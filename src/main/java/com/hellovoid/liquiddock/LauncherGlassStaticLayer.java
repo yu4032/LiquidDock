@@ -38,7 +38,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             @Override public void onViewDetachedFromWindow(View v) {
                 mainHandler.post(() -> {
                     View stableRoot = rootRef.get();
-                    if (stableRoot == v && !v.isAttachedToWindow()) forget(stableRoot, LauncherGlassStaticLayer.this);
+                    if (stableRoot == v && !v.isAttachedToWindow()) {
+                        forget(stableRoot, LauncherGlassStaticLayer.this);
+                    }
                 });
             }
         };
@@ -52,7 +54,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (existing != null && !existing.disposed && existing.getParent() == root) return existing;
         ViewGroup rootGroup = (ViewGroup) root;
         LauncherGlassStaticLayer layer = new LauncherGlassStaticLayer(root.getContext(), root, session);
-        root.addView(layer, 0, new ViewGroup.LayoutParams(
+        rootGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         BY_ROOT.put(root, layer);
         MainHook.log("[DC][LauncherGlass] shared static root layer attached root="

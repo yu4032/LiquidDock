@@ -33,7 +33,7 @@ public class LauncherGlassStaticCompositorContractTest {
         assertFalse(node.contains("EGLSurface"));
         assertTrue(layer.contains("extends TextureView"));
         assertTrue(layer.contains("WeakHashMap<View, LauncherGlassStaticLayer>"));
-        assertTrue(layer.contains("root.addView(layer, 0"));
+        assertTrue(layer.contains("rootGroup.addView(layer, 0"));
     }
 
     @Test
