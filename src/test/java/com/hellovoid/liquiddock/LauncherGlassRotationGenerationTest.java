@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -10,22 +11,35 @@ import org.junit.Test;
 
 /** Regression coverage for atomic Launcher root/producer geometry across rotation. */
 public class LauncherGlassRotationGenerationTest {
-    @Test
-    public void coherentSurfaceContentMatchesRootInBothOrientations() {
-        assertTrue(LauncherGlassProducerGeometryGate.matchesRoot(
-                1880, 3008, 1880, 3008, 0, 0, 0, 0));
-        assertTrue(LauncherGlassProducerGeometryGate.matchesRoot(
-                3008, 1880, 3008, 1880, 0, 0, 0, 0));
-        assertTrue(LauncherGlassProducerGeometryGate.matchesRoot(
-                3000, 1870, 3008, 1880, 3, 4, 5, 6));
+    private static boolean matchesRoot(
+            int rootWidth, int rootHeight, int surfaceWidth, int surfaceHeight,
+            int left, int top, int right, int bottom) throws Exception {
+        final Class<?> gate;
+        try {
+            gate = Class.forName("com.hellovoid.liquiddock.LauncherGlassProducerGeometryGate");
+        } catch (ClassNotFoundException missing) {
+            throw new AssertionError("missing LauncherGlassProducerGeometryGate", missing);
+        }
+        Method method = gate.getDeclaredMethod("matchesRoot",
+                int.class, int.class, int.class, int.class,
+                int.class, int.class, int.class, int.class);
+        method.setAccessible(true);
+        return (Boolean) method.invoke(null,
+                rootWidth, rootHeight, surfaceWidth, surfaceHeight,
+                left, top, right, bottom);
     }
 
     @Test
-    public void staleOppositeOrientationSurfaceIsRejected() {
-        assertFalse(LauncherGlassProducerGeometryGate.matchesRoot(
-                3008, 1880, 1880, 3008, 0, 0, 0, 0));
-        assertFalse(LauncherGlassProducerGeometryGate.matchesRoot(
-                1880, 3008, 3008, 1880, 0, 0, 0, 0));
+    public void coherentSurfaceContentMatchesRootInBothOrientations() throws Exception {
+        assertTrue(matchesRoot(1880, 3008, 1880, 3008, 0, 0, 0, 0));
+        assertTrue(matchesRoot(3008, 1880, 3008, 1880, 0, 0, 0, 0));
+        assertTrue(matchesRoot(3000, 1870, 3008, 1880, 3, 4, 5, 6));
+    }
+
+    @Test
+    public void staleOppositeOrientationSurfaceIsRejected() throws Exception {
+        assertFalse(matchesRoot(3008, 1880, 1880, 3008, 0, 0, 0, 0));
+        assertFalse(matchesRoot(1880, 3008, 3008, 1880, 0, 0, 0, 0));
     }
 
     @Test
