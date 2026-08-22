@@ -51,7 +51,8 @@ public class LauncherGlassAlignmentAndRadiusTest {
 
         assertTrue(schema.contains("FOLDER_CORNER_RADIUS = integer("));
         assertTrue(schema.contains("\"liquid_folder_corner_radius\", 0, 0, 0, 0, 96"));
-        assertTrue(schema.contains("Glass.FOLDER_GLASS, Glass.FOLDER_CORNER_RADIUS"));
+        assertTrue(schema.contains("Glass.FOLDER_GLASS"));
+        assertTrue(schema.contains("Glass.FOLDER_CORNER_RADIUS"));
         assertTrue(runtime.contains("final float folderCornerRadiusDp;"));
         assertTrue(runtime.contains("folderCornerRadiusDp = c.f(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name()"));
         assertTrue(folder.contains("LauncherGlassCornerRadiusPolicy.resolve("));

@@ -20,7 +20,7 @@ public class FolderGlassToggleContractTest {
 
         assertTrue(schema.contains("FOLDER_GLASS = bool(\n                \"liquid_folder_glass\", true, true, true"));
         assertTrue(schema.contains("Glass.ENABLED, Glass.FOLDER_GLASS"));
-        assertTrue(runtime.contains("final boolean enabled, folderEnabled;"));
+        assertTrue(runtime.contains("final boolean enabled, folderEnabled, widgetEnabled, iconEnabled;"));
         assertTrue(runtime.contains("folderEnabled = c.b(ConfigSchema.Glass.FOLDER_GLASS.name()"));
         assertTrue(hook.contains("!runtimeConfig.glass.folderEnabled"));
     }
