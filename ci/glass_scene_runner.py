@@ -101,3 +101,23 @@ for old, new in replacements:
         raise RuntimeError(f"current Session post-patch pattern count={source.count(old)}: {old[:60]!r}")
     source = source.replace(old, new, 1)
 session.write_text(source)
+
+compose = root / "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"
+compose_source = compose.read_text()
+bad = "    SettingsList(\x01"
+if compose_source.count(bad) != 1:
+    raise RuntimeError(f"malformed Compose SettingsList marker count={compose_source.count(bad)}")
+good = '''    SettingsList(
+        padding,
+        stringResource(R.string.page_liquid),
+        stringResource(R.string.liquid_header_summary),
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.ENABLED,
+            stringResource(R.string.liquid_enable),
+            stringResource(R.string.liquid_enable_summary),
+            masterEnabled,
+        ) { liquidGlass = it }
+'''
+compose.write_text(compose_source.replace(bad, good, 1))
