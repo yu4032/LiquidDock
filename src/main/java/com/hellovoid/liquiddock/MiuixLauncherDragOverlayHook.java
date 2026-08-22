@@ -27,9 +27,9 @@ final class MiuixLauncherDragOverlayHook {
 
     private static final class DragRecord {
         final WeakReference<View> sourceRef;
-        final WeakReference<LauncherGlassSinkView> staticSinkRef;
+        final WeakReference<LauncherGlassStaticNode> staticSinkRef;
 
-        DragRecord(View source, LauncherGlassSinkView staticSink) {
+        DragRecord(View source, LauncherGlassStaticNode staticSink) {
             sourceRef = new WeakReference<>(source);
             staticSinkRef = new WeakReference<>(staticSink);
         }
@@ -51,13 +51,13 @@ final class MiuixLauncherDragOverlayHook {
         final View source;
         final LauncherGlassDragState.Kind kind;
         final float cornerRadiusPx;
-        final LauncherGlassSinkView staticSink;
+        final LauncherGlassStaticNode staticSink;
 
         ResolvedSource(
                 View source,
                 LauncherGlassDragState.Kind kind,
                 float cornerRadiusPx,
-                LauncherGlassSinkView staticSink) {
+                LauncherGlassStaticNode staticSink) {
             this.source = source;
             this.kind = kind;
             this.cornerRadiusPx = cornerRadiusPx;
@@ -84,9 +84,6 @@ final class MiuixLauncherDragOverlayHook {
                 if (owner instanceof ViewGroup && args.length > 0 && args[0] instanceof View) {
                     ViewGroup parent = (ViewGroup) owner;
                     View child = (View) args[0];
-                    if (child instanceof LauncherGlassSinkView) {
-                        installStaticSinkDragSuppression((LauncherGlassSinkView) child);
-                    }
                     if (isDragContainer(parent) && isActualDragView(child)) {
                         onDragChildAdded(parent, child, glassConfig);
                     }
@@ -158,7 +155,7 @@ final class MiuixLauncherDragOverlayHook {
         if (record == null) return;
         View source = record.sourceRef.get();
         LauncherGlassDragOverlay.end(source, child);
-        LauncherGlassSinkView staticSink = record.staticSinkRef.get();
+        LauncherGlassStaticNode staticSink = record.staticSinkRef.get();
         if (staticSink != null) staticSink.setSuppressedByDrag(false);
         MainHook.log(TAG + " end child=" + child.getClass().getSimpleName());
     }
@@ -172,8 +169,8 @@ final class MiuixLauncherDragOverlayHook {
         if (!isActualDragView(child)) return null;
         Metadata metadata = resolveMetadata(child);
         View radiusSource = metadata.radiusSource != null ? metadata.radiusSource : child;
-        LauncherGlassSinkView staticSink = metadata.folderMaterial != null
-                ? findStaticSink(metadata.folderMaterial) : null;
+        LauncherGlassStaticNode staticSink = metadata.folderMaterial != null
+                ? LauncherGlassStaticNode.find(metadata.folderMaterial) : null;
         return new ResolvedSource(
                 child,
                 metadata.kind,
@@ -242,7 +239,12 @@ final class MiuixLauncherDragOverlayHook {
         return null;
     }
 
-    private static void installStaticSinkDragSuppression(LauncherGlassSinkView sink) {
+    // Drag overlay itself still owns one LauncherGlassSinkView; static desktop nodes own no View.
+    static void observeStaticNode(LauncherGlassStaticNode node) {
+        installStaticNodeDragSuppression(node);
+    }
+
+    private static void installStaticNodeDragSuppression(LauncherGlassStaticNode sink) {
         if (sink == null) return;
         View material = sink.materialHost();
         if (material == null) return;
@@ -261,7 +263,7 @@ final class MiuixLauncherDragOverlayHook {
                 Object target = chain.getThisObject();
                 if (target instanceof View && args.length > 1 && args[1] instanceof Boolean) {
                     boolean normalState = (Boolean) args[1];
-                    LauncherGlassSinkView current = findStaticSink((View) target);
+                    LauncherGlassStaticNode current = LauncherGlassStaticNode.find((View) target);
                     if (current != null) current.setSuppressedByDrag(!normalState);
                 }
                 return result;
@@ -285,18 +287,7 @@ final class MiuixLauncherDragOverlayHook {
         }
     }
 
-    private static LauncherGlassSinkView findStaticSink(View material) {
-        if (material == null || !(material.getParent() instanceof ViewGroup)) return null;
-        ViewGroup parent = (ViewGroup) material.getParent();
-        for (int index = 0; index < parent.getChildCount(); index++) {
-            View child = parent.getChildAt(index);
-            if (child instanceof LauncherGlassSinkView
-                    && ((LauncherGlassSinkView) child).materialHost() == material) {
-                return (LauncherGlassSinkView) child;
-            }
-        }
-        return null;
-    }
+
 
     private static float resolveCornerRadius(
             View preferredSource, LauncherGlassDragState.Kind kind, View dragView) {

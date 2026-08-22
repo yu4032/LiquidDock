@@ -53,7 +53,7 @@ public class FolderPressInteractionContractTest {
     @Test
     public void touchLocationDrivesOnlyTheOwningFolderAndLifecycleEdgesResetIt() throws Exception {
         String hook = read("MiuixFolderGlassHook.java");
-        String sink = read("LauncherGlassSinkView.java");
+        String sink = read("LauncherGlassStaticNode.java");
 
         assertTrue("raw touch coordinates must be mapped to the material glass bounds",
                 hook.contains("event.getRawX()") && hook.contains("event.getRawY()")
@@ -62,9 +62,9 @@ public class FolderPressInteractionContractTest {
                 hook.contains("resolveOwnerSink(owner)") && hook.contains("sink.setPressInteraction"));
         assertTrue("FolderIcon open must immediately clear press state before/while suppressing glass",
                 hook.contains("sink.resetPressInteraction(false)"));
-        assertTrue("sink detach must immediately clear stale press state",
+        assertTrue("static node detach must immediately clear stale press state",
                 sink.contains("resetPressInteraction(false)")
-                        && sink.indexOf("resetPressInteraction(false)") < sink.indexOf("super.onDetachedFromWindow()"));
+                        && sink.contains("onViewDetachedFromWindow"));
         assertTrue("press transitions should be animated rather than snapping during normal touch",
                 sink.contains("ValueAnimator") && sink.contains("PRESS_IN_DURATION_MS")
                         && sink.contains("PRESS_OUT_DURATION_MS"));

@@ -16,9 +16,9 @@ public class FolderOpenLifecycleContractTest {
     }
 
     @Test
-    public void folderOpenSuppressesOnlyItsOwnLauncherGlassSink() throws Exception {
+    public void folderOpenSuppressesOnlyItsOwnLauncherGlassStaticNode() throws Exception {
         String hook = read("MiuixFolderGlassHook.java");
-        String sink = read("LauncherGlassSinkView.java");
+        String sink = read("LauncherGlassStaticNode.java");
 
         assertTrue("FolderIcon.onOpen is the authoritative source-owner open edge",
                 hook.contains("findMethodExact(folderIcon, \"onOpen\", new Class<?>[0])"));

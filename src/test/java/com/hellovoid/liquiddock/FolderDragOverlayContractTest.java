@@ -32,11 +32,12 @@ public class FolderDragOverlayContractTest {
     }
 
     @Test
-    public void dragBridgeRegistersAuthoritativeStaticFolderSuppressionWhenSinkAppears() throws Exception {
+    public void dragBridgeRegistersAuthoritativeStaticFolderSuppressionOnLightweightNode() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherDragOverlayHook.java"));
 
-        assertTrue(hook.contains("child instanceof LauncherGlassSinkView"));
-        assertTrue(hook.contains("installStaticSinkDragSuppression"));
+        assertTrue(hook.contains("observeStaticNode"));
+        assertTrue(hook.contains("installStaticNodeDragSuppression"));
+        assertTrue(hook.contains("LauncherGlassStaticNode.find((View) target)"));
         assertTrue(hook.contains("onDragContainerBgAnimAlpha"));
         assertTrue(hook.contains("new Class<?>[]{Boolean.TYPE, Boolean.TYPE}"));
         assertTrue(hook.contains("setSuppressedByDrag(!normalState)"));

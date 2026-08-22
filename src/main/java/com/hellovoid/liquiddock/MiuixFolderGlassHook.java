@@ -22,14 +22,14 @@ final class MiuixFolderGlassHook {
     private static final String ITEM_ICON = "com.miui.home.launcher.ItemIcon";
     private static final String FOLDER_ICON = "com.miui.home.launcher.FolderIcon";
     private static final int MAX_STARTUP_RECOVERY_FRAMES = 24;
-    private static final Map<View, WeakReference<LauncherGlassSinkView>> CLAIMED =
+    private static final Map<View, WeakReference<LauncherGlassStaticNode>> CLAIMED =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, View.OnAttachStateChangeListener> FOLDER_ATTACH_LISTENERS =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, Boolean> FOLDER_RECOVERY_PENDING =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
-    private static WeakReference<LauncherGlassSinkView> openedFolderSink = new WeakReference<>(null);
+    private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
     private static boolean installed;
 
     private MiuixFolderGlassHook() {}
@@ -66,7 +66,7 @@ final class MiuixFolderGlassHook {
                 Object target = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
                 if (target instanceof View) {
                     View material = (View) target;
-                    LauncherGlassSinkView sink = claimedSink(material);
+                    LauncherGlassStaticNode sink = claimedSink(material);
                     if (sink == null) sink = attachMaterial(material, glassConfig);
                     if (sink != null) {
                         clearVendorBlur(material);
@@ -103,7 +103,7 @@ final class MiuixFolderGlassHook {
         // Long-press / drag rendering can bypass ItemIcon.setIconImageView and write a folder
         // drawable straight into mIconImageView from FolderIcon2x2.drawChild. Once that ImageView
         // is claimed by LiquidDock its material plate must stay transparent permanently; the
-        // sibling LauncherGlassSinkView owns the actual glass rendering.
+        // sibling LauncherGlassStaticNode owns the actual glass rendering.
         Method setImageDrawable = ImageView.class.getDeclaredMethod("setImageDrawable", Drawable.class);
         setImageDrawable.setAccessible(true);
         HookUtil.hook(setImageDrawable, chain -> {
@@ -153,7 +153,7 @@ final class MiuixFolderGlassHook {
 
     private static void updateFolderPressAfterDispatch(ViewGroup owner, MotionEvent event) {
         if (owner == null || event == null) return;
-        LauncherGlassSinkView sink = resolveOwnerSink(owner);
+        LauncherGlassStaticNode sink = resolveOwnerSink(owner);
         if (sink == null) return;
         try {
             Object value = HookUtil.getField(owner, "mIconImageView");
@@ -176,7 +176,7 @@ final class MiuixFolderGlassHook {
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
         if (!suppressed) {
-            LauncherGlassSinkView sink = resolveOwnerSink(owner);
+            LauncherGlassStaticNode sink = resolveOwnerSink(owner);
             if (sink != null) sink.setSuppressedByFolderOpen(false);
             if (openedFolderOwner.get() == owner) {
                 openedFolderOwner = new WeakReference<>(null);
@@ -186,13 +186,13 @@ final class MiuixFolderGlassHook {
         }
 
         ViewGroup previousOwner = openedFolderOwner.get();
-        LauncherGlassSinkView previousSink = openedFolderSink.get();
+        LauncherGlassStaticNode previousSink = openedFolderSink.get();
         if (previousOwner != null && previousOwner != owner && previousSink != null) {
             previousSink.setSuppressedByFolderOpen(false);
         }
 
         openedFolderOwner = new WeakReference<>(owner);
-        LauncherGlassSinkView sink = resolveOwnerSink(owner);
+        LauncherGlassStaticNode sink = resolveOwnerSink(owner);
         openedFolderSink = new WeakReference<>(sink);
         if (sink != null) {
             sink.resetPressInteraction(false);
@@ -201,13 +201,13 @@ final class MiuixFolderGlassHook {
     }
 
     private static void restoreOpenedFolderOwner() {
-        LauncherGlassSinkView sink = openedFolderSink.get();
+        LauncherGlassStaticNode sink = openedFolderSink.get();
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
         if (sink != null) sink.setSuppressedByFolderOpen(false);
     }
 
-    private static LauncherGlassSinkView resolveOwnerSink(ViewGroup owner) {
+    private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {
         try {
             Object value = HookUtil.getField(owner, "mIconImageView");
             return value instanceof View ? claimedSink((View) value) : null;
@@ -221,7 +221,7 @@ final class MiuixFolderGlassHook {
         try {
             Object value = HookUtil.getField(icon, "mIconImageView");
             if (value instanceof View) {
-                LauncherGlassSinkView sink = attachMaterial((View) value, glassConfig);
+                LauncherGlassStaticNode sink = attachMaterial((View) value, glassConfig);
                 if (sink != null && openedFolderOwner.get() == icon) {
                     openedFolderSink = new WeakReference<>(sink);
                     sink.setSuppressedByFolderOpen(true);
@@ -260,7 +260,7 @@ final class MiuixFolderGlassHook {
                 if (current != null) FOLDER_RECOVERY_PENDING.remove(current);
                 return;
             }
-            LauncherGlassSinkView sink = null;
+            LauncherGlassStaticNode sink = null;
             try {
                 Object value = HookUtil.getField(current, "mIconImageView");
                 if (value instanceof View) {
@@ -305,7 +305,7 @@ final class MiuixFolderGlassHook {
                 try {
                     Object value = HookUtil.getField(folder, "mIconImageView");
                     if (value instanceof View) {
-                        LauncherGlassSinkView sink = claimedSink((View) value);
+                        LauncherGlassStaticNode sink = claimedSink((View) value);
                         if (sink != null) sink.requestLifecycleRefresh();
                     }
                 } catch (Throwable ignored) {}
@@ -315,20 +315,14 @@ final class MiuixFolderGlassHook {
         icon.addOnAttachStateChangeListener(listener);
     }
 
-    private static LauncherGlassSinkView attachMaterial(
+    private static LauncherGlassStaticNode attachMaterial(
             View material, LiquidDockConfig.Glass glassConfig) {
-        if (material == null || !(material.getParent() instanceof ViewGroup)) return null;
-        ViewGroup parent = (ViewGroup) material.getParent();
-        if (parent.getClass().getName().endsWith(".CellLayout")) {
-            MainHook.log(TAG + " refusing direct CellLayout sink insertion");
-            return null;
-        }
-        LauncherGlassSinkView existing = claimedSink(material);
-        if (existing != null && existing.getParent() == parent) {
-            // MIUI can repopulate mIconImageView after our sink already exists. The material
-            // is above the sink in child order, so a restored drawable would cover Prismal.
+        if (material == null) return null;
+        LauncherGlassStaticNode existing = claimedSink(material);
+        if (existing != null) {
             clearVendorBlur(material);
             makeMaterialTransparent(material);
+            MiuixLauncherDragOverlayHook.observeStaticNode(existing);
             return existing;
         }
         float nativeRadius = readMaterialRadius(material);
@@ -338,19 +332,20 @@ final class MiuixFolderGlassHook {
         float radius = LauncherGlassCornerRadiusPolicy.resolve(
                 glassConfig != null ? glassConfig.folderCornerRadiusDp : 0f,
                 density, nativeRadius, fallbackRadius);
-        LauncherGlassSinkView sink = LauncherGlassSinkView.attachToMaterial(
+        LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachToMaterial(
                 material, radius, glassConfig);
         if (sink != null) {
             CLAIMED.put(material, new WeakReference<>(sink));
+            MiuixLauncherDragOverlayHook.observeStaticNode(sink);
             clearVendorBlur(material);
             makeMaterialTransparent(material);
-            MainHook.log(TAG + " FolderIcon material joined shared launcher session");
+            MainHook.log(TAG + " FolderIcon material joined shared static launcher compositor");
         }
         return sink;
     }
 
-    private static LauncherGlassSinkView claimedSink(View material) {
-        WeakReference<LauncherGlassSinkView> reference = CLAIMED.get(material);
+    private static LauncherGlassStaticNode claimedSink(View material) {
+        WeakReference<LauncherGlassStaticNode> reference = CLAIMED.get(material);
         return reference != null ? reference.get() : null;
     }
 

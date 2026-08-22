@@ -86,6 +86,19 @@ final class LauncherGlassSession {
         }
     }
 
+
+    private static final class StaticNodeState {
+        final WeakReference<LauncherGlassStaticNode> nodeRef;
+        final LauncherGlassGeometryStability geometryStability =
+                new LauncherGlassGeometryStability();
+        volatile LauncherGlassGeometry.Snapshot geometry;
+        volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
+
+        StaticNodeState(LauncherGlassStaticNode node) {
+            nodeRef = new WeakReference<>(node);
+        }
+    }
+
     private static final class OutputState {
         final Surface surface;
         EGLSurface eglSurface = EGL14.EGL_NO_SURFACE;
@@ -110,8 +123,11 @@ final class LauncherGlassSession {
     private final float[] textureMatrix = new float[16];
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
+            Collections.synchronizedMap(new WeakHashMap<>());
     // EGL surfaces are created/destroyed only on renderHandler.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
+    private OutputState staticOutput;
 
     private volatile boolean shuttingDown;
     private volatile PrismalParams prismalParams;
@@ -231,6 +247,39 @@ final class LauncherGlassSession {
         requestFrame(false);
     }
 
+
+    void registerStaticNode(LauncherGlassStaticNode node) {
+        if (node == null || shuttingDown) return;
+        synchronized (staticNodes) {
+            if (!staticNodes.containsKey(node)) staticNodes.put(node, new StaticNodeState(node));
+        }
+        View root = rootRef.get();
+        if (root != null) {
+            mainHandler.post(() -> {
+                if (!shuttingDown && ownsRoot(root)) LauncherGlassStaticLayer.acquire(root, this);
+            });
+        }
+        syncSceneOnUiThread();
+        requestLifecycleRefresh();
+    }
+
+    void unregisterStaticNode(LauncherGlassStaticNode node) {
+        if (node == null) return;
+        synchronized (staticNodes) { staticNodes.remove(node); }
+        requestLifecycleRefresh();
+    }
+
+    void updateStaticInteraction(
+            LauncherGlassStaticNode node, PrismalInteractionState interaction) {
+        if (node == null || shuttingDown) return;
+        synchronized (staticNodes) {
+            StaticNodeState state = staticNodes.get(node);
+            if (state == null) return;
+            state.interaction = interaction != null ? interaction : PrismalInteractionState.IDLE;
+        }
+        requestFrame(false);
+    }
+
     void requestLifecycleRefresh() {
         if (shuttingDown) return;
         requestFrame(false);
@@ -288,6 +337,59 @@ final class LauncherGlassSession {
         }, () -> { if (surface != null) surface.release(); });
     }
 
+
+    void attachStaticOutput(Surface surface, int width, int height) {
+        if (surface == null) return;
+        if (shuttingDown || !renderThread.isAlive()) {
+            surface.release();
+            return;
+        }
+        postRender(() -> {
+            if (shuttingDown) {
+                surface.release();
+                return;
+            }
+            try {
+                ensureEglAndGl();
+                releaseOutput(staticOutput);
+                OutputState next = new OutputState(surface, width, height);
+                next.eglSurface = EGL14.eglCreateWindowSurface(
+                        eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
+                checkEgl("eglCreateWindowSurface(static)", next.eglSurface != EGL14.EGL_NO_SURFACE);
+                staticOutput = next;
+                requestFrame(false);
+            } catch (Throwable error) {
+                MainHook.log(TAG + " attach static output failed " + debugLabel() + ": " + error);
+                surface.release();
+            }
+        }, surface::release);
+    }
+
+    void resizeStaticOutput(int width, int height) {
+        if (shuttingDown || !renderThread.isAlive()) return;
+        postRender(() -> {
+            OutputState output = staticOutput;
+            if (output != null) {
+                output.width = Math.max(1, width);
+                output.height = Math.max(1, height);
+                requestFrame(false);
+            }
+        }, null);
+    }
+
+    void detachStaticOutput(Surface surface) {
+        if (shuttingDown || !renderThread.isAlive()) {
+            if (surface != null) surface.release();
+            return;
+        }
+        postRender(() -> {
+            OutputState output = staticOutput;
+            staticOutput = null;
+            if (output != null) releaseOutput(output);
+            else if (surface != null) surface.release();
+        }, () -> { if (surface != null) surface.release(); });
+    }
+
     private void installRootObserver() {
         if (shuttingDown) return;
         View root = rootRef.get();
@@ -321,14 +423,15 @@ final class LauncherGlassSession {
         if (root == null) return;
         int nextWidth = root.getWidth();
         int nextHeight = root.getHeight();
-        boolean changed = nextWidth > 0 && nextHeight > 0
+        boolean rootGeometryChanged = nextWidth > 0 && nextHeight > 0
                 && (nextWidth != rootWidth || nextHeight != rootHeight);
+        boolean changed = rootGeometryChanged;
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        List<NodeState> snapshot;
-        synchronized (nodes) { snapshot = new ArrayList<>(nodes.values()); }
-        for (NodeState node : snapshot) {
+        List<NodeState> dragSnapshot;
+        synchronized (nodes) { dragSnapshot = new ArrayList<>(nodes.values()); }
+        for (NodeState node : dragSnapshot) {
             LauncherGlassSinkView sink = node.sinkRef.get();
             if (sink == null) continue;
             boolean localChanged = sink.syncFromMaterial();
@@ -343,9 +446,27 @@ final class LauncherGlassSession {
                 changed = true;
             }
         }
+
+        List<StaticNodeState> staticSnapshot;
+        synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
+        for (StaticNodeState state : staticSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            boolean localChanged = node.syncFromMaterial();
+            changed |= localChanged;
+            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+            LauncherGlassGeometry.Snapshot old = state.geometry;
+            LauncherGlassGeometry.Snapshot selected =
+                    state.geometryStability.select(old, observed, localChanged);
+            if ((old == null) != (selected == null)
+                    || (old != null && !old.sameAs(selected))) {
+                state.geometry = selected;
+                changed = true;
+            }
+        }
+
         boolean producerGeometryChanged = refreshProducerGeometryOnUi(root);
-        boolean atlasChanged = rebuildAtlasLayout(root);
-        if (producerGeometryChanged || atlasChanged) {
+        if (producerGeometryChanged || rootGeometryChanged) {
             requestBackdropRebuild();
         } else if (changed) {
             requestFrame(false);
@@ -617,64 +738,63 @@ final class LauncherGlassSession {
 
     private void renderScene(boolean rebuildBackdrop) {
         PrismalParams params = prismalParams;
-        LauncherGlassGpuAtlas.Layout layout = atlasLayout;
-        if (layout == null || layout.width <= 0 || layout.height <= 0
-                || params == null || outputs.isEmpty()) return;
+        if (params == null || rootWidth <= 0 || rootHeight <= 0
+                || (staticOutput == null && outputs.isEmpty())) return;
         makePbufferCurrent();
         boolean rawTargetChanged = rawFramebuffer == 0
-                || rawWidth != layout.width || rawHeight != layout.height;
-        ensureRawTarget(layout.width, layout.height);
+                || rawWidth != rootWidth || rawHeight != rootHeight;
+        ensureRawTarget(rootWidth, rootHeight);
         if (rebuildBackdrop || rawTargetChanged || !backdropPrepared) {
-            renderNormalization(layout);
-            prismalRenderer.prepareBackdrop(rawTexture, layout.width, layout.height, params);
+            renderNormalizationRoot();
+            prismalRenderer.prepareBackdrop(rawTexture, rootWidth, rootHeight, params);
             backdropPrepared = true;
         }
+        renderStaticScene(params);
+        renderDragOutputs(params);
+    }
+
+    private void renderStaticScene(PrismalParams params) {
+        OutputState output = staticOutput;
+        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
+        makePbufferCurrent();
         prismalRenderer.beginGlassFrame();
-
-        List<NodeState> snapshot;
-        synchronized (nodes) { snapshot = new ArrayList<>(nodes.values()); }
-        java.util.HashMap<Integer, NodeState> byId = new java.util.HashMap<>();
-        for (NodeState node : snapshot) byId.put(node.id, node);
-
-        boolean drew = false;
-        java.util.HashMap<Integer, LauncherGlassGeometry.Snapshot> atlasGeometries =
-                new java.util.HashMap<>();
-        for (LauncherGlassGpuAtlas.Tile tile : layout.tiles) {
-            NodeState node = byId.get(tile.request.id);
-            if (node == null || node.sinkRef.get() == null) continue;
-            float left = tile.glassAtlasLeft();
-            float top = tile.glassAtlasTop();
-            LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
-                    layout.width, layout.height, left, top,
-                    left + tile.request.glassWidth, top + tile.request.glassHeight,
-                    tile.request.cornerRadius);
-            if (geometry == null) continue;
-            atlasGeometries.put(tile.request.id, geometry);
+        List<StaticNodeState> snapshot;
+        synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
+        for (StaticNodeState state : snapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            LauncherGlassGeometry.Snapshot geometry = state.geometry;
+            if (node == null || geometry == null) continue;
             PrismalGeometry prismalGeometry = new PrismalGeometry(
-                    layout.width, layout.height, geometry.centerX, geometry.centerY,
+                    rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
             prismalRenderer.drawGlass(
-                    prismalGeometry, params, launcherHighlightProfile, node.interaction);
-            drew = true;
+                    prismalGeometry, params, launcherHighlightProfile, state.interaction);
         }
-        if (!drew) return;
+        presentFull(prismalRenderer.outputTexture(), output);
+    }
 
-        int sceneTexture = prismalRenderer.outputTexture();
+    private void renderDragOutputs(PrismalParams params) {
         for (Map.Entry<LauncherGlassSinkView, OutputState> entry
                 : new ArrayList<>(outputs.entrySet())) {
             NodeState node = nodes.get(entry.getKey());
-            if (node == null) continue;
-            LauncherGlassGeometry.Snapshot geometry = atlasGeometries.get(node.id);
+            LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (geometry == null) continue;
-            present(sceneTexture, geometry, entry.getValue());
+            makePbufferCurrent();
+            prismalRenderer.beginGlassFrame();
+            PrismalGeometry prismalGeometry = new PrismalGeometry(
+                    rootWidth, rootHeight, geometry.centerX, geometry.centerY,
+                    geometry.width, geometry.height, geometry.cornerRadius);
+            prismalRenderer.drawGlass(
+                    prismalGeometry, params, launcherHighlightProfile, node.interaction);
+            present(prismalRenderer.outputTexture(), geometry, entry.getValue());
         }
     }
 
-    private void renderNormalization(LauncherGlassGpuAtlas.Layout layout) {
+    private void renderNormalizationRoot() {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, rawFramebuffer);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glViewport(0, 0, layout.width, layout.height);
+        GLES20.glViewport(0, 0, rootWidth, rootHeight);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
@@ -686,21 +806,33 @@ final class LauncherGlassSession {
                 1, false, textureMatrix, 0);
         GLES20.glUniform1i(requireUniform(normalizeProgram, "uConfigRot"), configRotation);
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"), 0f, 0f, 1f, 1f);
-        for (LauncherGlassGpuAtlas.Tile tile : layout.tiles) {
-            LauncherGlassGpuAtlas.Request request = tile.request;
-            int viewportY = layout.height - tile.atlasBottom();
-            GLES20.glViewport(tile.atlasLeft, viewportY,
-                    request.sourceWidth, request.sourceHeight);
-            float left = request.sourceLeft / (float) Math.max(1, rootWidth);
-            float bottom = (rootHeight - (request.sourceTop + request.sourceHeight))
-                    / (float) Math.max(1, rootHeight);
-            float width = request.sourceWidth / (float) Math.max(1, rootWidth);
-            float height = request.sourceHeight / (float) Math.max(1, rootHeight);
-            GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
-                    left, bottom, width, height);
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        }
+        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(normalizeProgram);
+    }
+
+    private void presentFull(int sceneTexture, OutputState output) {
+        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
+                || output.width <= 0 || output.height <= 0) return;
+        makeCurrent(output.eglSurface);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glViewport(0, 0, output.width, output.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUseProgram(compositeProgram);
+        bindQuad(compositeProgram);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
+        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindQuad(compositeProgram);
+        if (!EGL14.eglSwapBuffers(eglDisplay, output.eglSurface)) {
+            throw new IllegalStateException("eglSwapBuffers(static) error=0x"
+                    + Integer.toHexString(EGL14.eglGetError()));
+        }
     }
 
     private void present(int sceneTexture, LauncherGlassGeometry.Snapshot geometry,
@@ -802,6 +934,8 @@ final class LauncherGlassSession {
             if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE
                     && eglContext != EGL14.EGL_NO_CONTEXT) makePbufferCurrent();
         } catch (Throwable ignored) {}
+        releaseOutput(staticOutput);
+        staticOutput = null;
         for (OutputState output : new ArrayList<>(outputs.values())) releaseOutput(output);
         outputs.clear();
         try { releaseRawTarget(); } catch (Throwable ignored) {}
