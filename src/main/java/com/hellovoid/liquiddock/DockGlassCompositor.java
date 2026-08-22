@@ -40,9 +40,7 @@ final class DockGlassCompositor {
     }
 
     private void collect(View view, View dockRoot, List<DockGlassItemNode> out) {
-        if (view == null || view == dockRoot) {
-            // The material body itself is drawn separately; still scan its root descendants below.
-        } else {
+        if (view != null && view != dockRoot) {
             String name = view.getClass().getName();
             if (name.endsWith(".ShortcutIcon") || "ShortcutIcon".equals(view.getClass().getSimpleName())) {
                 out.add(new DockGlassItemNode(view, LauncherGlassNodeKind.ICON, iconStyle));
@@ -64,10 +62,10 @@ final class DockGlassCompositor {
     }
 
     void drawItem(PrismalRenderer renderer, LauncherGlassGeometry.Snapshot geometry,
-                  PrismalParams params) {
+                  PrismalParams params, int framebufferWidth, int framebufferHeight) {
         if (geometry == null) return;
         renderer.drawGlass(new PrismalGeometry(
-                geometry.rootWidth, geometry.rootHeight,
+                framebufferWidth, framebufferHeight,
                 geometry.centerX, geometry.centerY,
                 geometry.width, geometry.height, geometry.cornerRadius), params);
     }
@@ -85,7 +83,8 @@ final class DockGlassCompositor {
         synchronized (items) { snapshot = new ArrayList<>(items); }
         for (DockGlassItemNode item : snapshot) {
             drawItem(renderer, item.capture(dockRoot, framebufferWidth, framebufferHeight,
-                    sampleInsetLeft, sampleInsetTop, scaleX, scaleY), params);
+                    sampleInsetLeft, sampleInsetTop, scaleX, scaleY), params,
+                    framebufferWidth, framebufferHeight);
         }
         return snapshot.size();
     }
