@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
@@ -61,15 +62,29 @@ final class LauncherGlassSession {
         final int bufferHeight;
         final int configRotation;
         final SurfaceControl rootSurface;
+        final int insetLeft;
+        final int insetTop;
+        final int insetRight;
+        final int insetBottom;
+        final LauncherGlassSurfaceContentRect contentRect;
 
-        ProducerGeometry(int surfaceWidth, int surfaceHeight, int bufferWidth, int bufferHeight,
-                         int configRotation, SurfaceControl rootSurface) {
+        ProducerGeometry(
+                int surfaceWidth, int surfaceHeight, int bufferWidth, int bufferHeight,
+                int configRotation, SurfaceControl rootSurface,
+                int insetLeft, int insetTop, int insetRight, int insetBottom) {
             this.surfaceWidth = surfaceWidth;
             this.surfaceHeight = surfaceHeight;
             this.bufferWidth = bufferWidth;
             this.bufferHeight = bufferHeight;
             this.configRotation = configRotation;
             this.rootSurface = rootSurface;
+            this.insetLeft = insetLeft;
+            this.insetTop = insetTop;
+            this.insetRight = insetRight;
+            this.insetBottom = insetBottom;
+            contentRect = LauncherGlassSurfaceContentRect.resolve(
+                    surfaceWidth, surfaceHeight,
+                    insetLeft, insetTop, insetRight, insetBottom);
         }
     }
 
@@ -138,6 +153,8 @@ final class LauncherGlassSession {
     private volatile int configRotation;
     private volatile int boundBufferWidth;
     private volatile int boundBufferHeight;
+    private volatile LauncherGlassSurfaceContentRect contentRect =
+            LauncherGlassSurfaceContentRect.full();
     private volatile Miuix307PassBlurBridge.Binding binding;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
@@ -510,13 +527,21 @@ final class LauncherGlassSession {
         ProducerGeometry geometry = readSurfaceGeometry(root);
         if (geometry == null) return false;
         int nextRotation = geometry.configRotation;
+        LauncherGlassSurfaceContentRect nextContentRect = geometry.contentRect;
         boolean changed = nextRotation != configRotation
                 || geometry.bufferWidth != boundBufferWidth
-                || geometry.bufferHeight != boundBufferHeight;
+                || geometry.bufferHeight != boundBufferHeight
+                || !nextContentRect.sameAs(contentRect);
         configRotation = nextRotation;
         if (changed) {
             boundBufferWidth = geometry.bufferWidth;
             boundBufferHeight = geometry.bufferHeight;
+            contentRect = nextContentRect;
+            MainHook.log(TAG + " producer geometry surface="
+                    + geometry.surfaceWidth + "x" + geometry.surfaceHeight
+                    + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
+                    + " insets=" + geometry.insetLeft + "," + geometry.insetTop
+                    + "," + geometry.insetRight + "," + geometry.insetBottom);
             SurfaceTexture input = inputSurfaceTexture;
             if (input != null && geometry.bufferWidth > 0 && geometry.bufferHeight > 0) {
                 postRender(() -> {
@@ -715,9 +740,12 @@ final class LauncherGlassSession {
         configRotation = geometry.configRotation;
         boundBufferWidth = geometry.bufferWidth;
         boundBufferHeight = geometry.bufferHeight;
+        contentRect = geometry.contentRect;
         MainHook.log(TAG + " shared PassBlur producer bound " + debugLabel()
                 + " surface=" + next.rootName + " buffer="
-                + geometry.bufferWidth + "x" + geometry.bufferHeight);
+                + geometry.bufferWidth + "x" + geometry.bufferHeight
+                + " insets=" + geometry.insetLeft + "," + geometry.insetTop
+                + "," + geometry.insetRight + "," + geometry.insetBottom);
         requestFrame(true);
     }
 
@@ -806,7 +834,9 @@ final class LauncherGlassSession {
                 1, false, textureMatrix, 0);
         GLES20.glUniform1i(requireUniform(normalizeProgram, "uConfigRot"), configRotation);
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"), 0f, 0f, 1f, 1f);
-        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"), 0f, 0f, 1f, 1f);
+        LauncherGlassSurfaceContentRect contentRect = this.contentRect;
+        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
+                contentRect.left, contentRect.bottom, contentRect.width, contentRect.height);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(normalizeProgram);
     }
@@ -985,6 +1015,7 @@ final class LauncherGlassSession {
             int surfaceWidth = surfaceSize.x;
             int surfaceHeight = surfaceSize.y;
             if (surfaceWidth <= 0 || surfaceHeight <= 0) return null;
+            Rect surfaceInsets = readSurfaceInsets(viewRoot);
             int rotation = readConfigRotation(root);
             int bufferWidth = surfaceWidth;
             int bufferHeight = surfaceHeight;
@@ -998,10 +1029,28 @@ final class LauncherGlassSession {
             SurfaceControl surfaceControl = value instanceof SurfaceControl
                     ? (SurfaceControl) value : null;
             return new ProducerGeometry(surfaceWidth, surfaceHeight,
-                    bufferWidth, bufferHeight, rotation, surfaceControl);
+                    bufferWidth, bufferHeight, rotation, surfaceControl,
+                    surfaceInsets.left, surfaceInsets.top,
+                    surfaceInsets.right, surfaceInsets.bottom);
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static Rect readSurfaceInsets(Object viewRoot) {
+        Rect result = new Rect();
+        if (viewRoot == null) return result;
+        try {
+            Field attrsField = findField(viewRoot.getClass(), "mWindowAttributes");
+            attrsField.setAccessible(true);
+            Object attrs = attrsField.get(viewRoot);
+            if (attrs == null) return result;
+            Field insetsField = findField(attrs.getClass(), "surfaceInsets");
+            insetsField.setAccessible(true);
+            Object value = insetsField.get(attrs);
+            if (value instanceof Rect) result.set((Rect) value);
+        } catch (Throwable ignored) {}
+        return result;
     }
 
     private static int readConfigRotation(View view) {

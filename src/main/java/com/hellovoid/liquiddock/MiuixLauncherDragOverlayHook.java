@@ -38,12 +38,12 @@ final class MiuixLauncherDragOverlayHook {
     private static final class Metadata {
         final LauncherGlassDragState.Kind kind;
         final View radiusSource;
-        final View folderMaterial;
+        final View staticHost;
 
-        Metadata(LauncherGlassDragState.Kind kind, View radiusSource, View folderMaterial) {
+        Metadata(LauncherGlassDragState.Kind kind, View radiusSource, View staticHost) {
             this.kind = kind != null ? kind : LauncherGlassDragState.Kind.ICON;
             this.radiusSource = radiusSource;
-            this.folderMaterial = folderMaterial;
+            this.staticHost = staticHost;
         }
     }
 
@@ -69,10 +69,12 @@ final class MiuixLauncherDragOverlayHook {
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
-        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled
-                || !runtimeConfig.glass.folderEnabled) {
+        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
+        boolean anyStaticGlass = runtimeConfig.glass.folderEnabled || runtimeConfig.glass.widgetEnabled
+                || runtimeConfig.glass.iconEnabled;
+        if (!anyStaticGlass) return false;
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             Method onViewAdded = ViewGroup.class.getDeclaredMethod("onViewAdded", View.class);
@@ -169,8 +171,8 @@ final class MiuixLauncherDragOverlayHook {
         if (!isActualDragView(child)) return null;
         Metadata metadata = resolveMetadata(child);
         View radiusSource = metadata.radiusSource != null ? metadata.radiusSource : child;
-        LauncherGlassStaticNode staticSink = metadata.folderMaterial != null
-                ? LauncherGlassStaticNode.find(metadata.folderMaterial) : null;
+        LauncherGlassStaticNode staticSink = metadata.staticHost != null
+                ? LauncherGlassStaticNode.find(metadata.staticHost) : null;
         return new ResolvedSource(
                 child,
                 metadata.kind,
@@ -213,8 +215,11 @@ final class MiuixLauncherDragOverlayHook {
             }
             String lowerView = viewName.toLowerCase(Locale.ROOT);
             if (lowerView.contains("appwidgethostview") || lowerView.contains("widget")
-                    || lowerView.contains("gadget")) {
-                return new Metadata(LauncherGlassDragState.Kind.WIDGET, view, null);
+                    || lowerView.contains("gadget") || lowerView.contains("mamlhostview")) {
+                return new Metadata(LauncherGlassDragState.Kind.WIDGET, view, view);
+            }
+            if (viewName.endsWith(".ShortcutIcon") || viewName.endsWith(".ItemIcon")) {
+                return new Metadata(LauncherGlassDragState.Kind.ICON, view, view);
             }
             Object tag = view.getTag();
             if (tag != null && tag != value) {

@@ -513,6 +513,18 @@ private fun LiquidPage(
         BooleanSetting(prefs, ConfigSchema.Glass.ENABLED, stringResource(R.string.liquid_enable), stringResource(R.string.liquid_enable_summary), masterEnabled) { liquidGlass = it }
         BooleanSetting(prefs, ConfigSchema.Glass.FOLDER_GLASS, stringResource(R.string.liquid_folder_glass_enable), stringResource(R.string.liquid_folder_glass_enable_summary), masterEnabled && liquidGlass) { folderGlass = it }
         IntSetting(prefs, folderCornerRadiusSpec, masterEnabled && liquidGlass && folderGlass)
+        BooleanSetting(
+            prefs, ConfigSchema.Glass.WIDGET_GLASS,
+            "小部件玻璃",
+            "在小部件后方使用共享桌面玻璃层；透明区域可显示玻璃",
+            masterEnabled && liquidGlass,
+        )
+        BooleanSetting(
+            prefs, ConfigSchema.Glass.ICON_GLASS,
+            "图标玻璃",
+            "只在图标图形区域下方绘制玻璃，不覆盖文字；透明图标可透出玻璃",
+            masterEnabled && liquidGlass,
+        )
         ArrowPreference(
             stringResource(R.string.launcher_highlights_entry),
             summary = stringResource(R.string.launcher_highlights_entry_summary),

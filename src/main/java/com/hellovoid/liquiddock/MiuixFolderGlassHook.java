@@ -333,7 +333,7 @@ final class MiuixFolderGlassHook {
                 glassConfig != null ? glassConfig.folderCornerRadiusDp : 0f,
                 density, nativeRadius, fallbackRadius);
         LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachToMaterial(
-                material, radius, glassConfig);
+                material, LauncherGlassDragState.Kind.FOLDER, radius, glassConfig);
         if (sink != null) {
             CLAIMED.put(material, new WeakReference<>(sink));
             MiuixLauncherDragOverlayHook.observeStaticNode(sink);

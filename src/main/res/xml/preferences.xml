@@ -412,6 +412,20 @@
             app:max="96"
             android:dependency="liquid_folder_glass" />
 
+        <SwitchPreference
+            android:key="liquid_widget_glass"
+            android:title="Widget Liquid Glass"
+            android:summary="Draw shared liquid glass behind transparent widget regions"
+            android:defaultValue="true"
+            android:dependency="liquid_glass" />
+
+        <SwitchPreference
+            android:key="liquid_icon_glass"
+            android:title="Icon Liquid Glass"
+            android:summary="Draw glass only under the icon graphic; labels remain unchanged"
+            android:defaultValue="true"
+            android:dependency="liquid_glass" />
+
     </PreferenceCategory>
 
 

@@ -194,7 +194,7 @@ final class LiquidDockConfig {
     }
 
     static final class Glass {
-        final boolean enabled, folderEnabled;
+        final boolean enabled, folderEnabled, widgetEnabled, iconEnabled;
         final float folderCornerRadiusDp;
         final boolean prismalShowNormals;
         final PrismalHighlightProfile launcherHighlightProfile;
@@ -216,6 +216,10 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.ENABLED.runtimeFallback());
             folderEnabled = c.b(ConfigSchema.Glass.FOLDER_GLASS.name(),
                     ConfigSchema.Glass.FOLDER_GLASS.runtimeFallback());
+            widgetEnabled = c.b(ConfigSchema.Glass.WIDGET_GLASS.name(),
+                    ConfigSchema.Glass.WIDGET_GLASS.runtimeFallback());
+            iconEnabled = c.b(ConfigSchema.Glass.ICON_GLASS.name(),
+                    ConfigSchema.Glass.ICON_GLASS.runtimeFallback());
             folderCornerRadiusDp = c.f(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name(),
                     ConfigSchema.Glass.FOLDER_CORNER_RADIUS.runtimeFallback());
             launcherHighlightProfile = LauncherHighlightPreferences.read(c);

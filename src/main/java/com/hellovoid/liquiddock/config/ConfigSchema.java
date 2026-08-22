@@ -205,6 +205,10 @@ public final class ConfigSchema {
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FOLDER_GLASS = bool(
                 "liquid_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> WIDGET_GLASS = bool(
+                "liquid_widget_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> ICON_GLASS = bool(
+                "liquid_icon_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> FOLDER_CORNER_RADIUS = integer(
                 "liquid_folder_corner_radius", 0, 0, 0, 0, 96, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DIMENSIONS_DP = bool(
@@ -434,7 +438,8 @@ public final class ConfigSchema {
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
-        add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.FOLDER_CORNER_RADIUS,
+        add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS, Glass.ICON_GLASS,
+                Glass.FOLDER_CORNER_RADIUS,
                 Glass.DIMENSIONS_DP, Glass.BLUR_MODE, Glass.BLUR, Glass.CHROMATIC,
                 Glass.TINT_ALPHA, Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
                 Glass.SAMPLING_EXTRA_TOP, Glass.SAMPLING_EXTRA_BOTTOM,
