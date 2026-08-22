@@ -26,7 +26,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
       - name: Apply Glass Scene production patch
-        run: python3 ci/glass_scene_apply.py
+        run: python3 ci/glass_scene_runner.py
       - name: Capture patched sources
         if: always()
         run: |
