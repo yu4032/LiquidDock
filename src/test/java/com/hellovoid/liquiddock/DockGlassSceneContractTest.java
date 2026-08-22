@@ -38,4 +38,23 @@ public class DockGlassSceneContractTest {
         assertFalse(item.contains("Surface "));
         assertFalse(item.contains("LauncherGlassStaticNode"));
     }
+
+    @Test public void dockUiPublishesImmutableSceneSnapshotBeforeGlDraw() throws Exception {
+        String compositor = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java"));
+        String view = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
+
+        assertTrue(compositor.contains("captureUiSnapshot"));
+        assertTrue(compositor.contains("DockGlassSceneSnapshot"));
+        assertTrue(view.contains("dockCompositor.captureUiSnapshot"));
+        assertTrue(view.contains("DockGlassSceneSnapshot dockScene"));
+
+        int drawStart = compositor.indexOf("int drawFrame(");
+        assertTrue(drawStart >= 0);
+        String drawPath = compositor.substring(drawStart);
+        assertFalse(drawPath.contains("syncItems()"));
+        assertFalse(drawPath.contains("transformMatrixToGlobal"));
+        assertFalse(drawPath.contains(".capture(dockRoot"));
+    }
 }
