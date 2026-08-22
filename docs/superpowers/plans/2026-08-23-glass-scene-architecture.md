@@ -36,37 +36,10 @@
 - `LauncherGlassSession` must call the gate before accepting producer geometry and must invalidate `frameAvailable` and `hasConsumedFrame` on a mismatch/generation change.
 
 - [x] **Step 1: Keep the existing RED rotation behavior test as the first gate**
-
-The test already requires `LauncherGlassProducerGeometryGate`, opposite-orientation rejection, frame invalidation, and rot1/3 buffer swap.
-
-- [x] **Step 2: Verify RED in CI**
-
-Observed in run 32605163006: three rotation tests fail because the gate is missing/session does not call it. Existing vendor-suppression RED tests also fail, so they remain active gates.
-
+- [x] **Step 2: Verify RED in CI** — run 32605163006 failed all three rotation tests as expected.
 - [ ] **Step 3: Implement the pure geometry gate**
-
-```java
-final class LauncherGlassProducerGeometryGate {
-    private LauncherGlassProducerGeometryGate() {}
-
-    static boolean matchesRoot(int rootWidth, int rootHeight,
-            int surfaceWidth, int surfaceHeight,
-            int left, int top, int right, int bottom) {
-        int contentWidth = surfaceWidth - Math.max(0, left) - Math.max(0, right);
-        int contentHeight = surfaceHeight - Math.max(0, top) - Math.max(0, bottom);
-        return rootWidth > 0 && rootHeight > 0
-                && contentWidth == rootWidth && contentHeight == rootHeight;
-    }
-}
-```
-
 - [ ] **Step 4: Integrate the gate in producer geometry refresh**
-
-Reject incoherent opposite-orientation geometry before an OES frame can be rendered; log `producer geometry not coherent with root`; clear `frameAvailable` and `hasConsumedFrame`.
-
 - [ ] **Step 5: Verify GREEN**
-
-Run `./gradlew testDebugUnitTest --tests com.hellovoid.liquiddock.LauncherGlassRotationGenerationTest --stacktrace` in CI, then full unit tests.
 
 ---
 
@@ -78,11 +51,6 @@ Run `./gradlew testDebugUnitTest --tests com.hellovoid.liquiddock.LauncherGlassR
 - Modify: `src/main/java/com/hellovoid/liquiddock/LauncherGlassSessionRegistry.java`
 - Test: `src/test/java/com/hellovoid/liquiddock/LauncherGlassSceneControllerTest.java`
 - Test: `src/test/java/com/hellovoid/liquiddock/LauncherGlassSceneOwnershipContractTest.java`
-
-**Interfaces:**
-- Produces: scene states `DETACHED`, `BOOTSTRAPPING`, `HOME_WAITING_FRESH_FRAME`, `HOME_VISIBLE`, `COVERED`.
-- Produces: controller methods `onRootReady()`, `setCovered(boolean)`, `onGenerationInvalidated()`, `onFreshFrameReady(long generation)`, `generation()`, `isLayerVisible()`.
-- `LauncherGlassStaticLayer` exposes controller-driven `setSceneVisible(boolean)` and never self-reveals from node registration.
 
 - [ ] **Step 1: Add failing pure state-machine tests**
 - [ ] **Step 2: Verify RED**
@@ -170,7 +138,7 @@ Run `./gradlew testDebugUnitTest --tests com.hellovoid.liquiddock.LauncherGlassR
 - Test: `src/test/java/com/hellovoid/liquiddock/LauncherGlassVendorMaterialSuppressionContractTest.java`
 
 - [x] **Step 1: Existing RED source/behavior contracts are present**
-- [x] **Step 2: Verify RED** — run 32605163006 fails both widget and small-folder suppression tests.
+- [x] **Step 2: Verify RED** — run 32605163006 failed both suppression tests.
 - [ ] **Step 3: Implement suppressor and wire hooks**
 - [ ] **Step 4: Verify GREEN**
 
