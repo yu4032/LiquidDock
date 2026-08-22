@@ -25,6 +25,21 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
+      - name: Apply Glass Scene production patch
+        run: python3 ci/glass_scene_apply.py
+      - name: Capture patched sources
+        if: always()
+        run: |
+          mkdir -p build/glass-scene-verified
+          git diff -- src/main > build/glass-scene-verified/glass-scene.patch
+          cp -a src/main build/glass-scene-verified/src-main
+      - name: Upload patched sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiquidDock-glass-scene-patched-source
+          path: build/glass-scene-verified
+          retention-days: 7
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
