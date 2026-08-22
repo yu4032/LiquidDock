@@ -25,6 +25,14 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
+      - name: Snapshot source
+        run: tar -czf /tmp/liquiddock-source.tar.gz --exclude=.git .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-compositor-source
+          path: /tmp/liquiddock-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
