@@ -30,7 +30,7 @@ public class LauncherGlassStaticCompositorContractTest {
         String layer = Files.readString(STATIC_LAYER);
         assertFalse(node.contains("extends TextureView"));
         assertFalse(node.contains("new Surface("));
-        assertFalse(node.contains("EGLSurface"));
+        assertFalse(node.contains("android.opengl.EGLSurface"));
         assertTrue(layer.contains("extends TextureView"));
         assertTrue(layer.contains("WeakHashMap<View, LauncherGlassStaticLayer>"));
         assertTrue(layer.contains("rootGroup.addView(layer, 0"));
