@@ -29,7 +29,9 @@ jobs:
         run: |
           python3 ci/glass_device_prep.py
           python3 ci/glass_device_fix.py
+          python3 ci/glass_main_dock_post.py
           sed -i 's/runtimeDefault()/runtimeFallback()/g' src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java
+          python3 ci/glass_main_dock_contracts.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
@@ -44,5 +46,6 @@ jobs:
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/main/kotlin/com/hellovoid/liquiddock
+            src/test/java/com/hellovoid/liquiddock
           if-no-files-found: error
           retention-days: 3
