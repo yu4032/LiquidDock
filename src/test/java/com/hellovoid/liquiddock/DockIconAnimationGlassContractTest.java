@@ -13,16 +13,29 @@ public class DockIconAnimationGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
+    public void dockProxyHookIsInstalledWithoutChangingWorkspaceProxyHook() throws Exception {
+        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String workspaceHook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        Path hookPath = MAIN.resolve("DockIconLaunchProxyHook.java");
+
+        assertTrue(module.contains("DockIconLaunchProxyHook.install(classLoader, runtimeConfig)"));
+        assertTrue(Files.exists(hookPath));
+        assertFalse(workspaceHook.contains("DockIconLaunchProxyBridge"));
+    }
+
+    @Test
     public void floatingIconBridgeHandsDockVisualOwnershipToLauncherStaticNode() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        Path hookPath = MAIN.resolve("DockIconLaunchProxyHook.java");
         Path bridgePath = MAIN.resolve("DockIconLaunchProxyBridge.java");
+        assertTrue(Files.exists(hookPath));
+        assertTrue(Files.exists(bridgePath));
+        String hook = Files.readString(hookPath);
+        String bridge = Files.readString(bridgePath);
 
         assertTrue(hook.contains("LauncherGlassHierarchy.Domain.DOCK"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.holdHidden"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.update"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.end"));
-        assertTrue(Files.exists(bridgePath));
-        String bridge = Files.readString(bridgePath);
         assertTrue(bridge.contains("LauncherGlassStaticNode.attachLaunchProxyAnchor"));
         assertTrue(bridge.contains("DockGlassItemRegistry.holdLaunchProxyHidden"));
         assertTrue(bridge.contains("DockGlassItemRegistry.updateLaunchProxyGeometry"));
@@ -45,12 +58,8 @@ public class DockIconAnimationGlassContractTest {
 
     @Test
     public void layer2UsesLauncherWorkspaceAsMainWindowSessionAnchor() throws Exception {
-        Path bridgePath = MAIN.resolve("DockIconLaunchProxyBridge.java");
-        assertTrue(Files.exists(bridgePath));
-        String bridge = Files.readString(bridgePath);
+        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
 
-        // FloatingIconView2 is itself a View in the Launcher window. FloatingIconLayer2 is not a
-        // View; Launcher 4.50 stores private Launcher launcher and renders against launcher.getRootView().
         assertTrue(bridge.contains("owner instanceof View"));
         assertTrue(bridge.contains("HookUtil.getField(owner, \"launcher\")"));
         assertTrue(bridge.contains("HookUtil.invoke(launcher, \"getWorkspace\")"));
@@ -65,14 +74,14 @@ public class DockIconAnimationGlassContractTest {
         assertTrue(node.contains("LauncherGlassIconGeometry.resolve(proxyReference)"));
         assertTrue(node.contains("proxyReference.getWidth()"));
         assertTrue(node.contains("proxyReference.getHeight()"));
+        assertTrue(node.contains("node.visualOwnerState.holdLaunchProxyHidden()"));
     }
 
     @Test
     public void hiddenVisibleEndTriStateMatchesWorkspaceSemantics() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
-        Path bridgePath = MAIN.resolve("DockIconLaunchProxyBridge.java");
-        assertTrue(Files.exists(bridgePath));
-        String bridge = Files.readString(bridgePath);
+        String hook = Files.readString(MAIN.resolve("DockIconLaunchProxyHook.java"));
+        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
+        String runtime = Files.readString(MAIN.resolve("GlassRuntimeState.java"));
 
         assertTrue(bridge.contains("node.holdLaunchProxyHidden()"));
         assertTrue(bridge.contains("node.updateLaunchProxyGeometry"));
@@ -80,14 +89,13 @@ public class DockIconAnimationGlassContractTest {
         assertTrue(bridge.contains("node.dispose()"));
         assertTrue(hook.contains("visibility == View.VISIBLE"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.end(host)"));
+        assertTrue(runtime.contains("DockIconLaunchProxyBridge.clear()"));
     }
 
     @Test
     public void dockCompositorAndProxyBridgeOwnNoNewOutputResources() throws Exception {
         String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
-        Path bridgePath = MAIN.resolve("DockIconLaunchProxyBridge.java");
-        assertTrue(Files.exists(bridgePath));
-        String bridge = Files.readString(bridgePath);
+        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
 
         assertFalse(compositor.contains("LauncherGlassSession"));
         assertFalse(compositor.contains("LauncherGlassSceneController"));
