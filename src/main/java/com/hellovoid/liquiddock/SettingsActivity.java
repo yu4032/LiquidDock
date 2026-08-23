@@ -204,7 +204,14 @@ public class SettingsActivity extends AppCompatActivity {
     public static class SettingsFragment extends PreferenceFragmentCompat {
         @Override public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.preferences, rootKey);
+            addPreferencesFromResource(R.xml.preferences_widget_theme);
             SettingsActivity activity = (SettingsActivity) requireActivity();
+            Preference widgetTheme = findPreference("widget_theme_mode");
+            if (widgetTheme != null) widgetTheme.setOnPreferenceChangeListener((pref, value) -> {
+                new android.os.Handler(android.os.Looper.getMainLooper())
+                        .post(() -> activity.restartLauncher());
+                return true;
+            });
             Preference export = findPreference("export_config");
             if (export != null) export.setOnPreferenceClickListener(pref -> {
                 activity.launchExport(); return true;
