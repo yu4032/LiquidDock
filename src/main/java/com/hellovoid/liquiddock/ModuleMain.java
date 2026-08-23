@@ -30,6 +30,7 @@ public final class ModuleMain extends XposedModule {
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled);
+            WidgetThemeHook.install(classLoader, configReader.s("widget_theme_mode", "auto"));
             new MainHook().install(classLoader);
 
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
