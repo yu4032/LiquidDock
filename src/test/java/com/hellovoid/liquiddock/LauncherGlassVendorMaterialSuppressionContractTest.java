@@ -120,6 +120,27 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(folder.contains("restoreMaterial(cover)"));
     }
 
+    @Test
+    public void largeFolderCoverIsHiddenOnlyAfterGlassSinkExists() throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+        String attach = methodSlice(folder,
+                "private static void attachFromFolderIcon(",
+                "private static void scheduleFolderRecovery(");
+        int sink = attach.indexOf("LauncherGlassStaticNode sink = attachMaterial(value, glassConfig)");
+        int sync = attach.indexOf("syncLargeFolderCover(icon, glassConfig)");
+        assertTrue("cover must not disappear before the static glass node exists", sink >= 0 && sync > sink);
+        assertTrue("failed/disabled glass ownership must restore the cover",
+                attach.indexOf("releaseFolderCover(icon)", sink) > sink);
+
+        String recovery = methodSlice(folder,
+                "private static void scheduleFolderRecovery(",
+                "private static void observeFolderIconAttach(");
+        int recoverySink = recovery.indexOf("sink = attachMaterial(material, glassConfig)");
+        int recoverySync = recovery.indexOf("syncLargeFolderCover(current, glassConfig)");
+        assertTrue("startup recovery may hide cover only after it acquires a sink",
+                recoverySink >= 0 && recoverySync > recoverySink);
+    }
+
     private static String methodSlice(String source, String startMarker, String endMarker) {
         int start = source.indexOf(startMarker);
         int end = source.indexOf(endMarker, Math.max(0, start));
