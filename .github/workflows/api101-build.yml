@@ -51,74 +51,59 @@ jobs:
           MATERIALIZE_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          rm -rf /tmp/liquiddock-glass-main /tmp/liquiddock-glass-test
-          cp -a src/main /tmp/liquiddock-glass-main
-          cp -a src/test /tmp/liquiddock-glass-test
+          FILES=(
+            src/main/java/com/hellovoid/liquiddock/DockGlassItemNode.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassSessionRegistry.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassSinkView.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassStaticLayer.java
+            src/main/java/com/hellovoid/liquiddock/LauncherGlassStaticNode.java
+            src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java
+            src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java
+            src/main/java/com/hellovoid/liquiddock/Miuix307ZeroCopyRenderer.java
+            src/main/java/com/hellovoid/liquiddock/MiuixFolderGlassHook.java
+            src/main/java/com/hellovoid/liquiddock/MiuixLauncherDragOverlayHook.java
+            src/main/java/com/hellovoid/liquiddock/MiuixLauncherStaticGlassHook.java
+            src/main/java/com/hellovoid/liquiddock/config/ConfigMigration.java
+            src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java
+            src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
+            src/main/res/xml/preferences.xml
+            src/test/java/com/hellovoid/liquiddock/DockGlassSceneContractTest.java
+            src/test/java/com/hellovoid/liquiddock/FolderGlassToggleContractTest.java
+            src/test/java/com/hellovoid/liquiddock/LauncherGlassAlignmentAndRadiusTest.java
+            src/test/java/com/hellovoid/liquiddock/LauncherGlassBackdropCacheContractTest.java
+            src/test/java/com/hellovoid/liquiddock/LauncherGlassDragStyleContractTest.java
+            src/test/java/com/hellovoid/liquiddock/Miuix307GlassCustomizationContractTest.java
+            src/test/java/com/hellovoid/liquiddock/Miuix307PassBlurGpuDemoTest.java
+            src/test/java/com/hellovoid/liquiddock/Miuix307PrismalParityRepairTest.java
+            src/test/java/com/hellovoid/liquiddock/Miuix307TextureViewPassBlurCalibrationTest.java
+            src/test/java/com/hellovoid/liquiddock/Miuix307TextureViewStrongRefractionTest.java
+            src/test/java/com/hellovoid/liquiddock/PrismalModuleBoundaryContractTest.java
+            src/test/java/com/hellovoid/liquiddock/WorkstationFullscreenProducerRecoveryContractTest.java
+            src/test/java/com/hellovoid/liquiddock/config/ConfigCodecTest.java
+          )
+
+          STAGE=/tmp/liquiddock-glass-materialize
+          rm -rf "${STAGE}"
+          mkdir -p "${STAGE}"
+          for path in "${FILES[@]}"; do
+            mkdir -p "${STAGE}/$(dirname "${path}")"
+            cp -a "${path}" "${STAGE}/${path}"
+          done
 
           git fetch origin "${MATERIALIZE_BRANCH}" --depth=1
           git checkout -B materialize "origin/${MATERIALIZE_BRANCH}"
 
-          rm -rf src/main src/test
-          cp -a /tmp/liquiddock-glass-main src/main
-          cp -a /tmp/liquiddock-glass-test src/test
-
-          rm -f \
-            .github/workflows/glass-scene-apply.yml \
-            ci/glass_contract_compact.py \
-            ci/glass_contract_escape_fix.py \
-            ci/glass_drag_perf_fix.py \
-            ci/glass_drag_style_fix.py \
-            ci/glass_idle_dock_fix.py \
-            ci/glass_perf_apply.py \
-            ci/glass_perf_runner.py \
-            ci/glass_scene_apply.py \
-            ci/glass_scene_runner.py
-
-          python3 - <<'PY'
-          from pathlib import Path
-          workflow = """name: API101 migration build
-
-          on:
-            push:
-              branches:
-                - main
-                - api101-migration
-                - refactor/modular-architecture
-                - 'fix/**'
-                - 'feat/**'
-                - 'demo/**'
-            pull_request:
-              branches: [ main ]
-            workflow_dispatch:
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-java@v4
-                  with:
-                    distribution: temurin
-                    java-version: '17'
-                    cache: gradle
-                - uses: gradle/actions/setup-gradle@v4
-                - run: chmod +x ./gradlew
-                - run: ./gradlew testDebugUnitTest --stacktrace
-                - run: ./gradlew assembleDebug --stacktrace
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: LiquidDock-api101-debug
-                    path: build/outputs/apk/debug/*.apk
-                    if-no-files-found: error
-                    retention-days: 7
-                # Keep the same Gradle verification gates on main and active API101 development branches.
-          """
-          Path('.github/workflows/api101-build.yml').write_text(workflow.replace('          ', ''))
-          PY
+          for path in "${FILES[@]}"; do
+            mkdir -p "$(dirname "${path}")"
+            cp -a "${STAGE}/${path}" "${path}"
+          done
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add -- "${FILES[@]}"
           git diff --cached --check
           git status --short
           git commit -m 'feat: materialize glass scene architecture'
