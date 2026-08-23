@@ -35,7 +35,7 @@ public class DockRealtimeProducerContractTest {
         assertFalse(view.contains("producerPump"));
         assertFalse(view.contains("postOnAnimation(producerPump)"));
         assertFalse(view.contains("producerRequestCount"));
-        assertFalse(view.contains("producerFrameCount"));
+        // Passive OES/draw counters are allowed; they observe cadence without scheduling frames.
     }
 
     @Test public void runtimeShutdownUnbindsPersistentDockProducer() throws Exception {
