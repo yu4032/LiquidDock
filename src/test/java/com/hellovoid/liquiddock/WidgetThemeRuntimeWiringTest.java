@@ -23,7 +23,7 @@ public class WidgetThemeRuntimeWiringTest {
         String source = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
 
-        assertTrue(source.contains("WidgetThemeHook.install"));
+        assertTrue(source.contains("if (runtimeConfig.enabled) WidgetThemeHook.install"));
         assertTrue(source.contains("widget_theme_mode"));
     }
 }
