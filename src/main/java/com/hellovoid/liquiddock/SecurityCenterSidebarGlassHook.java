@@ -8,7 +8,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
-import android.widget.RelativeLayout;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
@@ -137,6 +136,7 @@ final class SecurityCenterSidebarGlassHook {
             @Override public void onViewDetachedFromWindow(View view) {
                 if (rootRef.get() != root) return;
                 clearObservation();
+                restoreVendorMaterials(root);
                 rootRef = new WeakReference<>(null);
                 hostRef = new WeakReference<>(null);
                 // The TextureView releases EGL/producer resources from its own detach callback.
@@ -190,8 +190,7 @@ final class SecurityCenterSidebarGlassHook {
         host.setId(View.generateViewId());
         host.setZ(GLASS_Z);
         host.setGeometry(radius, false, SQUIRCLE_CP);
-        RelativeLayout.LayoutParams hostLp = new RelativeLayout.LayoutParams(1, 1);
-        root.addView(host, 0, hostLp);
+        root.addView(host, 0, new ViewGroup.MarginLayoutParams(1, 1));
         if (!syncHostGeometry(root, host)) {
             root.removeView(host);
             return;
@@ -255,19 +254,25 @@ final class SecurityCenterSidebarGlassHook {
             union.union(allAppsRect);
         }
 
-        ViewGroup.LayoutParams rawLp = host.getLayoutParams();
-        RelativeLayout.LayoutParams lp = rawLp instanceof RelativeLayout.LayoutParams
-                ? (RelativeLayout.LayoutParams) rawLp
-                : new RelativeLayout.LayoutParams(union.width(), union.height());
-        boolean changed = lp.width != union.width() || lp.height != union.height()
-                || lp.leftMargin != union.left || lp.topMargin != union.top;
-        if (changed) {
-            lp.width = union.width();
-            lp.height = union.height();
-            lp.leftMargin = union.left;
-            lp.topMargin = union.top;
-            host.setLayoutParams(lp);
+        ViewGroup.LayoutParams lp = host.getLayoutParams();
+        if (lp == null) return false;
+        boolean changed = lp.width != union.width() || lp.height != union.height();
+        lp.width = union.width();
+        lp.height = union.height();
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) lp;
+            changed |= margins.leftMargin != union.left || margins.topMargin != union.top;
+            margins.leftMargin = union.left;
+            margins.topMargin = union.top;
+            host.setTranslationX(0f);
+            host.setTranslationY(0f);
+        } else {
+            changed |= Float.compare(host.getX(), union.left) != 0
+                    || Float.compare(host.getY(), union.top) != 0;
+            host.setX(union.left);
+            host.setY(union.top);
         }
+        if (changed) host.setLayoutParams(lp);
         return true;
     }
 
@@ -357,5 +362,19 @@ final class SecurityCenterSidebarGlassHook {
             transparentMaterialBackgrounds.put(view, transparent);
         }
         if (view.getBackground() != transparent) view.setBackground(transparent);
+    }
+
+    private static void restoreVendorMaterials(ViewGroup root) {
+        View dock = dockLayout(root);
+        if (dock != null) restoreVendorMaterial(dock);
+        View allApps = findDescendantByClass(root, SidebarGlassPolicy.ALL_APPS_LAYOUT_CLASS);
+        if (allApps != null) restoreVendorMaterial(allApps);
+    }
+
+    private static void restoreVendorMaterial(View view) {
+        if (view == null || !originalMaterialBackgrounds.containsKey(view)) return;
+        Drawable original = originalMaterialBackgrounds.remove(view);
+        transparentMaterialBackgrounds.remove(view);
+        view.setBackground(original);
     }
 }
