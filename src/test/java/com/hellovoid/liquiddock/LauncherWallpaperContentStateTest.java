@@ -60,10 +60,8 @@ public class LauncherWallpaperContentStateTest {
     @Test public void wallpaperChangesAdvanceGenerationWithoutSceneInputs() throws Exception {
         Object state = state();
         long initial = generation(state);
-
         long first = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
         long second = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
-
         assertTrue(first > initial);
         assertTrue(second > first);
         assertEquals(second, generation(state));
@@ -72,31 +70,50 @@ public class LauncherWallpaperContentStateTest {
     @Test public void candidateBoundaryRequestsAtMostOnePulsePerGeneration() throws Exception {
         Object state = state();
         long generation = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
-
         Object first = call(state, "onCandidateBoundary", new Class<?>[]{long.class}, generation);
         Object duplicate = call(state, "onCandidateBoundary", new Class<?>[]{long.class}, generation);
-
         assertTrue(pulseRequested(first));
         assertEquals(generation, pulseGeneration(first));
         assertFalse(pulseAuthoritative(first));
         assertFalse(pulseRequested(duplicate));
     }
 
-    @Test public void authoritativeBoundaryMayFollowCandidateButAlsoCoalesces() throws Exception {
+    @Test public void authoritativeAfterConsumedCandidateRequestsSecondPulse() throws Exception {
         Object state = state();
         long generation = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
-
         Object candidate = call(state, "onCandidateBoundary", new Class<?>[]{long.class}, generation);
+        Object noFollowUp = call(state, "onCandidateFrameConsumed",
+                new Class<?>[]{long.class}, generation);
         Object authoritative = call(state, "onAuthoritativeBoundary",
                 new Class<?>[]{long.class}, generation);
         Object duplicate = call(state, "onAuthoritativeBoundary",
                 new Class<?>[]{long.class}, generation);
-
         assertTrue(pulseRequested(candidate));
+        assertFalse(pulseRequested(noFollowUp));
         assertTrue(pulseRequested(authoritative));
         assertTrue(pulseAuthoritative(authoritative));
         assertEquals(generation, pulseGeneration(authoritative));
         assertFalse(pulseRequested(duplicate));
+    }
+
+    @Test public void authoritativeDuringCandidateFlightDefersUntilCandidateFrame()
+            throws Exception {
+        Object state = state();
+        long generation = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
+        call(state, "onCandidateBoundary", new Class<?>[]{long.class}, generation);
+
+        Object deferred = call(state, "onAuthoritativeBoundary",
+                new Class<?>[]{long.class}, generation);
+        Object duplicateBoundary = call(state, "onAuthoritativeBoundary",
+                new Class<?>[]{long.class}, generation);
+        Object followUp = call(state, "onCandidateFrameConsumed",
+                new Class<?>[]{long.class}, generation);
+
+        assertFalse(pulseRequested(deferred));
+        assertFalse(pulseRequested(duplicateBoundary));
+        assertTrue(pulseRequested(followUp));
+        assertTrue(pulseAuthoritative(followUp));
+        assertEquals(generation, pulseGeneration(followUp));
     }
 
     @Test public void authoritativeBeforeCandidateCannotConsumeCurrentGenerationSlot()
@@ -110,11 +127,11 @@ public class LauncherWallpaperContentStateTest {
                 new Class<?>[]{long.class}, current);
         Object candidate = call(state, "onCandidateBoundary",
                 new Class<?>[]{long.class}, current);
+        call(state, "onCandidateFrameConsumed", new Class<?>[]{long.class}, current);
         Object pairedAuthoritative = call(state, "onAuthoritativeBoundary",
                 new Class<?>[]{long.class}, current);
 
-        assertFalse("late ready event from the prior wallpaper must not claim current generation",
-                pulseRequested(unpairedAuthoritative));
+        assertFalse(pulseRequested(unpairedAuthoritative));
         assertTrue(pulseRequested(candidate));
         assertTrue(pulseRequested(pairedAuthoritative));
         assertTrue(pulseAuthoritative(pairedAuthoritative));
@@ -124,14 +141,12 @@ public class LauncherWallpaperContentStateTest {
         Object state = state();
         long stale = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
         long current = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
-
         Object staleCandidate = call(state, "onCandidateBoundary",
                 new Class<?>[]{long.class}, stale);
         Object staleAuthoritative = call(state, "onAuthoritativeBoundary",
                 new Class<?>[]{long.class}, stale);
         Object currentCandidate = call(state, "onCandidateBoundary",
                 new Class<?>[]{long.class}, current);
-
         assertFalse(pulseRequested(staleCandidate));
         assertFalse(pulseRequested(staleAuthoritative));
         assertTrue(pulseRequested(currentCandidate));
@@ -141,9 +156,11 @@ public class LauncherWallpaperContentStateTest {
         Object state = state();
         long stale = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
         call(state, "onCandidateBoundary", new Class<?>[]{long.class}, stale);
+        call(state, "onCandidateFrameConsumed", new Class<?>[]{long.class}, stale);
         call(state, "onAuthoritativeBoundary", new Class<?>[]{long.class}, stale);
         long current = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
         call(state, "onCandidateBoundary", new Class<?>[]{long.class}, current);
+        call(state, "onCandidateFrameConsumed", new Class<?>[]{long.class}, current);
 
         boolean staleCommit = (Boolean) call(state, "onFrameCommitted",
                 new Class<?>[]{long.class, boolean.class}, stale, true);
