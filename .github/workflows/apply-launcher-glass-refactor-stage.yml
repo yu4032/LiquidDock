@@ -1,0 +1,54 @@
+name: Apply Launcher Glass Refactor Stage
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: launcher-glass-refactor-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  apply-stage:
+    if: ${{ github.event.pull_request.head.ref == 'refactor/launcher-glass-state-geometry' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refactor/launcher-glass-state-geometry
+      - name: Apply and verify stage
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f ci/launcher-glass-refactor-stage.patch ]]; then
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -f ci/launcher-glass-refactor-stage-message.txt
+          git apply --check ci/launcher-glass-refactor-stage.patch
+          git apply ci/launcher-glass-refactor-stage.patch
+          git diff --check
+          ./gradlew testDebugUnitTest --stacktrace
+          ./gradlew assembleDebug --stacktrace
+          echo "applied=true" >> "$GITHUB_OUTPUT"
+      - name: Commit verified source
+        if: ${{ steps.stage.outputs.applied == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          message="$(cat ci/launcher-glass-refactor-stage-message.txt)"
+          rm ci/launcher-glass-refactor-stage.patch ci/launcher-glass-refactor-stage-message.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- src/main/java/com/hellovoid/liquiddock \
+                       src/test/java/com/hellovoid/liquiddock \
+                       ci/launcher-glass-refactor-stage.patch \
+                       ci/launcher-glass-refactor-stage-message.txt
+          git commit -m "$message"
+          git push origin HEAD:refactor/launcher-glass-state-geometry
