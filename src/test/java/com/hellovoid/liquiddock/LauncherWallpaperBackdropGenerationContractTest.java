@@ -36,49 +36,43 @@ public class LauncherWallpaperBackdropGenerationContractTest {
                 controller.contains("onWallpaperAuthoritativeForAll()"));
     }
 
-    @Test public void wallpaperPulseDoesNotInvalidateSceneGenerationOrHideLayer() throws Exception {
+    @Test public void wallpaperPulseReusesGenericSceneFreshnessWithoutInvalidatingSceneState()
+            throws Exception {
         String controller = read("LauncherGlassSceneController.java");
         String pulse = method(controller, "private void requestWallpaperPulse(",
                 "private void applyLayerVisibility(");
 
-        assertTrue("wallpaper pulses must be routed to the existing root session",
-                pulse.contains("session.requestWallpaperBackdrop"));
+        assertTrue("wallpaper pulse must reuse the already validated one-shot Session fresh path",
+                pulse.contains("session.requestFreshBackdrop(state.generation())"));
         assertFalse("wallpaper content changes are not scene-generation invalidations",
                 pulse.contains("onGenerationInvalidated") || pulse.contains("generation++"));
         assertFalse("old glass remains visible until the fresh backdrop atomically replaces it",
                 pulse.contains("applyLayerVisibility") || pulse.contains("setSceneVisible"));
     }
 
-    @Test public void sessionTracksWallpaperTokenWithoutOverwritingSceneGeneration() throws Exception {
+    @Test public void rootControllerOwnsTheInFlightWallpaperFrameToken() throws Exception {
+        String controller = read("LauncherGlassSceneController.java");
         String session = read("LauncherGlassSession.java");
-        String request = method(session, "void requestWallpaperBackdrop(",
-                "void requestSceneRedraw(");
 
-        assertTrue("session needs a generation token for the wallpaper pulse in flight",
-                session.contains("wallpaperRequestedGeneration"));
-        assertTrue("session needs the candidate/authoritative phase for the pulse in flight",
-                session.contains("wallpaperRequestedAuthoritative"));
-        assertTrue("session must know whether the next OES frame belongs to a wallpaper pulse",
-                session.contains("wallpaperPulseInFlight"));
-        assertTrue("wallpaper freshness must reuse the validated producer recovery path",
-                request.contains("recoverFreshBackdropOnUi"));
-        assertFalse("WallpaperContentGeneration must never replace SceneGeneration",
-                request.contains("sceneGeneration = generation")
-                        || request.contains("invalidateGeneration(generation)"));
+        assertTrue("one root controller must bind the next fresh frame to a wallpaper generation",
+                controller.contains("wallpaperPulseGeneration"));
+        assertTrue("candidate and authoritative phases must stay distinguishable",
+                controller.contains("wallpaperPulseAuthoritative"));
+        assertTrue("the controller must know whether a wallpaper pulse is currently in flight",
+                controller.contains("wallpaperPulseInFlight"));
+        assertFalse("generic PassBlur Session must not duplicate wallpaper semantic state",
+                session.contains("wallpaperRequestedGeneration")
+                        || session.contains("wallpaperRequestedAuthoritative")
+                        || session.contains("wallpaperPulseInFlight"));
     }
 
-    @Test public void consumedOesFrameCarriesWallpaperGenerationAndPhase() throws Exception {
-        String session = read("LauncherGlassSession.java");
-        String drain = method(session, "private void drainFrameWork()",
-                "private void refreshProducer()");
+    @Test public void existingFreshFrameAcknowledgementConsumesWallpaperToken() throws Exception {
         String controller = read("LauncherGlassSceneController.java");
+        String callback = method(controller, "static void onFreshFrameRendered(",
+                "static long invalidateForProducerChange(");
 
-        assertTrue("the exact wallpaper generation must be snapshotted when its OES frame arrives",
-                drain.contains("consumedWallpaperGeneration"));
-        assertTrue("candidate and authoritative frames must remain distinguishable",
-                drain.contains("consumedWallpaperAuthoritative"));
-        assertTrue("frame consumption must return the token to the root controller",
-                drain.contains("LauncherGlassSceneController.onWallpaperFrameConsumed"));
+        assertTrue("the real consumed OES frame boundary must also acknowledge wallpaper freshness",
+                callback.contains("onWallpaperFrameConsumed"));
         assertTrue("candidate frame consumption may release a deferred authoritative pulse",
                 controller.contains("onCandidateFrameConsumed"));
         assertTrue("authoritative frame consumption must commit only its generation",
