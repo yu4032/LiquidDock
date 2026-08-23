@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.os.Handler;
 import android.view.Choreographer;
 import android.view.View;
@@ -26,6 +27,11 @@ final class LauncherGlassDragOverlay {
     private final View carrier;
     private final Handler mainHandler;
     private final View.OnAttachStateChangeListener rootAttachListener;
+    private final float[] sourcePoints = new float[8];
+    private final float[] visualPoints = new float[8];
+    private final Matrix sourceToGlobal = new Matrix();
+    private final Matrix hostToGlobal = new Matrix();
+    private final Matrix globalToHost = new Matrix();
     private WeakReference<View> sourceRef = new WeakReference<>(null);
     private LauncherGlassSinkView sink;
     private WeakReference<ViewGroup> hostRef = new WeakReference<>(null);
@@ -233,17 +239,17 @@ final class LauncherGlassDragOverlay {
                     carrier, activeCornerRadiusPx, glassConfig);
             if (sink == null) return false;
         }
-        sink.setLocalVisualBounds(
-                activeVisualLeft, activeVisualTop, activeVisualRight, activeVisualBottom);
-        sink.setNativeCornerRadiusPx(activeCornerRadiusPx);
         return true;
     }
 
     private void applyCarrierGeometry(View source) {
         ViewGroup host = hostRef.get();
         if (released || host == null || carrier.getParent() != host) return;
-        int width = Math.max(1, source.getWidth());
-        int height = Math.max(1, source.getHeight());
+        LauncherGlassDragCarrierGeometry.Snapshot geometry = resolveCarrierGeometry(source, host);
+        if (geometry == null) return;
+
+        int width = Math.max(1, (int) Math.ceil(geometry.carrierWidth()));
+        int height = Math.max(1, (int) Math.ceil(geometry.carrierHeight()));
         ViewGroup.LayoutParams lp = carrier.getLayoutParams();
         if (lp != null && (lp.width != width || lp.height != height)) {
             lp.width = width;
@@ -251,22 +257,69 @@ final class LauncherGlassDragOverlay {
             carrier.setLayoutParams(lp);
         }
 
-        int[] sourceScreen = new int[2];
-        int[] hostScreen = new int[2];
-        source.getLocationOnScreen(sourceScreen);
-        host.getLocationOnScreen(hostScreen);
-        carrier.setX(sourceScreen[0] - hostScreen[0]);
-        carrier.setY(sourceScreen[1] - hostScreen[1]);
-        carrier.setPivotX(source.getPivotX());
-        carrier.setPivotY(source.getPivotY());
-        carrier.setScaleX(source.getScaleX());
-        carrier.setScaleY(source.getScaleY());
-        carrier.setRotation(source.getRotation());
+        carrier.setX(geometry.carrierLeft);
+        carrier.setY(geometry.carrierTop);
+        // sourceToGlobal already contains DragView and ancestor transforms. The carrier is a
+        // sibling below DragContainer, so reapplying source transform here would double scale/
+        // pivot displacement and would miss ancestor transforms. Keep the carrier in final host
+        // space with an identity local transform.
+        carrier.setPivotX(0f);
+        carrier.setPivotY(0f);
+        carrier.setScaleX(1f);
+        carrier.setScaleY(1f);
+        carrier.setRotation(0f);
         carrier.setAlpha(1f);
         carrier.setVisibility(View.VISIBLE);
+
         sink.setLocalVisualBounds(
+                geometry.visualLeft, geometry.visualTop,
+                geometry.visualRight, geometry.visualBottom);
+        float originalVisualWidth = Math.max(1f, activeVisualRight - activeVisualLeft);
+        float originalVisualHeight = Math.max(1f, activeVisualBottom - activeVisualTop);
+        float radiusScale = Math.max(0.01f, Math.min(
+                geometry.visualWidth() / originalVisualWidth,
+                geometry.visualHeight() / originalVisualHeight));
+        sink.setNativeCornerRadiusPx(LauncherGlassBoundsPolicy.capRadius(
+                activeCornerRadiusPx * radiusScale,
+                geometry.visualWidth(), geometry.visualHeight()));
+    }
+
+    private LauncherGlassDragCarrierGeometry.Snapshot resolveCarrierGeometry(
+            View source, ViewGroup host) {
+        if (source == null || host == null || !source.isAttachedToWindow()
+                || !host.isAttachedToWindow() || source.getWidth() <= 0 || source.getHeight() <= 0) {
+            return null;
+        }
+        setRectCorners(sourcePoints, 0f, 0f, source.getWidth(), source.getHeight());
+        setRectCorners(visualPoints,
                 activeVisualLeft, activeVisualTop, activeVisualRight, activeVisualBottom);
-        sink.setNativeCornerRadiusPx(activeCornerRadiusPx);
+
+        sourceToGlobal.reset();
+        source.transformMatrixToGlobal(sourceToGlobal);
+        sourceToGlobal.mapPoints(sourcePoints);
+        sourceToGlobal.mapPoints(visualPoints);
+
+        hostToGlobal.reset();
+        host.transformMatrixToGlobal(hostToGlobal);
+        globalToHost.reset();
+        if (!hostToGlobal.invert(globalToHost)) return null;
+        globalToHost.mapPoints(sourcePoints);
+        globalToHost.mapPoints(visualPoints);
+
+        return LauncherGlassDragCarrierGeometry.resolve(
+                sourcePoints, visualPoints, host.getScrollX(), host.getScrollY());
+    }
+
+    private static void setRectCorners(
+            float[] points, float left, float top, float right, float bottom) {
+        points[0] = left;
+        points[1] = top;
+        points[2] = right;
+        points[3] = top;
+        points[4] = left;
+        points[5] = bottom;
+        points[6] = right;
+        points[7] = bottom;
     }
 
     private LauncherGlassDragState.Bounds readRootBounds(View source) {
