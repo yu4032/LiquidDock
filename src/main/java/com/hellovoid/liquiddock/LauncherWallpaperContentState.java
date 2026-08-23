@@ -6,8 +6,8 @@ package com.hellovoid.liquiddock;
  * <p>Wallpaper content generation is intentionally independent from Launcher scene/surface/
  * geometry generations. A candidate UI boundary may request one early producer pulse, while a
  * later compositor-ready boundary may request one additional authoritative pulse for the same
- * content generation. An unpaired ready callback is ignored so a late callback from the prior
- * wallpaper cannot consume the current generation's authoritative slot.</p>
+ * content generation. Candidate and authoritative producer pulses are serialized so each
+ * consumed OES frame has one unambiguous wallpaper-generation phase.</p>
  */
 final class LauncherWallpaperContentState {
     static final class Pulse {
@@ -39,11 +39,15 @@ final class LauncherWallpaperContentState {
     private long generation;
     private long committedGeneration;
     private boolean candidateRequested;
+    private boolean candidateFrameConsumed;
+    private boolean authoritativeBoundarySeen;
     private boolean authoritativeRequested;
 
     synchronized long onWallpaperChanged() {
         generation++;
         candidateRequested = false;
+        candidateFrameConsumed = false;
+        authoritativeBoundarySeen = false;
         authoritativeRequested = false;
         return generation;
     }
@@ -57,9 +61,22 @@ final class LauncherWallpaperContentState {
     }
 
     synchronized Pulse onAuthoritativeBoundary(long eventGeneration) {
-        if (eventGeneration != generation || !candidateRequested || authoritativeRequested) {
+        if (eventGeneration != generation || !candidateRequested
+                || authoritativeBoundarySeen || authoritativeRequested) {
             return Pulse.none();
         }
+        authoritativeBoundarySeen = true;
+        if (!candidateFrameConsumed) return Pulse.none();
+        authoritativeRequested = true;
+        return Pulse.request(generation, true);
+    }
+
+    synchronized Pulse onCandidateFrameConsumed(long frameGeneration) {
+        if (frameGeneration != generation || !candidateRequested || candidateFrameConsumed) {
+            return Pulse.none();
+        }
+        candidateFrameConsumed = true;
+        if (!authoritativeBoundarySeen || authoritativeRequested) return Pulse.none();
         authoritativeRequested = true;
         return Pulse.request(generation, true);
     }
