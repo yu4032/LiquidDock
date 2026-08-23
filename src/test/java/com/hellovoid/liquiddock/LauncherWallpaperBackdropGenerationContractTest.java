@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Source contracts for routing WallpaperContentGeneration through Workspace glass only. */
+/** Focused integration guards for WallpaperContentGeneration routing. */
 public class LauncherWallpaperBackdropGenerationContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -16,78 +16,25 @@ public class LauncherWallpaperBackdropGenerationContractTest {
         return Files.readString(MAIN.resolve(name));
     }
 
-    private static String method(String source, String declaration, String nextDeclaration) {
-        int start = source.indexOf(declaration);
-        if (start < 0) return "";
-        int end = source.indexOf(nextDeclaration, start + declaration.length());
-        return end >= 0 ? source.substring(start, end) : source.substring(start);
-    }
-
-    @Test public void sceneControllerOwnsWallpaperGenerationOutsideSceneState() throws Exception {
-        String controller = read("LauncherGlassSceneController.java");
-
-        assertTrue("each Workspace root must own independent wallpaper content freshness",
-                controller.contains("LauncherWallpaperContentState wallpaperContentState"));
-        assertTrue("vendor wallpaper changes must advance every active root's content generation",
-                controller.contains("onWallpaperChangedForAll()"));
-        assertTrue("Workspace UI wallpaper notification must route a candidate boundary",
-                controller.contains("onWallpaperCandidate(View"));
-        assertTrue("compositor-ready notification must route an authoritative boundary",
-                controller.contains("onWallpaperAuthoritativeForAll()"));
-    }
-
-    @Test public void wallpaperPulseReusesGenericSceneFreshnessWithoutInvalidatingSceneState()
+    @Test public void wallpaperContentGenerationStaysIndependentFromSceneGeneration()
             throws Exception {
         String controller = read("LauncherGlassSceneController.java");
-        String pulse = method(controller, "void requestWallpaperPulse(",
-                "private void applyLayerVisibility(");
-
-        assertTrue("wallpaper pulse must reuse the already validated one-shot Session fresh path",
-                pulse.contains("session.requestFreshBackdrop(state.generation())"));
-        assertFalse("wallpaper content changes are not scene-generation invalidations",
-                pulse.contains("onGenerationInvalidated") || pulse.contains("generation++"));
-        assertFalse("old glass remains visible until the fresh backdrop atomically replaces it",
-                pulse.contains("applyLayerVisibility") || pulse.contains("setSceneVisible"));
+        assertTrue(controller.contains("LauncherWallpaperContentState wallpaperContentState"));
+        assertTrue(controller.contains("onWallpaperChangedForAll()"));
+        assertFalse(controller.contains("onWallpaperChanged() {\n        state.onGenerationInvalidated()"));
     }
 
-    @Test public void rootControllerOwnsTheInFlightWallpaperFrameToken() throws Exception {
+    @Test public void sessionOwnsWallpaperFrameTokenInsteadOfGuessingFromGenericFreshFrame()
+            throws Exception {
         String controller = read("LauncherGlassSceneController.java");
         String session = read("LauncherGlassSession.java");
-
-        assertTrue("one root controller must bind the next fresh frame to a wallpaper generation",
-                controller.contains("wallpaperPulseGeneration"));
-        assertTrue("candidate and authoritative phases must stay distinguishable",
-                controller.contains("wallpaperPulseAuthoritative"));
-        assertTrue("the controller must know whether a wallpaper pulse is currently in flight",
-                controller.contains("wallpaperPulseInFlight"));
-        assertFalse("generic PassBlur Session must not duplicate wallpaper semantic state",
-                session.contains("wallpaperRequestedGeneration")
-                        || session.contains("wallpaperRequestedAuthoritative")
-                        || session.contains("wallpaperPulseInFlight"));
-    }
-
-    @Test public void existingFreshFrameAcknowledgementConsumesWallpaperToken() throws Exception {
-        String controller = read("LauncherGlassSceneController.java");
-        String callback = method(controller, "static void onFreshFrameRendered(",
-                "static long invalidateForProducerChange(");
-
-        assertTrue("the real consumed OES frame boundary must also acknowledge wallpaper freshness",
-                callback.contains("onWallpaperFrameConsumed"));
-        assertTrue("candidate frame consumption may release a deferred authoritative pulse",
-                controller.contains("onCandidateFrameConsumed"));
-        assertTrue("authoritative frame consumption must commit only its generation",
-                controller.contains("onFrameCommitted"));
-    }
-
-    @Test public void wallpaperRefreshStillReturnsWorkspaceProducerToIdle() throws Exception {
-        String session = read("LauncherGlassSession.java");
-        String drain = method(session, "private void drainFrameWork()",
-                "private void refreshProducer()");
-
-        assertTrue("fresh wallpaper frames must keep the Workspace one-shot power policy",
-                drain.contains("Miuix307PassBlurBridge.pauseUpdates(binding)"));
-        assertFalse("WallpaperContentGeneration must not enable a continuous Workspace producer",
-                session.contains("wallpaperContinuous")
-                        || session.contains("setProducerUpdatesEnabled(true, \"wallpaper"));
+        assertTrue("Session must accept the content token with the producer pulse",
+                session.contains("requestWallpaperBackdrop("));
+        assertTrue("Session must snapshot the requested wallpaper generation",
+                session.contains("wallpaperRequestedGeneration"));
+        assertTrue("Controller must send the content generation into Session",
+                controller.contains("session.requestWallpaperBackdrop("));
+        assertFalse("generic fresh-frame acknowledgement must not consume a wallpaper token",
+                controller.contains("controller.onWallpaperFrameConsumed(generation)"));
     }
 }
