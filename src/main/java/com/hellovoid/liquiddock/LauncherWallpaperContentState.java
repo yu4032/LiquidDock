@@ -5,8 +5,9 @@ package com.hellovoid.liquiddock;
  *
  * <p>Wallpaper content generation is intentionally independent from Launcher scene/surface/
  * geometry generations. A candidate UI boundary may request one early producer pulse, while a
- * compositor-ready boundary may request one additional authoritative pulse for the same content
- * generation. Only a frame associated with the current authoritative pulse can commit it.</p>
+ * later compositor-ready boundary may request one additional authoritative pulse for the same
+ * content generation. An unpaired ready callback is ignored so a late callback from the prior
+ * wallpaper cannot consume the current generation's authoritative slot.</p>
  */
 final class LauncherWallpaperContentState {
     static final class Pulse {
@@ -56,7 +57,7 @@ final class LauncherWallpaperContentState {
     }
 
     synchronized Pulse onAuthoritativeBoundary(long eventGeneration) {
-        if (eventGeneration != generation || authoritativeRequested) {
+        if (eventGeneration != generation || !candidateRequested || authoritativeRequested) {
             return Pulse.none();
         }
         authoritativeRequested = true;
