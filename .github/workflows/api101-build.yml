@@ -25,6 +25,8 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
+      - name: Apply vendor-state Dock mapping fix
+        run: python3 ci/vendor_state_dock_fix.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
@@ -33,4 +35,11 @@ jobs:
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
-      # Keep the same Gradle verification gates on main and active API101 development branches.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiquidDock-vendor-state-dock-patched-source
+          path: |
+            src/main/java/com/hellovoid/liquiddock
+            src/test/java/com/hellovoid/liquiddock
+          if-no-files-found: error
+          retention-days: 3
