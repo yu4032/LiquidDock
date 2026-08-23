@@ -39,7 +39,7 @@ public class LauncherWallpaperBackdropGenerationContractTest {
     @Test public void wallpaperPulseReusesGenericSceneFreshnessWithoutInvalidatingSceneState()
             throws Exception {
         String controller = read("LauncherGlassSceneController.java");
-        String pulse = method(controller, "private void requestWallpaperPulse(",
+        String pulse = method(controller, "void requestWallpaperPulse(",
                 "private void applyLayerVisibility(");
 
         assertTrue("wallpaper pulse must reuse the already validated one-shot Session fresh path",
