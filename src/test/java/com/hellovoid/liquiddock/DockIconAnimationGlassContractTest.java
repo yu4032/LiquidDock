@@ -36,7 +36,6 @@ public class DockIconAnimationGlassContractTest {
         assertTrue(hook.contains("DockIconLaunchProxyBridge.holdHidden"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.update"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.end"));
-        assertTrue(bridge.contains("LauncherGlassStaticNode.attachLaunchProxyAnchor"));
         assertTrue(bridge.contains("DockGlassItemRegistry.holdLaunchProxyHidden"));
         assertTrue(bridge.contains("DockGlassItemRegistry.updateLaunchProxyGeometry"));
         assertTrue(bridge.contains("DockGlassItemRegistry.endLaunchProxy"));
@@ -66,15 +65,19 @@ public class DockIconAnimationGlassContractTest {
     }
 
     @Test
-    public void proxyNodeSeparatesLauncherSessionAnchorFromDockRadiusReference() throws Exception {
+    public void proxyNodeUsesDockMaterialWithLauncherSessionWithoutChangingWorkspaceNode() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
         String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
 
-        assertTrue(node.contains("proxyReferenceRef"));
-        assertTrue(node.contains("attachLaunchProxyAnchor"));
-        assertTrue(node.contains("LauncherGlassIconGeometry.resolve(proxyReference)"));
-        assertTrue(node.contains("proxyReference.getWidth()"));
-        assertTrue(node.contains("proxyReference.getHeight()"));
-        assertTrue(node.contains("node.visualOwnerState.holdLaunchProxyHidden()"));
+        assertTrue(bridge.contains("LauncherGlassSessionRegistry.acquire(sessionAnchor"));
+        assertTrue(bridge.contains("LauncherGlassStaticNode.class.getDeclaredConstructor"));
+        assertTrue(bridge.contains("constructor.newInstance("));
+        assertTrue(bridge.contains("proxyReference, LauncherGlassDragState.Kind.ICON"));
+        assertTrue(bridge.contains("resolveProxyReferenceRadius(proxyReference)"));
+        assertTrue(bridge.contains("node.holdLaunchProxyHidden()"));
+        assertTrue(bridge.contains("shared.registerStaticNode(node)"));
+        assertFalse(node.contains("proxyReferenceRef"));
+        assertFalse(node.contains("attachLaunchProxyAnchor"));
     }
 
     @Test
