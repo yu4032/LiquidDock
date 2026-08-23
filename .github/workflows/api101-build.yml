@@ -26,7 +26,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
       - name: Apply vendor-state Dock mapping fix
-        run: python3 ci/vendor_state_dock_fix.py
+        run: |
+          python3 ci/vendor_state_dock_fix.py
+          python3 ci/workspace_covered_bind_fix.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
