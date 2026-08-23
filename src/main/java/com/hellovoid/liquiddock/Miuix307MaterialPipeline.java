@@ -69,6 +69,7 @@ final class Miuix307MaterialPipeline {
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);
             installVendorStaticDockSnapshotPowerHook(classLoader);
+            LauncherWallpaperFreshnessHook.install(classLoader);
 
             HookUtil.hookMethod(classLoader,
                     "com.miui.home.launcher.Launcher", "setupViews",
