@@ -1,0 +1,185 @@
+name: Materialize clean source
+
+on:
+  push:
+    branches: [ feat/folder-press-glow ]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: ${{ !contains(github.event.head_commit.message, '[materialized]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/folder-press-glow
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x ./gradlew
+      - name: Materialize validated production patches
+        run: |
+          python3 ci/vendor_state_dock_fix.py
+          python3 ci/workspace_covered_bind_fix.py
+          python3 ci/vendor_snapshot_power_fix.py
+          python3 ci/workspace_page_glass_fix.py
+          python3 ci/workspace_resume_glass_fix.py
+          python3 ci/workspace_scene_owner_fix.py
+          python3 ci/workspace_proxy_rect_owner_fix.py
+          python3 ci/workspace_final_proxy_consumer_fix.py
+          python3 ci/workspace_hidden_proxy_visibility_fix.py
+          python3 ci/workspace_surface_generation_recovery_fix.py
+          python3 ci/workspace_native_surface_generation_fix.py
+          python3 ci/workspace_producer_endpoint_rollover_fix.py
+      - name: Remove dead paths and duplicated cleanup
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          MAIN = Path('src/main/java/com/hellovoid/liquiddock')
+          TEST = Path('src/test/java/com/hellovoid/liquiddock')
+
+          session_path = MAIN / 'LauncherGlassSession.java'
+          s = session_path.read_text()
+          s = s.replace('import com.hellovoid.prismal.PrismalSampling;\n', '')
+          s = s.replace('    private static final AtomicInteger NEXT_NODE_ID = new AtomicInteger(1);\n', '')
+          s = s.replace('        final int id = NEXT_NODE_ID.getAndIncrement();\n', '')
+          s = s.replace('    private volatile LauncherGlassGpuAtlas.Layout atlasLayout;\n', '')
+          start = s.find('    private boolean rebuildAtlasLayout(View root) {')
+          if start >= 0:
+              end = s.find('    private boolean refreshProducerGeometryOnUi(View root) {', start)
+              if end < 0:
+                  raise SystemExit('missing refreshProducerGeometryOnUi after dead atlas path')
+              s = s[:start] + s[end:]
+
+          old = '''        backdropPrepared = false;
+                  if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
+                  if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
+                  normalizeProgram = compositeProgram = 0;
+                  if (oesTexture != 0) GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
+                  oesTexture = 0;
+                  Surface producer = inputProducerSurface;
+                  inputProducerSurface = null;
+                  if (producer != null) producer.release();
+                  SurfaceTexture input = inputSurfaceTexture;
+                  inputSurfaceTexture = null;
+                  if (input != null) {
+                      try { input.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
+                      input.release();
+                  }
+          '''
+          new = '''        if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
+                  if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
+                  normalizeProgram = compositeProgram = 0;
+                  releaseInputProducerEndpointOnRenderThread();
+          '''
+          if old not in s:
+              raise SystemExit('releaseGl duplicate endpoint cleanup anchor missing')
+          s = s.replace(old, new, 1)
+          session_path.write_text(s)
+
+          atlas = MAIN / 'LauncherGlassGpuAtlas.java'
+          if atlas.exists():
+              atlas.unlink()
+
+          bridge_path = MAIN / 'Miuix307PassBlurBridge.java'
+          b = bridge_path.read_text()
+          dead_overload = '''    /** Compatibility overload for the retired diagnostic view; output identity is intentionally ignored. */
+              static Binding bind(
+                      View materialHost, View ignoredOutputView, Surface producerSurface, float requestedScale) {
+                  return bind(materialHost, producerSurface, requestedScale);
+              }
+
+          '''
+          if dead_overload in b:
+              b = b.replace(dead_overload, '', 1)
+          bridge_path.write_text(b)
+
+          for name in ('DockContinuousLocalDomainContractTest.java',
+                       'DockRealtimeProducerContractTest.java'):
+              p = TEST / name
+              t = p.read_text()
+              old = '''int overloadStart = bridge.indexOf("/** Compatibility overload", bindStart);
+                  assertTrue(bindStart >= 0 && overloadStart > bindStart);
+                  String bind = bridge.substring(bindStart, overloadStart);'''
+              new = '''int nextMethod = bridge.indexOf("static void requestSingleUpdate(", bindStart);
+                  assertTrue(bindStart >= 0 && nextMethod > bindStart);
+                  String bind = bridge.substring(bindStart, nextMethod);'''
+              if old in t:
+                  t = t.replace(old, new, 1)
+              p.write_text(t)
+
+          p = TEST / 'LauncherGlassStaticCompositorContractTest.java'
+          t = p.read_text()
+          needle = '        assertFalse(session.contains("boolean atlasChanged = rebuildAtlasLayout(root);"));\n'
+          if 'assertFalse(session.contains("rebuildAtlasLayout("));' not in t:
+              if needle not in t:
+                  raise SystemExit('static compositor atlas assertion anchor missing')
+              t = t.replace(needle, needle
+                      + '        assertFalse(session.contains("rebuildAtlasLayout("));\n'
+                      + '        assertFalse(Files.exists(SESSION.getParent().resolve("LauncherGlassGpuAtlas.java")));\n', 1)
+          p.write_text(t)
+
+          p = TEST / 'LauncherGlassProducerEndpointRebindTest.java'
+          t = p.read_text()
+          if 'shutdownReusesEndpointReleaseHelperInsteadOfDuplicatingCleanup' not in t:
+              raise SystemExit('missing endpoint cleanup regression test')
+
+          forbidden = {
+              'LauncherGlassGpuAtlas.java': (MAIN / 'LauncherGlassGpuAtlas.java').exists(),
+              'rebuildAtlasLayout': 'rebuildAtlasLayout(' in s,
+              'atlasLayout': 'atlasLayout' in s,
+              'NEXT_NODE_ID': 'NEXT_NODE_ID' in s,
+              'retired diagnostic overload': 'ignoredOutputView' in b,
+          }
+          bad = [name for name, present in forbidden.items() if present]
+          if bad:
+              raise SystemExit('dead paths remain: ' + ', '.join(bad))
+          PY
+      - name: Remove patch-stack build indirection
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/api101-build.yml')
+          text = workflow.read_text()
+          start = text.index('      - name: Apply vendor-state Dock mapping fix\n')
+          end = text.index('      - run: ./gradlew testDebugUnitTest --stacktrace\n', start)
+          workflow.write_text(text[:start] + text[end:])
+          PY
+          rm -f \
+            ci/vendor_state_dock_fix.py \
+            ci/workspace_covered_bind_fix.py \
+            ci/vendor_snapshot_power_fix.py \
+            ci/workspace_page_glass_fix.py \
+            ci/workspace_resume_glass_fix.py \
+            ci/workspace_scene_owner_fix.py \
+            ci/workspace_proxy_rect_owner_fix.py \
+            ci/workspace_final_proxy_consumer_fix.py \
+            ci/workspace_hidden_proxy_visibility_fix.py \
+            ci/workspace_surface_generation_recovery_fix.py \
+            ci/workspace_native_surface_generation_fix.py \
+            ci/workspace_producer_endpoint_rollover_fix.py \
+            ci/prismal-single-edge-final-verify.txt
+      - name: Verify clean source tree
+        run: |
+          test ! -e src/main/java/com/hellovoid/liquiddock/LauncherGlassGpuAtlas.java
+          ! grep -R "rebuildAtlasLayout\|atlasLayout\|NEXT_NODE_ID\|ignoredOutputView" src/main/java/com/hellovoid/liquiddock
+          ! grep -R "ci/workspace_.*_fix.py\|ci/vendor_.*_fix.py" .github/workflows
+          test -z "$(find ci -maxdepth 1 -type f 2>/dev/null)"
+      - run: ./gradlew testDebugUnitTest --stacktrace
+      - run: ./gradlew assembleDebug --stacktrace
+      - name: Commit materialized clean tree
+        run: |
+          rm -f .github/workflows/materialize-clean-source.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "[materialized] refactor: commit clean Launcher glass source"
+          git push origin HEAD:feat/folder-press-glow
