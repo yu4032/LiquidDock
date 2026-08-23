@@ -23,7 +23,6 @@ import com.hellovoid.prismal.PrismalHighlightProfile;
 import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
-import com.hellovoid.prismal.PrismalSampling;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -47,7 +46,6 @@ final class LauncherGlassSession {
     private static final String TAG = "[DC][LauncherGlass]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
-    private static final AtomicInteger NEXT_NODE_ID = new AtomicInteger(1);
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -89,7 +87,6 @@ final class LauncherGlassSession {
     }
 
     private static final class NodeState {
-        final int id = NEXT_NODE_ID.getAndIncrement();
         final WeakReference<LauncherGlassSinkView> sinkRef;
         final LauncherGlassGeometryStability geometryStability =
                 new LauncherGlassGeometryStability();
@@ -158,7 +155,6 @@ final class LauncherGlassSession {
     private volatile Miuix307PassBlurBridge.Binding binding;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
-    private volatile LauncherGlassGpuAtlas.Layout atlasLayout;
     private volatile boolean hasConsumedFrame;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
@@ -527,39 +523,6 @@ final class LauncherGlassSession {
         if (staticChanged) schedule |= framePolicy.requestStatic();
         if (dragChanged) schedule |= framePolicy.requestDrag();
         if (schedule) postRender(this::drainFrameWork, null);
-    }
-
-    private boolean rebuildAtlasLayout(View root) {
-        PrismalParams params = prismalParams;
-        if (root == null || params == null || rootWidth <= 0 || rootHeight <= 0) return false;
-        List<NodeState> snapshot;
-        synchronized (nodes) { snapshot = new ArrayList<>(nodes.values()); }
-        ArrayList<LauncherGlassGpuAtlas.Request> requests = new ArrayList<>();
-        for (NodeState node : snapshot) {
-            LauncherGlassGeometry.Snapshot geometry = node.geometry;
-            if (geometry == null) continue;
-            int guardX = PrismalSampling.requiredGuardPx(
-                    params, geometry.width, geometry.height, true);
-            int guardY = PrismalSampling.requiredGuardPx(
-                    params, geometry.width, geometry.height, false);
-            int left = Math.max(0, (int) Math.floor(geometry.left - guardX));
-            int top = Math.max(0, (int) Math.floor(geometry.top - guardY));
-            int right = Math.min(rootWidth,
-                    (int) Math.ceil(geometry.left + geometry.width + guardX));
-            int bottom = Math.min(rootHeight,
-                    (int) Math.ceil(geometry.top + geometry.height + guardY));
-            if (right <= left || bottom <= top) continue;
-            requests.add(new LauncherGlassGpuAtlas.Request(
-                    node.id, left, top, right - left, bottom - top,
-                    geometry.left, geometry.top, geometry.width, geometry.height,
-                    geometry.cornerRadius));
-        }
-        int limit = maxTextureSize > 0 ? maxTextureSize
-                : Math.max(4096, Math.max(rootWidth, rootHeight));
-        LauncherGlassGpuAtlas.Layout next = LauncherGlassGpuAtlas.pack(requests, limit);
-        LauncherGlassGpuAtlas.Layout old = atlasLayout;
-        atlasLayout = next;
-        return old == null ? next != null : !old.sameAs(next);
     }
 
     private boolean refreshProducerGeometryOnUi(View root) {
