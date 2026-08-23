@@ -28,11 +28,9 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(helper.contains("setBackground(null)"));
         assertTrue(helper.contains("ORIGINAL_WIDGET_BACKGROUNDS"));
         assertTrue(helper.contains("releaseWidget"));
-        // RemoteViews may recreate widget_frame, so reclaim after every provider update.
         assertTrue(hook.contains("updateAppWidget"));
         assertTrue(hook.contains("LauncherGlassVendorMaterialSuppressor.claimWidget"));
 
-        // Never hide the whole host or provider content just to remove its fallback plate.
         assertFalse(helper.contains("setAlpha(0"));
         assertFalse(helper.contains("removeAllViews"));
         assertFalse(helper.contains("setVisibility(View.INVISIBLE"));
@@ -60,10 +58,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
     public void mamlAsyncRootAndColorRefreshReassertBackgroundOwnershipWithoutDrag() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
 
-        // Launcher 4.50 loads the MAML ScreenElementRoot asynchronously. putVariableNumber() is a
-        // no-op while mRoot is null, then applyPath() calls onResume() after initMamlview(). Also,
-        // updateColor() calls vendor setMaMlBlurIfSupported() and can write the variable back to 0.
-        // Both boundaries must re-enter the normal widget bind/claim path.
         assertTrue(hook.contains("installMamlBackgroundOwnershipHooks"));
         assertTrue(hook.contains("\"onResume\""));
         assertTrue(hook.contains("\"updateColor\""));
@@ -76,8 +70,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
 
         assertTrue(folder.contains("com.miui.home.launcher.folder.FolderIcon1x1"));
         assertTrue(folder.contains("com.miui.home.launcher.folder.FolderIcon2x2"));
-        // setIconImageView is invoked even when Launcher native folder blur is disabled. Use the
-        // abstract FolderIcon type so 1x1, 2x2_4, 2x2_9 and future subclasses all hit this path.
         assertTrue(folder.contains("folderIconType.isInstance(icon)"));
         assertTrue(folder.contains("setIconImageView"));
     }
@@ -101,7 +93,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue("native background can only be hidden after the per-style enabled guard",
                 suppress > restore);
 
-        // The preview/icon contents remain visible; only background-specific views are suppressed.
         assertFalse(folder.contains("mPreviewContainer.setAlpha(0"));
         assertFalse(folder.contains("mPreviewContainer.setVisibility"));
     }
@@ -110,9 +101,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
     public void largeFolderGlassAlsoSuppressesDedicatedCoverAbovePreview() throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
 
-        // Launcher 4.50 folder_icon_2x2_4/9 stacks R.id.cover above preview_icons_container.
-        // It is a second visual plate independent from icon_icon/mFolderBackground. Claim it only
-        // for large-folder glass and restore it when that ownership ends.
         assertTrue(folder.contains("CLAIMED_FOLDER_COVERS"));
         assertTrue(folder.contains("syncLargeFolderCover"));
         assertTrue(folder.contains("getCover"));
@@ -139,6 +127,23 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         int recoverySync = recovery.indexOf("syncLargeFolderCover(current, glassConfig)");
         assertTrue("startup recovery may hide cover only after it acquires a sink",
                 recoverySink >= 0 && recoverySync > recoverySink);
+    }
+
+    @Test
+    public void largeFolderBackgroundUsesInternalPaintAlphaBecauseDrawableSetAlphaIsNoOp()
+            throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+
+        // Launcher 4.50 FolderIcon4x4NormalBackgroundDrawable overrides Drawable.setAlpha(int)
+        // with an empty body. ImageView.setImageAlpha(0) therefore cannot suppress this plate.
+        // Launcher itself reaches into getPaint().setAlpha(0) when native folder blur is active.
+        assertTrue(folder.contains("suppressLargeFolderDrawablePaint"));
+        assertTrue(folder.contains("FolderIcon4x4NormalBackgroundDrawable"));
+        assertTrue(folder.contains("FolderIcon4x4DefaultBackgroundDrawable"));
+        assertTrue(folder.contains("HookUtil.invoke(drawable, \"getPaint\")"));
+        assertTrue(folder.contains("paint.setAlpha(0)"));
+        assertTrue(folder.contains("ORIGINAL_LARGE_FOLDER_PAINT_ALPHA"));
+        assertTrue(folder.contains("restoreLargeFolderDrawablePaint"));
     }
 
     private static String methodSlice(String source, String startMarker, String endMarker) {
