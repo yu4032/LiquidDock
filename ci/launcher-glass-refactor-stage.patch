@@ -1,0 +1,245 @@
+diff --git a/src/main/java/com/hellovoid/liquiddock/LauncherGlassFramePolicy.java b/src/main/java/com/hellovoid/liquiddock/LauncherGlassFramePolicy.java
+index 196ee3e..01b24b3 100644
+--- a/src/main/java/com/hellovoid/liquiddock/LauncherGlassFramePolicy.java
++++ b/src/main/java/com/hellovoid/liquiddock/LauncherGlassFramePolicy.java
+@@ -27,14 +27,6 @@ final class LauncherGlassFramePolicy {
+         return schedule();
+     }
+ 
+-    synchronized boolean requestBackdropRefresh() {
+-        staticDirty = true;
+-        dragDirty = true;
+-        refreshProducer = true;
+-        rebuildBackdrop = true;
+-        return schedule();
+-    }
+-
+     synchronized boolean requestBackdropRebuild() {
+         staticDirty = true;
+         dragDirty = true;
+diff --git a/src/main/java/com/hellovoid/liquiddock/LauncherGlassGeometryStability.java b/src/main/java/com/hellovoid/liquiddock/LauncherGlassGeometryStability.java
+deleted file mode 100644
+index ae3956c..0000000
+--- a/src/main/java/com/hellovoid/liquiddock/LauncherGlassGeometryStability.java
++++ /dev/null
+@@ -1,60 +0,0 @@
+-package com.hellovoid.liquiddock;
+-
+-/**
+- * Holds root-space geometry steady while an ancestor is continuously transforming it.
+- * Local material changes and explicitly trusted realtime ancestor motion commit immediately;
+- * other ancestor-only motion is committed after the same geometry is observed for two
+- * consecutive pre-draws.
+- */
+-final class LauncherGlassGeometryStability {
+-    private static final int REQUIRED_STABLE_FRAMES = 2;
+-
+-    private LauncherGlassGeometry.Snapshot pending;
+-    private int stableFrames;
+-
+-    LauncherGlassGeometry.Snapshot select(
+-            LauncherGlassGeometry.Snapshot current,
+-            LauncherGlassGeometry.Snapshot observed,
+-            boolean localMaterialChanged) {
+-        return select(current, observed, localMaterialChanged, false);
+-    }
+-
+-    LauncherGlassGeometry.Snapshot select(
+-            LauncherGlassGeometry.Snapshot current,
+-            LauncherGlassGeometry.Snapshot observed,
+-            boolean localMaterialChanged,
+-            boolean realtimeAncestorMotion) {
+-        if (same(current, observed)) {
+-            clearPending();
+-            return current;
+-        }
+-        if (localMaterialChanged || realtimeAncestorMotion || current == null || observed == null) {
+-            clearPending();
+-            return observed;
+-        }
+-        if (same(pending, observed)) {
+-            stableFrames++;
+-        } else {
+-            pending = observed;
+-            stableFrames = 1;
+-        }
+-        if (stableFrames >= REQUIRED_STABLE_FRAMES) {
+-            LauncherGlassGeometry.Snapshot committed = observed;
+-            clearPending();
+-            return committed;
+-        }
+-        return current;
+-    }
+-
+-    private void clearPending() {
+-        pending = null;
+-        stableFrames = 0;
+-    }
+-
+-    private static boolean same(
+-            LauncherGlassGeometry.Snapshot first,
+-            LauncherGlassGeometry.Snapshot second) {
+-        if (first == second) return true;
+-        return first != null && second != null && first.sameAs(second);
+-    }
+-}
+diff --git a/src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java b/src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java
+index 11adb5e..c607277 100644
+--- a/src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java
++++ b/src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java
+@@ -20,20 +20,19 @@ final class LauncherGlassSceneController {
+     static final class StateMachine {
+         private State state = State.DETACHED;
+         private long generation = 1L;
+-        private boolean covered;
+ 
+         void onRootReady() {
+             if (state == State.DETACHED) state = State.BOOTSTRAPPING;
+         }
+ 
+         void onBootstrapReconciled() {
+-            if (!covered && state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
++            if (state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
+         }
+ 
+         void setCovered(boolean nextCovered) {
+-            if (covered == nextCovered) return;
+-            covered = nextCovered;
+-            if (covered) {
++            boolean isCovered = state == State.COVERED;
++            if (isCovered == nextCovered) return;
++            if (nextCovered) {
+                 state = State.COVERED;
+             } else {
+                 generation++;
+@@ -43,17 +42,20 @@ final class LauncherGlassSceneController {
+ 
+         void onGenerationInvalidated() {
+             generation++;
+-            if (!covered && state != State.DETACHED) state = State.HOME_WAITING_FRESH_FRAME;
++            if (state != State.COVERED && state != State.DETACHED) {
++                state = State.HOME_WAITING_FRESH_FRAME;
++            }
+         }
+ 
+         void onFreshFrameReady(long frameGeneration) {
+-            if (frameGeneration != generation || covered || state == State.DETACHED) return;
++            if (frameGeneration != generation || state == State.COVERED || state == State.DETACHED) {
++                return;
++            }
+             state = State.HOME_VISIBLE;
+         }
+ 
+         void detach() {
+             state = State.DETACHED;
+-            covered = false;
+         }
+ 
+         long generation() { return generation; }
+diff --git a/src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java b/src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java
+index 7af29e8..74ed0f5 100644
+--- a/src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java
++++ b/src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java
+@@ -108,8 +108,6 @@ final class LauncherGlassSession {
+ 
+     private static final class NodeState {
+         final WeakReference<LauncherGlassSinkView> sinkRef;
+-        final LauncherGlassGeometryStability geometryStability =
+-                new LauncherGlassGeometryStability();
+         volatile LauncherGlassGeometry.Snapshot geometry;
+         volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
+ 
+@@ -121,8 +119,6 @@ final class LauncherGlassSession {
+ 
+     private static final class StaticNodeState {
+         final WeakReference<LauncherGlassStaticNode> nodeRef;
+-        final LauncherGlassGeometryStability geometryStability =
+-                new LauncherGlassGeometryStability();
+         volatile LauncherGlassGeometry.Snapshot geometry;
+         volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
+ 
+@@ -175,7 +171,6 @@ final class LauncherGlassSession {
+     private volatile Miuix307PassBlurBridge.Binding binding;
+     private volatile SurfaceTexture inputSurfaceTexture;
+     private volatile Surface inputProducerSurface;
+-    private volatile boolean hasConsumedFrame;
+     private volatile long sceneGeneration = 1L;
+     private volatile long consumedGeneration = -1L;
+     // Semantic content token for the one-shot producer pulse that requested a new wallpaper.
+@@ -370,7 +365,6 @@ final class LauncherGlassSession {
+ 
+     private void invalidateBackdropFrameState() {
+         frameAvailable.set(false);
+-        hasConsumedFrame = false;
+         consumedGeneration = -1L;
+         backdropPrepared = false;
+     }
+@@ -636,11 +630,9 @@ final class LauncherGlassSession {
+             if (!rootGeometryChanged && !localChanged) continue;
+             LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
+             LauncherGlassGeometry.Snapshot old = node.geometry;
+-            LauncherGlassGeometry.Snapshot selected = rootGeometryChanged
+-                    ? observed : node.geometryStability.select(old, observed, localChanged);
+-            if ((old == null) != (selected == null)
+-                    || (old != null && !old.sameAs(selected))) {
+-                node.geometry = selected;
++            if ((old == null) != (observed == null)
++                    || (old != null && !old.sameAs(observed))) {
++                node.geometry = observed;
+                 dragChanged = true;
+             }
+         }
+@@ -655,11 +647,9 @@ final class LauncherGlassSession {
+             if (!rootGeometryChanged && !localChanged) continue;
+             LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+             LauncherGlassGeometry.Snapshot old = state.geometry;
+-            LauncherGlassGeometry.Snapshot selected = rootGeometryChanged
+-                    ? observed : state.geometryStability.select(old, observed, localChanged);
+-            if ((old == null) != (selected == null)
+-                    || (old != null && !old.sameAs(selected))) {
+-                state.geometry = selected;
++            if ((old == null) != (observed == null)
++                    || (old != null && !old.sameAs(observed))) {
++                state.geometry = observed;
+                 staticChanged = true;
+             }
+         }
+@@ -861,13 +851,12 @@ final class LauncherGlassSession {
+                 makePbufferCurrent();
+                 input.updateTexImage();
+                 input.getTransformMatrix(textureMatrix);
+-                hasConsumedFrame = true;
+                 consumedGeneration = sceneGeneration;
+                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
+                 sourceChanged = true;
+                 Miuix307PassBlurBridge.pauseUpdates(binding);
+             }
+-            if (!hasConsumedFrame) return;
++            if (consumedGeneration < 0L) return;
+             boolean backdropDirty = work.rebuildBackdrop || sourceChanged || !backdropPrepared;
+             boolean staticDirty = backdropDirty;
+             if (work.staticDirty) staticDirty = true;
+diff --git a/src/test/java/com/hellovoid/liquiddock/LauncherGlassFramePolicyTest.java b/src/test/java/com/hellovoid/liquiddock/LauncherGlassFramePolicyTest.java
+index 15eb073..aed4513 100644
+--- a/src/test/java/com/hellovoid/liquiddock/LauncherGlassFramePolicyTest.java
++++ b/src/test/java/com/hellovoid/liquiddock/LauncherGlassFramePolicyTest.java
+@@ -18,19 +18,6 @@ public class LauncherGlassFramePolicyTest {
+         assertFalse(work.rebuildBackdrop);
+     }
+ 
+-    @Test
+-    public void backdropInvalidationIsStickyAcrossCoalescedRequests() {
+-        LauncherGlassFramePolicy policy = new LauncherGlassFramePolicy();
+-
+-        assertTrue(policy.request(false));
+-        assertFalse(policy.requestBackdropRefresh());
+-        LauncherGlassFramePolicy.Work work = policy.consume();
+-
+-        assertTrue(work.render);
+-        assertTrue(work.refreshProducer);
+-        assertTrue(work.rebuildBackdrop);
+-    }
+-
+     @Test
+     public void cachedBackdropCanBeRebuiltWithoutRefreshingProducer() {
+         LauncherGlassFramePolicy policy = new LauncherGlassFramePolicy();
