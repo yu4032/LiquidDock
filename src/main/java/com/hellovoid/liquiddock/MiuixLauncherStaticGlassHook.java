@@ -25,6 +25,7 @@ final class MiuixLauncherStaticGlassHook {
 
     static void onRuntimeGlassDisabled() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (isWidgetHost(host)) LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
             View.OnAttachStateChangeListener listener = BOOTSTRAP_OBSERVERS.remove(host);
             if (listener != null) host.removeOnAttachStateChangeListener(listener);
             DockGlassItemRegistry.unregister(host);
@@ -51,6 +52,8 @@ final class MiuixLauncherStaticGlassHook {
                     LauncherGlassDragState.Kind.WIDGET, glassConfig);
             any |= installHostClass(classLoader, "com.miui.home.launcher.maml.MaMlHostView",
                     LauncherGlassDragState.Kind.WIDGET, glassConfig);
+            installWidgetBackgroundOwnershipHook(classLoader, glassConfig);
+            installMamlBackgroundOwnershipHooks(classLoader, glassConfig);
         }
         installed = any;
         if (any) {
@@ -253,6 +256,65 @@ final class MiuixLauncherStaticGlassHook {
         });
     }
 
+    private static void installWidgetBackgroundOwnershipHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) {
+        try {
+            HookUtil.hookMethod(classLoader,
+                    "com.miui.home.launcher.LauncherAppWidgetHostView", "updateAppWidget",
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object result = chain.proceed(args);
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View && GlassRuntimeState.isEnabled()
+                                && glassConfig.widgetStyle.enabled) {
+                            // RemoteViews may recreate android.R.id.widget_frame. Re-run the normal
+                            // Workspace bind path after every provider update so the fallback plate
+                            // is only claimed when a live LiquidDock widget node owns the material.
+                            scheduleBind((View) owner, LauncherGlassDragState.Kind.WIDGET,
+                                    glassConfig, 0);
+                        }
+                        return result;
+                    }, android.widget.RemoteViews.class);
+            MainHook.log(TAG + " LauncherAppWidgetHostView background ownership hook installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " LauncherAppWidgetHostView background hook unavailable: " + error);
+        }
+    }
+
+    private static void installMamlBackgroundOwnershipHooks(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) {
+        installMamlBackgroundOwnershipHook(classLoader, glassConfig, "onResume");
+        installMamlBackgroundOwnershipHook(classLoader, glassConfig, "updateColor", int.class);
+    }
+
+    private static void installMamlBackgroundOwnershipHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig,
+            String methodName, Class<?>... parameterTypes) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.maml.MaMlHostView",
+                    methodName, chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object result = chain.proceed(args);
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View && GlassRuntimeState.isEnabled()
+                                && glassConfig.widgetStyle.enabled) {
+                            // Launcher 4.50 MAML roots are loaded asynchronously. putVariableNumber
+                            // is a no-op before mRoot exists, and updateColor can later let vendor
+                            // blur logic write enable_background_blur back to 0. Re-enter the normal
+                            // bind/claim path only after those vendor lifecycle boundaries complete.
+                            scheduleBind((View) owner, LauncherGlassDragState.Kind.WIDGET,
+                                    glassConfig, 0);
+                        }
+                        return result;
+                    }, parameterTypes);
+            MainHook.log(TAG + " MaMlHostView background ownership hook installed method="
+                    + methodName);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " MaMlHostView background hook unavailable method="
+                    + methodName + ": " + error);
+        }
+    }
+
     private static boolean installHostClass(
             ClassLoader classLoader, String className,
             LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
@@ -289,7 +351,6 @@ final class MiuixLauncherStaticGlassHook {
         } else if (glassConfig.widgetStyle.enabled
                 && (name.endsWith(".LauncherAppWidgetHostView")
                 || name.endsWith(".MaMlHostView"))) {
-            LauncherGlassVendorMaterialSuppressor.claimWidget(host);
             observeHost(host, LauncherGlassDragState.Kind.WIDGET, glassConfig);
         }
     }
@@ -338,6 +399,9 @@ final class MiuixLauncherStaticGlassHook {
         DockGlassItemRegistry.unregister(host);
         if (domain != LauncherGlassHierarchy.Domain.WORKSPACE) {
             if (node != null) node.dispose();
+            if (kind == LauncherGlassDragState.Kind.WIDGET) {
+                LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            }
             if (domain == LauncherGlassHierarchy.Domain.OTHER && node == null
                     && attempt < MAX_BIND_ATTEMPTS) {
                 host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
@@ -357,6 +421,12 @@ final class MiuixLauncherStaticGlassHook {
         if (node != null && kind == LauncherGlassDragState.Kind.WIDGET) {
             LauncherGlassVendorMaterialSuppressor.claimWidget(host);
         }
+    }
+
+    private static boolean isWidgetHost(View host) {
+        if (host == null) return false;
+        String name = host.getClass().getName();
+        return name.endsWith(".LauncherAppWidgetHostView") || name.endsWith(".MaMlHostView");
     }
 
     private static float resolveCornerRadius(View host, LauncherGlassDragState.Kind kind) {
