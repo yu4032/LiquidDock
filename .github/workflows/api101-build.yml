@@ -1,14 +1,6 @@
 name: API101 migration build
 
 on:
-  push:
-    branches:
-      - main
-      - api101-migration
-      - refactor/modular-architecture
-      - 'fix/**'
-      - 'feat/**'
-      - 'demo/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -18,7 +10,7 @@ permissions:
 
 jobs:
   materialize:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/folder-press-glow'
+    if: github.event.pull_request.head.ref == 'feat/folder-press-glow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,16 +38,15 @@ jobs:
           python3 ci/workspace_surface_generation_recovery_fix.py
           python3 ci/workspace_native_surface_generation_fix.py
           python3 ci/workspace_producer_endpoint_rollover_fix.py
-      - name: Clean dead code and test contracts
+      - name: Clean dead code and stale contracts
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           MAIN = Path('src/main/java/com/hellovoid/liquiddock')
           TEST = Path('src/test/java/com/hellovoid/liquiddock')
 
-          session_path = MAIN / 'LauncherGlassSession.java'
-          s = session_path.read_text()
+          p = MAIN / 'LauncherGlassSession.java'
+          s = p.read_text()
           s = s.replace('import com.hellovoid.prismal.PrismalSampling;\n', '')
           s = s.replace('    private static final AtomicInteger NEXT_NODE_ID = new AtomicInteger(1);\n', '')
           s = s.replace('        final int id = NEXT_NODE_ID.getAndIncrement();\n', '')
@@ -63,8 +54,7 @@ jobs:
           start = s.find('    private boolean rebuildAtlasLayout(View root) {')
           if start >= 0:
               end = s.find('    private boolean refreshProducerGeometryOnUi(View root) {', start)
-              if end < 0:
-                  raise SystemExit('missing refreshProducerGeometryOnUi after atlas')
+              if end < 0: raise SystemExit('atlas method end missing')
               s = s[:start] + s[end:]
           old = '''        backdropPrepared = false;
                   if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
@@ -87,182 +77,94 @@ jobs:
                   normalizeProgram = compositeProgram = 0;
                   releaseInputProducerEndpointOnRenderThread();
           '''
-          if old not in s:
-              raise SystemExit('releaseGl duplicate cleanup anchor missing')
-          s = s.replace(old, new, 1)
-          session_path.write_text(s)
-
+          if old not in s: raise SystemExit('duplicate endpoint cleanup anchor missing')
+          p.write_text(s.replace(old, new, 1))
           atlas = MAIN / 'LauncherGlassGpuAtlas.java'
           if atlas.exists(): atlas.unlink()
 
-          bridge_path = MAIN / 'Miuix307PassBlurBridge.java'
-          b = bridge_path.read_text()
-          start = b.find('    /** Compatibility overload for the retired diagnostic view;')
+          p = MAIN / 'Miuix307PassBlurBridge.java'
+          s = p.read_text()
+          start = s.find('    /** Compatibility overload for the retired diagnostic view;')
           if start >= 0:
-              end = b.find('    /** Workspace-only demand pulse.', start)
-              if end < 0: raise SystemExit('bridge dead overload end missing')
-              b = b[:start] + b[end:]
-          bridge_path.write_text(b)
+              end = s.find('    /** Workspace-only demand pulse.', start)
+              if end < 0: raise SystemExit('dead bridge overload end missing')
+              s = s[:start] + s[end:]
+          p.write_text(s)
 
-          for name in ('DockContinuousLocalDomainContractTest.java',
-                       'DockRealtimeProducerContractTest.java'):
+          for name in ('DockContinuousLocalDomainContractTest.java', 'DockRealtimeProducerContractTest.java'):
               p = TEST / name
-              t = p.read_text()
-              t = t.replace(
+              s = p.read_text()
+              s = s.replace(
                   'int overloadStart = bridge.indexOf("/** Compatibility overload", bindStart);\n'
                   '        assertTrue(bindStart >= 0 && overloadStart > bindStart);\n'
                   '        String bind = bridge.substring(bindStart, overloadStart);',
                   'int nextMethod = bridge.indexOf("static void requestSingleUpdate(", bindStart);\n'
                   '        assertTrue(bindStart >= 0 && nextMethod > bindStart);\n'
                   '        String bind = bridge.substring(bindStart, nextMethod);')
-              p.write_text(t)
+              p.write_text(s)
 
           p = TEST / 'LauncherGlassStaticCompositorContractTest.java'
-          t = p.read_text()
+          s = p.read_text()
           needle = '        assertFalse(session.contains("boolean atlasChanged = rebuildAtlasLayout(root);"));\n'
-          if 'assertFalse(session.contains("rebuildAtlasLayout("));' not in t:
-              if needle not in t: raise SystemExit('atlas regression anchor missing')
-              t = t.replace(needle, needle
+          if 'assertFalse(session.contains("rebuildAtlasLayout("));' not in s:
+              if needle not in s: raise SystemExit('atlas test anchor missing')
+              s = s.replace(needle, needle
                   + '        assertFalse(session.contains("rebuildAtlasLayout("));\n'
                   + '        assertFalse(Files.exists(SESSION.getParent().resolve("LauncherGlassGpuAtlas.java")));\n', 1)
-          p.write_text(t)
+          p.write_text(s)
 
           p = TEST / 'LauncherGlassProducerEndpointRebindTest.java'
           if 'shutdownReusesEndpointReleaseHelperInsteadOfDuplicatingCleanup' not in p.read_text():
-              raise SystemExit('missing endpoint cleanup regression')
+              raise SystemExit('endpoint cleanup regression missing')
 
-          # Confirmed zero-call legacy helpers.
           p = MAIN / 'HomeGridHook.java'
-          t = p.read_text()
-          t = t.replace(
+          s = p.read_text().replace(
               '    private static final java.util.WeakHashMap<android.view.View, Boolean>\n'
               '        loggedWidgetViews = new java.util.WeakHashMap<>();\n', '')
-          start = t.find('    private static void adaptTwoByOneWidget(')
+          start = s.find('    private static void adaptTwoByOneWidget(')
           if start >= 0:
-              end = t.find('    private static void applyCellLayoutOffsets(', start)
+              end = s.find('    private static void applyCellLayoutOffsets(', start)
               if end < 0: raise SystemExit('HomeGrid dead helper end missing')
-              t = t[:start] + t[end:]
-          p.write_text(t)
+              s = s[:start] + s[end:]
+          p.write_text(s)
 
           p = MAIN / 'MainHook.java'
-          t = p.read_text()
-          t = t.replace('    private static float clamp(float v, float lo, float hi) { return Math.max(lo, Math.min(hi, v)); }\n', '')
-          p.write_text(t)
+          p.write_text(p.read_text().replace(
+              '    private static float clamp(float v, float lo, float hi) { return Math.max(lo, Math.min(hi, v)); }\n', ''))
 
           p = MAIN / 'MiuixLauncherStaticGlassHook.java'
-          t = p.read_text()
-          start = t.find('    private static void removeBootstrapObserver(View host) {')
+          s = p.read_text()
+          start = s.find('    private static void removeBootstrapObserver(View host) {')
           if start >= 0:
-              end = t.find('    private static float resolveCornerRadius(', start)
+              end = s.find('    private static float resolveCornerRadius(', start)
               if end < 0: raise SystemExit('bootstrap dead helper end missing')
-              t = t[:start] + t[end:]
-          p.write_text(t)
+              s = s[:start] + s[end:]
+          p.write_text(s)
           PY
-      - name: Remove patch-stack indirection
+      - name: Remove one-shot patch stack
         run: |
-          rm -f \
-            ci/vendor_state_dock_fix.py \
-            ci/workspace_covered_bind_fix.py \
-            ci/vendor_snapshot_power_fix.py \
-            ci/workspace_page_glass_fix.py \
-            ci/workspace_resume_glass_fix.py \
-            ci/workspace_scene_owner_fix.py \
-            ci/workspace_proxy_rect_owner_fix.py \
-            ci/workspace_final_proxy_consumer_fix.py \
-            ci/workspace_hidden_proxy_visibility_fix.py \
-            ci/workspace_surface_generation_recovery_fix.py \
-            ci/workspace_native_surface_generation_fix.py \
-            ci/workspace_producer_endpoint_rollover_fix.py \
-            ci/prismal-single-edge-final-verify.txt \
-            .github/workflows/materialize-clean-source.yml
-          cat > .github/workflows/api101-build.yml <<'YAML'
-          name: API101 migration build
-
-          on:
-            push:
-              branches:
-                - main
-                - api101-migration
-                - refactor/modular-architecture
-                - 'fix/**'
-                - 'feat/**'
-                - 'demo/**'
-            pull_request:
-              branches: [ main ]
-            workflow_dispatch:
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-java@v4
-                  with:
-                    distribution: temurin
-                    java-version: '17'
-                    cache: gradle
-                - uses: gradle/actions/setup-gradle@v4
-                - run: chmod +x ./gradlew
-                - run: ./gradlew testDebugUnitTest --stacktrace
-                - run: ./gradlew assembleDebug --stacktrace
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: LiquidDock-api101-debug
-                    path: build/outputs/apk/debug/*.apk
-                    if-no-files-found: error
-                    retention-days: 7
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: LiquidDock-build-source
-                    path: |
-                      src/main/java/com/hellovoid/liquiddock
-                      src/test/java/com/hellovoid/liquiddock
-                    if-no-files-found: error
-                    retention-days: 3
-          YAML
-      - name: Verify clean materialized tree
+          rm -f ci/vendor_state_dock_fix.py ci/workspace_covered_bind_fix.py \
+            ci/vendor_snapshot_power_fix.py ci/workspace_page_glass_fix.py \
+            ci/workspace_resume_glass_fix.py ci/workspace_scene_owner_fix.py \
+            ci/workspace_proxy_rect_owner_fix.py ci/workspace_final_proxy_consumer_fix.py \
+            ci/workspace_hidden_proxy_visibility_fix.py ci/workspace_surface_generation_recovery_fix.py \
+            ci/workspace_native_surface_generation_fix.py ci/workspace_producer_endpoint_rollover_fix.py \
+            ci/prismal-single-edge-final-verify.txt
+      - name: Verify materialized source
         run: |
           test ! -e src/main/java/com/hellovoid/liquiddock/LauncherGlassGpuAtlas.java
           ! grep -R "rebuildAtlasLayout\|atlasLayout\|NEXT_NODE_ID\|ignoredOutputView\|adaptTwoByOneWidget\|loggedWidgetViews\|removeBootstrapObserver" src/main/java/com/hellovoid/liquiddock
           ! grep -R "private static float clamp(float v, float lo, float hi)" src/main/java/com/hellovoid/liquiddock/MainHook.java
           test -z "$(find ci -maxdepth 1 -type f 2>/dev/null)"
-          ! grep -R "ci/workspace_.*_fix.py\|ci/vendor_.*_fix.py" .github/workflows
           git diff --check
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
-      - name: Commit materialized source
+      - name: Commit verified source only
         run: |
+          git restore --source=HEAD -- .github/workflows/api101-build.yml .github/workflows/materialize-clean-source.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
           git diff --cached --check
           git commit -m "[materialized] refactor: commit clean Launcher glass source"
           git push origin HEAD:feat/folder-press-glow
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-      - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x ./gradlew
-      - name: Apply vendor-state Dock mapping fix
-        run: |
-          python3 ci/vendor_state_dock_fix.py
-          python3 ci/workspace_covered_bind_fix.py
-          python3 ci/vendor_snapshot_power_fix.py
-          python3 ci/workspace_page_glass_fix.py
-          python3 ci/workspace_resume_glass_fix.py
-          python3 ci/workspace_scene_owner_fix.py
-          python3 ci/workspace_proxy_rect_owner_fix.py
-          python3 ci/workspace_final_proxy_consumer_fix.py
-          python3 ci/workspace_hidden_proxy_visibility_fix.py
-          python3 ci/workspace_surface_generation_recovery_fix.py
-          python3 ci/workspace_native_surface_generation_fix.py
-          python3 ci/workspace_producer_endpoint_rollover_fix.py
-      - run: ./gradlew testDebugUnitTest --stacktrace
-      - run: ./gradlew assembleDebug --stacktrace
