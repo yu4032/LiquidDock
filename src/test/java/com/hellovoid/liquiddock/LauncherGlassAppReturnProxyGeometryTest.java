@@ -70,6 +70,7 @@ public class LauncherGlassAppReturnProxyGeometryTest {
         assertTrue(node.contains("updateLaunchProxyGeometry"));
         assertTrue(node.contains("endLaunchProxy"));
         assertTrue(node.contains("copyLaunchProxyRect"));
+        assertTrue(node.contains("postInvalidateOnAnimation"));
         assertFalse(node.contains("suppressedByLaunchProxy"));
     }
 
