@@ -28,6 +28,7 @@ final class SecurityCenterSidebarGlassHook {
     private static final float GLASS_Z = -2f;
     private static final float DEFAULT_RADIUS_DP = 28f;
     private static final float SQUIRCLE_CP = .58f;
+    private static final int TARGET_READY_FRAMES = 120;
     private static final int ZERO_COPY_VALIDATION_FRAMES = 90;
 
     private static boolean installed;
@@ -75,7 +76,7 @@ final class SecurityCenterSidebarGlassHook {
         root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 if (!GlassRuntimeState.isEnabled()) return;
-                root.post(() -> bindFirstLiveSidebar(root, config));
+                root.post(() -> bindWhenGameTurboReady(root, config, 0));
             }
 
             @Override public void onViewDetachedFromWindow(View view) {
@@ -87,18 +88,36 @@ final class SecurityCenterSidebarGlassHook {
                 // The TextureView shuts its EGL/producer resources down from its own detach.
             }
         });
-        if (root.isAttachedToWindow()) root.post(() -> bindFirstLiveSidebar(root, config));
+        if (root.isAttachedToWindow()) {
+            root.post(() -> bindWhenGameTurboReady(root, config, 0));
+        }
     }
 
-    private static void bindFirstLiveSidebar(ViewGroup root, LiquidDockConfig config) {
+    /**
+     * TurboLayout also hosts conversation/video sidebars. The verified Game Turbo branch alone
+     * creates both getGameTurboLayout() and the new DockLayout that owns the All Apps button.
+     */
+    private static void bindWhenGameTurboReady(
+            ViewGroup root, LiquidDockConfig config, int frame) {
         if (!GlassRuntimeState.isEnabled() || root == null || !root.isAttachedToWindow()) return;
-
-        ViewGroup current = rootRef.get();
-        if (current != null && current != root && current.isAttachedToWindow()) {
-            // SecurityCenter can construct an assistant TurboLayout too. The main sidebar is
-            // created first on the verified build; keep one producer bound to that live owner.
+        if (!isGameTurboRoot(root)) {
+            if (frame < TARGET_READY_FRAMES) {
+                root.postOnAnimation(() -> bindWhenGameTurboReady(root, config, frame + 1));
+            }
             return;
         }
+        bindGameTurboSidebar(root, config);
+    }
+
+    private static boolean isGameTurboRoot(ViewGroup root) {
+        return HookUtil.invoke(root, "getGameTurboLayout") instanceof View
+                && HookUtil.invoke(root, "getDockLayout") instanceof View;
+    }
+
+    private static void bindGameTurboSidebar(ViewGroup root, LiquidDockConfig config) {
+        ViewGroup current = rootRef.get();
+        if (current != null && current != root && current.isAttachedToWindow()) return;
+
         DockLiquidGlassHostView currentHost = hostRef.get();
         if (current == root && currentHost != null && currentHost.getParent() == root) return;
 
@@ -130,7 +149,7 @@ final class SecurityCenterSidebarGlassHook {
         rootRef = new WeakReference<>(root);
         hostRef = new WeakReference<>(host);
         scheduleZeroCopyValidation(root, host, 0);
-        MainHook.log(TAG + " shared sidebar + All Apps Prismal host pending");
+        MainHook.log(TAG + " Game Turbo sidebar + All Apps Prismal host pending");
     }
 
     private static void scheduleZeroCopyValidation(
