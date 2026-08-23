@@ -282,14 +282,18 @@ final class MiuixFolderGlassHook {
             return;
         }
         observeFolderIconAttach(icon, glassConfig);
-        syncLargeFolderCover(icon, glassConfig);
         try {
             View value = resolveFolderMaterial(icon);
             if (value != null) {
                 LauncherGlassStaticNode sink = attachMaterial(value, glassConfig);
-                if (sink != null && openedFolderOwner.get() == icon) {
-                    openedFolderSink = new WeakReference<>(sink);
-                    sink.setSuppressedByFolderOpen(true);
+                if (sink != null) {
+                    syncLargeFolderCover(icon, glassConfig);
+                    if (openedFolderOwner.get() == icon) {
+                        openedFolderSink = new WeakReference<>(sink);
+                        sink.setSuppressedByFolderOpen(true);
+                    }
+                } else {
+                    releaseFolderCover(icon);
                 }
                 // Launcher restart can call setIconImageView after FolderIcon is attached but
                 // before its real ViewRoot/Surface is stable. Adding an attach listener at that
@@ -335,9 +339,14 @@ final class MiuixFolderGlassHook {
                 material = resolveFolderMaterial(current);
                 if (material != null) {
                     sink = attachMaterial(material, glassConfig);
-                    if (sink != null && openedFolderOwner.get() == current) {
-                        openedFolderSink = new WeakReference<>(sink);
-                        sink.setSuppressedByFolderOpen(true);
+                    if (sink != null) {
+                        syncLargeFolderCover(current, glassConfig);
+                        if (openedFolderOwner.get() == current) {
+                            openedFolderSink = new WeakReference<>(sink);
+                            sink.setSuppressedByFolderOpen(true);
+                        }
+                    } else {
+                        releaseFolderCover(current);
                     }
                 }
             } catch (Throwable error) {
