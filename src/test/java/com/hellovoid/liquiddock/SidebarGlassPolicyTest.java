@@ -37,4 +37,15 @@ public class SidebarGlassPolicyTest {
         assertFalse((Boolean) shouldInstall.invoke(
                 null, "com.android.systemui", true, true));
     }
+
+    @Test public void onlyVerifiedSidebarMaterialOwnersAreSuppressed() {
+        assertTrue(SidebarGlassPolicy.isVendorMaterialClassName(
+                "com.miui.gamebooster.windowmanager.newbox.o0"));
+        assertTrue(SidebarGlassPolicy.isVendorMaterialClassName(
+                "com.miui.dock.allapps.w"));
+        assertFalse(SidebarGlassPolicy.isVendorMaterialClassName(
+                "com.miui.gamebooster.windowmanager.newbox.TurboLayout"));
+        assertFalse(SidebarGlassPolicy.isVendorMaterialClassName(
+                "android.widget.RelativeLayout"));
+    }
 }
