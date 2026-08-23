@@ -57,6 +57,20 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
     }
 
     @Test
+    public void mamlAsyncRootAndColorRefreshReassertBackgroundOwnershipWithoutDrag() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+
+        // Launcher 4.50 loads the MAML ScreenElementRoot asynchronously. putVariableNumber() is a
+        // no-op while mRoot is null, then applyPath() calls onResume() after initMamlview(). Also,
+        // updateColor() calls vendor setMaMlBlurIfSupported() and can write the variable back to 0.
+        // Both boundaries must re-enter the normal widget bind/claim path.
+        assertTrue(hook.contains("installMamlBackgroundOwnershipHooks"));
+        assertTrue(hook.contains("\"onResume\""));
+        assertTrue(hook.contains("\"updateColor\""));
+        assertTrue(hook.contains("scheduleBind((View) owner, LauncherGlassDragState.Kind.WIDGET"));
+    }
+
+    @Test
     public void folderHookRecognizesActualLauncher450SubclassesWithoutNativeBlur() throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
 
@@ -87,9 +101,23 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue("native background can only be hidden after the per-style enabled guard",
                 suppress > restore);
 
-        // The preview/icon contents remain visible; only icon_icon's drawable alpha is suppressed.
+        // The preview/icon contents remain visible; only background-specific views are suppressed.
         assertFalse(folder.contains("mPreviewContainer.setAlpha(0"));
         assertFalse(folder.contains("mPreviewContainer.setVisibility"));
+    }
+
+    @Test
+    public void largeFolderGlassAlsoSuppressesDedicatedCoverAbovePreview() throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+
+        // Launcher 4.50 folder_icon_2x2_4/9 stacks R.id.cover above preview_icons_container.
+        // It is a second visual plate independent from icon_icon/mFolderBackground. Claim it only
+        // for large-folder glass and restore it when that ownership ends.
+        assertTrue(folder.contains("CLAIMED_FOLDER_COVERS"));
+        assertTrue(folder.contains("syncLargeFolderCover"));
+        assertTrue(folder.contains("getCover"));
+        assertTrue(folder.contains("makeMaterialTransparent(cover)"));
+        assertTrue(folder.contains("restoreMaterial(cover)"));
     }
 
     private static String methodSlice(String source, String startMarker, String endMarker) {
