@@ -30,6 +30,7 @@ jobs:
           python3 ci/glass_device_prep.py
           python3 ci/glass_device_fix.py
           python3 ci/glass_main_dock_post.py
+          python3 ci/glass_runtime_no_revive.py
           sed -i 's/runtimeDefault()/runtimeFallback()/g' src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java
           python3 ci/glass_main_dock_contracts.py
       - run: ./gradlew testDebugUnitTest --stacktrace
