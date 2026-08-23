@@ -19,6 +19,9 @@ final class MiBlurBridge {
     private static final Method SET_PASS_WINDOW_BLUR_ENABLED;
     private static final Method SET_MI_VIEW_BLUR_MODE;
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
+    // SecurityCenter's TurboLayout.S()/U() also drives this separate compositor mode.
+    // Keep it optional so older Launcher builds that lack it retain the existing bridge.
+    private static final Method SET_MI_BACKGROUND_BLUR_MODE;
     private static final boolean PASS_BLUR_AVAILABLE;
 
     static volatile boolean liquidGlassActive;
@@ -58,6 +61,14 @@ final class MiBlurBridge {
         SET_MI_VIEW_BLUR_MODE = viewBlurMode;
         SET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadius;
         PASS_BLUR_AVAILABLE = passAvailable;
+
+        Method backgroundMode = null;
+        try {
+            backgroundMode = View.class.getMethod("setMiBackgroundBlurMode", int.class);
+        } catch (Throwable ignored) {
+            // Optional API: Launcher glass never depended on this method.
+        }
+        SET_MI_BACKGROUND_BLUR_MODE = backgroundMode;
     }
 
     private MiBlurBridge() {}
@@ -136,6 +147,11 @@ final class MiBlurBridge {
         } catch (Throwable ignored) {}
         try {
             SET_MI_VIEW_BLUR_MODE.invoke(view, 0);
+        } catch (Throwable ignored) {}
+        try {
+            if (SET_MI_BACKGROUND_BLUR_MODE != null) {
+                SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 0);
+            }
         } catch (Throwable ignored) {}
         try {
             SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 0);
