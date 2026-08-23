@@ -8,39 +8,44 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Device regression: a frame consumer is not enough; Dock must actively drive PassBlur updates. */
+/** Device regression: keep main's persistent Dock PassBlur binding; never add a per-vsync transaction pump. */
 public class DockRealtimeProducerContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void dockActivelyPumpsPassBlurProducerWhileVisible() throws Exception {
+    @Test public void dockUsesMainContinuousOnBindProducerMode() throws Exception {
         String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
-        assertTrue("bridge needs a non-coalesced producer pulse API",
-                bridge.contains("static void requestFrame(Binding binding)"));
-        assertTrue("each pulse must submit a real SurfaceControl transaction",
-                bridge.contains("binding.setUpdateTextureFlag.invoke("));
-        assertTrue("Dock needs an explicit frame pump, not only OnFrameAvailable consumption",
-                view.contains("producerPump"));
-        assertTrue(view.contains("Miuix307PassBlurBridge.requestFrame(currentBinding)"));
-        assertTrue(view.contains("postOnAnimation(producerPump)"));
+        int bindStart = bridge.indexOf("static Binding bind(View materialHost, Surface producerSurface");
+        int overloadStart = bridge.indexOf("/** Compatibility overload", bindStart);
+        assertTrue(bindStart >= 0 && overloadStart > bindStart);
+        String bind = bridge.substring(bindStart, overloadStart);
+        assertTrue(bind.contains("setUpdateTextureFlag.invoke("));
+        assertTrue(bind.contains("Boolean.TRUE"));
+        assertTrue(bridge.contains("mode=continuous-on-bind"));
+        assertTrue(view.contains("input.setOnFrameAvailableListener"));
+        assertTrue(view.contains("drawLatestFrame(true);"));
     }
 
-    @Test public void dockProducerPumpStopsWhenGlassIsDisabledOrRendererShutsDown() throws Exception {
+    @Test public void dockMustNotSubmitSurfaceControlTransactionsEveryVsync() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
-        assertTrue(view.contains("GlassRuntimeState.isEnabled()"));
-        assertTrue(view.contains("removeCallbacks(producerPump)"));
-        assertTrue(view.contains("shuttingDown"));
+        assertFalse(bridge.contains("static void requestFrame(Binding binding)"));
+        assertFalse(view.contains("producerPump"));
+        assertFalse(view.contains("postOnAnimation(producerPump)"));
+        assertFalse(view.contains("producerRequestCount"));
+        assertFalse(view.contains("producerFrameCount"));
     }
 
-    @Test public void diagnosticsSeparateProducerRequestsFromReceivedOesFrames() throws Exception {
+    @Test public void runtimeShutdownUnbindsPersistentDockProducer() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
-        assertTrue(view.contains("producerRequestCount"));
-        assertTrue(view.contains("producerFrameCount"));
-        assertTrue(view.contains("producerRequestCount.incrementAndGet()"));
-        assertTrue(view.contains("producerFrameCount.incrementAndGet()"));
-        assertFalse("diagnostics must not require CPU pixel readback", view.contains("glReadPixels"));
+        assertTrue(view.contains("Miuix307PassBlurBridge.unbind(currentBinding)"));
+        assertTrue(view.contains("renderThread.quitSafely()"));
+        assertTrue(bridge.contains("Boolean.FALSE"));
+        assertTrue(bridge.contains("setPassBlurSurface.invoke(transaction, binding.rootSurface, null)"));
+        assertFalse("shutdown must not require CPU pixel readback", view.contains("glReadPixels"));
     }
 }
