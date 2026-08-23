@@ -1,7 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.view.View;
-import android.view.ViewGroup;
 
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalParams;
@@ -9,15 +9,13 @@ import com.hellovoid.prismal.PrismalRenderer;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.List;
 
-/** One Dock-domain batch: Dock body + item nodes, followed by one TextureView output swap. */
+/** One Dock-domain batch: UI publishes geometry, GL consumes it with one output swap. */
 final class DockGlassCompositor {
     static final int ONE_OUTPUT_SWAP = 1;
 
     private final WeakReference<View> dockRootRef;
     private volatile GlassComponentStyle iconStyle = new GlassComponentStyle(false, 0f, 0f);
-    private final ArrayList<DockGlassItemNode> items = new ArrayList<>();
 
     DockGlassCompositor(View dockRoot) {
         dockRootRef = new WeakReference<>(dockRoot);
@@ -25,32 +23,35 @@ final class DockGlassCompositor {
 
     void setIconStyle(GlassComponentStyle style) {
         iconStyle = style != null ? style : new GlassComponentStyle(false, 0f, 0f);
-        syncItems();
     }
 
-    void syncItems() {
+    /** UI-thread only: capture one coherent Dock item geometry generation. */
+    DockGlassSceneSnapshot captureUiSnapshot(
+            int framebufferWidth, int framebufferHeight,
+            float sampleInsetLeft, float sampleInsetTop,
+            float scaleX, float scaleY) {
         View dockRoot = dockRootRef.get();
-        if (dockRoot == null) return;
-        ArrayList<DockGlassItemNode> next = new ArrayList<>();
-        if (iconStyle.enabled) collect(dockRoot.getRootView(), dockRoot, next);
-        synchronized (items) {
-            items.clear();
-            items.addAll(next);
+        GlassComponentStyle style = iconStyle;
+        if (dockRoot == null || style == null || !style.enabled
+                || framebufferWidth <= 0 || framebufferHeight <= 0) {
+            return DockGlassSceneSnapshot.EMPTY;
         }
-    }
 
-    private void collect(View view, View dockRoot, List<DockGlassItemNode> out) {
-        if (view != null && view != dockRoot) {
-            String name = view.getClass().getName();
-            if (name.endsWith(".ShortcutIcon") || "ShortcutIcon".equals(view.getClass().getSimpleName())) {
-                out.add(new DockGlassItemNode(view, LauncherGlassNodeKind.ICON, iconStyle));
-                return;
-            }
+        Matrix rootGlobal = new Matrix();
+        dockRoot.transformMatrixToGlobal(rootGlobal);
+        Matrix rootInverse = new Matrix();
+        if (!rootGlobal.invert(rootInverse)) return DockGlassSceneSnapshot.EMPTY;
+
+        ArrayList<LauncherGlassGeometry.Snapshot> geometry = new ArrayList<>();
+        for (View view : DockGlassItemRegistry.snapshotForRoot(dockRoot.getRootView())) {
+            LauncherGlassGeometry.Snapshot item = new DockGlassItemNode(
+                    view, LauncherGlassNodeKind.ICON, style).capture(
+                    dockRoot, rootInverse, framebufferWidth, framebufferHeight,
+                    sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
+            if (item != null) geometry.add(item);
         }
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) collect(group.getChildAt(i), dockRoot, out);
-        }
+        return new DockGlassSceneSnapshot(
+                geometry.toArray(new LauncherGlassGeometry.Snapshot[0]));
     }
 
     void beginGlassFrame(PrismalRenderer renderer) {
@@ -71,21 +72,15 @@ final class DockGlassCompositor {
     }
 
     int drawFrame(PrismalRenderer renderer, PrismalGeometry dockBody, PrismalParams params,
-                  int framebufferWidth, int framebufferHeight,
-                  float sampleInsetLeft, float sampleInsetTop,
-                  float scaleX, float scaleY) {
-        View dockRoot = dockRootRef.get();
-        if (renderer == null || dockRoot == null || dockBody == null || params == null) return 0;
-        syncItems();
+                  DockGlassSceneSnapshot scene,
+                  int framebufferWidth, int framebufferHeight) {
+        if (renderer == null || dockBody == null || params == null) return 0;
+        DockGlassSceneSnapshot stableScene = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
         beginGlassFrame(renderer);
         drawDockBody(renderer, dockBody, params);
-        List<DockGlassItemNode> snapshot;
-        synchronized (items) { snapshot = new ArrayList<>(items); }
-        for (DockGlassItemNode item : snapshot) {
-            drawItem(renderer, item.capture(dockRoot, framebufferWidth, framebufferHeight,
-                    sampleInsetLeft, sampleInsetTop, scaleX, scaleY), params,
-                    framebufferWidth, framebufferHeight);
+        for (LauncherGlassGeometry.Snapshot item : stableScene.items) {
+            drawItem(renderer, item, params, framebufferWidth, framebufferHeight);
         }
-        return snapshot.size();
+        return stableScene.size();
     }
 }
