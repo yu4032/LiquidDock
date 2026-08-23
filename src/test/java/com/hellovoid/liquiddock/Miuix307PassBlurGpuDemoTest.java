@@ -31,7 +31,9 @@ public class Miuix307PassBlurGpuDemoTest {
         assertTrue(view.contains("EGL14.eglCreateWindowSurface"));
         assertTrue(view.contains("GLES11Ext.GL_TEXTURE_EXTERNAL_OES"));
         assertTrue(view.contains("renderNormalizationPass"));
-        assertTrue(view.contains("prismalRenderer.render("));
+        assertTrue(view.contains("prismalRenderer.prepareBackdrop(")
+                && view.contains("dockCompositor.drawFrame(")
+                && view.contains("prismalRenderer.outputTexture()"));
         assertTrue(view.contains("renderCompositePass"));
     }
 
@@ -102,7 +104,9 @@ public class Miuix307PassBlurGpuDemoTest {
                 && adapter.contains("float determinant")
                 && adapter.contains("uTexMatrix * vec4(textureInputUv, 0.0, 1.0)"));
         assertTrue(view.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(view.contains("prismalRenderer.render("));
+        assertTrue(view.contains("prismalRenderer.prepareBackdrop(")
+                && view.contains("dockCompositor.drawFrame(")
+                && view.contains("prismalRenderer.outputTexture()"));
         assertFalse(prismal.contains("uTexMatrix"));
         assertFalse(prismal.contains("uBackdropRect"));
         assertFalse(prismal.contains("samplerExternalOES"));

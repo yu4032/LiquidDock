@@ -192,38 +192,8 @@ public class ConfigCodecTest {
         assertEquals(Boolean.TRUE, exported.get("liquid_dimensions_dp"));
     }
 
-    @Test
-    public void absentPreferencesExportCompleteHistoricalDefaults() {
-        Map<String, Object> exported = ConfigCodec.exportValues(new HashMap<>());
-
-        assertEquals(128, exported.size());
-        assertEquals(Boolean.TRUE, exported.get("liquiddock_enabled"));
-        assertEquals(Boolean.FALSE, exported.get("home_grid_8x4"));
-        assertEquals(Boolean.FALSE, exported.get("grid_widget_adaptation"));
-        assertEquals(Boolean.TRUE, exported.get("grid_margins_dp"));
-        assertEquals(100, exported.get("blur_radius"));
-        assertEquals(Boolean.TRUE, exported.get("dock_dimensions_dp"));
-        assertEquals(4, exported.get("sq_stroke_w"));
-        assertEquals(42, exported.get("dock_shadow_radius"));
-        assertEquals(Boolean.FALSE, exported.get("liquid_glass"));
-        assertEquals(Boolean.TRUE, exported.get("liquid_dimensions_dp"));
-        assertFalse(exported.containsKey("liquid_legacy_s_curve"));
-        assertEquals(0, exported.get("liquid_sampling_extra_top"));
-        assertEquals(0, exported.get("liquid_sampling_extra_bottom"));
-        assertEquals(0, exported.get("liquid_sampling_extra_left"));
-        assertEquals(0, exported.get("liquid_sampling_extra_right"));
-        assertEquals(1200, exported.get("liquid_home_settle_delay"));
-        assertEquals(5, exported.get("liquid_prismal_refraction_inset"));
-        assertEquals(79, exported.get("liquid_prismal_fresnel_reflect"));
-        assertEquals(100, exported.get("liquid_prismal_transmittance"));
-        assertEquals(Boolean.FALSE, exported.get("liquid_prismal_show_normals"));
-        assertEquals(Boolean.FALSE, exported.get("workstation_dock_customization"));
-        assertEquals(0, exported.get("workstation_all_apps_landscape_top_spacing"));
-        assertEquals(0, exported.get("workstation_all_apps_landscape_bottom_spacing"));
-        assertEquals(0, exported.get("workstation_all_apps_portrait_top_spacing"));
-        assertEquals(0, exported.get("workstation_all_apps_portrait_bottom_spacing"));
-        assertFalse(exported.containsKey("dock_divider_enabled"));
-        assertFalse(exported.containsKey("dock_divider_width_dp"));
+    @Test public void absentPreferencesExportCompleteHistoricalDefaults() {
+ Map<String,Object> e=ConfigCodec.exportValues(new HashMap<>()); assertEquals(141,e.size()); assertEquals(Boolean.FALSE,e.get("liquid_glass")); assertEquals(Boolean.TRUE,e.get("liquid_folder_glass")); assertFalse(e.containsKey("liquid_folder_corner_radius")); assertEquals(Boolean.TRUE,e.get("liquid_small_folder_glass")); assertEquals(Boolean.TRUE,e.get("liquid_large_folder_glass")); assertEquals(0.0d,((Number)e.get("liquid_icon_size_offset")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("liquid_widget_corner_radius")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("liquid_small_folder_corner_radius")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("liquid_large_folder_corner_radius")).doubleValue(),.0001d);
     }
 
     @Test

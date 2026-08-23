@@ -109,7 +109,8 @@ public class Miuix307GlassCustomizationContractTest {
         assertTrue("portable Prismal params must be carried in the immutable backdrop snapshot",
                 view.contains("final PrismalParams prismalParams;"));
         assertTrue("the renderer must consume the snapshot's portable Prismal params",
-                view.contains("rawTexture, prismalGeometry, mapping.prismalParams"));
+                view.contains("rawTexture, mapping.sampleWidth, mapping.sampleHeight, mapping.prismalParams")
+                && view.contains("dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams"));
     }
 
     private static int occurrences(String text, String needle) {

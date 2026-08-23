@@ -388,6 +388,56 @@
             app:min="0" app:max="255" android:dependency="dock_divider_enabled" />
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="Launcher Liquid Glass">
+
+        <SwitchPreference
+            android:key="liquid_glass"
+            android:title="Liquid Glass"
+            android:summary="Enable LiquidDock launcher liquid glass"
+            android:defaultValue="false" />
+
+        <SwitchPreference
+            android:key="liquid_icon_glass"
+            android:title="Icon Glass"
+            android:summary="Controls both Workspace and Dock icon glass"
+            android:defaultValue="true" android:dependency="liquid_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_icon_size_offset"
+            android:title="Icon Size Offset" android:summary="%d dp per edge"
+            android:defaultValue="0" app:min="-40" app:max="40" android:dependency="liquid_icon_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_icon_corner_radius"
+            android:title="Icon Corner Radius" android:summary="%d dp (0 = Auto)"
+            android:defaultValue="0" app:min="0" app:max="128" android:dependency="liquid_icon_glass" />
+
+        <SwitchPreference android:key="liquid_widget_glass" android:title="Widget Glass"
+            android:summary="Shared glass behind widget content" android:defaultValue="true" android:dependency="liquid_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_widget_size_offset"
+            android:title="Widget Size Offset" android:summary="%d dp per edge"
+            android:defaultValue="0" app:min="-40" app:max="40" android:dependency="liquid_widget_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_widget_corner_radius"
+            android:title="Widget Corner Radius" android:summary="%d dp (0 = Auto)"
+            android:defaultValue="0" app:min="0" app:max="128" android:dependency="liquid_widget_glass" />
+
+        <SwitchPreference android:key="liquid_small_folder_glass" android:title="Small Folder Glass"
+            android:summary="1x1 folder material; miniature preview remains native" android:defaultValue="true" android:dependency="liquid_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_small_folder_size_offset"
+            android:title="Small Folder Size Offset" android:summary="%d dp per edge"
+            android:defaultValue="0" app:min="-40" app:max="40" android:dependency="liquid_small_folder_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_small_folder_corner_radius"
+            android:title="Small Folder Corner Radius" android:summary="%d dp (0 = Auto)"
+            android:defaultValue="0" app:min="0" app:max="128" android:dependency="liquid_small_folder_glass" />
+
+        <SwitchPreference android:key="liquid_large_folder_glass" android:title="Large Folder Glass"
+            android:summary="Large folder material" android:defaultValue="true" android:dependency="liquid_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_large_folder_size_offset"
+            android:title="Large Folder Size Offset" android:summary="%d dp per edge"
+            android:defaultValue="0" app:min="-40" app:max="40" android:dependency="liquid_large_folder_glass" />
+        <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_large_folder_corner_radius"
+            android:title="Large Folder Corner Radius" android:summary="%d dp (0 = Auto)"
+            android:defaultValue="0" app:min="0" app:max="128" android:dependency="liquid_large_folder_glass" />
+
+    </PreferenceCategory>
+
+
     <PreferenceCategory android:title="Backup &amp; Restore">
 
         <Preference

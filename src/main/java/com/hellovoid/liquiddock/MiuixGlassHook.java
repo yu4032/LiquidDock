@@ -36,6 +36,8 @@ final class MiuixGlassHook {
     private static WeakReference<View> vendorGpuBlurLoggedFor = new WeakReference<>(null);
     private static WeakReference<View> compatBackgroundBlurLoggedFor = new WeakReference<>(null);
     private static WeakReference<View> transparentMaterialOwner = new WeakReference<>(null);
+    private static WeakReference<View> originalMaterialOwner = new WeakReference<>(null);
+    private static Drawable originalMaterialBody;
     private static GradientDrawable transparentMaterialBody;
     private static float transparentMaterialRadius = Float.NaN;
     private static WeakReference<View> materialBodyLoggedFor = new WeakReference<>(null);
@@ -52,10 +54,28 @@ final class MiuixGlassHook {
         vendorGpuBlurLoggedFor = new WeakReference<>(null);
         compatBackgroundBlurLoggedFor = new WeakReference<>(null);
         transparentMaterialOwner = new WeakReference<>(null);
+        originalMaterialOwner = new WeakReference<>(null);
+        originalMaterialBody = null;
         transparentMaterialBody = null;
         transparentMaterialRadius = Float.NaN;
         materialBodyLoggedFor = new WeakReference<>(null);
         zeroCopyActiveLoggedFor = new WeakReference<>(null);
+    }
+
+    static void onRuntimeGlassDisabled() {
+        View background = currentBackground();
+        DockLiquidGlassHostView host = currentHost();
+        removeVendorGpuBlurSuppressor();
+        Miuix307ZeroCopyRenderer.clear();
+        restoreVendorMaterialBody();
+        clearTrackedViews();
+        if (host != null && host.getParent() instanceof ViewGroup) {
+            ((ViewGroup) host.getParent()).removeView(host);
+        }
+        if (background != null) {
+            background.requestLayout();
+            background.invalidate();
+        }
     }
 
     static void onHostDetached(DockLiquidGlassHostView detachedHost) {
@@ -90,6 +110,7 @@ final class MiuixGlassHook {
     }
 
     static int suppressCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
+        if (!GlassRuntimeState.isEnabled()) return requestedRadius;
         if (dockBg == null || requestedRadius <= 0) return requestedRadius;
         if (!COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName())) return requestedRadius;
         if (compatBackgroundBlurLoggedFor.get() != dockBg) {
@@ -101,6 +122,7 @@ final class MiuixGlassHook {
     }
 
     static boolean install(View dockBg, LiquidDockConfig config) {
+        if (!GlassRuntimeState.isEnabled()) return false;
         if (!(dockBg instanceof ViewGroup) || config == null) return false;
         ViewGroup materialHost = (ViewGroup) dockBg;
         boolean nativeVisualOwner = isNativeVisualOwner(dockBg);
@@ -165,6 +187,7 @@ final class MiuixGlassHook {
 
     private static void scheduleZeroCopyValidation(
             View dockBg, DockLiquidGlassHostView host, int frame) {
+        if (!GlassRuntimeState.isEnabled()) return;
         if (dockBg != currentBackground() || host != currentHost()) return;
 
         if (Miuix307ZeroCopyRenderer.isActive()) {
@@ -237,6 +260,7 @@ final class MiuixGlassHook {
     }
 
     static void suppressVendorGpuBlur(View dockBg) {
+        if (!GlassRuntimeState.isEnabled()) return;
         if (dockBg == null || !isNativeVisualOwner(dockBg)) return;
         MiBlurBridge.setPassWindowBlurRadius(dockBg, 0);
         MiBlurBridge.clearPassWindowBlur(dockBg);
@@ -291,6 +315,11 @@ final class MiuixGlassHook {
         if (!shouldSuppressVendorMaterialBody(dockBg)) return;
         float radius = Math.max(0f, nativeRadius);
         if (transparentMaterialOwner.get() != dockBg || transparentMaterialBody == null) {
+            Drawable current = dockBg.getBackground();
+            if (current != null && current != transparentMaterialBody) {
+                originalMaterialOwner = new WeakReference<>(dockBg);
+                originalMaterialBody = current;
+            }
             transparentMaterialOwner = new WeakReference<>(dockBg);
             transparentMaterialBody = new GradientDrawable();
             transparentMaterialBody.setShape(GradientDrawable.RECTANGLE);
@@ -307,6 +336,12 @@ final class MiuixGlassHook {
             MainHook.log(TAG + " themed vendor material body transparent; native optics radius="
                     + radius + " class=" + dockBg.getClass().getSimpleName());
         }
+    }
+
+    private static void restoreVendorMaterialBody() {
+        View owner = originalMaterialOwner.get();
+        Drawable original = originalMaterialBody;
+        if (owner != null && original != null) owner.setBackground(original);
     }
 
     private static int readDimension(View dockBg, String fieldName, boolean width) {
