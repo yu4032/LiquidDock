@@ -38,6 +38,7 @@ jobs:
           python3 ci/workspace_hidden_proxy_visibility_fix.py
           python3 ci/workspace_surface_generation_recovery_fix.py
           python3 ci/workspace_native_surface_generation_fix.py
+          python3 ci/workspace_producer_endpoint_rollover_fix.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
