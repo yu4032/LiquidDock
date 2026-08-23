@@ -32,6 +32,7 @@ jobs:
           python3 ci/vendor_snapshot_power_fix.py
           python3 ci/workspace_page_glass_fix.py
           python3 ci/workspace_resume_glass_fix.py
+          python3 ci/workspace_scene_owner_fix.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
