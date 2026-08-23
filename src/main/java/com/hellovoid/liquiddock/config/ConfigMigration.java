@@ -48,6 +48,7 @@ public final class ConfigMigration {
         float safeDensity = Math.max(0.1f, density);
         removeRetiredGlassPreferences(preferences);
         resetUnsupportedGlassConfigGeneration(preferences);
+        migrateGlassComponentStyles(preferences);
         migrateMergedHorizontal(preferences);
         migrateLegacyGridKeys(preferences);
         migrateGridToDp(safeDensity, preferences);
@@ -131,6 +132,26 @@ public final class ConfigMigration {
         } else {
             throw new IllegalArgumentException("Unsupported current glass default " + key);
         }
+    }
+
+    private static void migrateGlassComponentStyles(SharedPreferences sp) {
+        boolean legacyEnabled = sp.getBoolean("liquid_folder_glass", true);
+        int legacyRadius = sp.getInt("liquid_folder_corner_radius", 0);
+        SharedPreferences.Editor e = sp.edit();
+        boolean changed = false;
+        if (!sp.contains("liquid_small_folder_glass")) {
+            e.putBoolean("liquid_small_folder_glass", legacyEnabled); changed = true;
+        }
+        if (!sp.contains("liquid_large_folder_glass")) {
+            e.putBoolean("liquid_large_folder_glass", legacyEnabled); changed = true;
+        }
+        if (!sp.contains("liquid_small_folder_corner_radius")) {
+            e.putInt("liquid_small_folder_corner_radius", legacyRadius); changed = true;
+        }
+        if (!sp.contains("liquid_large_folder_corner_radius")) {
+            e.putInt("liquid_large_folder_corner_radius", legacyRadius); changed = true;
+        }
+        if (changed) e.commit();
     }
 
     private static void migrateAxisDistances(SharedPreferences sp) {

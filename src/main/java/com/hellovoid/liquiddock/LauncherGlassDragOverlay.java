@@ -30,6 +30,10 @@ final class LauncherGlassDragOverlay {
     private LauncherGlassSinkView sink;
     private WeakReference<ViewGroup> hostRef = new WeakReference<>(null);
     private float activeCornerRadiusPx;
+    private float activeVisualLeft;
+    private float activeVisualTop;
+    private float activeVisualRight;
+    private float activeVisualBottom;
     private boolean tracking;
     private boolean released;
 
@@ -69,9 +73,13 @@ final class LauncherGlassDragOverlay {
             LiquidDockConfig.Glass glassConfig,
             Object token,
             LauncherGlassDragState.Kind kind,
-            float cornerRadiusPx) {
+            LauncherGlassNodeKind nodeKind,
+            GlassComponentStyle style,
+            float cornerRadiusPx,
+            float[] visualBounds) {
         LauncherGlassDragOverlay overlay = acquire(source, glassConfig);
-        return overlay != null && overlay.beginInternal(token, kind, source, cornerRadiusPx);
+        return overlay != null && overlay.beginInternal(
+                token, kind, nodeKind, style, source, cornerRadiusPx, visualBounds);
     }
 
     static void end(View source, Object token) {
@@ -107,20 +115,42 @@ final class LauncherGlassDragOverlay {
     private boolean beginInternal(
             Object token,
             LauncherGlassDragState.Kind kind,
+            LauncherGlassNodeKind nodeKind,
+            GlassComponentStyle style,
             View source,
-            float cornerRadiusPx) {
+            float cornerRadiusPx,
+            float[] visualBounds) {
         if (released || token == null || source == null) return false;
         LauncherGlassDragState.Bounds bounds = readRootBounds(source);
         if (bounds == null) return false;
-        float resolvedRadiusPx = Math.max(0f,
-                Float.isFinite(cornerRadiusPx) ? cornerRadiusPx : 0f);
-        if (kind == LauncherGlassDragState.Kind.FOLDER) {
-            float density = source.getResources().getDisplayMetrics().density;
-            resolvedRadiusPx = LauncherGlassCornerRadiusPolicy.resolve(
-                    glassConfig != null ? glassConfig.folderCornerRadiusDp : 0f,
-                    density, resolvedRadiusPx, resolvedRadiusPx);
+        if (style == null) style = new GlassComponentStyle(true, 0f, 0f);
+        float left = 0f;
+        float top = 0f;
+        float right = Math.max(1f, source.getWidth());
+        float bottom = Math.max(1f, source.getHeight());
+        if (visualBounds != null && visualBounds.length >= 4
+                && Float.isFinite(visualBounds[0]) && Float.isFinite(visualBounds[1])
+                && Float.isFinite(visualBounds[2]) && Float.isFinite(visualBounds[3])
+                && visualBounds[2] > visualBounds[0] && visualBounds[3] > visualBounds[1]) {
+            left = visualBounds[0];
+            top = visualBounds[1];
+            right = visualBounds[2];
+            bottom = visualBounds[3];
         }
-        activeCornerRadiusPx = resolvedRadiusPx;
+        float density = source.getResources().getDisplayMetrics().density;
+        float[] styledBounds = LauncherGlassBoundsPolicy.apply(
+                left, top, right, bottom, style.sizeOffsetDp * density);
+        activeVisualLeft = styledBounds[0];
+        activeVisualTop = styledBounds[1];
+        activeVisualRight = styledBounds[2];
+        activeVisualBottom = styledBounds[3];
+        float resolvedRadiusPx = style.cornerRadiusDp > 0f
+                ? style.cornerRadiusDp * density
+                : Math.max(0f, Float.isFinite(cornerRadiusPx) ? cornerRadiusPx : 0f);
+        activeCornerRadiusPx = LauncherGlassBoundsPolicy.capRadius(
+                resolvedRadiusPx,
+                activeVisualRight - activeVisualLeft,
+                activeVisualBottom - activeVisualTop);
         sourceRef = new WeakReference<>(source);
         if (!coordinator.begin(token, kind, bounds, activeCornerRadiusPx)) return false;
         tracking = true;
@@ -190,6 +220,8 @@ final class LauncherGlassDragOverlay {
                     carrier, activeCornerRadiusPx, glassConfig);
             if (sink == null) return false;
         }
+        sink.setLocalVisualBounds(
+                activeVisualLeft, activeVisualTop, activeVisualRight, activeVisualBottom);
         sink.setNativeCornerRadiusPx(activeCornerRadiusPx);
         return true;
     }
@@ -219,6 +251,8 @@ final class LauncherGlassDragOverlay {
         carrier.setRotation(source.getRotation());
         carrier.setAlpha(1f);
         carrier.setVisibility(View.VISIBLE);
+        sink.setLocalVisualBounds(
+                activeVisualLeft, activeVisualTop, activeVisualRight, activeVisualBottom);
         sink.setNativeCornerRadiusPx(activeCornerRadiusPx);
     }
 

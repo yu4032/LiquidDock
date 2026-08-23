@@ -32,6 +32,10 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private volatile LauncherGlassSession session;
     private final LiquidDockConfig.Glass glassConfig;
     private volatile float nativeCornerRadiusPx;
+    private volatile float localVisualLeft = Float.NaN;
+    private volatile float localVisualTop = Float.NaN;
+    private volatile float localVisualRight = Float.NaN;
+    private volatile float localVisualBottom = Float.NaN;
     private volatile boolean disposed;
     private volatile boolean suppressedByFolderOpen;
     private volatile boolean suppressedByDrag;
@@ -108,7 +112,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     void requestLifecycleRefresh() {
         LauncherGlassSession live = ensureLiveSession();
-        if (!disposed && live != null) live.requestLifecycleRefresh();
+        if (!disposed && live != null) live.requestDragRedraw();
     }
 
     void setSuppressedByFolderOpen(boolean suppressed) {
@@ -124,6 +128,20 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         if (disposed || suppressedByDrag == suppressed) return;
         suppressedByDrag = suppressed;
         if (suppressed) resetPressInteraction(false);
+        syncFromMaterial();
+        requestLifecycleRefresh();
+    }
+
+    void setLocalVisualBounds(float left, float top, float right, float bottom) {
+        if (disposed || !Float.isFinite(left) || !Float.isFinite(top)
+                || !Float.isFinite(right) || !Float.isFinite(bottom)
+                || right <= left || bottom <= top) return;
+        if (localVisualLeft == left && localVisualTop == top
+                && localVisualRight == right && localVisualBottom == bottom) return;
+        localVisualLeft = left;
+        localVisualTop = top;
+        localVisualRight = right;
+        localVisualBottom = bottom;
         syncFromMaterial();
         requestLifecycleRefresh();
     }
@@ -216,8 +234,14 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         }
         boolean changed = false;
         changed |= consumeWorkspaceScrollMotion();
-        int width = Math.max(1, material.getWidth());
-        int height = Math.max(1, material.getHeight());
+        float left = Float.isFinite(localVisualLeft) ? localVisualLeft : 0f;
+        float top = Float.isFinite(localVisualTop) ? localVisualTop : 0f;
+        float right = Float.isFinite(localVisualRight)
+                ? localVisualRight : Math.max(1f, material.getWidth());
+        float bottom = Float.isFinite(localVisualBottom)
+                ? localVisualBottom : Math.max(1f, material.getHeight());
+        int width = Math.max(1, Math.round(right - left));
+        int height = Math.max(1, Math.round(bottom - top));
         ViewGroup.LayoutParams lp = getLayoutParams();
         if (lp != null && (lp.width != width || lp.height != height)) {
             lp.width = width;
@@ -225,10 +249,12 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
             setLayoutParams(lp);
             changed = true;
         }
-        changed |= setFloatIfChanged(this::getX, this::setX, material.getX());
-        changed |= setFloatIfChanged(this::getY, this::setY, material.getY());
-        if (getPivotX() != material.getPivotX()) { setPivotX(material.getPivotX()); changed = true; }
-        if (getPivotY() != material.getPivotY()) { setPivotY(material.getPivotY()); changed = true; }
+        changed |= setFloatIfChanged(this::getX, this::setX, material.getX() + left);
+        changed |= setFloatIfChanged(this::getY, this::setY, material.getY() + top);
+        float pivotX = material.getPivotX() - left;
+        float pivotY = material.getPivotY() - top;
+        if (getPivotX() != pivotX) { setPivotX(pivotX); changed = true; }
+        if (getPivotY() != pivotY) { setPivotY(pivotY); changed = true; }
         if (getScaleX() != material.getScaleX()) { setScaleX(material.getScaleX()); changed = true; }
         if (getScaleY() != material.getScaleY()) { setScaleY(material.getScaleY()); changed = true; }
         if (getRotation() != material.getRotation()) { setRotation(material.getRotation()); changed = true; }

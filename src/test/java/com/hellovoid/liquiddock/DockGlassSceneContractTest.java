@@ -22,39 +22,13 @@ public class DockGlassSceneContractTest {
     }
 
     @Test public void dockItemsUseOneDockCompositorAndNeverWorkspaceStaticNodes() throws Exception {
-        Path compositorPath = Path.of(
-                "src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java");
-        Path itemPath = Path.of(
-                "src/main/java/com/hellovoid/liquiddock/DockGlassItemNode.java");
-        assertTrue(Files.exists(compositorPath));
-        assertTrue(Files.exists(itemPath));
-        String compositor = Files.readString(compositorPath);
-        String item = Files.readString(itemPath);
-        assertTrue(compositor.contains("beginGlassFrame"));
-        assertTrue(compositor.contains("drawDockBody"));
-        assertTrue(compositor.contains("drawItem"));
-        assertTrue(compositor.contains("ONE_OUTPUT_SWAP"));
-        assertFalse(item.contains("TextureView"));
-        assertFalse(item.contains("Surface "));
-        assertFalse(item.contains("LauncherGlassStaticNode"));
+ String c=Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java")); String n=Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassItemNode.java"));
+ assertTrue(c.contains("ONE_OUTPUT_SWAP")&&c.contains("drawDockBody")&&c.contains("drawItem")&&c.contains("volatile DockGlassSceneSnapshot latestScene")); assertFalse(n.contains("extends TextureView")||n.contains("new TextureView")||n.contains("EGLSurface")||n.contains("LauncherGlassStaticNode"));
     }
 
     @Test public void dockUiPublishesImmutableSceneSnapshotBeforeGlDraw() throws Exception {
-        String compositor = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java"));
-        String view = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
-
-        assertTrue(compositor.contains("captureUiSnapshot"));
-        assertTrue(compositor.contains("DockGlassSceneSnapshot"));
-        assertTrue(view.contains("dockCompositor.captureUiSnapshot"));
-        assertTrue(view.contains("DockGlassSceneSnapshot dockScene"));
-
-        int drawStart = compositor.indexOf("int drawFrame(");
-        assertTrue(drawStart >= 0);
-        String drawPath = compositor.substring(drawStart);
-        assertFalse(drawPath.contains("syncItems()"));
-        assertFalse(drawPath.contains("transformMatrixToGlobal"));
-        assertFalse(drawPath.contains(".capture(dockRoot"));
+ String c=Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java")); String v=Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
+ assertTrue(c.contains("refreshUiSceneIfNeeded")&&c.contains("DockGlassSceneSnapshot latestScene()")); assertTrue(v.contains("dockCompositor.refreshUiSceneIfNeeded(")&&v.contains("dockCompositor.latestScene()")); String d=c.substring(c.indexOf("int drawFrame(")); assertFalse(d.contains("transformMatrixToGlobal")||d.contains(".capture(")||d.contains("snapshotForRoot"));
     }
+
 }

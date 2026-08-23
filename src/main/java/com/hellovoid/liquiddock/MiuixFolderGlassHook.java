@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -57,6 +58,7 @@ final class MiuixFolderGlassHook {
             });
 
             installFolderOpenCloseHooks(classLoader);
+            observeFolderVariantConstructors(classLoader, glassConfig);
 
             Class<?> utilities = Class.forName(
                     "com.miui.home.launcher.common.BlurUtilities", false, classLoader);
@@ -81,6 +83,34 @@ final class MiuixFolderGlassHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
             return false;
+        }
+    }
+
+    private static void observeFolderVariantConstructors(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) {
+        String[] variants = {"com.miui.home.launcher.FolderIcon1x1",
+                "com.miui.home.launcher.FolderIcon2x2"};
+        for (String variant : variants) {
+            try {
+                Class<?> type = Class.forName(variant, false, classLoader);
+                for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+                    HookUtil.hook(constructor, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof ViewGroup) attachFromFolderIcon((ViewGroup) owner, glassConfig);
+                        return result;
+                    });
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    static void reconcileExistingView(View view, LiquidDockConfig.Glass glassConfig) {
+        if (!(view instanceof ViewGroup) || glassConfig == null) return;
+        String name = view.getClass().getName();
+        if (name.endsWith(".FolderIcon") || name.contains("FolderIcon1x1")
+                || name.contains("FolderIcon2x2")) {
+            attachFromFolderIcon((ViewGroup) view, glassConfig);
         }
     }
 
@@ -175,6 +205,7 @@ final class MiuixFolderGlassHook {
 
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
+        LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
         if (!suppressed) {
             LauncherGlassStaticNode sink = resolveOwnerSink(owner);
             if (sink != null) sink.setSuppressedByFolderOpen(false);
@@ -202,6 +233,8 @@ final class MiuixFolderGlassHook {
 
     private static void restoreOpenedFolderOwner() {
         LauncherGlassStaticNode sink = openedFolderSink.get();
+        ViewGroup owner = openedFolderOwner.get();
+        if (owner != null) LauncherGlassSceneController.setWorkspaceCovered(owner, false);
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
         if (sink != null) sink.setSuppressedByFolderOpen(false);
@@ -219,9 +252,9 @@ final class MiuixFolderGlassHook {
     private static void attachFromFolderIcon(ViewGroup icon, LiquidDockConfig.Glass glassConfig) {
         observeFolderIconAttach(icon, glassConfig);
         try {
-            Object value = HookUtil.getField(icon, "mIconImageView");
-            if (value instanceof View) {
-                LauncherGlassStaticNode sink = attachMaterial((View) value, glassConfig);
+            View value = resolveFolderMaterial(icon);
+            if (value != null) {
+                LauncherGlassStaticNode sink = attachMaterial(value, glassConfig);
                 if (sink != null && openedFolderOwner.get() == icon) {
                     openedFolderSink = new WeakReference<>(sink);
                     sink.setSuppressedByFolderOpen(true);
@@ -262,9 +295,9 @@ final class MiuixFolderGlassHook {
             }
             LauncherGlassStaticNode sink = null;
             try {
-                Object value = HookUtil.getField(current, "mIconImageView");
-                if (value instanceof View) {
-                    sink = attachMaterial((View) value, glassConfig);
+                View value = resolveFolderMaterial(current);
+                if (value != null) {
+                    sink = attachMaterial(value, glassConfig);
                     if (sink != null && openedFolderOwner.get() == current) {
                         openedFolderSink = new WeakReference<>(sink);
                         sink.setSuppressedByFolderOpen(true);
@@ -303,9 +336,9 @@ final class MiuixFolderGlassHook {
                 ViewGroup folder = iconRef.get();
                 if (folder == null) return;
                 try {
-                    Object value = HookUtil.getField(folder, "mIconImageView");
-                    if (value instanceof View) {
-                        LauncherGlassStaticNode sink = claimedSink((View) value);
+                    View value = resolveFolderMaterial(folder);
+                    if (value != null) {
+                        LauncherGlassStaticNode sink = claimedSink(value);
                         if (sink != null) sink.requestLifecycleRefresh();
                     }
                 } catch (Throwable ignored) {}
@@ -313,6 +346,31 @@ final class MiuixFolderGlassHook {
         };
         FOLDER_ATTACH_LISTENERS.put(icon, listener);
         icon.addOnAttachStateChangeListener(listener);
+    }
+
+    private static View resolveFolderMaterial(ViewGroup folder) {
+        if (folder == null) return null;
+        boolean small = folder.getClass().getName().contains("FolderIcon1x1");
+        String[] fields = small
+                ? new String[]{"mImageView", "mIconImageView"}
+                : new String[]{"mIconImageView", "mImageView"};
+        for (String field : fields) {
+            try {
+                Object value = HookUtil.getField(folder, field);
+                if (value instanceof View) return (View) value;
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static boolean isSmallFolderMaterial(View material) {
+        View cursor = material;
+        while (cursor != null) {
+            if (cursor.getClass().getName().contains("FolderIcon1x1")) return true;
+            android.view.ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return false;
     }
 
     private static LauncherGlassStaticNode attachMaterial(
@@ -329,11 +387,14 @@ final class MiuixFolderGlassHook {
         float fallbackRadius = Math.min(Math.max(1, material.getWidth()),
                 Math.max(1, material.getHeight())) * 0.22f;
         float density = material.getResources().getDisplayMetrics().density;
+        boolean smallFolder = isSmallFolderMaterial(material);
+        GlassComponentStyle style = glassConfig != null
+                ? (smallFolder ? glassConfig.smallFolderStyle : glassConfig.largeFolderStyle)
+                : new GlassComponentStyle(true, 0f, 0f);
         float radius = LauncherGlassCornerRadiusPolicy.resolve(
-                glassConfig != null ? glassConfig.folderCornerRadiusDp : 0f,
-                density, nativeRadius, fallbackRadius);
-        LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachToMaterial(
-                material, LauncherGlassDragState.Kind.FOLDER, radius, glassConfig);
+                style.cornerRadiusDp, density, nativeRadius, fallbackRadius);
+        LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachFolderMaterial(
+                material, smallFolder, radius, glassConfig);
         if (sink != null) {
             CLAIMED.put(material, new WeakReference<>(sink));
             MiuixLauncherDragOverlayHook.observeStaticNode(sink);
@@ -395,6 +456,7 @@ final class MiuixFolderGlassHook {
     }
 
     private static void clearVendorBlur(View material) {
+        LauncherGlassVendorMaterialSuppressor.claimFolderMaterial(material);
         MiBlurBridge.clearContentBlur(material);
         try { View.class.getMethod("clearMiBackgroundBlendColor").invoke(material); }
         catch (Throwable ignored) {}

@@ -270,11 +270,14 @@ private val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标上间距"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, "工作台 Dock 图标下间距"),
 )
-private val folderCornerRadiusSpec = IntSpec(
-    ConfigSchema.Glass.FOLDER_CORNER_RADIUS,
-    "文件夹圆角",
-    "dp",
-)
+private val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边")
+private val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp")
+private val widgetSizeOffsetSpec = IntSpec(ConfigSchema.Glass.WIDGET_SIZE_OFFSET, "小部件尺寸偏移", "dp/边")
+private val widgetCornerRadiusSpec = IntSpec(ConfigSchema.Glass.WIDGET_CORNER_RADIUS, "小部件圆角", "dp")
+private val smallFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET, "小文件夹尺寸偏移", "dp/边")
+private val smallFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS, "小文件夹圆角", "dp")
+private val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET, "大文件夹尺寸偏移", "dp/边")
+private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
 private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.BLUR, "玻璃模糊", "px"),
     IntSpec(ConfigSchema.Glass.THICKNESS, "玻璃厚度"),
@@ -504,27 +507,34 @@ private fun LiquidPage(
     openLauncherHighlights: () -> Unit,
 ) {
     var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
-    var folderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.FOLDER_GLASS.name(), ConfigSchema.Glass.FOLDER_GLASS.uiDefault())) }
+    var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
+    var widgetGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())) }
+    var smallFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault())) }
+    var largeFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault())) }
     SettingsList(
         padding,
         stringResource(R.string.page_liquid),
         stringResource(R.string.liquid_header_summary),
     ) {
-        BooleanSetting(prefs, ConfigSchema.Glass.ENABLED, stringResource(R.string.liquid_enable), stringResource(R.string.liquid_enable_summary), masterEnabled) { liquidGlass = it }
-        BooleanSetting(prefs, ConfigSchema.Glass.FOLDER_GLASS, stringResource(R.string.liquid_folder_glass_enable), stringResource(R.string.liquid_folder_glass_enable_summary), masterEnabled && liquidGlass) { folderGlass = it }
-        IntSetting(prefs, folderCornerRadiusSpec, masterEnabled && liquidGlass && folderGlass)
         BooleanSetting(
-            prefs, ConfigSchema.Glass.WIDGET_GLASS,
-            "小部件玻璃",
-            "在小部件后方使用共享桌面玻璃层；透明区域可显示玻璃",
-            masterEnabled && liquidGlass,
-        )
-        BooleanSetting(
-            prefs, ConfigSchema.Glass.ICON_GLASS,
-            "图标玻璃",
-            "只在图标图形区域下方绘制玻璃，不覆盖文字；透明图标可透出玻璃",
-            masterEnabled && liquidGlass,
-        )
+            prefs,
+            ConfigSchema.Glass.ENABLED,
+            stringResource(R.string.liquid_enable),
+            stringResource(R.string.liquid_enable_summary),
+            masterEnabled,
+        ) { liquidGlass = it }
+        BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
+        IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && iconGlass)
+        IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && iconGlass)
+        BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃", "只替换材质背景，保留 RemoteViews / MAML 内容", masterEnabled && liquidGlass) { widgetGlass = it }
+        IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)
+        IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidGlass && widgetGlass)
+        BooleanSetting(prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS, "小文件夹玻璃", "保留 1x1 文件夹缩略预览", masterEnabled && liquidGlass) { smallFolderGlass = it }
+        IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidGlass && smallFolderGlass)
+        IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidGlass && smallFolderGlass)
+        BooleanSetting(prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS, "大文件夹玻璃", "独立控制大文件夹材质", masterEnabled && liquidGlass) { largeFolderGlass = it }
+        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
+        IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
         ArrowPreference(
             stringResource(R.string.launcher_highlights_entry),
             summary = stringResource(R.string.launcher_highlights_entry_summary),

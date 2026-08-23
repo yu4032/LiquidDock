@@ -28,6 +28,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         this.session = session;
         mainHandler = new Handler(context.getMainLooper());
         setOpaque(false);
+        setVisibility(View.INVISIBLE);
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -64,6 +65,12 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     private static synchronized void forget(View root, LauncherGlassStaticLayer layer) {
         if (root != null && BY_ROOT.get(root) == layer) BY_ROOT.remove(root);
+    }
+
+    void setSceneVisible(boolean visible) {
+        if (disposed) return;
+        int target = visible ? View.VISIBLE : View.INVISIBLE;
+        if (getVisibility() != target) setVisibility(target);
     }
 
     void dispose() {

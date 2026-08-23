@@ -22,6 +22,7 @@ final class LauncherGlassStaticNode {
 
     private final WeakReference<View> materialRef;
     private final LauncherGlassDragState.Kind kind;
+    private final LauncherGlassNodeKind nodeKind;
     private final LauncherGlassScrollMotionTracker workspaceScrollMotion =
             new LauncherGlassScrollMotionTracker();
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -51,11 +52,13 @@ final class LauncherGlassStaticNode {
     private LauncherGlassStaticNode(
             View materialHost,
             LauncherGlassDragState.Kind kind,
+            LauncherGlassNodeKind nodeKind,
             LauncherGlassSession session,
             float cornerRadiusPx,
             LiquidDockConfig.Glass glassConfig) {
         materialRef = new WeakReference<>(materialHost);
         this.kind = kind != null ? kind : LauncherGlassDragState.Kind.FOLDER;
+        this.nodeKind = nodeKind != null ? nodeKind : LauncherGlassNodeKind.LARGE_FOLDER;
         this.session = session;
         this.glassConfig = glassConfig;
         nativeCornerRadiusPx = Math.max(0f, cornerRadiusPx);
@@ -88,9 +91,14 @@ final class LauncherGlassStaticNode {
         if (materialHost == null) return null;
         LauncherGlassDragState.Kind resolvedKind = kind != null
                 ? kind : LauncherGlassDragState.Kind.FOLDER;
+        LauncherGlassNodeKind resolvedNodeKind = resolvedKind == LauncherGlassDragState.Kind.ICON
+                ? LauncherGlassNodeKind.ICON
+                : resolvedKind == LauncherGlassDragState.Kind.WIDGET
+                ? LauncherGlassNodeKind.WIDGET : LauncherGlassNodeKind.LARGE_FOLDER;
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
         LauncherGlassStaticNode existing = reference != null ? reference.get() : null;
-        if (existing != null && !existing.disposed && existing.kind == resolvedKind) {
+        if (existing != null && !existing.disposed && existing.kind == resolvedKind
+                && existing.nodeKind == resolvedNodeKind) {
             existing.setNativeCornerRadiusPx(cornerRadiusPx);
             LauncherGlassSession live = existing.ensureLiveSession();
             if (live != null) live.registerStaticNode(existing);
@@ -100,7 +108,32 @@ final class LauncherGlassStaticNode {
         LauncherGlassSession shared = LauncherGlassSessionRegistry.acquire(materialHost, glassConfig);
         if (shared == null) return null;
         LauncherGlassStaticNode node = new LauncherGlassStaticNode(
-                materialHost, resolvedKind, shared, cornerRadiusPx, glassConfig);
+                materialHost, resolvedKind, resolvedNodeKind, shared, cornerRadiusPx, glassConfig);
+        BY_MATERIAL.put(materialHost, new WeakReference<>(node));
+        shared.registerStaticNode(node);
+        return node;
+    }
+
+    static LauncherGlassStaticNode attachFolderMaterial(
+            View materialHost, boolean smallFolder, float cornerRadiusPx,
+            LiquidDockConfig.Glass glassConfig) {
+        if (materialHost == null) return null;
+        LauncherGlassNodeKind resolvedNodeKind = smallFolder
+                ? LauncherGlassNodeKind.SMALL_FOLDER : LauncherGlassNodeKind.LARGE_FOLDER;
+        WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
+        LauncherGlassStaticNode existing = reference != null ? reference.get() : null;
+        if (existing != null && !existing.disposed && existing.nodeKind == resolvedNodeKind) {
+            existing.setNativeCornerRadiusPx(cornerRadiusPx);
+            LauncherGlassSession live = existing.ensureLiveSession();
+            if (live != null) live.registerStaticNode(existing);
+            return existing;
+        }
+        if (existing != null && !existing.disposed) existing.dispose();
+        LauncherGlassSession shared = LauncherGlassSessionRegistry.acquire(materialHost, glassConfig);
+        if (shared == null) return null;
+        LauncherGlassStaticNode node = new LauncherGlassStaticNode(materialHost,
+                LauncherGlassDragState.Kind.FOLDER, resolvedNodeKind, shared,
+                cornerRadiusPx, glassConfig);
         BY_MATERIAL.put(materialHost, new WeakReference<>(node));
         shared.registerStaticNode(node);
         return node;
@@ -115,12 +148,24 @@ final class LauncherGlassStaticNode {
 
     View materialHost() { return materialRef.get(); }
     LauncherGlassDragState.Kind kind() { return kind; }
+    LauncherGlassNodeKind nodeKind() { return nodeKind; }
+
+    GlassComponentStyle componentStyle() {
+        if (glassConfig == null) return new GlassComponentStyle(true, 0f, 0f);
+        switch (nodeKind) {
+            case ICON: return glassConfig.iconStyle;
+            case WIDGET: return glassConfig.widgetStyle;
+            case SMALL_FOLDER: return glassConfig.smallFolderStyle;
+            case LARGE_FOLDER:
+            default: return glassConfig.largeFolderStyle;
+        }
+    }
 
     void requestLifecycleRefresh() {
         if (disposed) return;
         geometryDirty = true;
         LauncherGlassSession live = ensureLiveSession();
-        if (live != null) live.requestLifecycleRefresh();
+        if (live != null) live.requestStaticRedraw();
     }
 
     void setSuppressedByFolderOpen(boolean suppressed) {
@@ -276,10 +321,10 @@ final class LauncherGlassStaticNode {
 
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
         View material = materialRef.get();
-        if (disposed || material == null || root == null
+        GlassComponentStyle style = componentStyle();
+        if (disposed || material == null || root == null || style == null || !style.enabled
                 || suppressedByFolderOpen || suppressedByDrag
-                || !material.isAttachedToWindow() || !material.isShown()
-                || material.getAlpha() <= 0f) return null;
+                || !LauncherGlassVisibility.isVisible(material, root)) return null;
         int hostWidth = material.getWidth();
         int hostHeight = material.getHeight();
         if (hostWidth <= 0 || hostHeight <= 0 || root.getWidth() <= 0 || root.getHeight() <= 0) {
@@ -298,6 +343,13 @@ final class LauncherGlassStaticNode {
             localRight = icon.right;
             localBottom = icon.bottom;
         }
+        float density = material.getResources().getDisplayMetrics().density;
+        float[] styledBounds = LauncherGlassBoundsPolicy.apply(
+                localLeft, localTop, localRight, localBottom, style.sizeOffsetDp * density);
+        localLeft = styledBounds[0];
+        localTop = styledBounds[1];
+        localRight = styledBounds[2];
+        localBottom = styledBounds[3];
         float localWidth = Math.max(1f, localRight - localLeft);
         float localHeight = Math.max(1f, localBottom - localTop);
         float[] points = new float[]{
@@ -322,9 +374,12 @@ final class LauncherGlassStaticNode {
         float scaleX = distance(points[0], points[1], points[2], points[3]) / localWidth;
         float scaleY = distance(points[0], points[1], points[4], points[5]) / localHeight;
         float radiusScale = Math.max(0.01f, Math.min(scaleX, scaleY));
+        float requestedRadius = style.cornerRadiusDp > 0f
+                ? style.cornerRadiusDp * density : nativeCornerRadiusPx;
         return LauncherGlassGeometry.resolve(
                 root.getWidth(), root.getHeight(), left, top, right, bottom,
-                nativeCornerRadiusPx * radiusScale);
+                LauncherGlassBoundsPolicy.capRadius(
+                        requestedRadius * radiusScale, right - left, bottom - top));
     }
 
     void dispose() {

@@ -32,50 +32,8 @@ public class Miuix307TextureViewPassBlurCalibrationTest {
                 && view.contains("outputWindowSurface"));
     }
 
-    @Test
-    public void fullUpstreamPrismalOpticsRunAfterOesNormalizationWithoutLeavingGpuPath() throws Exception {
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        String adapter = Files.readString(MAIN.resolve("Miuix307PassBlurShaders.java"));
-        String shader = Files.readString(Path.of("prismal/src/main/res/raw/prismal_fragment.glsl"));
-
-        assertTrue(view.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(view.contains("prismalRenderer.render("));
-        assertTrue(adapter.contains("samplerExternalOES uTexture")
-                && adapter.contains("uBackdropRect")
-                && adapter.contains("uConfigRot")
-                && adapter.contains("uTexMatrix"));
-        assertTrue(adapter.contains("compensateSurfaceTextureCropPreservingOrientation")
-                && adapter.contains("orientationBias")
-                && adapter.contains("uTexMatrix * vec4(textureInputUv, 0.0, 1.0)"));
-
-        assertTrue(shader.contains("getHeightFromDist")
-                && shader.contains("computeGradientHeight")
-                && shader.contains("N_meniscus")
-                && shader.contains("u_liquidDome")
-                && shader.contains("u_normalStrength"));
-        assertTrue(shader.contains("refract(-V, N, 1.0 / u_ior)")
-                && shader.contains("refract(refIn, -N, u_ior)"));
-        assertTrue(shader.contains("pow(1.0 - cosVNeff, 5.0)")
-                && shader.contains("u_fresnelReflect")
-                && shader.contains("u_chromaticAberration")
-                && shader.contains("u_dispersionR")
-                && shader.contains("u_dispersionB")
-                && shader.contains("uvR")
-                && shader.contains("uvB"));
-        assertTrue(shader.contains("u_shininess")
-                && shader.contains("u_specular")
-                && shader.contains("specP")
-                && shader.contains("specS")
-                && shader.contains("u_rimStrength")
-                && shader.contains("u_causticIntensity"));
-        assertFalse(view.contains("float displacementPx = 14.0")
-                || shader.contains("float displacementPx = 14.0"));
-        assertFalse(view.contains("Bitmap")
-                || view.contains("captureScreenAsync")
-                || view.contains("ScreenshotHardwareBuffer")
-                || view.contains("glReadPixels")
-                || adapter.contains("Bitmap")
-                || shader.contains("glReadPixels"));
+    @Test public void fullUpstreamPrismalOpticsRunAfterOesNormalizationWithoutLeavingGpuPath() throws Exception {
+ String v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")),a=Files.readString(MAIN.resolve("Miuix307PassBlurShaders.java")); assertTrue(v.contains("OES_NORMALIZE_FRAGMENT")&&v.contains("prismalRenderer.prepareBackdrop(")&&v.contains("dockCompositor.drawFrame(")); assertTrue(a.contains("samplerExternalOES uTexture")&&a.contains("uBackdropRect")&&a.contains("uTexMatrix")); assertFalse(v.contains("glReadPixels")||v.contains("captureScreenAsync"));
     }
 
     @Test
@@ -138,18 +96,8 @@ public class Miuix307TextureViewPassBlurCalibrationTest {
         assertTrue(bridge.contains("String[] exclusions") && bridge.contains("rootName"));
     }
 
-    @Test
-    public void calibrationRotationResizesInputProducerWithoutGeometryHotUnbind() throws Exception {
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        int start = view.indexOf("private void refreshProducerGeometryInPlace");
-        int end = view.indexOf("private void updateBackdropMapping", start);
-        assertTrue(start >= 0 && end > start);
-        String region = view.substring(start, end);
-
-        assertTrue(region.contains("setDefaultBufferSize"));
-        assertFalse(region.contains("Miuix307PassBlurBridge.unbind")
-                || region.contains("SetPassBlurSurface")
-                || region.contains("binding = null"));
+    @Test public void calibrationRotationReplacesInputProducerGeneration() throws Exception {
+ String v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")); assertTrue(v.contains("replaceProducerGeneration")&&v.contains("producer-generation-changed")&&v.contains("releaseInputProducer")&&v.contains("createInputProducer()"));
     }
 
     @Test

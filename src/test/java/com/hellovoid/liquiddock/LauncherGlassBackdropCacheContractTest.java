@@ -12,17 +12,8 @@ public class LauncherGlassBackdropCacheContractTest {
     private static final Path SESSION = Path.of(
             "src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java");
 
-    @Test
-    public void interactionRedrawDoesNotRebuildNormalizationAndBlur() throws Exception {
-        String source = Files.readString(SESSION);
-
-        assertTrue(source.contains("private boolean backdropPrepared;"));
-        assertTrue(source.contains(
-                "renderScene(work.rebuildBackdrop || sourceChanged || !backdropPrepared);"));
-        assertTrue(source.contains("private void renderScene(boolean rebuildBackdrop)"));
-        assertTrue(source.contains(
-                "if (rebuildBackdrop || rawTargetChanged || !backdropPrepared)"));
-        assertTrue(source.contains("backdropPrepared = true;"));
+    @Test public void interactionRedrawDoesNotRebuildNormalizationAndBlur() throws Exception {
+ String s=Files.readString(SESSION); assertTrue(s.contains("boolean backdropDirty = work.rebuildBackdrop || sourceChanged || !backdropPrepared;")&&s.contains("renderScene(backdropDirty, staticDirty, dragDirty);")&&s.contains("private void renderScene(boolean rebuildBackdrop, boolean renderStatic, boolean renderDrag)")&&s.contains("prismalRenderer.prepareBackdrop(rawTexture, rootWidth, rootHeight, params);"));
     }
 
     @Test

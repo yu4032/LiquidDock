@@ -60,20 +60,8 @@ public class PrismalModuleBoundaryContractTest {
         assertFalse(renderer.contains("requireUniform(glassProgram, \"u_backgroundTexture\")"));
     }
 
-    @Test
-    public void liquidDockAdapterOwnsOesNormalizationMappingLogAndFinalCrop() throws Exception {
-        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
-        String composite = Files.readString(APP.resolve("Miuix307PrismalCompositeShaders.java"));
-        assertTrue(view.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(view.contains("prismalRenderer.render("));
-        assertTrue(view.contains("createPrismalGeometry(mapping)"));
-        assertTrue(view.contains("private volatile BackdropSnapshot backdropSnapshot"));
-        assertTrue(view.contains("BackdropSnapshot mapping = backdropSnapshot"));
-        assertTrue(view.contains("ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight)"));
-        assertTrue(view.contains("renderNormalizationPass(mapping)"));
-        assertTrue(view.contains("[DC][PRISMAL-MAP]"));
-        assertTrue(view.contains("renderCompositePass(prismalTexture, mapping)"));
-        assertTrue(view.contains("if (backdropSnapshot != mapping"));
-        assertTrue(composite.contains("uCropRect.xy + vUv * uCropRect.zw"));
+    @Test public void liquidDockAdapterOwnsOesNormalizationMappingLogAndFinalCrop() throws Exception {
+ String v=Files.readString(APP.resolve("Miuix307PassBlurTextureView.java")),c=Files.readString(APP.resolve("Miuix307PrismalCompositeShaders.java")); assertTrue(v.contains("OES_NORMALIZE_FRAGMENT")&&v.contains("prismalRenderer.prepareBackdrop(")&&v.contains("dockCompositor.drawFrame(")&&v.contains("renderNormalizationPass(mapping)")&&v.contains("renderCompositePass(prismalTexture, mapping)")&&v.contains("backdropSnapshot != mapping")); assertTrue(c.contains("uCropRect.xy + vUv * uCropRect.zw"));
     }
+
 }

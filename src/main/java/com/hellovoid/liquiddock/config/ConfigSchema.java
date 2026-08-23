@@ -210,7 +210,27 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> ICON_GLASS = bool(
                 "liquid_icon_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> FOLDER_CORNER_RADIUS = integer(
-                "liquid_folder_corner_radius", 0, 0, 0, 0, 96, ConfigKey.ExportMode.ALWAYS);
+                "liquid_folder_corner_radius", 0, 0, 0, 0, 96, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> ICON_SIZE_OFFSET = dp(
+                "liquid_icon_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ICON_CORNER_RADIUS = dp(
+                "liquid_icon_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> WIDGET_SIZE_OFFSET = dp(
+                "liquid_widget_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> WIDGET_CORNER_RADIUS = dp(
+                "liquid_widget_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SMALL_FOLDER_GLASS = bool(
+                "liquid_small_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SMALL_FOLDER_SIZE_OFFSET = dp(
+                "liquid_small_folder_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SMALL_FOLDER_CORNER_RADIUS = dp(
+                "liquid_small_folder_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> LARGE_FOLDER_GLASS = bool(
+                "liquid_large_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> LARGE_FOLDER_SIZE_OFFSET = dp(
+                "liquid_large_folder_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> LARGE_FOLDER_CORNER_RADIUS = dp(
+                "liquid_large_folder_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DIMENSIONS_DP = bool(
                 "liquid_dimensions_dp", true, false, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<String> BLUR_MODE = string(
@@ -440,6 +460,11 @@ public final class ConfigSchema {
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS, Glass.ICON_GLASS,
                 Glass.FOLDER_CORNER_RADIUS,
+                Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
+                Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,
+                Glass.SMALL_FOLDER_GLASS, Glass.SMALL_FOLDER_SIZE_OFFSET,
+                Glass.SMALL_FOLDER_CORNER_RADIUS, Glass.LARGE_FOLDER_GLASS,
+                Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.DIMENSIONS_DP, Glass.BLUR_MODE, Glass.BLUR, Glass.CHROMATIC,
                 Glass.TINT_ALPHA, Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
                 Glass.SAMPLING_EXTRA_TOP, Glass.SAMPLING_EXTRA_BOTTOM,

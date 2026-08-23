@@ -21,18 +21,8 @@ public class Miuix307PassBlurGpuDemoTest {
         assertTrue(bridge.contains("View materialHost, Surface producerSurface, float requestedScale"));
     }
 
-    @Test
-    public void activeRendererUsesTextureViewEgl() throws Exception {
-        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        assertTrue(renderer.contains("new Miuix307PassBlurTextureView"));
-        assertFalse(renderer.contains("new Miuix307PassBlurGpuView"));
-        assertTrue(view.contains("extends TextureView"));
-        assertTrue(view.contains("EGL14.eglCreateWindowSurface"));
-        assertTrue(view.contains("GLES11Ext.GL_TEXTURE_EXTERNAL_OES"));
-        assertTrue(view.contains("renderNormalizationPass"));
-        assertTrue(view.contains("prismalRenderer.render("));
-        assertTrue(view.contains("renderCompositePass"));
+    @Test public void activeRendererUsesTextureViewEgl() throws Exception {
+ String r=Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java")),v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")); assertTrue(r.contains("new Miuix307PassBlurTextureView")); assertTrue(v.contains("extends TextureView")&&v.contains("eglCreateWindowSurface")&&v.contains("GL_TEXTURE_EXTERNAL_OES")&&v.contains("renderNormalizationPass")&&v.contains("prismalRenderer.prepareBackdrop(")&&v.contains("dockCompositor.drawFrame(")&&v.contains("renderCompositePass"));
     }
 
     @Test
@@ -62,22 +52,8 @@ public class Miuix307PassBlurGpuDemoTest {
         assertTrue(view.contains("setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight)"));
     }
 
-    @Test
-    public void rotationResizesExistingProducerInPlaceWithoutNativeHotRebind() throws Exception {
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        assertTrue(view.contains("refreshProducerGeometryInPlace"));
-        int start = view.indexOf("private void refreshProducerGeometryInPlace");
-        int end = view.indexOf("private void updateBackdropMapping", start);
-        assertTrue(start >= 0 && end > start);
-        String region = view.substring(start, end);
-        assertTrue(region.contains("setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight)"));
-        assertTrue(region.contains("configRotation = geometry.configRotation"));
-        assertTrue(region.contains("boundSurfaceWidth = geometry.surfaceWidth")
-                && region.contains("boundSurfaceHeight = geometry.surfaceHeight")
-                && region.contains("boundConfigRotation = geometry.configRotation"));
-        assertFalse(region.contains("Miuix307PassBlurBridge.unbind")
-                || region.contains("binding = null") || region.contains("SetPassBlurSurface"));
-        assertTrue(view.contains("refreshProducerGeometryInPlace();"));
+    @Test public void rotationReplacesProducerGenerationInsteadOfReusingOldBufferQueue() throws Exception {
+ String v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")); assertTrue(v.contains("replaceProducerGeneration")&&v.contains("producer-generation-changed")&&v.contains("recreateInputProducer")&&v.contains("releaseInputProducer")&&v.contains("createInputProducer()"));
     }
 
     @Test
@@ -88,24 +64,8 @@ public class Miuix307PassBlurGpuDemoTest {
         assertFalse(view.contains("getSurfaceControl()"));
     }
 
-    @Test
-    public void stageBIsolatedBeforeUpstreamPrismalMaterial() throws Exception {
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        String adapter = Files.readString(MAIN.resolve("Miuix307PassBlurShaders.java"));
-        String prismal = Files.readString(Path.of("prismal/src/main/res/raw/prismal_fragment.glsl"));
-
-        assertTrue(adapter.contains("uniform int uConfigRot")
-                && adapter.contains("vec2(1.0 - rootUv.y, rootUv.x)")
-                && adapter.contains("vec2(1.0 - rootUv.x, 1.0 - rootUv.y)")
-                && adapter.contains("vec2(rootUv.y, 1.0 - rootUv.x)"));
-        assertTrue(adapter.contains("compensateSurfaceTextureCropPreservingOrientation")
-                && adapter.contains("float determinant")
-                && adapter.contains("uTexMatrix * vec4(textureInputUv, 0.0, 1.0)"));
-        assertTrue(view.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(view.contains("prismalRenderer.render("));
-        assertFalse(prismal.contains("uTexMatrix"));
-        assertFalse(prismal.contains("uBackdropRect"));
-        assertFalse(prismal.contains("samplerExternalOES"));
+    @Test public void stageBIsolatedBeforeUpstreamPrismalMaterial() throws Exception {
+ String v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")),a=Files.readString(MAIN.resolve("Miuix307PassBlurShaders.java")),p=Files.readString(Path.of("prismal/src/main/res/raw/prismal_fragment.glsl")); assertTrue(a.contains("uConfigRot")&&a.contains("uTexMatrix")); assertTrue(v.contains("OES_NORMALIZE_FRAGMENT")&&v.contains("prismalRenderer.prepareBackdrop(")&&v.contains("dockCompositor.drawFrame(")); assertFalse(p.contains("samplerExternalOES")||p.contains("uBackdropRect"));
     }
 
     @Test

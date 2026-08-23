@@ -50,17 +50,26 @@ final class MiuixLauncherDragOverlayHook {
     private static final class ResolvedSource {
         final View source;
         final LauncherGlassDragState.Kind kind;
+        final LauncherGlassNodeKind nodeKind;
+        final GlassComponentStyle style;
         final float cornerRadiusPx;
+        final float[] visualBounds;
         final LauncherGlassStaticNode staticSink;
 
         ResolvedSource(
                 View source,
                 LauncherGlassDragState.Kind kind,
+                LauncherGlassNodeKind nodeKind,
+                GlassComponentStyle style,
                 float cornerRadiusPx,
+                float[] visualBounds,
                 LauncherGlassStaticNode staticSink) {
             this.source = source;
             this.kind = kind;
+            this.nodeKind = nodeKind;
+            this.style = style;
             this.cornerRadiusPx = cornerRadiusPx;
+            this.visualBounds = visualBounds;
             this.staticSink = staticSink;
         }
     }
@@ -129,18 +138,22 @@ final class MiuixLauncherDragOverlayHook {
             View child, LiquidDockConfig.Glass glassConfig, int attempt) {
         if (child == null || !isActualDragView(child) || ACTIVE.containsKey(child)
                 || attempt > MAX_READY_ATTEMPTS) return;
-        ResolvedSource resolved = resolveSource(child);
+        ResolvedSource resolved = resolveSource(child, glassConfig);
         if (resolved == null || !child.isAttachedToWindow()
                 || child.getWidth() <= 0 || child.getHeight() <= 0) {
             child.postOnAnimation(() -> beginWhenReady(child, glassConfig, attempt + 1));
             return;
         }
+        if (resolved.style == null || !resolved.style.enabled) return;
         boolean active = LauncherGlassDragOverlay.begin(
                 resolved.source,
                 glassConfig,
                 child,
                 resolved.kind,
-                resolved.cornerRadiusPx);
+                resolved.nodeKind,
+                resolved.style,
+                resolved.cornerRadiusPx,
+                resolved.visualBounds);
         if (!active) {
             child.postOnAnimation(() -> beginWhenReady(child, glassConfig, attempt + 1));
             return;
@@ -167,16 +180,24 @@ final class MiuixLauncherDragOverlayHook {
      * when MIUI exposes the original FolderIcon, gives us a second suppression path for its
      * static sink. No original workspace View is used as the moving geometry source.
      */
-    private static ResolvedSource resolveSource(View child) {
+    private static ResolvedSource resolveSource(
+            View child, LiquidDockConfig.Glass glassConfig) {
         if (!isActualDragView(child)) return null;
         Metadata metadata = resolveMetadata(child);
         View radiusSource = metadata.radiusSource != null ? metadata.radiusSource : child;
         LauncherGlassStaticNode staticSink = metadata.staticHost != null
                 ? LauncherGlassStaticNode.find(metadata.staticHost) : null;
+        LauncherGlassNodeKind nodeKind = staticSink != null
+                ? staticSink.nodeKind() : nodeKindFor(metadata.kind);
+        GlassComponentStyle style = staticSink != null
+                ? staticSink.componentStyle() : styleFor(glassConfig, nodeKind);
         return new ResolvedSource(
                 child,
                 metadata.kind,
+                nodeKind,
+                style,
                 resolveCornerRadius(radiusSource, metadata.kind, child),
+                resolveVisualBounds(child, metadata.staticHost, nodeKind),
                 staticSink);
     }
 
@@ -293,6 +314,45 @@ final class MiuixLauncherDragOverlayHook {
     }
 
 
+    private static LauncherGlassNodeKind nodeKindFor(LauncherGlassDragState.Kind kind) {
+        if (kind == LauncherGlassDragState.Kind.ICON) return LauncherGlassNodeKind.ICON;
+        if (kind == LauncherGlassDragState.Kind.WIDGET) return LauncherGlassNodeKind.WIDGET;
+        return LauncherGlassNodeKind.LARGE_FOLDER;
+    }
+
+    private static GlassComponentStyle styleFor(
+            LiquidDockConfig.Glass glassConfig, LauncherGlassNodeKind nodeKind) {
+        if (glassConfig == null) return new GlassComponentStyle(true, 0f, 0f);
+        switch (nodeKind) {
+            case ICON: return glassConfig.iconStyle;
+            case WIDGET: return glassConfig.widgetStyle;
+            case SMALL_FOLDER: return glassConfig.smallFolderStyle;
+            case LARGE_FOLDER:
+            default: return glassConfig.largeFolderStyle;
+        }
+    }
+
+    /** Resolve the originating visual footprint once; DragView remains the moving authority. */
+    private static float[] resolveVisualBounds(
+            View dragView, View originalHost, LauncherGlassNodeKind nodeKind) {
+        if (dragView == null) return null;
+        float dragWidth = Math.max(1f, dragView.getWidth());
+        float dragHeight = Math.max(1f, dragView.getHeight());
+        if (nodeKind != LauncherGlassNodeKind.ICON) {
+            return new float[]{0f, 0f, dragWidth, dragHeight};
+        }
+        View visualHost = originalHost != null ? originalHost : dragView;
+        LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(visualHost);
+        if (icon == null) return new float[]{0f, 0f, dragWidth, dragHeight};
+        float hostWidth = Math.max(1f, visualHost.getWidth());
+        float hostHeight = Math.max(1f, visualHost.getHeight());
+        return new float[]{
+                icon.left / hostWidth * dragWidth,
+                icon.top / hostHeight * dragHeight,
+                icon.right / hostWidth * dragWidth,
+                icon.bottom / hostHeight * dragHeight
+        };
+    }
 
     private static float resolveCornerRadius(
             View preferredSource, LauncherGlassDragState.Kind kind, View dragView) {

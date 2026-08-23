@@ -42,34 +42,12 @@ public class LauncherGlassAlignmentAndRadiusTest {
         assertFalse(sink.contains("root.getGlobalVisibleRect(rootRect)"));
     }
 
-    @Test
-    public void folderRadiusIsPersistedAndSharedByStaticAndDragGlass() throws Exception {
-        String schema = read("src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java");
-        String runtime = read("src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java");
-        String folder = read("src/main/java/com/hellovoid/liquiddock/MiuixFolderGlassHook.java");
-        String drag = read("src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java");
-
-        assertTrue(schema.contains("FOLDER_CORNER_RADIUS = integer("));
-        assertTrue(schema.contains("\"liquid_folder_corner_radius\", 0, 0, 0, 0, 96"));
-        assertTrue(schema.contains("Glass.FOLDER_GLASS"));
-        assertTrue(schema.contains("Glass.FOLDER_CORNER_RADIUS"));
-        assertTrue(runtime.contains("final float folderCornerRadiusDp;"));
-        assertTrue(runtime.contains("folderCornerRadiusDp = c.f(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name()"));
-        assertTrue(folder.contains("LauncherGlassCornerRadiusPolicy.resolve("));
-        assertTrue(drag.contains("LauncherGlassCornerRadiusPolicy.resolve("));
-        assertTrue(drag.contains("kind == LauncherGlassDragState.Kind.FOLDER"));
+    @Test public void folderRadiusIsPersistedPerCanonicalFolderKind() throws Exception {
+ String s=read("src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"),r=read("src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java"),f=read("src/main/java/com/hellovoid/liquiddock/MiuixFolderGlassHook.java"); assertTrue(s.contains("SMALL_FOLDER_CORNER_RADIUS")&&s.contains("LARGE_FOLDER_CORNER_RADIUS")); assertTrue(r.contains("smallFolderStyle = new GlassComponentStyle")&&r.contains("largeFolderStyle = new GlassComponentStyle")); assertTrue(f.contains("smallFolder ? glassConfig.smallFolderStyle : glassConfig.largeFolderStyle"));
     }
 
-    @Test
-    public void composeAndLegacyGuiExposeFolderRadiusWithFolderDependency() throws Exception {
-        String compose = read("src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
-        String legacy = read("src/main/res/xml/preferences.xml");
-
-        assertTrue(compose.contains("ConfigSchema.Glass.FOLDER_CORNER_RADIUS"));
-        assertTrue(compose.contains("masterEnabled && liquidGlass && folderGlass"));
-        assertTrue(compose.contains("\"文件夹圆角\""));
-        assertTrue(legacy.contains("android:key=\"liquid_folder_corner_radius\""));
-        assertTrue(legacy.contains("app:max=\"96\""));
-        assertTrue(legacy.contains("android:dependency=\"liquid_folder_glass\""));
+    @Test public void composeAndLegacyGuiExposePerKindFolderStyleControls() throws Exception {
+ String c=read("src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"),x=read("src/main/res/xml/preferences.xml"); assertTrue(c.contains("SMALL_FOLDER_SIZE_OFFSET")&&c.contains("SMALL_FOLDER_CORNER_RADIUS")&&c.contains("LARGE_FOLDER_SIZE_OFFSET")&&c.contains("LARGE_FOLDER_CORNER_RADIUS")); assertTrue(x.contains("liquid_small_folder_corner_radius")&&x.contains("liquid_large_folder_corner_radius"));
     }
+
 }

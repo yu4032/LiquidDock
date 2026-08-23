@@ -96,7 +96,7 @@ final class DockGlassItemNode {
                                             float scaleX, float scaleY) {
         View view = viewRef.get();
         if (view == null || dockRoot == null || rootInverse == null || !style.enabled
-                || !LauncherGlassVisibility.isVisible(view, dockRoot)
+                || !LauncherGlassVisibility.isVisible(view, dockRoot.getRootView())
                 || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
 
         float left = 0f, top = 0f, right = view.getWidth(), bottom = view.getHeight();

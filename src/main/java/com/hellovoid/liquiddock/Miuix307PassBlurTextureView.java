@@ -172,6 +172,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final Handler renderHandler;
     private final Handler mainHandler;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    private final DockGlassCompositor dockCompositor;
     private final float[] textureMatrix = new float[16];
 
     private volatile boolean shuttingDown;
@@ -250,6 +251,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     Miuix307PassBlurTextureView(Context context, View materialHost) {
         super(context);
         materialHostRef = new WeakReference<>(materialHost);
+        dockCompositor = new DockGlassCompositor(materialHost);
         opticalParams = Miuix307PrismalMaterial.defaults(
                 context.getResources().getDisplayMetrics().density);
         portablePrismalParams = Miuix307PrismalAdapter.toPortable(opticalParams);
@@ -287,6 +289,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         bottomSamplingExtraPx = glassConfig.samplingExtraBottomPx;
         leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
+        dockCompositor.setIconStyle(glassConfig.iconStyle);
         updateBackdropMapping();
         if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
     }
@@ -295,6 +298,11 @@ final class Miuix307PassBlurTextureView extends TextureView
      * Reconnect SurfaceFlinger's PassBlur producer without rebuilding the attached TextureView.
      * The framework Binding can remain stale-true after its BufferQueue has disconnected.
      */
+    // Dock producer remains continuous; a geometry generation replaces its BufferQueue.
+    void replaceProducerGeneration(String reason) {
+        rebindProducer(reason);
+    }
+
     void rebindProducer(String reason) {
         if (shuttingDown) return;
         if (producerRebindPending) return;
@@ -328,11 +336,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             inputProducerSurface = null;
             inputSurfaceTexture = null;
 
-            if (staleProducer != null) staleProducer.release();
-            if (staleInput != null) {
-                try { staleInput.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
-                staleInput.release();
-            }
+            releaseInputProducer(staleProducer, staleInput);
             if (oesTexture != 0) {
                 GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
                 oesTexture = 0;
@@ -347,6 +351,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         } catch (Throwable error) {
             producerRebindPending = false;
             fail("producer recreate", error);
+        }
+    }
+
+    private void releaseInputProducer(Surface producer, SurfaceTexture input) {
+        if (producer != null) producer.release();
+        if (input != null) {
+            try { input.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
+            input.release();
         }
     }
 
@@ -654,8 +666,12 @@ final class Miuix307PassBlurTextureView extends TextureView
             ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight);
             renderNormalizationPass(mapping);
             PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);
-            int prismalTexture = prismalRenderer.render(
-                    rawTexture, prismalGeometry, mapping.prismalParams);
+            prismalRenderer.prepareBackdrop(rawTexture, mapping.sampleWidth,
+                    mapping.sampleHeight, mapping.prismalParams);
+            DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
+            dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
+                    dockScene, mapping.sampleWidth, mapping.sampleHeight);
+            int prismalTexture = prismalRenderer.outputTexture();
             renderCompositePass(prismalTexture, mapping);
 
             int glError = GLES20.glGetError();
@@ -982,30 +998,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             return;
         }
 
-        configRotation = geometry.configRotation;
-        boundSurfaceWidth = geometry.surfaceWidth;
-        boundSurfaceHeight = geometry.surfaceHeight;
-        boundBufferWidth = geometry.bufferWidth;
-        boundBufferHeight = geometry.bufferHeight;
-        boundConfigRotation = geometry.configRotation;
-        hasConsumedFrame = false;
-        frameAvailable.set(false);
-        firstFrameLogged = false;
-        firstDrawLogged = false;
-        firstMatrixLogged = false;
-        stageBDiagnosticsLogged = false;
-        prismalMappingLogged = false;
-        updateBackdropMapping();
-        renderHandler.post(() -> {
-            SurfaceTexture currentInput = inputSurfaceTexture;
-            if (!shuttingDown && currentInput == input) {
-                currentInput.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-            }
-        });
-        MainHook.log(TAG + " producer geometry updated in place surface="
-                + geometry.surfaceWidth + "x" + geometry.surfaceHeight
-                + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
-                + " configRot=" + geometry.configRotation);
+        replaceProducerGeneration("producer-generation-changed");
     }
 
     private int horizontalOverscanPx() {
@@ -1087,6 +1080,13 @@ final class Miuix307PassBlurTextureView extends TextureView
         float nextDockUvBottom = insets.bottom / (float) sampleHeight;
         float nextDockUvWidth = visibleWidth / (float) sampleWidth;
         float nextDockUvHeight = visibleHeight / (float) sampleHeight;
+        float dockSampleInsetLeft = nextDockUvLeft * sampleWidth;
+        float dockSampleInsetTop = (1f - nextDockUvBottom - nextDockUvHeight) * sampleHeight;
+        float dockScaleX = (nextDockUvWidth * sampleWidth) / Math.max(1f, visibleWidth);
+        float dockScaleY = (nextDockUvHeight * sampleHeight) / Math.max(1f, visibleHeight);
+        dockCompositor.refreshUiSceneIfNeeded(
+                sampleWidth, sampleHeight, dockSampleInsetLeft, dockSampleInsetTop,
+                dockScaleX, dockScaleY);
 
         BackdropSnapshot currentSnapshot = backdropSnapshot;
         boolean unchanged = currentSnapshot != null

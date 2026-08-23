@@ -70,9 +70,24 @@ final class MiuixLauncherStaticGlassHook {
         }
     }
 
+    static void reconcileExistingHost(View host, LiquidDockConfig.Glass glassConfig) {
+        if (host == null || glassConfig == null) return;
+        String name = host.getClass().getName();
+        if (glassConfig.iconStyle.enabled && (name.endsWith(".ShortcutIcon")
+                || "ShortcutIcon".equals(host.getClass().getSimpleName()))) {
+            observeHost(host, LauncherGlassDragState.Kind.ICON, glassConfig);
+        } else if (glassConfig.widgetStyle.enabled
+                && (name.endsWith(".LauncherAppWidgetHostView")
+                || name.endsWith(".MaMlHostView"))) {
+            LauncherGlassVendorMaterialSuppressor.claimWidget(host);
+            observeHost(host, LauncherGlassDragState.Kind.WIDGET, glassConfig);
+        }
+    }
+
     private static void observeHost(
             View host, LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
         if (host == null) return;
+        if (kind == LauncherGlassDragState.Kind.ICON) DockGlassItemRegistry.register(host);
         synchronized (BOOTSTRAP_OBSERVERS) {
             if (BOOTSTRAP_OBSERVERS.containsKey(host)) return;
             View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
@@ -102,7 +117,11 @@ final class MiuixLauncherStaticGlassHook {
         } else {
             node.requestLifecycleRefresh();
         }
-        if (node != null) removeBootstrapObserver(host);
+        if (node != null) {
+            if (kind == LauncherGlassDragState.Kind.WIDGET)
+                LauncherGlassVendorMaterialSuppressor.claimWidget(host);
+            removeBootstrapObserver(host);
+        }
     }
 
     private static void removeBootstrapObserver(View host) {
@@ -119,7 +138,14 @@ final class MiuixLauncherStaticGlassHook {
             float min = bounds != null
                     ? Math.min(bounds.width(), bounds.height())
                     : Math.min(Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
-            return Math.max(0f, min * 0.22f);
+            android.graphics.drawable.Drawable drawable = null;
+            if (host instanceof android.widget.TextView) {
+                android.graphics.drawable.Drawable[] drawables =
+                        ((android.widget.TextView) host).getCompoundDrawables();
+                if (drawables.length > 1) drawable = drawables[1];
+            }
+            return LauncherGlassIconShapeResolver.resolveAutoRadius(
+                    drawable, min, min, min * 0.22f);
         }
         float nativeRadius = readCornerRadius(host);
         if (Float.isFinite(nativeRadius) && nativeRadius > 0f) return nativeRadius;
