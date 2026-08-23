@@ -348,7 +348,7 @@ final class SecurityCenterSidebarGlassHook {
     private static void suppressVendorMaterial(View view) {
         if (view == null || !SidebarGlassPolicy.isVendorMaterialClassName(
                 view.getClass().getName())) return;
-        MiBlurBridge.clearPassWindowBlur(view);
+        MiBlurBridge.clearPassWindowBlurIncludingBackgroundMode(view);
         GradientDrawable transparent = transparentMaterialBackgrounds.get(view);
         if (transparent == null) {
             if (!originalMaterialBackgrounds.containsKey(view)) {
