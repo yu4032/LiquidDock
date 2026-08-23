@@ -30,6 +30,8 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Drawable> ORIGINAL_BACKGROUND =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<ViewGroup, WeakReference<View>> CLAIMED_FOLDER_COVERS =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, View.OnAttachStateChangeListener> FOLDER_ATTACH_LISTENERS =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, Boolean> FOLDER_RECOVERY_PENDING =
@@ -267,6 +269,7 @@ final class MiuixFolderGlassHook {
     private static void attachFromFolderIcon(ViewGroup icon, LiquidDockConfig.Glass glassConfig) {
         if (icon == null) return;
         if (!GlassRuntimeState.isEnabled() || !LauncherGlassHierarchy.isWorkspace(icon)) {
+            releaseFolderCover(icon);
             try {
                 View material = resolveFolderMaterial(icon);
                 if (material != null) {
@@ -279,6 +282,7 @@ final class MiuixFolderGlassHook {
             return;
         }
         observeFolderIconAttach(icon, glassConfig);
+        syncLargeFolderCover(icon, glassConfig);
         try {
             View value = resolveFolderMaterial(icon);
             if (value != null) {
@@ -381,6 +385,36 @@ final class MiuixFolderGlassHook {
         };
         FOLDER_ATTACH_LISTENERS.put(icon, listener);
         icon.addOnAttachStateChangeListener(listener);
+    }
+
+    private static void syncLargeFolderCover(
+            ViewGroup icon, LiquidDockConfig.Glass glassConfig) {
+        if (icon == null) return;
+        // Launcher 4.50 folder_icon_2x2_4/9 stacks R.id.cover above preview_icons_container.
+        // It is independent from icon_icon/mFolderBackground, so large-folder glass owns both
+        // background-specific ImageViews while leaving the preview container untouched.
+        if (icon.getClass().getName().contains("FolderIcon1x1")
+                || glassConfig == null || !glassConfig.largeFolderStyle.enabled
+                || !GlassRuntimeState.isEnabled()
+                || !LauncherGlassHierarchy.isWorkspace(icon)) {
+            releaseFolderCover(icon);
+            return;
+        }
+        Object value = HookUtil.invoke(icon, "getCover");
+        if (!(value instanceof View)) return;
+        View cover = (View) value;
+        WeakReference<View> previousReference = CLAIMED_FOLDER_COVERS.put(
+                icon, new WeakReference<>(cover));
+        View previous = previousReference != null ? previousReference.get() : null;
+        if (previous != null && previous != cover) restoreMaterial(previous);
+        makeMaterialTransparent(cover);
+    }
+
+    private static void releaseFolderCover(ViewGroup icon) {
+        if (icon == null) return;
+        WeakReference<View> reference = CLAIMED_FOLDER_COVERS.remove(icon);
+        View cover = reference != null ? reference.get() : null;
+        if (cover != null) restoreMaterial(cover);
     }
 
     private static View resolveFolderMaterial(ViewGroup folder) {
@@ -501,6 +535,10 @@ final class MiuixFolderGlassHook {
             restoreMaterial(material);
         }
         CLAIMED.clear();
+        for (ViewGroup icon : new ArrayList<>(CLAIMED_FOLDER_COVERS.keySet())) {
+            releaseFolderCover(icon);
+        }
+        CLAIMED_FOLDER_COVERS.clear();
         for (ViewGroup icon : new ArrayList<>(FOLDER_ATTACH_LISTENERS.keySet())) {
             View.OnAttachStateChangeListener listener = FOLDER_ATTACH_LISTENERS.remove(icon);
             if (listener != null) icon.removeOnAttachStateChangeListener(listener);
