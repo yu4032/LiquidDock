@@ -53,7 +53,8 @@ final class LauncherWallpaperContentState {
     }
 
     synchronized Pulse onCandidateBoundary(long eventGeneration) {
-        if (eventGeneration != generation || candidateRequested || authoritativeRequested) {
+        if (eventGeneration != generation || generation <= committedGeneration
+                || candidateRequested || authoritativeRequested) {
             return Pulse.none();
         }
         candidateRequested = true;
