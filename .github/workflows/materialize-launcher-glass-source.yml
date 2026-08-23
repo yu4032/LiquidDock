@@ -1,0 +1,75 @@
+name: Materialize Launcher Glass Source
+
+on:
+  push:
+    branches:
+      - refactor/launcher-glass-state-geometry
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: ${{ !contains(github.event.head_commit.message, 'build: materialize validated launcher glass fixes') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refactor/launcher-glass-state-geometry
+      - name: Materialize validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ci/24bug-launcher-session-green.patch
+          test -f ci/24bug-scene-controller-green.patch
+          test -f ci/24bug-resize-pulse-order.patch
+          test -f ci/24bug-rotation-settle.patch
+
+          git apply --check ci/24bug-launcher-session-green.patch
+          git apply ci/24bug-launcher-session-green.patch
+          git apply --check ci/24bug-scene-controller-green.patch
+          git apply ci/24bug-scene-controller-green.patch
+          git apply --check ci/24bug-resize-pulse-order.patch
+          git apply ci/24bug-resize-pulse-order.patch
+          git apply --check ci/24bug-rotation-settle.patch
+          git apply ci/24bug-rotation-settle.patch
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/api101-build.yml')
+          text = path.read_text()
+          block = '''      - name: Materialize bounded rotation/wallpaper fix
+                run: |
+                  git apply --check ci/24bug-launcher-session-green.patch
+                  git apply --check ci/24bug-scene-controller-green.patch
+                  git apply ci/24bug-launcher-session-green.patch
+                  git apply ci/24bug-scene-controller-green.patch
+                  git apply --check ci/24bug-resize-pulse-order.patch
+                  git apply ci/24bug-resize-pulse-order.patch
+                  git apply --check ci/24bug-rotation-settle.patch
+                  git apply ci/24bug-rotation-settle.patch
+          '''
+          if block not in text:
+              raise SystemExit('expected materialization block not found')
+          path.write_text(text.replace(block, ''))
+          PY
+
+          rm ci/24bug-launcher-session-green.patch \
+             ci/24bug-scene-controller-green.patch \
+             ci/24bug-resize-pulse-order.patch \
+             ci/24bug-rotation-settle.patch
+
+          git diff --check
+          git status --short
+      - name: Commit materialized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java \
+                  .github/workflows/api101-build.yml ci/
+          git commit -m "build: materialize validated launcher glass fixes"
+          git push origin HEAD:refactor/launcher-glass-state-geometry
