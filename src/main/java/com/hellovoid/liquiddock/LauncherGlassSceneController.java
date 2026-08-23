@@ -64,11 +64,22 @@ final class LauncherGlassSceneController {
     private final WeakReference<View> rootRef;
     private final LauncherGlassSession session;
     private final StateMachine state = new StateMachine();
+    private final LauncherWallpaperContentState wallpaperContentState =
+            new LauncherWallpaperContentState();
     private volatile LiquidDockConfig.Glass glassConfig;
     private boolean folderCovered;
     private boolean recentsCovered;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
+
+    // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
+    // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
+    // generation waits until the older pulse's next OES frame has been consumed.
+    private long wallpaperPulseGeneration = -1L;
+    private boolean wallpaperPulseAuthoritative;
+    private boolean wallpaperPulseInFlight;
+    private LauncherWallpaperContentState.Pulse deferredWallpaperPulse =
+            LauncherWallpaperContentState.Pulse.none();
 
     private LauncherGlassSceneController(View root, LauncherGlassSession session,
                                          LiquidDockConfig.Glass glassConfig) {
@@ -138,9 +149,37 @@ final class LauncherGlassSceneController {
         }
     }
 
+    static void onWallpaperChangedForAll() {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.onWallpaperChanged();
+        }
+    }
+
+    static void onWallpaperCandidate(View anyView) {
+        LauncherGlassSceneController controller = find(anyView);
+        if (controller != null) controller.onWallpaperCandidateBoundary();
+    }
+
+    static void onWallpaperAuthoritativeForAll() {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.onWallpaperAuthoritativeBoundary();
+        }
+    }
+
     static void onFreshFrameRendered(View root, long generation) {
         LauncherGlassSceneController controller = findRoot(root);
-        if (controller != null) controller.onFreshFrameReady(generation);
+        if (controller != null) {
+            controller.onFreshFrameReady(generation);
+            controller.onWallpaperFrameConsumed(generation);
+        }
     }
 
     static long invalidateForProducerChange(View root) {
@@ -187,6 +226,54 @@ final class LauncherGlassSceneController {
         applyLayerVisibility();
     }
 
+    private synchronized void onWallpaperChanged() {
+        long generation = wallpaperContentState.onWallpaperChanged();
+        LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
+        if (deferred.requested() && deferred.generation < generation) {
+            deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
+        }
+        MainHook.log(TAG + " wallpaper changed contentGeneration=" + generation);
+    }
+
+    private synchronized void onWallpaperCandidateBoundary() {
+        long generation = wallpaperContentState.generation();
+        requestWallpaperPulse(wallpaperContentState.onCandidateBoundary(generation));
+    }
+
+    private synchronized void onWallpaperAuthoritativeBoundary() {
+        long generation = wallpaperContentState.generation();
+        requestWallpaperPulse(wallpaperContentState.onAuthoritativeBoundary(generation));
+    }
+
+    private synchronized void onWallpaperFrameConsumed(long sceneGeneration) {
+        if (!wallpaperPulseInFlight) return;
+
+        long contentGeneration = wallpaperPulseGeneration;
+        boolean authoritative = wallpaperPulseAuthoritative;
+        wallpaperPulseGeneration = -1L;
+        wallpaperPulseAuthoritative = false;
+        wallpaperPulseInFlight = false;
+
+        LauncherWallpaperContentState.Pulse followUp = LauncherWallpaperContentState.Pulse.none();
+        if (authoritative) {
+            if (wallpaperContentState.onFrameCommitted(contentGeneration, true)) {
+                MainHook.log(TAG + " wallpaper committed contentGeneration=" + contentGeneration
+                        + " sceneGeneration=" + sceneGeneration);
+            }
+        } else {
+            followUp = wallpaperContentState.onCandidateFrameConsumed(contentGeneration);
+        }
+
+        LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
+        deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
+        if (followUp.requested()) {
+            requestWallpaperPulse(followUp);
+        } else if (deferred.requested()
+                && deferred.generation == wallpaperContentState.generation()) {
+            requestWallpaperPulse(deferred);
+        }
+    }
+
     private void setFolderCovered(boolean covered) {
         folderCovered = covered;
         setEffectiveCovered(folderCovered || recentsCovered);
@@ -206,7 +293,34 @@ final class LauncherGlassSceneController {
             session.suspendWorkspaceProducer();
         } else if (wasCovered) {
             requestFreshBackdrop(state.generation());
+            synchronized (this) {
+                LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
+                if (!wallpaperPulseInFlight && deferred.requested()
+                        && deferred.generation == wallpaperContentState.generation()) {
+                    deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
+                    requestWallpaperPulse(deferred);
+                }
+            }
         }
+    }
+
+    private synchronized void requestWallpaperPulse(LauncherWallpaperContentState.Pulse pulse) {
+        if (pulse == null || !pulse.requested()
+                || pulse.generation != wallpaperContentState.generation()) return;
+        if (state.state() == State.COVERED || wallpaperPulseInFlight) {
+            LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
+            if (!deferred.requested() || pulse.generation >= deferred.generation) {
+                deferredWallpaperPulse = pulse;
+            }
+            return;
+        }
+        wallpaperPulseGeneration = pulse.generation;
+        wallpaperPulseAuthoritative = pulse.authoritative;
+        wallpaperPulseInFlight = true;
+        session.requestFreshBackdrop(state.generation());
+        MainHook.log(TAG + " wallpaper pulse contentGeneration=" + pulse.generation
+                + " authoritative=" + pulse.authoritative
+                + " sceneGeneration=" + state.generation());
     }
 
     private void applyLayerVisibility() {
@@ -255,6 +369,12 @@ final class LauncherGlassSceneController {
         View root = rootRef.get();
         synchronized (LauncherGlassSceneController.class) {
             if (root != null && BY_ROOT.get(root) == this) BY_ROOT.remove(root);
+        }
+        synchronized (this) {
+            wallpaperPulseGeneration = -1L;
+            wallpaperPulseAuthoritative = false;
+            wallpaperPulseInFlight = false;
+            deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
         }
         state.detach();
         LauncherGlassStaticLayer current = layer;
