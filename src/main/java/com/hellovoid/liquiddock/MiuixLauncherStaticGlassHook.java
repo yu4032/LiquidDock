@@ -6,6 +6,7 @@ import android.view.View;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -19,6 +20,17 @@ final class MiuixLauncherStaticGlassHook {
     private static boolean installed;
 
     private MiuixLauncherStaticGlassHook() {}
+
+    static void onRuntimeGlassDisabled() {
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            View.OnAttachStateChangeListener listener = BOOTSTRAP_OBSERVERS.remove(host);
+            if (listener != null) host.removeOnAttachStateChangeListener(listener);
+            DockGlassItemRegistry.unregister(host);
+            LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
+            if (node != null) node.dispose();
+        }
+        BOOTSTRAP_OBSERVERS.clear();
+    }
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
@@ -86,14 +98,18 @@ final class MiuixLauncherStaticGlassHook {
 
     private static void observeHost(
             View host, LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
-        if (host == null) return;
+        if (!GlassRuntimeState.isEnabled() || host == null) return;
         synchronized (BOOTSTRAP_OBSERVERS) {
             if (BOOTSTRAP_OBSERVERS.containsKey(host)) return;
             View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) {
                     scheduleBind(v, kind, glassConfig, 0);
                 }
-                @Override public void onViewDetachedFromWindow(View v) {}
+                @Override public void onViewDetachedFromWindow(View v) {
+                    DockGlassItemRegistry.unregister(v);
+                    LauncherGlassStaticNode node = LauncherGlassStaticNode.find(v);
+                    if (node != null) node.dispose();
+                }
             };
             BOOTSTRAP_OBSERVERS.put(host, listener);
             host.addOnAttachStateChangeListener(listener);
@@ -104,22 +120,33 @@ final class MiuixLauncherStaticGlassHook {
     private static void scheduleBind(
             View host, LauncherGlassDragState.Kind kind,
             LiquidDockConfig.Glass glassConfig, int attempt) {
-        if (host == null || !host.isAttachedToWindow() || attempt > MAX_BIND_ATTEMPTS) return;
+        if (!GlassRuntimeState.isEnabled() || host == null || !host.isAttachedToWindow()
+                || attempt > MAX_BIND_ATTEMPTS) return;
         if (host.getWidth() <= 0 || host.getHeight() <= 0) {
             host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
             return;
         }
+        LauncherGlassHierarchy.Domain domain = LauncherGlassHierarchy.classify(host);
         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
+        if (kind == LauncherGlassDragState.Kind.ICON
+                && domain == LauncherGlassHierarchy.Domain.DOCK) {
+            if (node != null) node.dispose();
+            DockGlassItemRegistry.register(host);
+            return;
+        }
+        DockGlassItemRegistry.unregister(host);
+        if (domain != LauncherGlassHierarchy.Domain.WORKSPACE) {
+            if (node != null) node.dispose();
+            return;
+        }
         if (node == null || node.kind() != kind) {
             float radius = resolveCornerRadius(host, kind);
             node = LauncherGlassStaticNode.attachToMaterial(host, kind, radius, glassConfig);
         } else {
             node.requestLifecycleRefresh();
         }
-        if (node != null) {
-            if (kind == LauncherGlassDragState.Kind.WIDGET)
-                LauncherGlassVendorMaterialSuppressor.claimWidget(host);
-            removeBootstrapObserver(host);
+        if (node != null && kind == LauncherGlassDragState.Kind.WIDGET) {
+            LauncherGlassVendorMaterialSuppressor.claimWidget(host);
         }
     }
 

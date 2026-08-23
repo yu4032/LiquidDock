@@ -37,8 +37,9 @@ public class LauncherGlassCoverageAndSurfaceContractTest {
         String dock = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
         assertTrue(dock.contains("extends TextureView"));
-        assertFalse(dock.contains("DockGlassItemNode"));
-        assertFalse(dock.contains("DockGlassCompositor"));
+        assertTrue(dock.contains("DockGlassCompositor"));
+        assertTrue(dock.contains("dockCompositor.drawFrame("));
+        assertFalse(dock.contains("new DockGlassItemNode("));
     }
 
     @Test public void forbiddenCpuCapturePathsStayAbsentFromSceneArchitecture() throws Exception {

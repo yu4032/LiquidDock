@@ -77,6 +77,7 @@ final class LauncherGlassDragOverlay {
             GlassComponentStyle style,
             float cornerRadiusPx,
             float[] visualBounds) {
+        if (!GlassRuntimeState.isEnabled()) return false;
         LauncherGlassDragOverlay overlay = acquire(source, glassConfig);
         return overlay != null && overlay.beginInternal(
                 token, kind, nodeKind, style, source, cornerRadiusPx, visualBounds);
@@ -85,6 +86,18 @@ final class LauncherGlassDragOverlay {
     static void end(View source, Object token) {
         LauncherGlassDragOverlay overlay = find(source, token);
         if (overlay != null) overlay.endInternal(token);
+    }
+
+    static void releaseAll() {
+        LauncherGlassDragOverlay[] snapshot;
+        synchronized (BY_ROOT) {
+            snapshot = BY_ROOT.values().toArray(new LauncherGlassDragOverlay[0]);
+        }
+        for (LauncherGlassDragOverlay overlay : snapshot) {
+            if (overlay == null) continue;
+            View root = overlay.rootRef.get();
+            if (root != null) overlay.releaseRoot(root);
+        }
     }
 
     private static LauncherGlassDragOverlay acquire(

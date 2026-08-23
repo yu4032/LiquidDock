@@ -128,7 +128,7 @@ final class Miuix307PassBlurBridge {
         return bind(materialHost, producerSurface, requestedScale);
     }
 
-    /** Workspace-only demand pulse. Dock never calls this and therefore stays continuous. */
+    /** Workspace-only demand pulse. Dock keeps main's persistent continuous-on-bind mode. */
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
         setUpdatesEnabled(binding, true);

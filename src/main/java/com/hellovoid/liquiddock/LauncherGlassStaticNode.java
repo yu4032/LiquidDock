@@ -323,6 +323,7 @@ final class LauncherGlassStaticNode {
         View material = materialRef.get();
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || style == null || !style.enabled
+                || !LauncherGlassHierarchy.isWorkspace(material)
                 || suppressedByFolderOpen || suppressedByDrag
                 || !LauncherGlassVisibility.isVisible(material, root)) return null;
         int hostWidth = material.getWidth();
@@ -398,7 +399,9 @@ final class LauncherGlassStaticNode {
 
     private LauncherGlassSession ensureLiveSession() {
         if (disposed) return null;
+        if (!GlassRuntimeState.isEnabled()) return null;
         View material = materialRef.get();
+        if (!LauncherGlassHierarchy.isWorkspace(material)) return null;
         LauncherGlassSession current = session;
         View stableRoot = LauncherGlassSessionRegistry.resolveStableRoot(material);
         if (stableRoot == null) return null;

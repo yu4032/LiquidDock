@@ -13,6 +13,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -24,6 +25,10 @@ final class MiuixFolderGlassHook {
     private static final String FOLDER_ICON = "com.miui.home.launcher.FolderIcon";
     private static final int MAX_STARTUP_RECOVERY_FRAMES = 24;
     private static final Map<View, WeakReference<LauncherGlassStaticNode>> CLAIMED =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, Drawable> ORIGINAL_IMAGE =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, Drawable> ORIGINAL_BACKGROUND =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, View.OnAttachStateChangeListener> FOLDER_ATTACH_LISTENERS =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -250,6 +255,19 @@ final class MiuixFolderGlassHook {
     }
 
     private static void attachFromFolderIcon(ViewGroup icon, LiquidDockConfig.Glass glassConfig) {
+        if (icon == null) return;
+        if (!GlassRuntimeState.isEnabled() || !LauncherGlassHierarchy.isWorkspace(icon)) {
+            try {
+                View material = resolveFolderMaterial(icon);
+                if (material != null) {
+                    LauncherGlassStaticNode old = claimedSink(material);
+                    if (old != null) old.dispose();
+                    CLAIMED.remove(material);
+                    restoreMaterial(material);
+                }
+            } catch (Throwable ignored) {}
+            return;
+        }
         observeFolderIconAttach(icon, glassConfig);
         try {
             View value = resolveFolderMaterial(icon);
@@ -273,7 +291,10 @@ final class MiuixFolderGlassHook {
 
     private static void scheduleFolderRecovery(
             ViewGroup icon, LiquidDockConfig.Glass glassConfig, int attempt) {
-        if (icon == null) return;
+        if (!GlassRuntimeState.isEnabled() || icon == null) {
+            if (icon != null) FOLDER_RECOVERY_PENDING.remove(icon);
+            return;
+        }
         if (attempt == 0) {
             synchronized (FOLDER_RECOVERY_PENDING) {
                 if (FOLDER_RECOVERY_PENDING.containsKey(icon)) return;
@@ -316,7 +337,8 @@ final class MiuixFolderGlassHook {
 
     private static void observeFolderIconAttach(
             ViewGroup icon, LiquidDockConfig.Glass glassConfig) {
-        if (icon == null || FOLDER_ATTACH_LISTENERS.containsKey(icon)) return;
+        if (!GlassRuntimeState.isEnabled() || icon == null
+                || FOLDER_ATTACH_LISTENERS.containsKey(icon)) return;
         WeakReference<ViewGroup> iconRef = new WeakReference<>(icon);
         View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
@@ -375,7 +397,8 @@ final class MiuixFolderGlassHook {
 
     private static LauncherGlassStaticNode attachMaterial(
             View material, LiquidDockConfig.Glass glassConfig) {
-        if (material == null) return null;
+        if (material == null || !GlassRuntimeState.isEnabled()
+                || !LauncherGlassHierarchy.isWorkspace(material)) return null;
         LauncherGlassStaticNode existing = claimedSink(material);
         if (existing != null) {
             clearVendorBlur(material);
@@ -442,6 +465,33 @@ final class MiuixFolderGlassHook {
         throw new NoSuchFieldException(name);
     }
 
+    static void onRuntimeGlassDisabled() {
+        for (View material : new ArrayList<>(CLAIMED.keySet())) {
+            LauncherGlassStaticNode sink = claimedSink(material);
+            if (sink != null) sink.dispose();
+            restoreMaterial(material);
+        }
+        CLAIMED.clear();
+        for (ViewGroup icon : new ArrayList<>(FOLDER_ATTACH_LISTENERS.keySet())) {
+            View.OnAttachStateChangeListener listener = FOLDER_ATTACH_LISTENERS.remove(icon);
+            if (listener != null) icon.removeOnAttachStateChangeListener(listener);
+        }
+        FOLDER_RECOVERY_PENDING.clear();
+        openedFolderOwner = new WeakReference<>(null);
+        openedFolderSink = new WeakReference<>(null);
+    }
+
+    private static void restoreMaterial(View material) {
+        if (material == null) return;
+        if (material instanceof ImageView) {
+            Drawable original = ORIGINAL_IMAGE.remove(material);
+            if (original != null) ((ImageView) material).setImageDrawable(original);
+        } else {
+            Drawable original = ORIGINAL_BACKGROUND.remove(material);
+            if (original != null) material.setBackground(original);
+        }
+    }
+
     private static boolean isTransparentColorDrawable(Drawable drawable) {
         return drawable instanceof ColorDrawable
                 && ((ColorDrawable) drawable).getColor() == Color.TRANSPARENT;
@@ -449,8 +499,19 @@ final class MiuixFolderGlassHook {
 
     private static void makeMaterialTransparent(View material) {
         if (material instanceof ImageView) {
-            ((ImageView) material).setImageDrawable(new ColorDrawable(Color.TRANSPARENT));
+            ImageView image = (ImageView) material;
+            Drawable current = image.getDrawable();
+            if (!ORIGINAL_IMAGE.containsKey(material) && current != null
+                    && !isTransparentColorDrawable(current)) {
+                ORIGINAL_IMAGE.put(material, current);
+            }
+            image.setImageDrawable(new ColorDrawable(Color.TRANSPARENT));
         } else {
+            Drawable current = material.getBackground();
+            if (!ORIGINAL_BACKGROUND.containsKey(material) && current != null
+                    && !isTransparentColorDrawable(current)) {
+                ORIGINAL_BACKGROUND.put(material, current);
+            }
             material.setBackground(new ColorDrawable(Color.TRANSPARENT));
         }
     }

@@ -46,6 +46,13 @@ final class Miuix307MaterialPipeline {
         return installed;
     }
 
+    static void onRuntimeGlassDisabled() {
+        clearHierarchyObservation();
+        clearHierarchyLayoutRecovery();
+        hierarchyRebindPosted = false;
+        geometryDeferredLoggedFor = new WeakReference<>(null);
+    }
+
     static boolean install(ClassLoader classLoader, LiquidDockConfig config) {
         if (installed) return true;
         final Class<?> backgroundClass = loadOptionalClass(classLoader, BACKGROUND_CLASS);
@@ -158,7 +165,7 @@ final class Miuix307MaterialPipeline {
             Method resume = launcherClass.getDeclaredMethod("onResume");
             HookUtil.hook(resume, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (MainHook.isWorkstationMode()) {
+                if (GlassRuntimeState.isEnabled() && MainHook.isWorkstationMode()) {
                     Miuix307ZeroCopyRenderer.rebindProducer("workstation-launcher-resume");
                 }
                 return result;
@@ -397,6 +404,7 @@ final class Miuix307MaterialPipeline {
      */
     private static boolean ensureGlassBound(
             View background, LiquidDockConfig config, ClassLoader classLoader) {
+        if (!GlassRuntimeState.isEnabled()) return false;
         if (background == null || !isSupportedBackground(background)) return false;
         if (MiuixGlassHook.isBoundTo(background)) {
             geometryDeferredLoggedFor = new WeakReference<>(null);

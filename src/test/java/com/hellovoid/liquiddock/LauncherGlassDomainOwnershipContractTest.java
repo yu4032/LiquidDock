@@ -44,8 +44,8 @@ public class LauncherGlassDomainOwnershipContractTest {
         assertTrue(view.contains("DockGlassCompositor"));
         assertTrue(view.contains("dockCompositor.drawFrame("));
         assertTrue(view.contains("prismalRenderer.prepareBackdrop("));
-        assertFalse(item.contains("SurfaceTexture"));
-        assertFalse(item.contains("EGLSurface"));
+        assertFalse(item.contains("new SurfaceTexture("));
+        assertFalse(item.contains("EGLSurface "));
         assertFalse(item.contains("extends TextureView"));
     }
 

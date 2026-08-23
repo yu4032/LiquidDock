@@ -470,6 +470,7 @@ final class LauncherGlassSession {
         if (shuttingDown) return;
         View root = rootRef.get();
         if (root == null) return;
+        LauncherGlassSceneController.syncRecentsForRoot(root);
         int nextWidth = root.getWidth();
         int nextHeight = root.getHeight();
         boolean rootGeometryChanged = nextWidth > 0 && nextHeight > 0

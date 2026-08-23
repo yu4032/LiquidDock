@@ -26,18 +26,21 @@ public final class ModuleMain extends XposedModule {
             LegacyConfigMigration.migrateAtProcessStart();
             ConfigMigration.migrateAtProcessStart();
             ClassLoader classLoader = param.getClassLoader();
-            ConfigReader configReader = ConfigReader.load();
-            LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+        ConfigReader configReader = ConfigReader.load();
+        LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+        GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
+                runtimeConfig.enabled && runtimeConfig.glass.enabled);
+        new MainHook().install(classLoader);
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
                     GridProfileConfig.normalizeProfile(configReader.s(
                             GridProfileConfig.PROFILE_KEY, GridProfileConfig.DEFAULT_PROFILE)));
             boolean customGridEnabled = runtimeConfig.enabled && runtimeConfig.grid.enabled;
 
-            new MainHook().install(classLoader);
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
         MiuixLauncherStaticGlassHook.install(classLoader, runtimeConfig);
-            DockBottomGeometryHook.install(classLoader);
+        LauncherGlassRecentsHook.install(classLoader, runtimeConfig);
+        DockBottomGeometryHook.install(classLoader);
             HomeGridProfileOverlayHook.install(classLoader,
                     customGridEnabled, selectedProfile);
             HomeGridDeviceConfigCountHook.install(classLoader,

@@ -167,6 +167,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private final WeakReference<View> materialHostRef;
+    private final DockGlassCompositor dockCompositor;
     private final FloatBuffer quadBuffer;
     private final HandlerThread renderThread;
     private final Handler renderHandler;
@@ -250,6 +251,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     Miuix307PassBlurTextureView(Context context, View materialHost) {
         super(context);
         materialHostRef = new WeakReference<>(materialHost);
+        View dockRoot = LauncherGlassHierarchy.findDockRoot(materialHost);
+        dockCompositor = new DockGlassCompositor(dockRoot != null ? dockRoot : materialHost);
         opticalParams = Miuix307PrismalMaterial.defaults(
                 context.getResources().getDisplayMetrics().density);
         portablePrismalParams = Miuix307PrismalAdapter.toPortable(opticalParams);
@@ -283,6 +286,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         opticalParams = Miuix307PrismalMaterial.fromConfig(
                 glassConfig, getResources().getDisplayMetrics().density);
         portablePrismalParams = Miuix307PrismalAdapter.toPortable(opticalParams);
+        dockCompositor.setIconStyle(glassConfig.iconStyle);
         topSamplingExtraPx = glassConfig.samplingExtraTopPx;
         bottomSamplingExtraPx = glassConfig.samplingExtraBottomPx;
         leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
@@ -654,8 +658,12 @@ final class Miuix307PassBlurTextureView extends TextureView
             ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight);
             renderNormalizationPass(mapping);
             PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);
-            int prismalTexture = prismalRenderer.render(
-                    rawTexture, prismalGeometry, mapping.prismalParams);
+            prismalRenderer.prepareBackdrop(
+                    rawTexture, mapping.sampleWidth, mapping.sampleHeight, mapping.prismalParams);
+            DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
+            dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
+                    dockScene, mapping.sampleWidth, mapping.sampleHeight);
+            int prismalTexture = prismalRenderer.outputTexture();
             renderCompositePass(prismalTexture, mapping);
 
             int glError = GLES20.glGetError();
@@ -1087,6 +1095,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         float nextDockUvBottom = insets.bottom / (float) sampleHeight;
         float nextDockUvWidth = visibleWidth / (float) sampleWidth;
         float nextDockUvHeight = visibleHeight / (float) sampleHeight;
+        dockCompositor.refreshUiSceneIfNeeded(sampleWidth, sampleHeight,
+                insets.left, insets.top, 1f, 1f);
 
         BackdropSnapshot currentSnapshot = backdropSnapshot;
         boolean unchanged = currentSnapshot != null

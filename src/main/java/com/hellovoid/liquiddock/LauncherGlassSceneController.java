@@ -62,6 +62,9 @@ final class LauncherGlassSceneController {
     private final LauncherGlassSession session;
     private final StateMachine state = new StateMachine();
     private volatile LiquidDockConfig.Glass glassConfig;
+    private WeakReference<View> recentsRef = new WeakReference<>(null);
+    private boolean folderCovered;
+    private boolean recentsCovered;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
 
@@ -98,7 +101,20 @@ final class LauncherGlassSceneController {
 
     static void setWorkspaceCovered(View anyView, boolean covered) {
         LauncherGlassSceneController controller = find(anyView);
-        if (controller != null) controller.setCovered(covered);
+        if (controller != null) controller.setFolderCovered(covered);
+    }
+
+    static void bindRecentsView(View anyView, View recents) {
+        LauncherGlassSceneController controller = find(anyView);
+        if (controller != null) controller.recentsRef = new WeakReference<>(recents);
+    }
+
+    static void syncRecentsForRoot(View root) {
+        LauncherGlassSceneController controller = findRoot(root);
+        if (controller == null) return;
+        View recents = controller.recentsRef.get();
+        boolean covered = recents != null && recents.getVisibility() == View.VISIBLE && recents.isShown();
+        controller.setRecentsCovered(covered);
     }
 
     static void onFreshFrameRendered(View root, long generation) {
@@ -150,7 +166,18 @@ final class LauncherGlassSceneController {
         applyLayerVisibility();
     }
 
-    private void setCovered(boolean covered) {
+    private void setFolderCovered(boolean covered) {
+        folderCovered = covered;
+        setEffectiveCovered(folderCovered || recentsCovered);
+    }
+
+    private void setRecentsCovered(boolean covered) {
+        if (recentsCovered == covered) return;
+        recentsCovered = covered;
+        setEffectiveCovered(folderCovered || recentsCovered);
+    }
+
+    private void setEffectiveCovered(boolean covered) {
         boolean wasCovered = state.state() == State.COVERED;
         state.setCovered(covered);
         applyLayerVisibility();

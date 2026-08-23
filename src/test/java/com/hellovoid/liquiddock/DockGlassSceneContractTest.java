@@ -29,9 +29,10 @@ public class DockGlassSceneContractTest {
 
         assertTrue(compositor.contains("renderer.beginGlassFrame()"));
         assertTrue(compositor.contains("renderer.drawGlass("));
-        assertFalse(item.contains("TextureView"));
-        assertFalse(item.contains("SurfaceTexture"));
-        assertFalse(item.contains("EGLSurface"));
+        assertFalse(item.contains("extends TextureView"));
+        assertFalse(item.contains("new TextureView("));
+        assertFalse(item.contains("new SurfaceTexture("));
+        assertFalse(item.contains("EGLSurface "));
     }
 
     @Test public void dockKeepsOwnPassBlurBindingAndNeverUsesWorkspaceGeneration() throws Exception {

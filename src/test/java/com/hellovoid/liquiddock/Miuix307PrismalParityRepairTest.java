@@ -104,7 +104,9 @@ public class Miuix307PrismalParityRepairTest {
         String blurV = Files.readString(Path.of("prismal/src/main/res/raw/prismal_blur_v.glsl"));
 
         assertTrue(view.contains("rawFramebuffer") && view.contains("renderNormalizationPass"));
-        assertTrue(view.contains("prismalRenderer.render("));
+        assertTrue(view.contains("prismalRenderer.prepareBackdrop(")
+                && view.contains("dockCompositor.drawFrame(")
+                && view.contains("prismalRenderer.outputTexture()"));
         assertTrue(renderer.contains("BLUR_FBO_SCALE = 0.5f"));
         assertTrue(renderer.contains("blurFramebufferH") && renderer.contains("blurFramebufferV"));
         assertTrue(renderer.contains("sourceFramebuffer") && renderer.contains("outputFramebuffer"));

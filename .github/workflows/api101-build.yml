@@ -1,22 +1,23 @@
-name: Materialize verified glass source
+name: API101 migration build
 
 on:
+  push:
+    branches:
+      - main
+      - api101-migration
+      - refactor/modular-architecture
+      - 'fix/**'
+      - 'feat/**'
+      - 'demo/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  materialize:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feat/folder-press-glow
-          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -24,69 +25,12 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
-      - name: Apply verified glass source
-        run: |
-          python3 ci/glass_device_prep.py
-          python3 ci/glass_device_fix.py
-          python3 ci/glass_main_dock_post.py
-          python3 ci/glass_runtime_no_revive.py
-          sed -i 's/runtimeDefault()/runtimeFallback()/g' src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java
-          python3 ci/glass_main_dock_contracts.py
-      - name: Verify materialized tree before commit
-        run: |
-          ./gradlew testDebugUnitTest --stacktrace
-          ./gradlew assembleDebug --stacktrace
-      - name: Remove temporary patch machinery and restore standard CI
-        run: |
-          rm -f \
-            ci/glass_device_prep.py \
-            ci/glass_device_fix.py \
-            ci/glass_main_dock_post.py \
-            ci/glass_runtime_no_revive.py \
-            ci/glass_main_dock_contracts.py
-          cat > .github/workflows/api101-build.yml <<'YAML'
-          name: API101 migration build
-
-          on:
-            push:
-              branches:
-                - main
-                - api101-migration
-                - refactor/modular-architecture
-                - 'fix/**'
-                - 'feat/**'
-                - 'demo/**'
-            pull_request:
-              branches: [ main ]
-            workflow_dispatch:
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-java@v4
-                  with:
-                    distribution: temurin
-                    java-version: '17'
-                    cache: gradle
-                - uses: gradle/actions/setup-gradle@v4
-                - run: chmod +x ./gradlew
-                - run: ./gradlew testDebugUnitTest --stacktrace
-                - run: ./gradlew assembleDebug --stacktrace
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: LiquidDock-api101-debug
-                    path: build/outputs/apk/debug/*.apk
-                    if-no-files-found: error
-                    retention-days: 7
-                # Keep the same Gradle verification gates on main and active API101 development branches.
-          YAML
-      - name: Commit verified source
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src .github/workflows/api101-build.yml ci
-          git diff --cached --check
-          git commit -m "fix: materialize glass scene runtime corrections"
-          git push origin HEAD:feat/folder-press-glow
+      - run: ./gradlew testDebugUnitTest --stacktrace
+      - run: ./gradlew assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiquidDock-api101-debug
+          path: build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      # Keep the same Gradle verification gates on main and active API101 development branches.

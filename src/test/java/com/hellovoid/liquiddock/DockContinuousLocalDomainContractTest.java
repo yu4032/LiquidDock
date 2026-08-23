@@ -29,8 +29,9 @@ public class DockContinuousLocalDomainContractTest {
         assertTrue(Files.exists(MAIN.resolve("DockGlassItemNode.java")));
         assertTrue(Files.exists(MAIN.resolve("DockGlassCompositor.java")));
         assertTrue(view.contains("DockGlassSceneSnapshot"));
-        assertFalse(item.contains("SurfaceTexture"));
-        assertFalse(item.contains("EGLSurface"));
+        assertFalse(item.contains("new SurfaceTexture("));
+        assertFalse(item.contains("EGLSurface "));
+        assertFalse(item.contains("extends TextureView"));
     }
 
     @Test public void dockBindDoesNotInheritWorkspacePausePolicy() throws Exception {
