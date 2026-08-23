@@ -2,9 +2,7 @@ package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -101,6 +99,27 @@ public class LauncherWallpaperContentStateTest {
         assertFalse(pulseRequested(duplicate));
     }
 
+    @Test public void authoritativeBeforeCandidateCannotConsumeCurrentGenerationSlot()
+            throws Exception {
+        Object state = state();
+        long stale = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
+        call(state, "onCandidateBoundary", new Class<?>[]{long.class}, stale);
+        long current = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
+
+        Object unpairedAuthoritative = call(state, "onAuthoritativeBoundary",
+                new Class<?>[]{long.class}, current);
+        Object candidate = call(state, "onCandidateBoundary",
+                new Class<?>[]{long.class}, current);
+        Object pairedAuthoritative = call(state, "onAuthoritativeBoundary",
+                new Class<?>[]{long.class}, current);
+
+        assertFalse("late ready event from the prior wallpaper must not claim current generation",
+                pulseRequested(unpairedAuthoritative));
+        assertTrue(pulseRequested(candidate));
+        assertTrue(pulseRequested(pairedAuthoritative));
+        assertTrue(pulseAuthoritative(pairedAuthoritative));
+    }
+
     @Test public void staleBoundariesCannotRequestPulseForNewerWallpaper() throws Exception {
         Object state = state();
         long stale = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
@@ -121,6 +140,7 @@ public class LauncherWallpaperContentStateTest {
     @Test public void onlyCurrentAuthoritativeFrameCanCommitGeneration() throws Exception {
         Object state = state();
         long stale = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
+        call(state, "onCandidateBoundary", new Class<?>[]{long.class}, stale);
         call(state, "onAuthoritativeBoundary", new Class<?>[]{long.class}, stale);
         long current = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
         call(state, "onCandidateBoundary", new Class<?>[]{long.class}, current);
