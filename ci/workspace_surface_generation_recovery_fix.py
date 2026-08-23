@@ -30,6 +30,23 @@ patch_once(
         mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
     }
 
+''',
+    "fresh backdrop starts Surface generation recovery",
+)
+
+patch_once(
+    "LauncherGlassSession.java",
+    '''    void requestSceneRedraw() {
+        if (shuttingDown) return;
+        requestFrame(false);
+    }
+
+''',
+    '''    void requestSceneRedraw() {
+        if (shuttingDown) return;
+        requestFrame(false);
+    }
+
     private void recoverFreshBackdropOnUi(long generation, int attempt) {
         if (shuttingDown || generation != sceneGeneration) return;
         View root = rootRef.get();
@@ -86,7 +103,7 @@ patch_once(
     }
 
 ''',
-    "fresh backdrop Surface generation recovery",
+    "fresh backdrop Surface generation recovery helpers",
 )
 
 old_refresh = '''    private boolean refreshProducerGeometryOnUi(View root) {
