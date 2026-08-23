@@ -38,27 +38,23 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path('.github/workflows/api101-build.yml')
-          text = path.read_text()
-          block = '''      - name: Materialize bounded rotation/wallpaper fix
-                run: |
-                  git apply --check ci/24bug-launcher-session-green.patch
-                  git apply --check ci/24bug-scene-controller-green.patch
-                  git apply ci/24bug-launcher-session-green.patch
-                  git apply ci/24bug-scene-controller-green.patch
-                  git apply --check ci/24bug-resize-pulse-order.patch
-                  git apply ci/24bug-resize-pulse-order.patch
-                  git apply --check ci/24bug-rotation-settle.patch
-                  git apply ci/24bug-rotation-settle.patch
-          '''
-          if block not in text:
-              raise SystemExit('expected materialization block not found')
-          path.write_text(text.replace(block, ''))
+          lines = path.read_text().splitlines(keepends=True)
+          start = next((i for i, line in enumerate(lines)
+                        if 'name: Materialize bounded rotation/wallpaper fix' in line), None)
+          if start is None:
+              raise SystemExit('materialization step start not found')
+          end = next((i for i in range(start + 1, len(lines))
+                      if './gradlew testDebugUnitTest --stacktrace' in lines[i]), None)
+          if end is None:
+              raise SystemExit('materialization step end not found')
+          path.write_text(''.join(lines[:start] + lines[end:]))
           PY
 
           rm ci/24bug-launcher-session-green.patch \
              ci/24bug-scene-controller-green.patch \
              ci/24bug-resize-pulse-order.patch \
              ci/24bug-rotation-settle.patch
+          rm -f ci/materialize-trigger.txt
 
           git diff --check
           git status --short
