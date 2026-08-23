@@ -122,12 +122,6 @@ final class Miuix307PassBlurBridge {
         }
     }
 
-    /** Compatibility overload for the retired diagnostic view; output identity is intentionally ignored. */
-    static Binding bind(
-            View materialHost, View ignoredOutputView, Surface producerSurface, float requestedScale) {
-        return bind(materialHost, producerSurface, requestedScale);
-    }
-
     /** Workspace-only demand pulse. Dock keeps main's persistent continuous-on-bind mode. */
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
