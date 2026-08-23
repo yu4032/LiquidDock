@@ -66,4 +66,19 @@ public class LauncherVendorStateDockMappingPowerContractTest {
         assertTrue(session.contains("LauncherGlassSceneController.isCoveredForRoot(root)"));
         assertTrue(session.contains("Miuix307PassBlurBridge.pauseUpdates(next)"));
     }
+
+    @Test public void homeIdleDockFollowsVendorStaticSnapshotModeInsteadOfTimerThrottling() throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue(pipeline.contains("setMingouStaticDockSnapshotMode"));
+        assertTrue(pipeline.contains("vendorStaticSnapshotMode"));
+        assertTrue(pipeline.contains("Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(!snapshotMode"));
+        assertTrue(renderer.contains("setProducerUpdatesEnabled"));
+        assertTrue(view.contains("setProducerUpdatesEnabled"));
+        assertTrue(bridge.contains("static void resumeUpdates"));
+        assertFalse(pipeline.contains("postDelayed("));
+    }
 }
