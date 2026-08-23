@@ -29,6 +29,12 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
+      - name: Materialize bounded rotation/wallpaper fix
+        run: |
+          git apply --check ci/24bug-launcher-session-green.patch
+          git apply --check ci/24bug-scene-controller-green.patch
+          git apply ci/24bug-launcher-session-green.patch
+          git apply ci/24bug-scene-controller-green.patch
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
