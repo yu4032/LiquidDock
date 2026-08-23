@@ -26,7 +26,7 @@ final class MiuixFolderGlassHook {
     private static final int MAX_STARTUP_RECOVERY_FRAMES = 24;
     private static final Map<View, WeakReference<LauncherGlassStaticNode>> CLAIMED =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<View, Drawable> ORIGINAL_IMAGE =
+    private static final Map<View, Integer> ORIGINAL_IMAGE_ALPHA =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Drawable> ORIGINAL_BACKGROUND =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -159,28 +159,11 @@ final class MiuixFolderGlassHook {
             return result;
         });
 
-        // Long-press / drag rendering can bypass ItemIcon.setIconImageView and write a folder
-        // drawable straight into mIconImageView from FolderIcon2x2.drawChild. Once that ImageView
-        // is claimed by LiquidDock its material plate must stay transparent permanently; the
-        // sibling LauncherGlassStaticNode owns the actual glass rendering.
-        Method setImageDrawable = ImageView.class.getDeclaredMethod("setImageDrawable", Drawable.class);
-        setImageDrawable.setAccessible(true);
-        HookUtil.hook(setImageDrawable, chain -> {
-            Object target = chain.getThisObject();
-            Object[] drawableArgs = chain.getArgs().toArray(new Object[0]);
-            if (target instanceof View
-                    && drawableArgs.length > 0
-                    && claimedSink((View) target) != null) {
-                Drawable requested = drawableArgs[0] instanceof Drawable
-                        ? (Drawable) drawableArgs[0] : null;
-                if (!isTransparentColorDrawable(requested)) {
-                    Drawable current = ((ImageView) target).getDrawable();
-                    drawableArgs[0] = isTransparentColorDrawable(current)
-                            ? current : new ColorDrawable(Color.TRANSPARENT);
-                }
-            }
-            return chain.proceed(drawableArgs);
-        });
+        // Do not rewrite ImageView.setImageDrawable here. HyperOS large-folder drag enter replaces
+        // LauncherFolder2x2IconImageView's drawable with FolderIcon4x4DefaultBackgroundDrawable and
+        // immediately casts getDrawable() back to that concrete type. Folder material suppression is
+        // instead applied with ImageView image alpha, which survives vendor drawable replacement
+        // without changing View alpha (the shared glass geometry still follows the material View).
 
         HookUtil.hook(HookUtil.findMethodExact(folderIcon, "onOpen", new Class<?>[0]), chain -> {
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -512,8 +495,8 @@ final class MiuixFolderGlassHook {
     private static void restoreMaterial(View material) {
         if (material == null) return;
         if (material instanceof ImageView) {
-            Drawable original = ORIGINAL_IMAGE.remove(material);
-            if (original != null) ((ImageView) material).setImageDrawable(original);
+            Integer originalAlpha = ORIGINAL_IMAGE_ALPHA.remove(material);
+            if (originalAlpha != null) ((ImageView) material).setImageAlpha(originalAlpha);
         } else {
             Drawable original = ORIGINAL_BACKGROUND.remove(material);
             if (original != null) material.setBackground(original);
@@ -528,12 +511,10 @@ final class MiuixFolderGlassHook {
     private static void makeMaterialTransparent(View material) {
         if (material instanceof ImageView) {
             ImageView image = (ImageView) material;
-            Drawable current = image.getDrawable();
-            if (!ORIGINAL_IMAGE.containsKey(material) && current != null
-                    && !isTransparentColorDrawable(current)) {
-                ORIGINAL_IMAGE.put(material, current);
+            if (!ORIGINAL_IMAGE_ALPHA.containsKey(material)) {
+                ORIGINAL_IMAGE_ALPHA.put(material, image.getImageAlpha());
             }
-            image.setImageDrawable(new ColorDrawable(Color.TRANSPARENT));
+            image.setImageAlpha(0);
         } else {
             Drawable current = material.getBackground();
             if (!ORIGINAL_BACKGROUND.containsKey(material) && current != null
