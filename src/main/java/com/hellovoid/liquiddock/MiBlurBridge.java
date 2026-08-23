@@ -140,6 +140,7 @@ final class MiBlurBridge {
         }
     }
 
+    /** Preserve the historical Launcher cleanup contract. */
     static void clearPassWindowBlur(View view) {
         if (!PASS_BLUR_AVAILABLE || view == null) return;
         try {
@@ -149,12 +150,16 @@ final class MiBlurBridge {
             SET_MI_VIEW_BLUR_MODE.invoke(view, 0);
         } catch (Throwable ignored) {}
         try {
-            if (SET_MI_BACKGROUND_BLUR_MODE != null) {
-                SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 0);
-            }
-        } catch (Throwable ignored) {}
-        try {
             SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 0);
+        } catch (Throwable ignored) {}
+    }
+
+    /** SecurityCenter additionally uses setMiBackgroundBlurMode(1) on its sidebar owners. */
+    static void clearPassWindowBlurIncludingBackgroundMode(View view) {
+        clearPassWindowBlur(view);
+        if (view == null || SET_MI_BACKGROUND_BLUR_MODE == null) return;
+        try {
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 0);
         } catch (Throwable ignored) {}
     }
 
