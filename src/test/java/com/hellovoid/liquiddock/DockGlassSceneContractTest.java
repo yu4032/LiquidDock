@@ -8,45 +8,39 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Device regression: Dock is the proven legacy independent continuous layer, not a Workspace scene. */
+/** Dock is one independent output domain; body and Dock icon glass share that one compositor. */
 public class DockGlassSceneContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void dockRendererUsesLegacyIndependentContinuousPipeline() throws Exception {
+    @Test public void dockRendererUsesIndependentPassBlurPipelineWithOneLocalBatch() throws Exception {
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
 
         assertTrue(view.contains("input.setOnFrameAvailableListener"));
         assertTrue(view.contains("drawLatestFrame(true);"));
-        assertTrue(view.contains("int prismalTexture = prismalRenderer.render("));
-        assertTrue(renderer.contains("gpuBackdrop.rebindProducer(reason)"));
-        assertFalse(view.contains("DockGlassCompositor"));
-        assertFalse(view.contains("DockGlassSceneSnapshot"));
-        assertFalse(view.contains("replaceProducerGeneration"));
+        assertTrue(view.contains("prismalRenderer.prepareBackdrop("));
+        assertTrue(view.contains("dockCompositor.drawFrame("));
         assertFalse(view.contains("LauncherGlassSession"));
         assertFalse(view.contains("LauncherGlassSceneController"));
     }
 
-    @Test public void dockHasNoSchemeAItemCompositorOrWorkspaceIconRegistry() throws Exception {
-        assertFalse(Files.exists(MAIN.resolve("DockGlassCompositor.java")));
-        assertFalse(Files.exists(MAIN.resolve("DockGlassItemNode.java")));
-        assertFalse(Files.exists(MAIN.resolve("DockGlassItemRegistry.java")));
-        assertFalse(Files.exists(MAIN.resolve("DockGlassSceneSnapshot.java")));
+    @Test public void dockItemCompositorHasNoPerItemOutputResources() throws Exception {
+        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
 
-        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
-        assertFalse(hook.contains("DockGlassItemRegistry.register"));
+        assertTrue(compositor.contains("renderer.beginGlassFrame()"));
+        assertTrue(compositor.contains("renderer.drawGlass("));
+        assertFalse(item.contains("TextureView"));
+        assertFalse(item.contains("SurfaceTexture"));
+        assertFalse(item.contains("EGLSurface"));
     }
 
-    @Test public void dockKeepsItsOwnContinuousPassBlurBindingAndNeverUsesWorkspaceGeneration() throws Exception {
+    @Test public void dockKeepsOwnPassBlurBindingAndNeverUsesWorkspaceGeneration() throws Exception {
         String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
         assertTrue(bridge.contains("mode=continuous-on-bind"));
-        assertFalse(bridge.contains("callerManagedUpdates"));
         assertTrue(view.contains("Miuix307PassBlurBridge.Binding binding"));
         assertFalse(view.contains("sceneGeneration"));
         assertFalse(view.contains("requestFreshBackdrop"));
-        assertFalse(view.contains("pauseUpdates("));
-        assertFalse(view.contains("requestSingleUpdate("));
     }
 }

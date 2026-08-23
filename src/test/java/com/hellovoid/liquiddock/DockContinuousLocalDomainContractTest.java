@@ -8,11 +8,11 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Dock stays an independent continuous TextureView/EGL domain and owns no Workspace scene nodes. */
+/** Dock stays one independent continuous TextureView/EGL domain; icon glass is batched inside it. */
 public class DockContinuousLocalDomainContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void dockProducerRendersEveryProducerFrameIndependentlyOfWorkspace() throws Exception {
+    @Test public void dockProducerConsumesFramesIndependentlyOfWorkspace() throws Exception {
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
         assertTrue(view.contains("input.setOnFrameAvailableListener"));
@@ -21,16 +21,19 @@ public class DockContinuousLocalDomainContractTest {
         assertFalse(view.contains("LauncherGlassSceneController"));
     }
 
-    @Test public void dockOutputIsOneLegacyTextureViewWithoutPerItemGlassNodes() throws Exception {
+    @Test public void dockOutputIsOneTextureViewWithResourceFreeItemNodes() throws Exception {
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
 
         assertTrue(view.contains("extends TextureView"));
-        assertFalse(Files.exists(MAIN.resolve("DockGlassItemNode.java")));
-        assertFalse(Files.exists(MAIN.resolve("DockGlassCompositor.java")));
-        assertFalse(view.contains("DockGlassSceneSnapshot"));
+        assertTrue(Files.exists(MAIN.resolve("DockGlassItemNode.java")));
+        assertTrue(Files.exists(MAIN.resolve("DockGlassCompositor.java")));
+        assertTrue(view.contains("DockGlassSceneSnapshot"));
+        assertFalse(item.contains("SurfaceTexture"));
+        assertFalse(item.contains("EGLSurface"));
     }
 
-    @Test public void dockBindNeverAutoPausesItsContinuousProducer() throws Exception {
+    @Test public void dockBindDoesNotInheritWorkspacePausePolicy() throws Exception {
         String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         int bindStart = bridge.indexOf("static Binding bind(View materialHost, Surface producerSurface");
         int overloadStart = bridge.indexOf("/** Compatibility overload", bindStart);
