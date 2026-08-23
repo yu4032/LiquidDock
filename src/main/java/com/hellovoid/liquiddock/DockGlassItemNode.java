@@ -3,6 +3,8 @@ package com.hellovoid.liquiddock;
 import android.graphics.Matrix;
 import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.ViewParent;
+import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
 
@@ -21,6 +23,73 @@ final class DockGlassItemNode {
     View view() { return viewRef.get(); }
     LauncherGlassNodeKind kind() { return kind; }
 
+    boolean belongsTo(View dockRoot) {
+        View view = viewRef.get();
+        if (view == null || dockRoot == null || !view.isAttachedToWindow()) return false;
+        View cursor = view;
+        while (cursor != null) {
+            if (cursor == dockRoot) return true;
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * Cheap UI-thread fingerprint of geometry relative to the Dock root.
+     * The Dock root's own translation/scale is intentionally excluded: the whole TextureView layer
+     * follows that transform, so moving the Dock must not rebuild every icon geometry snapshot.
+     */
+    long uiFingerprint(View dockRoot) {
+        View view = viewRef.get();
+        if (view == null || dockRoot == null || !view.isAttachedToWindow()) return Long.MIN_VALUE;
+        long hash = 0xcbf29ce484222325L;
+        View cursor = view;
+        while (cursor != null && cursor != dockRoot) {
+            hash = mix(hash, System.identityHashCode(cursor));
+            hash = mix(hash, cursor.getVisibility());
+            hash = mix(hash, cursor.getLeft());
+            hash = mix(hash, cursor.getTop());
+            hash = mix(hash, cursor.getRight());
+            hash = mix(hash, cursor.getBottom());
+            hash = mix(hash, cursor.getScrollX());
+            hash = mix(hash, cursor.getScrollY());
+            hash = mix(hash, Float.floatToIntBits(cursor.getTranslationX()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getTranslationY()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getScaleX()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getScaleY()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getRotation()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getPivotX()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getPivotY()));
+            hash = mix(hash, Float.floatToIntBits(cursor.getAlpha()));
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        if (cursor != dockRoot) return Long.MIN_VALUE;
+
+        // Root visibility/alpha affects whether the item is renderable, but root translation and
+        // scale are deliberately omitted because the Dock output layer already follows them.
+        hash = mix(hash, dockRoot.getVisibility());
+        hash = mix(hash, Float.floatToIntBits(dockRoot.getAlpha()));
+        if (kind == LauncherGlassNodeKind.ICON && view instanceof TextView) {
+            Drawable[] compound = ((TextView) view).getCompoundDrawables();
+            Drawable drawable = compound.length > 1 ? compound[1] : null;
+            hash = mix(hash, System.identityHashCode(drawable));
+            if (drawable != null) {
+                hash = mix(hash, drawable.getBounds().left);
+                hash = mix(hash, drawable.getBounds().top);
+                hash = mix(hash, drawable.getBounds().right);
+                hash = mix(hash, drawable.getBounds().bottom);
+            }
+        }
+        return hash;
+    }
+
+    private static long mix(long hash, long value) {
+        hash ^= value;
+        return hash * 0x100000001b3L;
+    }
+
     LauncherGlassGeometry.Snapshot capture(View dockRoot, Matrix rootInverse,
                                             int framebufferWidth, int framebufferHeight,
                                             float sampleInsetLeft, float sampleInsetTop,
@@ -37,8 +106,8 @@ final class DockGlassItemNode {
             if (icon != null) {
                 left = icon.left; top = icon.top; right = icon.right; bottom = icon.bottom;
             }
-            if (view instanceof android.widget.TextView) {
-                Drawable[] compound = ((android.widget.TextView) view).getCompoundDrawables();
+            if (view instanceof TextView) {
+                Drawable[] compound = ((TextView) view).getCompoundDrawables();
                 if (compound.length > 1) drawable = compound[1];
             }
         }
