@@ -36,18 +36,17 @@ public class FolderPressInteractionContractTest {
     }
 
     @Test
-    public void claimedFolderMaterialRejectsSystemDrawableRestoresDuringLongPress() throws Exception {
+    public void claimedFolderMaterialStaysHiddenWithoutRewritingSystemDrawables() throws Exception {
         String hook = read("MiuixFolderGlassHook.java");
 
-        assertTrue("direct ImageView.setImageDrawable writes must be fenced for claimed folder materials",
+        assertFalse("vendor drag/refresh must retain its concrete Drawable types",
                 hook.contains("ImageView.class.getDeclaredMethod(\"setImageDrawable\", Drawable.class)"));
-        assertTrue("the drawable fence must only affect views already claimed by LiquidDock",
-                hook.contains("claimedSink((View) target)"));
-        assertTrue("system drag/refresh writes must preserve or rebuild a transparent drawable",
-                hook.contains("drawableArgs[0] = isTransparentColorDrawable(current)")
-                        && hook.contains("? current : new ColorDrawable(Color.TRANSPARENT)"));
-        assertTrue("the filtered system call must still proceed",
-                hook.contains("chain.proceed(drawableArgs)"));
+        assertTrue("claimed ImageView material must be hidden independently of drawable replacement",
+                hook.contains("image.setImageAlpha(0)"));
+        assertTrue("runtime disable must restore the pre-claim image alpha",
+                hook.contains("ORIGINAL_IMAGE_ALPHA") && hook.contains("setImageAlpha(originalAlpha)"));
+        assertFalse("do not hide the View itself because shared glass geometry tracks View alpha",
+                hook.contains("image.setAlpha(0") || hook.contains("material.setAlpha(0"));
     }
 
     @Test
