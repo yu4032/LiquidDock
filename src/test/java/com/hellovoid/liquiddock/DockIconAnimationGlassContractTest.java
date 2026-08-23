@@ -96,6 +96,26 @@ public class DockIconAnimationGlassContractTest {
     }
 
     @Test
+    public void proxyGeometryPublishesDirectlyWithoutPreDrawRoundTrip() throws Exception {
+        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        int start = node.indexOf("boolean updateLaunchProxyGeometry");
+        int end = node.indexOf("void endLaunchProxy", start);
+        assertTrue(start >= 0 && end > start);
+        String updateBody = node.substring(start, end);
+
+        assertTrue(updateBody.contains("live.syncStaticNodeGeometryNow(this)"));
+        assertFalse(updateBody.contains("invalidateVisualOwnerGeometry()"));
+        assertFalse(updateBody.contains("live.requestStaticRedraw()"));
+
+        assertTrue(session.contains("boolean syncStaticNodeGeometryNow("));
+        assertTrue(session.contains("LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root)"));
+        assertTrue(session.contains("state.geometry = observed"));
+        assertTrue(session.contains("if (changed) requestStaticRedraw()"));
+    }
+
+    @Test
     public void dockCompositorAndProxyBridgeOwnNoNewOutputResources() throws Exception {
         String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
         String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
