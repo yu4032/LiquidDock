@@ -3,14 +3,16 @@ package com.hellovoid.liquiddock;
 import androidx.annotation.NonNull;
 
 import com.hellovoid.liquiddock.config.ConfigMigration;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.liquiddock.config.GridProfileConfig;
 import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
 import io.github.libxposed.api.XposedModule;
 
-/** libxposed API 101 entry point. Launcher is the sole injected process; SystemUI stays untouched. */
+/** libxposed API 101 entry point for Launcher and the opt-in SecurityCenter sidebar domain. */
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
+    private static final String SECURITY_CENTER_PACKAGE = SidebarGlassPolicy.SECURITY_CENTER_PACKAGE;
 
     @Override
     public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
@@ -21,13 +23,34 @@ public final class ModuleMain extends XposedModule {
 
     @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
-        if (!LAUNCHER_PACKAGE.equals(param.getPackageName())) return;
+        String packageName = param.getPackageName();
+        if (!LAUNCHER_PACKAGE.equals(packageName)
+                && !SECURITY_CENTER_PACKAGE.equals(packageName)) return;
         try {
             LegacyConfigMigration.migrateAtProcessStart();
             ConfigMigration.migrateAtProcessStart();
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+
+            if (SECURITY_CENTER_PACKAGE.equals(packageName)) {
+                boolean sidebarEnabled = configReader.b(
+                        ConfigSchema.Sidebar.ENABLED.name(),
+                        ConfigSchema.Sidebar.ENABLED.runtimeFallback());
+                boolean liquidEnabled = runtimeConfig.enabled && runtimeConfig.glass.enabled;
+                boolean installSidebar = SidebarGlassPolicy.shouldInstall(
+                        packageName, liquidEnabled, sidebarEnabled);
+                MainHook.debugLogging = runtimeConfig.debugLog;
+                GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
+                        installSidebar);
+                if (installSidebar) {
+                    SecurityCenterSidebarGlassHook.install(classLoader, runtimeConfig);
+                } else {
+                    MainHook.log("[DC][SidebarGlass] disabled by config");
+                }
+                return;
+            }
+
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled);
             new MainHook().install(classLoader);
@@ -58,7 +81,7 @@ public final class ModuleMain extends XposedModule {
             HomeGridDragBoundsHook.install(classLoader,
                     customGridEnabled, selectedProfile);
         } catch (Throwable error) {
-            Api101Bridge.log("[DC] API101 package init failed", error);
+            Api101Bridge.log("[DC] API101 package init failed package=" + packageName, error);
         }
     }
 }
