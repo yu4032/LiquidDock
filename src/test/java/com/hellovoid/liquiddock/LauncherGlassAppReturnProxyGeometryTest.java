@@ -74,10 +74,12 @@ public class LauncherGlassAppReturnProxyGeometryTest {
         assertFalse(node.contains("suppressedByLaunchProxy"));
     }
 
-    @Test public void windowElementPublishesItsAlreadyCorrectedCurrentRect() throws Exception {
+    @Test public void windowElementPublishesItsAlreadyCorrectedCurrentRectOnlyForHomeReturn()
+            throws Exception {
         String hook = source("MiuixLauncherStaticGlassHook.java");
         assertTrue(hook.contains("com.miui.home.recents.anim.WindowElement"));
         assertTrue(hook.contains("\"updateTaskView\""));
+        assertTrue(hook.contains("isClosingAnimRunning"));
         assertTrue(hook.contains("getLauncherTargetView"));
         assertTrue(hook.contains("updateLaunchProxyGeometry"));
         assertTrue(hook.contains("RectF.class, float.class"));
