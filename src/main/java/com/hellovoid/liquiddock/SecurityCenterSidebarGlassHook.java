@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -14,7 +16,7 @@ import java.util.WeakHashMap;
  * SecurityCenter/Game Turbo sidebar liquid-glass bridge.
  *
  * The expanded sidebar and its All Apps panel live in one TurboLayout / one type=2003 window.
- * Keep one PassBlur producer and one Prismal TextureView behind the vendor content.  All Apps is
+ * Keep one PassBlur producer and one Prismal TextureView behind the vendor content. All Apps is
  * dynamically inserted later at Z=-1, so the glass host lives at Z=-2 and naturally remains
  * behind both panels without a second producer.
  */
@@ -26,11 +28,14 @@ final class SecurityCenterSidebarGlassHook {
     private static final float GLASS_Z = -2f;
     private static final float DEFAULT_RADIUS_DP = 28f;
     private static final float SQUIRCLE_CP = .58f;
+    private static final int ZERO_COPY_VALIDATION_FRAMES = 90;
 
     private static boolean installed;
     private static final WeakHashMap<ViewGroup, Boolean> trackedRoots = new WeakHashMap<>();
     private static WeakReference<ViewGroup> rootRef = new WeakReference<>(null);
     private static WeakReference<DockLiquidGlassHostView> hostRef = new WeakReference<>(null);
+    private static WeakReference<ViewGroup> opticsOwnerRef = new WeakReference<>(null);
+    private static Drawable originalRootBackground;
     private static WeakReference<ViewTreeObserver> layoutObserverRef = new WeakReference<>(null);
     private static ViewTreeObserver.OnGlobalLayoutListener layoutListener;
 
@@ -78,6 +83,7 @@ final class SecurityCenterSidebarGlassHook {
                 clearObservation();
                 rootRef = new WeakReference<>(null);
                 hostRef = new WeakReference<>(null);
+                clearOpticsMetadata(root, false);
                 // The TextureView shuts its EGL/producer resources down from its own detach.
             }
         });
@@ -94,20 +100,20 @@ final class SecurityCenterSidebarGlassHook {
             return;
         }
         DockLiquidGlassHostView currentHost = hostRef.get();
-        if (current == root && currentHost != null && currentHost.getParent() == root) {
-            suppressVendorMaterials(root);
-            return;
-        }
+        if (current == root && currentHost != null && currentHost.getParent() == root) return;
 
         clearObservation();
-        if (current != null && current != root) Miuix307ZeroCopyRenderer.clear();
+        if (current != null && current != root) {
+            Miuix307ZeroCopyRenderer.clear();
+            clearOpticsMetadata(current, false);
+        }
 
-        suppressVendorMaterials(root);
+        float radius = DEFAULT_RADIUS_DP * root.getResources().getDisplayMetrics().density;
+        installOpticsMetadata(root, radius);
 
         DockLiquidGlassHostView host = new DockLiquidGlassHostView(root.getContext());
         host.setId(View.generateViewId());
         host.setZ(GLASS_Z);
-        float radius = DEFAULT_RADIUS_DP * root.getResources().getDisplayMetrics().density;
         host.setGeometry(radius, false, SQUIRCLE_CP);
         root.addView(host, 0, new RelativeLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -116,14 +122,57 @@ final class SecurityCenterSidebarGlassHook {
                 root, host, config.glass, Math.round(config.glass.blur));
         if (!rendererInstalled) {
             root.removeView(host);
-            MainHook.log(TAG + " PassBlur renderer unavailable");
+            clearOpticsMetadata(root, true);
+            MainHook.log(TAG + " PassBlur renderer unavailable; vendor material preserved");
             return;
         }
 
         rootRef = new WeakReference<>(root);
         hostRef = new WeakReference<>(host);
-        installMaterialObserver(root);
-        MainHook.log(TAG + " shared sidebar + All Apps Prismal host attached");
+        scheduleZeroCopyValidation(root, host, 0);
+        MainHook.log(TAG + " shared sidebar + All Apps Prismal host pending");
+    }
+
+    private static void scheduleZeroCopyValidation(
+            ViewGroup root, DockLiquidGlassHostView host, int frame) {
+        if (rootRef.get() != root || hostRef.get() != host || host.getParent() != root) return;
+        if (Miuix307ZeroCopyRenderer.isActive()) {
+            suppressVendorMaterials(root);
+            installMaterialObserver(root);
+            MainHook.log(TAG + " zero-copy active; vendor sidebar materials suppressed");
+            return;
+        }
+        if (Miuix307ZeroCopyRenderer.isActivationExhausted()
+                || frame >= ZERO_COPY_VALIDATION_FRAMES) {
+            Miuix307ZeroCopyRenderer.clear();
+            if (host.getParent() == root) root.removeView(host);
+            clearOpticsMetadata(root, true);
+            rootRef = new WeakReference<>(null);
+            hostRef = new WeakReference<>(null);
+            MainHook.log(TAG + " zero-copy inactive; vendor sidebar material preserved");
+            return;
+        }
+        host.postOnAnimation(() -> scheduleZeroCopyValidation(root, host, frame + 1));
+    }
+
+    /** Transparent rounded metadata lets the shared Dock renderer reuse a sidebar-sized radius. */
+    private static void installOpticsMetadata(ViewGroup root, float radius) {
+        if (opticsOwnerRef.get() != root) {
+            originalRootBackground = root.getBackground();
+            opticsOwnerRef = new WeakReference<>(root);
+        }
+        GradientDrawable metadata = new GradientDrawable();
+        metadata.setShape(GradientDrawable.RECTANGLE);
+        metadata.setColor(Color.TRANSPARENT);
+        metadata.setCornerRadius(Math.max(0f, radius));
+        root.setBackground(metadata);
+    }
+
+    private static void clearOpticsMetadata(ViewGroup root, boolean restore) {
+        if (root == null || opticsOwnerRef.get() != root) return;
+        if (restore) root.setBackground(originalRootBackground);
+        opticsOwnerRef = new WeakReference<>(null);
+        originalRootBackground = null;
     }
 
     private static void installMaterialObserver(ViewGroup root) {
