@@ -17,6 +17,7 @@ public class WidgetThemeRuntimeWiringTest {
         assertTrue(hook.contains("RemoteViews.class.getDeclaredMethods()"));
         assertTrue(hook.contains("createConfigurationContext"));
         assertTrue(hook.contains("WidgetThemePolicy.applyToUiMode"));
+        assertTrue(hook.contains("Widget theme method hook skipped"));
     }
 
     @Test public void moduleMainInstallsWidgetThemeHookFromPersistedMode() throws Exception {
