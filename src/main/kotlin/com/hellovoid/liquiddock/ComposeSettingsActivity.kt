@@ -182,9 +182,9 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_plain_highlight" -> "基础边缘高光"
     "liquid_prismal_light_dir_x" -> "光源水平方向"
     "liquid_prismal_light_dir_y" -> "光源垂直方向"
-    "liquid_prismal_shadow_r" -> "内阴影 · 红"
-    "liquid_prismal_shadow_g" -> "内阴影 · 绿"
-    "liquid_prismal_shadow_b" -> "内阴影 · 蓝"
+    "liquid_prismal_shadow_r" -> "内阴影红"
+    "liquid_prismal_shadow_g" -> "内阴影绿"
+    "liquid_prismal_shadow_b" -> "内阴影蓝"
     "liquid_prismal_shadow_alpha" -> "内阴影透明度"
     "liquid_prismal_shadow_softness" -> "控制内阴影边缘的柔和程度"
     "liquid_prismal_transmittance" -> "控制玻璃的透射与透明程度"
@@ -390,7 +390,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
             label = "page",
         ) { target ->
             when (target) {
-                Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }) { page = it }
+                Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }, activity) { page = it }
                 Page.Grid -> GridPage(padding, prefs, masterEnabled)
                 Page.Dock -> DockPage(padding, prefs, masterEnabled)
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
@@ -409,8 +409,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
 @Composable
 private fun HomePage(
     padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
-    onMasterChanged: (Boolean) -> Unit, open: (Page) -> Unit,
+    onMasterChanged: (Boolean) -> Unit, activity: ComposeSettingsActivity, open: (Page) -> Unit,
 ) {
+    val widgetThemeLabels = stringArrayResource(R.array.widget_theme_entries)
+    val widgetThemeValues = stringArrayResource(R.array.widget_theme_values)
+    val widgetThemeOptions = widgetThemeLabels.zip(widgetThemeValues)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.app_name)) }
         item { SmallTitle(stringResource(R.string.category_master)) }
@@ -425,6 +428,19 @@ private fun HomePage(
                 ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
                 ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
                 ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
+            }
+        }
+        item { SmallTitle("小部件") }
+        item {
+            SettingsCard {
+                StringDropdown(
+                    prefs = prefs,
+                    key = "widget_theme_mode",
+                    title = "小部件外观",
+                    default = "auto",
+                    options = widgetThemeOptions,
+                    enabled = masterEnabled,
+                ) { activity.restartLauncher() }
             }
         }
         item { SmallTitle(stringResource(R.string.category_configuration)) }
@@ -795,6 +811,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
 private fun StringDropdown(
     prefs: SharedPreferences, key: String, title: String, default: String,
     options: List<Pair<String, String>>, enabled: Boolean = true,
+    onChanged: (String) -> Unit = {},
 ) {
     var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
     val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
@@ -807,6 +824,7 @@ private fun StringDropdown(
             val next = options[(index + 1) % options.size].second
             value = next
             prefs.edit().putString(key, next).apply()
+            onChanged(next)
         },
     )
 }
