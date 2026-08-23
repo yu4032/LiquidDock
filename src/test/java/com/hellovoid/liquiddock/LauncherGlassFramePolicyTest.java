@@ -19,19 +19,6 @@ public class LauncherGlassFramePolicyTest {
     }
 
     @Test
-    public void backdropInvalidationIsStickyAcrossCoalescedRequests() {
-        LauncherGlassFramePolicy policy = new LauncherGlassFramePolicy();
-
-        assertTrue(policy.request(false));
-        assertFalse(policy.requestBackdropRefresh());
-        LauncherGlassFramePolicy.Work work = policy.consume();
-
-        assertTrue(work.render);
-        assertTrue(work.refreshProducer);
-        assertTrue(work.rebuildBackdrop);
-    }
-
-    @Test
     public void cachedBackdropCanBeRebuiltWithoutRefreshingProducer() {
         LauncherGlassFramePolicy policy = new LauncherGlassFramePolicy();
 

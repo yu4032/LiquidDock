@@ -108,8 +108,6 @@ final class LauncherGlassSession {
 
     private static final class NodeState {
         final WeakReference<LauncherGlassSinkView> sinkRef;
-        final LauncherGlassGeometryStability geometryStability =
-                new LauncherGlassGeometryStability();
         volatile LauncherGlassGeometry.Snapshot geometry;
         volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
 
@@ -121,8 +119,6 @@ final class LauncherGlassSession {
 
     private static final class StaticNodeState {
         final WeakReference<LauncherGlassStaticNode> nodeRef;
-        final LauncherGlassGeometryStability geometryStability =
-                new LauncherGlassGeometryStability();
         volatile LauncherGlassGeometry.Snapshot geometry;
         volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
 
@@ -175,7 +171,6 @@ final class LauncherGlassSession {
     private volatile Miuix307PassBlurBridge.Binding binding;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
-    private volatile boolean hasConsumedFrame;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
     // Semantic content token for the one-shot producer pulse that requested a new wallpaper.
@@ -370,7 +365,6 @@ final class LauncherGlassSession {
 
     private void invalidateBackdropFrameState() {
         frameAvailable.set(false);
-        hasConsumedFrame = false;
         consumedGeneration = -1L;
         backdropPrepared = false;
     }
@@ -636,11 +630,9 @@ final class LauncherGlassSession {
             if (!rootGeometryChanged && !localChanged) continue;
             LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = node.geometry;
-            LauncherGlassGeometry.Snapshot selected = rootGeometryChanged
-                    ? observed : node.geometryStability.select(old, observed, localChanged);
-            if ((old == null) != (selected == null)
-                    || (old != null && !old.sameAs(selected))) {
-                node.geometry = selected;
+            if ((old == null) != (observed == null)
+                    || (old != null && !old.sameAs(observed))) {
+                node.geometry = observed;
                 dragChanged = true;
             }
         }
@@ -655,11 +647,9 @@ final class LauncherGlassSession {
             if (!rootGeometryChanged && !localChanged) continue;
             LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = state.geometry;
-            LauncherGlassGeometry.Snapshot selected = rootGeometryChanged
-                    ? observed : state.geometryStability.select(old, observed, localChanged);
-            if ((old == null) != (selected == null)
-                    || (old != null && !old.sameAs(selected))) {
-                state.geometry = selected;
+            if ((old == null) != (observed == null)
+                    || (old != null && !old.sameAs(observed))) {
+                state.geometry = observed;
                 staticChanged = true;
             }
         }
@@ -861,13 +851,12 @@ final class LauncherGlassSession {
                 makePbufferCurrent();
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
-                hasConsumedFrame = true;
                 consumedGeneration = sceneGeneration;
                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
                 Miuix307PassBlurBridge.pauseUpdates(binding);
             }
-            if (!hasConsumedFrame) return;
+            if (consumedGeneration < 0L) return;
             boolean backdropDirty = work.rebuildBackdrop || sourceChanged || !backdropPrepared;
             boolean staticDirty = backdropDirty;
             if (work.staticDirty) staticDirty = true;

@@ -20,20 +20,19 @@ final class LauncherGlassSceneController {
     static final class StateMachine {
         private State state = State.DETACHED;
         private long generation = 1L;
-        private boolean covered;
 
         void onRootReady() {
             if (state == State.DETACHED) state = State.BOOTSTRAPPING;
         }
 
         void onBootstrapReconciled() {
-            if (!covered && state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
+            if (state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
         }
 
         void setCovered(boolean nextCovered) {
-            if (covered == nextCovered) return;
-            covered = nextCovered;
-            if (covered) {
+            boolean isCovered = state == State.COVERED;
+            if (isCovered == nextCovered) return;
+            if (nextCovered) {
                 state = State.COVERED;
             } else {
                 generation++;
@@ -43,17 +42,20 @@ final class LauncherGlassSceneController {
 
         void onGenerationInvalidated() {
             generation++;
-            if (!covered && state != State.DETACHED) state = State.HOME_WAITING_FRESH_FRAME;
+            if (state != State.COVERED && state != State.DETACHED) {
+                state = State.HOME_WAITING_FRESH_FRAME;
+            }
         }
 
         void onFreshFrameReady(long frameGeneration) {
-            if (frameGeneration != generation || covered || state == State.DETACHED) return;
+            if (frameGeneration != generation || state == State.COVERED || state == State.DETACHED) {
+                return;
+            }
             state = State.HOME_VISIBLE;
         }
 
         void detach() {
             state = State.DETACHED;
-            covered = false;
         }
 
         long generation() { return generation; }
