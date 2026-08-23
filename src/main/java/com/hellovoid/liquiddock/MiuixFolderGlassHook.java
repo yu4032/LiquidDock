@@ -51,13 +51,12 @@ final class MiuixFolderGlassHook {
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
+            Class<?> folderIconType = Class.forName(FOLDER_ICON, false, classLoader);
             Method setIconImageView = HookUtil.findMethodExact(itemIcon, "setIconImageView",
                     new Class<?>[]{Drawable.class, android.graphics.Bitmap.class});
             HookUtil.hook(setIconImageView, chain -> {
                 Object icon = chain.getThisObject();
-                boolean folder = icon instanceof ViewGroup
-                        && (FOLDER_ICON.equals(icon.getClass().getName())
-                        || icon.getClass().getName().endsWith(".FolderIcon"));
+                boolean folder = icon instanceof ViewGroup && folderIconType.isInstance(icon);
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 if (folder) attachFromFolderIcon((ViewGroup) icon, glassConfig);
@@ -95,8 +94,8 @@ final class MiuixFolderGlassHook {
 
     private static void observeFolderVariantConstructors(
             ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) {
-        String[] variants = {"com.miui.home.launcher.FolderIcon1x1",
-                "com.miui.home.launcher.FolderIcon2x2"};
+        String[] variants = {"com.miui.home.launcher.folder.FolderIcon1x1",
+                "com.miui.home.launcher.folder.FolderIcon2x2"};
         for (String variant : variants) {
             try {
                 Class<?> type = Class.forName(variant, false, classLoader);
@@ -291,7 +290,8 @@ final class MiuixFolderGlassHook {
                 // Launcher restart can call setIconImageView after FolderIcon is attached but
                 // before its real ViewRoot/Surface is stable. Adding an attach listener at that
                 // point does not replay onViewAttachedToWindow, so recover on later UI frames.
-                if (sink == null && icon.isAttachedToWindow()) {
+                if (sink == null && icon.isAttachedToWindow()
+                        && isFolderStyleEnabled(value, glassConfig)) {
                     scheduleFolderRecovery(icon, glassConfig, 0);
                 }
             }
@@ -326,10 +326,11 @@ final class MiuixFolderGlassHook {
                 return;
             }
             LauncherGlassStaticNode sink = null;
+            View material = null;
             try {
-                View value = resolveFolderMaterial(current);
-                if (value != null) {
-                    sink = attachMaterial(value, glassConfig);
+                material = resolveFolderMaterial(current);
+                if (material != null) {
+                    sink = attachMaterial(material, glassConfig);
                     if (sink != null && openedFolderOwner.get() == current) {
                         openedFolderSink = new WeakReference<>(sink);
                         sink.setSuppressedByFolderOpen(true);
@@ -338,7 +339,8 @@ final class MiuixFolderGlassHook {
             } catch (Throwable error) {
                 MainHook.log(TAG + " startup material recovery failed: " + error);
             }
-            if (sink == null && attempt < MAX_STARTUP_RECOVERY_FRAMES) {
+            if (sink == null && material != null && isFolderStyleEnabled(material, glassConfig)
+                    && attempt < MAX_STARTUP_RECOVERY_FRAMES) {
                 scheduleFolderRecovery(current, glassConfig, attempt + 1);
             } else {
                 FOLDER_RECOVERY_PENDING.remove(current);
@@ -406,10 +408,30 @@ final class MiuixFolderGlassHook {
         return false;
     }
 
+    private static boolean isFolderStyleEnabled(
+            View material, LiquidDockConfig.Glass glassConfig) {
+        if (glassConfig == null) return true;
+        return isSmallFolderMaterial(material)
+                ? glassConfig.smallFolderStyle.enabled
+                : glassConfig.largeFolderStyle.enabled;
+    }
+
     private static LauncherGlassStaticNode attachMaterial(
             View material, LiquidDockConfig.Glass glassConfig) {
         if (material == null || !GlassRuntimeState.isEnabled()
                 || !LauncherGlassHierarchy.isWorkspace(material)) return null;
+        boolean smallFolder = isSmallFolderMaterial(material);
+        GlassComponentStyle style = glassConfig != null
+                ? (smallFolder ? glassConfig.smallFolderStyle : glassConfig.largeFolderStyle)
+                : new GlassComponentStyle(true, 0f, 0f);
+        if (!style.enabled) {
+            LauncherGlassStaticNode existing = claimedSink(material);
+            if (existing != null) existing.dispose();
+            CLAIMED.remove(material);
+            restoreMaterial(material);
+            return null;
+        }
+
         LauncherGlassStaticNode existing = claimedSink(material);
         if (existing != null) {
             clearVendorBlur(material);
@@ -421,10 +443,6 @@ final class MiuixFolderGlassHook {
         float fallbackRadius = Math.min(Math.max(1, material.getWidth()),
                 Math.max(1, material.getHeight())) * 0.22f;
         float density = material.getResources().getDisplayMetrics().density;
-        boolean smallFolder = isSmallFolderMaterial(material);
-        GlassComponentStyle style = glassConfig != null
-                ? (smallFolder ? glassConfig.smallFolderStyle : glassConfig.largeFolderStyle)
-                : new GlassComponentStyle(true, 0f, 0f);
         float radius = LauncherGlassCornerRadiusPolicy.resolve(
                 style.cornerRadiusDp, density, nativeRadius, fallbackRadius);
         LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachFolderMaterial(
