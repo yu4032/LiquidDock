@@ -33,6 +33,8 @@ jobs:
         run: python3 ci/glass_idle_dock_fix.py
       - name: Apply drag component-style handoff fix
         run: python3 ci/glass_drag_style_fix.py
+      - name: Remove duplicate drag material sync
+        run: python3 ci/glass_drag_perf_fix.py
       - name: Update Scheme A regression contracts
         run: python3 ci/glass_contract_compact.py
       - name: Repair generated contract quoting
