@@ -93,6 +93,19 @@ final class LauncherGlassSession {
         }
     }
 
+    private static final class WallpaperFrameToken {
+        static final WallpaperFrameToken NONE = new WallpaperFrameToken(-1L, false);
+
+        final long generation;
+        final boolean authoritative;
+
+        WallpaperFrameToken(long generation, boolean authoritative) {
+            this.generation = generation;
+            this.authoritative = authoritative;
+        }
+
+    }
+
     private static final class NodeState {
         final WeakReference<LauncherGlassSinkView> sinkRef;
         final LauncherGlassGeometryStability geometryStability =
@@ -165,6 +178,16 @@ final class LauncherGlassSession {
     private volatile boolean hasConsumedFrame;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
+    // Semantic content token for the one-shot producer pulse that requested a new wallpaper.
+    // It is independent from scene generation and is consumed only by the matching OES frame.
+    private long wallpaperRequestedGeneration = -1L;
+    private long wallpaperRequestedSceneGeneration = -1L;
+    private boolean wallpaperRequestedAuthoritative;
+    // Display rotation reaches target ViewRoot geometry before Shell finishes its screenshot
+    // rotation leash. While pending, no Workspace producer may bind or publish a fresh frame.
+    private volatile long rotationSettleSerial;
+    private volatile boolean rotationSettlePending;
+    private volatile int rotationSettleTargetRotation = -1;
 
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
@@ -303,19 +326,78 @@ final class LauncherGlassSession {
     void invalidateGeneration(long generation) {
         if (shuttingDown || generation < sceneGeneration) return;
         sceneGeneration = generation;
+        invalidateBackdropFrameState();
+    }
+
+    void requestFreshBackdrop(long generation) {
+        if (shuttingDown || generation < sceneGeneration) return;
+        if (rotationSettlePending && generation == sceneGeneration) {
+            MainHook.log(TAG + " fresh backdrop deferred for rotation settle generation="
+                    + generation + " rotation=" + rotationSettleTargetRotation);
+            return;
+        }
+        clearWallpaperRequest();
+        invalidateGeneration(generation);
+        // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced
+        // during App -> HOME. Revalidate on the UI thread before pulsing PassBlur so a fresh
+        // request can never target a dead producer binding.
+        mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
+    }
+
+    boolean requestWallpaperBackdrop(
+            long sceneGeneration, long wallpaperGeneration, boolean authoritative) {
+        if (shuttingDown || sceneGeneration != this.sceneGeneration || wallpaperGeneration < 0L
+                || rotationSettlePending) {
+            return false;
+        }
+        synchronized (this) {
+            wallpaperRequestedGeneration = wallpaperGeneration;
+            wallpaperRequestedSceneGeneration = sceneGeneration;
+            wallpaperRequestedAuthoritative = authoritative;
+        }
+        // Keep the existing StaticLayer pixels visible while invalidating only the cached source.
+        invalidateBackdropFrameState();
+        requestFrame(true);
+        return true;
+    }
+
+    void cancelWallpaperBackdrop(long wallpaperGeneration) {
+        synchronized (this) {
+            if (wallpaperRequestedGeneration != wallpaperGeneration) return;
+            clearWallpaperRequestLocked();
+        }
+    }
+
+    private void invalidateBackdropFrameState() {
         frameAvailable.set(false);
         hasConsumedFrame = false;
         consumedGeneration = -1L;
         backdropPrepared = false;
     }
 
-    void requestFreshBackdrop(long generation) {
-        if (shuttingDown || generation < sceneGeneration) return;
-        invalidateGeneration(generation);
-        // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced
-        // during App -> HOME. Revalidate on the UI thread before pulsing PassBlur so a fresh
-        // request can never target a dead producer binding.
-        mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
+    private void clearWallpaperRequest() {
+        synchronized (this) {
+            clearWallpaperRequestLocked();
+        }
+    }
+
+    private void clearWallpaperRequestLocked() {
+        wallpaperRequestedGeneration = -1L;
+        wallpaperRequestedSceneGeneration = -1L;
+        wallpaperRequestedAuthoritative = false;
+    }
+
+    private WallpaperFrameToken takeWallpaperFrameToken(long frameSceneGeneration) {
+        synchronized (this) {
+            if (wallpaperRequestedGeneration < 0L
+                    || wallpaperRequestedSceneGeneration != frameSceneGeneration) {
+                return WallpaperFrameToken.NONE;
+            }
+            WallpaperFrameToken token = new WallpaperFrameToken(
+                    wallpaperRequestedGeneration, wallpaperRequestedAuthoritative);
+            clearWallpaperRequestLocked();
+            return token;
+        }
     }
 
     void requestSceneRedraw() {
@@ -601,66 +683,142 @@ final class LauncherGlassSession {
         if (!LauncherGlassProducerGeometryGate.matchesRoot(
                 rootWidth, rootHeight, geometry.surfaceWidth, geometry.surfaceHeight,
                 geometry.insetLeft, geometry.insetTop, geometry.insetRight, geometry.insetBottom)) {
-            frameAvailable.set(false);
-            hasConsumedFrame = false;
-            consumedGeneration = -1L;
+            invalidateBackdropFrameState();
             MainHook.log(TAG + " producer geometry not coherent with root root="
                     + rootWidth + "x" + rootHeight + " surface="
                     + geometry.surfaceWidth + "x" + geometry.surfaceHeight);
             return false;
         }
+        int previousRotation = configRotation;
         int nextRotation = geometry.configRotation;
         LauncherGlassSurfaceContentRect nextContentRect = geometry.contentRect;
-        boolean geometryChanged = nextRotation != configRotation
+        boolean rotationChanged = nextRotation != previousRotation;
+        boolean geometryChanged = rotationChanged
                 || geometry.bufferWidth != boundBufferWidth
                 || geometry.bufferHeight != boundBufferHeight
                 || !nextContentRect.sameAs(contentRect);
         Miuix307PassBlurBridge.Binding current = binding;
         boolean surfaceChanged = current != null && (!current.rootSurface.isValid()
                 || !sameProducerSurfaceGeneration(current, geometry));
+        boolean endpointRollover = LauncherGlassProducerTransitionPolicy.requiresEndpointRollover(
+                previousRotation, nextRotation, surfaceChanged);
         boolean changed = geometryChanged || surfaceChanged;
         configRotation = nextRotation;
-        if (changed) {
-            frameAvailable.set(false);
-            hasConsumedFrame = false;
-            consumedGeneration = -1L;
-            backdropPrepared = false;
-            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
-            boundBufferWidth = geometry.bufferWidth;
-            boundBufferHeight = geometry.bufferHeight;
-            contentRect = nextContentRect;
-            if (surfaceChanged) {
-                MainHook.log(TAG + " producer Surface generation changed old=" + current.rootName
-                        + " oldLayerId=" + current.rootLayerId
-                        + " new=" + geometry.rootSurface
-                        + " newLayerId=" + geometry.rootLayerId
-                        + " oldSurfaceSeq=" + current.surfaceSequenceId
-                        + " newSurfaceSeq=" + geometry.surfaceSequenceId);
-            } else {
-                MainHook.log(TAG + " producer geometry surface="
-                        + geometry.surfaceWidth + "x" + geometry.surfaceHeight
-                        + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
-                        + " insets=" + geometry.insetLeft + "," + geometry.insetTop
-                        + "," + geometry.insetRight + "," + geometry.insetBottom);
-            }
-            SurfaceTexture input = inputSurfaceTexture;
-            if (input != null && geometry.bufferWidth > 0 && geometry.bufferHeight > 0) {
-                postRender(() -> {
-                    if (!shuttingDown && input == inputSurfaceTexture) {
-                        input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-                    }
-                }, null);
-            }
-        }
+        if (!changed) return false;
+
+        if (rotationChanged) beginRotationSettle(nextRotation);
+        invalidateBackdropFrameState();
+        long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+        if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+        boundBufferWidth = geometry.bufferWidth;
+        boundBufferHeight = geometry.bufferHeight;
+        contentRect = nextContentRect;
+
         if (surfaceChanged) {
-            rebindProducer();
+            MainHook.log(TAG + " producer Surface generation changed old=" + current.rootName
+                    + " oldLayerId=" + current.rootLayerId
+                    + " new=" + geometry.rootSurface
+                    + " newLayerId=" + geometry.rootLayerId
+                    + " oldSurfaceSeq=" + current.surfaceSequenceId
+                    + " newSurfaceSeq=" + geometry.surfaceSequenceId);
+        } else {
+            MainHook.log(TAG + " producer geometry surface="
+                    + geometry.surfaceWidth + "x" + geometry.surfaceHeight
+                    + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
+                    + " rotation=" + previousRotation + "->" + nextRotation
+                    + " insets=" + geometry.insetLeft + "," + geometry.insetTop
+                    + "," + geometry.insetRight + "," + geometry.insetBottom);
+        }
+
+        // Rotation changes SurfaceFlinger's orientation/crop generation. A Workspace producer is
+        // one-shot, so never let the first post-rotation buffer come through an endpoint that was
+        // registered under the previous orientation. Rollover establishes default buffer size
+        // before SetPassBlurSurface binds the new endpoint.
+        if (endpointRollover) {
+            if (rotationChanged) {
+                // Keep the pre-rotation endpoint suspended until Shell removes RotationLayer.
+                // Binding a new endpoint here would immediately publish a screenshot-animation
+                // frame because the vendor bridge is continuous-on-bind.
+                binding = null;
+                Miuix307PassBlurBridge.unbind(current);
+                scheduleRotationSettle(root, nextRotation);
+            } else {
+                rebindProducer();
+            }
             return true;
         }
-        if (geometryChanged && current != null && current.bound) {
-            Miuix307PassBlurBridge.requestSingleUpdate(current, root);
+
+        SurfaceTexture input = inputSurfaceTexture;
+        if (input != null && geometry.bufferWidth > 0 && geometry.bufferHeight > 0) {
+            postRender(() -> {
+                if (shuttingDown || input != inputSurfaceTexture) return;
+                input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
+                if (geometryChanged && current != null && current.bound) {
+                    mainHandler.post(() -> {
+                        if (!shuttingDown && binding == current && current.bound
+                                && input == inputSurfaceTexture) {
+                            Miuix307PassBlurBridge.requestSingleUpdate(current, root);
+                        }
+                    });
+                }
+            }, null);
         }
-        return changed;
+        return true;
+    }
+
+    private void beginRotationSettle(int targetRotation) {
+        rotationSettleSerial++;
+        rotationSettlePending = true;
+        rotationSettleTargetRotation = targetRotation;
+    }
+
+    private void scheduleRotationSettle(View root, int targetRotation) {
+        if (shuttingDown || root == null) return;
+        final long serial = rotationSettleSerial;
+        final float ratio = readLauncherTransitionDurationRatio(root);
+        final long delayMs = LauncherGlassRotationSettlePolicy.settleDelayMs(ratio);
+        MainHook.log(TAG + " rotation capture gated rotation=" + targetRotation
+                + " delayMs=" + delayMs + " ratio=" + ratio + " serial=" + serial);
+        mainHandler.postDelayed(() -> {
+            if (shuttingDown || !rotationSettlePending || serial != rotationSettleSerial
+                    || configRotation != targetRotation) return;
+            View liveRoot = rootRef.get();
+            if (liveRoot == null || !liveRoot.isAttachedToWindow()) return;
+            // The delay models HyperOS' vendor transition duration. Commit on the following
+            // Choreographer frame so the final Shell transaction has reached composition.
+            liveRoot.postOnAnimation(() -> finishRotationSettle(serial, targetRotation));
+        }, delayMs);
+    }
+
+    private void finishRotationSettle(long serial, int targetRotation) {
+        if (shuttingDown || !rotationSettlePending || serial != rotationSettleSerial
+                || configRotation != targetRotation) return;
+        rotationSettlePending = false;
+        rotationSettleTargetRotation = -1;
+        MainHook.log(TAG + " rotation capture released rotation=" + targetRotation
+                + " serial=" + serial);
+        // Always roll here, even if binding became null while the transition was running.
+        // This guarantees SetPassBlurSurface sees a producer created after the rotation leash.
+        rebindProducer();
+    }
+
+    private float readLauncherTransitionDurationRatio(View root) {
+        if (root == null) return 1f;
+        try {
+            ClassLoader loader = root.getContext().getClassLoader();
+            Class<?> helper = Class.forName(
+                    "com.miui.home.recents.TransitionAnimDurationHelper", false, loader);
+            java.lang.reflect.Method getInstance = helper.getDeclaredMethod("getInstance");
+            getInstance.setAccessible(true);
+            Object instance = getInstance.invoke(null);
+            java.lang.reflect.Method getRatio = helper.getDeclaredMethod("getAnimDurationRatio");
+            getRatio.setAccessible(true);
+            Object value = getRatio.invoke(instance);
+            if (value instanceof Number) return ((Number) value).floatValue();
+        } catch (Throwable error) {
+            MainHook.log(TAG + " transition duration ratio unavailable: " + error);
+        }
+        return 1f;
     }
 
     private boolean postRender(Runnable action, Runnable rejected) {
@@ -697,6 +855,7 @@ final class LauncherGlassSession {
             ensureEglAndGl();
             if (work.refreshProducer) refreshProducer();
             boolean sourceChanged = false;
+            WallpaperFrameToken wallpaperFrame = WallpaperFrameToken.NONE;
             SurfaceTexture input = inputSurfaceTexture;
             if (input != null && frameAvailable.getAndSet(false)) {
                 makePbufferCurrent();
@@ -704,6 +863,7 @@ final class LauncherGlassSession {
                 input.getTransformMatrix(textureMatrix);
                 hasConsumedFrame = true;
                 consumedGeneration = sceneGeneration;
+                wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
                 Miuix307PassBlurBridge.pauseUpdates(binding);
             }
@@ -717,8 +877,10 @@ final class LauncherGlassSession {
             long renderedGeneration = consumedGeneration;
             if (sourceChanged && staticOutput != null && renderedGeneration == sceneGeneration) {
                 View rootView = rootRef.get();
+                WallpaperFrameToken renderedWallpaperFrame = wallpaperFrame;
                 mainHandler.post(() -> LauncherGlassSceneController.onFreshFrameRendered(
-                        rootView, renderedGeneration));
+                        rootView, renderedGeneration,
+                        renderedWallpaperFrame.generation, renderedWallpaperFrame.authoritative));
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " render failed: " + error);
@@ -726,6 +888,7 @@ final class LauncherGlassSession {
     }
 
     private void refreshProducer() {
+        if (rotationSettlePending) return;
         Miuix307PassBlurBridge.Binding current = binding;
         View root = rootRef.get();
         if (current == null || root == null || !current.bound || !current.rootSurface.isValid()) return;
@@ -813,7 +976,7 @@ final class LauncherGlassSession {
         inputProducerSurface = producer;
         backdropPrepared = false;
         input.setOnFrameAvailableListener(texture -> {
-            if (shuttingDown || texture != inputSurfaceTexture) return;
+            if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
             frameAvailable.set(true);
             requestFrame(false);
         }, renderHandler);
@@ -821,7 +984,7 @@ final class LauncherGlassSession {
     }
 
     private void bindProducerWhenReady(int attempt) {
-        if (shuttingDown || binding != null) return;
+        if (shuttingDown || binding != null || rotationSettlePending) return;
         View root = rootRef.get();
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
@@ -899,10 +1062,8 @@ final class LauncherGlassSession {
         SurfaceTexture input = inputSurfaceTexture;
         inputSurfaceTexture = null;
 
-        frameAvailable.set(false);
-        hasConsumedFrame = false;
-        consumedGeneration = -1L;
-        backdropPrepared = false;
+        invalidateBackdropFrameState();
+        clearWallpaperRequest();
 
         if (input != null) {
             try {
@@ -1102,6 +1263,9 @@ final class LauncherGlassSession {
         if (shuttingDown) return;
         MainHook.log(TAG + " shutdown " + debugLabel());
         shuttingDown = true;
+        rotationSettleSerial++;
+        rotationSettlePending = false;
+        rotationSettleTargetRotation = -1;
         View root = rootRef.get();
         removeRootObserver();
         if (root != null) {
