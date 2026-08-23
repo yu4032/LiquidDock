@@ -36,8 +36,13 @@ public class LauncherGlassSceneOwnershipRegressionTest {
 
     @Test public void existingBootstrapObserverStillRetriesAnAttachedHost() throws Exception {
         String hook = source("MiuixLauncherStaticGlassHook.java");
-        assertTrue(hook.contains("BOOTSTRAP_OBSERVERS.containsKey(host)"));
-        assertTrue(hook.contains("if (host.isAttachedToWindow()) scheduleBind(host, kind, glassConfig, 0)"));
+        assertFalse(hook.contains("if (BOOTSTRAP_OBSERVERS.containsKey(host)) return;"));
+        assertTrue(hook.contains(
+                "if (BOOTSTRAP_OBSERVERS.containsKey(host)) {\n"
+                        + "                if (host.isAttachedToWindow()) "
+                        + "scheduleBind(host, kind, glassConfig, 0);\n"
+                        + "                return;\n"
+                        + "            }"));
     }
 
     @Test public void failedWorkspaceSessionAcquireRetriesInsteadOfAbandoningHost() throws Exception {
