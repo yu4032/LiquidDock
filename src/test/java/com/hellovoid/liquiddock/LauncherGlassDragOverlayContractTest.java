@@ -35,7 +35,6 @@ public class LauncherGlassDragOverlayContractTest {
         assertTrue(Files.exists(path));
         String source = Files.readString(path);
 
-        assertTrue(source.contains("source.getLocationOnScreen"));
         assertTrue(source.contains("carrier.setX"));
         assertTrue(source.contains("carrier.setY"));
         assertTrue(source.contains("sink.requestLifecycleRefresh()"));
@@ -43,6 +42,21 @@ public class LauncherGlassDragOverlayContractTest {
                 source.contains("sink.syncFromMaterial()"));
         assertFalse(source.contains("requestSingleUpdate"));
         assertFalse(source.contains("pauseUpdates"));
+    }
+
+    @Test
+    public void dragCarrierUsesOneMappedHostSpaceGeometryWithoutReapplyingSourceTransform()
+            throws Exception {
+        String source = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+
+        assertTrue(source.contains("source.transformMatrixToGlobal"));
+        assertTrue(source.contains("host.transformMatrixToGlobal"));
+        assertTrue(source.contains("LauncherGlassDragCarrierGeometry.resolve"));
+        assertFalse(source.contains("carrier.setScaleX(source.getScaleX())"));
+        assertFalse(source.contains("carrier.setScaleY(source.getScaleY())"));
+        assertFalse(source.contains("carrier.setPivotX(source.getPivotX())"));
+        assertFalse(source.contains("carrier.setPivotY(source.getPivotY())"));
+        assertFalse(source.contains("carrier.setRotation(source.getRotation())"));
     }
 
     @Test
