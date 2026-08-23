@@ -30,17 +30,22 @@ public final class WidgetThemeHook {
             int installed = 0;
             for (Method method : RemoteViews.class.getDeclaredMethods()) {
                 if (!isInflationMethod(method)) continue;
-                HookUtil.hook(method, chain -> {
-                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                    if (args.length >= 2
-                            && args[0] instanceof Context
-                            && args[1] instanceof View
-                            && isInsideLauncherWidgetHost((View) args[1], hostClass)) {
-                        args[0] = createThemedContext((Context) args[0], mode);
-                    }
-                    return chain.proceed(args);
-                });
-                installed++;
+                try {
+                    HookUtil.hook(method, chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        if (args.length >= 2
+                                && args[0] instanceof Context
+                                && args[1] instanceof View
+                                && isInsideLauncherWidgetHost((View) args[1], hostClass)) {
+                            args[0] = createThemedContext((Context) args[0], mode);
+                        }
+                        return chain.proceed(args);
+                    });
+                    installed++;
+                } catch (Throwable methodError) {
+                    Api101Bridge.log("[DC] Widget theme method hook skipped: " + method,
+                            methodError);
+                }
             }
             Api101Bridge.log("[DC] Widget theme=" + mode + " RemoteViews hooks=" + installed);
         } catch (Throwable error) {
