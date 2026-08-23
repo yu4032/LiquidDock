@@ -584,8 +584,12 @@ final class LauncherGlassSession {
         if (shuttingDown) return;
         View root = rootRef.get();
         if (root == null) return;
-        removeRootObserver();
         ViewTreeObserver observer = root.getViewTreeObserver();
+        ViewTreeObserver current = rootObserver;
+        ViewTreeObserver.OnPreDrawListener currentListener = preDrawListener;
+        if (current == observer && currentListener != null && observer.isAlive()) return;
+
+        removeRootObserver();
         if (!observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
             syncSceneOnUiThread();
