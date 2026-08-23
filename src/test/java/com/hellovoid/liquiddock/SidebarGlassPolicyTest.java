@@ -5,21 +5,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.hellovoid.liquiddock.config.ConfigKey;
+import com.hellovoid.liquiddock.config.SidebarGlassConfig;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import org.junit.Test;
 
 /** Behavioural contract for the SecurityCenter sidebar liquid-glass feature gate. */
 public class SidebarGlassPolicyTest {
-    @Test public void sidebarConfigExistsAndDefaultsOff() throws Exception {
-        Class<?> sidebar = Class.forName("com.hellovoid.liquiddock.config.ConfigSchema$Sidebar");
-        Field enabledField = sidebar.getDeclaredField("ENABLED");
-        Object raw = enabledField.get(null);
-        assertTrue(raw instanceof ConfigKey<?>);
-        @SuppressWarnings("unchecked")
-        ConfigKey<Boolean> enabled = (ConfigKey<Boolean>) raw;
+    @Test public void sidebarConfigExistsAndDefaultsOff() {
+        ConfigKey<Boolean> enabled = SidebarGlassConfig.ENABLED;
         assertEquals("sidebar_liquid_glass", enabled.name());
         assertFalse(enabled.uiDefault());
         assertFalse(enabled.runtimeFallback());
