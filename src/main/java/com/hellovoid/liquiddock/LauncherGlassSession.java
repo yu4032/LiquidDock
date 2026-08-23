@@ -642,9 +642,6 @@ final class LauncherGlassSession {
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
-            boolean localChanged = node.syncFromMaterial();
-            staticChanged |= localChanged;
-            if (!rootGeometryChanged && !localChanged) continue;
             LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = state.geometry;
             if ((old == null) != (observed == null)
