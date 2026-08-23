@@ -45,9 +45,23 @@ jobs:
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - name: Materialize verified Glass Scene sources
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/folder-press-glow'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/folder-press-glow' && github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
+        env:
+          MATERIALIZE_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
+          set -euo pipefail
+          rm -rf /tmp/liquiddock-glass-main /tmp/liquiddock-glass-test
+          cp -a src/main /tmp/liquiddock-glass-main
+          cp -a src/test /tmp/liquiddock-glass-test
+
+          git fetch origin "${MATERIALIZE_BRANCH}" --depth=1
+          git checkout -B materialize "origin/${MATERIALIZE_BRANCH}"
+
+          rm -rf src/main src/test
+          cp -a /tmp/liquiddock-glass-main src/main
+          cp -a /tmp/liquiddock-glass-test src/test
+
           rm -f \
             .github/workflows/glass-scene-apply.yml \
             ci/glass_contract_compact.py \
@@ -59,9 +73,10 @@ jobs:
             ci/glass_perf_runner.py \
             ci/glass_scene_apply.py \
             ci/glass_scene_runner.py
+
           python3 - <<'PY'
           from pathlib import Path
-          Path('.github/workflows/api101-build.yml').write_text('''name: API101 migration build
+          workflow = """name: API101 migration build
 
           on:
             push:
@@ -97,15 +112,17 @@ jobs:
                     if-no-files-found: error
                     retention-days: 7
                 # Keep the same Gradle verification gates on main and active API101 development branches.
-          '''.replace('          ', ''))
+          """
+          Path('.github/workflows/api101-build.yml').write_text(workflow.replace('          ', ''))
           PY
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A src/main src/test .github/workflows/api101-build.yml .github/workflows/glass-scene-apply.yml ci
+          git add -A
           git diff --cached --check
           git status --short
           git commit -m 'feat: materialize glass scene architecture'
-          git push origin HEAD:${GITHUB_REF_NAME}
+          git push origin HEAD:"${MATERIALIZE_BRANCH}"
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug
