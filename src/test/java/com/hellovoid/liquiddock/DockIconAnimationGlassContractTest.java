@@ -77,6 +77,17 @@ public class DockIconAnimationGlassContractTest {
     }
 
     @Test
+    public void dockOwnerHandoffRedrawsWithoutWaitingForNewProducerFrame() throws Exception {
+        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+        String dockView = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+
+        assertTrue(compositor.contains("boolean refreshUiSceneIfNeeded"));
+        assertTrue(dockView.contains("boolean dockSceneChanged"));
+        assertTrue(dockView.contains("if (dockSceneChanged && hasConsumedFrame)"));
+        assertTrue(dockView.contains("drawLatestFrame(false)"));
+    }
+
+    @Test
     public void dockCompositorStillOwnsNoWorkspaceSessionResources() throws Exception {
         String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
         String dockView = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
