@@ -4,6 +4,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import org.junit.Test;
 
@@ -46,5 +48,19 @@ public class LauncherGlassRotationGenerationTest {
         assertTrue(requiresEndpointRollover(1, 3, false));
         assertFalse(requiresEndpointRollover(1, 1, false));
         assertTrue(requiresEndpointRollover(1, 1, true));
+    }
+
+    @Test public void inPlaceResizePulsesOnlyAfterBufferSizeIsApplied() throws Exception {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java"));
+        int start = source.indexOf("private boolean refreshProducerGeometryOnUi(View root)");
+        int end = source.indexOf("private boolean postRender(", start);
+        String method = source.substring(start, end);
+        int resize = method.indexOf("input.setDefaultBufferSize");
+        int mainPost = method.indexOf("mainHandler.post(() ->", resize);
+        int pulse = method.indexOf("Miuix307PassBlurBridge.requestSingleUpdate", resize);
+        assertTrue("resize must happen on render thread", resize >= 0);
+        assertTrue("pulse must be posted only after resize returns", mainPost > resize);
+        assertTrue("one-shot pulse must run after the resize barrier", pulse > mainPost);
     }
 }
