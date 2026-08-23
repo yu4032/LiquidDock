@@ -13,7 +13,6 @@ import android.widget.RelativeLayout;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.WeakHashMap;
 
 /**
@@ -105,8 +104,8 @@ final class SecurityCenterSidebarGlassHook {
             Method reset = helper.getDeclaredMethod("c", allApps, Context.class);
             reset.setAccessible(true);
             HookUtil.hook(reset, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
                 if (args.length > 0 && args[0] instanceof View) {
                     View material = (View) args[0];
                     material.post(() -> {
@@ -310,7 +309,11 @@ final class SecurityCenterSidebarGlassHook {
             if (current != null && current == rootRef.get()) {
                 DockLiquidGlassHostView host = hostRef.get();
                 if (host != null) syncHostGeometry(current, host);
-                suppressVendorMaterials(current);
+                View allApps = findDescendantByClass(
+                        current, SidebarGlassPolicy.ALL_APPS_LAYOUT_CLASS);
+                if (allApps != null && !transparentMaterialBackgrounds.containsKey(allApps)) {
+                    suppressVendorMaterial(allApps);
+                }
             }
             return true;
         };
