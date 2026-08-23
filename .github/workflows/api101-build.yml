@@ -27,6 +27,8 @@ jobs:
       - run: chmod +x ./gradlew
       - name: Apply Glass Scene production patch
         run: python3 ci/glass_scene_runner.py
+      - name: Apply Glass performance patch
+        run: python3 ci/glass_perf_apply.py
       - name: Capture patched sources
         if: always()
         run: |
