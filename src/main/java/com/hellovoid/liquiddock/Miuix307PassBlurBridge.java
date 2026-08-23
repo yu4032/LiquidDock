@@ -11,6 +11,10 @@ import java.util.Arrays;
  * Minimal HyperOS 3.0.307 bridge that asks SurfaceFlinger PassBlur to render into a caller-owned
  * producer Surface. Pixel ownership remains in GPU buffers; this class never captures or maps the
  * backdrop on the CPU.
+ *
+ * A bind is always continuous. The independent Dock relies on that historical behavior. Workspace
+ * sessions may explicitly pulse or pause their own binding after bind; those calls must never be
+ * inferred from the material-host hierarchy because Floating Dock window topology is vendor-specific.
  */
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
@@ -24,7 +28,6 @@ final class Miuix307PassBlurBridge {
         final Method setMiBlurWinExc;
         final float scale;
         final String rootName;
-        final boolean callerManagedUpdates;
         boolean bound = true;
         boolean updatesEnabled = true;
 
@@ -34,15 +37,13 @@ final class Miuix307PassBlurBridge {
                 Method setUpdateTextureFlag,
                 Method setMiBlurWinExc,
                 float scale,
-                String rootName,
-                boolean callerManagedUpdates) {
+                String rootName) {
             this.rootSurface = rootSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
             this.scale = scale;
             this.rootName = rootName;
-            this.callerManagedUpdates = callerManagedUpdates;
         }
     }
 
@@ -89,13 +90,8 @@ final class Miuix307PassBlurBridge {
                     "DockAssistantView"
             };
 
-            // LauncherGlassSession deliberately passes its stable Launcher root as materialHost and
-            // owns its own refresh cadence. Dock's zero-copy renderer passes the actual Dock material
-            // view instead, so its historical continuous producer remains completely independent.
-            boolean callerManagedUpdates = materialHost.getRootView() == materialHost;
-
             // Keep the calibration producer at full resolution. TextureView output is composited
-            // into the already-excluded Floating Dock root, so no child-layer exclusion is required.
+            // into the already-excluded root, so no child-layer exclusion is required.
             float scale = DEMO_SCALE;
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -111,17 +107,13 @@ final class Miuix307PassBlurBridge {
                     setUpdateTextureFlag,
                     setMiBlurWinExc,
                     scale,
-                    rootName,
-                    callerManagedUpdates);
-            if (binding.callerManagedUpdates) {
-                schedulePauseUpdates(materialHost, binding, INITIAL_UPDATE_FRAMES);
-            }
+                    rootName);
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + requestedScale
                     + " root=" + rootName
                     + " output=TextureView-in-root"
-                    + " mode=" + (callerManagedUpdates ? "caller-managed" : "continuous")
+                    + " mode=continuous-on-bind"
                     + " exclusions=" + Arrays.toString(exclusions));
             return binding;
         } catch (Throwable error) {
@@ -136,19 +128,24 @@ final class Miuix307PassBlurBridge {
         return bind(materialHost, producerSurface, requestedScale);
     }
 
+    /** Workspace-only demand pulse. Dock never calls this and therefore stays continuous. */
     static void requestSingleUpdate(Binding binding, View host) {
-        if (binding == null || host == null || !binding.bound || !binding.callerManagedUpdates) return;
+        if (binding == null || host == null || !binding.bound) return;
         setUpdatesEnabled(binding, true);
+        // A static Launcher may have no pending ViewRoot damage. Force one UI frame so the
+        // compositor has a reason to publish a fresh PassBlur buffer before the pulse is paused.
+        host.postInvalidateOnAnimation();
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
     }
 
+    /** Workspace-only idle suspension. Dock never calls this. */
     static void pauseUpdates(Binding binding) {
-        if (binding == null || !binding.callerManagedUpdates) return;
+        if (binding == null) return;
         setUpdatesEnabled(binding, false);
     }
 
     private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
-        if (host == null || binding == null || !binding.bound || !binding.callerManagedUpdates) return;
+        if (host == null || binding == null || !binding.bound) return;
         if (framesLeft <= 0) {
             pauseUpdates(binding);
             return;
