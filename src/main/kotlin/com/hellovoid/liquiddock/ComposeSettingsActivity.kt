@@ -42,6 +42,7 @@ import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.GridProfileConfig
 import com.hellovoid.liquiddock.config.PresetManager
+import com.hellovoid.liquiddock.config.SidebarGlassConfig
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -523,6 +524,13 @@ private fun LiquidPage(
             stringResource(R.string.liquid_enable_summary),
             masterEnabled,
         ) { liquidGlass = it }
+        BooleanSetting(
+            prefs,
+            SidebarGlassConfig.ENABLED,
+            "安全服务侧边栏玻璃",
+            "将游戏侧边栏与 All Apps 替换为共享 Prismal 液态玻璃；重启安全服务/Game Turbo 后生效",
+            masterEnabled && liquidGlass,
+        )
         BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
         IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && iconGlass)
         IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && iconGlass)
