@@ -54,7 +54,11 @@ final class DockGlassItemNode {
             float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
         View view = viewRef.get();
         if (view == null || ownershipRoot == null || outputInverse == null || style == null || !style.enabled
-                || !belongsTo(ownershipRoot) || !LauncherGlassVisibility.isVisible(view, ownershipRoot)
+                || !belongsTo(ownershipRoot)) return null;
+        // Launcher 4.50 moves Dock ShortcutIcon visuals into FloatingIconView2/Layer2 in the
+        // Launcher main window. The bottom Dock output must yield for that whole proxy lifetime.
+        if (DockGlassItemRegistry.isLaunchProxyActive(view)) return null;
+        if (!LauncherGlassVisibility.isVisible(view, ownershipRoot)
                 || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
         LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(view);
         float left = icon != null ? icon.left : 0f;

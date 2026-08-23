@@ -42,6 +42,7 @@ final class GlassRuntimeState {
         Runnable teardown = () -> {
             MiuixFolderGlassHook.onRuntimeGlassDisabled();
             MiuixLauncherStaticGlassHook.onRuntimeGlassDisabled();
+            DockIconLaunchProxyBridge.clear();
             DockGlassItemRegistry.clear();
             LauncherGlassDragOverlay.releaseAll();
             LauncherGlassSessionRegistry.shutdownAll();
