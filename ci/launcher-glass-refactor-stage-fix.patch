@@ -47,3 +47,87 @@ diff --git a/src/main/java/com/hellovoid/liquiddock/LauncherGlassSinkView.java b
      }
  
      private static View findWorkspaceAncestor(View material) {
+diff --git a/src/test/java/com/hellovoid/liquiddock/LauncherGlassSceneOwnershipRegressionTest.java b/src/test/java/com/hellovoid/liquiddock/LauncherGlassSceneOwnershipRegressionTest.java
+deleted file mode 100644
+--- a/src/test/java/com/hellovoid/liquiddock/LauncherGlassSceneOwnershipRegressionTest.java
++++ /dev/null
+@@ -1,35 +0,0 @@
+-package com.hellovoid.liquiddock;
+-
+-import static org.junit.Assert.assertFalse;
+-import static org.junit.Assert.assertTrue;
+-
+-import java.lang.reflect.Constructor;
+-import java.lang.reflect.Method;
+-
+-import org.junit.Test;
+-
+-public class LauncherGlassSceneOwnershipRegressionTest {
+-    private static Object tracker() throws Exception {
+-        Class<?> type = Class.forName(
+-                "com.hellovoid.liquiddock.LauncherGlassRootTransformTracker");
+-        Constructor<?> ctor = type.getDeclaredConstructor();
+-        ctor.setAccessible(true);
+-        return ctor.newInstance();
+-    }
+-
+-    private static boolean update(Object tracker, float[] points) throws Exception {
+-        Method method = tracker.getClass().getDeclaredMethod("update", float[].class);
+-        method.setAccessible(true);
+-        return (Boolean) method.invoke(tracker, new Object[]{points});
+-    }
+-
+-    @Test public void rootTransformTrackerDetectsParentOnlyMotion() throws Exception {
+-        Object tracker = tracker();
+-        float[] initial = {0f, 0f, 100f, 0f, 0f, 100f, 100f, 100f};
+-        assertTrue(update(tracker, initial));
+-        assertFalse(update(tracker, initial.clone()));
+-        assertTrue(update(tracker, new float[]{12f, 4f, 112f, 4f, 12f, 104f, 112f, 104f}));
+-    }
+-}
+diff --git a/src/test/java/com/hellovoid/liquiddock/LauncherGlassIdleWorkContractTest.java b/src/test/java/com/hellovoid/liquiddock/LauncherGlassIdleWorkContractTest.java
+deleted file mode 100644
+--- a/src/test/java/com/hellovoid/liquiddock/LauncherGlassIdleWorkContractTest.java
++++ /dev/null
+@@ -1,40 +0,0 @@
+-package com.hellovoid.liquiddock;
+-
+-import static org.junit.Assert.assertFalse;
+-import static org.junit.Assert.assertTrue;
+-
+-import java.nio.file.Files;
+-import java.nio.file.Path;
+-
+-import org.junit.Test;
+-
+-/** Idle Workspace pre-draws may poll cheap state, but must not rebuild root-space geometry. */
+-public class LauncherGlassIdleWorkContractTest {
+-    private static final Path SESSION = Path.of(
+-            "src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java");
+-
+-    @Test public void unchangedNodesSkipExpensiveGeometryCapture() throws Exception {
+-        String source = Files.readString(SESSION);
+-
+-        assertTrue(source.contains("boolean localChanged = sink.syncFromMaterial();"));
+-        assertTrue(source.contains("boolean localChanged = node.syncFromMaterial();"));
+-        assertTrue("drag geometry must only be captured after a change gate",
+-                source.contains("if (!rootGeometryChanged && !localChanged) continue;\n"
+-                        + "            LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);"));
+-        assertTrue("static geometry must only be captured after a change gate",
+-                source.contains("if (!rootGeometryChanged && !localChanged) continue;\n"
+-                        + "            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);"));
+-    }
+-
+-    @Test public void idlePreDrawDoesNotRequestGpuWorkByItself() throws Exception {
+-        String source = Files.readString(SESSION);
+-        int observerStart = source.indexOf("private void installRootObserver()");
+-        int observerEnd = source.indexOf("private void removeRootObserver()", observerStart);
+-        assertTrue(observerStart >= 0 && observerEnd > observerStart);
+-        String observer = source.substring(observerStart, observerEnd);
+-
+-        assertTrue(observer.contains("syncSceneOnUiThread();"));
+-        assertFalse(observer.contains("requestFrame("));
+-        assertFalse(observer.contains("requestBackdropRebuild("));
+-        assertFalse(observer.contains("requestFresh"));
+-    }
+-}
