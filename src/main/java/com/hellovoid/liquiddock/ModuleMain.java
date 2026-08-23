@@ -3,9 +3,9 @@ package com.hellovoid.liquiddock;
 import androidx.annotation.NonNull;
 
 import com.hellovoid.liquiddock.config.ConfigMigration;
-import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.liquiddock.config.GridProfileConfig;
 import com.hellovoid.liquiddock.config.LegacyConfigMigration;
+import com.hellovoid.liquiddock.config.SidebarGlassConfig;
 
 import io.github.libxposed.api.XposedModule;
 
@@ -35,8 +35,8 @@ public final class ModuleMain extends XposedModule {
 
             if (SECURITY_CENTER_PACKAGE.equals(packageName)) {
                 boolean sidebarEnabled = configReader.b(
-                        ConfigSchema.Sidebar.ENABLED.name(),
-                        ConfigSchema.Sidebar.ENABLED.runtimeFallback());
+                        SidebarGlassConfig.ENABLED.name(),
+                        SidebarGlassConfig.ENABLED.runtimeFallback());
                 boolean liquidEnabled = runtimeConfig.enabled && runtimeConfig.glass.enabled;
                 boolean installSidebar = SidebarGlassPolicy.shouldInstall(
                         packageName, liquidEnabled, sidebarEnabled);
