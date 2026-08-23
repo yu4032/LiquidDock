@@ -8,20 +8,19 @@ import java.nio.file.Path;
 import static org.junit.Assert.assertTrue;
 
 public class WidgetThemeSettingsContractTest {
-    @Test public void widgetThemeModeUsesExistingRemotePreferenceSyncAndIsUserSelectable()
-            throws Exception {
-        Path widgetPrefsPath = Path.of("src/main/res/xml/preferences_widget_theme.xml");
-        assertTrue("widget theme preference resource must exist", Files.exists(widgetPrefsPath));
-        String preferences = Files.readString(widgetPrefsPath);
+    @Test public void composeSettingsExposeWidgetThemeModeAndRemoteSync() throws Exception {
+        String compose = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
         String arrays = Files.readString(Path.of("src/main/res/values/arrays.xml"));
         String app = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/LiquidDockApp.java"));
         String module = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
 
-        assertTrue(preferences.contains("android:key=\"widget_theme_mode\""));
-        assertTrue(preferences.contains("@array/widget_theme_entries"));
-        assertTrue(preferences.contains("@array/widget_theme_values"));
+        assertTrue(compose.contains("widget_theme_mode"));
+        assertTrue(compose.contains("R.array.widget_theme_entries"));
+        assertTrue(compose.contains("R.array.widget_theme_values"));
+        assertTrue(compose.contains("小部件外观"));
         assertTrue(arrays.contains("<item>auto</item>"));
         assertTrue(arrays.contains("<item>light</item>"));
         assertTrue(arrays.contains("<item>dark</item>"));
@@ -30,12 +29,12 @@ public class WidgetThemeSettingsContractTest {
         assertTrue(module.contains("configReader.s(\"widget_theme_mode\", \"auto\")"));
     }
 
-    @Test public void changingWidgetThemeRestartsLauncherAfterPersistence() throws Exception {
-        String settings = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/SettingsActivity.java"));
+    @Test public void composeThemeChangeRestartsLauncherAfterPersistence() throws Exception {
+        String compose = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
-        assertTrue(settings.contains("addPreferencesFromResource(R.xml.preferences_widget_theme)"));
-        assertTrue(settings.contains("findPreference(\"widget_theme_mode\")"));
-        assertTrue(settings.contains("activity.restartLauncher()"));
+        assertTrue(compose.contains("onChanged: (String) -> Unit = {}"));
+        assertTrue(compose.contains("prefs.edit().putString(key, next).apply()"));
+        assertTrue(compose.contains("activity.restartLauncher()"));
     }
 }
