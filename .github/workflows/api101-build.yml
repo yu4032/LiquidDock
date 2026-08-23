@@ -31,6 +31,8 @@ jobs:
         run: python3 ci/glass_perf_runner.py
       - name: Apply idle Workspace and continuous Dock fix
         run: python3 ci/glass_idle_dock_fix.py
+      - name: Apply drag component-style handoff fix
+        run: python3 ci/glass_drag_style_fix.py
       - name: Update Scheme A regression contracts
         run: python3 ci/glass_contract_compact.py
       - name: Repair generated contract quoting

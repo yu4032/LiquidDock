@@ -12,9 +12,8 @@ for name in [
         raise RuntimeError(f"{name}: generated quote pattern count={text.count(bad)}")
     path.write_text(text.replace(bad, good, 1))
 
-# The compact method rewriter intentionally replaces a whole final @Test block.  In this legacy
-# test class a shared helper follows the final test, so restore that helper if the rewrite consumed
-# it.  Keep the helper byte-for-byte equivalent to the original contract implementation.
+# The compact method rewriter intentionally replaces a whole final @Test block. In this legacy
+# class a shared helper follows that test, so restore the original helper if the rewrite consumed it.
 path = ROOT / "src/test/java/com/hellovoid/liquiddock/Miuix307GlassCustomizationContractTest.java"
 text = path.read_text()
 helper = '''
@@ -34,4 +33,14 @@ if "private static int occurrences(String text, String needle)" not in text:
         raise RuntimeError("Miuix307GlassCustomizationContractTest: class close not found")
     text = text[:close] + helper + text[close:]
     path.write_text(text)
-print("generated contract quote/helper repair applied")
+
+# Dock item nodes may mention the parent TextureView in documentation without owning one.  Assert
+# actual resource ownership constructs rather than matching that harmless word in a comment.
+path = ROOT / "src/test/java/com/hellovoid/liquiddock/DockGlassSceneContractTest.java"
+text = path.read_text()
+bad_dock = 'assertFalse(n.contains("TextureView")||n.contains("EGLSurface")||n.contains("LauncherGlassStaticNode"));'
+good_dock = 'assertFalse(n.contains("extends TextureView")||n.contains("new TextureView")||n.contains("EGLSurface")||n.contains("LauncherGlassStaticNode"));'
+if text.count(bad_dock) != 1:
+    raise RuntimeError(f"DockGlassSceneContractTest: broad ownership assertion count={text.count(bad_dock)}")
+path.write_text(text.replace(bad_dock, good_dock, 1))
+print("generated Scheme A contract repairs applied")
