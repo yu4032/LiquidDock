@@ -13,9 +13,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,89 +25,12 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
-      - name: Apply Glass Scene production patch
-        run: python3 ci/glass_scene_runner.py
-      - name: Apply Glass performance patch
-        run: python3 ci/glass_perf_runner.py
-      - name: Apply idle Workspace and continuous Dock fix
-        run: python3 ci/glass_idle_dock_fix.py
-      - name: Apply drag component-style handoff fix
-        run: python3 ci/glass_drag_style_fix.py
-      - name: Remove duplicate drag material sync
-        run: python3 ci/glass_drag_perf_fix.py
-      - name: Update Scheme A regression contracts
-        run: python3 ci/glass_contract_compact.py
-      - name: Repair generated contract quoting
-        run: python3 ci/glass_contract_escape_fix.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
-      - name: Materialize verified Glass Scene sources
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/folder-press-glow' && github.event.pull_request.head.repo.full_name == github.repository
-        shell: bash
-        env:
-          MATERIALIZE_BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          FILES=(
-            src/main/java/com/hellovoid/liquiddock/DockGlassItemNode.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassSessionRegistry.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassSinkView.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassStaticLayer.java
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassStaticNode.java
-            src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java
-            src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java
-            src/main/java/com/hellovoid/liquiddock/Miuix307ZeroCopyRenderer.java
-            src/main/java/com/hellovoid/liquiddock/MiuixFolderGlassHook.java
-            src/main/java/com/hellovoid/liquiddock/MiuixLauncherDragOverlayHook.java
-            src/main/java/com/hellovoid/liquiddock/MiuixLauncherStaticGlassHook.java
-            src/main/java/com/hellovoid/liquiddock/config/ConfigMigration.java
-            src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java
-            src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
-            src/main/res/xml/preferences.xml
-            src/test/java/com/hellovoid/liquiddock/DockGlassSceneContractTest.java
-            src/test/java/com/hellovoid/liquiddock/FolderGlassToggleContractTest.java
-            src/test/java/com/hellovoid/liquiddock/LauncherGlassAlignmentAndRadiusTest.java
-            src/test/java/com/hellovoid/liquiddock/LauncherGlassBackdropCacheContractTest.java
-            src/test/java/com/hellovoid/liquiddock/LauncherGlassDragStyleContractTest.java
-            src/test/java/com/hellovoid/liquiddock/Miuix307GlassCustomizationContractTest.java
-            src/test/java/com/hellovoid/liquiddock/Miuix307PassBlurGpuDemoTest.java
-            src/test/java/com/hellovoid/liquiddock/Miuix307PrismalParityRepairTest.java
-            src/test/java/com/hellovoid/liquiddock/Miuix307TextureViewPassBlurCalibrationTest.java
-            src/test/java/com/hellovoid/liquiddock/Miuix307TextureViewStrongRefractionTest.java
-            src/test/java/com/hellovoid/liquiddock/PrismalModuleBoundaryContractTest.java
-            src/test/java/com/hellovoid/liquiddock/WorkstationFullscreenProducerRecoveryContractTest.java
-            src/test/java/com/hellovoid/liquiddock/config/ConfigCodecTest.java
-          )
-
-          STAGE=/tmp/liquiddock-glass-materialize
-          rm -rf "${STAGE}"
-          mkdir -p "${STAGE}"
-          for path in "${FILES[@]}"; do
-            mkdir -p "${STAGE}/$(dirname "${path}")"
-            cp -a "${path}" "${STAGE}/${path}"
-          done
-
-          git fetch origin "${MATERIALIZE_BRANCH}" --depth=1
-          git checkout -B materialize "origin/${MATERIALIZE_BRANCH}"
-
-          for path in "${FILES[@]}"; do
-            mkdir -p "$(dirname "${path}")"
-            cp -a "${STAGE}/${path}" "${path}"
-          done
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- "${FILES[@]}"
-          git diff --cached --check
-          git status --short
-          git commit -m 'feat: materialize glass scene architecture'
-          git push origin HEAD:"${MATERIALIZE_BRANCH}"
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
+      # Keep the same Gradle verification gates on main and active API101 development branches.
