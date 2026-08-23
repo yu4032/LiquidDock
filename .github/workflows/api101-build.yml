@@ -13,6 +13,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,26 +42,73 @@ jobs:
         run: python3 ci/glass_contract_compact.py
       - name: Repair generated contract quoting
         run: python3 ci/glass_contract_escape_fix.py
-      - name: Capture patched sources
-        if: always()
-        run: |
-          mkdir -p build/glass-scene-verified
-          git diff -- src/main > build/glass-scene-verified/glass-scene.patch
-          cp -a src/main build/glass-scene-verified/src-main
-          cp -a src/test build/glass-scene-verified/src-test
-      - name: Upload patched sources
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiquidDock-glass-scene-patched-source
-          path: build/glass-scene-verified
-          retention-days: 7
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
+      - name: Materialize verified Glass Scene sources
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/folder-press-glow'
+        shell: bash
+        run: |
+          rm -f \
+            .github/workflows/glass-scene-apply.yml \
+            ci/glass_contract_compact.py \
+            ci/glass_contract_escape_fix.py \
+            ci/glass_drag_perf_fix.py \
+            ci/glass_drag_style_fix.py \
+            ci/glass_idle_dock_fix.py \
+            ci/glass_perf_apply.py \
+            ci/glass_perf_runner.py \
+            ci/glass_scene_apply.py \
+            ci/glass_scene_runner.py
+          python3 - <<'PY'
+          from pathlib import Path
+          Path('.github/workflows/api101-build.yml').write_text('''name: API101 migration build
+
+          on:
+            push:
+              branches:
+                - main
+                - api101-migration
+                - refactor/modular-architecture
+                - 'fix/**'
+                - 'feat/**'
+                - 'demo/**'
+            pull_request:
+              branches: [ main ]
+            workflow_dispatch:
+
+          jobs:
+            build:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-java@v4
+                  with:
+                    distribution: temurin
+                    java-version: '17'
+                    cache: gradle
+                - uses: gradle/actions/setup-gradle@v4
+                - run: chmod +x ./gradlew
+                - run: ./gradlew testDebugUnitTest --stacktrace
+                - run: ./gradlew assembleDebug --stacktrace
+                - uses: actions/upload-artifact@v4
+                  with:
+                    name: LiquidDock-api101-debug
+                    path: build/outputs/apk/debug/*.apk
+                    if-no-files-found: error
+                    retention-days: 7
+                # Keep the same Gradle verification gates on main and active API101 development branches.
+          '''.replace('          ', ''))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A src/main src/test .github/workflows/api101-build.yml .github/workflows/glass-scene-apply.yml ci
+          git diff --cached --check
+          git status --short
+          git commit -m 'feat: materialize glass scene architecture'
+          git push origin HEAD:${GITHUB_REF_NAME}
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
-      # Keep the same Gradle verification gates on main and active API101 development branches.
