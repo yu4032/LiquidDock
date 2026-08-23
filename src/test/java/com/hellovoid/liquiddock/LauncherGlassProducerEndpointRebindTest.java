@@ -73,4 +73,16 @@ public class LauncherGlassProducerEndpointRebindTest {
         assertFalse(rollover.contains("new Surface("));
         assertTrue(rollover.contains("createInputProducer()"));
     }
+
+    @Test public void shutdownReusesEndpointReleaseHelperInsteadOfDuplicatingCleanup()
+            throws Exception {
+        String source = sessionSource();
+        String releaseGl = method(source,
+                "private void releaseGl()",
+                "private ProducerGeometry readSurfaceGeometry(");
+        assertTrue(releaseGl.contains("releaseInputProducerEndpointOnRenderThread()"));
+        assertFalse(releaseGl.contains("Surface producer = inputProducerSurface"));
+        assertFalse(releaseGl.contains("SurfaceTexture input = inputSurfaceTexture"));
+        assertFalse(releaseGl.contains("GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0)"));
+    }
 }
