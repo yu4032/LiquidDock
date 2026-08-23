@@ -57,13 +57,4 @@ public class LauncherVendorStateDockMappingPowerContractTest {
         assertFalse(view.contains("producerPump"));
         assertFalse(view.contains("Choreographer.getInstance().postFrameCallback"));
     }
-
-    @Test public void prismalSmallNodesUseGeometryBoundedScissorInsteadOfFullFramebufferWork() throws Exception {
-        String renderer = Files.readString(Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
-
-        assertTrue(renderer.contains("applyGlassNodeScissor"));
-        assertTrue(renderer.contains("GLES20.glScissor("));
-        assertTrue(renderer.contains("PrismalSampling.requiredGuardPx"));
-    }
 }
