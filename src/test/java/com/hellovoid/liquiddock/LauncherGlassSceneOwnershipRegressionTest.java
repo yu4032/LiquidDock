@@ -79,7 +79,8 @@ public class LauncherGlassSceneOwnershipRegressionTest {
         assertTrue(hook.contains("\"setAnimTargetVisibility\""));
         assertTrue(hook.contains("scheduleWorkspaceRecoveryFromHost"));
         assertTrue(hook.contains("anim-target-visible"));
-        assertTrue(node.contains("beginLaunchProxy"));
+        assertFalse(node.contains("beginLaunchProxy"));
+        assertTrue(node.contains("updateLaunchProxyGeometry"));
         assertTrue(node.contains("endLaunchProxy"));
         assertTrue(node.contains("LauncherGlassVisualOwnerState"));
         assertFalse(node.contains("suppressedByLaunchProxy"));
