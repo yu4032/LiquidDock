@@ -37,18 +37,15 @@ public class LauncherGlassAppReturnProxyGeometryTest {
         return method.invoke(target, args);
     }
 
-    @Test public void launchProxyOwnsGeometryUntilVendorReturnsSourceView() throws Exception {
+    @Test public void finalProxyRectAcquiresOwnerWithoutVisibilityBegin() throws Exception {
         Object state = state();
         assertFalse((Boolean) call(state, "isLaunchProxyActive", new Class<?>[]{}));
-        assertNull(call(state, "copyLaunchProxyRect", new Class<?>[]{}));
-
-        assertTrue((Boolean) call(state, "beginLaunchProxy", new Class<?>[]{}));
-        assertTrue((Boolean) call(state, "isLaunchProxyActive", new Class<?>[]{}));
         assertNull(call(state, "copyLaunchProxyRect", new Class<?>[]{}));
 
         float[] first = new float[]{20f, 30f, 220f, 230f};
         assertTrue((Boolean) call(state, "updateLaunchProxyRect",
                 new Class<?>[]{float[].class}, new Object[]{first}));
+        assertTrue((Boolean) call(state, "isLaunchProxyActive", new Class<?>[]{}));
         assertArrayEquals(first, (float[]) call(state, "copyLaunchProxyRect", new Class<?>[]{}), 0f);
 
         assertFalse((Boolean) call(state, "updateLaunchProxyRect",
@@ -63,32 +60,43 @@ public class LauncherGlassAppReturnProxyGeometryTest {
         assertNull(call(state, "copyLaunchProxyRect", new Class<?>[]{}));
     }
 
-    @Test public void staticNodeUsesProxyRectInsteadOfSourceViewWhileProxyOwnsVisual() throws Exception {
+    @Test public void staticNodeAcquiresProxyOwnerFromGeometryAndCanReleaseIt() throws Exception {
         String node = source("LauncherGlassStaticNode.java");
         assertTrue(node.contains("LauncherGlassVisualOwnerState"));
-        assertTrue(node.contains("beginLaunchProxy"));
         assertTrue(node.contains("updateLaunchProxyGeometry"));
         assertTrue(node.contains("endLaunchProxy"));
         assertTrue(node.contains("copyLaunchProxyRect"));
         assertTrue(node.contains("postInvalidateOnAnimation"));
+        assertFalse(node.contains("void beginLaunchProxy()"));
         assertFalse(node.contains("suppressedByLaunchProxy"));
     }
 
-    @Test public void windowElementPublishesItsAlreadyCorrectedCurrentRectOnlyForHomeReturn()
-            throws Exception {
+    @Test public void finalFloatingConsumersPublishTheirAlreadyCorrectedRect() throws Exception {
         String hook = source("MiuixLauncherStaticGlassHook.java");
-        assertTrue(hook.contains("com.miui.home.recents.anim.WindowElement"));
-        assertTrue(hook.contains("\"updateTaskView\""));
-        assertTrue(hook.contains("isClosingAnimRunning"));
-        assertTrue(hook.contains("getLauncherTargetView"));
+        assertTrue(hook.contains("com.miui.home.recents.views.FloatingIconView2"));
+        assertTrue(hook.contains("com.miui.home.recents.views.FloatingIconLayer2"));
+        assertTrue(hook.contains("\"update\""));
+        assertTrue(hook.contains("getAnimTarget"));
         assertTrue(hook.contains("updateLaunchProxyGeometry"));
-        assertTrue(hook.contains("RectF.class, float.class"));
+        assertTrue(hook.contains("RectF.class, RectF.class"));
+        assertTrue(hook.contains("boolean.class, boolean.class, boolean.class"));
+        assertTrue(hook.contains("float.class, boolean.class"));
+        assertTrue(hook.contains("proxy owner acquired"));
     }
 
-    @Test public void vendorVisibilityOnlyStartsAndEndsOwnerHandoff() throws Exception {
+    @Test public void intermediateWindowElementGeometryTapIsRetired() throws Exception {
         String hook = source("MiuixLauncherStaticGlassHook.java");
-        assertTrue(hook.contains("node.beginLaunchProxy()"));
+        assertFalse(hook.contains("com.miui.home.recents.anim.WindowElement"));
+        assertFalse(hook.contains("\"updateTaskView\""));
+        assertFalse(hook.contains("isClosingAnimRunning"));
+        assertFalse(hook.contains("getLauncherTargetView"));
+    }
+
+    @Test public void vendorVisibilityOnlyReleasesOwnerHandoff() throws Exception {
+        String hook = source("MiuixLauncherStaticGlassHook.java");
         assertTrue(hook.contains("node.endLaunchProxy()"));
+        assertTrue(hook.contains("anim-target-visible"));
+        assertFalse(hook.contains("node.beginLaunchProxy()"));
         assertFalse(hook.contains("setSuppressedByLaunchProxy"));
     }
 }
