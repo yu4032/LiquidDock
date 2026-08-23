@@ -33,6 +33,10 @@ jobs:
           test -f ci/launcher-glass-refactor-stage-message.txt
           git apply --recount --check ci/launcher-glass-refactor-stage.patch
           git apply --recount ci/launcher-glass-refactor-stage.patch
+          if [[ -f ci/launcher-glass-refactor-stage-fix.patch ]]; then
+            git apply --recount --check ci/launcher-glass-refactor-stage-fix.patch
+            git apply --recount ci/launcher-glass-refactor-stage-fix.patch
+          fi
           git diff --check
           ./gradlew testDebugUnitTest --stacktrace
           ./gradlew assembleDebug --stacktrace
@@ -44,11 +48,13 @@ jobs:
           set -euo pipefail
           message="$(cat ci/launcher-glass-refactor-stage-message.txt)"
           rm ci/launcher-glass-refactor-stage.patch ci/launcher-glass-refactor-stage-message.txt
+          rm -f ci/launcher-glass-refactor-stage-fix.patch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A -- src/main/java/com/hellovoid/liquiddock \
                        src/test/java/com/hellovoid/liquiddock \
                        ci/launcher-glass-refactor-stage.patch \
+                       ci/launcher-glass-refactor-stage-fix.patch \
                        ci/launcher-glass-refactor-stage-message.txt
           git commit -m "$message"
           git push origin HEAD:refactor/launcher-glass-state-geometry
