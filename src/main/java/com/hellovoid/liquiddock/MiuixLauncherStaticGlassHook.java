@@ -87,7 +87,6 @@ final class MiuixLauncherStaticGlassHook {
     private static void observeHost(
             View host, LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
         if (host == null) return;
-        if (kind == LauncherGlassDragState.Kind.ICON) DockGlassItemRegistry.register(host);
         synchronized (BOOTSTRAP_OBSERVERS) {
             if (BOOTSTRAP_OBSERVERS.containsKey(host)) return;
             View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {

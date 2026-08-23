@@ -26,11 +26,40 @@ public class WorkstationFullscreenProducerRecoveryContractTest {
     }
 
     @Test public void producerRebindDropsStaleFrameworkBindingAndWaitsForANewOesFrame() throws Exception {
- String r=Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java")),v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")); assertTrue(r.contains("gpuBackdrop.replaceProducerGeneration(reason)")); assertTrue(v.contains("void replaceProducerGeneration(String reason)")&&v.contains("Miuix307PassBlurBridge.unbind(stale)")&&v.contains("hasConsumedFrame = false")&&v.contains("frameAvailable.set(false)"));
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+
+        assertTrue(renderer.contains("static void rebindProducer(String reason)"));
+        assertTrue(renderer.contains("gpuBackdrop.rebindProducer(reason);"));
+
+        assertTrue(view.contains("void rebindProducer(String reason)"));
+        assertTrue(view.contains("Miuix307PassBlurBridge.Binding stale = binding;"));
+        assertTrue(view.contains("binding = null;"));
+        assertTrue(view.contains("Miuix307PassBlurBridge.unbind(stale);"));
+        assertTrue(view.contains("hasConsumedFrame = false;"));
+        assertTrue(view.contains("frameAvailable.set(false);"));
+        assertTrue(view.contains("activationExhausted = false;"));
+        assertTrue(view.contains("bindProducerWhenReady(0)"));
     }
 
     @Test public void producerRebindNeverReusesAnAlreadyParceledBufferQueueProducer() throws Exception {
- String v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")); assertTrue(v.contains("recreateInputProducer")&&v.contains("releaseInputProducer(staleProducer, staleInput)")&&v.contains("producer.release()")&&v.contains("input.release()")&&v.contains("glDeleteTextures")&&v.contains("createInputProducer()")&&v.contains("PassBlur input producer was not replaced"));
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+
+        assertTrue(view.contains("private volatile boolean producerRebindPending;"));
+        assertTrue(view.contains("if (producerRebindPending) return;"));
+        assertTrue(view.contains("producerRebindPending = true;"));
+        assertTrue(view.contains("renderHandler.post(() -> recreateInputProducer(reason));"));
+        assertTrue(view.contains("private void recreateInputProducer(String reason)"));
+        assertTrue(view.contains("Surface staleProducer = inputProducerSurface;"));
+        assertTrue(view.contains("SurfaceTexture staleInput = inputSurfaceTexture;"));
+        assertTrue(view.contains("staleProducer.release();"));
+        assertTrue(view.contains("staleInput.release();"));
+        assertTrue(view.contains("GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);"));
+        assertTrue(view.contains("createInputProducer();"));
+        assertTrue(view.contains("inputProducerSurface == staleProducer"));
+        assertTrue(view.contains("inputSurfaceTexture == staleInput"));
+        assertTrue(view.contains("PassBlur input producer was not replaced"));
+        assertTrue(view.contains("post(() -> bindProducerWhenReady(0));"));
     }
 
     @Test public void rootSurfaceReplacementSelfHealsInsteadOfSilentlyKeepingTheOldBinding() throws Exception {

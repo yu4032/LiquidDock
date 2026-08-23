@@ -95,8 +95,23 @@ public class Miuix307PrismalParityRepairTest {
                 shaders.contains("return clamp(transformed.xy"));
     }
 
-    @Test public void portablePrismalOwnsHalfResolutionTwoPassGaussianAndClearsTargets() throws Exception {
- String v=Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java")),r=Files.readString(Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java")); assertTrue(v.contains("renderNormalizationPass")&&v.contains("prismalRenderer.prepareBackdrop(")&&v.contains("dockCompositor.drawFrame(")); assertTrue(r.contains("BLUR_FBO_SCALE = 0.5f")&&r.contains("blurFramebufferH")&&r.contains("blurFramebufferV")&&r.contains("glClear(GLES20.GL_COLOR_BUFFER_BIT)"));
+    @Test
+    public void portablePrismalOwnsHalfResolutionTwoPassGaussianAndClearsTargets() throws Exception {
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String renderer = Files.readString(Path.of(
+                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
+        String blurH = Files.readString(Path.of("prismal/src/main/res/raw/prismal_blur_h.glsl"));
+        String blurV = Files.readString(Path.of("prismal/src/main/res/raw/prismal_blur_v.glsl"));
+
+        assertTrue(view.contains("rawFramebuffer") && view.contains("renderNormalizationPass"));
+        assertTrue(view.contains("prismalRenderer.render("));
+        assertTrue(renderer.contains("BLUR_FBO_SCALE = 0.5f"));
+        assertTrue(renderer.contains("blurFramebufferH") && renderer.contains("blurFramebufferV"));
+        assertTrue(renderer.contains("sourceFramebuffer") && renderer.contains("outputFramebuffer"));
+        assertTrue(renderer.contains("glClearColor(0f, 0f, 0f, 0f)"));
+        assertTrue(renderer.contains("GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)"));
+        assertTrue(blurH.contains("for (float i = -15.0; i <= 15.0; i += 1.0)"));
+        assertTrue(blurV.contains("for (float i = -15.0; i <= 15.0; i += 1.0)"));
     }
 
     @Test

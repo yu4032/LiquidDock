@@ -69,8 +69,17 @@ public class Miuix307TextureViewStrongRefractionTest {
                 || source.contains("glReadPixels"));
     }
 
-    @Test public void portableRendererKeepsFramebufferAndGlassDomainsSeparateForPixelStableOptics() throws Exception {
- String v=view(),r=Files.readString(Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java")); assertTrue(v.contains("createPrismalGeometry(mapping)")&&v.contains("prismalRenderer.prepareBackdrop(")&&v.contains("dockCompositor.drawFrame(")); assertTrue(r.contains("u_resolution")&&r.contains("u_mousePos")&&r.contains("u_glassSize"));
+    @Test
+    public void portableRendererKeepsFramebufferAndGlassDomainsSeparateForPixelStableOptics() throws Exception {
+        String source = view();
+        String renderer = Files.readString(Path.of(
+                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
+        assertTrue(source.contains("PrismalGeometry prismalGeometry = createPrismalGeometry(mapping)")
+                && source.contains("prismalRenderer.render("));
+        assertTrue(source.contains("mapping.dockUvWidth * mapping.sampleWidth")
+                && source.contains("mapping.dockUvHeight * mapping.sampleHeight"));
+        assertTrue(renderer.contains("uniform2f(\"u_resolution\", width, height)"));
+        assertTrue(renderer.contains("uniform2f(\"u_mousePos\", g.centerX, height - g.centerY)"));
+        assertTrue(renderer.contains("uniform2f(\"u_glassSize\", g.glassWidth, g.glassHeight)"));
     }
-
 }

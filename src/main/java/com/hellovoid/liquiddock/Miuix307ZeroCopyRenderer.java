@@ -80,7 +80,7 @@ final class Miuix307ZeroCopyRenderer {
 
     static void rebindProducer(String reason) {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop != null) gpuBackdrop.replaceProducerGeneration(reason);
+        if (gpuBackdrop != null) gpuBackdrop.rebindProducer(reason);
     }
 
     static void clear() {
