@@ -4,9 +4,11 @@ import android.graphics.Color;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.widget.RelativeLayout;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Method;
+import java.lang.reflect.Constructor;
+import java.util.WeakHashMap;
 
 /**
  * SecurityCenter/Game Turbo sidebar liquid-glass bridge.
@@ -26,6 +28,7 @@ final class SecurityCenterSidebarGlassHook {
     private static final float SQUIRCLE_CP = .58f;
 
     private static boolean installed;
+    private static final WeakHashMap<ViewGroup, Boolean> trackedRoots = new WeakHashMap<>();
     private static WeakReference<ViewGroup> rootRef = new WeakReference<>(null);
     private static WeakReference<DockLiquidGlassHostView> hostRef = new WeakReference<>(null);
     private static WeakReference<ViewTreeObserver> layoutObserverRef = new WeakReference<>(null);
@@ -38,19 +41,21 @@ final class SecurityCenterSidebarGlassHook {
         if (classLoader == null || config == null) return false;
         try {
             Class<?> turbo = Class.forName(TURBO_LAYOUT, false, classLoader);
-            Method attached = HookUtil.findMethodExact(
-                    turbo, "onAttachedToWindow", new Class<?>[0]);
-            HookUtil.hook(attached, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                Object owner = chain.getThisObject();
-                if (owner instanceof ViewGroup && GlassRuntimeState.isEnabled()) {
-                    ViewGroup root = (ViewGroup) owner;
-                    root.post(() -> bindFirstLiveSidebar(root, config));
-                }
-                return result;
-            });
+            Constructor<?>[] constructors = turbo.getDeclaredConstructors();
+            if (constructors.length == 0) return false;
+            for (Constructor<?> constructor : constructors) {
+                HookUtil.hook(constructor, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof ViewGroup && GlassRuntimeState.isEnabled()) {
+                        trackTurboLayout((ViewGroup) owner, config);
+                    }
+                    return result;
+                });
+            }
             installed = true;
-            MainHook.log(TAG + " TurboLayout attach hook installed");
+            MainHook.log(TAG + " TurboLayout constructor hooks installed count="
+                    + constructors.length);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " install failed: " + error);
@@ -58,12 +63,33 @@ final class SecurityCenterSidebarGlassHook {
         }
     }
 
+    private static void trackTurboLayout(ViewGroup root, LiquidDockConfig config) {
+        synchronized (trackedRoots) {
+            if (trackedRoots.put(root, Boolean.TRUE) != null) return;
+        }
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) {
+                if (!GlassRuntimeState.isEnabled()) return;
+                root.post(() -> bindFirstLiveSidebar(root, config));
+            }
+
+            @Override public void onViewDetachedFromWindow(View view) {
+                if (rootRef.get() != root) return;
+                clearObservation();
+                rootRef = new WeakReference<>(null);
+                hostRef = new WeakReference<>(null);
+                // The TextureView shuts its EGL/producer resources down from its own detach.
+            }
+        });
+        if (root.isAttachedToWindow()) root.post(() -> bindFirstLiveSidebar(root, config));
+    }
+
     private static void bindFirstLiveSidebar(ViewGroup root, LiquidDockConfig config) {
         if (!GlassRuntimeState.isEnabled() || root == null || !root.isAttachedToWindow()) return;
 
         ViewGroup current = rootRef.get();
         if (current != null && current != root && current.isAttachedToWindow()) {
-            // SecurityCenter can construct an assistant TurboLayout too.  The main sidebar is
+            // SecurityCenter can construct an assistant TurboLayout too. The main sidebar is
             // created first on the verified build; keep one producer bound to that live owner.
             return;
         }
@@ -83,7 +109,7 @@ final class SecurityCenterSidebarGlassHook {
         host.setZ(GLASS_Z);
         float radius = DEFAULT_RADIUS_DP * root.getResources().getDisplayMetrics().density;
         host.setGeometry(radius, false, SQUIRCLE_CP);
-        root.addView(host, 0, new ViewGroup.LayoutParams(
+        root.addView(host, 0, new RelativeLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         boolean rendererInstalled = Miuix307ZeroCopyRenderer.install(
@@ -127,7 +153,7 @@ final class SecurityCenterSidebarGlassHook {
     }
 
     /**
-     * Remove only the two vendor material bodies that LiquidDock replaces.  Internal All Apps
+     * Remove only the two vendor material bodies that LiquidDock replaces. Internal All Apps
      * cards/search pills are intentionally untouched.
      */
     private static void suppressVendorMaterials(View view) {
