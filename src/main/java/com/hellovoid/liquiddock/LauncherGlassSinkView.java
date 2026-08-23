@@ -26,9 +26,11 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private static final long PRESS_OUT_DURATION_MS = 160L;
 
     private final WeakReference<View> materialRef;
-    private final LauncherGlassScrollMotionTracker workspaceScrollMotion =
-            new LauncherGlassScrollMotionTracker();
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
+    private Object workspaceScrollOwner;
+    private int workspaceScrollX;
+    private int workspaceScrollY;
+    private boolean workspaceScrollInitialized;
     private volatile LauncherGlassSession session;
     private final LiquidDockConfig.Glass glassConfig;
     private volatile float nativeCornerRadiusPx;
@@ -272,9 +274,29 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
             workspace = findWorkspaceAncestor(material);
             workspaceRef = new WeakReference<>(workspace);
         }
-        if (workspace == null) return workspaceScrollMotion.update(null, 0, 0);
-        return workspaceScrollMotion.update(
-                workspace, workspace.getScrollX(), workspace.getScrollY());
+        if (workspace == null) return updateWorkspaceScrollMotion(null, 0, 0);
+        return updateWorkspaceScrollMotion(workspace, workspace.getScrollX(), workspace.getScrollY());
+    }
+
+    private boolean updateWorkspaceScrollMotion(Object owner, int scrollX, int scrollY) {
+        if (owner == null) {
+            workspaceScrollOwner = null;
+            workspaceScrollX = 0;
+            workspaceScrollY = 0;
+            workspaceScrollInitialized = false;
+            return false;
+        }
+        if (!workspaceScrollInitialized || workspaceScrollOwner != owner) {
+            workspaceScrollOwner = owner;
+            workspaceScrollX = scrollX;
+            workspaceScrollY = scrollY;
+            workspaceScrollInitialized = true;
+            return false;
+        }
+        boolean moved = workspaceScrollX != scrollX || workspaceScrollY != scrollY;
+        workspaceScrollX = scrollX;
+        workspaceScrollY = scrollY;
+        return moved;
     }
 
     private static View findWorkspaceAncestor(View material) {

@@ -55,7 +55,7 @@ final class MiuixLauncherStaticGlassHook {
         installed = any;
         if (any) {
             installWorkspacePageReconcileHook(classLoader, glassConfig);
-            installWorkspaceResumeRecoveryHooks(classLoader, glassConfig);
+            installWorkspaceResumeReconcileHook(classLoader, glassConfig);
             if (glassConfig.iconEnabled) {
                 installShortcutIconVisualOwnerHook(classLoader, glassConfig);
                 installFloatingProxyVisualGeometryHooks(classLoader);
@@ -129,10 +129,8 @@ final class MiuixLauncherStaticGlassHook {
                         if (!LauncherGlassHierarchy.isWorkspace(host)) return result;
                         int visibility = ((Number) args[0]).intValue();
                         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
-                        if (visibility == View.VISIBLE) {
-                            if (node != null) node.endLaunchProxy();
-                            scheduleWorkspaceRecoveryFromHost(
-                                    host, glassConfig, "anim-target-visible");
+                        if (visibility == View.VISIBLE && node != null) {
+                            node.endLaunchProxy();
                         }
                         return result;
                     }, int.class);
@@ -224,71 +222,23 @@ final class MiuixLauncherStaticGlassHook {
         }
     }
 
-    private static void scheduleWorkspaceRecoveryFromHost(
-            View host, LiquidDockConfig.Glass glassConfig, String reason) {
-        if (!GlassRuntimeState.isEnabled() || host == null) return;
-        View workspace = findWorkspaceAncestor(host);
-        if (workspace == null) return;
-        workspace.postOnAnimation(() -> {
-            if (!GlassRuntimeState.isEnabled() || !workspace.isAttachedToWindow()) return;
-            reconcileCurrentWorkspacePage(workspace, glassConfig);
-            View root = LauncherGlassSessionRegistry.resolveStableRoot(workspace);
-            if (root != null) {
-                // Consume geometryDirty/root-space owner changes before the one-shot producer pulse.
-                root.postInvalidateOnAnimation();
-                LauncherGlassSceneController.requestFreshForRoot(root);
-            }
-            MainHook.log(TAG + " Workspace visual owner recovery reason=" + reason);
-        });
-    }
-
-    private static View findWorkspaceAncestor(View host) {
-        View cursor = host;
-        while (cursor != null) {
-            Class<?> type = cursor.getClass();
-            if ("com.miui.home.launcher.Workspace".equals(type.getName())
-                    || "Workspace".equals(type.getSimpleName())) return cursor;
-            android.view.ViewParent parent = cursor.getParent();
-            cursor = parent instanceof View ? (View) parent : null;
-        }
-        return null;
-    }
-
-    private static void installWorkspaceResumeRecoveryHooks(
+    private static void installWorkspaceResumeReconcileHook(
             ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) {
         try {
             HookUtil.hookMethod(classLoader, "com.miui.home.launcher.Launcher", "onResume",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        scheduleWorkspaceHomeRecovery(
-                                chain.getThisObject(), glassConfig, "launcher-onResume");
+                        scheduleWorkspaceResumeReconcile(chain.getThisObject(), glassConfig);
                         return result;
                     });
-            MainHook.log(TAG + " Launcher HOME resume recovery hook installed");
+            MainHook.log(TAG + " Launcher HOME resume reconcile hook installed");
         } catch (Throwable error) {
-            MainHook.log(TAG + " Launcher HOME resume recovery hook unavailable: " + error);
-        }
-
-        try {
-            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.Launcher",
-                    "restoreMingouDesktopIconBlurSourceIfNeeded",
-                    chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        scheduleWorkspaceHomeRecovery(
-                                chain.getThisObject(), glassConfig, "mingou-source-restored");
-                        return result;
-                    });
-            MainHook.log(TAG + " Mingou Workspace source restore recovery hook installed");
-        } catch (Throwable error) {
-            // Optional across Launcher versions. Generic ancestor visibility tracking remains the
-            // fallback and Launcher.onResume still provides a stable HOME lifecycle boundary.
-            MainHook.log(TAG + " Mingou Workspace source restore recovery hook unavailable: "
-                    + error);
+            MainHook.log(TAG + " Launcher HOME resume reconcile hook unavailable: " + error);
         }
     }
 
-    private static void scheduleWorkspaceHomeRecovery(
-            Object launcher, LiquidDockConfig.Glass glassConfig, String reason) {
+    private static void scheduleWorkspaceResumeReconcile(
+            Object launcher, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || launcher == null) return;
         Object value = HookUtil.invoke(launcher, "getWorkspace");
         if (!(value instanceof View)) return;
@@ -296,9 +246,10 @@ final class MiuixLauncherStaticGlassHook {
         workspace.postOnAnimation(() -> {
             if (!GlassRuntimeState.isEnabled() || !workspace.isAttachedToWindow()) return;
             reconcileCurrentWorkspacePage(workspace, glassConfig);
-            View root = LauncherGlassSessionRegistry.resolveStableRoot(workspace);
-            if (root != null) LauncherGlassSceneController.requestFreshForRoot(root);
-            MainHook.log(TAG + " Workspace HOME recovery reason=" + reason);
+            // Resume is not a source invalidation. The invalidate only schedules normal pre-draw
+            // geometry reconciliation; Surface/wallpaper/rotation freshness stays with its owner.
+            workspace.postInvalidateOnAnimation();
+            MainHook.log(TAG + " Workspace HOME resume reconciled");
         });
     }
 
