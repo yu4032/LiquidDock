@@ -31,8 +31,8 @@ jobs:
             exit 0
           fi
           test -f ci/launcher-glass-refactor-stage-message.txt
-          git apply --check ci/launcher-glass-refactor-stage.patch
-          git apply ci/launcher-glass-refactor-stage.patch
+          git apply --recount --check ci/launcher-glass-refactor-stage.patch
+          git apply --recount ci/launcher-glass-refactor-stage.patch
           git diff --check
           ./gradlew testDebugUnitTest --stacktrace
           ./gradlew assembleDebug --stacktrace
