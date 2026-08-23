@@ -10,7 +10,9 @@ import static org.junit.Assert.assertTrue;
 public class WidgetThemeSettingsContractTest {
     @Test public void widgetThemeModeUsesExistingRemotePreferenceSyncAndIsUserSelectable()
             throws Exception {
-        String preferences = Files.readString(Path.of("src/main/res/xml/preferences.xml"));
+        Path widgetPrefsPath = Path.of("src/main/res/xml/preferences_widget_theme.xml");
+        assertTrue("widget theme preference resource must exist", Files.exists(widgetPrefsPath));
+        String preferences = Files.readString(widgetPrefsPath);
         String arrays = Files.readString(Path.of("src/main/res/values/arrays.xml"));
         String app = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/LiquidDockApp.java"));
@@ -32,6 +34,7 @@ public class WidgetThemeSettingsContractTest {
         String settings = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/SettingsActivity.java"));
 
+        assertTrue(settings.contains("addPreferencesFromResource(R.xml.preferences_widget_theme)"));
         assertTrue(settings.contains("findPreference(\"widget_theme_mode\")"));
         assertTrue(settings.contains("activity.restartLauncher()"));
     }
