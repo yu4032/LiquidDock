@@ -37,13 +37,16 @@ public class DockGlassSceneContractTest {
         assertFalse(hook.contains("DockGlassItemRegistry.register"));
     }
 
-    @Test public void dockKeepsItsOwnPassBlurBindingAndNeverUsesWorkspaceSceneGeneration() throws Exception {
+    @Test public void dockKeepsItsOwnContinuousPassBlurBindingAndNeverUsesWorkspaceGeneration() throws Exception {
         String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
-        assertTrue(bridge.contains("mode=\" + (callerManagedUpdates ? \"caller-managed\" : \"continuous\")"));
+        assertTrue(bridge.contains("mode=continuous-on-bind"));
+        assertFalse(bridge.contains("callerManagedUpdates"));
         assertTrue(view.contains("Miuix307PassBlurBridge.Binding binding"));
         assertFalse(view.contains("sceneGeneration"));
         assertFalse(view.contains("requestFreshBackdrop"));
+        assertFalse(view.contains("pauseUpdates("));
+        assertFalse(view.contains("requestSingleUpdate("));
     }
 }
