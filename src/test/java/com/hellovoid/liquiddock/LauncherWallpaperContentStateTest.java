@@ -67,6 +67,14 @@ public class LauncherWallpaperContentStateTest {
         assertEquals(second, generation(state));
     }
 
+    @Test public void candidateWithoutPendingWallpaperChangeDoesNotRequestPulse() throws Exception {
+        Object state = state();
+        long generation = generation(state);
+        Object candidate = call(state, "onCandidateBoundary",
+                new Class<?>[]{long.class}, generation);
+        assertFalse(pulseRequested(candidate));
+    }
+
     @Test public void candidateBoundaryRequestsAtMostOnePulsePerGeneration() throws Exception {
         Object state = state();
         long generation = (Long) call(state, "onWallpaperChanged", new Class<?>[0]);
