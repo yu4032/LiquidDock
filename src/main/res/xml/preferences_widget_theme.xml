@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="Widgets">
+        <ListPreference
+            android:key="widget_theme_mode"
+            android:title="Widget Appearance"
+            android:summary="%s · restarts MIUI Home when changed"
+            android:entries="@array/widget_theme_entries"
+            android:entryValues="@array/widget_theme_values"
+            android:defaultValue="auto" />
+    </PreferenceCategory>
+</PreferenceScreen>
