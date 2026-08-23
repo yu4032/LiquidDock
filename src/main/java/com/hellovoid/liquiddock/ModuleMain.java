@@ -41,8 +41,10 @@ public final class ModuleMain extends XposedModule {
                 boolean installSidebar = SidebarGlassPolicy.shouldInstall(
                         packageName, liquidEnabled, sidebarEnabled);
                 MainHook.debugLogging = runtimeConfig.debugLog;
-                GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
-                        installSidebar);
+                // Sidebar material replacement is intentionally process-start scoped for the
+                // first experiment.  A half-live teardown would clear Prismal while leaving the
+                // vendor backgrounds suppressed, so GUI changes explicitly require a restart.
+                GlassRuntimeState.initialize(null, installSidebar);
                 if (installSidebar) {
                     SecurityCenterSidebarGlassHook.install(classLoader, runtimeConfig);
                 } else {
