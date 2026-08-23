@@ -31,4 +31,14 @@ public class DockGlassSceneContractTest {
  assertTrue(c.contains("refreshUiSceneIfNeeded")&&c.contains("DockGlassSceneSnapshot latestScene()")); assertTrue(v.contains("dockCompositor.refreshUiSceneIfNeeded(")&&v.contains("dockCompositor.latestScene()")); String d=c.substring(c.indexOf("int drawFrame(")); assertFalse(d.contains("transformMatrixToGlobal")||d.contains(".capture(")||d.contains("snapshotForRoot"));
     }
 
+    @Test public void dockContinuousProducerSamplesSceneInsteadOfForcingWallpaperOnlyRootExclusion() throws Exception {
+        String bridge = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java"));
+
+        assertTrue(bridge.contains("callerManagedUpdates ? workspaceExclusions : dockExclusions"));
+        assertTrue(bridge.contains("String[] workspaceExclusions"));
+        assertTrue(bridge.contains("String[] dockExclusions"));
+        assertFalse(bridge.contains("String[] exclusions = new String[]{\n                    rootName,"));
+    }
+
 }
