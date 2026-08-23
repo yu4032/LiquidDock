@@ -57,4 +57,13 @@ public class LauncherVendorStateDockMappingPowerContractTest {
         assertFalse(view.contains("producerPump"));
         assertFalse(view.contains("Choreographer.getInstance().postFrameCallback"));
     }
+
+    @Test public void workspaceBindingCannotStayContinuousIfCoveragePredatesProducerBind() throws Exception {
+        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(controller.contains("isCoveredForRoot"));
+        assertTrue(session.contains("LauncherGlassSceneController.isCoveredForRoot(root)"));
+        assertTrue(session.contains("Miuix307PassBlurBridge.pauseUpdates(next)"));
+    }
 }
