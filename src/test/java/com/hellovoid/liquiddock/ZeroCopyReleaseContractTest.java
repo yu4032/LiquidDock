@@ -27,7 +27,7 @@ public class ZeroCopyReleaseContractTest {
                 .map(String::trim)
                 .filter(line -> !line.isEmpty())
                 .toList();
-        assertEquals(List.of("com.miui.home"), packages);
+        assertEquals(List.of("com.miui.home", "com.miui.securitycenter"), packages);
 
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
         assertFalse(module.contains("com.android.systemui"));
