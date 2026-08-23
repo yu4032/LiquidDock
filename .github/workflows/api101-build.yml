@@ -29,6 +29,7 @@ jobs:
         run: |
           python3 ci/vendor_state_dock_fix.py
           python3 ci/workspace_covered_bind_fix.py
+          python3 ci/vendor_snapshot_power_fix.py
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
