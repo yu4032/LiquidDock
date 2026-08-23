@@ -17,9 +17,9 @@ public class DockRealtimeProducerContractTest {
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
         int bindStart = bridge.indexOf("static Binding bind(View materialHost, Surface producerSurface");
-        int overloadStart = bridge.indexOf("/** Compatibility overload", bindStart);
-        assertTrue(bindStart >= 0 && overloadStart > bindStart);
-        String bind = bridge.substring(bindStart, overloadStart);
+        int nextMethod = bridge.indexOf("static void requestSingleUpdate(", bindStart);
+        assertTrue(bindStart >= 0 && nextMethod > bindStart);
+        String bind = bridge.substring(bindStart, nextMethod);
         assertTrue(bind.contains("setUpdateTextureFlag.invoke("));
         assertTrue(bind.contains("Boolean.TRUE"));
         assertTrue(bridge.contains("mode=continuous-on-bind"));

@@ -37,9 +37,9 @@ public class DockContinuousLocalDomainContractTest {
     @Test public void dockBindDoesNotInheritWorkspacePausePolicy() throws Exception {
         String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
         int bindStart = bridge.indexOf("static Binding bind(View materialHost, Surface producerSurface");
-        int overloadStart = bridge.indexOf("/** Compatibility overload", bindStart);
-        assertTrue(bindStart >= 0 && overloadStart > bindStart);
-        String bind = bridge.substring(bindStart, overloadStart);
+        int nextMethod = bridge.indexOf("static void requestSingleUpdate(", bindStart);
+        assertTrue(bindStart >= 0 && nextMethod > bindStart);
+        String bind = bridge.substring(bindStart, nextMethod);
 
         assertTrue(bind.contains("setUpdateTextureFlag.invoke("));
         assertTrue(bind.contains("Boolean.TRUE"));

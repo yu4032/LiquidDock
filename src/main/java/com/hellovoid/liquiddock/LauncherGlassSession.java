@@ -60,6 +60,9 @@ final class LauncherGlassSession {
         final int bufferHeight;
         final int configRotation;
         final SurfaceControl rootSurface;
+        final int viewRootIdentity;
+        final int surfaceSequenceId;
+        final int rootLayerId;
         final int insetLeft;
         final int insetTop;
         final int insetRight;
@@ -69,6 +72,7 @@ final class LauncherGlassSession {
         ProducerGeometry(
                 int surfaceWidth, int surfaceHeight, int bufferWidth, int bufferHeight,
                 int configRotation, SurfaceControl rootSurface,
+                int viewRootIdentity, int surfaceSequenceId, int rootLayerId,
                 int insetLeft, int insetTop, int insetRight, int insetBottom) {
             this.surfaceWidth = surfaceWidth;
             this.surfaceHeight = surfaceHeight;
@@ -76,6 +80,9 @@ final class LauncherGlassSession {
             this.bufferHeight = bufferHeight;
             this.configRotation = configRotation;
             this.rootSurface = rootSurface;
+            this.viewRootIdentity = viewRootIdentity;
+            this.surfaceSequenceId = surfaceSequenceId;
+            this.rootLayerId = rootLayerId;
             this.insetLeft = insetLeft;
             this.insetTop = insetTop;
             this.insetRight = insetRight;
@@ -305,12 +312,74 @@ final class LauncherGlassSession {
     void requestFreshBackdrop(long generation) {
         if (shuttingDown || generation < sceneGeneration) return;
         invalidateGeneration(generation);
-        requestFrame(true);
+        // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced
+        // during App -> HOME. Revalidate on the UI thread before pulsing PassBlur so a fresh
+        // request can never target a dead producer binding.
+        mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
     }
 
     void requestSceneRedraw() {
         if (shuttingDown) return;
         requestFrame(false);
+    }
+
+    private void recoverFreshBackdropOnUi(long generation, int attempt) {
+        if (shuttingDown || generation != sceneGeneration) return;
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) {
+            retryFreshBackdropRecovery(generation, attempt);
+            return;
+        }
+
+        // ViewRootImpl replacement does not necessarily detach the stable DecorView, so the old
+        // ViewTreeObserver can die without the root attach listener firing. Reinstall it here.
+        installRootObserver();
+        ProducerGeometry geometry = readSurfaceGeometry(root);
+        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
+            retryFreshBackdropRecovery(generation, attempt);
+            return;
+        }
+
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (current != null && (!current.rootSurface.isValid()
+                || !sameProducerSurfaceGeneration(current, geometry))) {
+            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+            MainHook.log(TAG + " producer Surface generation changed old=" + current.rootName
+                    + " oldLayerId=" + current.rootLayerId
+                    + " new=" + geometry.rootSurface
+                    + " newLayerId=" + geometry.rootLayerId
+                    + " oldSurfaceSeq=" + current.surfaceSequenceId
+                    + " newSurfaceSeq=" + geometry.surfaceSequenceId);
+            rebindProducer();
+            return;
+        }
+
+        boolean producerChanged = refreshProducerGeometryOnUi(root);
+        if (producerChanged || generation != sceneGeneration) return;
+
+        current = binding;
+        if (current == null) {
+            // Startup may reach the fresh boundary before EGL/input creation; a Surface rebind can
+            // also already be pending. Start exactly one existing bootstrap/rebind path.
+            if (inputSurfaceTexture == null || inputProducerSurface == null) requestFrame(true);
+            else bindProducerWhenReady(0);
+            return;
+        }
+        if (!current.bound || !current.rootSurface.isValid()
+                || !sameProducerSurfaceGeneration(current, geometry)) {
+            rebindProducer();
+            return;
+        }
+        requestFrame(true);
+    }
+
+    private void retryFreshBackdropRecovery(long generation, int attempt) {
+        if (shuttingDown || generation != sceneGeneration
+                || attempt >= MAX_BIND_RETRY_FRAMES) return;
+        View root = rootRef.get();
+        if (root == null) return;
+        root.postOnAnimation(() -> recoverFreshBackdropOnUi(generation, attempt + 1));
     }
 
     void requestDragRedraw() {
@@ -466,7 +535,6 @@ final class LauncherGlassSession {
         if (shuttingDown) return;
         View root = rootRef.get();
         if (root == null) return;
-        LauncherGlassSceneController.syncRecentsForRoot(root);
         int nextWidth = root.getWidth();
         int nextHeight = root.getHeight();
         boolean rootGeometryChanged = nextWidth > 0 && nextHeight > 0
@@ -527,7 +595,9 @@ final class LauncherGlassSession {
 
     private boolean refreshProducerGeometryOnUi(View root) {
         ProducerGeometry geometry = readSurfaceGeometry(root);
-        if (geometry == null) return false;
+        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
+            return false;
+        }
         if (!LauncherGlassProducerGeometryGate.matchesRoot(
                 rootWidth, rootHeight, geometry.surfaceWidth, geometry.surfaceHeight,
                 geometry.insetLeft, geometry.insetTop, geometry.insetRight, geometry.insetBottom)) {
@@ -541,25 +611,39 @@ final class LauncherGlassSession {
         }
         int nextRotation = geometry.configRotation;
         LauncherGlassSurfaceContentRect nextContentRect = geometry.contentRect;
-        boolean changed = nextRotation != configRotation
+        boolean geometryChanged = nextRotation != configRotation
                 || geometry.bufferWidth != boundBufferWidth
                 || geometry.bufferHeight != boundBufferHeight
                 || !nextContentRect.sameAs(contentRect);
+        Miuix307PassBlurBridge.Binding current = binding;
+        boolean surfaceChanged = current != null && (!current.rootSurface.isValid()
+                || !sameProducerSurfaceGeneration(current, geometry));
+        boolean changed = geometryChanged || surfaceChanged;
         configRotation = nextRotation;
         if (changed) {
             frameAvailable.set(false);
             hasConsumedFrame = false;
             consumedGeneration = -1L;
+            backdropPrepared = false;
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
             if (nextGeneration > 0L) sceneGeneration = nextGeneration;
             boundBufferWidth = geometry.bufferWidth;
             boundBufferHeight = geometry.bufferHeight;
             contentRect = nextContentRect;
-            MainHook.log(TAG + " producer geometry surface="
-                    + geometry.surfaceWidth + "x" + geometry.surfaceHeight
-                    + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
-                    + " insets=" + geometry.insetLeft + "," + geometry.insetTop
-                    + "," + geometry.insetRight + "," + geometry.insetBottom);
+            if (surfaceChanged) {
+                MainHook.log(TAG + " producer Surface generation changed old=" + current.rootName
+                        + " oldLayerId=" + current.rootLayerId
+                        + " new=" + geometry.rootSurface
+                        + " newLayerId=" + geometry.rootLayerId
+                        + " oldSurfaceSeq=" + current.surfaceSequenceId
+                        + " newSurfaceSeq=" + geometry.surfaceSequenceId);
+            } else {
+                MainHook.log(TAG + " producer geometry surface="
+                        + geometry.surfaceWidth + "x" + geometry.surfaceHeight
+                        + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
+                        + " insets=" + geometry.insetLeft + "," + geometry.insetTop
+                        + "," + geometry.insetRight + "," + geometry.insetBottom);
+            }
             SurfaceTexture input = inputSurfaceTexture;
             if (input != null && geometry.bufferWidth > 0 && geometry.bufferHeight > 0) {
                 postRender(() -> {
@@ -569,13 +653,11 @@ final class LauncherGlassSession {
                 }, null);
             }
         }
-        Miuix307PassBlurBridge.Binding current = binding;
-        if (current != null && (!current.rootSurface.isValid()
-                || !isSameSurface(current.rootSurface, geometry.rootSurface))) {
+        if (surfaceChanged) {
             rebindProducer();
             return true;
         }
-        if (changed && current != null && current.bound) {
+        if (geometryChanged && current != null && current.bound) {
             Miuix307PassBlurBridge.requestSingleUpdate(current, root);
         }
         return changed;
@@ -767,6 +849,11 @@ final class LauncherGlassSession {
             return;
         }
         binding = next;
+        if (LauncherGlassSceneController.isCoveredForRoot(root)) {
+            // Coverage can predate the asynchronous producer bind. Do not leave a hidden
+            // Workspace producer in the bridge's default continuous-on-bind state.
+            Miuix307PassBlurBridge.pauseUpdates(next);
+        }
         configRotation = geometry.configRotation;
         boundBufferWidth = geometry.bufferWidth;
         boundBufferHeight = geometry.bufferHeight;
@@ -791,7 +878,54 @@ final class LauncherGlassSession {
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
         backdropPrepared = false;
-        mainHandler.post(() -> bindProducerWhenReady(0));
+        rollInputProducerForRebind();
+    }
+
+    private void rollInputProducerForRebind() {
+        if (shuttingDown) return;
+        postRender(() -> {
+            if (shuttingDown) return;
+            makePbufferCurrent();
+            releaseInputProducerEndpointOnRenderThread();
+            if (shuttingDown) return;
+            MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
+            createInputProducer();
+        }, null);
+    }
+
+    private void releaseInputProducerEndpointOnRenderThread() {
+        Surface producer = inputProducerSurface;
+        inputProducerSurface = null;
+        SurfaceTexture input = inputSurfaceTexture;
+        inputSurfaceTexture = null;
+
+        frameAvailable.set(false);
+        hasConsumedFrame = false;
+        consumedGeneration = -1L;
+        backdropPrepared = false;
+
+        if (input != null) {
+            try {
+                input.setOnFrameAvailableListener(null);
+            } catch (Throwable ignored) {
+            }
+        }
+        if (producer != null) {
+            try {
+                producer.release();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (input != null) {
+            try {
+                input.release();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (oesTexture != 0) {
+            GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
+            oesTexture = 0;
+        }
     }
 
     private void renderScene(boolean rebuildBackdrop, boolean renderStatic, boolean renderDrag) {
@@ -1003,21 +1137,10 @@ final class LauncherGlassSession {
             try { prismalRenderer.close(); } catch (Throwable ignored) {}
             prismalRenderer = null;
         }
-        backdropPrepared = false;
         if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
         if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
         normalizeProgram = compositeProgram = 0;
-        if (oesTexture != 0) GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
-        oesTexture = 0;
-        Surface producer = inputProducerSurface;
-        inputProducerSurface = null;
-        if (producer != null) producer.release();
-        SurfaceTexture input = inputSurfaceTexture;
-        inputSurfaceTexture = null;
-        if (input != null) {
-            try { input.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
-            input.release();
-        }
+        releaseInputProducerEndpointOnRenderThread();
         if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
             try { EGL14.eglDestroySurface(eglDisplay, eglPbufferSurface); } catch (Throwable ignored) {}
         }
@@ -1058,8 +1181,12 @@ final class LauncherGlassSession {
             Object value = method.invoke(viewRoot);
             SurfaceControl surfaceControl = value instanceof SurfaceControl
                     ? (SurfaceControl) value : null;
+            int viewRootIdentity = System.identityHashCode(viewRoot);
+            int surfaceSequenceId = Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot);
+            int rootLayerId = Miuix307PassBlurBridge.surfaceLayerId(surfaceControl);
             return new ProducerGeometry(surfaceWidth, surfaceHeight,
                     bufferWidth, bufferHeight, rotation, surfaceControl,
+                    viewRootIdentity, surfaceSequenceId, rootLayerId,
                     surfaceInsets.left, surfaceInsets.top,
                     surfaceInsets.right, surfaceInsets.bottom);
         } catch (Throwable ignored) {
@@ -1109,6 +1236,29 @@ final class LauncherGlassSession {
             catch (NoSuchFieldException ignored) { current = current.getSuperclass(); }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    private static boolean sameProducerSurfaceGeneration(
+            Miuix307PassBlurBridge.Binding current, ProducerGeometry geometry) {
+        if (current == null || geometry == null) return false;
+        // ViewRoot replacement is a generation change even if WMS happens to reuse a layer id.
+        if (current.viewRootIdentity != 0 && geometry.viewRootIdentity != 0
+                && current.viewRootIdentity != geometry.viewRootIdentity) {
+            return false;
+        }
+        boolean comparedImmutableGeneration = false;
+        if (current.rootLayerId >= 0 && geometry.rootLayerId >= 0) {
+            comparedImmutableGeneration = true;
+            if (current.rootLayerId != geometry.rootLayerId) return false;
+        }
+        if (current.surfaceSequenceId >= 0 && geometry.surfaceSequenceId >= 0) {
+            comparedImmutableGeneration = true;
+            if (current.surfaceSequenceId != geometry.surfaceSequenceId) return false;
+        }
+        if (comparedImmutableGeneration) return true;
+        // Last-resort compatibility fallback only. It is intentionally not the primary key because
+        // ViewRootImpl can mutate the same SurfaceControl wrapper to a new native BLAST layer.
+        return isSameSurface(current.rootSurface, geometry.rootSurface);
     }
 
     private static boolean isSameSurface(SurfaceControl first, SurfaceControl second) {

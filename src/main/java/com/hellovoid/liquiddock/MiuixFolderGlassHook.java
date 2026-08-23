@@ -36,6 +36,7 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
+    private static boolean folderStatusDispatcherInstalled;
     private static boolean installed;
 
     private MiuixFolderGlassHook() {}
@@ -47,6 +48,7 @@ final class MiuixFolderGlassHook {
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
+        folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
             Method setIconImageView = HookUtil.findMethodExact(itemIcon, "setIconImageView",
@@ -116,6 +118,28 @@ final class MiuixFolderGlassHook {
         if (name.endsWith(".FolderIcon") || name.contains("FolderIcon1x1")
                 || name.contains("FolderIcon2x2")) {
             attachFromFolderIcon((ViewGroup) view, glassConfig);
+        }
+    }
+
+    private static boolean installFolderStatusDispatcherHooks(ClassLoader classLoader) {
+        String dispatcher =
+                "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
+        try {
+            HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
+                LauncherGlassSceneController.setFolderCoveredForAll(true);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                LauncherGlassSceneController.setFolderCoveredForAll(false);
+                return result;
+            });
+            MainHook.log(TAG + " semantic FolderStatus dispatcher hooks installed");
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " semantic FolderStatus dispatcher unavailable; using FolderIcon fallback: "
+                    + error);
+            return false;
         }
     }
 
@@ -210,7 +234,9 @@ final class MiuixFolderGlassHook {
 
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
-        LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
+        if (!folderStatusDispatcherInstalled) {
+            LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
+        }
         if (!suppressed) {
             LauncherGlassStaticNode sink = resolveOwnerSink(owner);
             if (sink != null) sink.setSuppressedByFolderOpen(false);
@@ -239,7 +265,9 @@ final class MiuixFolderGlassHook {
     private static void restoreOpenedFolderOwner() {
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
-        if (owner != null) LauncherGlassSceneController.setWorkspaceCovered(owner, false);
+        if (owner != null && !folderStatusDispatcherInstalled) {
+            LauncherGlassSceneController.setWorkspaceCovered(owner, false);
+        }
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
         if (sink != null) sink.setSuppressedByFolderOpen(false);

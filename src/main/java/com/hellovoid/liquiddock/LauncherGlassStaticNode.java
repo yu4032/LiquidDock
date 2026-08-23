@@ -25,6 +25,12 @@ final class LauncherGlassStaticNode {
     private final LauncherGlassNodeKind nodeKind;
     private final LauncherGlassScrollMotionTracker workspaceScrollMotion =
             new LauncherGlassScrollMotionTracker();
+    private final LauncherGlassEffectiveVisibilityTracker effectiveVisibilityTracker =
+            new LauncherGlassEffectiveVisibilityTracker();
+    private final LauncherGlassRootTransformTracker rootTransformMotion =
+            new LauncherGlassRootTransformTracker();
+    private final LauncherGlassVisualOwnerState visualOwnerState =
+            new LauncherGlassVisualOwnerState();
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
     private volatile LauncherGlassSession session;
     private final LiquidDockConfig.Glass glassConfig;
@@ -184,6 +190,45 @@ final class LauncherGlassStaticNode {
         requestLifecycleRefresh();
     }
 
+    boolean holdLaunchProxyHidden() {
+        if (disposed) return false;
+        boolean wasActive = visualOwnerState.isLaunchProxyActive();
+        if (!visualOwnerState.holdLaunchProxyHidden()) return false;
+        if (!wasActive) resetPressInteraction(false);
+        geometryDirty = true;
+        invalidateVisualOwnerGeometry();
+        LauncherGlassSession live = session;
+        if (live != null) live.requestStaticRedraw();
+        return true;
+    }
+
+    boolean updateLaunchProxyGeometry(float left, float top, float right, float bottom) {
+        if (disposed) return false;
+        boolean wasActive = visualOwnerState.isLaunchProxyActive();
+        boolean hadGeometry = visualOwnerState.copyLaunchProxyRect() != null;
+        if (!visualOwnerState.updateLaunchProxyRect(
+                new float[]{left, top, right, bottom})) return false;
+        if (!wasActive) resetPressInteraction(false);
+        geometryDirty = true;
+        invalidateVisualOwnerGeometry();
+        LauncherGlassSession live = session;
+        if (live != null) live.requestStaticRedraw();
+        return !hadGeometry;
+    }
+
+    void endLaunchProxy() {
+        if (disposed || !visualOwnerState.endLaunchProxy()) return;
+        geometryDirty = true;
+        invalidateVisualOwnerGeometry();
+        requestLifecycleRefresh();
+    }
+
+    private void invalidateVisualOwnerGeometry() {
+        View material = materialRef.get();
+        View root = material != null ? material.getRootView() : null;
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
     void setNativeCornerRadiusPx(float cornerRadiusPx) {
         if (disposed || !Float.isFinite(cornerRadiusPx)) return;
         float next = Math.max(0f, cornerRadiusPx);
@@ -258,6 +303,10 @@ final class LauncherGlassStaticNode {
         boolean changed = geometryDirty;
         geometryDirty = false;
         changed |= consumeWorkspaceScrollMotion();
+        changed |= consumeRootSpaceTransformMotion(material);
+        View sceneRoot = material.getRootView();
+        changed |= effectiveVisibilityTracker.update(
+                LauncherGlassVisibility.effectiveAlpha(material, sceneRoot));
         Object parent = material.getParent();
         if (lastParent != parent) { lastParent = parent; changed = true; }
         int left = material.getLeft();
@@ -296,6 +345,32 @@ final class LauncherGlassStaticNode {
         return changed;
     }
 
+    private boolean consumeRootSpaceTransformMotion(View material) {
+        if (material == null || !material.isAttachedToWindow()) {
+            return rootTransformMotion.update(null);
+        }
+        View root = material.getRootView();
+        if (root == null || !root.isAttachedToWindow()) return rootTransformMotion.update(null);
+        int width = material.getWidth();
+        int height = material.getHeight();
+        if (width <= 0 || height <= 0) return rootTransformMotion.update(null);
+        float[] points = new float[]{
+                0f, 0f,
+                width, 0f,
+                0f, height,
+                width, height
+        };
+        Matrix materialGlobal = new Matrix();
+        material.transformMatrixToGlobal(materialGlobal);
+        materialGlobal.mapPoints(points);
+        Matrix rootGlobal = new Matrix();
+        root.transformMatrixToGlobal(rootGlobal);
+        Matrix globalToRoot = new Matrix();
+        if (!rootGlobal.invert(globalToRoot)) return rootTransformMotion.update(null);
+        globalToRoot.mapPoints(points);
+        return rootTransformMotion.update(points);
+    }
+
     private boolean consumeWorkspaceScrollMotion() {
         View material = materialRef.get();
         View workspace = workspaceRef.get();
@@ -323,14 +398,46 @@ final class LauncherGlassStaticNode {
         View material = materialRef.get();
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || style == null || !style.enabled
-                || !LauncherGlassHierarchy.isWorkspace(material)
-                || suppressedByFolderOpen || suppressedByDrag
-                || !LauncherGlassVisibility.isVisible(material, root)) return null;
+                || suppressedByFolderOpen || suppressedByDrag) return null;
+        int rootWidth = root.getWidth();
+        int rootHeight = root.getHeight();
+        if (rootWidth <= 0 || rootHeight <= 0) return null;
+
         int hostWidth = material.getWidth();
         int hostHeight = material.getHeight();
-        if (hostWidth <= 0 || hostHeight <= 0 || root.getWidth() <= 0 || root.getHeight() <= 0) {
-            return null;
+        float density = material.getResources().getDisplayMetrics().density;
+        float requestedRadius = style.cornerRadiusDp > 0f
+                ? style.cornerRadiusDp * density : nativeCornerRadiusPx;
+
+        if (visualOwnerState.isLaunchProxyActive()) {
+            // While MIUI owns the icon with FloatingIconView2/FloatingIconLayer2, the source View
+            // is not the visual geometry authority. A null proxy rect intentionally means the vendor
+            // proxy exists but its icon is still hidden; never expand glass over the task-sized rect.
+            float[] proxyRect = visualOwnerState.copyLaunchProxyRect();
+            if (proxyRect == null) return null;
+            float proxyWidth = proxyRect[2] - proxyRect[0];
+            float proxyHeight = proxyRect[3] - proxyRect[1];
+            float referenceWidth = Math.max(1f, hostWidth);
+            float referenceHeight = Math.max(1f, hostHeight);
+            if (kind == LauncherGlassDragState.Kind.ICON) {
+                LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(material);
+                if (icon != null && icon.width() > 0f && icon.height() > 0f) {
+                    referenceWidth = icon.width();
+                    referenceHeight = icon.height();
+                }
+            }
+            float radiusScale = Math.max(0.01f, Math.min(
+                    proxyWidth / referenceWidth, proxyHeight / referenceHeight));
+            return LauncherGlassGeometry.resolve(
+                    rootWidth, rootHeight,
+                    proxyRect[0], proxyRect[1], proxyRect[2], proxyRect[3],
+                    LauncherGlassBoundsPolicy.capRadius(
+                            requestedRadius * radiusScale, proxyWidth, proxyHeight));
         }
+
+        if (!LauncherGlassHierarchy.isWorkspace(material)
+                || !LauncherGlassVisibility.isVisible(material, root)) return null;
+        if (hostWidth <= 0 || hostHeight <= 0) return null;
 
         float localLeft = 0f;
         float localTop = 0f;
@@ -344,7 +451,6 @@ final class LauncherGlassStaticNode {
             localRight = icon.right;
             localBottom = icon.bottom;
         }
-        float density = material.getResources().getDisplayMetrics().density;
         float[] styledBounds = LauncherGlassBoundsPolicy.apply(
                 localLeft, localTop, localRight, localBottom, style.sizeOffsetDp * density);
         localLeft = styledBounds[0];
@@ -375,8 +481,6 @@ final class LauncherGlassStaticNode {
         float scaleX = distance(points[0], points[1], points[2], points[3]) / localWidth;
         float scaleY = distance(points[0], points[1], points[4], points[5]) / localHeight;
         float radiusScale = Math.max(0.01f, Math.min(scaleX, scaleY));
-        float requestedRadius = style.cornerRadiusDp > 0f
-                ? style.cornerRadiusDp * density : nativeCornerRadiusPx;
         return LauncherGlassGeometry.resolve(
                 root.getWidth(), root.getHeight(), left, top, right, bottom,
                 LauncherGlassBoundsPolicy.capRadius(

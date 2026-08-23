@@ -4,12 +4,15 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.WeakHashMap;
 
 /** Sole owner of Workspace glass visibility, bootstrap freshness and scene generation. */
 final class LauncherGlassSceneController {
     private static final String TAG = "[DC][GlassScene]";
     private static final WeakHashMap<View, LauncherGlassSceneController> BY_ROOT = new WeakHashMap<>();
+    private static boolean vendorRecentsCovered;
+    private static boolean vendorFolderCovered;
 
     enum State { DETACHED, BOOTSTRAPPING, HOME_WAITING_FRESH_FRAME, HOME_VISIBLE, COVERED }
 
@@ -62,7 +65,6 @@ final class LauncherGlassSceneController {
     private final LauncherGlassSession session;
     private final StateMachine state = new StateMachine();
     private volatile LiquidDockConfig.Glass glassConfig;
-    private WeakReference<View> recentsRef = new WeakReference<>(null);
     private boolean folderCovered;
     private boolean recentsCovered;
     private LauncherGlassStaticLayer layer;
@@ -86,6 +88,11 @@ final class LauncherGlassSceneController {
         if (current != null) current.dispose();
         LauncherGlassSceneController created =
                 new LauncherGlassSceneController(root, session, glassConfig);
+        created.recentsCovered = vendorRecentsCovered;
+        created.folderCovered = vendorFolderCovered;
+        if (created.recentsCovered || created.folderCovered) {
+            created.state.setCovered(true);
+        }
         BY_ROOT.put(root, created);
         return created;
     }
@@ -99,22 +106,36 @@ final class LauncherGlassSceneController {
         return root != null ? BY_ROOT.get(root) : null;
     }
 
+    static synchronized boolean isCoveredForRoot(View root) {
+        LauncherGlassSceneController controller = root != null ? BY_ROOT.get(root) : null;
+        return controller != null && controller.state.state() == State.COVERED;
+    }
+
     static void setWorkspaceCovered(View anyView, boolean covered) {
         LauncherGlassSceneController controller = find(anyView);
         if (controller != null) controller.setFolderCovered(covered);
     }
 
-    static void bindRecentsView(View anyView, View recents) {
-        LauncherGlassSceneController controller = find(anyView);
-        if (controller != null) controller.recentsRef = new WeakReference<>(recents);
+    static void setRecentsCoveredForAll(boolean covered) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            vendorRecentsCovered = covered;
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.setRecentsCovered(covered);
+        }
     }
 
-    static void syncRecentsForRoot(View root) {
-        LauncherGlassSceneController controller = findRoot(root);
-        if (controller == null) return;
-        View recents = controller.recentsRef.get();
-        boolean covered = recents != null && recents.getVisibility() == View.VISIBLE && recents.isShown();
-        controller.setRecentsCovered(covered);
+    static void setFolderCoveredForAll(boolean covered) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            vendorFolderCovered = covered;
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.setFolderCovered(covered);
+        }
     }
 
     static void onFreshFrameRendered(View root, long generation) {

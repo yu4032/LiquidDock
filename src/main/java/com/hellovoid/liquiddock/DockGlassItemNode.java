@@ -49,12 +49,12 @@ final class DockGlassItemNode {
         hash = mix(hash, Float.floatToIntBits(dockRoot.getAlpha()));
         return hash;
     }
-    LauncherGlassGeometry.Snapshot capture(View dockRoot, Matrix rootInverse,
+    LauncherGlassGeometry.Snapshot capture(View ownershipRoot, Matrix outputInverse,
             int framebufferWidth, int framebufferHeight,
             float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
         View view = viewRef.get();
-        if (view == null || dockRoot == null || rootInverse == null || style == null || !style.enabled
-                || !belongsTo(dockRoot) || !LauncherGlassVisibility.isVisible(view, dockRoot)
+        if (view == null || ownershipRoot == null || outputInverse == null || style == null || !style.enabled
+                || !belongsTo(ownershipRoot) || !LauncherGlassVisibility.isVisible(view, ownershipRoot)
                 || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
         LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(view);
         float left = icon != null ? icon.left : 0f;
@@ -68,7 +68,7 @@ final class DockGlassItemNode {
         Matrix global = new Matrix();
         view.transformMatrixToGlobal(global);
         global.mapPoints(points);
-        rootInverse.mapPoints(points);
+        outputInverse.mapPoints(points);
         float width = Math.max(1f, (points[2] - points[0]) * scaleX);
         float height = Math.max(1f, (points[3] - points[1]) * scaleY);
         float x = sampleInsetLeft + points[0] * scaleX;

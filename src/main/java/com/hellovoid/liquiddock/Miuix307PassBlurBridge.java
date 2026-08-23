@@ -28,6 +28,12 @@ final class Miuix307PassBlurBridge {
         final Method setMiBlurWinExc;
         final float scale;
         final String rootName;
+        // Immutable snapshots. ViewRootImpl may mutate the same SurfaceControl Java wrapper
+        // to point at a new BLAST/native layer, so keeping only rootSurface aliases away the
+        // old generation identity that a later recovery needs to compare.
+        final int viewRootIdentity;
+        final int surfaceSequenceId;
+        final int rootLayerId;
         boolean bound = true;
         boolean updatesEnabled = true;
 
@@ -37,13 +43,19 @@ final class Miuix307PassBlurBridge {
                 Method setUpdateTextureFlag,
                 Method setMiBlurWinExc,
                 float scale,
-                String rootName) {
+                String rootName,
+                int viewRootIdentity,
+                int surfaceSequenceId,
+                int rootLayerId) {
             this.rootSurface = rootSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
             this.scale = scale;
             this.rootName = rootName;
+            this.viewRootIdentity = viewRootIdentity;
+            this.surfaceSequenceId = surfaceSequenceId;
+            this.rootLayerId = rootLayerId;
         }
     }
 
@@ -82,6 +94,9 @@ final class Miuix307PassBlurBridge {
                     "setMiBlurWinExc", SurfaceControl.class, String[].class);
 
             String rootName = surfaceName(rootSurface);
+            int viewRootIdentity = System.identityHashCode(viewRoot);
+            int surfaceSequenceId = readSurfaceSequenceId(viewRoot);
+            int rootLayerId = surfaceLayerId(rootSurface);
             String[] exclusions = new String[]{
                     rootName,
                     "NavigationBar",
@@ -107,11 +122,17 @@ final class Miuix307PassBlurBridge {
                     setUpdateTextureFlag,
                     setMiBlurWinExc,
                     scale,
-                    rootName);
+                    rootName,
+                    viewRootIdentity,
+                    surfaceSequenceId,
+                    rootLayerId);
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + requestedScale
                     + " root=" + rootName
+                    + " layerId=" + rootLayerId
+                    + " surfaceSeq=" + surfaceSequenceId
+                    + " viewRootId=" + viewRootIdentity
                     + " output=TextureView-in-root"
                     + " mode=continuous-on-bind"
                     + " exclusions=" + Arrays.toString(exclusions));
@@ -132,7 +153,13 @@ final class Miuix307PassBlurBridge {
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
     }
 
-    /** Workspace-only idle suspension. Dock never calls this. */
+    /** Persistent resume used by Dock when HyperOS leaves its HOME snapshot state. */
+    static void resumeUpdates(Binding binding) {
+        if (binding == null) return;
+        setUpdatesEnabled(binding, true);
+    }
+
+    /** Workspace idle suspension and vendor-snapshot Dock suspension. */
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;
         setUpdatesEnabled(binding, false);
@@ -192,6 +219,50 @@ final class Miuix307PassBlurBridge {
             binding.updatesEnabled = false;
             MainHook.log(TAG + " PassBlur unbind failed: " + error);
         }
+    }
+
+    static int surfaceLayerId(SurfaceControl surface) {
+        if (surface == null) return -1;
+        try {
+            Method method = SurfaceControl.class.getDeclaredMethod("getLayerId");
+            method.setAccessible(true);
+            Object value = method.invoke(surface);
+            return value instanceof Number ? ((Number) value).intValue() : -1;
+        } catch (Throwable ignored) {
+            return -1;
+        }
+    }
+
+    static int readSurfaceSequenceId(Object viewRoot) {
+        if (viewRoot == null) return -1;
+        Class<?> type = viewRoot.getClass();
+        while (type != null) {
+            try {
+                Method method = type.getDeclaredMethod("getSurfaceSequenceId");
+                method.setAccessible(true);
+                Object value = method.invoke(viewRoot);
+                if (value instanceof Number) return ((Number) value).intValue();
+            } catch (NoSuchMethodException ignored) {
+                type = type.getSuperclass();
+                continue;
+            } catch (Throwable ignored) {
+                break;
+            }
+        }
+        type = viewRoot.getClass();
+        while (type != null) {
+            try {
+                java.lang.reflect.Field field = type.getDeclaredField("mSurfaceSequenceId");
+                field.setAccessible(true);
+                Object value = field.get(viewRoot);
+                return value instanceof Number ? ((Number) value).intValue() : -1;
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            } catch (Throwable ignored) {
+                return -1;
+            }
+        }
+        return -1;
     }
 
     private static String surfaceName(SurfaceControl surface) {

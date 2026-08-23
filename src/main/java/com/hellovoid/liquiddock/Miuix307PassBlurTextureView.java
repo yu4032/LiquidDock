@@ -13,6 +13,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.SystemClock;
 import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -180,6 +181,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile boolean activationExhausted;
     private volatile boolean hasConsumedFrame;
     private volatile boolean producerRebindPending;
+    private volatile boolean producerUpdatesEnabled = true;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
@@ -245,14 +247,18 @@ final class Miuix307PassBlurTextureView extends TextureView
     private boolean firstMatrixLogged;
     private boolean stageBDiagnosticsLogged;
     private boolean prismalMappingLogged;
+    private long producerFrameCount;
+    private long renderedFrameCount;
+    private long powerWindowStartedMs = SystemClock.uptimeMillis();
     private ViewTreeObserver preDrawObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
 
     Miuix307PassBlurTextureView(Context context, View materialHost) {
         super(context);
         materialHostRef = new WeakReference<>(materialHost);
-        View dockRoot = LauncherGlassHierarchy.findDockRoot(materialHost);
-        dockCompositor = new DockGlassCompositor(dockRoot != null ? dockRoot : materialHost);
+        View ownershipRoot = LauncherGlassHierarchy.findDockRoot(materialHost);
+        dockCompositor = new DockGlassCompositor(
+                ownershipRoot != null ? ownershipRoot : materialHost, this);
         opticalParams = Miuix307PrismalMaterial.defaults(
                 context.getResources().getDisplayMetrics().density);
         portablePrismalParams = Miuix307PrismalAdapter.toPortable(opticalParams);
@@ -299,6 +305,18 @@ final class Miuix307PassBlurTextureView extends TextureView
      * Reconnect SurfaceFlinger's PassBlur producer without rebuilding the attached TextureView.
      * The framework Binding can remain stale-true after its BufferQueue has disconnected.
      */
+    void setProducerUpdatesEnabled(boolean enabled, String reason) {
+        if (shuttingDown) return;
+        producerUpdatesEnabled = enabled;
+        renderHandler.post(() -> {
+            Miuix307PassBlurBridge.Binding current = binding;
+            if (shuttingDown || current == null || !current.bound) return;
+            if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
+            else Miuix307PassBlurBridge.pauseUpdates(current);
+            MainHook.log(TAG + " producer updates=" + enabled + " reason=" + reason);
+        });
+    }
+
     void rebindProducer(String reason) {
         if (shuttingDown) return;
         if (producerRebindPending) return;
@@ -583,6 +601,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         inputProducerSurface = producer;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
+            producerFrameCount++;
             frameAvailable.set(true);
             drawLatestFrame(true);
         }, renderHandler);
@@ -683,6 +702,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 throw new IllegalStateException("eglSwapBuffers error=0x"
                         + Integer.toHexString(EGL14.eglGetError()));
             }
+            renderedFrameCount++;
+            maybeLogPowerStats();
 
             Miuix307PassBlurBridge.Binding currentBinding = binding;
             gpuBackdropActive = currentBinding != null && currentBinding.bound;
@@ -715,6 +736,24 @@ final class Miuix307PassBlurTextureView extends TextureView
         } catch (Throwable error) {
             fail("draw", error);
         }
+    }
+
+    private void maybeLogPowerStats() {
+        long now = SystemClock.uptimeMillis();
+        long elapsed = now - powerWindowStartedMs;
+        if (elapsed < 5000L) return;
+        float seconds = Math.max(0.001f, elapsed / 1000f);
+        float producerFps = producerFrameCount / seconds;
+        float drawFps = renderedFrameCount / seconds;
+        DockGlassSceneSnapshot scene = dockCompositor.latestScene();
+        MainHook.log("[DC][PBTX][Power] producerFps=" + producerFps
+                + " drawFps=" + drawFps
+                + " dockItems=" + (scene != null ? scene.size() : 0)
+                + " attached=" + isAttachedToWindow()
+                + " shown=" + isShown());
+        producerFrameCount = 0L;
+        renderedFrameCount = 0L;
+        powerWindowStartedMs = now;
     }
 
     private void renderNormalizationPass(BackdropSnapshot mapping) {
@@ -914,6 +953,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
 
         binding = next;
+        if (!producerUpdatesEnabled) {
+            // SetPassBlurSurface always starts continuous. Preserve vendor HOME snapshot state
+            // across a producer replacement instead of silently reviving full-rate rendering.
+            Miuix307PassBlurBridge.pauseUpdates(next);
+        }
         producerRebindPending = false;
         configRotation = current.configRotation;
         boundSurfaceWidth = current.surfaceWidth;

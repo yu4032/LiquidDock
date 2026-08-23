@@ -53,6 +53,8 @@ public class LauncherGlassStaticCompositorContractTest {
         assertTrue(session.contains("renderNormalizationRoot"));
         assertTrue(session.contains("presentFull("));
         assertFalse(session.contains("boolean atlasChanged = rebuildAtlasLayout(root);"));
+        assertFalse(session.contains("rebuildAtlasLayout("));
+        assertFalse(Files.exists(SESSION.getParent().resolve("LauncherGlassGpuAtlas.java")));
     }
 
     @Test
