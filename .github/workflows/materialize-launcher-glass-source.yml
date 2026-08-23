@@ -1,9 +1,6 @@
 name: Materialize Launcher Glass Source
 
 on:
-  push:
-    branches:
-      - refactor/launcher-glass-state-geometry
   pull_request:
     branches: [ main ]
 
@@ -12,22 +9,17 @@ permissions:
 
 jobs:
   materialize:
-    if: ${{ github.event_name == 'push' || github.event.pull_request.head.ref == 'refactor/launcher-glass-state-geometry' }}
+    if: ${{ github.event.pull_request.head.ref == 'refactor/launcher-glass-state-geometry' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: refactor/launcher-glass-state-geometry
-      - name: Materialize validated source
+      - name: Materialize validated Java source
         shell: bash
         run: |
           set -euo pipefail
-          test -f ci/24bug-launcher-session-green.patch
-          test -f ci/24bug-scene-controller-green.patch
-          test -f ci/24bug-resize-pulse-order.patch
-          test -f ci/24bug-rotation-settle.patch
-
           git apply --check ci/24bug-launcher-session-green.patch
           git apply ci/24bug-launcher-session-green.patch
           git apply --check ci/24bug-scene-controller-green.patch
@@ -39,43 +31,14 @@ jobs:
 
           echo "048a48cd9e0fc4ac49b3e3a89fb4daa59de5a2776f1de72acc22ab00b0d91b67  src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java" | sha256sum --check --strict
           echo "607751f3921725b250a10003272325ec7cad75ac15b04420f8db2c68e4c085cb  src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java" | sha256sum --check --strict
-
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('.github/workflows/api101-build.yml')
-          lines = path.read_text().splitlines(keepends=True)
-          start = next((i for i, line in enumerate(lines)
-                        if 'name: Materialize bounded rotation/wallpaper fix' in line), None)
-          if start is None:
-              raise SystemExit('materialization step start not found')
-          end = next((i for i in range(start + 1, len(lines))
-                      if './gradlew testDebugUnitTest --stacktrace' in lines[i]), None)
-          if end is None:
-              raise SystemExit('materialization step end not found')
-          path.write_text(''.join(lines[:start] + lines[end:]))
-          PY
-
-          rm ci/24bug-launcher-session-green.patch \
-             ci/24bug-scene-controller-green.patch \
-             ci/24bug-resize-pulse-order.patch \
-             ci/24bug-rotation-settle.patch
-          rm -f ci/materialize-trigger.txt
-          rm .github/workflows/materialize-launcher-glass-source.yml
-
-          ! grep -R "git apply.*24bug" .github/workflows/api101-build.yml
           git diff --check
-          git status --short
-      - name: Commit materialized source
+      - name: Commit exact runner Java source
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- \
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java \
-            src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java \
-            .github/workflows/api101-build.yml \
-            .github/workflows/materialize-launcher-glass-source.yml \
-            ci/
-          git commit -m "build: materialize validated launcher glass fixes"
+          git add src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java
+          git commit -m "build: materialize validated launcher glass Java source"
           git push origin HEAD:refactor/launcher-glass-state-geometry
