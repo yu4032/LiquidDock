@@ -53,6 +53,7 @@ final class MiuixLauncherStaticGlassHook {
             any |= installHostClass(classLoader, "com.miui.home.launcher.maml.MaMlHostView",
                     LauncherGlassDragState.Kind.WIDGET, glassConfig);
             installWidgetBackgroundOwnershipHook(classLoader, glassConfig);
+            installMamlBackgroundOwnershipHooks(classLoader, glassConfig);
         }
         installed = any;
         if (any) {
@@ -277,6 +278,40 @@ final class MiuixLauncherStaticGlassHook {
             MainHook.log(TAG + " LauncherAppWidgetHostView background ownership hook installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " LauncherAppWidgetHostView background hook unavailable: " + error);
+        }
+    }
+
+    private static void installMamlBackgroundOwnershipHooks(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) {
+        installMamlBackgroundOwnershipHook(classLoader, glassConfig, "onResume");
+        installMamlBackgroundOwnershipHook(classLoader, glassConfig, "updateColor", int.class);
+    }
+
+    private static void installMamlBackgroundOwnershipHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig,
+            String methodName, Class<?>... parameterTypes) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.maml.MaMlHostView",
+                    methodName, chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object result = chain.proceed(args);
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View && GlassRuntimeState.isEnabled()
+                                && glassConfig.widgetStyle.enabled) {
+                            // Launcher 4.50 MAML roots are loaded asynchronously. putVariableNumber
+                            // is a no-op before mRoot exists, and updateColor can later let vendor
+                            // blur logic write enable_background_blur back to 0. Re-enter the normal
+                            // bind/claim path only after those vendor lifecycle boundaries complete.
+                            scheduleBind((View) owner, LauncherGlassDragState.Kind.WIDGET,
+                                    glassConfig, 0);
+                        }
+                        return result;
+                    }, parameterTypes);
+            MainHook.log(TAG + " MaMlHostView background ownership hook installed method="
+                    + methodName);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " MaMlHostView background hook unavailable method="
+                    + methodName + ": " + error);
         }
     }
 
