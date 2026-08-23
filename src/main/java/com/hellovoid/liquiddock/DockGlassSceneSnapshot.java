@@ -12,4 +12,16 @@ final class DockGlassSceneSnapshot {
     }
 
     int size() { return items.length; }
+
+    boolean sameAs(DockGlassSceneSnapshot other) {
+        if (other == this) return true;
+        if (other == null || items.length != other.items.length) return false;
+        for (int i = 0; i < items.length; i++) {
+            LauncherGlassGeometry.Snapshot left = items[i];
+            LauncherGlassGeometry.Snapshot right = other.items[i];
+            if ((left == null) != (right == null)) return false;
+            if (left != null && !left.sameAs(right)) return false;
+        }
+        return true;
+    }
 }
