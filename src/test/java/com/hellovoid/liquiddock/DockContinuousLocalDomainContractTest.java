@@ -29,4 +29,19 @@ public class DockContinuousLocalDomainContractTest {
         assertFalse(Files.exists(MAIN.resolve("DockGlassCompositor.java")));
         assertFalse(view.contains("DockGlassSceneSnapshot"));
     }
+
+    @Test public void dockBridgeIsUnconditionallyContinuousAndWorkspaceUsesSeparateBridge() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertFalse(bridge.contains("callerManagedUpdates"));
+        assertFalse(bridge.contains("INITIAL_UPDATE_FRAMES"));
+        assertFalse(bridge.contains("requestSingleUpdate"));
+        assertFalse(bridge.contains("pauseUpdates"));
+        assertFalse(bridge.contains("schedulePauseUpdates"));
+        assertTrue(bridge.contains("Boolean.TRUE"));
+
+        assertTrue(session.contains("LauncherGlassPassBlurBridge"));
+        assertFalse(session.contains("Miuix307PassBlurBridge"));
+    }
 }
