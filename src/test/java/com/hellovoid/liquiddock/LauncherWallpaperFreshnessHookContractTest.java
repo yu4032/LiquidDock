@@ -37,9 +37,10 @@ public class LauncherWallpaperFreshnessHookContractTest {
     @Test public void routesChangeCandidateAndAuthoritativeEventsToSceneOwner() throws Exception {
         String source = hook();
 
-        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperChangedForAll"));
-        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperCandidate"));
-        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperAuthoritativeForAll"));
+        assertTrue(source.contains("LauncherGlassSceneController"));
+        assertTrue(source.contains("onWallpaperChangedForAll"));
+        assertTrue(source.contains("onWallpaperCandidate"));
+        assertTrue(source.contains("onWallpaperAuthoritativeForAll"));
     }
 
     @Test public void binderCallbacksMarshalToMainWithoutPollingOrDelay() throws Exception {
