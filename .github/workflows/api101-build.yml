@@ -25,6 +25,8 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
+      - name: Capture prepatch source
+        run: cp -a src /tmp/LiquidDock-prepatch-src
       - name: Apply device glass experiment
         run: |
           python3 ci/glass_device_prep.py
@@ -41,6 +43,12 @@ jobs:
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiquidDock-device-glass-prepatch-source
+          path: /tmp/LiquidDock-prepatch-src
+          if-no-files-found: error
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-device-glass-patched-source
