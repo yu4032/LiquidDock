@@ -1,15 +1,14 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Method;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Rotation must reject stale root geometry and roll the one-shot Workspace producer endpoint. */
+/** Rotation must reject stale root geometry, roll the producer, and wait for transition settle. */
 public class LauncherGlassRotationGenerationTest {
     private static boolean matchesRoot(
             int rootWidth, int rootHeight, int surfaceWidth, int surfaceHeight,
@@ -35,6 +34,14 @@ public class LauncherGlassRotationGenerationTest {
         return (Boolean) method.invoke(null, previousRotation, nextRotation, surfaceChanged);
     }
 
+    private static long settleDelayMs(float ratio) throws Exception {
+        Class<?> policy = Class.forName(
+                "com.hellovoid.liquiddock.LauncherGlassRotationSettlePolicy");
+        Method method = policy.getDeclaredMethod("settleDelayMs", float.class);
+        method.setAccessible(true);
+        return (Long) method.invoke(null, ratio);
+    }
+
     @Test public void staleOppositeOrientationSurfaceIsRejected() throws Exception {
         assertTrue(matchesRoot(1880, 3008, 1880, 3008, 0, 0, 0, 0));
         assertTrue(matchesRoot(3008, 1880, 3008, 1880, 0, 0, 0, 0));
@@ -50,17 +57,11 @@ public class LauncherGlassRotationGenerationTest {
         assertTrue(requiresEndpointRollover(1, 1, true));
     }
 
-    @Test public void inPlaceResizePulsesOnlyAfterBufferSizeIsApplied() throws Exception {
-        String source = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java"));
-        int start = source.indexOf("private boolean refreshProducerGeometryOnUi(View root)");
-        int end = source.indexOf("private boolean postRender(", start);
-        String method = source.substring(start, end);
-        int resize = method.indexOf("input.setDefaultBufferSize");
-        int mainPost = method.indexOf("mainHandler.post(() ->", resize);
-        int pulse = method.indexOf("Miuix307PassBlurBridge.requestSingleUpdate", resize);
-        assertTrue("resize must happen on render thread", resize >= 0);
-        assertTrue("pulse must be posted only after resize returns", mainPost > resize);
-        assertTrue("one-shot pulse must run after the resize barrier", pulse > mainPost);
+    @Test public void rotationCaptureWaitsForVendorScaledTransitionSettle() throws Exception {
+        assertEquals(500L, settleDelayMs(1.0f));
+        assertEquals(250L, settleDelayMs(0.5f));
+        assertEquals(0L, settleDelayMs(0.0f));
+        assertEquals(0L, settleDelayMs(-1.0f));
+        assertEquals(500L, settleDelayMs(2.0f));
     }
 }
