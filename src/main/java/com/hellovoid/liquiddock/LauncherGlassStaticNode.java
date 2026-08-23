@@ -3,7 +3,6 @@ package com.hellovoid.liquiddock;
 import android.animation.ValueAnimator;
 import android.graphics.Matrix;
 import android.view.View;
-import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 
 import com.hellovoid.prismal.PrismalInteractionState;
@@ -23,36 +22,23 @@ final class LauncherGlassStaticNode {
     private final WeakReference<View> materialRef;
     private final LauncherGlassDragState.Kind kind;
     private final LauncherGlassNodeKind nodeKind;
-    private final LauncherGlassScrollMotionTracker workspaceScrollMotion =
-            new LauncherGlassScrollMotionTracker();
-    private final LauncherGlassEffectiveVisibilityTracker effectiveVisibilityTracker =
-            new LauncherGlassEffectiveVisibilityTracker();
-    private final LauncherGlassRootTransformTracker rootTransformMotion =
-            new LauncherGlassRootTransformTracker();
     private final LauncherGlassVisualOwnerState visualOwnerState =
             new LauncherGlassVisualOwnerState();
-    private WeakReference<View> workspaceRef = new WeakReference<>(null);
+    private final float[] geometryPoints = new float[8];
+    private final Matrix materialToGlobal = new Matrix();
+    private final Matrix rootToGlobal = new Matrix();
+    private final Matrix globalToRoot = new Matrix();
     private volatile LauncherGlassSession session;
     private final LiquidDockConfig.Glass glassConfig;
     private volatile float nativeCornerRadiusPx;
     private volatile boolean disposed;
     private volatile boolean suppressedByFolderOpen;
     private volatile boolean suppressedByDrag;
-    private boolean geometryDirty = true;
     private boolean pressTarget;
     private float pressProgress;
     private float glowCenterX = 0.5f;
     private float glowCenterY = 0.5f;
     private ValueAnimator pressAnimator;
-    private Object lastParent;
-    private int lastLeft = Integer.MIN_VALUE;
-    private int lastTop = Integer.MIN_VALUE;
-    private int lastRight = Integer.MIN_VALUE;
-    private int lastBottom = Integer.MIN_VALUE;
-    private int lastVisibility = Integer.MIN_VALUE;
-    private float lastAlpha = Float.NaN;
-    private final float[] lastMatrix = new float[9];
-    private boolean matrixInitialized;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassStaticNode(
@@ -70,7 +56,6 @@ final class LauncherGlassStaticNode {
         nativeCornerRadiusPx = Math.max(0f, cornerRadiusPx);
         materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
-                geometryDirty = true;
                 LauncherGlassSession live = ensureLiveSession();
                 if (live != null) live.registerStaticNode(LauncherGlassStaticNode.this);
             }
@@ -79,7 +64,6 @@ final class LauncherGlassStaticNode {
                 resetPressInteraction(false);
                 LauncherGlassSession live = session;
                 if (live != null) live.unregisterStaticNode(LauncherGlassStaticNode.this);
-                geometryDirty = true;
             }
         };
         materialHost.addOnAttachStateChangeListener(materialAttachListener);
@@ -169,8 +153,10 @@ final class LauncherGlassStaticNode {
 
     void requestLifecycleRefresh() {
         if (disposed) return;
-        geometryDirty = true;
         LauncherGlassSession live = ensureLiveSession();
+        View material = materialRef.get();
+        View root = material != null ? material.getRootView() : null;
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
         if (live != null) live.requestStaticRedraw();
     }
 
@@ -178,7 +164,6 @@ final class LauncherGlassStaticNode {
         if (disposed || suppressedByFolderOpen == suppressed) return;
         if (suppressed) resetPressInteraction(false);
         suppressedByFolderOpen = suppressed;
-        geometryDirty = true;
         requestLifecycleRefresh();
     }
 
@@ -186,7 +171,6 @@ final class LauncherGlassStaticNode {
         if (disposed || suppressedByDrag == suppressed) return;
         if (suppressed) resetPressInteraction(false);
         suppressedByDrag = suppressed;
-        geometryDirty = true;
         requestLifecycleRefresh();
     }
 
@@ -195,7 +179,6 @@ final class LauncherGlassStaticNode {
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
         if (!visualOwnerState.holdLaunchProxyHidden()) return false;
         if (!wasActive) resetPressInteraction(false);
-        geometryDirty = true;
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
         if (live != null) live.requestStaticRedraw();
@@ -209,7 +192,6 @@ final class LauncherGlassStaticNode {
         if (!visualOwnerState.updateLaunchProxyRect(
                 new float[]{left, top, right, bottom})) return false;
         if (!wasActive) resetPressInteraction(false);
-        geometryDirty = true;
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
         if (live != null) live.requestStaticRedraw();
@@ -218,7 +200,6 @@ final class LauncherGlassStaticNode {
 
     void endLaunchProxy() {
         if (disposed || !visualOwnerState.endLaunchProxy()) return;
-        geometryDirty = true;
         invalidateVisualOwnerGeometry();
         requestLifecycleRefresh();
     }
@@ -234,7 +215,6 @@ final class LauncherGlassStaticNode {
         float next = Math.max(0f, cornerRadiusPx);
         if (Math.abs(nativeCornerRadiusPx - next) < 0.01f) return;
         nativeCornerRadiusPx = next;
-        geometryDirty = true;
         requestLifecycleRefresh();
     }
 
@@ -295,103 +275,6 @@ final class LauncherGlassStaticNode {
         if (disposed || live == null) return;
         live.updateStaticInteraction(this,
                 new PrismalInteractionState(pressProgress, glowCenterX, glowCenterY));
-    }
-
-    boolean syncFromMaterial() {
-        View material = materialRef.get();
-        if (disposed || material == null) return false;
-        boolean changed = geometryDirty;
-        geometryDirty = false;
-        changed |= consumeWorkspaceScrollMotion();
-        changed |= consumeRootSpaceTransformMotion(material);
-        View sceneRoot = material.getRootView();
-        changed |= effectiveVisibilityTracker.update(
-                LauncherGlassVisibility.effectiveAlpha(material, sceneRoot));
-        Object parent = material.getParent();
-        if (lastParent != parent) { lastParent = parent; changed = true; }
-        int left = material.getLeft();
-        int top = material.getTop();
-        int right = material.getRight();
-        int bottom = material.getBottom();
-        if (lastLeft != left || lastTop != top || lastRight != right || lastBottom != bottom) {
-            lastLeft = left;
-            lastTop = top;
-            lastRight = right;
-            lastBottom = bottom;
-            changed = true;
-        }
-        int visibility = material.getVisibility();
-        if (lastVisibility != visibility) { lastVisibility = visibility; changed = true; }
-        float alpha = material.getAlpha();
-        if (!Float.isFinite(lastAlpha) || Math.abs(lastAlpha - alpha) >= 0.01f) {
-            lastAlpha = alpha;
-            changed = true;
-        }
-        float[] matrix = new float[9];
-        material.getMatrix().getValues(matrix);
-        if (!matrixInitialized) {
-            System.arraycopy(matrix, 0, lastMatrix, 0, matrix.length);
-            matrixInitialized = true;
-            changed = true;
-        } else {
-            for (int i = 0; i < matrix.length; i++) {
-                if (Math.abs(lastMatrix[i] - matrix[i]) >= 0.001f) {
-                    System.arraycopy(matrix, 0, lastMatrix, 0, matrix.length);
-                    changed = true;
-                    break;
-                }
-            }
-        }
-        return changed;
-    }
-
-    private boolean consumeRootSpaceTransformMotion(View material) {
-        if (material == null || !material.isAttachedToWindow()) {
-            return rootTransformMotion.update(null);
-        }
-        View root = material.getRootView();
-        if (root == null || !root.isAttachedToWindow()) return rootTransformMotion.update(null);
-        int width = material.getWidth();
-        int height = material.getHeight();
-        if (width <= 0 || height <= 0) return rootTransformMotion.update(null);
-        float[] points = new float[]{
-                0f, 0f,
-                width, 0f,
-                0f, height,
-                width, height
-        };
-        Matrix materialGlobal = new Matrix();
-        material.transformMatrixToGlobal(materialGlobal);
-        materialGlobal.mapPoints(points);
-        Matrix rootGlobal = new Matrix();
-        root.transformMatrixToGlobal(rootGlobal);
-        Matrix globalToRoot = new Matrix();
-        if (!rootGlobal.invert(globalToRoot)) return rootTransformMotion.update(null);
-        globalToRoot.mapPoints(points);
-        return rootTransformMotion.update(points);
-    }
-
-    private boolean consumeWorkspaceScrollMotion() {
-        View material = materialRef.get();
-        View workspace = workspaceRef.get();
-        if (workspace == null || !workspace.isAttachedToWindow()) {
-            workspace = findWorkspaceAncestor(material);
-            workspaceRef = new WeakReference<>(workspace);
-        }
-        if (workspace == null) return workspaceScrollMotion.update(null, 0, 0);
-        return workspaceScrollMotion.update(workspace, workspace.getScrollX(), workspace.getScrollY());
-    }
-
-    private static View findWorkspaceAncestor(View material) {
-        View cursor = material;
-        while (cursor != null) {
-            Class<?> type = cursor.getClass();
-            if ("com.miui.home.launcher.Workspace".equals(type.getName())
-                    || "Workspace".equals(type.getSimpleName())) return cursor;
-            ViewParent parent = cursor.getParent();
-            cursor = parent instanceof View ? (View) parent : null;
-        }
-        return null;
     }
 
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
@@ -459,27 +342,35 @@ final class LauncherGlassStaticNode {
         localBottom = styledBounds[3];
         float localWidth = Math.max(1f, localRight - localLeft);
         float localHeight = Math.max(1f, localBottom - localTop);
-        float[] points = new float[]{
-                localLeft, localTop,
-                localRight, localTop,
-                localLeft, localBottom,
-                localRight, localBottom
-        };
-        Matrix materialGlobal = new Matrix();
-        material.transformMatrixToGlobal(materialGlobal);
-        materialGlobal.mapPoints(points);
-        Matrix rootGlobal = new Matrix();
-        root.transformMatrixToGlobal(rootGlobal);
-        Matrix globalToRoot = new Matrix();
-        if (!rootGlobal.invert(globalToRoot)) return null;
-        globalToRoot.mapPoints(points);
+        geometryPoints[0] = localLeft;
+        geometryPoints[1] = localTop;
+        geometryPoints[2] = localRight;
+        geometryPoints[3] = localTop;
+        geometryPoints[4] = localLeft;
+        geometryPoints[5] = localBottom;
+        geometryPoints[6] = localRight;
+        geometryPoints[7] = localBottom;
+        materialToGlobal.reset();
+        material.transformMatrixToGlobal(materialToGlobal);
+        materialToGlobal.mapPoints(geometryPoints);
+        rootToGlobal.reset();
+        root.transformMatrixToGlobal(rootToGlobal);
+        globalToRoot.reset();
+        if (!rootToGlobal.invert(globalToRoot)) return null;
+        globalToRoot.mapPoints(geometryPoints);
 
-        float left = Math.min(Math.min(points[0], points[2]), Math.min(points[4], points[6]));
-        float top = Math.min(Math.min(points[1], points[3]), Math.min(points[5], points[7]));
-        float right = Math.max(Math.max(points[0], points[2]), Math.max(points[4], points[6]));
-        float bottom = Math.max(Math.max(points[1], points[3]), Math.max(points[5], points[7]));
-        float scaleX = distance(points[0], points[1], points[2], points[3]) / localWidth;
-        float scaleY = distance(points[0], points[1], points[4], points[5]) / localHeight;
+        float left = Math.min(Math.min(geometryPoints[0], geometryPoints[2]),
+                Math.min(geometryPoints[4], geometryPoints[6]));
+        float top = Math.min(Math.min(geometryPoints[1], geometryPoints[3]),
+                Math.min(geometryPoints[5], geometryPoints[7]));
+        float right = Math.max(Math.max(geometryPoints[0], geometryPoints[2]),
+                Math.max(geometryPoints[4], geometryPoints[6]));
+        float bottom = Math.max(Math.max(geometryPoints[1], geometryPoints[3]),
+                Math.max(geometryPoints[5], geometryPoints[7]));
+        float scaleX = distance(geometryPoints[0], geometryPoints[1],
+                geometryPoints[2], geometryPoints[3]) / localWidth;
+        float scaleY = distance(geometryPoints[0], geometryPoints[1],
+                geometryPoints[4], geometryPoints[5]) / localHeight;
         float radiusScale = Math.max(0.01f, Math.min(scaleX, scaleY));
         return LauncherGlassGeometry.resolve(
                 root.getWidth(), root.getHeight(), left, top, right, bottom,

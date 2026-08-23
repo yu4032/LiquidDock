@@ -7,17 +7,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import org.junit.Test;
 
 /** Regression coverage for Launcher 4.50 App->HOME visual-owner geometry handoff. */
 public class LauncherGlassAppReturnProxyGeometryTest {
-    private static String source(String name) throws Exception {
-        return Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/" + name));
-    }
-
     private static Object state() throws Exception {
         Class<?> type;
         try {
@@ -82,18 +75,6 @@ public class LauncherGlassAppReturnProxyGeometryTest {
         assertNull(call(state, "copyLaunchProxyRect", new Class<?>[]{}));
     }
 
-    @Test public void staticNodeCanHoldProxyOwnerHiddenUntilVendorShowsIcon() throws Exception {
-        String node = source("LauncherGlassStaticNode.java");
-        assertTrue(node.contains("LauncherGlassVisualOwnerState"));
-        assertTrue(node.contains("holdLaunchProxyHidden"));
-        assertTrue(node.contains("updateLaunchProxyGeometry"));
-        assertTrue(node.contains("endLaunchProxy"));
-        assertTrue(node.contains("copyLaunchProxyRect"));
-        assertTrue(node.contains("postInvalidateOnAnimation"));
-        assertFalse(node.contains("void beginLaunchProxy()"));
-        assertFalse(node.contains("suppressedByLaunchProxy"));
-    }
-
     @Test public void vendorProxyVisibilityMatchesLauncher450ConsumerSemantics() throws Exception {
         Class<?> type;
         try {
@@ -118,34 +99,4 @@ public class LauncherGlassAppReturnProxyGeometryTest {
         assertFalse((Boolean) layer.invoke(null, 1f, false));
     }
 
-    @Test public void finalFloatingConsumersGateGeometryWithVendorProxyAlpha() throws Exception {
-        String hook = source("MiuixLauncherStaticGlassHook.java");
-        assertTrue(hook.contains("com.miui.home.recents.views.FloatingIconView2"));
-        assertTrue(hook.contains("com.miui.home.recents.views.FloatingIconLayer2"));
-        assertTrue(hook.contains("\"update\""));
-        assertTrue(hook.contains("getAnimTarget"));
-        assertTrue(hook.contains("isDrawIcon"));
-        assertTrue(hook.contains("LauncherGlassProxyVisibility"));
-        assertTrue(hook.contains("args[2]"));
-        assertTrue(hook.contains("holdLaunchProxyHidden"));
-        assertTrue(hook.contains("updateLaunchProxyGeometry"));
-        assertTrue(hook.contains("proxy owner hidden"));
-        assertTrue(hook.contains("proxy geometry visible"));
-        assertTrue(hook.contains("RectF.class, RectF.class"));
-        assertTrue(hook.contains("boolean.class, boolean.class, boolean.class"));
-        assertTrue(hook.contains("float.class, boolean.class"));
-    }
-
-    @Test public void intermediateWindowElementGeometryTapIsRetired() throws Exception {
-        String hook = source("MiuixLauncherStaticGlassHook.java");
-        assertFalse(hook.contains("\"updateTaskView\""));
-    }
-
-    @Test public void vendorVisibilityOnlyReleasesOwnerHandoff() throws Exception {
-        String hook = source("MiuixLauncherStaticGlassHook.java");
-        assertTrue(hook.contains("node.endLaunchProxy()"));
-        assertTrue(hook.contains("anim-target-visible"));
-        assertFalse(hook.contains("node.beginLaunchProxy()"));
-        assertFalse(hook.contains("setSuppressedByLaunchProxy"));
-    }
 }

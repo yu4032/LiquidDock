@@ -27,14 +27,6 @@ final class LauncherGlassFramePolicy {
         return schedule();
     }
 
-    synchronized boolean requestBackdropRefresh() {
-        staticDirty = true;
-        dragDirty = true;
-        refreshProducer = true;
-        rebuildBackdrop = true;
-        return schedule();
-    }
-
     synchronized boolean requestBackdropRebuild() {
         staticDirty = true;
         dragDirty = true;

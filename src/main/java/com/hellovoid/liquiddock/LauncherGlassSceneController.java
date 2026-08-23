@@ -20,20 +20,19 @@ final class LauncherGlassSceneController {
     static final class StateMachine {
         private State state = State.DETACHED;
         private long generation = 1L;
-        private boolean covered;
 
         void onRootReady() {
             if (state == State.DETACHED) state = State.BOOTSTRAPPING;
         }
 
         void onBootstrapReconciled() {
-            if (!covered && state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
+            if (state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
         }
 
         void setCovered(boolean nextCovered) {
-            if (covered == nextCovered) return;
-            covered = nextCovered;
-            if (covered) {
+            boolean isCovered = state == State.COVERED;
+            if (isCovered == nextCovered) return;
+            if (nextCovered) {
                 state = State.COVERED;
             } else {
                 generation++;
@@ -43,17 +42,20 @@ final class LauncherGlassSceneController {
 
         void onGenerationInvalidated() {
             generation++;
-            if (!covered && state != State.DETACHED) state = State.HOME_WAITING_FRESH_FRAME;
+            if (state != State.COVERED && state != State.DETACHED) {
+                state = State.HOME_WAITING_FRESH_FRAME;
+            }
         }
 
         void onFreshFrameReady(long frameGeneration) {
-            if (frameGeneration != generation || covered || state == State.DETACHED) return;
+            if (frameGeneration != generation || state == State.COVERED || state == State.DETACHED) {
+                return;
+            }
             state = State.HOME_VISIBLE;
         }
 
         void detach() {
             state = State.DETACHED;
-            covered = false;
         }
 
         long generation() { return generation; }
@@ -174,17 +176,21 @@ final class LauncherGlassSceneController {
         }
     }
 
-    static void onFreshFrameRendered(View root, long generation) {
+    static void onFreshFrameRendered(
+            View root, long generation, long wallpaperGeneration, boolean wallpaperAuthoritative) {
         LauncherGlassSceneController controller = findRoot(root);
-        if (controller != null) {
-            controller.onFreshFrameReady(generation);
-            controller.onWallpaperFrameConsumed(generation);
+        if (controller == null) return;
+        controller.onFreshFrameReady(generation);
+        if (wallpaperGeneration >= 0L) {
+            controller.onWallpaperFrameConsumed(
+                    generation, wallpaperGeneration, wallpaperAuthoritative);
         }
     }
 
     static long invalidateForProducerChange(View root) {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller == null) return -1L;
+        controller.deferInFlightWallpaperPulse();
         controller.state.onGenerationInvalidated();
         controller.applyLayerVisibility();
         long generation = controller.state.generation();
@@ -218,12 +224,14 @@ final class LauncherGlassSceneController {
 
     private void requestFreshBackdrop(long generation) {
         if (state.state() == State.COVERED || generation != state.generation()) return;
+        deferInFlightWallpaperPulse();
         session.requestFreshBackdrop(generation);
     }
 
     private void onFreshFrameReady(long generation) {
         state.onFreshFrameReady(generation);
         applyLayerVisibility();
+        flushDeferredWallpaperPulse();
     }
 
     private synchronized void onWallpaperChanged() {
@@ -245,11 +253,14 @@ final class LauncherGlassSceneController {
         requestWallpaperPulse(wallpaperContentState.onAuthoritativeBoundary(generation));
     }
 
-    private synchronized void onWallpaperFrameConsumed(long sceneGeneration) {
-        if (!wallpaperPulseInFlight) return;
+    private synchronized void onWallpaperFrameConsumed(
+            long sceneGeneration, long contentGeneration, boolean authoritative) {
+        if (!wallpaperPulseInFlight
+                || contentGeneration != wallpaperPulseGeneration
+                || authoritative != wallpaperPulseAuthoritative) {
+            return;
+        }
 
-        long contentGeneration = wallpaperPulseGeneration;
-        boolean authoritative = wallpaperPulseAuthoritative;
         wallpaperPulseGeneration = -1L;
         wallpaperPulseAuthoritative = false;
         wallpaperPulseInFlight = false;
@@ -274,6 +285,29 @@ final class LauncherGlassSceneController {
         }
     }
 
+    private synchronized void deferInFlightWallpaperPulse() {
+        if (!wallpaperPulseInFlight) return;
+        long generation = wallpaperPulseGeneration;
+        boolean authoritative = wallpaperPulseAuthoritative;
+        if (generation == wallpaperContentState.generation()) {
+            deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.request(
+                    generation, authoritative);
+        }
+        wallpaperPulseGeneration = -1L;
+        wallpaperPulseAuthoritative = false;
+        wallpaperPulseInFlight = false;
+        session.cancelWallpaperBackdrop(generation);
+    }
+
+    private synchronized void flushDeferredWallpaperPulse() {
+        if (state.state() == State.COVERED || wallpaperPulseInFlight) return;
+        LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
+        if (!deferred.requested()
+                || deferred.generation != wallpaperContentState.generation()) return;
+        deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
+        requestWallpaperPulse(deferred);
+    }
+
     private void setFolderCovered(boolean covered) {
         folderCovered = covered;
         setEffectiveCovered(folderCovered || recentsCovered);
@@ -292,15 +326,9 @@ final class LauncherGlassSceneController {
         if (covered) {
             session.suspendWorkspaceProducer();
         } else if (wasCovered) {
+            // Scene recovery wins. Any wallpaper pulse that was in flight is deferred by
+            // requestFreshBackdrop() and is released only after this generic fresh frame lands.
             requestFreshBackdrop(state.generation());
-            synchronized (this) {
-                LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
-                if (!wallpaperPulseInFlight && deferred.requested()
-                        && deferred.generation == wallpaperContentState.generation()) {
-                    deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
-                    requestWallpaperPulse(deferred);
-                }
-            }
         }
     }
 
@@ -317,7 +345,14 @@ final class LauncherGlassSceneController {
         wallpaperPulseGeneration = pulse.generation;
         wallpaperPulseAuthoritative = pulse.authoritative;
         wallpaperPulseInFlight = true;
-        session.requestFreshBackdrop(state.generation());
+        if (!session.requestWallpaperBackdrop(
+                state.generation(), pulse.generation, pulse.authoritative)) {
+            wallpaperPulseGeneration = -1L;
+            wallpaperPulseAuthoritative = false;
+            wallpaperPulseInFlight = false;
+            deferredWallpaperPulse = pulse;
+            return;
+        }
         MainHook.log(TAG + " wallpaper pulse contentGeneration=" + pulse.generation
                 + " authoritative=" + pulse.authoritative
                 + " sceneGeneration=" + state.generation());
