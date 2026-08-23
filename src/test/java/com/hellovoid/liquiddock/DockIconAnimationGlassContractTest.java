@@ -8,64 +8,82 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Launcher 4.50 Dock ShortcutIcon uses the same FloatingIcon visual owner as Workspace icons. */
+/** Launcher 4.50 hands Dock ShortcutIcon visuals to a Launcher-root FloatingIcon proxy. */
 public class DockIconAnimationGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void floatingIconBridgeRoutesDockTargetsWithoutJoiningWorkspaceSession() throws Exception {
+    public void floatingIconBridgeHandsDockVisualOwnershipToLauncherRoot() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
-        String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
 
         assertTrue(hook.contains("LauncherGlassHierarchy.Domain.DOCK"));
         assertTrue(hook.contains("DockGlassItemRegistry.holdLaunchProxyHidden"));
         assertTrue(hook.contains("DockGlassItemRegistry.updateLaunchProxyGeometry"));
         assertTrue(hook.contains("DockGlassItemRegistry.endLaunchProxy"));
+        assertTrue(hook.contains("LauncherGlassSceneController.updateDockIconProxy"));
+        assertTrue(hook.contains("LauncherGlassSceneController.holdDockIconProxyHidden"));
+        assertTrue(hook.contains("LauncherGlassSceneController.endDockIconProxyForAll"));
         assertTrue(hook.contains("resolveProxyCoordinateRoot"));
+    }
+
+    @Test
+    public void dockStaticItemYieldsForEntireVendorProxyLifetime() throws Exception {
+        String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
+        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
 
         assertTrue(registry.contains("LauncherGlassVisualOwnerState"));
+        assertTrue(registry.contains("isLaunchProxyActive"));
+        assertTrue(registry.contains("postInvalidateOnAnimation"));
+        assertTrue(item.contains("DockGlassItemRegistry.isLaunchProxyActive(view)"));
+        assertTrue(item.contains("return null"));
+
+        // Static Dock rendering remains its own output domain; only ownership state crosses over.
         assertFalse(registry.contains("LauncherGlassSession"));
         assertFalse(registry.contains("LauncherGlassSceneController"));
+        assertFalse(item.contains("LauncherGlassSession"));
+        assertFalse(item.contains("LauncherGlassSceneController"));
     }
 
     @Test
-    public void dockProxyKeepsLauncherRootCoordinateAuthorityUntilDockCapture() throws Exception {
-        String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
-        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
+    public void launcherRootProxyUsesVendorRectDirectlyInsteadOfDockWindowMapping() throws Exception {
+        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
 
-        // FloatingIconView2/FloatingIconLayer2 update rects are Launcher-root local. Preserve that
-        // root together with the rect, then map root -> global -> Dock output at capture time.
-        assertTrue(registry.contains("ProxySnapshot"));
-        assertTrue(registry.contains("coordinateRoot"));
-        assertTrue(registry.contains("copyLaunchProxy"));
-        assertTrue(item.contains("DockGlassItemRegistry.copyLaunchProxy(view)"));
-        assertTrue(item.contains("proxy.coordinateRoot.transformMatrixToGlobal"));
-        assertTrue(item.contains("outputInverse.mapPoints"));
+        // FloatingIconView2.iconRect and FloatingIconLayer2.rotationIconRect are already local to
+        // Launcher.getRootView(). The full-screen Launcher static layer is therefore the final
+        // consumer; do not map the proxy back through the bottom Dock window.
+        assertTrue(controller.contains("updateDockIconProxy"));
+        assertTrue(controller.contains("LauncherGlassGeometry.resolve"));
+        assertTrue(controller.contains("glassConfig.iconStyle"));
+        assertTrue(session.contains("externalStaticNodes"));
+        assertTrue(session.contains("updateExternalStaticGeometry"));
+        assertTrue(session.contains("removeExternalStaticGeometry"));
+        assertTrue(session.contains("renderExternalStaticGeometry"));
     }
 
     @Test
-    public void dockProxyStateForcesNextDockPredrawAndParticipatesInFingerprint() throws Exception {
-        String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
-        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+    public void hiddenVisibleEndTriStateMatchesWorkspaceSemantics() throws Exception {
+        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
 
-        assertTrue(registry.contains("postInvalidateOnAnimation"));
-        assertTrue(registry.contains("visualFingerprint"));
-        assertTrue(item.contains("DockGlassItemRegistry.visualFingerprint"));
-        assertTrue(view.contains("ViewTreeObserver.OnPreDrawListener"));
-        assertTrue(view.contains("dockCompositor.refreshUiSceneIfNeeded"));
+        // Hidden proxy owns the slot but draws no glass. Visible proxy publishes final-consumer
+        // geometry. Returning source visibility ends the Launcher-root proxy and restores Dock.
+        assertTrue(controller.contains("holdDockIconProxyHidden"));
+        assertTrue(controller.contains("removeExternalStaticGeometry"));
+        assertTrue(controller.contains("updateDockIconProxy"));
+        assertTrue(controller.contains("endDockIconProxyForAll"));
+        assertTrue(hook.contains("visibility == View.VISIBLE"));
+        assertTrue(hook.contains("DockGlassItemRegistry.endLaunchProxy(host)"));
     }
 
     @Test
-    public void hiddenProxyOwnsDockSlotBeforeSourceVisibilityChecks() throws Exception {
-        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
-        int proxyRead = item.indexOf("DockGlassItemRegistry.copyLaunchProxy(view)");
-        int visibility = item.indexOf("LauncherGlassVisibility.isVisible(view, ownershipRoot)");
+    public void dockCompositorStillOwnsNoWorkspaceSessionResources() throws Exception {
+        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+        String dockView = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
-        assertTrue("proxy ownership must be resolved before hidden source visibility", proxyRead >= 0);
-        assertTrue("source visibility must not discard an active FloatingIcon proxy",
-                visibility < 0 || proxyRead < visibility);
-        assertTrue(item.contains("if (proxy.active)"));
-        assertTrue(item.contains("if (proxy.rect == null) return null"));
+        assertFalse(compositor.contains("LauncherGlassSession"));
+        assertFalse(compositor.contains("LauncherGlassSceneController"));
+        assertFalse(dockView.contains("LauncherGlassSession"));
+        assertFalse(dockView.contains("LauncherGlassSceneController"));
     }
 }
