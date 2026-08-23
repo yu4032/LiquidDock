@@ -31,8 +31,6 @@ final class HomeGridHook {
         indicatorBaseTranslations = new java.util.WeakHashMap<>();
     private static final java.util.WeakHashMap<android.view.View, IndicatorPositionGuard>
         indicatorPositionGuards = new java.util.WeakHashMap<>();
-    private static final java.util.WeakHashMap<android.view.View, Boolean>
-        loggedWidgetViews = new java.util.WeakHashMap<>();
     private static final java.util.WeakHashMap<android.view.View, Long>
         preparedCellLayoutGeometry = new java.util.WeakHashMap<>();
 
@@ -392,46 +390,6 @@ final class HomeGridHook {
             }
         } catch (Throwable e) {
             MainHook.log("[DC] final widget frame enforcement failed: " + e);
-        }
-    }
-
-    private static void adaptTwoByOneWidget(android.view.ViewGroup parent,
-                                            android.view.View child) {
-        try {
-            Object info = child.getTag();
-            if (info == null) return;
-            int itemType = HookUtil.getIntField(info, "itemType");
-            int spanX = HookUtil.getIntField(info, "spanX");
-            int spanY = HookUtil.getIntField(info, "spanY");
-            if (spanX != 2 || spanY != 1) return;
-            synchronized (loggedWidgetViews) {
-                if (!loggedWidgetViews.containsKey(child)) {
-                    loggedWidgetViews.put(child, Boolean.TRUE);
-                    MainHook.log("[DC] 2x1 runtime view type=" + itemType
-                        + " class=" + child.getClass().getName()
-                        + " bounds=" + child.getWidth() + "x" + child.getHeight()
-                        + " children=" + (child instanceof android.view.ViewGroup
-                            ? ((android.view.ViewGroup) child).getChildCount() : -1));
-                }
-            }
-            if (itemType != 19) return;
-            int widthGap = Math.max(0, HookUtil.getIntField(parent, "mWidthGap"));
-            int visualCompensation = Math.round(
-                child.getResources().getDisplayMetrics().density * 16f);
-            int shrink = Math.max(widthGap, visualCompensation);
-            int leftInset = shrink / 2;
-            int rightInset = shrink - leftInset;
-            int width = child.getWidth() - shrink;
-            if (width <= 0) return;
-            child.measure(
-                android.view.View.MeasureSpec.makeMeasureSpec(
-                    width, android.view.View.MeasureSpec.EXACTLY),
-                android.view.View.MeasureSpec.makeMeasureSpec(
-                    child.getHeight(), android.view.View.MeasureSpec.EXACTLY));
-            child.layout(child.getLeft() + leftInset, child.getTop(),
-                child.getRight() - rightInset, child.getBottom());
-        } catch (Throwable e) {
-            MainHook.log("[DC] 2x1 widget adaptation failed: " + e);
         }
     }
 

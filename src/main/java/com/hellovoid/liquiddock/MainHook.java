@@ -645,7 +645,6 @@ public class MainHook {
 
     // ── drawing / sync ───────────────────────────────────────────────
 
-    private static float clamp(float v, float lo, float hi) { return Math.max(lo, Math.min(hi, v)); }
     private static Path squirclePath(RectF r, float rad) { return squirclePath(r, rad, 0.65f); }
     private static Path squirclePath(RectF r, float rad, float cp) {
         Path p = new Path(); if (rad <= 1) { p.addRect(r, Path.Direction.CW); return p; }

@@ -194,7 +194,12 @@ final class LiquidDockConfig {
     }
 
     static final class Glass {
-        final boolean enabled;
+        final boolean enabled, folderEnabled, widgetEnabled, iconEnabled;
+        final float folderCornerRadiusDp;
+        final GlassComponentStyle iconStyle;
+        final GlassComponentStyle widgetStyle;
+        final GlassComponentStyle smallFolderStyle;
+        final GlassComponentStyle largeFolderStyle;
         final boolean prismalShowNormals;
         final PrismalHighlightProfile launcherHighlightProfile;
         final float blur, chromatic, thickness, ior, normalStrength, dome,
@@ -213,6 +218,40 @@ final class LiquidDockConfig {
         Glass(ConfigReader c) {
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
                     ConfigSchema.Glass.ENABLED.runtimeFallback());
+            boolean legacyFolderEnabled = c.b("liquid_folder_glass",
+                    ConfigSchema.Glass.FOLDER_GLASS.runtimeFallback());
+            float legacyFolderRadius = c.f("liquid_folder_corner_radius",
+                    ConfigSchema.Glass.FOLDER_CORNER_RADIUS.runtimeFallback());
+            boolean resolvedIconEnabled = c.b(ConfigSchema.Glass.ICON_GLASS.name(),
+                    ConfigSchema.Glass.ICON_GLASS.runtimeFallback());
+            boolean resolvedWidgetEnabled = c.b(ConfigSchema.Glass.WIDGET_GLASS.name(),
+                    ConfigSchema.Glass.WIDGET_GLASS.runtimeFallback());
+            boolean resolvedSmallEnabled = c.has(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name())
+                    ? c.b(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), true)
+                    : legacyFolderEnabled;
+            boolean resolvedLargeEnabled = c.has(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name())
+                    ? c.b(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), true)
+                    : legacyFolderEnabled;
+            float smallRadius = c.has(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name())
+                    ? c.f(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name(), 0f)
+                    : legacyFolderRadius;
+            float largeRadius = c.has(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name())
+                    ? c.f(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(), 0f)
+                    : legacyFolderRadius;
+            iconStyle = new GlassComponentStyle(resolvedIconEnabled,
+                    c.f(ConfigSchema.Glass.ICON_SIZE_OFFSET.name(), 0f),
+                    c.f(ConfigSchema.Glass.ICON_CORNER_RADIUS.name(), 0f));
+            widgetStyle = new GlassComponentStyle(resolvedWidgetEnabled,
+                    c.f(ConfigSchema.Glass.WIDGET_SIZE_OFFSET.name(), 0f),
+                    c.f(ConfigSchema.Glass.WIDGET_CORNER_RADIUS.name(), 0f));
+            smallFolderStyle = new GlassComponentStyle(resolvedSmallEnabled,
+                    c.f(ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET.name(), 0f), smallRadius);
+            largeFolderStyle = new GlassComponentStyle(resolvedLargeEnabled,
+                    c.f(ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET.name(), 0f), largeRadius);
+            iconEnabled = iconStyle.enabled;
+            widgetEnabled = widgetStyle.enabled;
+            folderEnabled = smallFolderStyle.enabled || largeFolderStyle.enabled;
+            folderCornerRadiusDp = legacyFolderRadius;
             launcherHighlightProfile = LauncherHighlightPreferences.read(c);
             blur = c.f(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.runtimeFallback());
             // Upstream Prismal uses the human-facing chromatic magnitude directly (for example 8).

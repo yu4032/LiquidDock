@@ -1,0 +1,84 @@
+package com.hellovoid.liquiddock;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import org.junit.Test;
+
+/** Hardware regressions must follow the vendor Launcher state and real Dock output coordinates. */
+public class LauncherVendorStateDockMappingPowerContractTest {
+    private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
+
+    @Test public void recentsCoverageUsesVendorSemanticDispatcherNotViewVisibility() throws Exception {
+        String hook = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(hook.contains("com.miui.home.recents.RecentsServiceDispatcher"));
+        assertTrue(hook.contains("onRecentViewShow"));
+        assertTrue(hook.contains("onRecentViewHide"));
+        assertFalse(controller.contains("recents.getVisibility()"));
+        assertFalse(controller.contains("recents.isShown()"));
+        assertFalse(session.contains("syncRecentsForRoot(root)"));
+    }
+
+    @Test public void folderCoverageUsesVendorFolderStatusDispatcher() throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+
+        assertTrue(folder.contains("com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl"));
+        assertTrue(folder.contains("dispatchFolderOpen"));
+        assertTrue(folder.contains("dispatchFolderClose"));
+    }
+
+    @Test public void dockUsesHotSeatsOnlyForOwnershipAndMaterialHostForOutputCoordinates() throws Exception {
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+        String item = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
+
+        assertTrue(compositor.contains("ownershipRootRef"));
+        assertTrue(compositor.contains("outputRootRef"));
+        assertTrue(compositor.contains("outputRoot.transformMatrixToGlobal"));
+        assertTrue(view.contains("new DockGlassCompositor("));
+        assertTrue(view.contains("materialHost"));
+        assertTrue(item.contains("belongsTo(ownershipRoot)"));
+        assertFalse(compositor.contains("itemSpacing"));
+        assertFalse(compositor.contains("dividerWidth"));
+    }
+
+    @Test public void dockReportsProducerAndGlDrawRatesWithoutDrivingExtraFrames() throws Exception {
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+
+        assertTrue(view.contains("producerFrameCount"));
+        assertTrue(view.contains("renderedFrameCount"));
+        assertTrue(view.contains("[DC][PBTX][Power]"));
+        assertFalse(view.contains("producerPump"));
+        assertFalse(view.contains("Choreographer.getInstance().postFrameCallback"));
+    }
+
+    @Test public void workspaceBindingCannotStayContinuousIfCoveragePredatesProducerBind() throws Exception {
+        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(controller.contains("isCoveredForRoot"));
+        assertTrue(session.contains("LauncherGlassSceneController.isCoveredForRoot(root)"));
+        assertTrue(session.contains("Miuix307PassBlurBridge.pauseUpdates(next)"));
+    }
+
+    @Test public void homeIdleDockFollowsVendorStaticSnapshotModeInsteadOfTimerThrottling() throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue(pipeline.contains("setMingouStaticDockSnapshotMode"));
+        assertTrue(pipeline.contains("vendorStaticSnapshotMode"));
+        assertTrue(pipeline.contains("Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(!snapshotMode"));
+        assertTrue(renderer.contains("setProducerUpdatesEnabled"));
+        assertTrue(view.contains("setProducerUpdatesEnabled"));
+        assertTrue(bridge.contains("static void resumeUpdates"));
+        assertFalse(pipeline.contains("postDelayed("));
+    }
+}

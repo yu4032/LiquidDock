@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
@@ -19,9 +20,9 @@ import android.view.ViewTreeObserver;
 
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
+import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
-import com.hellovoid.prismal.PrismalSampling;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -45,7 +46,6 @@ final class LauncherGlassSession {
     private static final String TAG = "[DC][LauncherGlass]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
-    private static final AtomicInteger NEXT_NODE_ID = new AtomicInteger(1);
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -60,25 +60,61 @@ final class LauncherGlassSession {
         final int bufferHeight;
         final int configRotation;
         final SurfaceControl rootSurface;
+        final int viewRootIdentity;
+        final int surfaceSequenceId;
+        final int rootLayerId;
+        final int insetLeft;
+        final int insetTop;
+        final int insetRight;
+        final int insetBottom;
+        final LauncherGlassSurfaceContentRect contentRect;
 
-        ProducerGeometry(int surfaceWidth, int surfaceHeight, int bufferWidth, int bufferHeight,
-                         int configRotation, SurfaceControl rootSurface) {
+        ProducerGeometry(
+                int surfaceWidth, int surfaceHeight, int bufferWidth, int bufferHeight,
+                int configRotation, SurfaceControl rootSurface,
+                int viewRootIdentity, int surfaceSequenceId, int rootLayerId,
+                int insetLeft, int insetTop, int insetRight, int insetBottom) {
             this.surfaceWidth = surfaceWidth;
             this.surfaceHeight = surfaceHeight;
             this.bufferWidth = bufferWidth;
             this.bufferHeight = bufferHeight;
             this.configRotation = configRotation;
             this.rootSurface = rootSurface;
+            this.viewRootIdentity = viewRootIdentity;
+            this.surfaceSequenceId = surfaceSequenceId;
+            this.rootLayerId = rootLayerId;
+            this.insetLeft = insetLeft;
+            this.insetTop = insetTop;
+            this.insetRight = insetRight;
+            this.insetBottom = insetBottom;
+            contentRect = LauncherGlassSurfaceContentRect.resolve(
+                    surfaceWidth, surfaceHeight,
+                    insetLeft, insetTop, insetRight, insetBottom);
         }
     }
 
     private static final class NodeState {
-        final int id = NEXT_NODE_ID.getAndIncrement();
         final WeakReference<LauncherGlassSinkView> sinkRef;
+        final LauncherGlassGeometryStability geometryStability =
+                new LauncherGlassGeometryStability();
         volatile LauncherGlassGeometry.Snapshot geometry;
+        volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
 
         NodeState(LauncherGlassSinkView sink) {
             sinkRef = new WeakReference<>(sink);
+        }
+    }
+
+
+    private static final class StaticNodeState {
+        final WeakReference<LauncherGlassStaticNode> nodeRef;
+        final LauncherGlassGeometryStability geometryStability =
+                new LauncherGlassGeometryStability();
+        volatile LauncherGlassGeometry.Snapshot geometry;
+        volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
+
+        StaticNodeState(LauncherGlassStaticNode node) {
+            nodeRef = new WeakReference<>(node);
         }
     }
 
@@ -106,8 +142,11 @@ final class LauncherGlassSession {
     private final float[] textureMatrix = new float[16];
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
+            Collections.synchronizedMap(new WeakHashMap<>());
     // EGL surfaces are created/destroyed only on renderHandler.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
+    private OutputState staticOutput;
 
     private volatile boolean shuttingDown;
     private volatile PrismalParams prismalParams;
@@ -118,11 +157,14 @@ final class LauncherGlassSession {
     private volatile int configRotation;
     private volatile int boundBufferWidth;
     private volatile int boundBufferHeight;
+    private volatile LauncherGlassSurfaceContentRect contentRect =
+            LauncherGlassSurfaceContentRect.full();
     private volatile Miuix307PassBlurBridge.Binding binding;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
-    private volatile LauncherGlassGpuAtlas.Layout atlasLayout;
     private volatile boolean hasConsumedFrame;
+    private volatile long sceneGeneration = 1L;
+    private volatile long consumedGeneration = -1L;
 
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
@@ -137,6 +179,7 @@ final class LauncherGlassSession {
     private int rawHeight;
     private volatile int maxTextureSize;
     private PrismalRenderer prismalRenderer;
+    private boolean backdropPrepared;
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
     private final View.OnAttachStateChangeListener rootAttachListener =
@@ -197,7 +240,7 @@ final class LauncherGlassSession {
                 ? glassConfig.launcherHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
         mainHandler.post(this::syncSceneOnUiThread);
-        requestFrame(false);
+        requestBackdropRebuild();
     }
 
     void registerSink(LauncherGlassSinkView sink) {
@@ -206,18 +249,152 @@ final class LauncherGlassSession {
             if (!nodes.containsKey(sink)) nodes.put(sink, new NodeState(sink));
         }
         syncSceneOnUiThread();
-        requestLifecycleRefresh();
+        requestDragRedraw();
     }
 
     void unregisterSink(LauncherGlassSinkView sink) {
         if (sink == null) return;
         synchronized (nodes) { nodes.remove(sink); }
-        requestLifecycleRefresh();
+        requestDragRedraw();
+    }
+
+    void updateInteraction(LauncherGlassSinkView sink, PrismalInteractionState interaction) {
+        if (sink == null || shuttingDown) return;
+        synchronized (nodes) {
+            NodeState node = nodes.get(sink);
+            if (node == null) return;
+            node.interaction = interaction != null ? interaction : PrismalInteractionState.IDLE;
+        }
+        // Interaction redraws reuse the last consumed wallpaper texture and prepared blur.
+        requestDragRedraw();
+    }
+
+
+    void registerStaticNode(LauncherGlassStaticNode node) {
+        if (node == null || shuttingDown) return;
+        synchronized (staticNodes) {
+            if (!staticNodes.containsKey(node)) staticNodes.put(node, new StaticNodeState(node));
+        }
+        syncSceneOnUiThread();
+        requestStaticRedraw();
+    }
+
+    void unregisterStaticNode(LauncherGlassStaticNode node) {
+        if (node == null) return;
+        synchronized (staticNodes) { staticNodes.remove(node); }
+        requestStaticRedraw();
+    }
+
+    void updateStaticInteraction(
+            LauncherGlassStaticNode node, PrismalInteractionState interaction) {
+        if (node == null || shuttingDown) return;
+        synchronized (staticNodes) {
+            StaticNodeState state = staticNodes.get(node);
+            if (state == null) return;
+            state.interaction = interaction != null ? interaction : PrismalInteractionState.IDLE;
+        }
+        requestStaticRedraw();
     }
 
     void requestLifecycleRefresh() {
+        requestSceneRedraw();
+    }
+
+    void invalidateGeneration(long generation) {
+        if (shuttingDown || generation < sceneGeneration) return;
+        sceneGeneration = generation;
+        frameAvailable.set(false);
+        hasConsumedFrame = false;
+        consumedGeneration = -1L;
+        backdropPrepared = false;
+    }
+
+    void requestFreshBackdrop(long generation) {
+        if (shuttingDown || generation < sceneGeneration) return;
+        invalidateGeneration(generation);
+        // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced
+        // during App -> HOME. Revalidate on the UI thread before pulsing PassBlur so a fresh
+        // request can never target a dead producer binding.
+        mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
+    }
+
+    void requestSceneRedraw() {
         if (shuttingDown) return;
         requestFrame(false);
+    }
+
+    private void recoverFreshBackdropOnUi(long generation, int attempt) {
+        if (shuttingDown || generation != sceneGeneration) return;
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) {
+            retryFreshBackdropRecovery(generation, attempt);
+            return;
+        }
+
+        // ViewRootImpl replacement does not necessarily detach the stable DecorView, so the old
+        // ViewTreeObserver can die without the root attach listener firing. Reinstall it here.
+        installRootObserver();
+        ProducerGeometry geometry = readSurfaceGeometry(root);
+        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
+            retryFreshBackdropRecovery(generation, attempt);
+            return;
+        }
+
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (current != null && (!current.rootSurface.isValid()
+                || !sameProducerSurfaceGeneration(current, geometry))) {
+            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+            MainHook.log(TAG + " producer Surface generation changed old=" + current.rootName
+                    + " oldLayerId=" + current.rootLayerId
+                    + " new=" + geometry.rootSurface
+                    + " newLayerId=" + geometry.rootLayerId
+                    + " oldSurfaceSeq=" + current.surfaceSequenceId
+                    + " newSurfaceSeq=" + geometry.surfaceSequenceId);
+            rebindProducer();
+            return;
+        }
+
+        boolean producerChanged = refreshProducerGeometryOnUi(root);
+        if (producerChanged || generation != sceneGeneration) return;
+
+        current = binding;
+        if (current == null) {
+            // Startup may reach the fresh boundary before EGL/input creation; a Surface rebind can
+            // also already be pending. Start exactly one existing bootstrap/rebind path.
+            if (inputSurfaceTexture == null || inputProducerSurface == null) requestFrame(true);
+            else bindProducerWhenReady(0);
+            return;
+        }
+        if (!current.bound || !current.rootSurface.isValid()
+                || !sameProducerSurfaceGeneration(current, geometry)) {
+            rebindProducer();
+            return;
+        }
+        requestFrame(true);
+    }
+
+    private void retryFreshBackdropRecovery(long generation, int attempt) {
+        if (shuttingDown || generation != sceneGeneration
+                || attempt >= MAX_BIND_RETRY_FRAMES) return;
+        View root = rootRef.get();
+        if (root == null) return;
+        root.postOnAnimation(() -> recoverFreshBackdropOnUi(generation, attempt + 1));
+    }
+
+    void requestDragRedraw() {
+        if (shuttingDown) return;
+        if (framePolicy.requestDrag()) postRender(this::drainFrameWork, null);
+    }
+
+    void requestStaticRedraw() {
+        if (shuttingDown) return;
+        if (framePolicy.requestStatic()) postRender(this::drainFrameWork, null);
+    }
+
+    void suspendWorkspaceProducer() {
+        if (shuttingDown) return;
+        Miuix307PassBlurBridge.pauseUpdates(binding);
     }
 
     void attachOutput(LauncherGlassSinkView sink, Surface surface, int width, int height) {
@@ -272,6 +449,61 @@ final class LauncherGlassSession {
         }, () -> { if (surface != null) surface.release(); });
     }
 
+
+    void attachStaticOutput(Surface surface, int width, int height) {
+        if (surface == null) return;
+        if (shuttingDown || !renderThread.isAlive()) {
+            surface.release();
+            return;
+        }
+        postRender(() -> {
+            if (shuttingDown) {
+                surface.release();
+                return;
+            }
+            try {
+                ensureEglAndGl();
+                releaseOutput(staticOutput);
+                OutputState next = new OutputState(surface, width, height);
+                next.eglSurface = EGL14.eglCreateWindowSurface(
+                        eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
+                checkEgl("eglCreateWindowSurface(static)", next.eglSurface != EGL14.EGL_NO_SURFACE);
+                staticOutput = next;
+                requestFrame(false);
+                mainHandler.post(() ->
+                        LauncherGlassSceneController.requestFreshForRoot(rootRef.get()));
+            } catch (Throwable error) {
+                MainHook.log(TAG + " attach static output failed " + debugLabel() + ": " + error);
+                surface.release();
+            }
+        }, surface::release);
+    }
+
+    void resizeStaticOutput(int width, int height) {
+        if (shuttingDown || !renderThread.isAlive()) return;
+        postRender(() -> {
+            OutputState output = staticOutput;
+            if (output != null) {
+                output.width = Math.max(1, width);
+                output.height = Math.max(1, height);
+                requestFrame(false);
+            }
+        }, null);
+    }
+
+    void detachStaticOutput(Surface surface) {
+        if (shuttingDown || !renderThread.isAlive()) {
+            if (surface != null) surface.release();
+            return;
+        }
+        postRender(() -> {
+            OutputState output = staticOutput;
+            staticOutput = null;
+            if (output != null) releaseOutput(output);
+            else if (surface != null) surface.release();
+        }, () -> { if (surface != null) surface.release(); });
+    }
+
     private void installRootObserver() {
         if (shuttingDown) return;
         View root = rootRef.get();
@@ -305,75 +537,113 @@ final class LauncherGlassSession {
         if (root == null) return;
         int nextWidth = root.getWidth();
         int nextHeight = root.getHeight();
-        boolean changed = nextWidth > 0 && nextHeight > 0
+        boolean rootGeometryChanged = nextWidth > 0 && nextHeight > 0
                 && (nextWidth != rootWidth || nextHeight != rootHeight);
+        boolean dragChanged = rootGeometryChanged;
+        boolean staticChanged = rootGeometryChanged;
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        List<NodeState> snapshot;
-        synchronized (nodes) { snapshot = new ArrayList<>(nodes.values()); }
-        for (NodeState node : snapshot) {
+        List<NodeState> dragSnapshot;
+        synchronized (nodes) { dragSnapshot = new ArrayList<>(nodes.values()); }
+        for (NodeState node : dragSnapshot) {
             LauncherGlassSinkView sink = node.sinkRef.get();
             if (sink == null) continue;
-            changed |= sink.syncFromMaterial();
-            LauncherGlassGeometry.Snapshot next = sink.captureGeometry(root);
+            boolean localChanged = sink.syncFromMaterial();
+            dragChanged |= localChanged;
+            if (!rootGeometryChanged && !localChanged) continue;
+            LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = node.geometry;
-            if ((old == null) != (next == null) || (old != null && !old.sameAs(next))) {
-                node.geometry = next;
-                changed = true;
+            LauncherGlassGeometry.Snapshot selected = rootGeometryChanged
+                    ? observed : node.geometryStability.select(old, observed, localChanged);
+            if ((old == null) != (selected == null)
+                    || (old != null && !old.sameAs(selected))) {
+                node.geometry = selected;
+                dragChanged = true;
             }
         }
-        changed |= refreshProducerGeometryOnUi(root);
-        changed |= rebuildAtlasLayout(root);
-        if (changed) {
-            requestFrame(false);
-        }
-    }
 
-    private boolean rebuildAtlasLayout(View root) {
-        PrismalParams params = prismalParams;
-        if (root == null || params == null || rootWidth <= 0 || rootHeight <= 0) return false;
-        List<NodeState> snapshot;
-        synchronized (nodes) { snapshot = new ArrayList<>(nodes.values()); }
-        ArrayList<LauncherGlassGpuAtlas.Request> requests = new ArrayList<>();
-        for (NodeState node : snapshot) {
-            LauncherGlassGeometry.Snapshot geometry = node.geometry;
-            if (geometry == null) continue;
-            int guardX = PrismalSampling.requiredGuardPx(
-                    params, geometry.width, geometry.height, true);
-            int guardY = PrismalSampling.requiredGuardPx(
-                    params, geometry.width, geometry.height, false);
-            int left = Math.max(0, (int) Math.floor(geometry.left - guardX));
-            int top = Math.max(0, (int) Math.floor(geometry.top - guardY));
-            int right = Math.min(rootWidth,
-                    (int) Math.ceil(geometry.left + geometry.width + guardX));
-            int bottom = Math.min(rootHeight,
-                    (int) Math.ceil(geometry.top + geometry.height + guardY));
-            if (right <= left || bottom <= top) continue;
-            requests.add(new LauncherGlassGpuAtlas.Request(
-                    node.id, left, top, right - left, bottom - top,
-                    geometry.left, geometry.top, geometry.width, geometry.height,
-                    geometry.cornerRadius));
+        List<StaticNodeState> staticSnapshot;
+        synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
+        for (StaticNodeState state : staticSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            boolean localChanged = node.syncFromMaterial();
+            staticChanged |= localChanged;
+            if (!rootGeometryChanged && !localChanged) continue;
+            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+            LauncherGlassGeometry.Snapshot old = state.geometry;
+            LauncherGlassGeometry.Snapshot selected = rootGeometryChanged
+                    ? observed : state.geometryStability.select(old, observed, localChanged);
+            if ((old == null) != (selected == null)
+                    || (old != null && !old.sameAs(selected))) {
+                state.geometry = selected;
+                staticChanged = true;
+            }
         }
-        int limit = maxTextureSize > 0 ? maxTextureSize
-                : Math.max(4096, Math.max(rootWidth, rootHeight));
-        LauncherGlassGpuAtlas.Layout next = LauncherGlassGpuAtlas.pack(requests, limit);
-        LauncherGlassGpuAtlas.Layout old = atlasLayout;
-        atlasLayout = next;
-        return old == null ? next != null : !old.sameAs(next);
+
+        boolean producerGeometryChanged = refreshProducerGeometryOnUi(root);
+        if (producerGeometryChanged || rootGeometryChanged) {
+            requestBackdropRebuild();
+            return;
+        }
+        boolean schedule = false;
+        if (staticChanged) schedule |= framePolicy.requestStatic();
+        if (dragChanged) schedule |= framePolicy.requestDrag();
+        if (schedule) postRender(this::drainFrameWork, null);
     }
 
     private boolean refreshProducerGeometryOnUi(View root) {
         ProducerGeometry geometry = readSurfaceGeometry(root);
-        if (geometry == null) return false;
+        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
+            return false;
+        }
+        if (!LauncherGlassProducerGeometryGate.matchesRoot(
+                rootWidth, rootHeight, geometry.surfaceWidth, geometry.surfaceHeight,
+                geometry.insetLeft, geometry.insetTop, geometry.insetRight, geometry.insetBottom)) {
+            frameAvailable.set(false);
+            hasConsumedFrame = false;
+            consumedGeneration = -1L;
+            MainHook.log(TAG + " producer geometry not coherent with root root="
+                    + rootWidth + "x" + rootHeight + " surface="
+                    + geometry.surfaceWidth + "x" + geometry.surfaceHeight);
+            return false;
+        }
         int nextRotation = geometry.configRotation;
-        boolean changed = nextRotation != configRotation
+        LauncherGlassSurfaceContentRect nextContentRect = geometry.contentRect;
+        boolean geometryChanged = nextRotation != configRotation
                 || geometry.bufferWidth != boundBufferWidth
-                || geometry.bufferHeight != boundBufferHeight;
+                || geometry.bufferHeight != boundBufferHeight
+                || !nextContentRect.sameAs(contentRect);
+        Miuix307PassBlurBridge.Binding current = binding;
+        boolean surfaceChanged = current != null && (!current.rootSurface.isValid()
+                || !sameProducerSurfaceGeneration(current, geometry));
+        boolean changed = geometryChanged || surfaceChanged;
         configRotation = nextRotation;
         if (changed) {
+            frameAvailable.set(false);
+            hasConsumedFrame = false;
+            consumedGeneration = -1L;
+            backdropPrepared = false;
+            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
             boundBufferWidth = geometry.bufferWidth;
             boundBufferHeight = geometry.bufferHeight;
+            contentRect = nextContentRect;
+            if (surfaceChanged) {
+                MainHook.log(TAG + " producer Surface generation changed old=" + current.rootName
+                        + " oldLayerId=" + current.rootLayerId
+                        + " new=" + geometry.rootSurface
+                        + " newLayerId=" + geometry.rootLayerId
+                        + " oldSurfaceSeq=" + current.surfaceSequenceId
+                        + " newSurfaceSeq=" + geometry.surfaceSequenceId);
+            } else {
+                MainHook.log(TAG + " producer geometry surface="
+                        + geometry.surfaceWidth + "x" + geometry.surfaceHeight
+                        + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
+                        + " insets=" + geometry.insetLeft + "," + geometry.insetTop
+                        + "," + geometry.insetRight + "," + geometry.insetBottom);
+            }
             SurfaceTexture input = inputSurfaceTexture;
             if (input != null && geometry.bufferWidth > 0 && geometry.bufferHeight > 0) {
                 postRender(() -> {
@@ -383,11 +653,12 @@ final class LauncherGlassSession {
                 }, null);
             }
         }
-        Miuix307PassBlurBridge.Binding current = binding;
-        if (current != null && (!current.rootSurface.isValid()
-                || !isSameSurface(current.rootSurface, geometry.rootSurface))) {
+        if (surfaceChanged) {
             rebindProducer();
             return true;
+        }
+        if (geometryChanged && current != null && current.bound) {
+            Miuix307PassBlurBridge.requestSingleUpdate(current, root);
         }
         return changed;
     }
@@ -413,6 +684,11 @@ final class LauncherGlassSession {
         if (framePolicy.request(refreshProducer)) postRender(this::drainFrameWork, null);
     }
 
+    private void requestBackdropRebuild() {
+        if (shuttingDown) return;
+        if (framePolicy.requestBackdropRebuild()) postRender(this::drainFrameWork, null);
+    }
+
     private void drainFrameWork() {
         if (shuttingDown) return;
         LauncherGlassFramePolicy.Work work = framePolicy.consume();
@@ -420,15 +696,30 @@ final class LauncherGlassSession {
         try {
             ensureEglAndGl();
             if (work.refreshProducer) refreshProducer();
+            boolean sourceChanged = false;
             SurfaceTexture input = inputSurfaceTexture;
             if (input != null && frameAvailable.getAndSet(false)) {
                 makePbufferCurrent();
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 hasConsumedFrame = true;
+                consumedGeneration = sceneGeneration;
+                sourceChanged = true;
+                Miuix307PassBlurBridge.pauseUpdates(binding);
             }
             if (!hasConsumedFrame) return;
-            renderScene();
+            boolean backdropDirty = work.rebuildBackdrop || sourceChanged || !backdropPrepared;
+            boolean staticDirty = backdropDirty;
+            if (work.staticDirty) staticDirty = true;
+            boolean dragDirty = backdropDirty;
+            if (work.dragDirty) dragDirty = true;
+            renderScene(backdropDirty, staticDirty, dragDirty);
+            long renderedGeneration = consumedGeneration;
+            if (sourceChanged && staticOutput != null && renderedGeneration == sceneGeneration) {
+                View rootView = rootRef.get();
+                mainHandler.post(() -> LauncherGlassSceneController.onFreshFrameRendered(
+                        rootView, renderedGeneration));
+            }
         } catch (Throwable error) {
             MainHook.log(TAG + " render failed: " + error);
         }
@@ -436,14 +727,9 @@ final class LauncherGlassSession {
 
     private void refreshProducer() {
         Miuix307PassBlurBridge.Binding current = binding;
-        if (current == null || !current.bound || !current.rootSurface.isValid()) return;
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            current.setUpdateTextureFlag.invoke(
-                    transaction, current.rootSurface, Boolean.TRUE, Float.valueOf(current.scale));
-            transaction.apply();
-        } catch (Throwable error) {
-            MainHook.log(TAG + " PassBlur refresh failed: " + error);
-        }
+        View root = rootRef.get();
+        if (current == null || root == null || !current.bound || !current.rootSurface.isValid()) return;
+        Miuix307PassBlurBridge.requestSingleUpdate(current, root);
     }
 
     private void ensureEglAndGl() {
@@ -459,7 +745,10 @@ final class LauncherGlassSession {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
         }
-        if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
+        if (prismalRenderer == null) {
+            prismalRenderer = new PrismalRenderer();
+            backdropPrepared = false;
+        }
         if (oesTexture == 0 || inputSurfaceTexture == null || inputProducerSurface == null) {
             createInputProducer();
         }
@@ -522,6 +811,7 @@ final class LauncherGlassSession {
         Surface producer = new Surface(input);
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
+        backdropPrepared = false;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
             frameAvailable.set(true);
@@ -559,12 +849,20 @@ final class LauncherGlassSession {
             return;
         }
         binding = next;
+        if (LauncherGlassSceneController.isCoveredForRoot(root)) {
+            // Coverage can predate the asynchronous producer bind. Do not leave a hidden
+            // Workspace producer in the bridge's default continuous-on-bind state.
+            Miuix307PassBlurBridge.pauseUpdates(next);
+        }
         configRotation = geometry.configRotation;
         boundBufferWidth = geometry.bufferWidth;
         boundBufferHeight = geometry.bufferHeight;
+        contentRect = geometry.contentRect;
         MainHook.log(TAG + " shared PassBlur producer bound " + debugLabel()
                 + " surface=" + next.rootName + " buffer="
-                + geometry.bufferWidth + "x" + geometry.bufferHeight);
+                + geometry.bufferWidth + "x" + geometry.bufferHeight
+                + " insets=" + geometry.insetLeft + "," + geometry.insetTop
+                + "," + geometry.insetRight + "," + geometry.insetBottom);
         requestFrame(true);
     }
 
@@ -579,63 +877,116 @@ final class LauncherGlassSession {
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
-        mainHandler.post(() -> bindProducerWhenReady(0));
+        backdropPrepared = false;
+        rollInputProducerForRebind();
     }
 
-    private void renderScene() {
-        PrismalParams params = prismalParams;
-        LauncherGlassGpuAtlas.Layout layout = atlasLayout;
-        if (layout == null || layout.width <= 0 || layout.height <= 0
-                || params == null || outputs.isEmpty()) return;
-        makePbufferCurrent();
-        ensureRawTarget(layout.width, layout.height);
-        renderNormalization(layout);
-        prismalRenderer.prepareBackdrop(rawTexture, layout.width, layout.height, params);
-        prismalRenderer.beginGlassFrame();
+    private void rollInputProducerForRebind() {
+        if (shuttingDown) return;
+        postRender(() -> {
+            if (shuttingDown) return;
+            makePbufferCurrent();
+            releaseInputProducerEndpointOnRenderThread();
+            if (shuttingDown) return;
+            MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
+            createInputProducer();
+        }, null);
+    }
 
-        List<NodeState> snapshot;
-        synchronized (nodes) { snapshot = new ArrayList<>(nodes.values()); }
-        java.util.HashMap<Integer, NodeState> byId = new java.util.HashMap<>();
-        for (NodeState node : snapshot) byId.put(node.id, node);
+    private void releaseInputProducerEndpointOnRenderThread() {
+        Surface producer = inputProducerSurface;
+        inputProducerSurface = null;
+        SurfaceTexture input = inputSurfaceTexture;
+        inputSurfaceTexture = null;
 
-        boolean drew = false;
-        java.util.HashMap<Integer, LauncherGlassGeometry.Snapshot> atlasGeometries =
-                new java.util.HashMap<>();
-        for (LauncherGlassGpuAtlas.Tile tile : layout.tiles) {
-            NodeState node = byId.get(tile.request.id);
-            if (node == null || node.sinkRef.get() == null) continue;
-            float left = tile.glassAtlasLeft();
-            float top = tile.glassAtlasTop();
-            LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
-                    layout.width, layout.height, left, top,
-                    left + tile.request.glassWidth, top + tile.request.glassHeight,
-                    tile.request.cornerRadius);
-            if (geometry == null) continue;
-            atlasGeometries.put(tile.request.id, geometry);
-            PrismalGeometry prismalGeometry = new PrismalGeometry(
-                    layout.width, layout.height, geometry.centerX, geometry.centerY,
-                    geometry.width, geometry.height, geometry.cornerRadius);
-            prismalRenderer.drawGlass(prismalGeometry, params, launcherHighlightProfile);
-            drew = true;
+        frameAvailable.set(false);
+        hasConsumedFrame = false;
+        consumedGeneration = -1L;
+        backdropPrepared = false;
+
+        if (input != null) {
+            try {
+                input.setOnFrameAvailableListener(null);
+            } catch (Throwable ignored) {
+            }
         }
-        if (!drew) return;
+        if (producer != null) {
+            try {
+                producer.release();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (input != null) {
+            try {
+                input.release();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (oesTexture != 0) {
+            GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
+            oesTexture = 0;
+        }
+    }
 
-        int sceneTexture = prismalRenderer.outputTexture();
+    private void renderScene(boolean rebuildBackdrop, boolean renderStatic, boolean renderDrag) {
+        PrismalParams params = prismalParams;
+        if (params == null || rootWidth <= 0 || rootHeight <= 0
+                || (staticOutput == null && outputs.isEmpty())) return;
+        makePbufferCurrent();
+        boolean rawTargetChanged = rawFramebuffer == 0
+                || rawWidth != rootWidth || rawHeight != rootHeight;
+        ensureRawTarget(rootWidth, rootHeight);
+        if (rebuildBackdrop || rawTargetChanged || !backdropPrepared) {
+            renderNormalizationRoot();
+            prismalRenderer.prepareBackdrop(rawTexture, rootWidth, rootHeight, params);
+            backdropPrepared = true;
+        }
+        if (renderStatic) renderStaticScene(params);
+        if (renderDrag) renderDragOutputs(params);
+    }
+
+    private void renderStaticScene(PrismalParams params) {
+        OutputState output = staticOutput;
+        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
+        makePbufferCurrent();
+        prismalRenderer.beginGlassFrame();
+        List<StaticNodeState> snapshot;
+        synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
+        for (StaticNodeState state : snapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            LauncherGlassGeometry.Snapshot geometry = state.geometry;
+            if (node == null || geometry == null) continue;
+            PrismalGeometry prismalGeometry = new PrismalGeometry(
+                    rootWidth, rootHeight, geometry.centerX, geometry.centerY,
+                    geometry.width, geometry.height, geometry.cornerRadius);
+            prismalRenderer.drawGlass(
+                    prismalGeometry, params, launcherHighlightProfile, state.interaction);
+        }
+        presentFull(prismalRenderer.outputTexture(), output);
+    }
+
+    private void renderDragOutputs(PrismalParams params) {
         for (Map.Entry<LauncherGlassSinkView, OutputState> entry
                 : new ArrayList<>(outputs.entrySet())) {
             NodeState node = nodes.get(entry.getKey());
-            if (node == null) continue;
-            LauncherGlassGeometry.Snapshot geometry = atlasGeometries.get(node.id);
+            LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (geometry == null) continue;
-            present(sceneTexture, geometry, entry.getValue());
+            makePbufferCurrent();
+            prismalRenderer.beginGlassFrame();
+            PrismalGeometry prismalGeometry = new PrismalGeometry(
+                    rootWidth, rootHeight, geometry.centerX, geometry.centerY,
+                    geometry.width, geometry.height, geometry.cornerRadius);
+            prismalRenderer.drawGlass(
+                    prismalGeometry, params, launcherHighlightProfile, node.interaction);
+            present(prismalRenderer.outputTexture(), geometry, entry.getValue());
         }
     }
 
-    private void renderNormalization(LauncherGlassGpuAtlas.Layout layout) {
+    private void renderNormalizationRoot() {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, rawFramebuffer);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glViewport(0, 0, layout.width, layout.height);
+        GLES20.glViewport(0, 0, rootWidth, rootHeight);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
@@ -647,21 +998,35 @@ final class LauncherGlassSession {
                 1, false, textureMatrix, 0);
         GLES20.glUniform1i(requireUniform(normalizeProgram, "uConfigRot"), configRotation);
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"), 0f, 0f, 1f, 1f);
-        for (LauncherGlassGpuAtlas.Tile tile : layout.tiles) {
-            LauncherGlassGpuAtlas.Request request = tile.request;
-            int viewportY = layout.height - tile.atlasBottom();
-            GLES20.glViewport(tile.atlasLeft, viewportY,
-                    request.sourceWidth, request.sourceHeight);
-            float left = request.sourceLeft / (float) Math.max(1, rootWidth);
-            float bottom = (rootHeight - (request.sourceTop + request.sourceHeight))
-                    / (float) Math.max(1, rootHeight);
-            float width = request.sourceWidth / (float) Math.max(1, rootWidth);
-            float height = request.sourceHeight / (float) Math.max(1, rootHeight);
-            GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
-                    left, bottom, width, height);
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        }
+        LauncherGlassSurfaceContentRect contentRect = this.contentRect;
+        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
+                contentRect.left, contentRect.bottom, contentRect.width, contentRect.height);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(normalizeProgram);
+    }
+
+    private void presentFull(int sceneTexture, OutputState output) {
+        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
+                || output.width <= 0 || output.height <= 0) return;
+        makeCurrent(output.eglSurface);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glViewport(0, 0, output.width, output.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUseProgram(compositeProgram);
+        bindQuad(compositeProgram);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
+        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindQuad(compositeProgram);
+        if (!EGL14.eglSwapBuffers(eglDisplay, output.eglSurface)) {
+            throw new IllegalStateException("eglSwapBuffers(static) error=0x"
+                    + Integer.toHexString(EGL14.eglGetError()));
+        }
     }
 
     private void present(int sceneTexture, LauncherGlassGeometry.Snapshot geometry,
@@ -730,6 +1095,7 @@ final class LauncherGlassSession {
         rawTexture = 0;
         rawWidth = 0;
         rawHeight = 0;
+        backdropPrepared = false;
     }
 
     void shutdown() {
@@ -762,6 +1128,8 @@ final class LauncherGlassSession {
             if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE
                     && eglContext != EGL14.EGL_NO_CONTEXT) makePbufferCurrent();
         } catch (Throwable ignored) {}
+        releaseOutput(staticOutput);
+        staticOutput = null;
         for (OutputState output : new ArrayList<>(outputs.values())) releaseOutput(output);
         outputs.clear();
         try { releaseRawTarget(); } catch (Throwable ignored) {}
@@ -772,17 +1140,7 @@ final class LauncherGlassSession {
         if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
         if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
         normalizeProgram = compositeProgram = 0;
-        if (oesTexture != 0) GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
-        oesTexture = 0;
-        Surface producer = inputProducerSurface;
-        inputProducerSurface = null;
-        if (producer != null) producer.release();
-        SurfaceTexture input = inputSurfaceTexture;
-        inputSurfaceTexture = null;
-        if (input != null) {
-            try { input.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
-            input.release();
-        }
+        releaseInputProducerEndpointOnRenderThread();
         if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
             try { EGL14.eglDestroySurface(eglDisplay, eglPbufferSurface); } catch (Throwable ignored) {}
         }
@@ -810,6 +1168,7 @@ final class LauncherGlassSession {
             int surfaceWidth = surfaceSize.x;
             int surfaceHeight = surfaceSize.y;
             if (surfaceWidth <= 0 || surfaceHeight <= 0) return null;
+            Rect surfaceInsets = readSurfaceInsets(viewRoot);
             int rotation = readConfigRotation(root);
             int bufferWidth = surfaceWidth;
             int bufferHeight = surfaceHeight;
@@ -822,11 +1181,33 @@ final class LauncherGlassSession {
             Object value = method.invoke(viewRoot);
             SurfaceControl surfaceControl = value instanceof SurfaceControl
                     ? (SurfaceControl) value : null;
+            int viewRootIdentity = System.identityHashCode(viewRoot);
+            int surfaceSequenceId = Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot);
+            int rootLayerId = Miuix307PassBlurBridge.surfaceLayerId(surfaceControl);
             return new ProducerGeometry(surfaceWidth, surfaceHeight,
-                    bufferWidth, bufferHeight, rotation, surfaceControl);
+                    bufferWidth, bufferHeight, rotation, surfaceControl,
+                    viewRootIdentity, surfaceSequenceId, rootLayerId,
+                    surfaceInsets.left, surfaceInsets.top,
+                    surfaceInsets.right, surfaceInsets.bottom);
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static Rect readSurfaceInsets(Object viewRoot) {
+        Rect result = new Rect();
+        if (viewRoot == null) return result;
+        try {
+            Field attrsField = findField(viewRoot.getClass(), "mWindowAttributes");
+            attrsField.setAccessible(true);
+            Object attrs = attrsField.get(viewRoot);
+            if (attrs == null) return result;
+            Field insetsField = findField(attrs.getClass(), "surfaceInsets");
+            insetsField.setAccessible(true);
+            Object value = insetsField.get(attrs);
+            if (value instanceof Rect) result.set((Rect) value);
+        } catch (Throwable ignored) {}
+        return result;
     }
 
     private static int readConfigRotation(View view) {
@@ -855,6 +1236,29 @@ final class LauncherGlassSession {
             catch (NoSuchFieldException ignored) { current = current.getSuperclass(); }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    private static boolean sameProducerSurfaceGeneration(
+            Miuix307PassBlurBridge.Binding current, ProducerGeometry geometry) {
+        if (current == null || geometry == null) return false;
+        // ViewRoot replacement is a generation change even if WMS happens to reuse a layer id.
+        if (current.viewRootIdentity != 0 && geometry.viewRootIdentity != 0
+                && current.viewRootIdentity != geometry.viewRootIdentity) {
+            return false;
+        }
+        boolean comparedImmutableGeneration = false;
+        if (current.rootLayerId >= 0 && geometry.rootLayerId >= 0) {
+            comparedImmutableGeneration = true;
+            if (current.rootLayerId != geometry.rootLayerId) return false;
+        }
+        if (current.surfaceSequenceId >= 0 && geometry.surfaceSequenceId >= 0) {
+            comparedImmutableGeneration = true;
+            if (current.surfaceSequenceId != geometry.surfaceSequenceId) return false;
+        }
+        if (comparedImmutableGeneration) return true;
+        // Last-resort compatibility fallback only. It is intentionally not the primary key because
+        // ViewRootImpl can mutate the same SurfaceControl wrapper to a new native BLAST layer.
+        return isSameSurface(current.rootSurface, geometry.rootSurface);
     }
 
     private static boolean isSameSurface(SurfaceControl first, SurfaceControl second) {

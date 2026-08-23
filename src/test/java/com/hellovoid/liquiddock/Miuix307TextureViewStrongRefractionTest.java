@@ -75,7 +75,9 @@ public class Miuix307TextureViewStrongRefractionTest {
         String renderer = Files.readString(Path.of(
                 "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
         assertTrue(source.contains("PrismalGeometry prismalGeometry = createPrismalGeometry(mapping)")
-                && source.contains("prismalRenderer.render("));
+                && source.contains("prismalRenderer.prepareBackdrop(")
+                && source.contains("dockCompositor.drawFrame(")
+                && source.contains("prismalRenderer.outputTexture()"));
         assertTrue(source.contains("mapping.dockUvWidth * mapping.sampleWidth")
                 && source.contains("mapping.dockUvHeight * mapping.sampleHeight"));
         assertTrue(renderer.contains("uniform2f(\"u_resolution\", width, height)"));

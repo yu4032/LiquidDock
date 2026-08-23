@@ -39,7 +39,9 @@ public class Miuix307TextureViewPassBlurCalibrationTest {
         String shader = Files.readString(Path.of("prismal/src/main/res/raw/prismal_fragment.glsl"));
 
         assertTrue(view.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(view.contains("prismalRenderer.render("));
+        assertTrue(view.contains("prismalRenderer.prepareBackdrop(")
+                && view.contains("dockCompositor.drawFrame(")
+                && view.contains("prismalRenderer.outputTexture()"));
         assertTrue(adapter.contains("samplerExternalOES uTexture")
                 && adapter.contains("uBackdropRect")
                 && adapter.contains("uConfigRot")

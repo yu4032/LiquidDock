@@ -16,9 +16,9 @@ public class FolderOpenLifecycleContractTest {
     }
 
     @Test
-    public void folderOpenSuppressesOnlyItsOwnLauncherGlassSink() throws Exception {
+    public void folderOpenSuppressesOnlyItsOwnLauncherGlassStaticNode() throws Exception {
         String hook = read("MiuixFolderGlassHook.java");
-        String sink = read("LauncherGlassSinkView.java");
+        String sink = read("LauncherGlassStaticNode.java");
 
         assertTrue("FolderIcon.onOpen is the authoritative source-owner open edge",
                 hook.contains("findMethodExact(folderIcon, \"onOpen\", new Class<?>[0])"));
@@ -27,10 +27,10 @@ public class FolderOpenLifecycleContractTest {
         assertFalse("opening one folder must never hide every folder output",
                 hook.contains("setAllFolderOutputsVisible(false)"));
 
-        assertTrue("sink needs persistent state independent of vendor View visibility",
+        assertTrue("sink needs persistent folder-open state independent of vendor View visibility",
                 sink.contains("suppressedByFolderOpen"));
-        assertTrue("material visibility sync must preserve folder-open suppression",
-                sink.contains("suppressedByFolderOpen ? View.GONE : material.getVisibility()"));
+        assertTrue("folder-open suppression must compose with independent drag suppression",
+                sink.contains("suppressedByFolderOpen || suppressedByDrag"));
     }
 
     @Test
