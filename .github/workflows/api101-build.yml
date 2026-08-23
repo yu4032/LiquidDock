@@ -6,12 +6,13 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
-      - 'fix/**'
-      - 'feat/**'
-      - 'demo/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+concurrency:
+  group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -25,6 +26,16 @@ jobs:
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
+      - name: Materialize bounded rotation/wallpaper fix
+        run: |
+          git apply --check ci/24bug-launcher-session-green.patch
+          git apply --check ci/24bug-scene-controller-green.patch
+          git apply ci/24bug-launcher-session-green.patch
+          git apply ci/24bug-scene-controller-green.patch
+          git apply --check ci/24bug-resize-pulse-order.patch
+          git apply ci/24bug-resize-pulse-order.patch
+          git apply --check ci/24bug-rotation-settle.patch
+          git apply ci/24bug-rotation-settle.patch
       - run: ./gradlew testDebugUnitTest --stacktrace
       - run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
