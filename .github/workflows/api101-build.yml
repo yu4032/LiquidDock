@@ -45,6 +45,7 @@ jobs:
           mkdir -p build/glass-scene-verified
           git diff -- src/main > build/glass-scene-verified/glass-scene.patch
           cp -a src/main build/glass-scene-verified/src-main
+          cp -a src/test build/glass-scene-verified/src-test
       - name: Upload patched sources
         if: always()
         uses: actions/upload-artifact@v4
