@@ -27,6 +27,7 @@ jobs:
       - run: chmod +x ./gradlew
       - name: Apply device glass experiment
         run: |
+          python3 ci/glass_device_prep.py
           python3 ci/glass_device_fix.py
           sed -i 's/runtimeDefault()/runtimeFallback()/g' src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java
       - run: ./gradlew testDebugUnitTest --stacktrace
