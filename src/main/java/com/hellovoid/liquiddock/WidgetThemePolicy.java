@@ -12,6 +12,9 @@ public final class WidgetThemePolicy {
         if ("light".equals(mode)) {
             return (uiMode & ~UI_MODE_NIGHT_MASK) | UI_MODE_NIGHT_NO;
         }
+        if ("dark".equals(mode)) {
+            return (uiMode & ~UI_MODE_NIGHT_MASK) | UI_MODE_NIGHT_YES;
+        }
         return uiMode;
     }
 }
