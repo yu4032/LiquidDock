@@ -14,10 +14,13 @@ final class DockIconLaunchProxyBridge {
 
     private static final class Binding {
         final WeakReference<View> anchorRef;
-        final LauncherGlassStaticNode node;
-        Binding(View anchor, LauncherGlassStaticNode node) {
+        final DockIconFrozenGlassLayer layer;
+        LauncherGlassStaticNode fallbackNode;
+
+        Binding(View anchor, DockIconFrozenGlassLayer layer, LauncherGlassStaticNode fallbackNode) {
             anchorRef = new WeakReference<>(anchor);
-            this.node = node;
+            this.layer = layer;
+            this.fallbackNode = fallbackNode;
         }
     }
 
@@ -25,18 +28,36 @@ final class DockIconLaunchProxyBridge {
 
     static void holdHidden(Object owner, View target, LiquidDockConfig.Glass glassConfig) {
         if (target == null) return;
-        DockGlassItemRegistry.holdLaunchProxyHidden(target);
+        // Capture the final static Dock glass before marking the Dock item as proxy-owned. Once the
+        // registry yields, DockGlassItemNode.capture() intentionally returns null.
         Binding binding = ensureBinding(owner, target, glassConfig);
-        if (binding != null && binding.node != null) binding.node.holdLaunchProxyHidden();
+        DockGlassItemRegistry.holdLaunchProxyHidden(target);
+        if (binding == null) return;
+        if (binding.layer != null && !binding.layer.isFailed()) {
+            binding.layer.holdHidden();
+            return;
+        }
+        LauncherGlassStaticNode fallback = ensureFallback(binding, target, glassConfig);
+        if (fallback != null) fallback.holdLaunchProxyHidden();
     }
 
-    static void update(Object owner, View target, RectF rect, LiquidDockConfig.Glass glassConfig) {
+    static void update(
+            Object owner,
+            View target,
+            RectF rect,
+            Object vendorTransaction,
+            LiquidDockConfig.Glass glassConfig) {
         if (target == null || rect == null || rect.width() <= 0f || rect.height() <= 0f) return;
-        DockGlassItemRegistry.updateLaunchProxyGeometry(
-                target, rect.left, rect.top, rect.right, rect.bottom);
         Binding binding = ensureBinding(owner, target, glassConfig);
-        if (binding != null && binding.node != null) {
-            binding.node.updateLaunchProxyGeometry(rect.left, rect.top, rect.right, rect.bottom);
+        DockGlassItemRegistry.holdLaunchProxyHidden(target);
+        if (binding == null) return;
+        if (binding.layer != null && !binding.layer.isFailed()) {
+            binding.layer.update(owner, rect, vendorTransaction);
+            return;
+        }
+        LauncherGlassStaticNode fallback = ensureFallback(binding, target, glassConfig);
+        if (fallback != null) {
+            fallback.updateLaunchProxyGeometry(rect.left, rect.top, rect.right, rect.bottom);
         }
     }
 
@@ -44,9 +65,13 @@ final class DockIconLaunchProxyBridge {
         if (target == null) return;
         Binding binding;
         synchronized (BINDINGS) { binding = BINDINGS.remove(target); }
-        if (binding != null && binding.node != null) {
-            binding.node.endLaunchProxy();
-            binding.node.dispose();
+        if (binding != null) {
+            if (binding.layer != null) binding.layer.release();
+            LauncherGlassStaticNode fallback = binding.fallbackNode;
+            if (fallback != null) {
+                fallback.endLaunchProxy();
+                fallback.dispose();
+            }
         }
         DockGlassItemRegistry.endLaunchProxy(target);
     }
@@ -66,19 +91,42 @@ final class DockIconLaunchProxyBridge {
         if (anchor == null || !anchor.isAttachedToWindow()) return null;
         synchronized (BINDINGS) {
             Binding existing = BINDINGS.get(target);
-            if (existing != null && existing.anchorRef.get() == anchor && existing.node != null) {
-                return existing;
-            }
-            if (existing != null && existing.node != null) existing.node.dispose();
-            LauncherGlassStaticNode node = attachLaunchProxyAnchor(
-                    anchor, target, glassConfig);
-            if (node == null) {
+            if (existing != null && existing.anchorRef.get() == anchor) return existing;
+            if (existing != null) releaseBinding(existing);
+
+            DockIconFrozenGlassLayer frozen =
+                    DockIconFrozenGlassLayer.tryCreate(owner, anchor, target);
+            LauncherGlassStaticNode fallback = frozen == null
+                    ? attachLaunchProxyAnchor(anchor, target, glassConfig)
+                    : null;
+            if (frozen == null && fallback == null) {
                 BINDINGS.remove(target);
                 return null;
             }
-            Binding created = new Binding(anchor, node);
+            Binding created = new Binding(anchor, frozen, fallback);
             BINDINGS.put(target, created);
             return created;
+        }
+    }
+
+    private static LauncherGlassStaticNode ensureFallback(
+            Binding binding, View target, LiquidDockConfig.Glass glassConfig) {
+        if (binding == null) return null;
+        LauncherGlassStaticNode current = binding.fallbackNode;
+        if (current != null) return current;
+        View anchor = binding.anchorRef.get();
+        if (anchor == null) return null;
+        LauncherGlassStaticNode created = attachLaunchProxyAnchor(anchor, target, glassConfig);
+        binding.fallbackNode = created;
+        return created;
+    }
+
+    private static void releaseBinding(Binding binding) {
+        if (binding == null) return;
+        if (binding.layer != null) binding.layer.release();
+        if (binding.fallbackNode != null) {
+            binding.fallbackNode.endLaunchProxy();
+            binding.fallbackNode.dispose();
         }
     }
 
@@ -95,9 +143,6 @@ final class DockIconLaunchProxyBridge {
                             LauncherGlassNodeKind.class, LauncherGlassSession.class,
                             float.class, LiquidDockConfig.Glass.class);
             constructor.setAccessible(true);
-            // Geometry reference stays the original Dock ShortcutIcon, while the injected Session
-            // belongs to the Launcher main ViewRoot. The existing proxy branch consumes vendor rects
-            // before any Workspace/source visibility check, so no Dock transform leaks across windows.
             LauncherGlassStaticNode node = constructor.newInstance(
                     proxyReference, LauncherGlassDragState.Kind.ICON, LauncherGlassNodeKind.ICON,
                     shared, radius, glassConfig);
@@ -105,7 +150,7 @@ final class DockIconLaunchProxyBridge {
             shared.registerStaticNode(node);
             return node;
         } catch (Throwable error) {
-            MainHook.log("[DC][DockIconProxy] proxy node attach failed: " + error);
+            MainHook.log("[DC][DockIconProxy] fallback node attach failed: " + error);
             return null;
         }
     }
@@ -130,9 +175,6 @@ final class DockIconLaunchProxyBridge {
     private static View resolveSessionAnchor(Object owner) {
         if (owner instanceof View) return (View) owner;
         try {
-            // FloatingIconLayer2 is not a View in Launcher 4.50. It stores private Launcher
-            // launcher and renders its SurfaceControl against launcher.getRootView(). Workspace is
-            // an attached View in that same ViewRoot, so use it only as the shared-session anchor.
             Object launcher = HookUtil.getField(owner, "launcher");
             Object workspace = HookUtil.invoke(launcher, "getWorkspace");
             return workspace instanceof View ? (View) workspace : null;

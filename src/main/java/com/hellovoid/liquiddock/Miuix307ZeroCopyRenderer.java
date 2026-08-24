@@ -47,6 +47,21 @@ final class Miuix307ZeroCopyRenderer {
         return true;
     }
 
+    static DockIconFrozenGlassRenderer.FrozenIconSpec captureFrozenIconSpec(View target) {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        return gpuBackdrop != null
+                ? DockIconFrozenGlassRenderer.capture(gpuBackdrop, target)
+                : null;
+    }
+
+    static boolean renderFrozenIcon(
+            DockIconFrozenGlassRenderer.FrozenIconSpec spec,
+            android.view.Surface surface,
+            Runnable ready,
+            Runnable failed) {
+        return DockIconFrozenGlassRenderer.render(spec, surface, ready, failed);
+    }
+
     static boolean isInstalled() {
         return gpuBackdropRef.get() != null;
     }

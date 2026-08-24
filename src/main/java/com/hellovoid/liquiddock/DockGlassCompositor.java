@@ -96,6 +96,26 @@ final class DockGlassCompositor {
         lastInsetT = sampleInsetTop;
     }
 
+    LauncherGlassGeometry.Snapshot captureUiItem(
+            View candidate, int framebufferWidth, int framebufferHeight,
+            float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
+        View ownershipRoot = ownershipRootRef.get();
+        View outputRoot = outputRootRef.get();
+        if (candidate == null || ownershipRoot == null || outputRoot == null
+                || !GlassRuntimeState.isEnabled() || !iconStyle.enabled) {
+            return null;
+        }
+        DockGlassItemNode item = new DockGlassItemNode(candidate, iconStyle);
+        if (!item.belongsTo(ownershipRoot)) return null;
+        Matrix outputGlobal = new Matrix();
+        outputRoot.transformMatrixToGlobal(outputGlobal);
+        Matrix outputInverse = new Matrix();
+        if (!outputGlobal.invert(outputInverse)) return null;
+        return item.capture(ownershipRoot, outputInverse,
+                framebufferWidth, framebufferHeight,
+                sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
+    }
+
     DockGlassSceneSnapshot latestScene() { return latestScene; }
 
     int drawFrame(PrismalRenderer renderer, PrismalGeometry dockBody, PrismalParams params,

@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.RectF;
 import android.view.View;
 
-/** Routes Launcher 4.50 Dock ShortcutIcon animation ownership into the Launcher-root proxy glass. */
+/** Routes Launcher 4.50 Dock ShortcutIcon animation ownership into frozen Launcher-root glass. */
 final class DockIconLaunchProxyHook {
     private static final String TAG = "[DC][DockIconProxy]";
     private static boolean installed;
@@ -58,44 +58,47 @@ final class DockIconLaunchProxyHook {
             HookUtil.hookMethod(classLoader, className, "update",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (args.length == 10 && args[0] instanceof RectF
-                                && args[1] instanceof RectF && args[2] instanceof Number
-                                && args[6] instanceof Boolean && !((Boolean) args[6])) {
-                            Object owner = chain.getThisObject();
-                            Object target = HookUtil.invoke(owner, "getAnimTarget");
-                            if (target instanceof View) {
-                                View targetView = (View) target;
-                                if (LauncherGlassHierarchy.classify(targetView)
-                                        == LauncherGlassHierarchy.Domain.DOCK) {
-                                    float proxyAlpha = ((Number) args[2]).floatValue();
-                                    boolean drawIcon;
-                                    if (useRotationRect) {
-                                        try {
-                                            drawIcon = HookUtil.getBooleanField(owner, "mIsDrawIcon");
-                                        } catch (Throwable ignored) {
-                                            drawIcon = false;
-                                        }
-                                    } else {
-                                        Object draw = HookUtil.invoke(owner, "isDrawIcon");
-                                        drawIcon = draw instanceof Boolean && ((Boolean) draw);
-                                    }
-                                    boolean proxyVisible = useRotationRect
-                                            ? LauncherGlassProxyVisibility.isLayer2Visible(
-                                                    proxyAlpha, drawIcon)
-                                            : LauncherGlassProxyVisibility.isView2Visible(
-                                                    proxyAlpha, drawIcon);
-                                    if (!proxyVisible) {
-                                        DockIconLaunchProxyBridge.holdHidden(
-                                                owner, targetView, glassConfig);
-                                    } else {
-                                        RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
-                                        DockIconLaunchProxyBridge.update(
-                                                owner, targetView, proxyRect, glassConfig);
-                                    }
-                                }
-                            }
+                        if (args.length != 10 || !(args[0] instanceof RectF)
+                                || !(args[1] instanceof RectF) || !(args[2] instanceof Number)
+                                || !(args[6] instanceof Boolean) || ((Boolean) args[6])) {
+                            return chain.proceed(args);
                         }
-                        return chain.proceed(args);
+                        Object owner = chain.getThisObject();
+                        Object target = HookUtil.invoke(owner, "getAnimTarget");
+                        if (!(target instanceof View)) return chain.proceed(args);
+                        View targetView = (View) target;
+                        if (LauncherGlassHierarchy.classify(targetView)
+                                != LauncherGlassHierarchy.Domain.DOCK) {
+                            return chain.proceed(args);
+                        }
+
+                        float proxyAlpha = ((Number) args[2]).floatValue();
+                        boolean drawIcon;
+                        if (useRotationRect) {
+                            try {
+                                drawIcon = HookUtil.getBooleanField(owner, "mIsDrawIcon");
+                            } catch (Throwable ignored) {
+                                drawIcon = false;
+                            }
+                        } else {
+                            Object draw = HookUtil.invoke(owner, "isDrawIcon");
+                            drawIcon = draw instanceof Boolean && ((Boolean) draw);
+                        }
+                        boolean proxyVisible = useRotationRect
+                                ? LauncherGlassProxyVisibility.isLayer2Visible(proxyAlpha, drawIcon)
+                                : LauncherGlassProxyVisibility.isView2Visible(proxyAlpha, drawIcon);
+                        if (!proxyVisible) {
+                            // Freeze while the original Dock item is still eligible for capture.
+                            DockIconLaunchProxyBridge.holdHidden(owner, targetView, glassConfig);
+                            return chain.proceed(args);
+                        }
+
+                        Object result = chain.proceed(args);
+                        RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
+                        DockIconLaunchProxyBridge.update(
+                                owner, targetView, proxyRect,
+                                result, glassConfig);
+                        return result;
                     }, RectF.class, RectF.class,
                     float.class, float.class, float.class,
                     boolean.class, boolean.class, boolean.class,
