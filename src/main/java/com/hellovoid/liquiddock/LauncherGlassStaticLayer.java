@@ -7,12 +7,14 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 
 import java.lang.ref.WeakReference;
 import java.util.WeakHashMap;
 
 /** One transparent static Launcher glass output for an entire stable Launcher root. */
 final class LauncherGlassStaticLayer extends TextureView implements TextureView.SurfaceTextureListener {
+    private static final long REVEAL_FADE_DURATION_MS = 450L;
     private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
 
     private final WeakReference<View> rootRef;
@@ -68,9 +70,20 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (root != null && BY_ROOT.get(root) == layer) BY_ROOT.remove(root);
     }
 
-    void setSceneVisible(boolean visible) {
+    void setSceneVisible(boolean visible, boolean fadeReveal) {
         if (disposed) return;
-        setAlpha(visible ? 1f : 0f);
+        animate().cancel();
+        if (!visible) {
+            setAlpha(0f);
+        } else if (fadeReveal) {
+            setAlpha(0f);
+            animate().alpha(1f)
+                    .setDuration(REVEAL_FADE_DURATION_MS)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        } else {
+            setAlpha(1f);
+        }
     }
 
     void dispose() {

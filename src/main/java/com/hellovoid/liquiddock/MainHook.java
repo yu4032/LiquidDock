@@ -332,7 +332,7 @@ public class MainHook {
 
         View currentShadow = shadowViewRef.get();
         if (workstationMode) {
-            dockBg.setAlpha(0f);
+            dockBg.setAlpha(1f);
             if (currentShadow != null) currentShadow.setVisibility(View.GONE);
             return;
         }
@@ -581,12 +581,14 @@ public class MainHook {
             return;
         }
         if (dockBg != null) dockBg.post(() -> {
-            // The workstation Dock background is rendered by its independent laptop
-            // DockContainerView. Suppress every normal-mode background layer here.
-            dockBg.setAlpha(0f);
+            // The injected Prismal surface is a child of this vendor material. Keep the host
+            // visible in workstation mode and suppress only the independent normal-mode shadow.
+            dockBg.setAlpha(1f);
             View currentShadow = shadowViewRef.get();
             if (currentShadow != null) currentShadow.setVisibility(View.GONE);
         });
+        Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(
+                true, "workstation-mode-enabled");
     }
 
     private static void backupNormalHomeLayout() {

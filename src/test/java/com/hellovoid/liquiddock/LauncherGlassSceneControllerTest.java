@@ -64,4 +64,21 @@ public class LauncherGlassSceneControllerTest {
         call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
         assertTrue(visible(state));
     }
+
+    @Test public void onlyFirstFreshFrameAfterCoverageRequestsFadeReveal() throws Exception {
+        Object state = machine();
+        call(state, "onRootReady", new Class<?>[0]);
+        call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
+        assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
+
+        call(state, "setCovered", new Class<?>[]{boolean.class}, true);
+        call(state, "setCovered", new Class<?>[]{boolean.class}, false);
+        call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
+        assertTrue((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
+        assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
+
+        call(state, "onGenerationInvalidated", new Class<?>[0]);
+        call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
+        assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
+    }
 }

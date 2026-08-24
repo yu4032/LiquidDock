@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="home_grid_profile_entries">
+        <item>8×4 横屏 / 4×8 竖屏</item>
+        <item>10×6 横屏 / 6×10 竖屏</item>
+    </string-array>
+</resources>

@@ -292,12 +292,21 @@ final class Miuix307PassBlurTextureView extends TextureView
         opticalParams = Miuix307PrismalMaterial.fromConfig(
                 glassConfig, getResources().getDisplayMetrics().density);
         portablePrismalParams = Miuix307PrismalAdapter.toPortable(opticalParams);
-        dockCompositor.setIconStyle(glassConfig.iconStyle);
+        dockCompositor.setIconStyle(
+                glassConfig.iconStyle, glassConfig.launcherHighlightProfile);
         topSamplingExtraPx = glassConfig.samplingExtraTopPx;
         bottomSamplingExtraPx = glassConfig.samplingExtraBottomPx;
         leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         updateBackdropMapping();
+        if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
+    }
+
+    private float workstationDockIconCornerRadiusDp;
+
+    void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
+        workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
+        dockCompositor.setWorkstationIconCornerRadiusDp(workstationDockIconCornerRadiusDp);
         if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
     }
 
@@ -1031,6 +1040,12 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && geometry.bufferWidth == boundBufferWidth
                 && geometry.bufferHeight == boundBufferHeight
                 && geometry.configRotation == boundConfigRotation) {
+            return;
+        }
+
+        if (WorkstationProducerPolicy.shouldRebindForGeometryChange(
+                MainHook.isWorkstationMode(), true)) {
+            rebindProducer("workstation-producer-geometry-changed");
             return;
         }
 

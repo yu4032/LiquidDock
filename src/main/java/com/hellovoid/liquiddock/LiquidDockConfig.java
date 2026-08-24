@@ -13,6 +13,7 @@ final class LiquidDockConfig {
     final Divider divider;
     final Glass glass;
     final Workstation workstation;
+    final Recents recents;
 
     static LiquidDockConfig load() { return new LiquidDockConfig(ConfigReader.load()); }
 
@@ -28,6 +29,17 @@ final class LiquidDockConfig {
         divider = new Divider(c);
         glass = new Glass(c);
         workstation = new Workstation(c);
+        recents = new Recents(c);
+    }
+
+    static final class Recents {
+        final int backgroundBlurPercent;
+
+        Recents(ConfigReader c) {
+            backgroundBlurPercent = Math.max(0, Math.min(100, c.i(
+                    ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
+                    ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.runtimeFallback())));
+        }
     }
 
     static final class Grid {
@@ -201,7 +213,7 @@ final class LiquidDockConfig {
         final GlassComponentStyle smallFolderStyle;
         final GlassComponentStyle largeFolderStyle;
         final boolean prismalShowNormals;
-        final PrismalHighlightProfile launcherHighlightProfile;
+        final PrismalHighlightProfile launcherHighlightProfile, largeSurfaceHighlightProfile;
         final float blur, chromatic, thickness, ior, normalStrength, dome,
         lensRefraction, depthEffect, highlightWidth, brightness,
         specularStrength, rimLight, caustics;
@@ -253,6 +265,7 @@ final class LiquidDockConfig {
             folderEnabled = smallFolderStyle.enabled || largeFolderStyle.enabled;
             folderCornerRadiusDp = legacyFolderRadius;
             launcherHighlightProfile = LauncherHighlightPreferences.read(c);
+            largeSurfaceHighlightProfile = LauncherHighlightPreferences.readLargeSurfaces(c);
             blur = c.f(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.runtimeFallback());
             // Upstream Prismal uses the human-facing chromatic magnitude directly (for example 8).
             chromatic = c.i(ConfigSchema.Glass.CHROMATIC.name(),
@@ -343,7 +356,7 @@ final class LiquidDockConfig {
 
     static final class Workstation {
         final boolean dockEnabled, dimensionsDp;
-        final float dockWidthOffset, gridHorizontalOffset;
+        final float dockWidthOffset, dockIconGlassCornerRadius, gridHorizontalOffset;
         final float allAppsLandscapeHorizontalOffset;
         final float allAppsLandscapeTopSpacing, allAppsLandscapeBottomSpacing;
         final float allAppsPortraitHorizontalOffset;
@@ -356,6 +369,9 @@ final class LiquidDockConfig {
             dimensionsDp = c.b("dock_dimensions_dp", true);
             dockWidthOffset = c.f(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.runtimeFallback());
+            dockIconGlassCornerRadius = c.f(
+                    ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.name(),
+                    ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.runtimeFallback());
             gridHorizontalOffset = c.f(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET.runtimeFallback());
             // Compatibility chain: oldest global vertical -> old per-orientation merged

@@ -36,6 +36,7 @@ final class LauncherGlassDragOverlay {
     private LauncherGlassSinkView sink;
     private WeakReference<ViewGroup> hostRef = new WeakReference<>(null);
     private float activeCornerRadiusPx;
+    private LauncherGlassNodeKind activeNodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
     private float activeVisualLeft;
     private float activeVisualTop;
     private float activeVisualRight;
@@ -143,6 +144,8 @@ final class LauncherGlassDragOverlay {
         LauncherGlassDragState.Bounds bounds = readRootBounds(source);
         if (bounds == null) return false;
         if (style == null) style = new GlassComponentStyle(true, 0f, 0f);
+        activeNodeKind = nodeKind != null ? nodeKind : LauncherGlassNodeKind.LARGE_FOLDER;
+        if (sink != null) sink.setNodeKind(activeNodeKind);
         float left = 0f;
         float top = 0f;
         float right = Math.max(1f, source.getWidth());
@@ -238,6 +241,7 @@ final class LauncherGlassDragOverlay {
             sink = LauncherGlassSinkView.attachToMaterial(
                     carrier, activeCornerRadiusPx, glassConfig);
             if (sink == null) return false;
+            sink.setNodeKind(activeNodeKind);
         }
         return true;
     }

@@ -62,6 +62,7 @@ public class ConfigPresetTest {
         expected.put("workstation_dock_customization", false);
         expected.put("dock_divider_enabled", false);
         expected.put("blur_radius", 100);
+        expected.put("recents_background_blur_percent", 100);
 
         expected.put("liquid_glass", true);
         expected.put("liquid_dimensions_dp", true);

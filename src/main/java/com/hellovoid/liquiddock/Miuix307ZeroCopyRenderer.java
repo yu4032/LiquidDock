@@ -19,8 +19,11 @@ final class Miuix307ZeroCopyRenderer {
     private Miuix307ZeroCopyRenderer() {}
 
     static boolean install(ViewGroup materialHost, DockLiquidGlassHostView host,
-                           LiquidDockConfig.Glass glassConfig, int blurRadiusPx) {
-        if (materialHost == null || host == null || glassConfig == null) return false;
+                           LiquidDockConfig.Glass glassConfig,
+                           LiquidDockConfig.Workstation workstationConfig,
+                           int blurRadiusPx) {
+        if (materialHost == null || host == null || glassConfig == null
+                || workstationConfig == null) return false;
 
         // The current zero-copy backend binds SurfaceFlinger's PassBlur producer directly to the
         // Floating Dock root through SetPassBlurSurface. It does not depend on the themed
@@ -29,6 +32,8 @@ final class Miuix307ZeroCopyRenderer {
         Miuix307PassBlurTextureView gpuBackdrop = new Miuix307PassBlurTextureView(
                 materialHost.getContext(), materialHost);
         gpuBackdrop.setGlassConfig(glassConfig);
+        gpuBackdrop.setWorkstationDockIconCornerRadiusDp(
+                workstationConfig.dockIconGlassCornerRadius);
         gpuBackdrop.setId(View.generateViewId());
 
         // Prismal optics are evaluated in Dock-local UV space over the zero-copy OES backdrop.

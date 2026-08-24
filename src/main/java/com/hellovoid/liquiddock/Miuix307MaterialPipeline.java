@@ -75,7 +75,6 @@ final class Miuix307MaterialPipeline {
                     "com.miui.home.launcher.Launcher", "setupViews",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (MainHook.isWorkstationMode()) return result;
                         try {
                             Object launcher = chain.getThisObject();
                             launcherRef = new WeakReference<>(launcher);
@@ -131,7 +130,6 @@ final class Miuix307MaterialPipeline {
             Method attach = hotSeatsClass.getDeclaredMethod("onAttachedToWindow");
             HookUtil.hook(attach, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (MainHook.isWorkstationMode()) return result;
                 Object hotSeats = chain.getThisObject();
                 hotSeatsRef = new WeakReference<>(hotSeats);
                 View background = resolveBackground(hotSeats);
@@ -508,7 +506,9 @@ final class Miuix307MaterialPipeline {
         } else {
             MainHook.syncDockShadow(background, config.dock);
             observeBoundHierarchy(background, config, classLoader);
-            Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(!vendorStaticSnapshotMode,
+            Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(
+                    MainHook.isWorkstationMode()
+                            || !vendorStaticSnapshotMode,
                     "vendor-snapshot-state-after-bind");
         }
         return installedNow;

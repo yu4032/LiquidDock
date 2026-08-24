@@ -369,6 +369,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOCK_WIDTH_OFFSET = dp(
                 "workstation_dock_width_offset", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_ICON_GLASS_CORNER_RADIUS = dp(
+                "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> GRID_HORIZONTAL_OFFSET = dp(
                 "workstation_grid_horizontal_offset", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
@@ -412,6 +415,14 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.NEVER);
 
         private Workstation() {}
+    }
+
+    public static final class Recents {
+        public static final ConfigKey<Integer> BACKGROUND_BLUR_PERCENT = integer(
+                "recents_background_blur_percent", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+
+        private Recents() {}
     }
 
     public static final class Debug {
@@ -490,6 +501,7 @@ public final class ConfigSchema {
                 Glass.PRISMAL_BACKDROP_SCALE_X, Glass.PRISMAL_BACKDROP_SCALE_Y,
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.DOCK_WIDTH_OFFSET,
+                Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
                 Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET,
@@ -502,6 +514,7 @@ public final class ConfigSchema {
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET,
                 Workstation.LEGACY_ALL_APPS_HORIZONTAL_OFFSET,
                 Workstation.LEGACY_ALL_APPS_VERTICAL_OFFSET);
+        add(keys, Recents.BACKGROUND_BLUR_PERCENT);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);
     }

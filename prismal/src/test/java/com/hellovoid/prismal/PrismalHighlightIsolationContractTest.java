@@ -60,4 +60,13 @@ public class PrismalHighlightIsolationContractTest {
         assertTrue(profile.contains("public static final PrismalHighlightProfile ALL_ENABLED"));
         assertFalse(profile.contains("compactSafe"));
     }
+
+    @Test
+    public void rendererCanCombinePerDrawProfileWithNodeOpacity() throws Exception {
+        PrismalRenderer.class.getDeclaredMethod("drawGlass",
+                PrismalGeometry.class,
+                PrismalParams.class,
+                PrismalHighlightProfile.class,
+                float.class);
+    }
 }

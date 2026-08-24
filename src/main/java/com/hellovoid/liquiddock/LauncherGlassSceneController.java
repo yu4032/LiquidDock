@@ -20,6 +20,8 @@ final class LauncherGlassSceneController {
     static final class StateMachine {
         private State state = State.DETACHED;
         private long generation = 1L;
+        private boolean fadeAfterFreshFrame;
+        private boolean fadeRevealReady;
 
         void onRootReady() {
             if (state == State.DETACHED) state = State.BOOTSTRAPPING;
@@ -34,9 +36,12 @@ final class LauncherGlassSceneController {
             if (isCovered == nextCovered) return;
             if (nextCovered) {
                 state = State.COVERED;
+                fadeAfterFreshFrame = false;
+                fadeRevealReady = false;
             } else {
                 generation++;
                 state = State.HOME_WAITING_FRESH_FRAME;
+                fadeAfterFreshFrame = true;
             }
         }
 
@@ -52,14 +57,23 @@ final class LauncherGlassSceneController {
                 return;
             }
             state = State.HOME_VISIBLE;
+            fadeRevealReady = fadeAfterFreshFrame;
+            fadeAfterFreshFrame = false;
         }
 
         void detach() {
             state = State.DETACHED;
+            fadeAfterFreshFrame = false;
+            fadeRevealReady = false;
         }
 
         long generation() { return generation; }
         boolean isLayerVisible() { return state == State.HOME_VISIBLE; }
+        boolean consumeFadeReveal() {
+            boolean result = fadeRevealReady;
+            fadeRevealReady = false;
+            return result;
+        }
         State state() { return state; }
     }
 
@@ -360,7 +374,9 @@ final class LauncherGlassSceneController {
 
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
-        if (current != null) current.setSceneVisible(state.isLayerVisible());
+        if (current != null) {
+            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal());
+        }
     }
 
     /** Startup barrier: scan objects that existed before constructor/attach hooks became useful. */

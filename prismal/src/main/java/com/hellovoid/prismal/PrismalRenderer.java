@@ -197,7 +197,31 @@ public final class PrismalRenderer implements AutoCloseable {
         if (params == null) params = PrismalParams.builder().build();
         if (highlightProfile == null) highlightProfile = PrismalHighlightProfile.ALL_ENABLED;
         renderGlassNode(geometry, params, highlightProfile, interactionState,
-                !legacySingleDraw || glassDrawCount > 0);
+                !legacySingleDraw || glassDrawCount > 0, 1f);
+        glassDrawCount++;
+    }
+
+    /** Append one glass node with an output-alpha multiplier. */
+    public void drawGlass(PrismalGeometry geometry, PrismalParams params, float opacity) {
+        drawGlass(geometry, params, PrismalHighlightProfile.ALL_ENABLED, opacity);
+    }
+
+    /** Append one glass node with per-draw highlights and an output-alpha multiplier. */
+    public void drawGlass(PrismalGeometry geometry, PrismalParams params,
+                          PrismalHighlightProfile highlightProfile, float opacity) {
+        if (geometry == null) throw new IllegalArgumentException("geometry == null");
+        if (!glassFrameBegun) {
+            throw new IllegalStateException("beginGlassFrame must be called before drawGlass");
+        }
+        if (geometry.framebufferWidth != width || geometry.framebufferHeight != height) {
+            throw new IllegalArgumentException("geometry framebuffer does not match prepared backdrop");
+        }
+        if (params == null) params = PrismalParams.builder().build();
+        if (highlightProfile == null) highlightProfile = PrismalHighlightProfile.ALL_ENABLED;
+        float safeOpacity = Float.isFinite(opacity)
+                ? Math.max(0f, Math.min(1f, opacity)) : 1f;
+        renderGlassNode(geometry, params, highlightProfile, null,
+                !legacySingleDraw || glassDrawCount > 0, safeOpacity);
         glassDrawCount++;
     }
 
@@ -285,7 +309,7 @@ public final class PrismalRenderer implements AutoCloseable {
     private void renderGlassNode(PrismalGeometry g, PrismalParams p,
                                  PrismalHighlightProfile highlights,
                                  PrismalInteractionState interactionState,
-                                 boolean composite) {
+                                 boolean composite, float opacity) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
         GLES20.glViewport(0, 0, width, height);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
@@ -342,7 +366,7 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform4f("u_shadowColor", p.shadowR, p.shadowG, p.shadowB, p.shadowA);
         uniform1f("u_shadowSoftness", p.shadowSoftness);
         uniform1f("u_causticIntensity", p.causticIntensity);
-        uniform1f("u_transmittance", p.transmittance);
+        uniform1f("u_transmittance", p.transmittance * opacity);
         uniform2f("u_backdropSampleScale", p.backdropScaleX, p.backdropScaleY);
         uniform1f("u_parallaxScale", p.parallaxScale);
         float pressProgress = interactionState != null ? interactionState.pressProgress : p.pressProgress;

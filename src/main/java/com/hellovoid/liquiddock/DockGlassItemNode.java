@@ -16,6 +16,12 @@ final class DockGlassItemNode {
         this.style = style;
     }
     View view() { return viewRef.get(); }
+    float animationOpacity(long nowMs) {
+        return DockGlassItemRegistry.animationOpacity(viewRef.get(), nowMs);
+    }
+    boolean isFading() {
+        return DockGlassItemRegistry.isFading(viewRef.get());
+    }
     boolean belongsTo(View dockRoot) {
         View cursor = viewRef.get();
         if (cursor == null || dockRoot == null || !cursor.isAttachedToWindow()) return false;
