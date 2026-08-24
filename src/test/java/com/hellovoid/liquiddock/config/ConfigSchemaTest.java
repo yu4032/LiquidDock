@@ -9,6 +9,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ConfigSchemaTest {
+    @Test
+    public void recentsBackgroundBlurIsAnExportedPercentage() {
+        assertEquals(Integer.valueOf(100), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.uiDefault());
+        assertEquals(Integer.valueOf(0), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.minInt());
+        assertEquals(Integer.valueOf(100), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.maxInt());
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT));
+    }
+
     private static void assertComposeIntSpec(ConfigKey<Integer> key, int uiDefault,
                                              int min, int max) {
         assertEquals(key.name(), Integer.valueOf(uiDefault), key.uiDefault());

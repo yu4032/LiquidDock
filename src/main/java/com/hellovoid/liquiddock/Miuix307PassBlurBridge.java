@@ -168,7 +168,10 @@ final class Miuix307PassBlurBridge {
     private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
         if (host == null || binding == null || !binding.bound) return;
         if (framesLeft <= 0) {
-            pauseUpdates(binding);
+            if (WorkstationProducerPolicy.shouldPauseSharedProducer(
+                    true, MainHook.isWorkstationMode())) {
+                pauseUpdates(binding);
+            }
             return;
         }
         host.postOnAnimation(() -> schedulePauseUpdates(host, binding, framesLeft - 1));

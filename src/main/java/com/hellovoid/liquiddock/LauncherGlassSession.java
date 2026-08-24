@@ -161,6 +161,8 @@ final class LauncherGlassSession {
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile launcherHighlightProfile =
             PrismalHighlightProfile.ALL_ENABLED;
+    private volatile PrismalHighlightProfile largeSurfaceHighlightProfile =
+            PrismalHighlightProfile.ALL_ENABLED;
     private volatile int rootWidth;
     private volatile int rootHeight;
     private volatile int configRotation;
@@ -256,6 +258,9 @@ final class LauncherGlassSession {
         prismalParams = Miuix307PrismalAdapter.toPortable(optical);
         launcherHighlightProfile = glassConfig != null
                 ? glassConfig.launcherHighlightProfile
+                : PrismalHighlightProfile.ALL_ENABLED;
+        largeSurfaceHighlightProfile = glassConfig != null
+                ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
         mainHandler.post(this::syncSceneOnUiThread);
         requestBackdropRebuild();
@@ -470,7 +475,10 @@ final class LauncherGlassSession {
 
     void suspendWorkspaceProducer() {
         if (shuttingDown) return;
-        Miuix307PassBlurBridge.pauseUpdates(binding);
+        if (WorkstationProducerPolicy.shouldPauseSharedProducer(
+                true, MainHook.isWorkstationMode())) {
+            Miuix307PassBlurBridge.pauseUpdates(binding);
+        }
     }
 
     void attachOutput(LauncherGlassSinkView sink, Surface surface, int width, int height) {
@@ -748,7 +756,7 @@ final class LauncherGlassSession {
                     mainHandler.post(() -> {
                         if (!shuttingDown && binding == current && current.bound
                                 && input == inputSurfaceTexture) {
-                            Miuix307PassBlurBridge.requestSingleUpdate(current, root);
+                            requestProducerRefresh(current, root);
                         }
                     });
                 }
@@ -855,7 +863,10 @@ final class LauncherGlassSession {
                 consumedGeneration = sceneGeneration;
                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
-                Miuix307PassBlurBridge.pauseUpdates(binding);
+                if (WorkstationProducerPolicy.shouldPauseSharedProducer(
+                        true, MainHook.isWorkstationMode())) {
+                    Miuix307PassBlurBridge.pauseUpdates(binding);
+                }
             }
             if (consumedGeneration < 0L) return;
             boolean backdropDirty = work.rebuildBackdrop || sourceChanged || !backdropPrepared;
@@ -882,7 +893,18 @@ final class LauncherGlassSession {
         Miuix307PassBlurBridge.Binding current = binding;
         View root = rootRef.get();
         if (current == null || root == null || !current.bound || !current.rootSurface.isValid()) return;
-        Miuix307PassBlurBridge.requestSingleUpdate(current, root);
+        requestProducerRefresh(current, root);
+    }
+
+    private void requestProducerRefresh(
+            Miuix307PassBlurBridge.Binding current, View root) {
+        if (WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                MainHook.isWorkstationMode())) {
+            Miuix307PassBlurBridge.requestSingleUpdate(current, root);
+        } else {
+            Miuix307PassBlurBridge.resumeUpdates(current);
+            root.postInvalidateOnAnimation();
+        }
     }
 
     private void ensureEglAndGl() {
@@ -1002,7 +1024,9 @@ final class LauncherGlassSession {
             return;
         }
         binding = next;
-        if (LauncherGlassSceneController.isCoveredForRoot(root)) {
+        if (WorkstationProducerPolicy.shouldPauseSharedProducer(
+                LauncherGlassSceneController.isCoveredForRoot(root),
+                MainHook.isWorkstationMode())) {
             // Coverage can predate the asynchronous producer bind. Do not leave a hidden
             // Workspace producer in the bridge's default continuous-on-bind state.
             Miuix307PassBlurBridge.pauseUpdates(next);
@@ -1110,8 +1134,9 @@ final class LauncherGlassSession {
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
-            prismalRenderer.drawGlass(
-                    prismalGeometry, params, launcherHighlightProfile, state.interaction);
+            PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
+                    node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
+            prismalRenderer.drawGlass(prismalGeometry, params, highlights, state.interaction);
         }
         presentFull(prismalRenderer.outputTexture(), output);
     }
@@ -1127,8 +1152,12 @@ final class LauncherGlassSession {
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
-            prismalRenderer.drawGlass(
-                    prismalGeometry, params, launcherHighlightProfile, node.interaction);
+            LauncherGlassSinkView sink = node.sinkRef.get();
+            LauncherGlassNodeKind kind = sink != null
+                    ? sink.nodeKind() : LauncherGlassNodeKind.LARGE_FOLDER;
+            PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
+                    kind, launcherHighlightProfile, largeSurfaceHighlightProfile);
+            prismalRenderer.drawGlass(prismalGeometry, params, highlights, node.interaction);
             present(prismalRenderer.outputTexture(), geometry, entry.getValue());
         }
     }

@@ -40,7 +40,9 @@ public final class ModuleMain extends XposedModule {
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
             MiuixLauncherStaticGlassHook.install(classLoader, runtimeConfig);
+            DockIconAnimationGlassHook.install(classLoader, runtimeConfig);
             LauncherGlassRecentsHook.install(classLoader, runtimeConfig);
+            RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
             DockBottomGeometryHook.install(classLoader);
             HomeGridProfileOverlayHook.install(classLoader,
                     customGridEnabled, selectedProfile);

@@ -71,7 +71,8 @@ class ComposeSettingsActivity : SettingsActivity() {
 
 private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
-    Divider(R.string.page_divider), Workstation(R.string.page_workstation), Liquid(R.string.page_liquid),
+    Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
+    Liquid(R.string.page_liquid),
     LauncherHighlights(R.string.page_launcher_highlights),
     Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Data(R.string.page_data),
     About(R.string.page_about)
@@ -260,6 +261,7 @@ private fun ensureDividerDefaults(prefs: SharedPreferences) {
 }
 private val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, "工作台 Dock 长度偏移"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, "工作台 Dock 图标玻璃圆角", "dp"),
     IntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, "工作台桌面水平偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING, "所有应用 · 横屏上间距"),
@@ -269,6 +271,12 @@ private val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏下间距"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标上间距"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, "工作台 Dock 图标下间距"),
+)
+private val recentsBlurSpec = IntSpec(
+    ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
+    "背景模糊程度",
+    "%",
+    summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画",
 )
 private val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边")
 private val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp")
@@ -395,6 +403,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Dock -> DockPage(padding, prefs, masterEnabled)
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
+                Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
                 Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
@@ -422,6 +431,7 @@ private fun HomePage(
                 ArrowPreference(stringResource(R.string.page_dock), summary = stringResource(R.string.home_dock_summary), onClick = { open(Page.Dock) })
                 ArrowPreference(stringResource(R.string.page_divider), summary = stringResource(R.string.home_divider_summary), onClick = { open(Page.Divider) })
                 ArrowPreference(stringResource(R.string.page_workstation), summary = stringResource(R.string.home_workstation_summary), onClick = { open(Page.Workstation) })
+                ArrowPreference(stringResource(R.string.page_recents), summary = stringResource(R.string.home_recents_summary), onClick = { open(Page.Recents) })
                 ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
                 ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
                 ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
@@ -500,6 +510,17 @@ private fun WorkstationPage(padding: PaddingValues, prefs: SharedPreferences, ma
 }
 
 @Composable
+private fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
+    SettingsList(
+        padding,
+        stringResource(R.string.page_recents),
+        stringResource(R.string.recents_header_summary),
+    ) {
+        IntSetting(prefs, recentsBlurSpec, masterEnabled)
+    }
+}
+
+@Composable
 private fun LiquidPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
@@ -559,17 +580,36 @@ private fun LauncherHighlightsPage(
     masterEnabled: Boolean,
 ) {
     val liquidEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
-    SettingsList(
-        padding,
-        stringResource(R.string.page_launcher_highlights),
-        stringResource(R.string.launcher_highlights_header_summary),
-    ) {
-        launcherHighlightSpecs.forEach { spec ->
-            RawBooleanSetting(
-                prefs, spec.key, true,
-                stringResource(spec.titleRes), stringResource(spec.summaryRes),
-                masterEnabled && liquidEnabled,
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_launcher_highlights),
+                stringResource(R.string.launcher_highlights_header_summary),
             )
+        }
+        item { SmallTitle("图标、小文件夹与 Dock 图标") }
+        item {
+            SettingsCard {
+                launcherHighlightSpecs.forEach { spec ->
+                    RawBooleanSetting(
+                        prefs, spec.key, true,
+                        stringResource(spec.titleRes), stringResource(spec.summaryRes),
+                        masterEnabled && liquidEnabled,
+                    )
+                }
+            }
+        }
+        item { SmallTitle("小组件与大文件夹") }
+        item {
+            SettingsCard {
+                launcherHighlightSpecs.forEach { spec ->
+                    RawBooleanSetting(
+                        prefs, LauncherHighlightPreferences.largeSurfaceKey(spec.key), true,
+                        stringResource(spec.titleRes), stringResource(spec.summaryRes),
+                        masterEnabled && liquidEnabled,
+                    )
+                }
+            }
         }
     }
 }

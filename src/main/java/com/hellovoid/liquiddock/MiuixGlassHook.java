@@ -158,7 +158,8 @@ final class MiuixGlassHook {
         host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
 
         boolean zeroCopyCandidate = Miuix307ZeroCopyRenderer.install(
-                materialHost, host, config.glass, Math.round(config.glass.blur));
+                materialHost, host, config.glass, config.workstation,
+                Math.round(config.glass.blur));
 
         FrameLayout.LayoutParams hostLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);

@@ -41,6 +41,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private volatile boolean disposed;
     private volatile boolean suppressedByFolderOpen;
     private volatile boolean suppressedByDrag;
+    private volatile LauncherGlassNodeKind nodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
     private boolean pressTarget;
     private float pressProgress;
     private float glowCenterX = 0.5f;
@@ -110,6 +111,12 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     View materialHost() {
         return materialRef.get();
+    }
+
+    LauncherGlassNodeKind nodeKind() { return nodeKind; }
+
+    void setNodeKind(LauncherGlassNodeKind value) {
+        nodeKind = value != null ? value : LauncherGlassNodeKind.LARGE_FOLDER;
     }
 
     void requestLifecycleRefresh() {

@@ -2,8 +2,9 @@ package com.hellovoid.liquiddock;
 
 import com.hellovoid.prismal.PrismalHighlightProfile;
 
-/** Preferences shared by folder glass and future widget glass; Dock never reads these keys. */
+/** Independent component switches for compact and large Launcher glass surfaces. */
 public final class LauncherHighlightPreferences {
+    private static final String LARGE_PREFIX = "launcher_large_surface_component_";
     public static final String SKY_HAZE = "launcher_surface_component_sky_haze";
     public static final String SPECULAR = "launcher_surface_component_specular";
     public static final String LIT_RIM = "launcher_surface_component_lit_rim";
@@ -27,5 +28,22 @@ public final class LauncherHighlightPreferences {
                 c.b(PLAIN_HIGHLIGHT, true),
                 c.b(CAUSTICS, true),
                 c.b(PRESS_GLOW, true));
+    }
+
+    static PrismalHighlightProfile readLargeSurfaces(ConfigReader c) {
+        return new PrismalHighlightProfile(
+                c.b(largeSurfaceKey(SKY_HAZE), true),
+                c.b(largeSurfaceKey(SPECULAR), true),
+                c.b(largeSurfaceKey(LIT_RIM), true),
+                c.b(largeSurfaceKey(OPPOSITE_RIM), true),
+                c.b(largeSurfaceKey(CORNER_RIM), true),
+                c.b(largeSurfaceKey(FACE_SHEEN), true),
+                c.b(largeSurfaceKey(PLAIN_HIGHLIGHT), true),
+                c.b(largeSurfaceKey(CAUSTICS), true),
+                c.b(largeSurfaceKey(PRESS_GLOW), true));
+    }
+
+    public static String largeSurfaceKey(String compactKey) {
+        return LARGE_PREFIX + compactKey.substring("launcher_surface_component_".length());
     }
 }

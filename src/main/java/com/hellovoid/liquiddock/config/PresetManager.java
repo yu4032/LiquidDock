@@ -152,6 +152,7 @@ public final class PresetManager {
         values.put("workstation_dock_customization", false);
         values.put("dock_divider_enabled", false);
         values.put("blur_radius", 100);
+        values.put("recents_background_blur_percent", 100);
 
         // Effective Prismal v1.0.6 Quick Start optics: PrismalFrameLayout defaults followed
         // by PrismalLiquidGlass.applyBase(). Keep synchronized with runtime fallbacks.
