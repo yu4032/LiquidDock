@@ -74,25 +74,35 @@ public class DockIconAnimationGlassContractTest {
     }
 
     @Test
-    public void dockRendererFreezesExistingBackdropExactlyOnce() throws Exception {
+    public void dockRendererFreezesExistingBackdropExactlyOnceWithoutChangingCoreTextureView()
+            throws Exception {
         String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
         String texture = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
         String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+        Path helperPath = MAIN.resolve("DockIconFrozenGlassRenderer.java");
+        assertTrue(Files.exists(helperPath));
+        String helper = Files.readString(helperPath);
 
         assertTrue(renderer.contains("captureFrozenIconSpec"));
         assertTrue(renderer.contains("renderFrozenIcon"));
-        assertTrue(texture.contains("FrozenIconSpec"));
-        assertTrue(texture.contains("frozenProxyRenderer"));
-        assertTrue(texture.contains("renderFrozenIconOnce"));
-        assertTrue(texture.contains("rawTexture"));
+        assertTrue(renderer.contains("DockIconFrozenGlassRenderer.capture"));
+        assertTrue(renderer.contains("DockIconFrozenGlassRenderer.render"));
+        assertTrue(helper.contains("FrozenIconSpec"));
+        assertTrue(helper.contains("renderFrozenIconOnce"));
+        assertTrue(helper.contains("rawTexture"));
+        assertTrue(helper.contains("PrismalRenderer"));
         assertTrue(compositor.contains("captureUiItem"));
+        assertFalse(texture.contains("FrozenIconSpec"));
+        assertFalse(texture.contains("frozenProxyRenderer"));
 
-        int start = texture.indexOf("renderFrozenIconOnce");
-        int end = texture.indexOf("private", start + 1);
-        String body = end > start ? texture.substring(start, end) : texture.substring(start);
+        int start = helper.indexOf("renderFrozenIconOnce");
+        int end = helper.indexOf("private static void postMain", start);
+        String body = end > start ? helper.substring(start, end) : helper.substring(start);
         assertFalse(body.contains("requestSingleUpdate"));
         assertFalse(body.contains("rebindProducer"));
         assertFalse(body.contains("setProducerUpdatesEnabled"));
+        assertFalse(body.contains("PixelCopy"));
+        assertFalse(body.contains("glReadPixels"));
     }
 
     @Test
