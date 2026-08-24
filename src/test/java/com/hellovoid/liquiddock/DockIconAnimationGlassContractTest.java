@@ -24,20 +24,16 @@ public class DockIconAnimationGlassContractTest {
     }
 
     @Test
-    public void floatingIconBridgeHandsDockVisualOwnershipToLauncherStaticNode() throws Exception {
-        Path hookPath = MAIN.resolve("DockIconLaunchProxyHook.java");
-        Path bridgePath = MAIN.resolve("DockIconLaunchProxyBridge.java");
-        assertTrue(Files.exists(hookPath));
-        assertTrue(Files.exists(bridgePath));
-        String hook = Files.readString(hookPath);
-        String bridge = Files.readString(bridgePath);
+    public void floatingIconBridgePrefersFrozenSurfaceControlLayer() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconLaunchProxyHook.java"));
+        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
 
         assertTrue(hook.contains("LauncherGlassHierarchy.Domain.DOCK"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.holdHidden"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.update"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.end"));
+        assertTrue(bridge.contains("DockIconFrozenGlassLayer"));
         assertTrue(bridge.contains("DockGlassItemRegistry.holdLaunchProxyHidden"));
-        assertTrue(bridge.contains("DockGlassItemRegistry.updateLaunchProxyGeometry"));
         assertTrue(bridge.contains("DockGlassItemRegistry.endLaunchProxy"));
     }
 
@@ -48,7 +44,6 @@ public class DockIconAnimationGlassContractTest {
 
         assertTrue(registry.contains("LauncherGlassVisualOwnerState"));
         assertTrue(registry.contains("isLaunchProxyActive"));
-        assertTrue(registry.contains("postInvalidateOnAnimation"));
         assertTrue(item.contains("DockGlassItemRegistry.isLaunchProxyActive(view)"));
         assertTrue(item.contains("return null"));
         assertFalse(registry.contains("LauncherGlassSession"));
@@ -56,74 +51,91 @@ public class DockIconAnimationGlassContractTest {
     }
 
     @Test
-    public void layer2UsesLauncherWorkspaceAsMainWindowSessionAnchor() throws Exception {
+    public void frozenFrameIsCapturedBeforeDockItemYields() throws Exception {
         String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
-
-        assertTrue(bridge.contains("owner instanceof View"));
-        assertTrue(bridge.contains("HookUtil.getField(owner, \"launcher\")"));
-        assertTrue(bridge.contains("HookUtil.invoke(launcher, \"getWorkspace\")"));
+        int ensure = bridge.indexOf("ensureBinding(owner, target, glassConfig)");
+        int hide = bridge.indexOf("DockGlassItemRegistry.holdLaunchProxyHidden(target)");
+        assertTrue(ensure >= 0 && hide > ensure);
     }
 
     @Test
-    public void proxyNodeUsesDockMaterialWithLauncherSessionWithoutChangingWorkspaceNode() throws Exception {
-        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
-        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
+    public void frozenProxyUsesLauncherRootBufferLayerWithoutScreenCapture() throws Exception {
+        Path frozenPath = MAIN.resolve("DockIconFrozenGlassLayer.java");
+        assertTrue(Files.exists(frozenPath));
+        String frozen = Files.readString(frozenPath);
 
-        assertTrue(bridge.contains("LauncherGlassSessionRegistry.acquire(sessionAnchor"));
-        assertTrue(bridge.contains("LauncherGlassStaticNode.class.getDeclaredConstructor"));
-        assertTrue(bridge.contains("constructor.newInstance("));
-        assertTrue(bridge.contains("proxyReference, LauncherGlassDragState.Kind.ICON"));
-        assertTrue(bridge.contains("resolveProxyReferenceRadius(proxyReference)"));
-        assertTrue(bridge.contains("node.holdLaunchProxyHidden()"));
-        assertTrue(bridge.contains("shared.registerStaticNode(node)"));
-        assertFalse(node.contains("proxyReferenceRef"));
-        assertFalse(node.contains("attachLaunchProxyAnchor"));
+        assertTrue(frozen.contains("SurfaceControlUtils"));
+        assertTrue(frozen.contains("getBufferLayer"));
+        assertTrue(frozen.contains("SurfaceCompat"));
+        assertFalse(frozen.contains("PixelCopy"));
+        assertFalse(frozen.contains("ImageReader"));
+        assertFalse(frozen.contains("MediaProjection"));
+        assertFalse(frozen.contains("glReadPixels"));
     }
 
     @Test
-    public void hiddenVisibleEndTriStateMatchesWorkspaceSemantics() throws Exception {
+    public void dockRendererFreezesExistingBackdropExactlyOnce() throws Exception {
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String texture = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+
+        assertTrue(renderer.contains("captureFrozenIconSpec"));
+        assertTrue(renderer.contains("renderFrozenIcon"));
+        assertTrue(texture.contains("FrozenIconSpec"));
+        assertTrue(texture.contains("frozenProxyRenderer"));
+        assertTrue(texture.contains("renderFrozenIconOnce"));
+        assertTrue(texture.contains("rawTexture"));
+        assertTrue(compositor.contains("captureUiItem"));
+
+        int start = texture.indexOf("renderFrozenIconOnce");
+        int end = texture.indexOf("private", start + 1);
+        String body = end > start ? texture.substring(start, end) : texture.substring(start);
+        assertFalse(body.contains("requestSingleUpdate"));
+        assertFalse(body.contains("rebindProducer"));
+        assertFalse(body.contains("setProducerUpdatesEnabled"));
+    }
+
+    @Test
+    public void visibleAnimationHotPathOnlyMutatesSurfaceTransaction() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconLaunchProxyHook.java"));
+        String frozen = Files.readString(MAIN.resolve("DockIconFrozenGlassLayer.java"));
+
+        assertTrue(hook.contains("Object result = chain.proceed(args)"));
+        assertTrue(hook.contains("DockIconLaunchProxyBridge.update(\n"));
+        assertTrue(hook.contains("result, glassConfig"));
+        assertTrue(frozen.contains("setMatrix"));
+        assertTrue(frozen.contains("setRelativeLayer"));
+        assertTrue(frozen.contains("setAlpha"));
+        assertTrue(frozen.contains("show"));
+
+        int start = frozen.indexOf("void update(");
+        int end = frozen.indexOf("void holdHidden", start);
+        String update = end > start ? frozen.substring(start, end) : frozen.substring(start);
+        assertFalse(update.contains("renderFrozenIcon"));
+        assertFalse(update.contains("requestStaticRedraw"));
+        assertFalse(update.contains("eglSwapBuffers"));
+        assertFalse(update.contains("PrismalRenderer"));
+    }
+
+    @Test
+    public void layer2CanMergeGlassIntoVendorTransactionAndView2CanSelfApply() throws Exception {
+        String frozen = Files.readString(MAIN.resolve("DockIconFrozenGlassLayer.java"));
+        assertTrue(frozen.contains("getTransaction"));
+        assertTrue(frozen.contains("applyStandalone"));
+        assertTrue(frozen.contains("mFloatingIconSurfaceControl"));
+    }
+
+    @Test
+    public void hiddenVisibleEndTriStateStillRestoresDockOwnership() throws Exception {
         String hook = Files.readString(MAIN.resolve("DockIconLaunchProxyHook.java"));
         String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
         String runtime = Files.readString(MAIN.resolve("GlassRuntimeState.java"));
 
-        assertTrue(bridge.contains("node.holdLaunchProxyHidden()"));
-        assertTrue(bridge.contains("node.updateLaunchProxyGeometry"));
-        assertTrue(bridge.contains("node.endLaunchProxy()"));
-        assertTrue(bridge.contains("node.dispose()"));
+        assertTrue(bridge.contains("layer.holdHidden()"));
+        assertTrue(bridge.contains("layer.update("));
+        assertTrue(bridge.contains("layer.release()"));
         assertTrue(hook.contains("visibility == View.VISIBLE"));
         assertTrue(hook.contains("DockIconLaunchProxyBridge.end(host)"));
         assertTrue(runtime.contains("DockIconLaunchProxyBridge.clear()"));
-    }
-
-    @Test
-    public void proxyGeometryPublishesDirectlyWithoutPreDrawRoundTrip() throws Exception {
-        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
-
-        int start = node.indexOf("boolean updateLaunchProxyGeometry");
-        int end = node.indexOf("void endLaunchProxy", start);
-        assertTrue(start >= 0 && end > start);
-        String updateBody = node.substring(start, end);
-
-        assertTrue(updateBody.contains("live.syncStaticNodeGeometryNow(this)"));
-        assertFalse(updateBody.contains("invalidateVisualOwnerGeometry()"));
-        assertFalse(updateBody.contains("live.requestStaticRedraw()"));
-
-        assertTrue(session.contains("boolean syncStaticNodeGeometryNow("));
-        assertTrue(session.contains("LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root)"));
-        assertTrue(session.contains("state.geometry = observed"));
-        assertTrue(session.contains("if (changed) requestStaticRedraw()"));
-    }
-
-    @Test
-    public void dockCompositorAndProxyBridgeOwnNoNewOutputResources() throws Exception {
-        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
-        String bridge = Files.readString(MAIN.resolve("DockIconLaunchProxyBridge.java"));
-
-        assertFalse(compositor.contains("LauncherGlassSession"));
-        assertFalse(compositor.contains("LauncherGlassSceneController"));
-        assertFalse(bridge.contains("new TextureView("));
-        assertFalse(bridge.contains("new SurfaceTexture("));
-        assertFalse(bridge.contains("EGLSurface "));
     }
 }
