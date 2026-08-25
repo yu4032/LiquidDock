@@ -42,12 +42,15 @@ final class VisualRuntimeState {
         if (nextPrefs == null) return;
 
         listener = (sharedPreferences, key) -> {
+            boolean strokeStyleChanged = ConfigSchema.Dock.SQUIRCLE.name().equals(key)
+                    || ConfigSchema.Dock.FILL_DIFF.name().equals(key);
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.SHADOW_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_SHADOW.name().equals(key)
-                    && !ConfigSchema.Divider.ENABLED.name().equals(key)) return;
+                    && !ConfigSchema.Divider.ENABLED.name().equals(key)
+                    && !strokeStyleChanged) return;
 
             boolean nextCoreEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Core.ENABLED.name(),
@@ -66,6 +69,9 @@ final class VisualRuntimeState {
                     ConfigSchema.Divider.ENABLED.name(), dividerEnabled);
             apply(nextCoreEnabled, nextDockCustomizationEnabled, nextDockStrokeEnabled,
                     nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled);
+            if (strokeStyleChanged) {
+                runOnMain(DockStrokeRenderer::refreshInstalledFromCurrentConfig);
+            }
         };
         nextPrefs.registerOnSharedPreferenceChangeListener(listener);
         logState("initialized");
@@ -137,7 +143,7 @@ final class VisualRuntimeState {
             runOnMain(() -> MainHook.onRuntimeDockShadowDisabled());
         }
         if (wasStrokeShadowEnabled && !nextLiveStrokeShadowEnabled) {
-            runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
+            runOnMain(DockStrokeRenderer::refreshInstalledFromCurrentConfig);
         }
         if (wasDividerEnabled && !nextLiveDividerEnabled) {
             runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());
