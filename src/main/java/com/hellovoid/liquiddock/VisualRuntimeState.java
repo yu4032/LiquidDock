@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
@@ -103,13 +105,49 @@ final class VisualRuntimeState {
                 && strokeShadowEnabled == nextStrokeShadowEnabled
                 && dividerEnabled == nextDividerEnabled) return;
 
+        boolean wasDockCustomizationEnabled = isDockCustomizationEnabled();
+        boolean wasDockStrokeEnabled = isDockStrokeEnabled();
+        boolean wasDockShadowEnabled = isDockShadowEnabled();
+        boolean wasStrokeShadowEnabled = isStrokeShadowEnabled();
+        boolean wasDividerEnabled = isDividerEnabled();
+
+        // Publish the new booleans before scheduling teardown. Any callback that was queued before
+        // the preference change must observe the new false value and become inert immediately.
         coreEnabled = nextCoreEnabled;
         dockCustomizationEnabled = nextDockCustomizationEnabled;
         dockStrokeEnabled = nextDockStrokeEnabled;
         dockShadowEnabled = nextDockShadowEnabled;
         strokeShadowEnabled = nextStrokeShadowEnabled;
         dividerEnabled = nextDividerEnabled;
+
+        boolean nextLiveDockCustomizationEnabled = isDockCustomizationEnabled();
+        boolean nextLiveDockStrokeEnabled = isDockStrokeEnabled();
+        boolean nextLiveDockShadowEnabled = isDockShadowEnabled();
+        boolean nextLiveStrokeShadowEnabled = isStrokeShadowEnabled();
+        boolean nextLiveDividerEnabled = isDividerEnabled();
         logState("updated");
+
+        if (wasDockCustomizationEnabled && !nextLiveDockCustomizationEnabled) {
+            runOnMain(() -> MainHook.onRuntimeDockCustomizationDisabled());
+        }
+        if (wasDockStrokeEnabled && !nextLiveDockStrokeEnabled) {
+            runOnMain(() -> DockStrokeRenderer.onRuntimeStrokeDisabled());
+        }
+        if (wasDockShadowEnabled && !nextLiveDockShadowEnabled) {
+            runOnMain(() -> MainHook.onRuntimeDockShadowDisabled());
+        }
+        if (wasStrokeShadowEnabled && !nextLiveStrokeShadowEnabled) {
+            runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
+        }
+        if (wasDividerEnabled && !nextLiveDividerEnabled) {
+            runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());
+        }
+    }
+
+    private static void runOnMain(Runnable action) {
+        Looper main = Looper.getMainLooper();
+        if (Looper.myLooper() == main) action.run();
+        else new Handler(main).post(action);
     }
 
     private static void logState(String phase) {
