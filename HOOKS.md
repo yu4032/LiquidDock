@@ -1,6 +1,6 @@
-# LiquidDock 2.0 Hook 点总览
+# LiquidDock 2.1 Hook 点总览
 
-本文档记录 **当前 `main`（2.x）源码实际安装或尝试安装的主要 Hook 点**。
+本文档记录当前 `main` 源码安装的主要 libxposed Hook、Android listener、系统反射调用和 GPU 渲染阶段。
 
 ## 运行时边界
 
@@ -10,93 +10,59 @@ Xposed scope：
 com.miui.home
 ```
 
-## API 101 入口与安装顺序
-
-入口为 `ModuleMain`。
-
-`onPackageReady()` 只接受 `com.miui.home`，当前顺序是：
+API 101 入口为 `ModuleMain`。`onPackageReady()` 的安装顺序为：
 
 1. `LegacyConfigMigration.migrateAtProcessStart()`；
-2. 读取一次 `LiquidDockConfig` runtime snapshot；
+2. 读取 `LiquidDockConfig` runtime snapshot；
 3. `new MainHook().install(classLoader)`；
-4. `WorkspaceDropRuleHook.install(...)`，只有 master switch 与 custom grid 同时开启时才安装。
+4. master switch 与 custom grid 同时开启时安装 `WorkspaceDropRuleHook`。
 
-### 主开关边界
+`MainHook.install()` 依次安装工作台状态、Dock 描边、Dock 几何、分隔线、主屏幕网格、多任务模糊和液态玻璃。`Miuix307MaterialPipeline` 成功安装后接管当前玻璃路径。
 
-`MainHook.install()` 会在读取 `config.enabled` 之前先安装 workstation mode guard。因此 master switch 关闭时，Launcher 主体功能不会继续安装，但 workstation mode guard 仍可能已经注册。
-
-其余主要安装顺序为：
-
-1. workstation mode guard；
-2. `DockStrokeRenderer.installNativeHook()`；
-3. workstation Dock icon / visible Dock geometry Hook；
-4. Dock resize animation bypass（按配置）；
-5. `DockDividerHook`；
-6. `HomeGridHook`；
-7. 如果开启 Liquid Glass，尝试 `Miuix307MaterialPipeline.install(...)`；
-8. 307 material 安装成功后，`MainHook` 直接返回，不进入旧 renderer；
-9. 如果 zero-copy material 不可用，则只在 Dock customization 开启时继续 native Dock customization 路径。
-
----
-
-## 液态玻璃
+## Dock 与 zero-copy 玻璃
 
 ### Material owner
 
-`Miuix307MaterialPipeline` 识别两个当前支持的 vendor background：
+`Miuix307MaterialPipeline` 支持以下 vendor background：
 
 ```text
 com.miui.home.launcher.hotseats.HotSeatsListContentMiuiXBlurBackground
 com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2
 ```
 
-前者是当前 MiuiX material background；后者会在部分第三方主题/图标主题下成为实际 HotSeats background。
+### Hook 点
 
-### 主要 Hook 点
-
-| 目标 | Hook | 作用 |
+| 目标 | 方法 | 作用 |
 |---|---|---|
-| `com.miui.home.launcher.Launcher` | `setupViews()` | 取得 `mHotSeats` / `mWorkspace`，解析当前实际 background，并尝试把 zero-copy glass 绑定到真实 vendor hierarchy |
-| `BlurUtilities` | `setBackgroundBlur(View, int, float[], int[][])` | 仅对受支持的 `BlurBackground2` material owner 把正的 vendor parent blur radius 压为 0，避免和 Prismal 重复合成 |
-| `HotSeatsListContentMiuiXBlurBackground` | `setBackgroundWidth(int)` | 应用 307 Dock width offset，随后同步 glass size |
-| 同上 | `setBackgroundHeight(int)` | 应用 height offset，随后同步 glass size |
-| 同上 | `setBackgroundRadius(float)` | 应用 blur corner offset，并同步 glass geometry / optics |
-| `HotSeatsListContentBlurBackground2` | `onAttachedToWindow()` | 主题背景实例 attach 时尝试重新绑定 glass |
-| 同上 | `setBackgroundWidth(int)` | 同步主题背景 width 与 glass |
-| 同上 | `setBackgroundHeight(int)` | 同步主题背景 height 与 glass |
-| 同上 | `setBackgroundRadius(float)` | 同步主题背景 radius 与 glass |
-| 同上及其父类 | 所有非 static `triggerMeasure(...)` overload | 主题背景真正完成测量/几何更新后重新同步 size / radius |
+| `Launcher` | `setupViews()` | 读取 `mHotSeats`、`mWorkspace` 和实际 background，绑定 zero-copy glass |
+| `Launcher` | `onResume()` | 工作台模式重新绑定 PassBlur producer |
+| `HotSeats` | `onAttachedToWindow()` | 按当前 HotSeats background 恢复玻璃绑定与几何 |
+| `HotSeats` | `setMingouStaticDockSnapshotMode(boolean)` | 同步静态 Dock snapshot 状态与 producer 更新状态 |
+| `HotSeats` | `setMingouStaticDockLiveBlurVisible(boolean)` | 在对应系统版本同步 live blur 可见状态与 producer 更新状态 |
+| `BlurUtilities` | `setBackgroundBlur(View,int,float[],int[][])` | 将当前 glass material owner 的 vendor background blur radius 设为 0 |
+| `HotSeatsListContentMiuiXBlurBackground` | `setBackgroundWidth(int)` | 应用 Dock width offset 并同步 glass size |
+| 同上 | `setBackgroundHeight(int)` | 应用 Dock height offset 并同步 glass size |
+| 同上 | `setBackgroundRadius(float)` | 应用圆角设置并同步 glass geometry |
+| `HotSeatsListContentBlurBackground2` | `onAttachedToWindow()` | 绑定主题提供的 Dock background |
+| 同上 | `setBackgroundWidth(int)` | 同步主题 background width |
+| 同上 | `setBackgroundHeight(int)` | 同步主题 background height |
+| 同上 | `setBackgroundRadius(float)` | 同步主题 background radius |
+| 同上及其父类 | 非 static `triggerMeasure(...)` overload | 在 vendor 测量结束后同步玻璃几何 |
 
-`Miuix307MaterialPipeline` 还通过 View attach/global-layout listener 观察 vendor hierarchy 被主题替换或 detach/reattach。这些是普通 Android listener，不是 Xposed Hook。
+`MiuixGlassHook` 将 vendor background 作为 Dock 几何来源，在其内部创建 `DockLiquidGlassHostView` 和 `Miuix307PassBlurTextureView`。View attach 与 global-layout listener 跟踪 background 替换、重新挂载和布局变化。
 
-### `MiuixGlassHook` 的职责
+### SurfaceFlinger PassBlur 反射调用
 
-`MiuixGlassHook` 本身不是新的场景状态机，它负责把当前 vendor background 转成 zero-copy glass 容器：
-
-- vendor background 继续作为 Dock 几何 authority；
-- vendor material body 被替换为透明 `GradientDrawable`；
-- vendor parent GPU blur 被抑制；
-- 在 vendor background 内加入 `DockLiquidGlassHostView`；
-- host 内加入 `Miuix307PassBlurTextureView`；
-- Dock radius / size 改变时同步 host、Prismal 参数和 foreground stroke；
-- zero-copy 激活失败或验证超时只保持透明，不创建截图 renderer。
-
-`DockLiquidGlassHostView` 只是轻量 geometry / clip host：最终按当前 Dock path 裁切 `TextureView`，不承担截图、RuntimeShader backdrop 或 CPU blur。
-
----
-
-## SurfaceFlinger PassBlur：反射调用，不是 Hook
-
-下面这些调用对 2.0 glass 很关键，但它们是对系统隐藏 API 的**反射调用**，不是 libxposed interceptor：
+以下项目是系统隐藏 API 的反射调用：
 
 | 对象 | 调用 | 作用 |
 |---|---|---|
-| `View` / `ViewRootImpl` | `getViewRootImpl()` / `getSurfaceControl()` | 找到 Floating Dock / HotSeats 所在 root `SurfaceControl` |
-| `SurfaceControl.Transaction` | `SetPassBlurSurface(SurfaceControl, Surface)` | 把 SurfaceFlinger PassBlur 输出绑定到 LiquidDock 提供的 producer `Surface` |
-| 同上 | `setUpdateTextureFlag(SurfaceControl, boolean, float)` | 启用/关闭 PassBlur texture 更新 |
-| 同上 | `setMiBlurWinExc(SurfaceControl, String[])` | 设置 compositor exclusion 名单，避免输出再次采样自身或系统栏层 |
+| `View` / `ViewRootImpl` | `getViewRootImpl()` / `getSurfaceControl()` | 获取 Floating Dock root `SurfaceControl` |
+| `SurfaceControl.Transaction` | `SetPassBlurSurface(SurfaceControl,Surface)` | 将 PassBlur 输出绑定到 LiquidDock producer `Surface` |
+| 同上 | `setUpdateTextureFlag(SurfaceControl,boolean,float)` | 控制 PassBlur texture 更新 |
+| 同上 | `setMiBlurWinExc(SurfaceControl,String[])` | 设置 compositor exclusion layer 名单 |
 
-当前 exclusion 包含 root surface 自身以及：
+exclusion layer 包含：
 
 ```text
 NavigationBar
@@ -105,136 +71,153 @@ GestureStub
 DockAssistantView
 ```
 
-PassBlur producer 保持 full-resolution scale；最终 `TextureView` 位于已经排除的 Floating Dock root 内，因此不需要再做旧截图管线的 child-layer exclusion 管理。
+### GPU 数据流
 
----
-
-## GPU 渲染阶段
-
-`Miuix307PassBlurTextureView` 的渲染线程维护 EGL / OES / FBO 生命周期，当前数据流是：
-
-### Stage A — OES → Dock-local RGBA
-
-SurfaceFlinger PassBlur 写入 caller-owned `Surface`，对应 `SurfaceTexture` 作为 external OES texture 输入。
-
-normalize shader 负责：
-
-- OES texture matrix；
-- producer surface / buffer geometry；
-- config rotation；
-- Dock 到 producer 的 Stage-B 坐标映射；
-- FULL / PARTIAL / OUTSIDE coverage；
-- partial coverage 的 mirror guard band，避免超出 producer 有效区域后留下透明黑边。
-
-### Stage B — Gaussian blur
-
-Dock-local RGBA 进入半分辨率 blur FBO：
+`Miuix307PassBlurTextureView` 的渲染线程维护 EGL、OES 和 FBO：
 
 ```text
-rawFramebuffer
-  ↓ horizontal Gaussian
-blurFramebufferH
-  ↓ vertical Gaussian
-blurFramebufferV
+SurfaceFlinger PassBlur Surface
+  → external OES texture
+  → Dock-local RGBA normalization FBO
+  → horizontal Gaussian blur
+  → vertical Gaussian blur
+  → Prismal scene compositor
+  → TextureView
 ```
 
-`BLUR_FBO_SCALE = 0.5f`。
+Prismal scene 同时绘制 Dock body、Dock 图标和工作区静态玻璃节点。光学参数、高光分组、动画状态和玻璃边缘描边通过 `PrismalParams` 传入共享 renderer。
 
-### Stage C — Prismal
+玻璃边缘描边属于 GPU shader 合成，不是 Xposed Hook。Fill-Diff 与标准描边使用玻璃 SDF 计算轮廓，配置与 Dock background 描边独立。
 
-Prismal shader 只处理普通 2D texture，不直接理解 OES / SurfaceFlinger producer geometry。折射、色散、Fresnel、dome、specular、rim、caustics、vibrancy、tint 等参数由 `Miuix307PrismalMaterial` 统一映射。
+## 工作区玻璃
 
-像素数据全程留在 GPU buffer 中。
+### 图标与小组件
 
----
+`MiuixLauncherStaticGlassHook` 安装以下 Hook：
 
-## 307 Glass 的 fail-closed 行为
-
-当前失败路径有意保持简单：
-
-```text
-supported vendor material
-        ↓
-PassBlur/OES activation succeeds ──→ Prismal glass
-        │
-        └─ fails / times out ──────→ transparent glass
-```
-
-如果 `Miuix307MaterialPipeline` 连受支持的 background class 都找不到，`MainHook` 会把 Liquid Glass 视为不可用；如果普通 Dock customization 仍开启，则可以继续安装 native Dock 自定义 Hook，但不会恢复旧版本 glass renderer。
-
----
-
-## 普通 / Native Dock 自定义 Hook
-
-以下路径主要用于 native Dock customization。
-
-| 目标类 | 方法 | 当前作用 |
+| 目标 | 方法 | 作用 |
 |---|---|---|
-| `HotSeatsListContentBlurBackground2` | `setBackgroundWidth(int)` | 普通 Dock width offset，并同步 shadow geometry |
-| 同上 | `setBackgroundHeight(int)` | height offset，并同步 shadow geometry |
-| 同上 | `setBackgroundRadius(float)` | blur radius basis / stroke radius / squircle geometry 同步 |
-| 同上 | `updateBackgroundSize(int,int,float)` | 按配置结束 vendor resize animator；可由 LiquidDock 重新做短时 smooth geometry animation |
-| `HotSeatsListContentLayoutManager$OffsetDecoration` | `getItemOffsets(...)` | 普通 Dock icon spacing；workstation 开启时也可叠加 workstation top/bottom offset |
-| `HotSeatsListContentLayoutManager` | `updateBackgroundView(FrameLayout,int,int,float)` | spacing 改变后补偿 Dock background width |
-| `DeviceConfig` | `getHotSeatsMarginBottom()` | 普通 Dock bottom offset |
-| `BlurUtilities` | `setBackgroundBlur(...)` | native 路径覆盖系统 Dock blur radius |
-| `HotSeats` | `getMingouStaticDockBlurShadowTarget()` | 记录系统原生 Dock shadow target |
-| `MiShadowUtils` | `applyViewShadow(...)` | 只对已确认的原生 Dock shadow target 清除 vendor shadow，避免和 LiquidDock 独立 shadow 重叠 |
-| `Launcher` | `setupViews()` | native 路径初始化 background 引用和可选独立 Dock shadow |
+| `Launcher` | `setupViews()` | 扫描已存在的工作区页面并注册静态玻璃节点 |
+| `Launcher` | `onResume()` | 重新协调当前工作区节点和场景状态 |
+| `ShortcutIcon` | constructor | 注册图标 host |
+| `ShortcutIcon` | `setIconImageView(...)` | 在图标材质更新后重新绑定节点 |
+| `LauncherAppWidgetHostView` | constructor | 注册小组件 host |
+| 同上 | `updateAppWidget(RemoteViews)` | RemoteViews 更新后重新绑定小组件材质 |
+| `MaMlHostView` | constructor | 注册 MAML 小组件 host |
+| 同上 | `onResume()` | MAML 恢复后重新绑定材质 |
+| 同上 | `updateColor(int)` | MAML 颜色更新后重新绑定材质 |
 
-### Dock stroke
+静态节点由 `LauncherGlassSceneController` 和 `DockGlassItemRegistry` 管理。节点几何来自实际 material View 的屏幕坐标、尺寸、缩放和圆角。
 
-`DockStrokeRenderer.installNativeHook()` Hook：
+### 文件夹
 
-```text
-HotSeatsListContentBlurBackground2.setBackgroundRadius(float)
-```
+`MiuixFolderGlassHook` 安装以下 Hook：
 
-native blur Dock 直接使用 background foreground 绘制 border。307 in-place glass 则由 material/geometry 同步路径直接调用 `configureReplacingForeground(...)`，不需要再创建历史上的独立 stroke overlay renderer。
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| `ItemIcon` | `setIconImageView(Drawable,Bitmap)` | 为 `FolderIcon` 绑定文件夹玻璃材质 |
+| `FolderIcon1x1` / `FolderIcon2x2` | constructor | 注册小文件夹和大文件夹 host |
+| `BlurUtilities` | `setFolderIconBlur(...)` | 将已绑定文件夹的 vendor blur 转交给共享玻璃节点 |
+| `FolderStatusServiceImpl` | `dispatchFolderOpen()` | 设置文件夹打开覆盖状态 |
+| 同上 | `dispatchFolderClose()` | 清除文件夹打开覆盖状态 |
+| `FolderIcon` | `dispatchTouchEvent(MotionEvent)` | 将按压状态与触点坐标传入 Prismal interaction |
+| `FolderIcon` | `onOpen()` | 隐藏打开文件夹对应的桌面静态玻璃 |
+| `FolderIcon` | `onClose()` | 跟随系统关闭流程更新状态 |
+| `Folder` | `onClose(boolean,Runnable)` | 在系统关闭完成回调中恢复桌面文件夹玻璃 |
+| `FolderIcon2x2` | `drawChild(Canvas,View,long)` | 在大文件夹绘制前同步原生背景材质状态 |
 
-边框绘制使用 outer path + inner path：先 clip 到 outer，再 `clipOutPath(inner)` 排除 Dock 中心。内部 contour 在动画瞬间无效时宁可跳过该帧，也不会降级成整块填充。
+文件夹、图标和小组件的显隐由同一个场景控制器执行。动画时长来自“动画”页面的工作区显隐配置。
 
----
+### 多任务场景
 
-## Workstation / Laptop 模式 Hook
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| `RecentsServiceDispatcher` | `onRecentViewShow()` | 隐藏工作区静态玻璃 |
+| 同上 | `onRecentViewHide()` | 恢复工作区静态玻璃 |
 
-工作台状态完全在 Launcher 进程内判断，不依赖 SystemUI。
+### 壁纸内容代际
 
-### 状态 authority
+`LauncherWallpaperFreshnessHook` 使用以下 Launcher 回调更新场景壁纸代际：
 
-优先读取：
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| wallpaper callback | `onWallpaperChanged(WallpaperColors,String,int)` | 创建新的壁纸内容代际 |
+| `Workspace` | `onWallpaperColorChanged()` | 提交工作区壁纸候选帧 |
+| wallpaper callback | `onWallpaperFirstFrameRendered(int)` | 标记首帧为当前壁纸内容 |
+| wallpaper callback | `onDrawFrameEnd()` | 标记当前绘制周期壁纸内容完成 |
+
+## Dock 图标动画与拖拽
+
+### Dock 图标启动动画
+
+`DockIconAnimationGlassHook` 安装：
+
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| `ShortcutIcon` | `setAnimTargetVisibility(int)` | 在 Dock 图标恢复可见时结束玻璃启动动画状态 |
+| `FloatingIconView2` | `update(...)` | 按退出动画 progress 更新 Dock 图标玻璃状态 |
+| `FloatingIconLayer2` | `update(...)` | 在对应系统实现中按 progress 更新 Dock 图标玻璃状态 |
+
+Dock 图标玻璃在系统动画期间隐藏，并按“Dock 图标玻璃恢复”时长淡入。
+
+### 工作区拖拽
+
+`MiuixLauncherDragOverlayHook` 安装：
+
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| `ViewGroup` | `onViewAdded(View)` | 在 DragView 加入拖拽容器时创建移动玻璃节点 |
+| `ViewGroup` | `onViewRemoved(View)` | 在 DragView 移除时释放移动玻璃节点 |
+| 静态材质 class | `onDragContainerBgAnimAlpha(boolean,boolean)` | 同步原位置静态玻璃的拖拽抑制状态 |
+
+移动节点沿用对应图标、文件夹或小组件的尺寸、圆角和组件类型。
+
+## Native Dock 自定义
+
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| `HotSeatsListContentBlurBackground2` | `setBackgroundWidth(int)` | 应用普通 Dock width offset |
+| 同上 | `setBackgroundHeight(int)` | 应用普通 Dock height offset |
+| 同上 | `setBackgroundRadius(float)` | 同步 blur radius、stroke radius 和 shadow geometry |
+| 同上 | `updateBackgroundSize(int,int,float)` | 应用 Dock resize animation 设置 |
+| `HotSeatsListContentLayoutManager$OffsetDecoration` | `getItemOffsets(...)` | 应用 Dock icon spacing 与工作台上下偏移 |
+| `HotSeatsListContentLayoutManager` | `updateBackgroundView(FrameLayout,int,int,float)` | 按图标数量补偿 Dock background width |
+| `DeviceConfig` | `getHotSeatsMarginBottom()` | 应用普通 Dock bottom offset |
+| `BlurUtilities` | `setBackgroundBlur(...)` | 应用 native Dock blur radius |
+| `HotSeats` | `getMingouStaticDockBlurShadowTarget()` | 记录系统 Dock shadow target |
+| `MiShadowUtils` | `applyViewShadow(...)` | 对系统 Dock shadow target 应用自定义 shadow 策略 |
+| `Launcher` | `setupViews()` | 初始化 native background 与 Dock shadow |
+
+`DockStrokeRenderer` Hook `HotSeatsListContentBlurBackground2.setBackgroundRadius(float)`。Dock 描边使用 outer path 与 inner path 形成轮廓环。307 glass 通过 `configureReplacingForeground(...)` 使用同一 renderer。
+
+## 工作台模式
+
+### 状态
+
+状态来源为：
 
 ```text
 LauncherModeController.isLaptopMode()
-```
-
-并 Hook：
-
-```text
 LaptopStateManager.onLaptopModeChanged(boolean)
 ```
 
-如果当前 API 不存在，则回退到 Launcher 内的旧接口：
+兼容接口为：
 
 ```text
 DeviceConfig.isMingouLaptopPcModeEnabled()
-DeviceConfig.setMingouLaptopPcModeEnabled(boolean)   // Hook
+DeviceConfig.setMingouLaptopPcModeEnabled(boolean)
 ```
 
-workstation mode 改变后会同步 `HomeGridHook` 与 `WorkstationDockGeometryHook`，并在进入/退出时备份或恢复普通桌面 item position。
+工作台状态变化同步 `HomeGridHook`、`WorkstationDockGeometryHook` 和 zero-copy producer。
 
-### Workstation Dock
+### Dock 几何
 
-| 目标 | Hook | 作用 |
+| 目标 | 方法 | 作用 |
 |---|---|---|
-| `HotSeatsListContentLayoutManager$OffsetDecoration` | `getItemOffsets(...)` | workstation 模式下增加 Dock icon top / bottom offset |
-| `HotSeatsListContentAdapter$LineViewHolder` | `bindView()` | `WorkstationDockGeometryHook` 从 divider anchor 向父级寻找实际 `DockContainer`，对可见 laptop Dock 应用独立 width offset |
+| `HotSeatsListContentLayoutManager$OffsetDecoration` | `getItemOffsets(...)` | 应用工作台 Dock icon top / bottom offset |
+| `HotSeatsListContentAdapter$LineViewHolder` | `bindView()` | 定位工作台 `DockContainer` 并应用独立 width offset |
 
-普通 HotSeats background 在 workstation 模式下会隐藏；可见 capsule 由独立 laptop `DockContainer` 管理，因此 workstation width 不通过普通 HotSeats blur background 强行实现。
-
----
-
-## Dock Divider Hook
+## Dock 分隔线
 
 `DockDividerHook` Hook：
 
@@ -242,52 +225,37 @@ workstation mode 改变后会同步 `HomeGridHook` 与 `WorkstationDockGeometryH
 HotSeatsListContentAdapter$LineViewHolder.bindView()
 ```
 
-从 holder 取得 divider content View，并按 Remote Preferences 应用：
+该 Hook 设置分隔线 width、height percent、Y offset 和 RGBA color。
 
-- width；
-- 相对父容器高度的 height percent；
-- Y offset；
-- RGBA color。
+## 多任务背景模糊
 
-首个 RecyclerView bind 发生在父容器还没有有效高度时，会注册一次普通 `OnLayoutChangeListener` 延迟补几何。
+`RecentsBackgroundBlurHook` 安装：
 
----
+| 目标 | 方法 | 作用 |
+|---|---|---|
+| `BlurUtils` | `fastBlur(float,Window,boolean)` | 应用多任务背景模糊百分比 |
+| 同上 | `fastBlurWhenEnterRecents(...)` | 标记进入多任务的同步模糊调用范围 |
+| 同上 | `fastBlurWhenGestureResetTaskView(...)` | 标记手势复位的同步模糊调用范围 |
+| 同上 | `fastBlurWhenEnterMultiWindowMode(...)` | 标记进入多窗口的同步模糊调用范围 |
+| 同上 | `fastBlurWhenDontUseNoBlurTypeWhenRecents(...)` | 缩放手势过程模糊比例 |
+| 同上 | `fastBlurWhenUseCompleteRecentsBlur(...)` | 缩放完整多任务模糊比例 |
 
-## 8×4 / 4×8 Home Grid
+## 主屏幕网格
 
-`HomeGridHook` 只有在 custom grid 开启时安装布局 Hook；关闭时保持 MIUI stock grid，不会修改 CellLayout / indicator / folder measurement。
+`HomeGridHook` 与其辅助 Hook 覆盖以下范围：
 
-主要 Hook 范围包括：
-
-- `LauncherCellCountCompatPadDevice` 的 X/Y min/default cell count；
-- `GridConfig` count X/Y getter / setter；
-- `CellLayout.calculateXsAndYs()`；
-- `CellLayout.setupLayoutParam(...)`；
-- `CellLayout.onLayout(...)`；
+- `LauncherCellCountCompatPadDevice` 的 X/Y cell count；
+- `GridConfig` 的 count getter、setter 和 `checkCellCount()`；
+- `CellLayout.calculateXsAndYs()`、`setupLayoutParam(...)`、`onLayout(...)`；
 - `FolderIcon1x1.onMeasure(...)`；
-- orientation transform、workspace refresh、页面 indicator 和旋转后的 geometry refresh 相关 Launcher 方法。
+- `Launcher.setupViews()`、`onConfigurationChanged(...)`；
+- `ScreenView.updateIndicatorPositions()`；
+- 横竖屏 profile overlay、边界计算、居中、旋转快照和布局恢复。
 
-关键职责包括：
-
-- 横屏 8×4 / 竖屏 4×8 count；
-- 横竖屏独立 padding / row gap；
-- 重新构建 `mXs` / `mYs`；
-- widget span 和最终 frame 适配；
-- lazy/off-screen page 首次得到有效 bounds 时补 geometry；
-- 小文件夹在新 cell size 下重新对齐；
-- workstation 桌面 / All Apps 独立偏移。
-
-### Workspace drop rule
-
-`WorkspaceDropRuleHook` 仅在 master switch + custom grid 都开启时 Hook：
+`WorkspaceDropRuleHook` Hook：
 
 ```text
-com.miui.home.launcher.compat.LayoutDropRuleForSwapPlaces
-    .isLegalXY(int, int, int, int)
+LayoutDropRuleForSwapPlaces.isLegalXY(int,int,int,int)
 ```
 
-返回 `true` 的目的只是移除 MIUI stock 6-column swap-placement pattern 限制。
-
-不会替换 `GridOccupancyController`：边界、occupied cells、vacancy search 和实际 placement 仍由 Launcher 原逻辑负责。
-
-
+该 Hook 在自定义网格中返回合法坐标，实际 occupancy 与 placement 继续由 Launcher 网格实现处理。
