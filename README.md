@@ -1,6 +1,6 @@
 # LiquidDock
 
-![LiquidDock 效果](artwork/liquid-dock-screenshot.jpg)
+![LiquidDock 效果](artwork/header-screenshot.jpg)
 
 LiquidDock 是一个面向 HyperOS 3 平板系统桌面 的 LSPosed / libxposed API 101 模块，用于实现系统桌面 UI 的液态玻璃、Dock 外观、桌面网格与工作台布局。
 
