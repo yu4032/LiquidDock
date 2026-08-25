@@ -9,14 +9,15 @@ LiquidDock 是一个面向 HyperOS 3 平板系统桌面 的 LSPosed / libxposed 
 
 ## 主要功能
 
-- **液态玻璃改造**：针对 HyperOS 3.0.307+，使用 PassBlur + GLES + 项目 Prismal 模型完成折射、色散、穹顶、Fresnel、镜面、焦散、振动度与 tint 等光学效果。支持 Dock、小组件、文件夹、桌面图标，可自定义尺寸与圆角。
+- **液态玻璃改造**：针对 HyperOS 3.0.307+，使用系统 PassBlur 方法、GLES、Prismal 项目液态玻璃模型完成折射、色散、镜面、焦散、高光、描边等光学效果。支持 Dock、小组件（部分支持）、文件夹、桌面图标（需配合透明图标主题），可自定义尺寸与圆角。
 - **自定义桌面布局**：新增 8x4、10x6 两种桌面布局，自定义横竖屏边距/间距、页面指示器位置。
 - **Dock 几何自定义**：宽度、高度、底部偏移、图标间距、圆角、背景模糊强度的自定义。
 - **Dock 描边**：为 Dock 增加描边，可自定义颜色、透明度。
 - **Dock 阴影**：自定义 Dock 阴影，包括描边阴影和底部阴影。
 - **原生 Dock 自定义**：在未启用 zero-copy glass 的 native 路径中继续支持 blur radius、独立 Dock shadow、系统原生 shadow 抑制与 squircle 相关外观控制。
-- **工作台 / Laptop 模式**：支持 8x4 桌面布局，同样支持布局自定义。
+- **工作台模式**：支持 8x4 桌面布局，同样支持布局自定义。
 - **Dock 分隔线**：可调宽度、高度比例、垂直偏移、颜色与透明度。
+- **多任务界面自定义**：支持自定义多任务界面背景模糊度
 
 <p align="center">
   <img src="artwork/detail.gif" alt="LiquidDock detail"/>
