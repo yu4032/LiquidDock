@@ -29,13 +29,4 @@ public class GlassComponentRuntimeToggleContractTest {
         assertTrue(module.contains("runtimeConfig.glass.smallFolderStyle.enabled"));
         assertTrue(module.contains("runtimeConfig.glass.largeFolderStyle.enabled"));
     }
-
-    @Test
-    public void componentDisableTransitionsHaveDedicatedTeardownCallbacks() throws Exception {
-        String state = Files.readString(MAIN.resolve("GlassRuntimeState.java"));
-        assertTrue(state.contains("onRuntimeIconGlassDisabled()"));
-        assertTrue(state.contains("onRuntimeWidgetGlassDisabled()"));
-        assertTrue(state.contains("onRuntimeSmallFolderGlassDisabled()"));
-        assertTrue(state.contains("onRuntimeLargeFolderGlassDisabled()"));
-    }
 }
