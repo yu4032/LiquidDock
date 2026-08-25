@@ -21,6 +21,7 @@ public class RestartBoundSettingsContractTest {
         String en = Files.readString(EN);
         String zh = Files.readString(ZH);
         String[] summaries = {
+                "enable_liquiddock_summary",
                 "enable_grid_8x4_summary",
                 "enable_widget_adaptation_summary",
                 "dock_resize_animation_summary",
@@ -37,7 +38,25 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
-    public void runtimeSafeVisualSwitchesRemainImmediate() throws Exception {
+    public void glassPageExplainsLiveDisableWithoutPromisingFullHotReload() throws Exception {
+        String en = Files.readString(EN);
+        String zh = Files.readString(ZH);
+
+        String enMaster = stringValue(en, "liquid_enable_summary").toLowerCase(Locale.ROOT);
+        String zhMaster = stringValue(zh, "liquid_enable_summary");
+        assertTrue(enMaster.contains("turning off") || enMaster.contains("disable"));
+        assertTrue(enMaster.contains("restart"));
+        assertTrue(zhMaster.contains("关闭"));
+        assertTrue(zhMaster.contains("重启"));
+
+        String enHeader = stringValue(en, "liquid_header_summary").toLowerCase(Locale.ROOT);
+        String zhHeader = stringValue(zh, "liquid_header_summary");
+        assertTrue(enHeader.contains("component") && enHeader.contains("restart"));
+        assertTrue(zhHeader.contains("组件") && zhHeader.contains("重启"));
+    }
+
+    @Test
+    public void runtimeSafeComponentDisableSwitchesDoNotClaimRestartIsRequired() throws Exception {
         String source = Files.readString(UI);
         String en = Files.readString(EN);
         String zh = Files.readString(ZH);
@@ -45,9 +64,6 @@ public class RestartBoundSettingsContractTest {
         assertFalse(stringValue(en, "dock_customization_summary")
                 .toLowerCase(Locale.ROOT).contains("restart"));
         assertFalse(stringValue(zh, "dock_customization_summary").contains("重启"));
-        assertFalse(stringValue(en, "liquid_enable_summary")
-                .toLowerCase(Locale.ROOT).contains("restart"));
-        assertFalse(stringValue(zh, "liquid_enable_summary").contains("重启"));
 
         assertFalse(lineContaining(source, "ConfigSchema.Glass.ICON_GLASS,").contains("重启"));
         assertFalse(lineContaining(source, "ConfigSchema.Glass.WIDGET_GLASS,").contains("重启"));
