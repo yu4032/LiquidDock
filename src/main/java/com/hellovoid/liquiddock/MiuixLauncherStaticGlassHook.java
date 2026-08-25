@@ -35,12 +35,19 @@ final class MiuixLauncherStaticGlassHook {
         BOOTSTRAP_OBSERVERS.clear();
     }
 
+    static void onRuntimeIconGlassDisabled() {
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (!isIconHost(host)) continue;
+            DockGlassItemRegistry.unregister(host);
+            LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
+            if (node != null && node.kind() == LauncherGlassDragState.Kind.ICON) node.dispose();
+        }
+    }
+
     static void onRuntimeWidgetGlassDisabled() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (!isWidgetHost(host)) continue;
             LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
-            View.OnAttachStateChangeListener listener = BOOTSTRAP_OBSERVERS.remove(host);
-            if (listener != null) host.removeOnAttachStateChangeListener(listener);
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
             if (node != null && node.kind() == LauncherGlassDragState.Kind.WIDGET) node.dispose();
@@ -53,28 +60,21 @@ final class MiuixLauncherStaticGlassHook {
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
-        if (!glassConfig.widgetEnabled && !glassConfig.iconEnabled) return false;
         boolean any = false;
-        if (glassConfig.iconEnabled) {
-            any |= installHostClass(classLoader, "com.miui.home.launcher.ShortcutIcon",
-                    LauncherGlassDragState.Kind.ICON, glassConfig);
-        }
-        if (glassConfig.widgetEnabled) {
-            any |= installHostClass(classLoader, "com.miui.home.launcher.LauncherAppWidgetHostView",
-                    LauncherGlassDragState.Kind.WIDGET, glassConfig);
-            any |= installHostClass(classLoader, "com.miui.home.launcher.maml.MaMlHostView",
-                    LauncherGlassDragState.Kind.WIDGET, glassConfig);
-            installWidgetBackgroundOwnershipHook(classLoader, glassConfig);
-            installMamlBackgroundOwnershipHooks(classLoader, glassConfig);
-        }
+        any |= installHostClass(classLoader, "com.miui.home.launcher.ShortcutIcon",
+                LauncherGlassDragState.Kind.ICON, glassConfig);
+        any |= installHostClass(classLoader, "com.miui.home.launcher.LauncherAppWidgetHostView",
+                LauncherGlassDragState.Kind.WIDGET, glassConfig);
+        any |= installHostClass(classLoader, "com.miui.home.launcher.maml.MaMlHostView",
+                LauncherGlassDragState.Kind.WIDGET, glassConfig);
+        installWidgetBackgroundOwnershipHook(classLoader, glassConfig);
+        installMamlBackgroundOwnershipHooks(classLoader, glassConfig);
         installed = any;
         if (any) {
             installWorkspacePageReconcileHook(classLoader, glassConfig);
             installWorkspaceResumeReconcileHook(classLoader, glassConfig);
-            if (glassConfig.iconEnabled) {
-                installShortcutIconVisualOwnerHook(classLoader, glassConfig);
-                installFloatingProxyVisualGeometryHooks(classLoader);
-            }
+            installShortcutIconVisualOwnerHook(classLoader, glassConfig);
+            installFloatingProxyVisualGeometryHooks(classLoader);
             MainHook.log(TAG + " widget/icon static glass hooks installed");
         }
         return any;
@@ -137,6 +137,7 @@ final class MiuixLauncherStaticGlassHook {
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
+                        if (!GlassRuntimeState.isIconEnabled()) return result;
                         Object owner = chain.getThisObject();
                         if (!(owner instanceof View) || args.length == 0
                                 || !(args[0] instanceof Number)) return result;
@@ -170,7 +171,8 @@ final class MiuixLauncherStaticGlassHook {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         // Launcher 4.50 WindowElement and FastLaunchWindowElement both pass
                         // (animType != CLOSE_TO_HOME) as the second boolean in this overload.
-                        if (args.length == 10 && args[0] instanceof RectF
+                        if (GlassRuntimeState.isIconEnabled()
+                                && args.length == 10 && args[0] instanceof RectF
                                 && args[1] instanceof RectF && args[6] instanceof Boolean
                                 && !((Boolean) args[6])) {
                             Object owner = chain.getThisObject();
@@ -355,10 +357,10 @@ final class MiuixLauncherStaticGlassHook {
     static void reconcileExistingHost(View host, LiquidDockConfig.Glass glassConfig) {
         if (host == null || glassConfig == null) return;
         String name = host.getClass().getName();
-        if (glassConfig.iconStyle.enabled && (name.endsWith(".ShortcutIcon")
+        if (GlassRuntimeState.isIconEnabled() && (name.endsWith(".ShortcutIcon")
                 || "ShortcutIcon".equals(host.getClass().getSimpleName()))) {
             observeHost(host, LauncherGlassDragState.Kind.ICON, glassConfig);
-        } else if (GlassRuntimeState.isWidgetEnabled() && glassConfig.widgetStyle.enabled
+        } else if (GlassRuntimeState.isWidgetEnabled()
                 && (name.endsWith(".LauncherAppWidgetHostView")
                 || name.endsWith(".MaMlHostView"))) {
             observeHost(host, LauncherGlassDragState.Kind.WIDGET, glassConfig);
@@ -368,10 +370,6 @@ final class MiuixLauncherStaticGlassHook {
     private static void observeHost(
             View host, LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || host == null) return;
-        if (kind == LauncherGlassDragState.Kind.WIDGET && !GlassRuntimeState.isWidgetEnabled()) {
-            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
-            return;
-        }
         synchronized (BOOTSTRAP_OBSERVERS) {
             if (BOOTSTRAP_OBSERVERS.containsKey(host)) {
                 if (host.isAttachedToWindow()) scheduleBind(host, kind, glassConfig, 0);
@@ -397,6 +395,14 @@ final class MiuixLauncherStaticGlassHook {
             View host, LauncherGlassDragState.Kind kind,
             LiquidDockConfig.Glass glassConfig, int attempt) {
         if (host == null || attempt > MAX_BIND_ATTEMPTS) return;
+        if (kind == LauncherGlassDragState.Kind.ICON && !GlassRuntimeState.isIconEnabled()) {
+            DockGlassItemRegistry.unregister(host);
+            LauncherGlassStaticNode staleNode = LauncherGlassStaticNode.find(host);
+            if (staleNode != null && staleNode.kind() == LauncherGlassDragState.Kind.ICON) {
+                staleNode.dispose();
+            }
+            return;
+        }
         if (kind == LauncherGlassDragState.Kind.WIDGET && !GlassRuntimeState.isWidgetEnabled()) {
             LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
             DockGlassItemRegistry.unregister(host);
@@ -445,6 +451,13 @@ final class MiuixLauncherStaticGlassHook {
                 && GlassRuntimeState.isWidgetEnabled()) {
             LauncherGlassVendorMaterialSuppressor.claimWidget(host);
         }
+    }
+
+    private static boolean isIconHost(View host) {
+        if (host == null) return false;
+        String name = host.getClass().getName();
+        return name.endsWith(".ShortcutIcon")
+                || "ShortcutIcon".equals(host.getClass().getSimpleName());
     }
 
     private static boolean isWidgetHost(View host) {

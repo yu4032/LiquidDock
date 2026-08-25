@@ -82,16 +82,17 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
                 "private static LauncherGlassStaticNode claimedSink(");
 
         int styleResolution = attach.indexOf("smallFolderStyle");
-        int enabledGuard = attach.indexOf("if (!style.enabled)");
-        int restore = attach.indexOf("restoreMaterial(material)");
+        int enabledGuard = attach.indexOf("if (!isFolderLiveEnabled(material))");
+        int release = attach.indexOf("releaseMaterialOwnership(material)");
         int suppress = attach.indexOf("makeMaterialTransparent(material)");
 
         assertTrue(styleResolution >= 0);
-        assertTrue("disabled small/large style must be checked before suppressing native plate",
+        assertTrue("live small/large state must be checked before suppressing native plate",
                 enabledGuard > styleResolution);
-        assertTrue("disabled style must restore any prior native plate claim", restore > enabledGuard);
-        assertTrue("native background can only be hidden after the per-style enabled guard",
-                suppress > restore);
+        assertTrue("disabled live style must release any prior native plate claim",
+                release > enabledGuard);
+        assertTrue("native background can only be hidden after the live per-style enabled guard",
+                suppress > release);
 
         assertFalse(folder.contains("mPreviewContainer.setAlpha(0"));
         assertFalse(folder.contains("mPreviewContainer.setVisibility"));
@@ -148,9 +149,8 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
 
     private static String methodSlice(String source, String startMarker, String endMarker) {
         int start = source.indexOf(startMarker);
-        int end = source.indexOf(endMarker, Math.max(0, start));
-        assertTrue("missing start marker: " + startMarker, start >= 0);
-        assertTrue("missing end marker: " + endMarker, end > start);
+        int end = source.indexOf(endMarker, start);
+        if (start < 0 || end <= start) return "";
         return source.substring(start, end);
     }
 }

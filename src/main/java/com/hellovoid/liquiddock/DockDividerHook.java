@@ -1,18 +1,24 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.WeakHashMap;
 
 /** Controls workstation/laptop Dock divider lines independently from Dock geometry. */
 final class DockDividerHook {
     private DockDividerHook() {}
 
-    private static final WeakHashMap<View, View.OnLayoutChangeListener> pendingGeometry =
+    private static final WeakHashMap<View, DividerSnapshot> originalStates =
+            new WeakHashMap<>();
+    private static final WeakHashMap<View, PendingGeometry> pendingGeometry =
             new WeakHashMap<>();
 
     private static int channel(int v) { return Math.max(0, Math.min(v, 255)); }
@@ -24,11 +30,16 @@ final class DockDividerHook {
                     "bindView",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        LiquidDockConfig.Divider cfg = LiquidDockConfig.load().divider;
-                        if (!cfg.enabled) return result;
-
                         View line = (View) HookUtil.invoke(chain.getThisObject(), "getContent");
-                        if (line != null) applyDivider(line, cfg, true);
+                        if (line == null) return result;
+
+                        LiquidDockConfig.Divider cfg = LiquidDockConfig.load().divider;
+                        if (!VisualRuntimeState.isDividerEnabled() || !cfg.enabled) {
+                            releaseDivider(line);
+                            return result;
+                        }
+
+                        applyDivider(line, cfg, true);
                         return result;
                     });
             MainHook.log("[DC] dock divider hook installed");
@@ -44,11 +55,16 @@ final class DockDividerHook {
      */
     private static void applyDivider(View line, LiquidDockConfig.Divider cfg,
                                      boolean allowDeferredGeometry) {
-        if (line == null || cfg == null || !cfg.enabled) return;
+        if (line == null || cfg == null) return;
+        if (!VisualRuntimeState.isDividerEnabled() || !cfg.enabled) {
+            releaseDivider(line);
+            return;
+        }
         if (!(line.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
 
         ViewGroup.MarginLayoutParams lp =
                 (ViewGroup.MarginLayoutParams) line.getLayoutParams();
+        captureOriginalState(line);
         float density = line.getResources().getDisplayMetrics().density;
 
         if (cfg.explicitMode) {
@@ -93,6 +109,37 @@ final class DockDividerHook {
         }
     }
 
+    private static void captureOriginalState(View line) {
+        if (line == null || !(line.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+        synchronized (originalStates) {
+            if (originalStates.containsKey(line)) return;
+            ViewGroup.MarginLayoutParams lp =
+                    (ViewGroup.MarginLayoutParams) line.getLayoutParams();
+            originalStates.put(line, new DividerSnapshot(
+                    lp, cloneBackgroundDrawable(line, line.getBackground())));
+        }
+    }
+
+    private static Drawable cloneBackgroundDrawable(View line, Drawable background) {
+        if (background == null) return null;
+        try {
+            Drawable.ConstantState state = background.getConstantState();
+            if (state != null) {
+                Drawable copy = state.newDrawable(line.getResources());
+                if (copy != null) return copy.mutate();
+            }
+        } catch (Throwable ignored) {
+        }
+        // View.setBackgroundColor mutates an existing ColorDrawable in place, so never retain
+        // that same object as the restore snapshot if ConstantState cloning is unavailable.
+        if (background instanceof ColorDrawable) {
+            return new ColorDrawable(((ColorDrawable) background).getColor());
+        }
+        // For non-ColorDrawable backgrounds setBackgroundColor replaces the View background;
+        // retaining the original reference is therefore safe when no clone API is available.
+        return background;
+    }
+
     private static int parentHeight(View line) {
         ViewParent parent = line.getParent();
         return parent instanceof View ? ((View) parent).getHeight() : 0;
@@ -100,6 +147,10 @@ final class DockDividerHook {
 
     /** One deferred retry per divider View, completed as soon as its parent has real bounds. */
     private static void scheduleGeometryAfterLayout(View line) {
+        if (!VisualRuntimeState.isDividerEnabled()) {
+            releaseDivider(line);
+            return;
+        }
         ViewParent rawParent = line.getParent();
         if (!(rawParent instanceof View)) return;
         View parent = (View) rawParent;
@@ -120,7 +171,7 @@ final class DockDividerHook {
         synchronized (pendingGeometry) {
             // A bind may race between the first containsKey() and listener construction.
             if (pendingGeometry.containsKey(line)) return;
-            pendingGeometry.put(line, listener);
+            pendingGeometry.put(line, new PendingGeometry(parent, listener));
         }
         parent.addOnLayoutChangeListener(listener);
 
@@ -136,10 +187,104 @@ final class DockDividerHook {
         parent.removeOnLayoutChangeListener(listener);
         if (line == null) return;
         synchronized (pendingGeometry) {
-            View.OnLayoutChangeListener current = pendingGeometry.get(line);
-            if (current != listener) return;
+            PendingGeometry current = pendingGeometry.get(line);
+            if (current == null || current.listener != listener) return;
             pendingGeometry.remove(line);
         }
-        applyDivider(line, LiquidDockConfig.load().divider, false);
+        if (!VisualRuntimeState.isDividerEnabled()) {
+            releaseDivider(line);
+            return;
+        }
+        LiquidDockConfig.Divider cfg = LiquidDockConfig.load().divider;
+        if (!cfg.enabled) {
+            releaseDivider(line);
+            return;
+        }
+        applyDivider(line, cfg, false);
+    }
+
+    static void onRuntimeDividerDisabled() {
+        ArrayList<Map.Entry<View, PendingGeometry>> pending;
+        synchronized (pendingGeometry) {
+            pending = new ArrayList<>(pendingGeometry.entrySet());
+            pendingGeometry.clear();
+        }
+        for (Map.Entry<View, PendingGeometry> entry : pending) {
+            PendingGeometry geometry = entry.getValue();
+            if (geometry != null) {
+                geometry.parent.removeOnLayoutChangeListener(geometry.listener);
+            }
+        }
+
+        ArrayList<View> claimed;
+        synchronized (originalStates) {
+            claimed = new ArrayList<>(originalStates.keySet());
+        }
+        for (View line : claimed) {
+            if (line != null) releaseDivider(line);
+        }
+    }
+
+    private static void releaseDivider(View line) {
+        if (line == null) return;
+
+        PendingGeometry pending;
+        synchronized (pendingGeometry) {
+            pending = pendingGeometry.remove(line);
+        }
+        if (pending != null) {
+            pending.parent.removeOnLayoutChangeListener(pending.listener);
+        }
+
+        DividerSnapshot snapshot;
+        synchronized (originalStates) {
+            snapshot = originalStates.remove(line);
+        }
+        if (snapshot == null) return;
+
+        if (line.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams lp =
+                    (ViewGroup.MarginLayoutParams) line.getLayoutParams();
+            lp.width = snapshot.width;
+            lp.height = snapshot.height;
+            lp.leftMargin = snapshot.leftMargin;
+            lp.topMargin = snapshot.topMargin;
+            lp.rightMargin = snapshot.rightMargin;
+            lp.bottomMargin = snapshot.bottomMargin;
+            line.setLayoutParams(lp);
+        }
+        line.setBackground(snapshot.background);
+        line.requestLayout();
+        line.invalidate();
+    }
+
+    private static final class PendingGeometry {
+        final View parent;
+        final View.OnLayoutChangeListener listener;
+
+        PendingGeometry(View parent, View.OnLayoutChangeListener listener) {
+            this.parent = parent;
+            this.listener = listener;
+        }
+    }
+
+    private static final class DividerSnapshot {
+        final int width;
+        final int height;
+        final int leftMargin;
+        final int topMargin;
+        final int rightMargin;
+        final int bottomMargin;
+        final Drawable background;
+
+        DividerSnapshot(ViewGroup.MarginLayoutParams lp, Drawable background) {
+            this.width = lp.width;
+            this.height = lp.height;
+            this.leftMargin = lp.leftMargin;
+            this.topMargin = lp.topMargin;
+            this.rightMargin = lp.rightMargin;
+            this.bottomMargin = lp.bottomMargin;
+            this.background = background;
+        }
     }
 }

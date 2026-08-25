@@ -12,8 +12,9 @@ final class DockIconAnimationGlassHook {
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
-        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled
-                || !runtimeConfig.glass.iconStyle.enabled) return false;
+        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
+            return false;
+        }
         boolean shortcut = installShortcutVisibilityHook(classLoader);
         boolean view2 = installFloatingProxyHook(classLoader,
                 "com.miui.home.recents.views.FloatingIconView2");
@@ -32,7 +33,8 @@ final class DockIconAnimationGlassHook {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
                         Object owner = chain.getThisObject();
-                        if (owner instanceof View && args.length > 0 && args[0] instanceof Number
+                        if (GlassRuntimeState.isIconEnabled()
+                                && owner instanceof View && args.length > 0 && args[0] instanceof Number
                                 && ((Number) args[0]).intValue() == View.VISIBLE
                                 && LauncherGlassHierarchy.isDock((View) owner)) {
                             DockGlassItemRegistry.endLaunchAnimation((View) owner);
@@ -51,7 +53,8 @@ final class DockIconAnimationGlassHook {
             HookUtil.hookMethod(classLoader, className, "update",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (args.length == 10 && args[0] instanceof RectF
+                        if (GlassRuntimeState.isIconEnabled()
+                                && args.length == 10 && args[0] instanceof RectF
                                 && args[1] instanceof RectF && args[2] instanceof Number
                                 && args[6] instanceof Boolean
                                 && !((Boolean) args[6])) {

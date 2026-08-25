@@ -147,14 +147,24 @@ final class LauncherGlassStaticNode {
     LauncherGlassNodeKind nodeKind() { return nodeKind; }
 
     GlassComponentStyle componentStyle() {
-        if (glassConfig == null) return new GlassComponentStyle(true, 0f, 0f);
-        switch (nodeKind) {
-            case ICON: return glassConfig.iconStyle;
-            case WIDGET: return glassConfig.widgetStyle;
-            case SMALL_FOLDER: return glassConfig.smallFolderStyle;
+        GlassComponentStyle base;
+        boolean liveEnabled;
+        if (glassConfig == null) base = new GlassComponentStyle(true, 0f, 0f);
+        else switch (nodeKind) {
+            case ICON: base = glassConfig.iconStyle; break;
+            case WIDGET: base = glassConfig.widgetStyle; break;
+            case SMALL_FOLDER: base = glassConfig.smallFolderStyle; break;
             case LARGE_FOLDER:
-            default: return glassConfig.largeFolderStyle;
+            default: base = glassConfig.largeFolderStyle; break;
         }
+        switch (nodeKind) {
+            case ICON: liveEnabled = GlassRuntimeState.isIconEnabled(); break;
+            case WIDGET: liveEnabled = GlassRuntimeState.isWidgetEnabled(); break;
+            case SMALL_FOLDER: liveEnabled = GlassRuntimeState.isSmallFolderEnabled(); break;
+            case LARGE_FOLDER:
+            default: liveEnabled = GlassRuntimeState.isLargeFolderEnabled(); break;
+        }
+        return new GlassComponentStyle(liveEnabled, base.sizeOffsetDp, base.cornerRadiusDp);
     }
 
     void requestLifecycleRefresh() {
@@ -440,7 +450,7 @@ final class LauncherGlassStaticNode {
 
     private LauncherGlassSession ensureLiveSession() {
         if (disposed) return null;
-        if (!GlassRuntimeState.isEnabled()) return null;
+        if (!GlassRuntimeState.isEnabled() || !componentStyle().enabled) return null;
         View material = materialRef.get();
         if (!LauncherGlassHierarchy.isWorkspace(material)) return null;
         LauncherGlassSession current = session;
