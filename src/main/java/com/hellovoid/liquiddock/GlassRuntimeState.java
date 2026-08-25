@@ -80,6 +80,7 @@ final class GlassRuntimeState {
             boolean nextSmallFolderEnabled,
             boolean nextLargeFolderEnabled) {
         boolean wasEnabled = enabled;
+        boolean wasIconEnabled = isIconEnabled();
         boolean wasWidgetEnabled = isWidgetEnabled();
         if (enabled == nextEnabled
                 && iconEnabled == nextIconEnabled
@@ -92,9 +93,10 @@ final class GlassRuntimeState {
         widgetEnabled = nextWidgetEnabled;
         smallFolderEnabled = nextSmallFolderEnabled;
         largeFolderEnabled = nextLargeFolderEnabled;
+        boolean nextLiveIconEnabled = isIconEnabled();
         boolean nextLiveWidgetEnabled = isWidgetEnabled();
         MainHook.log("[DC][GlassRuntime] enabled=" + enabled
-                + " iconEnabled=" + isIconEnabled()
+                + " iconEnabled=" + nextLiveIconEnabled
                 + " widgetEnabled=" + nextLiveWidgetEnabled
                 + " smallFolderEnabled=" + isSmallFolderEnabled()
                 + " largeFolderEnabled=" + isLargeFolderEnabled());
@@ -113,6 +115,13 @@ final class GlassRuntimeState {
             return;
         }
 
+        if (wasIconEnabled && !nextLiveIconEnabled) {
+            runOnMain(() -> {
+                MiuixLauncherStaticGlassHook.onRuntimeIconGlassDisabled();
+                MiuixLauncherDragOverlayHook.onRuntimeIconGlassDisabled();
+                MainHook.log("[DC][GlassRuntime] icon glass ownership released");
+            });
+        }
         if (wasWidgetEnabled && !nextLiveWidgetEnabled) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassDisabled();
