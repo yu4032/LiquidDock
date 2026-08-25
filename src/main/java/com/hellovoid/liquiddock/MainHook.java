@@ -54,7 +54,8 @@ public class MainHook {
         installWorkstationDockHooks(classLoader, config.workstation);
         WorkstationDockGeometryHook.install(classLoader, config.workstation);
         if (!config.dock.resizeAnimation)
-            installDockResizeAnimationBypass(classLoader, config.dock.smoothResizeAnimation);
+            installDockResizeAnimationBypass(classLoader, config.dock.smoothResizeAnimation,
+                    config.animation.dockResizeMs);
         if (workstationMode)
             log("[DC] workstation active; using isolated workstation parameters");
 
@@ -394,7 +395,8 @@ public class MainHook {
         shadowViewRef = new WeakReference<>(shadow);
     }
 
-    private static void installDockResizeAnimationBypass(ClassLoader cl, boolean smoothAnimation) {
+    private static void installDockResizeAnimationBypass(
+            ClassLoader cl, boolean smoothAnimation, int durationMs) {
         try {
             HookUtil.hookMethod(cl,
                     "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2",
@@ -419,7 +421,7 @@ public class MainHook {
                         } catch (Throwable ignored) {}
                         View view = (View) chain.getThisObject();
                         if (smoothAnimation)
-                            animateDockGeometryFromPrevious(view, oldW, oldH, oldR);
+                            animateDockGeometryFromPrevious(view, oldW, oldH, oldR, durationMs);
                         else syncAll(view);
                         return r;
                     }, int.class, int.class, float.class);
@@ -427,7 +429,8 @@ public class MainHook {
         } catch (Throwable e) { log("[DC] Dock resize animation bypass unavailable: " + e); }
     }
 
-    private static void animateDockGeometryFromPrevious(View view, int startW, int startH, float startR) {
+    private static void animateDockGeometryFromPrevious(
+            View view, int startW, int startH, float startR, int durationMs) {
         try {
             int targetW = HookUtil.getIntField(view, "mWidth");
             int targetH = HookUtil.getIntField(view, "mHeight");
@@ -449,7 +452,7 @@ public class MainHook {
                 HookUtil.setIntField(view, "mHeight", fromH);
                 HookUtil.setField(view, "mCornerRadius", fromR);
                 android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
-                a.setDuration(180L);
+                a.setDuration(durationMs);
                 a.setInterpolator(new android.view.animation.PathInterpolator(.2f, 0f, 0f, 1f));
                 a.addUpdateListener(anim -> {
                     float t = (Float) anim.getAnimatedValue();

@@ -187,6 +187,13 @@ public final class PrismalRenderer implements AutoCloseable {
     public void drawGlass(PrismalGeometry geometry, PrismalParams params,
                           PrismalHighlightProfile highlightProfile,
                           PrismalInteractionState interactionState) {
+        drawGlass(geometry, params, highlightProfile, interactionState, 1f);
+    }
+
+    /** Append one glass node with interaction and an output-alpha multiplier. */
+    public void drawGlass(PrismalGeometry geometry, PrismalParams params,
+                          PrismalHighlightProfile highlightProfile,
+                          PrismalInteractionState interactionState, float opacity) {
         if (geometry == null) throw new IllegalArgumentException("geometry == null");
         if (!glassFrameBegun) {
             throw new IllegalStateException("beginGlassFrame must be called before drawGlass");
@@ -196,8 +203,10 @@ public final class PrismalRenderer implements AutoCloseable {
         }
         if (params == null) params = PrismalParams.builder().build();
         if (highlightProfile == null) highlightProfile = PrismalHighlightProfile.ALL_ENABLED;
+        float safeOpacity = Float.isFinite(opacity)
+                ? Math.max(0f, Math.min(1f, opacity)) : 1f;
         renderGlassNode(geometry, params, highlightProfile, interactionState,
-                !legacySingleDraw || glassDrawCount > 0, 1f);
+                !legacySingleDraw || glassDrawCount > 0, safeOpacity);
         glassDrawCount++;
     }
 

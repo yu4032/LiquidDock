@@ -18,6 +18,29 @@ public final class ConfigSchema {
         private Core() {}
     }
 
+    public static final class Animation {
+        public static final ConfigKey<Integer> WORKSPACE_VISIBILITY = integer(
+                "animation_workspace_visibility_ms", 450, 450, 450, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_ICON_REVEAL = integer(
+                "animation_dock_icon_reveal_ms", 450, 450, 450, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> PRESS_IN = integer(
+                "animation_press_in_ms", 90, 90, 90, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> PRESS_OUT = integer(
+                "animation_press_out_ms", 160, 160, 160, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_RESIZE = integer(
+                "animation_dock_resize_ms", 180, 180, 180, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SETTINGS_PAGE = integer(
+                "animation_settings_page_ms", 300, 300, 300, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+
+        private Animation() {}
+    }
+
     public static final class Grid {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "home_grid_8x4", false, false, false, ConfigKey.ExportMode.ALWAYS);
@@ -443,6 +466,9 @@ public final class ConfigSchema {
     private static List<ConfigKey<?>> createAll() {
         List<ConfigKey<?>> keys = new ArrayList<>();
         add(keys, Core.ENABLED);
+        add(keys, Animation.WORKSPACE_VISIBILITY, Animation.DOCK_ICON_REVEAL,
+                Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
+                Animation.SETTINGS_PAGE);
         add(keys, Grid.ENABLED, Grid.WIDGET_ADAPTATION, Grid.MARGINS_DP, Grid.MARGINS_OFFSET,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,

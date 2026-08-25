@@ -14,7 +14,6 @@ import java.util.WeakHashMap;
 
 /** One transparent static Launcher glass output for an entire stable Launcher root. */
 final class LauncherGlassStaticLayer extends TextureView implements TextureView.SurfaceTextureListener {
-    private static final long REVEAL_FADE_DURATION_MS = 450L;
     private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
 
     private final WeakReference<View> rootRef;
@@ -70,20 +69,28 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (root != null && BY_ROOT.get(root) == layer) BY_ROOT.remove(root);
     }
 
-    void setSceneVisible(boolean visible, boolean fadeReveal) {
+    void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
         if (disposed) return;
         animate().cancel();
-        if (!visible) {
+        if (!visible && immediateHide) {
             setAlpha(0f);
-        } else if (fadeReveal) {
-            setAlpha(0f);
-            animate().alpha(1f)
-                    .setDuration(REVEAL_FADE_DURATION_MS)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-        } else {
-            setAlpha(1f);
+            return;
         }
+        if (visible && !fadeReveal) {
+            setAlpha(1f);
+            return;
+        }
+        LauncherGlassVisibilityTransition.Plan plan =
+                LauncherGlassVisibilityTransition.plan(getAlpha(), visible);
+        setAlpha(plan.startAlpha);
+        if (plan.durationMs == 0L) {
+            setAlpha(plan.targetAlpha);
+            return;
+        }
+        animate().alpha(plan.targetAlpha)
+                .setDuration(plan.durationMs)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
     }
 
     void dispose() {

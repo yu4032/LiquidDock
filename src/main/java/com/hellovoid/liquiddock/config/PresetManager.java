@@ -123,6 +123,12 @@ public final class PresetManager {
     private static Map<String, Object> createDefaultValues() {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("liquiddock_enabled", true);
+        values.put(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(), 450);
+        values.put(ConfigSchema.Animation.DOCK_ICON_REVEAL.name(), 450);
+        values.put(ConfigSchema.Animation.PRESS_IN.name(), 90);
+        values.put(ConfigSchema.Animation.PRESS_OUT.name(), 160);
+        values.put(ConfigSchema.Animation.DOCK_RESIZE.name(), 180);
+        values.put(ConfigSchema.Animation.SETTINGS_PAGE.name(), 300);
         values.put("home_grid_8x4", false);
         values.put("grid_widget_adaptation", false);
         values.put("grid_margins_dp", true);

@@ -24,11 +24,17 @@ final class LauncherGlassSceneController {
         private boolean fadeRevealReady;
 
         void onRootReady() {
-            if (state == State.DETACHED) state = State.BOOTSTRAPPING;
+            if (state == State.DETACHED) {
+                state = State.BOOTSTRAPPING;
+                fadeAfterFreshFrame = true;
+            }
         }
 
         void onBootstrapReconciled() {
-            if (state == State.BOOTSTRAPPING) state = State.HOME_WAITING_FRESH_FRAME;
+            if (state == State.BOOTSTRAPPING) {
+                state = State.HOME_WAITING_FRESH_FRAME;
+                fadeAfterFreshFrame = true;
+            }
         }
 
         void setCovered(boolean nextCovered) {
@@ -375,7 +381,7 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal());
+            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal(), folderCovered);
         }
     }
 

@@ -15,6 +15,12 @@ public class ConfigPresetTest {
     public void defaultPresetKeepsTheComposePersistedValues() {
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("liquiddock_enabled", true);
+        expected.put("animation_workspace_visibility_ms", 450);
+        expected.put("animation_dock_icon_reveal_ms", 450);
+        expected.put("animation_press_in_ms", 90);
+        expected.put("animation_press_out_ms", 160);
+        expected.put("animation_dock_resize_ms", 180);
+        expected.put("animation_settings_page_ms", 300);
         expected.put("home_grid_8x4", false);
         expected.put("grid_widget_adaptation", false);
         expected.put("grid_margins_dp", true);

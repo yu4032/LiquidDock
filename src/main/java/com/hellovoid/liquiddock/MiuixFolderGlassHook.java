@@ -32,6 +32,8 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Drawable> ORIGINAL_BACKGROUND =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, Integer> ORIGINAL_COVERED_VISIBILITY =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Map<Drawable, Integer>> ORIGINAL_LARGE_FOLDER_PAINT_ALPHA =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, WeakReference<View>> CLAIMED_FOLDER_COVERS =
@@ -43,6 +45,7 @@ final class MiuixFolderGlassHook {
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
     private static boolean folderStatusDispatcherInstalled;
+    private static boolean nativeFolderMaterialsCovered;
     private static boolean installed;
 
     private MiuixFolderGlassHook() {}
@@ -131,11 +134,13 @@ final class MiuixFolderGlassHook {
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
         try {
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
+                setNativeFolderMaterialsCovered(true);
                 LauncherGlassSceneController.setFolderCoveredForAll(true);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                setNativeFolderMaterialsCovered(false);
                 LauncherGlassSceneController.setFolderCoveredForAll(false);
                 return result;
             });
@@ -237,6 +242,7 @@ final class MiuixFolderGlassHook {
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
         if (!folderStatusDispatcherInstalled) {
+            setNativeFolderMaterialsCovered(suppressed);
             LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
         }
         if (!suppressed) {
@@ -425,6 +431,7 @@ final class MiuixFolderGlassHook {
         View previous = previousReference != null ? previousReference.get() : null;
         if (previous != null && previous != cover) restoreMaterial(previous);
         makeMaterialTransparent(cover);
+        coverNativeViewIfNeeded(cover);
     }
 
     private static void releaseFolderCover(ViewGroup icon) {
@@ -488,6 +495,7 @@ final class MiuixFolderGlassHook {
             clearVendorBlur(material);
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
+            coverNativeViewIfNeeded(material);
             MiuixLauncherDragOverlayHook.observeStaticNode(existing);
             return existing;
         }
@@ -505,6 +513,7 @@ final class MiuixFolderGlassHook {
             clearVendorBlur(material);
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
+            coverNativeViewIfNeeded(material);
             MainHook.log(TAG + " FolderIcon material joined shared static launcher compositor");
         }
         return sink;
@@ -548,6 +557,7 @@ final class MiuixFolderGlassHook {
     }
 
     static void onRuntimeGlassDisabled() {
+        setNativeFolderMaterialsCovered(false);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             LauncherGlassStaticNode sink = claimedSink(material);
             if (sink != null) sink.dispose();
@@ -566,6 +576,35 @@ final class MiuixFolderGlassHook {
         FOLDER_RECOVERY_PENDING.clear();
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
+    }
+
+    private static void setNativeFolderMaterialsCovered(boolean covered) {
+        nativeFolderMaterialsCovered = covered;
+        if (!covered) {
+            for (Map.Entry<View, Integer> entry
+                    : new ArrayList<>(ORIGINAL_COVERED_VISIBILITY.entrySet())) {
+                View view = entry.getKey();
+                Integer original = entry.getValue();
+                if (view != null && original != null) view.setVisibility(original);
+            }
+            ORIGINAL_COVERED_VISIBILITY.clear();
+            return;
+        }
+        for (View material : new ArrayList<>(CLAIMED.keySet())) {
+            coverNativeViewIfNeeded(material);
+        }
+        for (WeakReference<View> reference
+                : new ArrayList<>(CLAIMED_FOLDER_COVERS.values())) {
+            coverNativeViewIfNeeded(reference != null ? reference.get() : null);
+        }
+    }
+
+    private static void coverNativeViewIfNeeded(View view) {
+        if (!nativeFolderMaterialsCovered || view == null) return;
+        if (!ORIGINAL_COVERED_VISIBILITY.containsKey(view)) {
+            ORIGINAL_COVERED_VISIBILITY.put(view, view.getVisibility());
+        }
+        view.setVisibility(View.INVISIBLE);
     }
 
     private static void restoreMaterial(View material) {

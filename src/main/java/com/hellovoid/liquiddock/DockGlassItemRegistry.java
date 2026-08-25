@@ -7,10 +7,9 @@ import java.util.WeakHashMap;
 
 /** Weak candidate registry. Domain ownership is verified again by DockGlassItemNode. */
 final class DockGlassItemRegistry {
-    private static final long FADE_DURATION_MS = 450L;
     private static final WeakHashMap<View, Boolean> ICONS = new WeakHashMap<>();
     private static final DockIconAnimationState ANIMATION =
-            new DockIconAnimationState(FADE_DURATION_MS);
+            new DockIconAnimationState(AnimationRuntimeState.dockIconRevealDurationMs());
     private static long revision;
     private DockGlassItemRegistry() {}
 

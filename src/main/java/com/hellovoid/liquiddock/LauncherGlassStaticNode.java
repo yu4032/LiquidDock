@@ -16,8 +16,6 @@ import java.util.WeakHashMap;
 final class LauncherGlassStaticNode {
     private static final Map<View, WeakReference<LauncherGlassStaticNode>> BY_MATERIAL =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final long PRESS_IN_DURATION_MS = 90L;
-    private static final long PRESS_OUT_DURATION_MS = 160L;
 
     private final WeakReference<View> materialRef;
     private final LauncherGlassDragState.Kind kind;
@@ -39,6 +37,8 @@ final class LauncherGlassStaticNode {
     private float glowCenterX = 0.5f;
     private float glowCenterY = 0.5f;
     private ValueAnimator pressAnimator;
+    private ValueAnimator visibilityAnimator;
+    private volatile float visibilityAlpha;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassStaticNode(
@@ -57,11 +57,15 @@ final class LauncherGlassStaticNode {
         materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 LauncherGlassSession live = ensureLiveSession();
-                if (live != null) live.registerStaticNode(LauncherGlassStaticNode.this);
+                if (live != null) {
+                    live.registerStaticNode(LauncherGlassStaticNode.this);
+                    animateVisibilityTo(true);
+                }
             }
 
             @Override public void onViewDetachedFromWindow(View v) {
                 resetPressInteraction(false);
+                hideImmediately();
                 LauncherGlassSession live = session;
                 if (live != null) live.unregisterStaticNode(LauncherGlassStaticNode.this);
             }
@@ -101,6 +105,7 @@ final class LauncherGlassStaticNode {
                 materialHost, resolvedKind, resolvedNodeKind, shared, cornerRadiusPx, glassConfig);
         BY_MATERIAL.put(materialHost, new WeakReference<>(node));
         shared.registerStaticNode(node);
+        node.animateVisibilityTo(true);
         return node;
     }
 
@@ -126,6 +131,7 @@ final class LauncherGlassStaticNode {
                 cornerRadiusPx, glassConfig);
         BY_MATERIAL.put(materialHost, new WeakReference<>(node));
         shared.registerStaticNode(node);
+        node.animateVisibilityTo(true);
         return node;
     }
 
@@ -164,14 +170,52 @@ final class LauncherGlassStaticNode {
         if (disposed || suppressedByFolderOpen == suppressed) return;
         if (suppressed) resetPressInteraction(false);
         suppressedByFolderOpen = suppressed;
-        requestLifecycleRefresh();
+        animateVisibilityTo(!suppressedByFolderOpen && !suppressedByDrag);
     }
 
     void setSuppressedByDrag(boolean suppressed) {
         if (disposed || suppressedByDrag == suppressed) return;
         if (suppressed) resetPressInteraction(false);
         suppressedByDrag = suppressed;
-        requestLifecycleRefresh();
+        animateVisibilityTo(!suppressedByFolderOpen && !suppressedByDrag);
+    }
+
+    float visibilityAlpha() { return visibilityAlpha; }
+
+    boolean retainLastGeometryDuringFade() {
+        return visibilityAlpha > 0.001f && (suppressedByFolderOpen || suppressedByDrag);
+    }
+
+    private void animateVisibilityTo(boolean visible) {
+        if (disposed) return;
+        if (visibilityAnimator != null) visibilityAnimator.cancel();
+        LauncherGlassVisibilityTransition.Plan plan =
+                LauncherGlassVisibilityTransition.plan(visibilityAlpha, visible);
+        visibilityAlpha = plan.startAlpha;
+        if (plan.durationMs == 0L) {
+            visibilityAlpha = plan.targetAlpha;
+            requestLifecycleRefresh();
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(plan.startAlpha, plan.targetAlpha);
+        visibilityAnimator = animator;
+        animator.setDuration(plan.durationMs);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(valueAnimator -> {
+            if (visibilityAnimator != valueAnimator || disposed) return;
+            visibilityAlpha = (Float) valueAnimator.getAnimatedValue();
+            LauncherGlassSession live = session;
+            if (live != null) live.requestStaticRedraw();
+        });
+        animator.start();
+    }
+
+    private void hideImmediately() {
+        if (visibilityAnimator != null) {
+            visibilityAnimator.cancel();
+            visibilityAnimator = null;
+        }
+        visibilityAlpha = 0f;
     }
 
     boolean holdLaunchProxyHidden() {
@@ -260,7 +304,8 @@ final class LauncherGlassStaticNode {
         }
         ValueAnimator animator = ValueAnimator.ofFloat(start, target);
         pressAnimator = animator;
-        animator.setDuration(target > start ? PRESS_IN_DURATION_MS : PRESS_OUT_DURATION_MS);
+        animator.setDuration(target > start ? AnimationRuntimeState.pressInDurationMs()
+                : AnimationRuntimeState.pressOutDurationMs());
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(valueAnimator -> {
             if (pressAnimator != valueAnimator || disposed) return;
@@ -281,7 +326,7 @@ final class LauncherGlassStaticNode {
         View material = materialRef.get();
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || style == null || !style.enabled
-                || suppressedByFolderOpen || suppressedByDrag) return null;
+                || visibilityAlpha <= 0.001f) return null;
         int rootWidth = root.getWidth();
         int rootHeight = root.getHeight();
         if (rootWidth <= 0 || rootHeight <= 0) return null;
@@ -381,6 +426,7 @@ final class LauncherGlassStaticNode {
     void dispose() {
         if (disposed) return;
         resetPressInteraction(false);
+        hideImmediately();
         disposed = true;
         View material = materialRef.get();
         if (material != null) {
