@@ -305,7 +305,7 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.TINT_RED, "底色 · 红", ""),
     IntSpec(ConfigSchema.Glass.TINT_GREEN, "底色 · 绿", ""),
     IntSpec(ConfigSchema.Glass.TINT_BLUE, "底色 · 蓝", ""),
-    IntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, "边缘高光厚度", "%"),
+    IntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, "玻璃边缘厚度", "%"),
     IntSpec(ConfigSchema.Glass.BRIGHTNESS, "亮度", "%"),
     IntSpec(ConfigSchema.Glass.SPECULAR_SHARPNESS, "高光锐度", ""),
     IntSpec(ConfigSchema.Glass.SPECULAR_STRENGTH, "高光强度", "%"),

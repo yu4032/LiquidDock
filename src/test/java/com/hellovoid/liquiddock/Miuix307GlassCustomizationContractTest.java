@@ -19,6 +19,8 @@ public class Miuix307GlassCustomizationContractTest {
         String config = Files.readString(MAIN.resolve("LiquidDockConfig.java"));
         String material = Files.readString(MAIN.resolve("Miuix307PrismalMaterial.java"));
         String shader = Files.readString(MAIN.resolve("Miuix307PrismalShader.java"));
+        String opticalEdge = Files.readString(Path.of(
+                "prismal/src/main/java/com/hellovoid/prismal/PrismalOpticalEdgeShader.java"));
         String ui = Files.readString(UI);
 
         assertTrue(config.contains("depthEffect"));
@@ -28,7 +30,7 @@ public class Miuix307GlassCustomizationContractTest {
         assertTrue("edge falloff must affect shader math, not only be declared",
                 occurrences(shader, "u_edgeRefractionFalloff") >= 2);
         assertTrue("highlight width must affect shader math, not only be declared",
-                occurrences(shader, "u_highlightWidth") >= 2);
+                occurrences(shader + opticalEdge, "u_highlightWidth") >= 2);
         assertTrue(ui.contains("ConfigSchema.Glass.DEPTH_EFFECT"));
         assertFalse(ui.contains("兼容控制 Prismal lens-depth 倍率"));
         assertFalse(ui.contains("兼容控制 Prismal 边缘高光带宽"));
@@ -67,6 +69,8 @@ public class Miuix307GlassCustomizationContractTest {
     @Test
     public void everyVisibleZeroCopyOpticalUniformIsActuallyConsumed() throws Exception {
         String shader = Files.readString(MAIN.resolve("Miuix307PrismalShader.java"));
+        String opticalEdge = Files.readString(Path.of(
+                "prismal/src/main/java/com/hellovoid/prismal/PrismalOpticalEdgeShader.java"));
         String material = Files.readString(MAIN.resolve("Miuix307PrismalMaterial.java"));
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
 
@@ -83,7 +87,7 @@ public class Miuix307GlassCustomizationContractTest {
         };
         for (String uniform : uniforms) {
             assertTrue("visible optical uniform declared but not consumed: " + uniform,
-                    occurrences(shader, uniform) >= 2);
+                    occurrences(shader + opticalEdge, uniform) >= 2);
         }
         String[] configFields = new String[]{
                 "glass.blur", "glass.thickness", "glass.ior", "glass.normalStrength",

@@ -310,7 +310,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> HOME_SETTLE_DELAY_MS = dp(
                 "liquid_home_settle_delay", 1200, 1200, 1200, 200, 3000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> HIGHLIGHT_WIDTH = integer(
-                "liquid_highlight_width", 100, 100, 100, 20, 300, ConfigKey.ExportMode.ALWAYS);
+                "liquid_highlight_width", 100, 100, 100, 50, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_RED = integer(
                 "liquid_tint_r", 0, 0, 238, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_GREEN = integer(
