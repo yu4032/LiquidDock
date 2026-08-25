@@ -104,10 +104,10 @@ public class MainHook {
                 Math.round(config.workstation.allAppsPortraitBottomSpacing * workstationAllAppsScale));
 
         boolean dockCustomization = config.dock.enabled;
-        if (dockCustomization) {
-            installNativeDockShadowSuppression(classLoader);
-            installDockShadowSetupHook(classLoader);
-        }
+        // These hooks are permanent but inert when Dock customization is live-disabled. Keeping
+        // them installed prevents a startup snapshot from continuing to own native shadow state.
+        installNativeDockShadowSuppression(classLoader);
+        installDockShadowSetupHook(classLoader);
         if (config.glass.enabled) {
             if (Miuix307MaterialPipeline.install(classLoader, config)) {
                 log("[DC] MiuiX 307 zero-copy material active");
@@ -116,8 +116,7 @@ public class MainHook {
             log("[DC] MiuiX 307 zero-copy material unavailable; liquid glass disabled");
         }
         if (!dockCustomization) {
-            log("[DC] Dock customization disabled; no legacy glass fallback");
-            return;
+            log("[DC] Dock customization disabled; legacy hooks installed inertly");
         }
 
         // ── Dock customization path; liquid glass is zero-copy-only above ──
@@ -149,7 +148,9 @@ public class MainHook {
                         "getItemOffsets",
                         chain -> {
                             Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            if (workstationMode) return r;
+                            if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
+                                return r;
+                            }
                             Rect out = (Rect) chain.getArgs().get(0);
                             out.left += spacing;
                             out.right += spacing;
@@ -161,7 +162,9 @@ public class MainHook {
                     HookUtil.hookMethod(layoutManager, "updateBackgroundView",
                             new Class<?>[]{FrameLayout.class, int.class, int.class, float.class},
                             chain -> {
-                                if (workstationMode) return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                                if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
+                                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                                }
                                 int itemCount = (Integer) HookUtil.invoke(chain.getThisObject(), "getItemCount");
                                 if (itemCount > 0) {
                                     Object[] args = chain.getArgs().toArray(new Object[0]);
@@ -177,7 +180,10 @@ public class MainHook {
             HookUtil.hookMethod(cl, hsc, "setBackgroundWidth",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (!workstationMode && wo != 0) args[0] = (int) args[0] + wo;
+                        if (VisualRuntimeState.isDockCustomizationEnabled()
+                                && !workstationMode && wo != 0) {
+                            args[0] = (int) args[0] + wo;
+                        }
                         Object r = chain.proceed(args);
                         syncAll((View) chain.getThisObject());
                         return r;
@@ -187,7 +193,10 @@ public class MainHook {
             HookUtil.hookMethod(cl, hsc, "setBackgroundHeight",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (!workstationMode && ho != 0) args[0] = (int) args[0] + ho;
+                        if (VisualRuntimeState.isDockCustomizationEnabled()
+                                && !workstationMode && ho != 0) {
+                            args[0] = (int) args[0] + ho;
+                        }
                         Object r = chain.proceed(args);
                         syncAll((View) chain.getThisObject());
                         return r;
@@ -197,7 +206,7 @@ public class MainHook {
             HookUtil.hookMethod(cl, hsc, "setBackgroundRadius",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (!workstationMode) {
+                        if (!workstationMode && VisualRuntimeState.isDockCustomizationEnabled()) {
                             View v = (View) chain.getThisObject();
                             float systemRadius = (Float) args[0];
                             if (!animating(v)) strokeR = Math.max(0f, systemRadius + co);
@@ -206,7 +215,7 @@ public class MainHook {
                         Object r = chain.proceed(args);
                         View v = (View) chain.getThisObject();
                         syncAll(v);
-                        if (sq) {
+                        if (sq && VisualRuntimeState.isDockCustomizationEnabled()) {
                             if (animating(v)) return r;
                             float radius = (Float) HookUtil.getField(v, "mCornerRadius");
                             if (radius > 0) v.setOutlineProvider(new android.view.ViewOutlineProvider() {
@@ -224,7 +233,10 @@ public class MainHook {
                         new Class<?>[]{View.class, int.class, float[].class, int[][].class},
                         chain -> {
                             Object[] args = chain.getArgs().toArray(new Object[0]);
-                            if (!workstationMode && br != 100) args[1] = br;
+                            if (VisualRuntimeState.isDockCustomizationEnabled()
+                                    && !workstationMode && br != 100) {
+                                args[1] = br;
+                            }
                             return chain.proceed(args);
                         });
             } catch (Throwable ignored) {}
@@ -253,7 +265,9 @@ public class MainHook {
                             float.class},
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (workstationMode) return chain.proceed(args);
+                        if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) {
+                            return chain.proceed(args);
+                        }
                         if (args[0] != nativeShadowTarget()) return chain.proceed(args);
                         args[1] = Color.TRANSPARENT;
                         args[2] = 0f;
@@ -277,7 +291,10 @@ public class MainHook {
                             LiquidDockConfig.Dock dock = current.dock;
                             Object hs = HookUtil.getField(chain.getThisObject(), "mHotSeats");
                             if (hs == null) return r;
-                            if (!workstationMode) clearNativeDockShadow(hs);
+                            if (!workstationMode
+                                    && VisualRuntimeState.isDockCustomizationEnabled()) {
+                                clearNativeDockShadow(hs);
+                            }
                             View background = resolveActiveDockBackground(hs);
                             if (background == null) return r;
                             syncDockShadow(background, dock);
@@ -292,6 +309,7 @@ public class MainHook {
     }
 
     private static void clearNativeDockShadow(Object hotSeats) {
+        if (!VisualRuntimeState.isDockCustomizationEnabled()) return;
         try {
             Object target = HookUtil.invoke(hotSeats, "getMingouStaticDockBlurShadowTarget");
             if (target instanceof View) {
@@ -325,8 +343,12 @@ public class MainHook {
      * zero-copy geometry path when HyperOS replaces or resizes the material without setupViews.
      */
     static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock) {
-        if (dockBg == null || dock == null || !dock.enabled) return;
+        if (dockBg == null || dock == null) return;
         setOldBg(dockBg);
+        if (!VisualRuntimeState.isDockShadowEnabled()) {
+            removeDockShadow();
+            return;
+        }
 
         float nativeRadius = MiuixGlassHook.readNativeOpticsRadius(dockBg);
         strokeR = DockStrokeRenderer.resolveConfiguredRadius(dockBg, dock, nativeRadius);
@@ -334,10 +356,6 @@ public class MainHook {
         View currentShadow = shadowViewRef.get();
         if (workstationMode) {
             dockBg.setAlpha(1f);
-            if (currentShadow != null) currentShadow.setVisibility(View.GONE);
-            return;
-        }
-        if (!dock.shadowEnabled) {
             if (currentShadow != null) currentShadow.setVisibility(View.GONE);
             return;
         }
@@ -376,6 +394,28 @@ public class MainHook {
         }
         currentShadow.setVisibility(View.VISIBLE);
         syncAll(dockBg);
+    }
+
+    private static void removeDockShadow() {
+        View shadow = shadowViewRef.get();
+        if (shadow != null && shadow.getParent() instanceof ViewGroup) {
+            ((ViewGroup) shadow.getParent()).removeView(shadow);
+        }
+        shadowViewRef = new WeakReference<>(null);
+        lastShadowW = 0;
+    }
+
+    static void onRuntimeDockShadowDisabled() {
+        removeDockShadow();
+    }
+
+    static void onRuntimeDockCustomizationDisabled() {
+        // Do not invent vendor shadow parameters here. The permanent MiShadow hook now passes
+        // future calls through unchanged; the exact original MIUI shadow inputs were never stored.
+        removeDockShadow();
+        DockStrokeRenderer.refreshInstalledFromCurrentConfig();
+        View dockBg = oldBg();
+        if (dockBg != null) dockBg.postInvalidateOnAnimation();
     }
 
     /** Keep the reusable shadow below whichever vendor material is active now. */
@@ -578,7 +618,10 @@ public class MainHook {
             if (dockBg != null) dockBg.post(() -> {
                 dockBg.setAlpha(1f);
                 View currentShadow = shadowViewRef.get();
-                if (currentShadow != null) currentShadow.setVisibility(View.VISIBLE);
+                if (currentShadow != null) {
+                    currentShadow.setVisibility(VisualRuntimeState.isDockShadowEnabled()
+                            ? View.VISIBLE : View.GONE);
+                }
                 syncAll(dockBg);
             });
             return;
@@ -712,6 +755,10 @@ public class MainHook {
     private static void syncAll(View bg) {
         View shadowView = shadowViewRef.get();
         if (bg == null || shadowView == null) return;
+        if (!VisualRuntimeState.isDockShadowEnabled()) {
+            removeDockShadow();
+            return;
+        }
         boolean anim = animating(bg);
         try {
             int width = bg.getWidth();
