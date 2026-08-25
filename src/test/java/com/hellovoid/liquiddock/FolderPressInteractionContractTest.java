@@ -64,9 +64,10 @@ public class FolderPressInteractionContractTest {
         assertTrue("static node detach must immediately clear stale press state",
                 sink.contains("resetPressInteraction(false)")
                         && sink.contains("onViewDetachedFromWindow"));
-        assertTrue("press transitions should be animated rather than snapping during normal touch",
-                sink.contains("ValueAnimator") && sink.contains("PRESS_IN_DURATION_MS")
-                        && sink.contains("PRESS_OUT_DURATION_MS"));
+        assertTrue("press transitions should use configured reversible animators",
+                sink.contains("ValueAnimator")
+                        && sink.contains("AnimationRuntimeState.pressInDurationMs()")
+                        && sink.contains("AnimationRuntimeState.pressOutDurationMs()"));
     }
 
     @Test

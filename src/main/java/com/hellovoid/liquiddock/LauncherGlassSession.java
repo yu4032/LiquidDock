@@ -656,6 +656,7 @@ final class LauncherGlassSession {
             if (node == null) continue;
             LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = state.geometry;
+            if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
             if ((old == null) != (observed == null)
                     || (old != null && !old.sameAs(observed))) {
                 state.geometry = observed;
@@ -1136,7 +1137,8 @@ final class LauncherGlassSession {
                     geometry.width, geometry.height, geometry.cornerRadius);
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
-            prismalRenderer.drawGlass(prismalGeometry, params, highlights, state.interaction);
+            prismalRenderer.drawGlass(prismalGeometry, params, highlights,
+                    state.interaction, node.visibilityAlpha());
         }
         presentFull(prismalRenderer.outputTexture(), output);
     }

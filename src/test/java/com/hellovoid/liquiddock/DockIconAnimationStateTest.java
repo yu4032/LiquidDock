@@ -7,6 +7,14 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class DockIconAnimationStateTest {
+    @Test public void zeroDurationRevealCompletesImmediately() {
+        DockIconAnimationState state = new DockIconAnimationState(0L);
+        Object icon = new Object();
+        state.begin(icon);
+        state.end(icon, 100L);
+        assertEquals(1f, state.opacity(icon, 100L), 0f);
+    }
+
     @Test
     public void launchAnimationHidesGlassUntilFadeBegins() {
         DockIconAnimationState state = new DockIconAnimationState(180L);

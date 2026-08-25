@@ -22,8 +22,6 @@ import java.util.WeakHashMap;
 final class LauncherGlassSinkView extends TextureView implements TextureView.SurfaceTextureListener {
     private static final Map<View, WeakReference<LauncherGlassSinkView>> BY_MATERIAL =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final long PRESS_IN_DURATION_MS = 90L;
-    private static final long PRESS_OUT_DURATION_MS = 160L;
 
     private final WeakReference<View> materialRef;
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -205,7 +203,8 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         }
         ValueAnimator animator = ValueAnimator.ofFloat(start, target);
         pressAnimator = animator;
-        animator.setDuration(target > start ? PRESS_IN_DURATION_MS : PRESS_OUT_DURATION_MS);
+        animator.setDuration(target > start ? AnimationRuntimeState.pressInDurationMs()
+                : AnimationRuntimeState.pressOutDurationMs());
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(valueAnimator -> {
             if (pressAnimator != valueAnimator || disposed) return;

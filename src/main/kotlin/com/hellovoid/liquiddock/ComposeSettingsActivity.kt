@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -74,7 +75,8 @@ private enum class Page(val titleRes: Int) {
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     Liquid(R.string.page_liquid),
     LauncherHighlights(R.string.page_launcher_highlights),
-    Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Data(R.string.page_data),
+    Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
+    Data(R.string.page_data),
     About(R.string.page_about)
 }
 
@@ -387,12 +389,16 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         AnimatedContent(
             targetState = page,
             transitionSpec = {
+                val duration = prefs.getInt(
+                    ConfigSchema.Animation.SETTINGS_PAGE.name(),
+                    ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
+                ).coerceIn(0, 2000)
                 if (targetState.ordinal > initialState.ordinal) {
-                    (slideInHorizontally { it } + fadeIn()) togetherWith
-                            (slideOutHorizontally { -it / 3 } + fadeOut())
+                    (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
+                            (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
                 } else {
-                    (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
-                            (slideOutHorizontally { it } + fadeOut())
+                    (slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration))) togetherWith
+                            (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
                 }
             },
             label = "page",
@@ -408,6 +414,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
                 Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
+                Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
                 Page.Data -> DataPage(padding, activity)
                 Page.About -> AboutPage(padding, activity, prefs)
             }
@@ -435,12 +442,30 @@ private fun HomePage(
                 ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
                 ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
                 ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
+                ArrowPreference(stringResource(R.string.page_animation), summary = stringResource(R.string.home_animation_summary), onClick = { open(Page.Animation) })
             }
         }
         item { SmallTitle(stringResource(R.string.category_configuration)) }
         item { SettingsCard { ArrowPreference(stringResource(R.string.home_data_title), summary = stringResource(R.string.home_data_summary), onClick = { open(Page.Data) }) } }
         item { SmallTitle(stringResource(R.string.category_about)) }
         item { SettingsCard { ArrowPreference(stringResource(R.string.home_about_title), summary = stringResource(R.string.home_about_summary), onClick = { open(Page.About) }) } }
+    }
+}
+
+@Composable
+private fun AnimationPage(
+    padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
+) {
+    val specs = listOf(
+        IntSpec(ConfigSchema.Animation.WORKSPACE_VISIBILITY, "工作区玻璃显隐", "ms", summary = "图标、文件夹、小部件及工作区整体；文件夹打开的安全隐藏仍立即执行"),
+        IntSpec(ConfigSchema.Animation.DOCK_ICON_REVEAL, "Dock 图标玻璃恢复", "ms", summary = "应用退出动画末尾的 Dock 图标玻璃淡入"),
+        IntSpec(ConfigSchema.Animation.PRESS_IN, "按压进入", "ms", summary = "玻璃按下时的反馈速度"),
+        IntSpec(ConfigSchema.Animation.PRESS_OUT, "按压释放", "ms", summary = "松手后的回弹恢复速度"),
+        IntSpec(ConfigSchema.Animation.DOCK_RESIZE, "Dock 尺寸变化", "ms", summary = "宽度、高度和圆角的平滑调整"),
+        IntSpec(ConfigSchema.Animation.SETTINGS_PAGE, "GUI 页面切换", "ms", summary = "设置页面滑动与淡入淡出；下次切换立即生效"),
+    )
+    SettingsList(padding, stringResource(R.string.page_animation), "0 ms 表示立即完成；桌面内动画需重启桌面生效") {
+        specs.forEach { IntSetting(prefs, it, masterEnabled) }
     }
 }
 

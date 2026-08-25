@@ -14,6 +14,7 @@ final class LiquidDockConfig {
     final Glass glass;
     final Workstation workstation;
     final Recents recents;
+    final Animation animation;
 
     static LiquidDockConfig load() { return new LiquidDockConfig(ConfigReader.load()); }
 
@@ -30,6 +31,26 @@ final class LiquidDockConfig {
         glass = new Glass(c);
         workstation = new Workstation(c);
         recents = new Recents(c);
+        animation = new Animation(c);
+    }
+
+    static final class Animation {
+        final int workspaceVisibilityMs, dockIconRevealMs, pressInMs, pressOutMs,
+                dockResizeMs, settingsPageMs;
+
+        Animation(ConfigReader c) {
+            workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
+            dockIconRevealMs = duration(c, ConfigSchema.Animation.DOCK_ICON_REVEAL);
+            pressInMs = duration(c, ConfigSchema.Animation.PRESS_IN);
+            pressOutMs = duration(c, ConfigSchema.Animation.PRESS_OUT);
+            dockResizeMs = duration(c, ConfigSchema.Animation.DOCK_RESIZE);
+            settingsPageMs = duration(c, ConfigSchema.Animation.SETTINGS_PAGE);
+        }
+
+        private static int duration(ConfigReader c,
+                com.hellovoid.liquiddock.config.ConfigKey<Integer> key) {
+            return Math.max(0, Math.min(2000, c.i(key.name(), key.runtimeFallback())));
+        }
     }
 
     static final class Recents {

@@ -69,7 +69,7 @@ public class LauncherGlassSceneControllerTest {
         Object state = machine();
         call(state, "onRootReady", new Class<?>[0]);
         call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
-        assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
+        assertTrue((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
 
         call(state, "setCovered", new Class<?>[]{boolean.class}, true);
         call(state, "setCovered", new Class<?>[]{boolean.class}, false);

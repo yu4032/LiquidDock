@@ -17,7 +17,7 @@ final class DockIconAnimationState {
     private final WeakHashMap<Object, Record> states = new WeakHashMap<>();
 
     DockIconAnimationState(long fadeDurationMs) {
-        this.fadeDurationMs = Math.max(1L, fadeDurationMs);
+        this.fadeDurationMs = Math.max(0L, fadeDurationMs);
     }
 
     synchronized void begin(Object icon) {
@@ -50,6 +50,11 @@ final class DockIconAnimationState {
         Record record = icon != null ? states.get(icon) : null;
         if (record == null || record.fadeStartedMs == COMPLETE) return 1f;
         if (record.fadeStartedMs == HIDDEN) return 0f;
+        if (fadeDurationMs == 0L) {
+            if (record.ended) states.remove(icon);
+            else record.fadeStartedMs = COMPLETE;
+            return 1f;
+        }
         float progress = Math.max(0f, Math.min(1f,
                 (nowMs - record.fadeStartedMs) / (float) fadeDurationMs));
         if (progress >= 1f) {
