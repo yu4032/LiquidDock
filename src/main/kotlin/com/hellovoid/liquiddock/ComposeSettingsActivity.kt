@@ -75,14 +75,13 @@ private enum class Page(val titleRes: Int) {
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     Liquid(R.string.page_liquid),
     LauncherHighlights(R.string.page_launcher_highlights),
-    Stroke(R.string.page_stroke), GlassStroke(R.string.page_glass_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
+    Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
     Data(R.string.page_data),
     About(R.string.page_about)
 }
 
 private fun parentPage(page: Page): Page = when (page) {
     Page.LauncherHighlights -> Page.Liquid
-    Page.GlassStroke -> Page.Stroke
     else -> Page.Home
 }
 
@@ -413,8 +412,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
                 Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
-                Page.Stroke -> StrokePage(padding, prefs, masterEnabled) { page = Page.GlassStroke }
-                Page.GlassStroke -> GlassStrokePage(padding, prefs, masterEnabled)
+                Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
                 Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
                 Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
                 Page.Data -> DataPage(padding, activity)
@@ -642,12 +640,11 @@ private fun LauncherHighlightsPage(
 }
 
 @Composable
-private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean, openGlassStroke: () -> Unit) {
+private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
     var dockStroke by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_ENABLED.name(), ConfigSchema.Dock.STROKE_ENABLED.uiDefault())) }
     var squircle by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SQUIRCLE.name(), ConfigSchema.Dock.SQUIRCLE.uiDefault())) }
     var fillDiff by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.FILL_DIFF.name(), ConfigSchema.Dock.FILL_DIFF.uiDefault())) }
     SettingsList(padding, "描边") {
-        ArrowPreference(stringResource(R.string.page_glass_stroke), summary = stringResource(R.string.glass_stroke_entry_summary), onClick = openGlassStroke)
         BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
         BooleanSetting(prefs, ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边", "通过填充与挖空获得清晰抗锯齿", masterEnabled) { fillDiff = it }
@@ -662,28 +659,6 @@ private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterE
                 else -> true
             }
             IntSetting(prefs, it, masterEnabled && enabled)
-        }
-    }
-}
-
-@Composable
-private fun GlassStrokePage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
-    var enabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.GlassStroke.ENABLED.name(), true)) }
-    var fillDiff by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.GlassStroke.FILL_DIFF.name(), true)) }
-    val specs = listOf(
-        IntSpec(ConfigSchema.GlassStroke.FILL_DIFF_WIDTH, "Fill-Diff 宽度", "dp"),
-        IntSpec(ConfigSchema.GlassStroke.STANDARD_WIDTH, "标准描边宽度", "dp"),
-        IntSpec(ConfigSchema.GlassStroke.RED, "描边颜色 · 红", ""),
-        IntSpec(ConfigSchema.GlassStroke.GREEN, "描边颜色 · 绿", ""),
-        IntSpec(ConfigSchema.GlassStroke.BLUE, "描边颜色 · 蓝", ""),
-        IntSpec(ConfigSchema.GlassStroke.ALPHA, "描边透明度", ""),
-    )
-    SettingsList(padding, stringResource(R.string.page_glass_stroke)) {
-        BooleanSetting(prefs, ConfigSchema.GlassStroke.ENABLED, "启用玻璃边缘描边", "独立覆盖所有液态玻璃组件的边缘", masterEnabled) { enabled = it }
-        BooleanSetting(prefs, ConfigSchema.GlassStroke.FILL_DIFF, "Fill-Diff 描边", "关闭时使用标准中心描边", masterEnabled && enabled) { fillDiff = it }
-        specs.forEachIndexed { index, spec ->
-            val modeEnabled = when (index) { 0 -> fillDiff; 1 -> !fillDiff; else -> true }
-            IntSetting(prefs, spec, masterEnabled && enabled && modeEnabled)
         }
     }
 }

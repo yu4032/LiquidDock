@@ -51,9 +51,6 @@ final float chromaticAberration;
         final float shadowB;
         final float shadowA;
         final boolean showNormals;
-        final boolean strokeEnabled, strokeFillDiff;
-        final float strokeFillDiffWidthPx, strokeStandardWidthPx;
-        final float strokeR, strokeG, strokeB, strokeA;
 
         Params(
                 float ior,
@@ -95,10 +92,7 @@ final float chromaticAberration;
                 float shadowG,
                 float shadowB,
                 float shadowA,
-                boolean showNormals,
-                boolean strokeEnabled, boolean strokeFillDiff,
-                float strokeFillDiffWidthPx, float strokeStandardWidthPx,
-                float strokeR, float strokeG, float strokeB, float strokeA) {
+                boolean showNormals) {
             this.ior = ior;
             this.thicknessPx = thicknessPx;
             this.normalStrength = normalStrength;
@@ -139,14 +133,6 @@ final float chromaticAberration;
             this.shadowB = shadowB;
             this.shadowA = shadowA;
             this.showNormals = showNormals;
-            this.strokeEnabled = strokeEnabled;
-            this.strokeFillDiff = strokeFillDiff;
-            this.strokeFillDiffWidthPx = strokeFillDiffWidthPx;
-            this.strokeStandardWidthPx = strokeStandardWidthPx;
-            this.strokeR = strokeR;
-            this.strokeG = strokeG;
-            this.strokeB = strokeB;
-            this.strokeA = strokeA;
         }
     }
 
@@ -197,7 +183,7 @@ final float chromaticAberration;
                 1f,
                 1f,
                 35f / 255f,
-                false, true, true, 1f * d, 1f * d, 1f, 1f, 1f, 64f / 255f);
+                false);
     }
 
     /**
@@ -251,15 +237,7 @@ final float chromaticAberration;
                 glass.prismalShadowG / 255f,
                 glass.prismalShadowB / 255f,
                 glass.prismalShadowAlpha / 255f,
-                glass.prismalShowNormals,
-                glass.stroke.enabled,
-                glass.stroke.fillDiff,
-                Math.max(0f, glass.stroke.fillDiffWidthDp * d),
-                Math.max(0f, glass.stroke.standardWidthDp * d),
-                glass.stroke.red / 255f,
-                glass.stroke.green / 255f,
-                glass.stroke.blue / 255f,
-                glass.stroke.alpha / 255f);
+                glass.prismalShowNormals);
     }
 
 
@@ -369,11 +347,6 @@ final float chromaticAberration;
         uniform1f(program, "u_specular", p.specularStrength);
         uniform1f(program, "u_shininess", p.specularSharp);
         uniform1f(program, "u_rimStrength", p.rimLight);
-        uniform1i(program, "u_glassStrokeEnabled", p.strokeEnabled ? 1 : 0);
-        uniform1i(program, "u_glassStrokeFillDiff", p.strokeFillDiff ? 1 : 0);
-        uniform1f(program, "u_glassStrokeFillDiffWidth", p.strokeFillDiffWidthPx);
-        uniform1f(program, "u_glassStrokeStandardWidth", p.strokeStandardWidthPx);
-        uniform4fRaw(program, "u_glassStrokeColor", p.strokeR, p.strokeG, p.strokeB, p.strokeA);
         uniform4fRaw(program, "u_shadowColor", p.shadowR, p.shadowG, p.shadowB, p.shadowA);
         uniform1f(program, "u_shadowSoftness", p.shadowSoftness);
         uniform1f(program, "u_causticIntensity", p.causticIntensity);

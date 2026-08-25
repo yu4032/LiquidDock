@@ -137,16 +137,6 @@ public class ConfigPresetTest {
         expected.put("liquid_prismal_backdrop_scale_y", 100);
         expected.put("liquid_prismal_parallax_scale", 100);
         expected.put("liquid_prismal_show_normals", false);
-        expected.put("glass_stroke_enabled", true);
-        expected.put("glass_stroke_fill_diff", true);
-        expected.put("glass_stroke_fill_diff_width", 1);
-        expected.put("glass_stroke_fill_diff_width_tenths", 10);
-        expected.put("glass_stroke_standard_width", 1);
-        expected.put("glass_stroke_standard_width_tenths", 10);
-        expected.put("glass_stroke_red", 255);
-        expected.put("glass_stroke_green", 255);
-        expected.put("glass_stroke_blue", 255);
-        expected.put("glass_stroke_alpha", 64);
 
         expected.put("corners_dp", true);
         expected.put("dock_stroke", true);
