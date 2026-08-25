@@ -82,6 +82,8 @@ final class GlassRuntimeState {
         boolean wasEnabled = enabled;
         boolean wasIconEnabled = isIconEnabled();
         boolean wasWidgetEnabled = isWidgetEnabled();
+        boolean wasSmallFolderEnabled = isSmallFolderEnabled();
+        boolean wasLargeFolderEnabled = isLargeFolderEnabled();
         if (enabled == nextEnabled
                 && iconEnabled == nextIconEnabled
                 && widgetEnabled == nextWidgetEnabled
@@ -95,11 +97,13 @@ final class GlassRuntimeState {
         largeFolderEnabled = nextLargeFolderEnabled;
         boolean nextLiveIconEnabled = isIconEnabled();
         boolean nextLiveWidgetEnabled = isWidgetEnabled();
+        boolean nextLiveSmallFolderEnabled = isSmallFolderEnabled();
+        boolean nextLiveLargeFolderEnabled = isLargeFolderEnabled();
         MainHook.log("[DC][GlassRuntime] enabled=" + enabled
                 + " iconEnabled=" + nextLiveIconEnabled
                 + " widgetEnabled=" + nextLiveWidgetEnabled
-                + " smallFolderEnabled=" + isSmallFolderEnabled()
-                + " largeFolderEnabled=" + isLargeFolderEnabled());
+                + " smallFolderEnabled=" + nextLiveSmallFolderEnabled
+                + " largeFolderEnabled=" + nextLiveLargeFolderEnabled);
 
         if (wasEnabled && !nextEnabled) {
             runOnMain(() -> {
@@ -125,7 +129,20 @@ final class GlassRuntimeState {
         if (wasWidgetEnabled && !nextLiveWidgetEnabled) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassDisabled();
+                MiuixLauncherDragOverlayHook.onRuntimeWidgetGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] widget glass ownership released");
+            });
+        }
+        if (wasSmallFolderEnabled && !nextLiveSmallFolderEnabled) {
+            runOnMain(() -> {
+                MiuixFolderGlassHook.onRuntimeSmallFolderGlassDisabled();
+                MainHook.log("[DC][GlassRuntime] small-folder glass ownership released");
+            });
+        }
+        if (wasLargeFolderEnabled && !nextLiveLargeFolderEnabled) {
+            runOnMain(() -> {
+                MiuixFolderGlassHook.onRuntimeLargeFolderGlassDisabled();
+                MainHook.log("[DC][GlassRuntime] large-folder glass ownership released");
             });
         }
     }
