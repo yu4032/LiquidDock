@@ -14,21 +14,21 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
 
     @Test
     public void workstationRecentsExitRollsSharedProducerBeforeFreshFrameRecovery() throws Exception {
-        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+        String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
 
-        assertTrue(controller.contains("session.prepareWorkstationRecentsReturn();"));
-        assertTrue(controller.contains("MainHook.isWorkstationMode()"));
-        assertTrue(session.contains("void prepareWorkstationRecentsReturn()"));
-        assertTrue(session.contains("rebindProducer();"));
+        assertTrue(recents.contains("LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();"));
+        assertTrue(registry.contains("static synchronized void prepareWorkstationRecentsReturn()"));
+        assertTrue(registry.contains("if (!MainHook.isWorkstationMode()) return;"));
+        assertTrue(registry.contains("HookUtil.invoke(session, \"rebindProducer\")"));
 
-        String setRecents = methodSlice(controller,
-                "private void setRecentsCovered(boolean covered)",
-                "private void setEffectiveCovered(boolean covered)");
-        int rebind = setRecents.indexOf("session.prepareWorkstationRecentsReturn();");
-        int effective = setRecents.indexOf("setEffectiveCovered(");
+        String hide = methodSlice(recents,
+                "\"onRecentViewHide\"",
+                "installed = true;");
+        int rebind = hide.indexOf("prepareWorkstationRecentsReturn();");
+        int uncover = hide.indexOf("setRecentsCoveredForAll(false);");
         assertTrue("producer rollover must start before HOME requests its fresh frame",
-                rebind >= 0 && effective > rebind);
+                rebind >= 0 && uncover > rebind);
     }
 
     @Test
@@ -42,15 +42,17 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
 
     @Test
     public void recoveryNeverRevealsStaticLayerBeforeFreshOesFrame() throws Exception {
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+        String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
         String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
 
-        String preparation = methodSlice(session,
-                "void prepareWorkstationRecentsReturn()",
-                "void attachOutput(");
+        String preparation = methodSlice(registry,
+                "static synchronized void prepareWorkstationRecentsReturn()",
+                "static synchronized void shutdownAll()");
         assertFalse("producer recovery must not bypass the scene freshness barrier",
                 preparation.contains("setSceneVisible"));
         assertFalse(preparation.contains("onFreshFrameRendered"));
+        assertFalse(recents.contains("setSceneVisible(true)"));
 
         assertTrue(controller.contains("state.onFreshFrameReady(generation);"));
         assertTrue(controller.contains("applyLayerVisibility();"));
