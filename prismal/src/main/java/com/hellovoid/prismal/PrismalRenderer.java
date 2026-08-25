@@ -246,7 +246,8 @@ public final class PrismalRenderer implements AutoCloseable {
         blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_H);
         blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_V);
         String glassFragment = PrismalComponentGateShader.apply(
-                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT));
+                PrismalOpticalEdgeShader.apply(
+                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
         glassProgram = createProgram(PrismalShaderSources.VERTEX, glassFragment);
         glassUniformLocations.clear();
         if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0) {

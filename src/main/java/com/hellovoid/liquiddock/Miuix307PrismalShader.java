@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.prismal.PrismalOpticalEdgeShader;
+
 /** Current upstream styropyr0/Prismal glass shader with only the full-view vertex adapter changed. */
 final class Miuix307PrismalShader {
     static final String VERTEX_SHADER = """
@@ -14,7 +16,7 @@ final class Miuix307PrismalShader {
             }
             """;
 
-    static final String FRAGMENT_SHADER = """
+    static final String FRAGMENT_SHADER = PrismalOpticalEdgeShader.apply("""
             precision highp float;
 
             uniform sampler2D u_backgroundTexture;
@@ -266,7 +268,7 @@ final class Miuix307PrismalShader {
                 vec3 V = vec3(0.0, 0.0, 1.0);
                 float cosVN = clamp(dot(N, V), 0.0, 1.0);
                 float r0 = pow((1.0 - u_ior) / (1.0 + u_ior), 2.0);
-                float silW = clamp(minDim * 0.12 * clamp(u_highlightWidth, 0.2, 3.0), 2.5, 34.0);
+                float silW = clamp(minDim * 0.12, 2.5, 34.0);
                 float edgeSil = smoothstep(silW, 0.0, edgeDist) * smoothstep(-4.5, 0.0, distMask);
                 float tiltW = clamp(length(N.xy) * 2.4, 0.0, 1.0);
                 float grazingW = clamp(edgeSil * 0.94 + tiltW * 0.55, 0.0, 1.0);
@@ -403,7 +405,7 @@ final class Miuix307PrismalShader {
 
                 float rimBandTight = mix(0.82, 0.52, smallGlass);
                 float bandFracR = mix(0.022, 0.042, smoothstep(62.0, 218.0, minDim));
-                float bandR = clamp(minDim * bandFracR * rimBandTight * clamp(u_highlightWidth, 0.2, 3.0), mix(0.28, 0.65, 1.0 - smallGlass), min(18.0, minDim * 0.16));
+                float bandR = clamp(minDim * bandFracR * rimBandTight, mix(0.28, 0.65, 1.0 - smallGlass), min(18.0, minDim * 0.16));
                 float shellRim = smoothstep(bandR, bandR * 0.06, edgeDist) * smoothstep(-2.2, 0.0, distMask);
                 float centerQuiet = smoothstep(minDim * 0.18, minDim * 0.62, edgeDist);
                 float depthFade = mix(1.0, 0.62, centerQuiet);
@@ -464,7 +466,7 @@ final class Miuix307PrismalShader {
 
                 gl_FragColor = vec4(color, opacity * u_transmittance);
             }
-            """;
+            """);
 
     private Miuix307PrismalShader() {}
 }
