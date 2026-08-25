@@ -85,9 +85,7 @@ SurfaceFlinger PassBlur Surface
   → TextureView
 ```
 
-Prismal scene 同时绘制 Dock body、Dock 图标和工作区静态玻璃节点。光学参数、高光分组、动画状态和玻璃边缘描边通过 `PrismalParams` 传入共享 renderer。
-
-玻璃边缘描边属于 GPU shader 合成，不是 Xposed Hook。Fill-Diff 与标准描边使用玻璃 SDF 计算轮廓，配置与 Dock background 描边独立。
+Prismal scene 同时绘制 Dock body、Dock 图标和工作区静态玻璃节点。光学参数、高光分组和动画状态通过 `PrismalParams` 传入共享 renderer。
 
 ## 工作区玻璃
 
