@@ -9,6 +9,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
@@ -28,10 +29,12 @@ final class MiuixLauncherDragOverlayHook {
     private static final class DragRecord {
         final WeakReference<View> sourceRef;
         final WeakReference<LauncherGlassStaticNode> staticSinkRef;
+        final LauncherGlassNodeKind nodeKind;
 
-        DragRecord(View source, LauncherGlassStaticNode staticSink) {
+        DragRecord(View source, LauncherGlassStaticNode staticSink, LauncherGlassNodeKind nodeKind) {
             sourceRef = new WeakReference<>(source);
             staticSinkRef = new WeakReference<>(staticSink);
+            this.nodeKind = nodeKind;
         }
     }
 
@@ -81,9 +84,6 @@ final class MiuixLauncherDragOverlayHook {
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
-        boolean anyStaticGlass = runtimeConfig.glass.folderEnabled || runtimeConfig.glass.widgetEnabled
-                || runtimeConfig.glass.iconEnabled;
-        if (!anyStaticGlass) return false;
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             Method onViewAdded = ViewGroup.class.getDeclaredMethod("onViewAdded", View.class);
@@ -127,6 +127,18 @@ final class MiuixLauncherDragOverlayHook {
         }
     }
 
+    static void onRuntimeIconGlassDisabled() {
+        releaseNodeKind(LauncherGlassNodeKind.ICON);
+    }
+
+    private static void releaseNodeKind(LauncherGlassNodeKind nodeKind) {
+        for (View dragView : new ArrayList<>(ACTIVE.keySet())) {
+            DragRecord record = ACTIVE.get(dragView);
+            if (record == null || record.nodeKind != nodeKind) continue;
+            if (ACTIVE.remove(dragView) == record) releaseRecord(dragView, record);
+        }
+    }
+
     private static void onDragChildAdded(
             ViewGroup dragContainer, View child, LiquidDockConfig.Glass glassConfig) {
         if (!isDragContainer(dragContainer) || !isActualDragView(child)
@@ -139,6 +151,7 @@ final class MiuixLauncherDragOverlayHook {
         if (child == null || !isActualDragView(child) || ACTIVE.containsKey(child)
                 || attempt > MAX_READY_ATTEMPTS) return;
         ResolvedSource resolved = resolveSource(child, glassConfig);
+        if (resolved != null && !isNodeKindEnabled(resolved.nodeKind)) return;
         if (resolved == null || !child.isAttachedToWindow()
                 || child.getWidth() <= 0 || child.getHeight() <= 0) {
             child.postOnAnimation(() -> beginWhenReady(child, glassConfig, attempt + 1));
@@ -155,11 +168,13 @@ final class MiuixLauncherDragOverlayHook {
                 resolved.cornerRadiusPx,
                 resolved.visualBounds);
         if (!active) {
-            child.postOnAnimation(() -> beginWhenReady(child, glassConfig, attempt + 1));
+            if (isNodeKindEnabled(resolved.nodeKind)) {
+                child.postOnAnimation(() -> beginWhenReady(child, glassConfig, attempt + 1));
+            }
             return;
         }
         if (resolved.staticSink != null) resolved.staticSink.setSuppressedByDrag(true);
-        ACTIVE.put(child, new DragRecord(resolved.source, resolved.staticSink));
+        ACTIVE.put(child, new DragRecord(resolved.source, resolved.staticSink, resolved.nodeKind));
         MainHook.log(TAG + " begin kind=" + resolved.kind
                 + " child=" + child.getClass().getSimpleName());
     }
@@ -168,11 +183,16 @@ final class MiuixLauncherDragOverlayHook {
         if (child == null || !isActualDragView(child)) return;
         DragRecord record = ACTIVE.remove(child);
         if (record == null) return;
+        releaseRecord(child, record);
+        MainHook.log(TAG + " end child=" + child.getClass().getSimpleName());
+    }
+
+    private static void releaseRecord(View dragView, DragRecord record) {
+        if (record == null) return;
         View source = record.sourceRef.get();
-        LauncherGlassDragOverlay.end(source, child);
+        LauncherGlassDragOverlay.end(source, dragView);
         LauncherGlassStaticNode staticSink = record.staticSinkRef.get();
         if (staticSink != null) staticSink.setSuppressedByDrag(false);
-        MainHook.log(TAG + " end child=" + child.getClass().getSimpleName());
     }
 
     /**
@@ -290,7 +310,9 @@ final class MiuixLauncherDragOverlayHook {
                 if (target instanceof View && args.length > 1 && args[1] instanceof Boolean) {
                     boolean normalState = (Boolean) args[1];
                     LauncherGlassStaticNode current = LauncherGlassStaticNode.find((View) target);
-                    if (current != null) current.setSuppressedByDrag(!normalState);
+                    if (current != null && isNodeKindEnabled(current.nodeKind())) {
+                        current.setSuppressedByDrag(!normalState);
+                    }
                 }
                 return result;
             });
@@ -313,23 +335,36 @@ final class MiuixLauncherDragOverlayHook {
         }
     }
 
-
     private static LauncherGlassNodeKind nodeKindFor(LauncherGlassDragState.Kind kind) {
         if (kind == LauncherGlassDragState.Kind.ICON) return LauncherGlassNodeKind.ICON;
         if (kind == LauncherGlassDragState.Kind.WIDGET) return LauncherGlassNodeKind.WIDGET;
         return LauncherGlassNodeKind.LARGE_FOLDER;
     }
 
+    private static boolean isNodeKindEnabled(LauncherGlassNodeKind nodeKind) {
+        if (nodeKind == null) return false;
+        switch (nodeKind) {
+            case ICON: return GlassRuntimeState.isIconEnabled();
+            case WIDGET: return GlassRuntimeState.isWidgetEnabled();
+            case SMALL_FOLDER: return GlassRuntimeState.isSmallFolderEnabled();
+            case LARGE_FOLDER:
+            default: return GlassRuntimeState.isLargeFolderEnabled();
+        }
+    }
+
     private static GlassComponentStyle styleFor(
             LiquidDockConfig.Glass glassConfig, LauncherGlassNodeKind nodeKind) {
-        if (glassConfig == null) return new GlassComponentStyle(true, 0f, 0f);
-        switch (nodeKind) {
-            case ICON: return glassConfig.iconStyle;
-            case WIDGET: return glassConfig.widgetStyle;
-            case SMALL_FOLDER: return glassConfig.smallFolderStyle;
+        GlassComponentStyle base;
+        if (glassConfig == null) base = new GlassComponentStyle(true, 0f, 0f);
+        else switch (nodeKind) {
+            case ICON: base = glassConfig.iconStyle; break;
+            case WIDGET: base = glassConfig.widgetStyle; break;
+            case SMALL_FOLDER: base = glassConfig.smallFolderStyle; break;
             case LARGE_FOLDER:
-            default: return glassConfig.largeFolderStyle;
+            default: base = glassConfig.largeFolderStyle; break;
         }
+        return new GlassComponentStyle(isNodeKindEnabled(nodeKind),
+                base.sizeOffsetDp, base.cornerRadiusDp);
     }
 
     /** Resolve the originating visual footprint once; DragView remains the moving authority. */

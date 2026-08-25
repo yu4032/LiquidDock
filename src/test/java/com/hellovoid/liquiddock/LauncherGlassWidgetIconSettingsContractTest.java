@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -32,13 +33,13 @@ public class LauncherGlassWidgetIconSettingsContractTest {
     }
 
     @Test
-    public void dragOverlayIsNotFolderOnlyWhenWidgetOrIconGlassIsEnabled() throws Exception {
+    public void dragOverlayStaysInstalledAndUsesLiveComponentState() throws Exception {
         String drag = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/MiuixLauncherDragOverlayHook.java"));
-        assertTrue(drag.contains("widgetEnabled"));
-        assertTrue(drag.contains("iconEnabled"));
-        assertTrue(drag.contains("folderEnabled || runtimeConfig.glass.widgetEnabled")
-                || drag.contains("folderEnabled || glassConfig.widgetEnabled")
-                || drag.contains("folderEnabled || widgetEnabled"));
+        assertFalse(drag.contains("if (!anyStaticGlass) return false;"));
+        assertTrue(drag.contains("GlassRuntimeState.isWidgetEnabled()"));
+        assertTrue(drag.contains("GlassRuntimeState.isIconEnabled()"));
+        assertTrue(drag.contains("GlassRuntimeState.isSmallFolderEnabled()"));
+        assertTrue(drag.contains("GlassRuntimeState.isLargeFolderEnabled()"));
     }
 }
