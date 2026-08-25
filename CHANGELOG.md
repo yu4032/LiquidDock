@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (2026-08-25)
+## v2.1.1 (2026-08-26)
 
 ### Glass optics and animation
 
@@ -8,6 +8,13 @@
 - 文件夹打开/关闭期间继续保持原生 source material 隐藏，并通过可逆 alpha transition 完成 Liquid Glass 的显示/隐藏，减少切换瞬间的原生背景闪现
 - `liquid_highlight_width` 的可见语义收敛为“玻璃边缘厚度”：直接缩放 Prismal 的物理光学边缘带，而不是额外绘制一圈独立描边
 - 光学边缘加入 derivative anti-aliasing（`fwidth`）并统一到 Prismal renderer / MiuiX 307 shader 路径；GUI 范围调整为 50%–300%
+
+### Runtime visual ownership
+
+- 图标、小组件、文件夹与 Dock 视觉开关改为运行时状态驱动；关闭后立即释放对应玻璃、描边、阴影和分隔线所有权，重新开启时恢复
+- 修复工作台模式从多任务返回后共享玻璃 producer 丢失的问题，并保留 R8 所需的恢复入口
+- 修复 Dock 描边方式实时切换未刷新、Divider 背景快照别名污染，以及关闭自定义后原始 Divider 状态未恢复的问题
+- 设置页明确区分即时生效与需要重启桌面的结构性选项，并补齐中英文说明
 
 ### Documentation
 
