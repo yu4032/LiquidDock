@@ -25,7 +25,7 @@ LiquidDock 是一个面向 HyperOS 3 平板系统桌面 的 LSPosed / libxposed 
 ## 注入边界
 
 ```text
-com.miui.home 系统桌面
+com.miui.home 系统桌面版本 release-4.50.x.x
 ```
 
 ## 兼容性
