@@ -35,6 +35,18 @@ final class MiuixLauncherStaticGlassHook {
         BOOTSTRAP_OBSERVERS.clear();
     }
 
+    static void onRuntimeWidgetGlassDisabled() {
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (!isWidgetHost(host)) continue;
+            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            View.OnAttachStateChangeListener listener = BOOTSTRAP_OBSERVERS.remove(host);
+            if (listener != null) host.removeOnAttachStateChangeListener(listener);
+            DockGlassItemRegistry.unregister(host);
+            LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
+            if (node != null && node.kind() == LauncherGlassDragState.Kind.WIDGET) node.dispose();
+        }
+    }
+
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
@@ -265,8 +277,7 @@ final class MiuixLauncherStaticGlassHook {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
                         Object owner = chain.getThisObject();
-                        if (owner instanceof View && GlassRuntimeState.isEnabled()
-                                && glassConfig.widgetStyle.enabled) {
+                        if (owner instanceof View && GlassRuntimeState.isWidgetEnabled()) {
                             // RemoteViews may recreate android.R.id.widget_frame. Re-run the normal
                             // Workspace bind path after every provider update so the fallback plate
                             // is only claimed when a live LiquidDock widget node owns the material.
@@ -296,8 +307,7 @@ final class MiuixLauncherStaticGlassHook {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
                         Object owner = chain.getThisObject();
-                        if (owner instanceof View && GlassRuntimeState.isEnabled()
-                                && glassConfig.widgetStyle.enabled) {
+                        if (owner instanceof View && GlassRuntimeState.isWidgetEnabled()) {
                             // Launcher 4.50 MAML roots are loaded asynchronously. putVariableNumber
                             // is a no-op before mRoot exists, and updateColor can later let vendor
                             // blur logic write enable_background_blur back to 0. Re-enter the normal
@@ -348,7 +358,7 @@ final class MiuixLauncherStaticGlassHook {
         if (glassConfig.iconStyle.enabled && (name.endsWith(".ShortcutIcon")
                 || "ShortcutIcon".equals(host.getClass().getSimpleName()))) {
             observeHost(host, LauncherGlassDragState.Kind.ICON, glassConfig);
-        } else if (glassConfig.widgetStyle.enabled
+        } else if (GlassRuntimeState.isWidgetEnabled() && glassConfig.widgetStyle.enabled
                 && (name.endsWith(".LauncherAppWidgetHostView")
                 || name.endsWith(".MaMlHostView"))) {
             observeHost(host, LauncherGlassDragState.Kind.WIDGET, glassConfig);
@@ -358,6 +368,10 @@ final class MiuixLauncherStaticGlassHook {
     private static void observeHost(
             View host, LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || host == null) return;
+        if (kind == LauncherGlassDragState.Kind.WIDGET && !GlassRuntimeState.isWidgetEnabled()) {
+            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            return;
+        }
         synchronized (BOOTSTRAP_OBSERVERS) {
             if (BOOTSTRAP_OBSERVERS.containsKey(host)) {
                 if (host.isAttachedToWindow()) scheduleBind(host, kind, glassConfig, 0);
@@ -382,8 +396,17 @@ final class MiuixLauncherStaticGlassHook {
     private static void scheduleBind(
             View host, LauncherGlassDragState.Kind kind,
             LiquidDockConfig.Glass glassConfig, int attempt) {
-        if (!GlassRuntimeState.isEnabled() || host == null || !host.isAttachedToWindow()
-                || attempt > MAX_BIND_ATTEMPTS) return;
+        if (host == null || attempt > MAX_BIND_ATTEMPTS) return;
+        if (kind == LauncherGlassDragState.Kind.WIDGET && !GlassRuntimeState.isWidgetEnabled()) {
+            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            DockGlassItemRegistry.unregister(host);
+            LauncherGlassStaticNode staleNode = LauncherGlassStaticNode.find(host);
+            if (staleNode != null && staleNode.kind() == LauncherGlassDragState.Kind.WIDGET) {
+                staleNode.dispose();
+            }
+            return;
+        }
+        if (!GlassRuntimeState.isEnabled() || !host.isAttachedToWindow()) return;
         if (host.getWidth() <= 0 || host.getHeight() <= 0) {
             host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
             return;
@@ -418,7 +441,8 @@ final class MiuixLauncherStaticGlassHook {
             host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
             return;
         }
-        if (node != null && kind == LauncherGlassDragState.Kind.WIDGET) {
+        if (node != null && kind == LauncherGlassDragState.Kind.WIDGET
+                && GlassRuntimeState.isWidgetEnabled()) {
             LauncherGlassVendorMaterialSuppressor.claimWidget(host);
         }
     }
