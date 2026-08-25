@@ -49,14 +49,6 @@ final class Miuix307PrismalAdapter {
         b.shadowB = p.shadowB;
         b.shadowA = p.shadowA;
         b.showNormals = p.showNormals;
-        b.strokeEnabled = p.strokeEnabled;
-        b.strokeFillDiff = p.strokeFillDiff;
-        b.strokeFillDiffWidthPx = p.strokeFillDiffWidthPx;
-        b.strokeStandardWidthPx = p.strokeStandardWidthPx;
-        b.strokeR = p.strokeR;
-        b.strokeG = p.strokeG;
-        b.strokeB = p.strokeB;
-        b.strokeA = p.strokeA;
         return b.build();
     }
 }

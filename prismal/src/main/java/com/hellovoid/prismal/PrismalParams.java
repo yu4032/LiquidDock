@@ -47,9 +47,6 @@ public final class PrismalParams {
     public final float glowCenterY;
     public final float glowStrength;
     public final boolean showNormals;
-    public final boolean strokeEnabled, strokeFillDiff;
-    public final float strokeFillDiffWidthPx, strokeStandardWidthPx;
-    public final float strokeR, strokeG, strokeB, strokeA;
 
     private PrismalParams(Builder b) {
         ior = b.ior;
@@ -97,14 +94,6 @@ public final class PrismalParams {
         glowCenterY = b.glowCenterY;
         glowStrength = b.glowStrength;
         showNormals = b.showNormals;
-        strokeEnabled = b.strokeEnabled;
-        strokeFillDiff = b.strokeFillDiff;
-        strokeFillDiffWidthPx = b.strokeFillDiffWidthPx;
-        strokeStandardWidthPx = b.strokeStandardWidthPx;
-        strokeR = b.strokeR;
-        strokeG = b.strokeG;
-        strokeB = b.strokeB;
-        strokeA = b.strokeA;
     }
 
     public static Builder builder() { return new Builder(); }
@@ -155,11 +144,6 @@ public final class PrismalParams {
         public float glowCenterY = 0.5f;
         public float glowStrength = 1f;
         public boolean showNormals;
-        public boolean strokeEnabled = true;
-        public boolean strokeFillDiff = true;
-        public float strokeFillDiffWidthPx = 1f;
-        public float strokeStandardWidthPx = 1f;
-        public float strokeR = 1f, strokeG = 1f, strokeB = 1f, strokeA = 64f / 255f;
 
         public PrismalParams build() { return new PrismalParams(this); }
     }
