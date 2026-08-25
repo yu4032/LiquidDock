@@ -30,6 +30,17 @@ public class DividerRuntimeOwnershipContractTest {
     }
 
     @Test
+    public void backgroundSnapshotDoesNotAliasMutableVendorDrawable() throws Exception {
+        String source = Files.readString(MAIN.resolve("DockDividerHook.java"));
+
+        assertTrue("setBackgroundColor may mutate an existing ColorDrawable in place; snapshot must clone it",
+                source.contains("cloneBackgroundDrawable("));
+        assertTrue("prefer Drawable.ConstantState for an independent restore copy",
+                source.contains("getConstantState()"));
+        assertTrue(source.contains("newDrawable(line.getResources())"));
+    }
+
+    @Test
     public void disablingDividerRestoresLayoutBackgroundAndCancelsDeferredWork() throws Exception {
         String source = Files.readString(MAIN.resolve("DockDividerHook.java"));
 
