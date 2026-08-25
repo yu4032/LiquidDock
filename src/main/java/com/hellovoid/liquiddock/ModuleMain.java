@@ -31,7 +31,10 @@ public final class ModuleMain extends XposedModule {
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
-                    runtimeConfig.glass.widgetEnabled);
+                    runtimeConfig.glass.iconEnabled,
+                    runtimeConfig.glass.widgetEnabled,
+                    runtimeConfig.glass.smallFolderStyle.enabled,
+                    runtimeConfig.glass.largeFolderStyle.enabled);
             new MainHook().install(classLoader);
 
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
