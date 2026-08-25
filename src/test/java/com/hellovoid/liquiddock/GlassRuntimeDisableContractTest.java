@@ -45,7 +45,8 @@ public class GlassRuntimeDisableContractTest {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
 
         assertTrue(registry.contains("if (!GlassRuntimeState.isEnabled()) return null;"));
-        assertTrue(node.contains("if (!GlassRuntimeState.isEnabled()) return null;"));
+        assertTrue(node.contains("GlassRuntimeState.isEnabled()"));
+        assertTrue(node.contains("componentStyle().enabled"));
         assertTrue(pipeline.contains("if (!GlassRuntimeState.isEnabled()) return false;"));
     }
 
