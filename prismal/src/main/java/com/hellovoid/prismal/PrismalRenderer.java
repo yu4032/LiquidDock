@@ -246,7 +246,8 @@ public final class PrismalRenderer implements AutoCloseable {
         blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_H);
         blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_V);
         String glassFragment = PrismalComponentGateShader.apply(
-                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT));
+                PrismalEdgeAntialiasShader.apply(
+                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
         glassProgram = createProgram(PrismalShaderSources.VERTEX, glassFragment);
         glassUniformLocations.clear();
         if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0) {
@@ -372,6 +373,11 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_specular", p.specular);
         uniform1f("u_shininess", p.shininess);
         uniform1f("u_rimStrength", p.rimStrength);
+        uniform1i("u_glassStrokeEnabled", p.strokeEnabled ? 1 : 0);
+        uniform1i("u_glassStrokeFillDiff", p.strokeFillDiff ? 1 : 0);
+        uniform1f("u_glassStrokeFillDiffWidth", p.strokeFillDiffWidthPx);
+        uniform1f("u_glassStrokeStandardWidth", p.strokeStandardWidthPx);
+        uniform4f("u_glassStrokeColor", p.strokeR, p.strokeG, p.strokeB, p.strokeA);
         uniform4f("u_shadowColor", p.shadowR, p.shadowG, p.shadowB, p.shadowA);
         uniform1f("u_shadowSoftness", p.shadowSoftness);
         uniform1f("u_causticIntensity", p.causticIntensity);

@@ -222,6 +222,14 @@ public final class PresetManager {
         values.put("liquid_prismal_backdrop_scale_y", 100);
         values.put("liquid_prismal_parallax_scale", 100);
         values.put("liquid_prismal_show_normals", false);
+        values.put("glass_stroke_enabled", true);
+        values.put("glass_stroke_fill_diff", true);
+        putDp(values, "glass_stroke_fill_diff_width", 1f);
+        putDp(values, "glass_stroke_standard_width", 1f);
+        values.put("glass_stroke_red", 255);
+        values.put("glass_stroke_green", 255);
+        values.put("glass_stroke_blue", 255);
+        values.put("glass_stroke_alpha", 64);
 
         values.put("corners_dp", true);
         values.put("dock_stroke", true);
