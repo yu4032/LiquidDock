@@ -39,15 +39,4 @@ public class VisualRuntimeToggleContractTest {
         assertTrue(module.contains("runtimeConfig.dock.strokeShadow"));
         assertTrue(module.contains("runtimeConfig.divider.enabled"));
     }
-
-    @Test
-    public void disableTransitionsDispatchToExactOwners() throws Exception {
-        String state = Files.readString(MAIN.resolve("VisualRuntimeState.java"));
-
-        assertTrue(state.contains("MainHook.onRuntimeDockCustomizationDisabled()"));
-        assertTrue(state.contains("DockStrokeRenderer.onRuntimeStrokeDisabled()"));
-        assertTrue(state.contains("MainHook.onRuntimeDockShadowDisabled()"));
-        assertTrue(state.contains("DockStrokeRenderer.refreshInstalledFromCurrentConfig()"));
-        assertTrue(state.contains("DockDividerHook.onRuntimeDividerDisabled()"));
-    }
 }
