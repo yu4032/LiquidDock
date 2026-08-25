@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
@@ -114,8 +115,29 @@ final class DockDividerHook {
             if (originalStates.containsKey(line)) return;
             ViewGroup.MarginLayoutParams lp =
                     (ViewGroup.MarginLayoutParams) line.getLayoutParams();
-            originalStates.put(line, new DividerSnapshot(lp, line.getBackground()));
+            originalStates.put(line, new DividerSnapshot(
+                    lp, cloneBackgroundDrawable(line, line.getBackground())));
         }
+    }
+
+    private static Drawable cloneBackgroundDrawable(View line, Drawable background) {
+        if (background == null) return null;
+        try {
+            Drawable.ConstantState state = background.getConstantState();
+            if (state != null) {
+                Drawable copy = state.newDrawable(line.getResources());
+                if (copy != null) return copy.mutate();
+            }
+        } catch (Throwable ignored) {
+        }
+        // View.setBackgroundColor mutates an existing ColorDrawable in place, so never retain
+        // that same object as the restore snapshot if ConstantState cloning is unavailable.
+        if (background instanceof ColorDrawable) {
+            return new ColorDrawable(((ColorDrawable) background).getColor());
+        }
+        // For non-ColorDrawable backgrounds setBackgroundColor replaces the View background;
+        // retaining the original reference is therefore safe when no clone API is available.
+        return background;
     }
 
     private static int parentHeight(View line) {
