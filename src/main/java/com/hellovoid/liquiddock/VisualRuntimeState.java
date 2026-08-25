@@ -70,7 +70,7 @@ final class VisualRuntimeState {
             apply(nextCoreEnabled, nextDockCustomizationEnabled, nextDockStrokeEnabled,
                     nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled);
             if (strokeStyleChanged) {
-                runOnMain(DockStrokeRenderer::refreshInstalledFromCurrentConfig);
+                runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
             }
         };
         nextPrefs.registerOnSharedPreferenceChangeListener(listener);
@@ -143,7 +143,7 @@ final class VisualRuntimeState {
             runOnMain(() -> MainHook.onRuntimeDockShadowDisabled());
         }
         if (wasStrokeShadowEnabled && !nextLiveStrokeShadowEnabled) {
-            runOnMain(DockStrokeRenderer::refreshInstalledFromCurrentConfig);
+            runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
         }
         if (wasDividerEnabled && !nextLiveDividerEnabled) {
             runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());
