@@ -39,4 +39,14 @@ public class VisualRuntimeToggleContractTest {
         assertTrue(module.contains("runtimeConfig.dock.strokeShadow"));
         assertTrue(module.contains("runtimeConfig.divider.enabled"));
     }
+
+    @Test
+    public void strokeShapeModeSwitchesRefreshExistingRendererOwnership() throws Exception {
+        String state = Files.readString(MAIN.resolve("VisualRuntimeState.java"));
+
+        assertTrue(state.contains("ConfigSchema.Dock.SQUIRCLE.name()"));
+        assertTrue(state.contains("ConfigSchema.Dock.FILL_DIFF.name()"));
+        assertTrue(state.contains("strokeStyleChanged"));
+        assertTrue(state.contains("DockStrokeRenderer.refreshInstalledFromCurrentConfig()"));
+    }
 }
