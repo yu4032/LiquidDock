@@ -52,8 +52,7 @@ final class MiuixFolderGlassHook {
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
-        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled
-                || !runtimeConfig.glass.folderEnabled) {
+        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
@@ -83,6 +82,9 @@ final class MiuixFolderGlassHook {
                 Object target = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
                 if (target instanceof View) {
                     View material = (View) target;
+                    if (!isFolderLiveEnabled(material)) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
                     LauncherGlassStaticNode sink = claimedSink(material);
                     if (sink == null) sink = attachMaterial(material, glassConfig);
                     if (sink != null) {
@@ -177,7 +179,7 @@ final class MiuixFolderGlassHook {
                 new Class<?>[]{Canvas.class, View.class, Long.TYPE});
         HookUtil.hook(drawChild, chain -> {
             Object owner = chain.getThisObject();
-            if (owner instanceof ViewGroup) {
+            if (owner instanceof ViewGroup && GlassRuntimeState.isLargeFolderEnabled()) {
                 try {
                     View material = resolveFolderMaterial((ViewGroup) owner);
                     if (material != null && claimedSink(material) != null) {
@@ -226,6 +228,7 @@ final class MiuixFolderGlassHook {
             Object value = HookUtil.getField(owner, "mIconImageView");
             if (!(value instanceof View)) return;
             View material = (View) value;
+            if (!isFolderLiveEnabled(material)) return;
             int width = material.getWidth();
             int height = material.getHeight();
             if (width <= 0 || height <= 0) return;
@@ -294,12 +297,7 @@ final class MiuixFolderGlassHook {
             releaseFolderCover(icon);
             try {
                 View material = resolveFolderMaterial(icon);
-                if (material != null) {
-                    LauncherGlassStaticNode old = claimedSink(material);
-                    if (old != null) old.dispose();
-                    CLAIMED.remove(material);
-                    restoreMaterial(material);
-                }
+                if (material != null) releaseMaterialOwnership(material);
             } catch (Throwable ignored) {}
             return;
         }
@@ -307,6 +305,12 @@ final class MiuixFolderGlassHook {
         try {
             View value = resolveFolderMaterial(icon);
             if (value != null) {
+                if (!isFolderLiveEnabled(value)) {
+                    releaseMaterialOwnership(value);
+                    releaseFolderCover(icon);
+                    FOLDER_RECOVERY_PENDING.remove(icon);
+                    return;
+                }
                 LauncherGlassStaticNode sink = attachMaterial(value, glassConfig);
                 if (sink != null) {
                     syncLargeFolderCover(icon, glassConfig);
@@ -357,6 +361,12 @@ final class MiuixFolderGlassHook {
             try {
                 material = resolveFolderMaterial(current);
                 if (material != null) {
+                    if (!isFolderLiveEnabled(material)) {
+                        releaseMaterialOwnership(material);
+                        releaseFolderCover(current);
+                        FOLDER_RECOVERY_PENDING.remove(current);
+                        return;
+                    }
                     sink = attachMaterial(material, glassConfig);
                     if (sink != null) {
                         syncLargeFolderCover(current, glassConfig);
@@ -402,7 +412,7 @@ final class MiuixFolderGlassHook {
                 if (folder == null) return;
                 try {
                     View value = resolveFolderMaterial(folder);
-                    if (value != null) {
+                    if (value != null && isFolderLiveEnabled(value)) {
                         LauncherGlassStaticNode sink = claimedSink(value);
                         if (sink != null) sink.requestLifecycleRefresh();
                     }
@@ -417,8 +427,7 @@ final class MiuixFolderGlassHook {
             ViewGroup icon, LiquidDockConfig.Glass glassConfig) {
         if (icon == null) return;
         if (icon.getClass().getName().contains("FolderIcon1x1")
-                || glassConfig == null || !glassConfig.largeFolderStyle.enabled
-                || !GlassRuntimeState.isEnabled()
+                || glassConfig == null || !GlassRuntimeState.isLargeFolderEnabled()
                 || !LauncherGlassHierarchy.isWorkspace(icon)) {
             releaseFolderCover(icon);
             return;
@@ -429,7 +438,10 @@ final class MiuixFolderGlassHook {
         WeakReference<View> previousReference = CLAIMED_FOLDER_COVERS.put(
                 icon, new WeakReference<>(cover));
         View previous = previousReference != null ? previousReference.get() : null;
-        if (previous != null && previous != cover) restoreMaterial(previous);
+        if (previous != null && previous != cover) {
+            restoreCoveredVisibility(previous);
+            restoreMaterial(previous);
+        }
         makeMaterialTransparent(cover);
         coverNativeViewIfNeeded(cover);
     }
@@ -438,7 +450,10 @@ final class MiuixFolderGlassHook {
         if (icon == null) return;
         WeakReference<View> reference = CLAIMED_FOLDER_COVERS.remove(icon);
         View cover = reference != null ? reference.get() : null;
-        if (cover != null) restoreMaterial(cover);
+        if (cover != null) {
+            restoreCoveredVisibility(cover);
+            restoreMaterial(cover);
+        }
     }
 
     private static View resolveFolderMaterial(ViewGroup folder) {
@@ -466,12 +481,21 @@ final class MiuixFolderGlassHook {
         return false;
     }
 
+    private static boolean isSmallFolderIcon(ViewGroup icon) {
+        if (icon == null) return false;
+        return icon.getClass().getName().contains("FolderIcon1x1");
+    }
+
+    private static boolean isFolderLiveEnabled(View material) {
+        if (material == null || !GlassRuntimeState.isEnabled()) return false;
+        return isSmallFolderMaterial(material)
+                ? GlassRuntimeState.isSmallFolderEnabled()
+                : GlassRuntimeState.isLargeFolderEnabled();
+    }
+
     private static boolean isFolderStyleEnabled(
             View material, LiquidDockConfig.Glass glassConfig) {
-        if (glassConfig == null) return true;
-        return isSmallFolderMaterial(material)
-                ? glassConfig.smallFolderStyle.enabled
-                : glassConfig.largeFolderStyle.enabled;
+        return isFolderLiveEnabled(material);
     }
 
     private static LauncherGlassStaticNode attachMaterial(
@@ -482,11 +506,8 @@ final class MiuixFolderGlassHook {
         GlassComponentStyle style = glassConfig != null
                 ? (smallFolder ? glassConfig.smallFolderStyle : glassConfig.largeFolderStyle)
                 : new GlassComponentStyle(true, 0f, 0f);
-        if (!style.enabled) {
-            LauncherGlassStaticNode existing = claimedSink(material);
-            if (existing != null) existing.dispose();
-            CLAIMED.remove(material);
-            restoreMaterial(material);
+        if (!isFolderLiveEnabled(material)) {
+            releaseMaterialOwnership(material);
             return null;
         }
 
@@ -556,12 +577,47 @@ final class MiuixFolderGlassHook {
         throw new NoSuchFieldException(name);
     }
 
+    static void onRuntimeSmallFolderGlassDisabled() {
+        releaseFolderStyleOwnership(true);
+    }
+
+    static void onRuntimeLargeFolderGlassDisabled() {
+        releaseFolderStyleOwnership(false);
+    }
+
+    private static void releaseFolderStyleOwnership(boolean smallFolder) {
+        for (View material : new ArrayList<>(CLAIMED.keySet())) {
+            if (material == null || isSmallFolderMaterial(material) != smallFolder) continue;
+            releaseMaterialOwnership(material);
+        }
+        if (!smallFolder) {
+            for (ViewGroup icon : new ArrayList<>(CLAIMED_FOLDER_COVERS.keySet())) {
+                releaseFolderCover(icon);
+            }
+        }
+        for (ViewGroup icon : new ArrayList<>(FOLDER_RECOVERY_PENDING.keySet())) {
+            if (isSmallFolderIcon(icon) == smallFolder) FOLDER_RECOVERY_PENDING.remove(icon);
+        }
+        ViewGroup opened = openedFolderOwner.get();
+        if (opened != null && isSmallFolderIcon(opened) == smallFolder) {
+            openedFolderOwner = new WeakReference<>(null);
+            openedFolderSink = new WeakReference<>(null);
+        }
+    }
+
+    private static void releaseMaterialOwnership(View material) {
+        if (material == null) return;
+        LauncherGlassStaticNode sink = claimedSink(material);
+        if (sink != null) sink.dispose();
+        CLAIMED.remove(material);
+        restoreCoveredVisibility(material);
+        restoreMaterial(material);
+    }
+
     static void onRuntimeGlassDisabled() {
         setNativeFolderMaterialsCovered(false);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
-            LauncherGlassStaticNode sink = claimedSink(material);
-            if (sink != null) sink.dispose();
-            restoreMaterial(material);
+            releaseMaterialOwnership(material);
         }
         CLAIMED.clear();
         ORIGINAL_LARGE_FOLDER_PAINT_ALPHA.clear();
@@ -607,6 +663,12 @@ final class MiuixFolderGlassHook {
         view.setVisibility(View.INVISIBLE);
     }
 
+    private static void restoreCoveredVisibility(View view) {
+        if (view == null) return;
+        Integer original = ORIGINAL_COVERED_VISIBILITY.remove(view);
+        if (original != null) view.setVisibility(original);
+    }
+
     private static void restoreMaterial(View material) {
         if (material == null) return;
         restoreLargeFolderDrawablePaint(material);
@@ -627,7 +689,8 @@ final class MiuixFolderGlassHook {
     }
 
     private static void suppressLargeFolderDrawablePaint(View material) {
-        if (!(material instanceof ImageView) || isSmallFolderMaterial(material)) return;
+        if (!GlassRuntimeState.isLargeFolderEnabled()
+                || !(material instanceof ImageView) || isSmallFolderMaterial(material)) return;
         Drawable drawable = ((ImageView) material).getDrawable();
         if (!isLargeFolderBackgroundDrawable(drawable)) return;
         Object paintValue = HookUtil.invoke(drawable, "getPaint");
