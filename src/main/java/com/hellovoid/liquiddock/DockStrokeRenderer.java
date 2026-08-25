@@ -11,6 +11,8 @@ import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
@@ -94,7 +96,9 @@ final class DockStrokeRenderer {
     static float resolveConfiguredRadius(
             View host, LiquidDockConfig.Dock config, float nativeBlurRadius) {
         float radius = Math.max(0f, nativeBlurRadius);
-        if (host == null || config == null || !config.enabled) return radius;
+        if (host == null || config == null || !VisualRuntimeState.isDockCustomizationEnabled()) {
+            return radius;
+        }
         float density = host.getResources().getDisplayMetrics().density;
         float cornerScale = config.cornersDp ? density : 1f;
         return Math.max(0f, radius
@@ -109,7 +113,8 @@ final class DockStrokeRenderer {
         synchronized (INSTALLED) {
             StrokeDrawable installed = INSTALLED.get(host);
 
-            if (config == null || !config.strokeEnabled) {
+            if (config == null || !config.strokeEnabled
+                    || !VisualRuntimeState.isDockStrokeEnabled()) {
                 if (installed != null && host.getForeground() == installed) {
                     host.setForeground(preserveExistingForeground
                             ? installed.baseForeground() : null);
@@ -138,6 +143,47 @@ final class DockStrokeRenderer {
             installed.setStyle(style);
             installed.setRadius(radius);
             host.invalidate();
+        }
+    }
+
+    static void onRuntimeStrokeDisabled() {
+        synchronized (INSTALLED) {
+            for (Map.Entry<View, StrokeDrawable> entry
+                    : new ArrayList<>(INSTALLED.entrySet())) {
+                View host = entry.getKey();
+                StrokeDrawable installed = entry.getValue();
+                if (host == null || installed == null) continue;
+                if (host.getForeground() == installed) {
+                    host.setForeground(installed.baseForeground());
+                }
+                host.invalidate();
+            }
+            INSTALLED.clear();
+        }
+    }
+
+    static void refreshInstalledFromCurrentConfig() {
+        LiquidDockConfig.Dock config;
+        try {
+            config = LiquidDockConfig.load().dock;
+        } catch (Throwable error) {
+            return;
+        }
+        cachedNativeConfig = config;
+        nativeConfigReadNanos = System.nanoTime();
+        if (!VisualRuntimeState.isDockStrokeEnabled()) {
+            onRuntimeStrokeDisabled();
+            return;
+        }
+        synchronized (INSTALLED) {
+            for (Map.Entry<View, StrokeDrawable> entry
+                    : new ArrayList<>(INSTALLED.entrySet())) {
+                View host = entry.getKey();
+                StrokeDrawable installed = entry.getValue();
+                if (host == null || installed == null) continue;
+                installed.setStyle(Style.from(config, host));
+                host.invalidate();
+            }
         }
     }
 
@@ -211,7 +257,7 @@ final class DockStrokeRenderer {
             this.squircleCp = squircleCp;
             this.radiusDeltaPx = radiusDeltaPx;
             this.color = color;
-            this.shadowEnabled = shadowEnabled;
+            this.shadowEnabled = shadowEnabled && VisualRuntimeState.isStrokeShadowEnabled();
             this.shadowRadiusPx = shadowRadiusPx;
             this.shadowAlpha = shadowAlpha;
         }
@@ -238,7 +284,7 @@ final class DockStrokeRenderer {
             // stroke radius = system radius + cornerOffset
             // blur radius   = system radius + blurCornerOffset
             // Liquid-only/native mode simply follows the native radius.
-            float radiusDelta = config.enabled
+            float radiusDelta = config.enabled && VisualRuntimeState.isDockCustomizationEnabled()
                     ? (config.cornerOffset - config.blurCornerOffset) * cornerScale
                     : 0f;
 
