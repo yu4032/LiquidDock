@@ -19,7 +19,7 @@
     <string name="category_configuration">Configuration</string>
     <string name="category_about">About</string>
     <string name="enable_liquiddock">Enable LiquidDock</string>
-    <string name="enable_liquiddock_summary">Disables all home-grid, Dock, divider, liquid-glass, stroke, and shadow hooks when turned off</string>
+    <string name="enable_liquiddock_summary">Turning off releases runtime-safe visual ownership immediately; restart the launcher to fully apply structural hook changes</string>
     <string name="home_grid_summary">Selectable 8×4 / 4×8 or 10×6 / 6×10 grid, orientation spacing, and page indicator</string>
     <string name="home_dock_summary">Size, corners, icon spacing, position, and blur</string>
     <string name="home_divider_summary">Independent divider width, height, position, color, and opacity</string>
@@ -53,7 +53,7 @@
     <string name="workstation_customization_summary">Uses independent Dock length and 8-column horizontal spacing; requires a launcher restart</string>
     <string name="recents_header_summary">Adjust the system wallpaper blur shown behind task cards; restart the launcher to apply.</string>
     <string name="liquid_enable">Enable liquid glass</string>
-    <string name="liquid_enable_summary">Enables liquid glass on supported surfaces using the configured optical properties</string>
+    <string name="liquid_enable_summary">Turning off releases the live glass layer immediately; restart the launcher to fully install glass hooks after enabling</string>
     <string name="liquid_folder_glass_enable">Enable folder glass</string>
     <string name="liquid_folder_glass_enable_summary">Applies liquid glass to supported home-screen folders; restart launcher to apply</string>
     <string name="liquid_blur_method">Blur method</string>
@@ -64,7 +64,7 @@
     <string name="liquid_dynamic_capture_summary">Refreshes while the Dock is open over games or video, and stops immediately after it closes</string>
     <string name="pref_debug_log">Debug Logging</string>
     <string name="pref_debug_log_summary">Write [DC] diagnostics to logcat (about page), restart desktop to apply</string>
-    <string name="liquid_header_summary">Adjust blur, refraction, dispersion, color, and lighting; restart the launcher to apply changes.</string>
+    <string name="liquid_header_summary">Component switches update live while glass is installed; restart the launcher for optical parameters or hook-installation changes.</string>
     <string name="page_launcher_highlights">Icon, folder &amp; widget highlights</string>
     <string name="launcher_highlights_entry">Icon, folder &amp; widget highlight layers</string>
     <string name="launcher_highlights_entry_summary">Control the glass highlight layers used by workspace icons, folders, and widgets</string>
