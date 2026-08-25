@@ -19,7 +19,10 @@ final class LauncherGlassRecentsHook {
             });
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewHide", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                // Reveal only after the vendor has left Recents; the controller still requires a fresh frame.
+                // Workstation can reuse an apparently-valid Launcher Surface while retiring the
+                // old PassBlur BufferQueue producer. Roll that endpoint before HOME asks for its
+                // freshness frame; the scene controller still owns the final reveal barrier.
+                LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
                 return result;
             });
