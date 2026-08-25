@@ -12,6 +12,7 @@ final class LiquidDockConfig {
     final Dock dock;
     final Divider divider;
     final Glass glass;
+    final GlassStroke glassStroke;
     final Workstation workstation;
     final Recents recents;
     final Animation animation;
@@ -29,9 +30,27 @@ final class LiquidDockConfig {
         dock = new Dock(c);
         divider = new Divider(c);
         glass = new Glass(c);
+        glassStroke = glass.stroke;
         workstation = new Workstation(c);
         recents = new Recents(c);
         animation = new Animation(c);
+    }
+
+    static final class GlassStroke {
+        final boolean enabled, fillDiff;
+        final float fillDiffWidthDp, standardWidthDp;
+        final int red, green, blue, alpha;
+
+        GlassStroke(ConfigReader c) {
+            enabled = c.b(ConfigSchema.GlassStroke.ENABLED.name(), true);
+            fillDiff = c.b(ConfigSchema.GlassStroke.FILL_DIFF.name(), true);
+            fillDiffWidthDp = c.f(ConfigSchema.GlassStroke.FILL_DIFF_WIDTH.name(), 1f);
+            standardWidthDp = c.f(ConfigSchema.GlassStroke.STANDARD_WIDTH.name(), 1f);
+            red = channel(c.i(ConfigSchema.GlassStroke.RED.name(), 255));
+            green = channel(c.i(ConfigSchema.GlassStroke.GREEN.name(), 255));
+            blue = channel(c.i(ConfigSchema.GlassStroke.BLUE.name(), 255));
+            alpha = channel(c.i(ConfigSchema.GlassStroke.ALPHA.name(), 64));
+        }
     }
 
     static final class Animation {
@@ -227,6 +246,7 @@ final class LiquidDockConfig {
     }
 
     static final class Glass {
+        final GlassStroke stroke;
         final boolean enabled, folderEnabled, widgetEnabled, iconEnabled;
         final float folderCornerRadiusDp;
         final GlassComponentStyle iconStyle;
@@ -249,6 +269,7 @@ final class LiquidDockConfig {
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
 
         Glass(ConfigReader c) {
+            stroke = new GlassStroke(c);
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
                     ConfigSchema.Glass.ENABLED.runtimeFallback());
             boolean legacyFolderEnabled = c.b("liquid_folder_glass",

@@ -386,6 +386,27 @@ public final class ConfigSchema {
         private Glass() {}
     }
 
+    public static final class GlassStroke {
+        public static final ConfigKey<Boolean> ENABLED = bool(
+                "glass_stroke_enabled", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> FILL_DIFF = bool(
+                "glass_stroke_fill_diff", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> FILL_DIFF_WIDTH = dp(
+                "glass_stroke_fill_diff_width", 1, 1, 1, 0, 10, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> STANDARD_WIDTH = dp(
+                "glass_stroke_standard_width", 1, 1, 1, 0, 10, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> RED = integer(
+                "glass_stroke_red", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GREEN = integer(
+                "glass_stroke_green", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BLUE = integer(
+                "glass_stroke_blue", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALPHA = integer(
+                "glass_stroke_alpha", 64, 64, 64, 0, 255, ConfigKey.ExportMode.ALWAYS);
+
+        private GlassStroke() {}
+    }
+
     public static final class Workstation {
         public static final ConfigKey<Boolean> DOCK_CUSTOMIZATION = bool(
                 "workstation_dock_customization", false, false, false, ConfigKey.ExportMode.ALWAYS);

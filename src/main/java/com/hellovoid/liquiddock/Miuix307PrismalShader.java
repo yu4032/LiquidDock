@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.prismal.PrismalEdgeAntialiasShader;
+
 /** Current upstream styropyr0/Prismal glass shader with only the full-view vertex adapter changed. */
 final class Miuix307PrismalShader {
     static final String VERTEX_SHADER = """
@@ -14,7 +16,7 @@ final class Miuix307PrismalShader {
             }
             """;
 
-    static final String FRAGMENT_SHADER = """
+    static final String FRAGMENT_SHADER = PrismalEdgeAntialiasShader.apply("""
             precision highp float;
 
             uniform sampler2D u_backgroundTexture;
@@ -464,7 +466,7 @@ final class Miuix307PrismalShader {
 
                 gl_FragColor = vec4(color, opacity * u_transmittance);
             }
-            """;
+            """);
 
     private Miuix307PrismalShader() {}
 }

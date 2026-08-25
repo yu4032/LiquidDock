@@ -10,6 +10,8 @@
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
     <string name="page_stroke">Stroke</string>
+    <string name="page_glass_stroke">Glass edge stroke</string>
+    <string name="glass_stroke_entry_summary">Independent mode, width, color, and opacity for all glass surfaces</string>
     <string name="page_shadow">Shadow</string>
     <string name="page_animation">Animation</string>
     <string name="page_data">Presets and data</string>

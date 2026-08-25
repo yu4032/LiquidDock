@@ -10,6 +10,8 @@
     <string name="page_recents">多任务</string>
     <string name="page_liquid">液态玻璃</string>
     <string name="page_stroke">描边</string>
+    <string name="page_glass_stroke">玻璃边缘描边</string>
+    <string name="glass_stroke_entry_summary">独立调整所有玻璃组件的方式、宽度、颜色与透明度</string>
     <string name="page_shadow">阴影</string>
     <string name="page_animation">动画</string>
     <string name="page_data">预设与数据</string>
