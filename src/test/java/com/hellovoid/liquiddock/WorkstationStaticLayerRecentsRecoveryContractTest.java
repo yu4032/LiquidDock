@@ -32,6 +32,16 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
     }
 
     @Test
+    public void reflectiveRecoveryEntrySurvivesR8Optimization() throws Exception {
+        Path keep = Path.of("src/main/keepRules/runtime-reflection.keep");
+        assertTrue("AGP 9.3 optimization requires a keep rule for the reflective method",
+                Files.exists(keep));
+        String rules = Files.readString(keep);
+        assertTrue(rules.contains("class com.hellovoid.liquiddock.LauncherGlassSession"));
+        assertTrue(rules.contains("void rebindProducer();"));
+    }
+
+    @Test
     public void folderCoverageDoesNotRollWorkstationProducer() throws Exception {
         String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
         String folder = methodSlice(controller,
