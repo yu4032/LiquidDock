@@ -44,6 +44,17 @@ public class DockIconAnimationRenderingContractTest {
         assertFalse(compositor.contains("item.isFading()"));
     }
 
+    @Test
+    public void vendorBlurSuppressionWritesRadiusZeroOnlyOncePerPredraw() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String suppression = slice(hook,
+                "static void suppressVendorGpuBlur",
+                "private static void installVendorGpuBlurSuppressor");
+
+        assertFalse(suppression.contains("setPassWindowBlurRadius(dockBg, 0)"));
+        assertTrue(suppression.contains("MiBlurBridge.clearPassWindowBlur(dockBg);"));
+    }
+
     private static String slice(String source, String start, String end) {
         int from = source.indexOf(start);
         int to = source.indexOf(end, from);
