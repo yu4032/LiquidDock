@@ -30,7 +30,7 @@ com.miui.home 系统桌面版本 release-4.50.x.x
 
 ## 兼容性
 
-液态玻璃效果针对 **HyperOS 3.0.307+** 版本的 HotSeats material 与 SurfaceFlinger PassBlur 私有接口实现，依赖 ROM 中存在对应 vendor class 和隐藏 SurfaceControl transaction API。ROM 更新后如果这些私有接口发生变化，液态玻璃功能将按失效。
+液态玻璃效果针对 **HyperOS 3.0.307+** 版本的 HotSeats material 与 SurfaceFlinger PassBlur 私有接口实现，依赖 ROM 中存在对应 vendor class 和隐藏 SurfaceControl transaction API。ROM 更新后如果这些私有接口发生变化，液态玻璃功能将按预期失效。
 
 非玻璃功能的可用性仍取决于对应 HyperOS Launcher 类和方法是否存在。
 
