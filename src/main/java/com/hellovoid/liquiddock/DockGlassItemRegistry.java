@@ -36,6 +36,9 @@ final class DockGlassItemRegistry {
         ANIMATION.end(view, SystemClock.uptimeMillis());
         view.postInvalidateOnAnimation();
     }
+    static synchronized DockIconAnimationState.Sample animationSample(View view, long nowMs) {
+        return ANIMATION.sample(view, nowMs);
+    }
     static synchronized float animationOpacity(View view, long nowMs) {
         return ANIMATION.opacity(view, nowMs);
     }
