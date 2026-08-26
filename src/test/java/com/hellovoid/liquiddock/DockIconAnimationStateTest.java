@@ -2,8 +2,10 @@ package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import org.junit.Test;
 
@@ -102,6 +104,24 @@ public class DockIconAnimationStateTest {
     }
 
     @Test
+    public void oneAnimationSampleCarriesOpacityAndFadeState() throws Exception {
+        DockIconAnimationState state = new DockIconAnimationState(180L);
+        Object icon = new Object();
+        state.begin(icon);
+        state.end(icon, 1_000L);
+
+        Object sample = sample(state, icon, 1_090L);
+        assertNotNull(sample);
+        assertEquals(0.75f, readFloat(sample, "opacity"), 0.0001f);
+        assertTrue(readBoolean(sample, "fading"));
+
+        sample = sample(state, icon, 1_180L);
+        assertNotNull(sample);
+        assertEquals(1f, readFloat(sample, "opacity"), 0f);
+        assertFalse(readBoolean(sample, "fading"));
+    }
+
+    @Test
     public void visibleCallbackDoesNotRestartAnEarlyFade() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
@@ -147,5 +167,29 @@ public class DockIconAnimationStateTest {
                 "observeProxyFrame", Object.class, float.class, long.class);
         method.setAccessible(true);
         return Boolean.TRUE.equals(method.invoke(state, icon, progress, nowMs));
+    }
+
+    private static Object sample(
+            DockIconAnimationState state, Object icon, long nowMs) throws Exception {
+        try {
+            Method method = DockIconAnimationState.class.getDeclaredMethod(
+                    "sample", Object.class, long.class);
+            method.setAccessible(true);
+            return method.invoke(state, icon, nowMs);
+        } catch (NoSuchMethodException missing) {
+            return null;
+        }
+    }
+
+    private static float readFloat(Object target, String fieldName) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.getFloat(target);
+    }
+
+    private static boolean readBoolean(Object target, String fieldName) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.getBoolean(target);
     }
 }
