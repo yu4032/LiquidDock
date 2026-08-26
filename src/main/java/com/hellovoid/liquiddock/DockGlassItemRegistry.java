@@ -10,32 +10,30 @@ final class DockGlassItemRegistry {
     private static final WeakHashMap<View, Boolean> ICONS = new WeakHashMap<>();
     private static final DockIconAnimationState ANIMATION =
             new DockIconAnimationState(AnimationRuntimeState.dockIconRevealDurationMs());
-    private static long revision;
+    private static long membershipRevision;
     private DockGlassItemRegistry() {}
 
     static synchronized void register(View view) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || ICONS.containsKey(view)) return;
         ICONS.put(view, Boolean.TRUE);
-        revision++;
+        membershipRevision++;
     }
     static synchronized void unregister(View view) {
         if (view != null) ANIMATION.remove(view);
-        if (view != null && ICONS.remove(view) != null) revision++;
+        if (view != null && ICONS.remove(view) != null) membershipRevision++;
     }
     static synchronized void clear() {
         ANIMATION.clear();
-        if (!ICONS.isEmpty()) { ICONS.clear(); revision++; }
+        if (!ICONS.isEmpty()) { ICONS.clear(); membershipRevision++; }
     }
     static synchronized void observeLaunchAnimationFrame(View view, float progress) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
-        ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis());
-        revision++;
+        if (!ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis())) return;
         view.postInvalidateOnAnimation();
     }
     static synchronized void endLaunchAnimation(View view) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
         ANIMATION.end(view, SystemClock.uptimeMillis());
-        revision++;
         view.postInvalidateOnAnimation();
     }
     static synchronized float animationOpacity(View view, long nowMs) {
@@ -44,7 +42,7 @@ final class DockGlassItemRegistry {
     static synchronized boolean isFading(View view) {
         return ANIMATION.isFading(view);
     }
-    static synchronized long revision() { return revision; }
+    static synchronized long revision() { return membershipRevision; }
     static synchronized ArrayList<View> snapshotForRoot(View root) {
         ArrayList<View> out = new ArrayList<>();
         if (!GlassRuntimeState.isIconEnabled() || root == null) return out;
