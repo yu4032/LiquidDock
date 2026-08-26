@@ -16,6 +16,9 @@ final class DockGlassItemNode {
         this.style = style;
     }
     View view() { return viewRef.get(); }
+    DockIconAnimationState.Sample animationSample(long nowMs) {
+        return DockGlassItemRegistry.animationSample(viewRef.get(), nowMs);
+    }
     float animationOpacity(long nowMs) {
         return DockGlassItemRegistry.animationOpacity(viewRef.get(), nowMs);
     }
