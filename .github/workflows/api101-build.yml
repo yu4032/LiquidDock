@@ -6,6 +6,7 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
+      - perf/dock-icon-animation-rendering
   pull_request:
     branches: [ main ]
   workflow_dispatch:
