@@ -30,6 +30,20 @@ public class DockIconAnimationRenderingContractTest {
         assertTrue(registry.contains("static synchronized long revision() { return membershipRevision; }"));
     }
 
+    @Test
+    public void compositorSamplesAnimationOnceAndReusesStableGeometry() throws Exception {
+        String node = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
+        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+
+        assertTrue(node.contains("DockIconAnimationState.Sample animationSample(long nowMs)"));
+        assertTrue(compositor.contains("private static final class CachedItem"));
+        assertTrue(compositor.contains("LauncherGlassGeometry.Snapshot geometry;"));
+        assertTrue(compositor.contains("DockIconAnimationState.Sample[] animationSamples"));
+        assertTrue(compositor.contains("geometryMappingChanged || cachedItem.uiFingerprint != uiFingerprint"));
+        assertFalse(compositor.contains("item.animationOpacity(nowMs)"));
+        assertFalse(compositor.contains("item.isFading()"));
+    }
+
     private static String slice(String source, String start, String end) {
         int from = source.indexOf(start);
         int to = source.indexOf(end, from);
