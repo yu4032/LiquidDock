@@ -24,8 +24,8 @@ final class DockIconAnimationState {
         if (icon != null) states.put(icon, new Record());
     }
 
-    synchronized void observeProxyFrame(Object icon, float progress, long nowMs) {
-        if (icon == null) return;
+    synchronized boolean observeProxyFrame(Object icon, float progress, long nowMs) {
+        if (icon == null) return false;
         Record record = states.get(icon);
         if (record == null) {
             record = new Record();
@@ -34,7 +34,9 @@ final class DockIconAnimationState {
         if (record.fadeStartedMs == HIDDEN && Float.isFinite(progress)
                 && progress >= RESTORE_PROGRESS) {
             record.fadeStartedMs = nowMs;
+            return true;
         }
+        return false;
     }
 
     synchronized void end(Object icon, long nowMs) {
