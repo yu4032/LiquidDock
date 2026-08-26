@@ -263,7 +263,6 @@ final class MiuixGlassHook {
     static void suppressVendorGpuBlur(View dockBg) {
         if (!GlassRuntimeState.isEnabled()) return;
         if (dockBg == null || !isNativeVisualOwner(dockBg)) return;
-        MiBlurBridge.setPassWindowBlurRadius(dockBg, 0);
         MiBlurBridge.clearPassWindowBlur(dockBg);
         if (vendorGpuBlurLoggedFor.get() != dockBg) {
             vendorGpuBlurLoggedFor = new WeakReference<>(dockBg);
