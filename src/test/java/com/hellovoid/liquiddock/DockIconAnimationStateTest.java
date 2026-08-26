@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Method;
 import org.junit.Test;
 
 public class DockIconAnimationStateTest {
@@ -90,6 +91,17 @@ public class DockIconAnimationStateTest {
     }
 
     @Test
+    public void proxyFrameReportsOnlyRealAnimationStateChanges() throws Exception {
+        DockIconAnimationState state = new DockIconAnimationState(180L);
+        Object icon = new Object();
+
+        assertFalse(observeChanged(state, icon, 0.20f, 1_000L));
+        assertFalse(observeChanged(state, icon, 0.89f, 1_050L));
+        assertTrue(observeChanged(state, icon, 0.90f, 1_100L));
+        assertFalse(observeChanged(state, icon, 0.95f, 1_120L));
+    }
+
+    @Test
     public void visibleCallbackDoesNotRestartAnEarlyFade() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
@@ -127,5 +139,13 @@ public class DockIconAnimationStateTest {
 
         assertFalse(state.isFading(icon));
         assertEquals(0f, state.opacity(icon, 1_020L), 0f);
+    }
+
+    private static boolean observeChanged(
+            DockIconAnimationState state, Object icon, float progress, long nowMs) throws Exception {
+        Method method = DockIconAnimationState.class.getDeclaredMethod(
+                "observeProxyFrame", Object.class, float.class, long.class);
+        method.setAccessible(true);
+        return Boolean.TRUE.equals(method.invoke(state, icon, progress, nowMs));
     }
 }
