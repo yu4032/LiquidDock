@@ -27,14 +27,21 @@ import java.util.WeakHashMap;
  * A border is built from a validated outer path and inner path. The canvas is
  * clipped to the outer path and then clipOutPath(inner) removes the complete
  * Dock interior. Stroke shadow is deliberately not painted into that interior;
- * it is delegated to the host's native hardware shadow path and outline.
+ * glass mode delegates it to the glass host's hardware shadow, while native
+ * mode coalesces it with the existing HotSeats native MiShadow in
+ * DockNativeShadowBridge so two writes never race on one RenderNode.
  */
 final class DockStrokeRenderer {
     private static final float MAX_THICKNESS_FRACTION = 0.20f;
     private static final float MIN_INTERIOR_FRACTION = 0.35f;
     private static final long NATIVE_CONFIG_REFRESH_NS = 1_000_000_000L;
+    private static final String NATIVE_BACKGROUND_CLASS =
+            "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2";
 
     private static final WeakHashMap<View, StrokeDrawable> INSTALLED =
+            new WeakHashMap<>();
+    /** Native backgrounds remain known even when stroke is currently disabled. */
+    private static final WeakHashMap<View, Float> KNOWN_NATIVE_HOSTS =
             new WeakHashMap<>();
 
     private static boolean nativeHookInstalled;
@@ -56,7 +63,7 @@ final class DockStrokeRenderer {
 
         try {
             HookUtil.hookMethod(classLoader,
-                    "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2",
+                    NATIVE_BACKGROUND_CLASS,
                     "setBackgroundRadius",
                     chain -> {
                         Object result =
@@ -66,6 +73,7 @@ final class DockStrokeRenderer {
 
                         View background = (View) chain.getThisObject();
                         float radius = readNativeRadius(background);
+                        rememberNativeHost(background, radius);
                         LiquidDockConfig.Dock config = currentNativeConfig();
 
                         configure(background, config, radius);
@@ -76,6 +84,22 @@ final class DockStrokeRenderer {
         } catch (Throwable error) {
             MainHook.log("[DC] native blur Dock stroke renderer unavailable: " + error);
         }
+    }
+
+    /**
+     * Remember the actual native background independently of current stroke state. Device logs show
+     * this exact View is also the authoritative MiShadow target, so it is a reliable runtime owner.
+     */
+    static void rememberNativeHost(View host, float radius) {
+        if (!isNativeHost(host)) return;
+        float safeRadius = Math.max(0f, radius);
+        synchronized (KNOWN_NATIVE_HOSTS) {
+            KNOWN_NATIVE_HOSTS.put(host, safeRadius);
+        }
+    }
+
+    private static boolean isNativeHost(View host) {
+        return host != null && NATIVE_BACKGROUND_CLASS.equals(host.getClass().getName());
     }
 
     /**
@@ -109,6 +133,7 @@ final class DockStrokeRenderer {
             View host, LiquidDockConfig.Dock config, float radius,
             boolean preserveExistingForeground) {
         if (host == null) return;
+        if (isNativeHost(host)) rememberNativeHost(host, radius);
 
         synchronized (INSTALLED) {
             StrokeDrawable installed = INSTALLED.get(host);
@@ -120,8 +145,8 @@ final class DockStrokeRenderer {
                             ? installed.baseForeground() : null);
                 }
                 applyNativeOuterShadow(host, null);
-                // Keep the weak installation record. Runtime false->true must be able to reattach
-                // the same drawable without waiting for another vendor radius callback.
+                // Keep both weak owner registries. Runtime false->true must be able to reattach
+                // without waiting for another vendor radius callback.
                 return;
             }
 
@@ -180,6 +205,7 @@ final class DockStrokeRenderer {
             onRuntimeStrokeDisabled();
             return;
         }
+
         synchronized (INSTALLED) {
             for (Map.Entry<View, StrokeDrawable> entry
                     : new ArrayList<>(INSTALLED.entrySet())) {
@@ -195,10 +221,30 @@ final class DockStrokeRenderer {
                 host.invalidate();
             }
         }
+
+        // A native owner may have been observed while stroke was disabled, so no StrokeDrawable
+        // existed yet. Reconfigure those known hosts now instead of waiting for setBackgroundRadius.
+        ArrayList<Map.Entry<View, Float>> known;
+        synchronized (KNOWN_NATIVE_HOSTS) {
+            known = new ArrayList<>(KNOWN_NATIVE_HOSTS.entrySet());
+        }
+        for (Map.Entry<View, Float> entry : known) {
+            View host = entry.getKey();
+            if (host == null) continue;
+            synchronized (INSTALLED) {
+                if (INSTALLED.containsKey(host)) continue;
+            }
+            configure(host, config, entry.getValue() != null ? entry.getValue() : 0f);
+        }
     }
 
     private static void applyNativeOuterShadow(View host, Style style) {
         if (host == null) return;
+        // The native HotSeats background owns exactly one RenderNode MiShadow. The final-boundary
+        // bridge merges whole-Dock and stroke-shadow settings there; a second direct write here
+        // would race the vendor animation and recreate the original flash/ownership bug.
+        if (isNativeHost(host)) return;
+
         boolean enabled = style != null
                 && style.shadowEnabled
                 && style.shadowRadiusPx > 0f
@@ -217,6 +263,7 @@ final class DockStrokeRenderer {
 
     static void updateRadius(View host, float radius) {
         if (host == null) return;
+        if (isNativeHost(host)) rememberNativeHost(host, radius);
         synchronized (INSTALLED) {
             StrokeDrawable drawable = INSTALLED.get(host);
             if (drawable == null && host.getForeground() instanceof StrokeDrawable) {
