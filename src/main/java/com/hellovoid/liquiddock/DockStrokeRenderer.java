@@ -371,63 +371,71 @@ final class DockStrokeRenderer {
             Rect bounds = getBounds();
             if (s == null
                     || s.widthPx <= 0f
-                    || Color.alpha(s.color) <= 0
                     || bounds.width() <= 2
                     || bounds.height() <= 2) {
                 return;
             }
 
+            boolean strokeVisible = Color.alpha(s.color) > 0 && drawableAlpha > 0;
+            boolean shadowVisible = s.shadowEnabled
+                    && s.shadowRadiusPx > 0f
+                    && s.shadowAlpha > 0
+                    && drawableAlpha > 0;
+            if (!strokeVisible && !shadowVisible) return;
             if (!ensureGeometry(s, bounds)) return;
 
+            if (strokeVisible) {
+                int alpha = Math.round(
+                        Color.alpha(s.color) * drawableAlpha / 255f);
+                paint.setShader(null);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColorFilter(colorFilter);
+                paint.setColor(Color.argb(
+                        alpha,
+                        Color.red(s.color),
+                        Color.green(s.color),
+                        Color.blue(s.color)));
+
+                // The central Dock body is removed from the clip before any stroke color is
+                // drawn. This prevents the old "whole Dock mask" regression.
+                int save = canvas.save();
+                canvas.clipPath(outer);
+                canvas.clipOutPath(inner);
+                canvas.drawPath(outer, paint);
+                canvas.restoreToCount(save);
+            }
+
+            // Draw after the foreground stroke, but in a different region: start at the stroke's
+            // inner contour and fade farther into the Dock body. The old implementation painted
+            // shadow into the same border ring and then covered it with the stroke itself.
             drawStrokeShadow(canvas, s);
-
-            int alpha = Math.round(
-                    Color.alpha(s.color) * drawableAlpha / 255f);
-            paint.setShader(null);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColorFilter(colorFilter);
-            paint.setColor(Color.argb(
-                    alpha,
-                    Color.red(s.color),
-                    Color.green(s.color),
-                    Color.blue(s.color)));
-
-            // The central Dock body is removed from the clip before any color is
-            // drawn.  This is the invariant that prevents the old "whole Dock mask".
-            int save = canvas.save();
-            canvas.clipPath(outer);
-            canvas.clipOutPath(inner);
-            canvas.drawPath(outer, paint);
-            canvas.restoreToCount(save);
         }
-
 
         private void drawStrokeShadow(Canvas canvas, Style s) {
             if (!s.shadowEnabled
                     || s.shadowRadiusPx <= 0f
                     || s.shadowAlpha <= 0
-                    || geometryThickness <= 0f) {
+                    || innerRect.width() <= 1f
+                    || innerRect.height() <= 1f) {
                 return;
             }
 
-            // The historical stroke shadow faded inward from the outer contour. Keep that
-            // visual model, but clamp it to the current border ring so the Dock body remains
-            // geometrically excluded just like the foreground stroke.
-            float reach = Math.min(s.shadowRadiusPx, geometryThickness);
+            float interiorLimit = Math.max(0f,
+                    Math.min(innerRect.width(), innerRect.height()) * 0.25f);
+            float reach = Math.min(s.shadowRadiusPx, interiorLimit);
+            if (!(reach > 0f)) return;
             int steps = Math.max(1, Math.min(40, (int) Math.ceil(reach)));
 
             paint.setShader(null);
             paint.setStyle(Paint.Style.FILL);
             paint.setColorFilter(colorFilter);
 
-            for (int i = steps; i >= 1; i--) {
+            for (int i = 1; i <= steps; i++) {
                 float outerDistance = reach * (i - 1f) / steps;
                 float innerDistance = reach * i / steps;
-                float outerT = Math.min(1f, outerDistance / geometryThickness);
-                float innerT = Math.min(1f, innerDistance / geometryThickness);
 
-                buildInterpolatedContour(shadowOuter, outerT, s);
-                buildInterpolatedContour(shadowInner, innerT, s);
+                buildInwardShadowContour(shadowOuter, outerDistance, s);
+                buildInwardShadowContour(shadowInner, innerDistance, s);
 
                 float strength = 1f - (i - 1f) / steps;
                 int alpha = Math.round(
@@ -443,21 +451,14 @@ final class DockStrokeRenderer {
             }
         }
 
-        private void buildInterpolatedContour(Path out, float t, Style s) {
-            float clamped = Math.max(0f, Math.min(1f, t));
-            shadowRect.set(
-                    lerp(outerRect.left, innerRect.left, clamped),
-                    lerp(outerRect.top, innerRect.top, clamped),
-                    lerp(outerRect.right, innerRect.right, clamped),
-                    lerp(outerRect.bottom, innerRect.bottom, clamped));
-            float contourRadius = lerp(outerRadius, innerRadius, clamped);
-            float contourCp = lerp(s.squircleCp, innerCp, clamped);
+        private void buildInwardShadowContour(Path out, float distance, Style s) {
+            float inset = Math.max(0f, distance);
+            shadowRect.set(innerRect);
+            shadowRect.inset(inset, inset);
+            float contourRadius = Math.max(0f, innerRadius - inset);
             out.rewind();
-            buildShape(out, shadowRect, contourRadius, s.squircle, contourCp);
-        }
-
-        private static float lerp(float start, float end, float t) {
-            return start + (end - start) * t;
+            if (shadowRect.width() <= 1f || shadowRect.height() <= 1f) return;
+            buildShape(out, shadowRect, contourRadius, s.squircle, innerCp);
         }
 
         private boolean ensureGeometry(Style s, Rect bounds) {
