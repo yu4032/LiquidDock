@@ -33,10 +33,10 @@ public class DockVendorNativeShadowReuseContractTest {
         String main = mainHook();
         String ownership = slice(main,
                 "private static void installNativeDockShadowOwnership(",
-                "/** Re-apply the configured visible shadow");
+                "/** Re-apply the configured native shadow");
 
         assertTrue("the vendor shadow target must remain the target of configured native shadow args",
-                ownership.contains("configuredNativeDockShadowArgs(vendorTarget"));
+                ownership.contains("configuredNativeDockShadowArgs(\n                                    vendorTarget"));
         assertTrue("dock_shadow=false must clear that same vendor target",
                 ownership.contains("clearNativeDockShadowArgs(vendorTarget)"));
         assertFalse("the vendor call must not depend on a second custom shadow target",
