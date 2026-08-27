@@ -16,20 +16,25 @@ public class MainHook {
 
     private static WeakReference<View> oldBgRef = new WeakReference<>(null);
     private static WeakReference<View> nativeShadowTargetRef = new WeakReference<>(null);
-    private static WeakReference<View> customShadowTargetRef = new WeakReference<>(null);
     private static NativeDockShadowState vendorDockShadowState;
     private static boolean nativeShadowInternalCall;
-    private static final java.util.ArrayList<DockShadowClipState> dockShadowClipStates =
-            new java.util.ArrayList<>();
 
     private static View oldBg() { return oldBgRef.get(); }
     private static void setOldBg(View view) { oldBgRef = new WeakReference<>(view); }
     private static View nativeShadowTarget() { return nativeShadowTargetRef.get(); }
-    private static View customShadowTarget() { return customShadowTargetRef.get(); }
     private static void setNativeShadowTarget(View view) {
         View previous = nativeShadowTargetRef.get();
-        if (previous != view) vendorDockShadowState = null;
-        nativeShadowTargetRef = new WeakReference<>(view);
+        if (previous != view) {
+            vendorDockShadowState = null;
+            nativeShadowTargetRef = new WeakReference<>(view);
+            if (view != null) {
+                android.view.ViewParent parent = view.getParent();
+                log("[DC] native Dock shadow target=" + view.getClass().getName()
+                        + " parent=" + (parent == null ? "null" : parent.getClass().getName())
+                        + " attached=" + view.isAttachedToWindow()
+                        + " size=" + view.getWidth() + "x" + view.getHeight());
+            }
+        }
     }
     private static float strokeR = 30f;
     private static volatile boolean workstationMode;
@@ -106,7 +111,7 @@ public class MainHook {
                 Math.round(config.workstation.allAppsPortraitBottomSpacing * workstationAllAppsScale));
 
         boolean dockCustomization = config.dock.enabled;
-        // Keep vendor shadow capture/restore separate from the custom visible shadow owner.
+        // Intercept Launcher's real native Dock shadow owner before zero-copy may return early.
         installNativeDockShadowOwnership(classLoader);
         installDockShadowSetupHook(classLoader);
         if (config.glass.enabled) {
@@ -247,8 +252,8 @@ public class MainHook {
     // ── helpers ──────────────────────────────────────────────────────
 
     /**
-     * Capture and suppress only the vendor's own static Dock shadow while LiquidDock owns normal
-     * Dock customization. The custom shadow itself is applied to the active visible material host.
+     * Reuse Launcher's real native Dock shadow owner and lifecycle. LiquidDock only substitutes
+     * the parameters of the vendor applyViewShadow call while normal Dock customization owns it.
      */
     private static void installNativeDockShadowOwnership(ClassLoader cl) {
         try {
@@ -275,8 +280,7 @@ public class MainHook {
                             return chain.proceed(args);
                         }
                         View vendorTarget = (View) args[0];
-                        if (vendorTarget == customShadowTarget()
-                                && VisualRuntimeState.isDockShadowEnabled()) {
+                        if (VisualRuntimeState.isDockShadowEnabled()) {
                             return chain.proceed(configuredNativeDockShadowArgs(
                                     vendorTarget, LiquidDockConfig.load().dock));
                         }
@@ -287,7 +291,7 @@ public class MainHook {
         }
     }
 
-    /** Re-apply the configured visible shadow after Launcher setup or settled geometry. */
+    /** Re-apply the configured native shadow after Launcher setup or settled geometry. */
     private static void installDockShadowSetupHook(ClassLoader cl) {
         try {
             HookUtil.hookMethod(cl, "com.miui.home.launcher.Launcher", "setupViews",
@@ -300,11 +304,7 @@ public class MainHook {
                             Object target = HookUtil.invoke(hs, "getMingouStaticDockBlurShadowTarget");
                             if (target instanceof View) setNativeShadowTarget((View) target);
                             View background = resolveActiveDockBackground(hs);
-                            if (background == null) return r;
-                            if (!workstationMode
-                                    && VisualRuntimeState.isDockCustomizationEnabled()) {
-                                suppressVendorDockShadow();
-                            }
+                            if (background != null) setOldBg(background);
                             syncDockShadow(background, current.dock);
                         } catch (Throwable e) {
                             log("[DC] Dock shadow setup failed: " + e);
@@ -352,52 +352,6 @@ public class MainHook {
         invokeNativeDockShadow(configuredNativeDockShadowArgs(target, dock));
     }
 
-    private static void suppressVendorDockShadow() {
-        View target = nativeShadowTarget();
-        if (target != null && target != customShadowTarget()) {
-            invokeNativeDockShadow(clearNativeDockShadowArgs(target));
-        }
-    }
-
-    private static void clearConfiguredNativeDockShadow() {
-        View target = customShadowTarget();
-        if (target != null) invokeNativeDockShadow(clearNativeDockShadowArgs(target));
-        releaseDockShadowClipOwnership();
-    }
-
-    private static synchronized void acquireDockShadowClipOwnership(View dockBg) {
-        if (dockBg == null) return;
-        View current = customShadowTarget();
-        if (current == dockBg && !dockShadowClipStates.isEmpty()) return;
-        if (current != null && current != dockBg) {
-            invokeNativeDockShadow(clearNativeDockShadowArgs(current));
-        }
-        releaseDockShadowClipOwnership();
-        customShadowTargetRef = new WeakReference<>(dockBg);
-
-        android.view.ViewParent parent = dockBg.getParent();
-        for (int level = 0; level < 4 && parent instanceof ViewGroup; level++) {
-            ViewGroup group = (ViewGroup) parent;
-            dockShadowClipStates.add(new DockShadowClipState(
-                    group, group.getClipChildren(), group.getClipToPadding()));
-            group.setClipChildren(false);
-            group.setClipToPadding(false);
-            parent = group.getParent();
-        }
-    }
-
-    private static synchronized void releaseDockShadowClipOwnership() {
-        for (int i = dockShadowClipStates.size() - 1; i >= 0; i--) {
-            DockShadowClipState state = dockShadowClipStates.get(i);
-            ViewGroup group = state.group.get();
-            if (group == null) continue;
-            group.setClipChildren(state.clipChildren);
-            group.setClipToPadding(state.clipToPadding);
-        }
-        dockShadowClipStates.clear();
-        customShadowTargetRef = new WeakReference<>(null);
-    }
-
     private static void restoreVendorDockShadow() {
         NativeDockShadowState state = vendorDockShadowState;
         if (state == null) return;
@@ -436,42 +390,43 @@ public class MainHook {
     }
 
     /**
-     * Keep the configured whole-Dock shadow on the active visible Dock material. The vendor static
-     * shadow target is kept only for exact vendor restoration when LiquidDock releases ownership.
+     * Refresh the configured whole-Dock shadow on Launcher's authoritative native shadow target.
+     * The visible Dock material is tracked only for geometry/workstation callbacks; it is not a
+     * second shadow owner.
      */
     static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock) {
-        if (dockBg == null || dock == null) return;
-        setOldBg(dockBg);
+        if (dockBg != null) setOldBg(dockBg);
+        if (dock == null) return;
+        View target = nativeShadowTarget();
+        if (target == null) return;
         if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
-            clearConfiguredNativeDockShadow();
+            restoreVendorDockShadow();
             return;
         }
-        suppressVendorDockShadow();
         if (!VisualRuntimeState.isDockShadowEnabled()) {
-            clearConfiguredNativeDockShadow();
+            invokeNativeDockShadow(clearNativeDockShadowArgs(target));
             return;
         }
-        acquireDockShadowClipOwnership(dockBg);
-        applyConfiguredNativeDockShadow(dockBg, dock);
+        applyConfiguredNativeDockShadow(target, dock);
     }
 
     static void onRuntimeDockShadowDisabled() {
-        suppressVendorDockShadow();
-        clearConfiguredNativeDockShadow();
+        // Parent Dock customization teardown restores the exact vendor state. Because runtime
+        // booleans are published before callbacks run, do not clear that restored state afterward.
+        if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) return;
+        View target = nativeShadowTarget();
+        if (target != null) invokeNativeDockShadow(clearNativeDockShadowArgs(target));
     }
 
     static void onRuntimeDockShadowEnabled() {
-        View dockBg = oldBg();
-        if (dockBg == null) return;
         try {
-            syncDockShadow(dockBg, LiquidDockConfig.load().dock);
+            syncDockShadow(oldBg(), LiquidDockConfig.load().dock);
         } catch (Throwable e) {
             log("[DC] runtime Dock shadow enable failed: " + e);
         }
     }
 
     static void onRuntimeDockCustomizationDisabled() {
-        clearConfiguredNativeDockShadow();
         restoreVendorDockShadow();
         DockStrokeRenderer.refreshInstalledFromCurrentConfig();
         View dockBg = oldBg();
@@ -658,14 +613,17 @@ public class MainHook {
         log("[DC] Mingou workstation mode changed=" + enabled);
         View dockBg = oldBg();
         if (!enabled) {
-            if (VisualRuntimeState.isDockCustomizationEnabled()) suppressVendorDockShadow();
             if (dockBg != null) dockBg.post(() -> {
                 dockBg.setAlpha(1f);
                 syncAll(dockBg);
             });
+            else {
+                try {
+                    syncDockShadow(null, LiquidDockConfig.load().dock);
+                } catch (Throwable ignored) {}
+            }
             return;
         }
-        clearConfiguredNativeDockShadow();
         restoreVendorDockShadow();
         if (dockBg != null) dockBg.post(() -> {
             // The injected Prismal surface is a child of this vendor material. Keep the host
@@ -688,9 +646,13 @@ public class MainHook {
         View dockBg = oldBg();
         View root = dockBg == null ? null : dockBg.getRootView();
         if (root == null || normalLayoutBackup.isEmpty()) return;
-        root.post(() -> restoreNormalHomeLayout(root));
-        root.postDelayed(() -> restoreNormalHomeLayout(root), 250L);
-        root.postDelayed(() -> restoreNormalHomeLayout(root), 700L);
+        root.post(() -> restoreNormalLayout(root));
+        root.postDelayed(() -> restoreNormalLayout(root), 250L);
+        root.postDelayed(() -> restoreNormalLayout(root), 700L);
+    }
+
+    private static void restoreNormalLayout(View root) {
+        restoreNormalHomeLayout(root);
     }
 
     private static void collectHomeItemPositions(View view, boolean restore) {
@@ -780,18 +742,6 @@ public class MainHook {
     }
 
     // ── data ─────────────────────────────────────────────────────────
-
-    private static final class DockShadowClipState {
-        final WeakReference<ViewGroup> group;
-        final boolean clipChildren;
-        final boolean clipToPadding;
-
-        DockShadowClipState(ViewGroup group, boolean clipChildren, boolean clipToPadding) {
-            this.group = new WeakReference<>(group);
-            this.clipChildren = clipChildren;
-            this.clipToPadding = clipToPadding;
-        }
-    }
 
     private static final class NativeDockShadowState {
         final WeakReference<View> target;
