@@ -7,60 +7,51 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.Test;
 
-/** Contracts for the independent whole-Dock shadow during vendor Dock resize animation. */
+/** Contracts for whole-Dock native shadow ownership during Dock resize animation. */
 public class DockShadowAnimationRegressionTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void transientAnimationSiblingDoesNotReparentTrackedShadow() throws Exception {
+    public void resizeAnimationDoesNotCreateOrReorderShadowSiblingViews() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
 
-        assertFalse("temporary siblings must not force strict shadow/background adjacency",
-                main.contains("shadowIndex + 1 == backgroundIndex"));
-        assertTrue("an already-lower shadow remains valid even when animation siblings sit between it and the background",
-                main.contains("shadowIndex < backgroundIndex"));
+        assertFalse("native whole-Dock shadow must not keep a standalone shadow View owner",
+                main.contains("shadowViewRef"));
+        assertFalse("native whole-Dock shadow must not create a sibling View",
+                main.contains("makeDockShadow("));
+        assertFalse("native whole-Dock shadow must not mutate sibling z-order",
+                main.contains("ensureShadowBelowBackground("));
     }
 
     @Test
-    public void shadowZOrderRepairWaitsForResizeAnimationToSettle() throws Exception {
+    public void geometryCallbacksDoNotReapplyNativeShadowMidAnimation() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
-
-        assertTrue("z-order mutations must be deferred while the vendor Dock reports animation",
-                main.contains("if (!animating(dockBg)) {\n            ensureShadowBelowBackground"));
-    }
-
-    @Test
-    public void deliberateShadowReinsertRestoresWeakTracking() throws Exception {
-        String main = Files.readString(MAIN.resolve("MainHook.java"));
-        int helper = main.indexOf("private static void ensureShadowBelowBackground");
-        int next = main.indexOf("private static void installDockResizeAnimationBypass", helper);
-        String body = main.substring(helper, next);
-
-        assertTrue("detach clears the tracked owner, so a deliberate reinsert must restore it",
-                body.contains("shadowViewRef = new WeakReference<>(shadow);"));
-    }
-
-    @Test
-    public void settledShadowGeometryUsesLaidOutBoundsWithoutDuplicateSoftwareLayerResize()
-            throws Exception {
-        String main = Files.readString(MAIN.resolve("MainHook.java"));
-        String geometry = slice(main,
-                "private static void syncShadowGeometry()",
-                "private static void syncAll(View bg)");
         String sync = slice(main,
                 "private static void syncAll(View bg)",
                 "static boolean isWorkstationMode()");
 
-        assertTrue("visible shadow geometry must come from the Dock View after layout",
-                geometry.contains("int targetWidth = dockBg.getWidth() + shadowPad * 2;")
-                        && geometry.contains("int targetHeight = dockBg.getHeight() + shadowPad * 2;"));
-        assertTrue("software shadow layer must not be resized when its dimensions are unchanged",
-                geometry.contains("if (lp.width != targetWidth || lp.height != targetHeight)"));
-        assertFalse("settled shadow must not publish speculative vendor mWidth/mHeight as visible geometry",
+        assertTrue("geometry callbacks must skip native shadow writes while Dock animation is active",
+                sync.contains("if (workstationMode || animating(bg)) return;"));
+        assertTrue("settled geometry callbacks may refresh the configured native shadow",
+                sync.contains("syncDockShadow(bg, LiquidDockConfig.load().dock);"));
+        assertFalse("native shadow must not publish speculative vendor mWidth/mHeight geometry",
                 sync.contains("HookUtil.getIntField(bg, \"mWidth\")")
                         || sync.contains("HookUtil.getIntField(bg, \"mHeight\")"));
-        assertFalse("one settled frame must not perform an immediate resize and then post the same resize again",
-                sync.contains("shadowView.post(MainHook::syncShadowGeometry)"));
+    }
+
+    @Test
+    public void internalNativeShadowWritesCannotOverwriteVendorBackup() throws Exception {
+        String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String ownership = slice(main,
+                "private static void installNativeDockShadowOwnership(",
+                "/** Re-apply the configured native shadow");
+
+        int guard = ownership.indexOf("if (nativeShadowInternalCall) return chain.proceed(args);");
+        int capture = ownership.indexOf("captureVendorDockShadow(args);");
+        assertTrue("internal LiquidDock shadow writes must bypass vendor-state capture",
+                guard >= 0 && capture > guard);
+        assertTrue("direct native writes must always release their recursion guard",
+                main.contains("finally {\n            nativeShadowInternalCall = false;"));
     }
 
     private static String slice(String source, String start, String end) {
