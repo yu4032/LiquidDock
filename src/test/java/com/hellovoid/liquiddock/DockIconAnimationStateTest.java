@@ -93,6 +93,23 @@ public class DockIconAnimationStateTest {
     }
 
     @Test
+    public void geometryCustomizationDefersEarlyRestoreUntilOwnershipEnds() throws Exception {
+        DockIconAnimationState state = new DockIconAnimationState(180L);
+        Object icon = new Object();
+
+        assertFalse(observeChanged(state, icon, 0.89f, 1_000L, false));
+        assertEquals(0f, state.opacity(icon, 1_050L), 0f);
+        assertFalse(observeChanged(state, icon, 0.95f, 1_100L, false));
+        assertEquals(0f, state.opacity(icon, 1_150L), 0f);
+        assertFalse(state.isFading(icon));
+
+        state.end(icon, 1_200L);
+
+        assertTrue(state.isFading(icon));
+        assertEquals(0.75f, state.opacity(icon, 1_290L), 0.0001f);
+    }
+
+    @Test
     public void proxyFrameReportsOnlyRealAnimationStateChanges() throws Exception {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
@@ -167,6 +184,20 @@ public class DockIconAnimationStateTest {
                 "observeProxyFrame", Object.class, float.class, long.class);
         method.setAccessible(true);
         return Boolean.TRUE.equals(method.invoke(state, icon, progress, nowMs));
+    }
+
+    private static boolean observeChanged(
+            DockIconAnimationState state, Object icon, float progress, long nowMs,
+            boolean allowEarlyRestore) throws Exception {
+        try {
+            Method method = DockIconAnimationState.class.getDeclaredMethod(
+                    "observeProxyFrame", Object.class, float.class, long.class, boolean.class);
+            method.setAccessible(true);
+            return Boolean.TRUE.equals(method.invoke(
+                    state, icon, progress, nowMs, allowEarlyRestore));
+        } catch (NoSuchMethodException missing) {
+            return false;
+        }
     }
 
     private static Object sample(
