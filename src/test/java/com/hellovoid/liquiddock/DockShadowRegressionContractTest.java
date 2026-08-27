@@ -40,12 +40,13 @@ public class DockShadowRegressionContractTest {
                 source.contains("restoreVendorDockShadow();"));
         String disable = slice(source,
                 "static void onRuntimeDockShadowDisabled()",
-                "static void onRuntimeDockCustomizationDisabled()");
-        assertTrue("runtime shadow disable must suppress the vendor shadow while Dock customization still owns it",
-                disable.contains("suppressVendorDockShadow();"));
-        assertTrue("runtime shadow disable must clear only LiquidDock's visible configured shadow",
-                disable.contains("clearConfiguredNativeDockShadow();"));
-        assertFalse("runtime shadow disable must not restore vendor shadow until full customization releases ownership",
+                "static void onRuntimeDockShadowEnabled()");
+        assertTrue("shadow-only disable must clear the authoritative native target while customization still owns it",
+                disable.contains("View target = nativeShadowTarget();")
+                        && disable.contains("clearNativeDockShadowArgs(target)"));
+        assertTrue("parent customization teardown must not be followed by a child clear",
+                disable.contains("!VisualRuntimeState.isDockCustomizationEnabled()"));
+        assertFalse("runtime shadow-only disable must not restore vendor state",
                 disable.contains("restoreVendorDockShadow();"));
     }
 
