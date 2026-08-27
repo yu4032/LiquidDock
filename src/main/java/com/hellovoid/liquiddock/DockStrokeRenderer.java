@@ -24,10 +24,10 @@ import java.util.WeakHashMap;
  *  - no Paint.Style.STROKE for the configurable Dock border;
  *  - the center of the Dock is geometrically excluded from every border draw.
  *
- * A border is built from a validated outer path and inner path.  The canvas is
+ * A border is built from a validated outer path and inner path. The canvas is
  * clipped to the outer path and then clipOutPath(inner) removes the complete
- * Dock interior.  If the inner contour is ever invalid during an animation,
- * that one border frame is skipped instead of degrading into a filled mask.
+ * Dock interior. Stroke shadow is deliberately not painted into that interior;
+ * it is delegated to the host's native hardware shadow path and outline.
  */
 final class DockStrokeRenderer {
     private static final float MAX_THICKNESS_FRACTION = 0.20f;
@@ -79,7 +79,7 @@ final class DockStrokeRenderer {
     }
 
     /**
-     * Configure a View's foreground border.  For Liquid Glass this View is the glass
+     * Configure a View's foreground border. For Liquid Glass this View is the glass
      * itself; for native mode it is HotSeatsListContentBlurBackground2.
      */
     static void configure(View host, LiquidDockConfig.Dock config, float radius) {
@@ -119,7 +119,9 @@ final class DockStrokeRenderer {
                     host.setForeground(preserveExistingForeground
                             ? installed.baseForeground() : null);
                 }
-                INSTALLED.remove(host);
+                applyNativeOuterShadow(host, null);
+                // Keep the weak installation record. Runtime false->true must be able to reattach
+                // the same drawable without waiting for another vendor radius callback.
                 return;
             }
 
@@ -135,13 +137,16 @@ final class DockStrokeRenderer {
                 installed = new StrokeDrawable(
                         preserveExistingForeground ? current : null);
                 INSTALLED.put(host, installed);
-                host.setForeground(installed);
             } else if (!preserveExistingForeground) {
                 installed.setBaseForeground(null);
             }
 
             installed.setStyle(style);
             installed.setRadius(radius);
+            if (host.getForeground() != installed) {
+                host.setForeground(installed);
+            }
+            applyNativeOuterShadow(host, style);
             host.invalidate();
         }
     }
@@ -156,9 +161,9 @@ final class DockStrokeRenderer {
                 if (host.getForeground() == installed) {
                     host.setForeground(installed.baseForeground());
                 }
+                applyNativeOuterShadow(host, null);
                 host.invalidate();
             }
-            INSTALLED.clear();
         }
     }
 
@@ -181,9 +186,32 @@ final class DockStrokeRenderer {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
-                installed.setStyle(Style.from(config, host));
+                Style style = Style.from(config, host);
+                installed.setStyle(style);
+                if (host.getForeground() != installed) {
+                    host.setForeground(installed);
+                }
+                applyNativeOuterShadow(host, style);
                 host.invalidate();
             }
+        }
+    }
+
+    private static void applyNativeOuterShadow(View host, Style style) {
+        if (host == null) return;
+        boolean enabled = style != null
+                && style.shadowEnabled
+                && style.shadowRadiusPx > 0f
+                && style.shadowAlpha > 0;
+        int color = enabled
+                ? Color.argb(Math.max(0, Math.min(255, style.shadowAlpha)), 0, 0, 0)
+                : Color.TRANSPARENT;
+        float radius = enabled ? style.shadowRadiusPx : 0f;
+        try {
+            HookUtil.invokeStatic("com.miui.home.launcher.common.MiShadowUtils",
+                    "applyViewShadow", host, color, 0f, 0f, radius, 1f);
+        } catch (Throwable error) {
+            MainHook.log("[DC] native stroke outer shadow unavailable: " + error);
         }
     }
 
@@ -313,18 +341,11 @@ final class DockStrokeRenderer {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path outer = new Path();
         private final Path inner = new Path();
-        private final Path shadowOuter = new Path();
-        private final Path shadowInner = new Path();
         private final RectF outerRect = new RectF();
         private final RectF innerRect = new RectF();
-        private final RectF shadowRect = new RectF();
 
         private Style style;
         private float radius;
-        private float geometryThickness;
-        private float outerRadius;
-        private float innerRadius;
-        private float innerCp;
         private boolean geometryDirty = true;
         private boolean geometryValid;
         private int drawableAlpha = 255;
@@ -377,88 +398,26 @@ final class DockStrokeRenderer {
             }
 
             boolean strokeVisible = Color.alpha(s.color) > 0 && drawableAlpha > 0;
-            boolean shadowVisible = s.shadowEnabled
-                    && s.shadowRadiusPx > 0f
-                    && s.shadowAlpha > 0
-                    && drawableAlpha > 0;
-            if (!strokeVisible && !shadowVisible) return;
+            if (!strokeVisible) return;
             if (!ensureGeometry(s, bounds)) return;
 
-            if (strokeVisible) {
-                int alpha = Math.round(
-                        Color.alpha(s.color) * drawableAlpha / 255f);
-                paint.setShader(null);
-                paint.setStyle(Paint.Style.FILL);
-                paint.setColorFilter(colorFilter);
-                paint.setColor(Color.argb(
-                        alpha,
-                        Color.red(s.color),
-                        Color.green(s.color),
-                        Color.blue(s.color)));
-
-                // The central Dock body is removed from the clip before any stroke color is
-                // drawn. This prevents the old "whole Dock mask" regression.
-                int save = canvas.save();
-                canvas.clipPath(outer);
-                canvas.clipOutPath(inner);
-                canvas.drawPath(outer, paint);
-                canvas.restoreToCount(save);
-            }
-
-            // Draw after the foreground stroke, but in a different region: start at the stroke's
-            // inner contour and fade farther into the Dock body. The old implementation painted
-            // shadow into the same border ring and then covered it with the stroke itself.
-            drawStrokeShadow(canvas, s);
-        }
-
-        private void drawStrokeShadow(Canvas canvas, Style s) {
-            if (!s.shadowEnabled
-                    || s.shadowRadiusPx <= 0f
-                    || s.shadowAlpha <= 0
-                    || innerRect.width() <= 1f
-                    || innerRect.height() <= 1f) {
-                return;
-            }
-
-            float interiorLimit = Math.max(0f,
-                    Math.min(innerRect.width(), innerRect.height()) * 0.25f);
-            float reach = Math.min(s.shadowRadiusPx, interiorLimit);
-            if (!(reach > 0f)) return;
-            int steps = Math.max(1, Math.min(40, (int) Math.ceil(reach)));
-
+            int alpha = Math.round(
+                    Color.alpha(s.color) * drawableAlpha / 255f);
             paint.setShader(null);
             paint.setStyle(Paint.Style.FILL);
             paint.setColorFilter(colorFilter);
+            paint.setColor(Color.argb(
+                    alpha,
+                    Color.red(s.color),
+                    Color.green(s.color),
+                    Color.blue(s.color)));
 
-            for (int i = 1; i <= steps; i++) {
-                float outerDistance = reach * (i - 1f) / steps;
-                float innerDistance = reach * i / steps;
-
-                buildInwardShadowContour(shadowOuter, outerDistance, s);
-                buildInwardShadowContour(shadowInner, innerDistance, s);
-
-                float strength = 1f - (i - 1f) / steps;
-                int alpha = Math.round(
-                        s.shadowAlpha * strength * strength * drawableAlpha / 255f);
-                if (alpha <= 0) continue;
-                paint.setColor(Color.argb(alpha, 0, 0, 0));
-
-                int save = canvas.save();
-                canvas.clipPath(shadowOuter);
-                canvas.clipOutPath(shadowInner);
-                canvas.drawPath(shadowOuter, paint);
-                canvas.restoreToCount(save);
-            }
-        }
-
-        private void buildInwardShadowContour(Path out, float distance, Style s) {
-            float inset = Math.max(0f, distance);
-            shadowRect.set(innerRect);
-            shadowRect.inset(inset, inset);
-            float contourRadius = Math.max(0f, innerRadius - inset);
-            out.rewind();
-            if (shadowRect.width() <= 1f || shadowRect.height() <= 1f) return;
-            buildShape(out, shadowRect, contourRadius, s.squircle, innerCp);
+            // The central Dock body is removed from the clip before any stroke color is drawn.
+            int save = canvas.save();
+            canvas.clipPath(outer);
+            canvas.clipOutPath(inner);
+            canvas.drawPath(outer, paint);
+            canvas.restoreToCount(save);
         }
 
         private boolean ensureGeometry(Style s, Rect bounds) {
@@ -514,11 +473,6 @@ final class DockStrokeRenderer {
                     || innerRect.height() < height * MIN_INTERIOR_FRACTION) {
                 return false;
             }
-
-            geometryThickness = thickness;
-            this.outerRadius = outerRadius;
-            this.innerRadius = innerRadius;
-            this.innerCp = innerCp;
 
             outer.rewind();
             inner.rewind();
