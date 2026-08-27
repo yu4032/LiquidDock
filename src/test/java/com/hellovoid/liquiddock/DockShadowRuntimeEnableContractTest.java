@@ -11,16 +11,18 @@ public class DockShadowRuntimeEnableContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void wholeDockShadowFalseToTrueReappliesCurrentVisibleOwner() throws Exception {
+    public void wholeDockShadowFalseToTrueReappliesAuthoritativeNativeOwner() throws Exception {
         String state = Files.readString(MAIN.resolve("VisualRuntimeState.java"));
         String main = Files.readString(MAIN.resolve("MainHook.java"));
 
         assertTrue("false->true dock_shadow must dispatch an immediate reapply",
                 state.contains("!wasDockShadowEnabled && nextLiveDockShadowEnabled")
                         && state.contains("MainHook.onRuntimeDockShadowEnabled()"));
-        assertTrue("whole-Dock runtime enable must resync the already-bound visible Dock",
+        assertTrue("whole-Dock runtime enable must resync the already-known native target",
                 main.contains("static void onRuntimeDockShadowEnabled()")
-                        && main.contains("syncDockShadow(dockBg, LiquidDockConfig.load().dock);"));
+                        && main.contains("syncDockShadow(oldBg(), LiquidDockConfig.load().dock);"));
+        assertTrue("sync must use the authoritative Launcher native owner",
+                main.contains("View target = nativeShadowTarget();"));
     }
 
     @Test
