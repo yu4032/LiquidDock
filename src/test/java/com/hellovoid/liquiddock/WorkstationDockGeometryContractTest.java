@@ -58,9 +58,11 @@ public class WorkstationDockGeometryContractTest {
                 main.contains("syncShadowGeometry();"));
         assertFalse("whole-Dock shadow must not have a sibling View geometry owner",
                 main.contains("shadowViewRef"));
-        assertTrue("entering workstation must restore the vendor native shadow",
-                main.contains("restoreVendorDockShadow();"));
-        assertTrue("leaving workstation may reapply the normal configured native shadow",
+        assertFalse("whole-Dock shadow must not retain a terminal native target owner",
+                main.contains("nativeShadowTargetRef"));
+        assertTrue("workstation transitions must ask HotSeats to render its own current shadow",
+                main.contains("refreshVendorDockShadow();"));
+        assertTrue("leaving workstation may refresh the normal Dock config reference",
                 main.contains("syncAll(dockBg);"));
     }
 }
