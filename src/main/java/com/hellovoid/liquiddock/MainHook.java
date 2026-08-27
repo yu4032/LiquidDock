@@ -460,6 +460,16 @@ public class MainHook {
         clearConfiguredNativeDockShadow();
     }
 
+    static void onRuntimeDockShadowEnabled() {
+        View dockBg = oldBg();
+        if (dockBg == null) return;
+        try {
+            syncDockShadow(dockBg, LiquidDockConfig.load().dock);
+        } catch (Throwable e) {
+            log("[DC] runtime Dock shadow enable failed: " + e);
+        }
+    }
+
     static void onRuntimeDockCustomizationDisabled() {
         clearConfiguredNativeDockShadow();
         restoreVendorDockShadow();
