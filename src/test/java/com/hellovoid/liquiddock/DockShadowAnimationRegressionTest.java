@@ -44,7 +44,7 @@ public class DockShadowAnimationRegressionTest {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String ownership = slice(main,
                 "private static void installNativeDockShadowOwnership(",
-                "/** Re-apply the configured native shadow");
+                "/** Re-apply the configured visible shadow");
 
         int guard = ownership.indexOf("if (nativeShadowInternalCall) return chain.proceed(args);");
         int capture = ownership.indexOf("captureVendorDockShadow(args);");
