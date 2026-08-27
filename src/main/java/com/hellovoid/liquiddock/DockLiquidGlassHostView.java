@@ -15,7 +15,9 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        setWillNotDraw(true);
+        // Keep the normal View.draw() path so a foreground StrokeDrawable is actually rendered.
+        // This host still has no onDraw() body; the only local drawing is the foreground edge.
+        setWillNotDraw(false);
         setClipChildren(false);
         setClipToPadding(false);
         setClickable(false);
