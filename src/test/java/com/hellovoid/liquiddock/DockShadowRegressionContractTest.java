@@ -38,8 +38,15 @@ public class DockShadowRegressionContractTest {
                 source.contains("captureVendorDockShadow(args);"));
         assertTrue("Dock customization teardown must restore exact vendor shadow parameters",
                 source.contains("restoreVendorDockShadow();"));
-        assertTrue("runtime shadow disable must clear only LiquidDock's configured shadow",
-                source.contains("static void onRuntimeDockShadowDisabled() {\n        clearConfiguredNativeDockShadow();"));
+        String disable = slice(source,
+                "static void onRuntimeDockShadowDisabled()",
+                "static void onRuntimeDockCustomizationDisabled()");
+        assertTrue("runtime shadow disable must suppress the vendor shadow while Dock customization still owns it",
+                disable.contains("suppressVendorDockShadow();"));
+        assertTrue("runtime shadow disable must clear only LiquidDock's visible configured shadow",
+                disable.contains("clearConfiguredNativeDockShadow();"));
+        assertFalse("runtime shadow disable must not restore vendor shadow until full customization releases ownership",
+                disable.contains("restoreVendorDockShadow();"));
     }
 
     @Test
@@ -53,5 +60,12 @@ public class DockShadowRegressionContractTest {
                         || main.contains("liquidGlassHostView.setTranslationY"));
         assertTrue("zero-copy host must be attached directly to the vendor material host",
                 hook.contains("materialHost.addView(host, materialHost.getChildCount(), hostLp);"));
+    }
+
+    private static String slice(String source, String start, String end) {
+        int from = source.indexOf(start);
+        int to = source.indexOf(end, Math.max(0, from));
+        if (from < 0 || to <= from) return "";
+        return source.substring(from, to);
     }
 }
