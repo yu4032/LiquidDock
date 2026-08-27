@@ -31,22 +31,31 @@ public class DockStrokeShadowContractTest {
     @Test public void shadowUsesSharedStrokeGeometryWithoutIndependentView() throws IOException {
         String source = source();
         assertTrue(source.contains("drawStrokeShadow(canvas, s);"));
-        assertTrue(source.contains("buildInterpolatedContour(shadowOuter"));
-        assertTrue(source.contains("buildInterpolatedContour(shadowInner"));
-        assertTrue(source.contains("buildShape(out, shadowRect"));
-        assertTrue(source.contains("outerRect"));
+        assertTrue(source.contains("buildInwardShadowContour"));
         assertTrue(source.contains("innerRect"));
         assertFalse(source.contains("Path.Op."));
         assertFalse(source.contains("setLayerType(View.LAYER_TYPE_SOFTWARE"));
     }
 
-    @Test public void shadowIsClippedOutOfDockInteriorAndDrawnBeforeStroke() throws IOException {
+    @Test public void shadowIsDrawnAfterStrokeAndExtendsIntoDockInterior() throws IOException {
         String source = source();
-        assertTrue(source.contains("canvas.clipPath(shadowOuter);"));
-        assertTrue(source.contains("canvas.clipOutPath(shadowInner);"));
-        int shadow = source.indexOf("drawStrokeShadow(canvas, s);");
-        int stroke = source.indexOf("canvas.drawPath(outer, paint);", shadow);
-        assertTrue("stroke shadow must be rendered before the foreground stroke",
-                shadow >= 0 && stroke > shadow);
+        int stroke = source.indexOf("canvas.drawPath(outer, paint);");
+        int shadow = source.indexOf("drawStrokeShadow(canvas, s);", stroke);
+        assertTrue("foreground stroke must be rendered before the inward shadow",
+                stroke >= 0 && shadow > stroke);
+        assertTrue("the inward shadow must start from the stroke inner contour",
+                source.contains("buildInwardShadowContour(shadowOuter, outerDistance, s);"));
+        assertTrue("the inward shadow must advance farther into the Dock interior",
+                source.contains("buildInwardShadowContour(shadowInner, innerDistance, s);"));
+        assertFalse("stroke shadow must not reuse the same outer-to-inner border ring",
+                source.contains("buildInterpolatedContour(shadowOuter"));
+    }
+
+    @Test public void transparentStrokeColorDoesNotSuppressEnabledShadow() throws IOException {
+        String source = source();
+        assertTrue("stroke and shadow visibility must be evaluated independently",
+                source.contains("boolean strokeVisible") && source.contains("boolean shadowVisible"));
+        assertFalse("draw must not return solely because the stroke color is transparent",
+                source.contains("|| Color.alpha(s.color) <= 0\n                    || bounds.width()"));
     }
 }
