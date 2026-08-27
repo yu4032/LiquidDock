@@ -26,7 +26,7 @@ public class DockRuntimeOwnershipContractTest {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String nativeShadow = methodSlice(main,
                 "private static void installNativeDockShadowOwnership(",
-                "/** Re-apply the configured visible shadow");
+                "/** Re-apply the configured native shadow");
 
         assertTrue(nativeShadow.contains("VisualRuntimeState.isDockCustomizationEnabled()"));
         assertTrue(nativeShadow.contains("return chain.proceed(args);"));
@@ -42,11 +42,13 @@ public class DockRuntimeOwnershipContractTest {
                 "static void onRuntimeDockShadowDisabled()");
 
         assertTrue(sync.contains("VisualRuntimeState.isDockShadowEnabled()"));
-        assertTrue(sync.contains("clearConfiguredNativeDockShadow();"));
+        assertTrue(sync.contains("View target = nativeShadowTarget();"));
+        assertTrue(sync.contains("clearNativeDockShadowArgs(target)"));
         assertTrue(main.contains("static void onRuntimeDockShadowDisabled()"));
-        assertTrue(main.contains("clearNativeDockShadowArgs"));
         assertFalse("disabled whole-Dock shadow must not be recreated as a separate View",
                 main.contains("makeDockShadow("));
+        assertFalse("disabled whole-Dock shadow must not create a second native owner",
+                main.contains("customShadowTargetRef"));
     }
 
     @Test
