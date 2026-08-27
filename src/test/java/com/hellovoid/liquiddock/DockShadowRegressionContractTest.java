@@ -10,7 +10,7 @@ import java.nio.file.Paths;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Regression contracts for the independent Dock shadow. */
+/** Regression contracts for whole-Dock native shadow ownership. */
 public class DockShadowRegressionContractTest {
     private static String mainHook() throws IOException {
         return Files.readString(
@@ -19,23 +19,27 @@ public class DockShadowRegressionContractTest {
     }
 
     @Test
-    public void customDockShadowUsesSoftwareLayerForPaintShadowLayer() throws IOException {
+    public void wholeDockShadowUsesMiuiNativeShadowInsteadOfSoftwareLayer() throws IOException {
         String source = mainHook();
-        assertTrue("Paint.setShadowLayer requires the custom shadow View to stay software-rendered",
+        assertTrue("whole-Dock shadow must own the vendor Mi Shadow path",
+                source.contains("installNativeDockShadowOwnership(classLoader)"));
+        assertTrue("configured shadow must be applied through the vendor native shadow helper",
+                source.contains("applyConfiguredNativeDockShadow"));
+        assertFalse("whole-Dock shadow must not force a software View layer",
                 source.contains("view.setLayerType(View.LAYER_TYPE_SOFTWARE, null);"));
+        assertFalse("whole-Dock shadow must not draw with Paint.setShadowLayer",
+                source.contains("paint.setShadowLayer("));
     }
 
     @Test
-    public void dockAnimationDefersButSettledFramesResyncIndependentShadowGeometry() throws IOException {
+    public void vendorShadowStateIsCapturedAndRestoredOnOwnershipRelease() throws IOException {
         String source = mainHook();
-        assertTrue("glass/stroke may track animation, but the independent shadow must wait until settled",
-                source.contains("boolean anim = animating(bg);"));
-        assertTrue("settled Dock frames must resync independent shadow position",
-                source.contains("if (!anim)"));
-        assertFalse("shadow position must not be gated only by a width change",
-                source.contains("if (!anim && bgW != lastShadowW)"));
-        assertTrue("shadow corner geometry must not follow transient radius animation frames",
-                source.contains("if (!animating(v)) strokeR = Math.max(0f, systemRadius + co);"));
+        assertTrue("vendor shadow calls must be captured before LiquidDock substitutes parameters",
+                source.contains("captureVendorDockShadow(args);"));
+        assertTrue("Dock customization teardown must restore exact vendor shadow parameters",
+                source.contains("restoreVendorDockShadow();"));
+        assertTrue("runtime shadow disable must clear only LiquidDock's configured shadow",
+                source.contains("static void onRuntimeDockShadowDisabled() {\n        clearConfiguredNativeDockShadow();"));
     }
 
     @Test
