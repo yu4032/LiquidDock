@@ -178,7 +178,8 @@ final class MiuixGlassHook {
             MainHook.log(ZERO_COPY_TAG + " zero-copy unavailable; " + inactiveVisualState(dockBg));
         }
 
-        DockStrokeRenderer.configureReplacingForeground(dockBg, config.dock, nativeRadius);
+        DockStrokeRenderer.configureReplacingForeground(
+                host, config.dock, nativeRadius);
         MainHook.syncDockShadow(dockBg, config.dock);
         MainHook.log(TAG + " glass composed inside native 307 material shell class="
                 + dockBg.getClass().getSimpleName()
@@ -243,7 +244,8 @@ final class MiuixGlassHook {
         suppressVendorMaterialBody(dockBg, nativeRadius);
         host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
         Miuix307ZeroCopyRenderer.sync(config.glass, Math.round(config.glass.blur));
-        DockStrokeRenderer.configureReplacingForeground(dockBg, config.dock, nativeRadius);
+        DockStrokeRenderer.configureReplacingForeground(
+                host, config.dock, nativeRadius);
         MainHook.syncDockShadow(dockBg, config.dock);
         host.bringToFront();
         host.invalidate();
