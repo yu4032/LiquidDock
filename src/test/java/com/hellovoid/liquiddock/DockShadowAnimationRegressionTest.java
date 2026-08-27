@@ -49,7 +49,7 @@ public class DockShadowAnimationRegressionTest {
                 "private static void syncAll(View bg)");
         String sync = slice(main,
                 "private static void syncAll(View bg)",
-                "private static void removeDockShadow()");
+                "static boolean isWorkstationMode()");
 
         assertTrue("visible shadow geometry must come from the Dock View after layout",
                 geometry.contains("int targetWidth = dockBg.getWidth() + shadowPad * 2;")
