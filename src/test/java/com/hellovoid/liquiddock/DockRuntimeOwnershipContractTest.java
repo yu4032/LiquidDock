@@ -26,7 +26,7 @@ public class DockRuntimeOwnershipContractTest {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String nativeShadow = methodSlice(main,
                 "private static void installNativeDockShadowOwnership(",
-                "/** Re-apply the configured native shadow");
+                "/** Re-apply the configured visible shadow");
 
         assertTrue(nativeShadow.contains("VisualRuntimeState.isDockCustomizationEnabled()"));
         assertTrue(nativeShadow.contains("return chain.proceed(args);"));
