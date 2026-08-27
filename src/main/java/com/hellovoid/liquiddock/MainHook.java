@@ -492,8 +492,8 @@ public class MainHook {
                 android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
                 a.setDuration(durationMs);
                 a.setInterpolator(new android.view.animation.PathInterpolator(.2f, 0f, 0f, 1f));
-                a.addUpdateListener(anim -> {
-                    float t = (Float) anim.getAnimatedValue();
+                a.addUpdateListener(animator -> {
+                    float t = (Float) animator.getAnimatedValue();
                     HookUtil.setIntField(view, "mWidth", Math.round(fromW + (targetW - fromW) * t));
                     HookUtil.setIntField(view, "mHeight", Math.round(fromH + (targetH - fromH) * t));
                     HookUtil.setField(view, "mCornerRadius", fromR + (targetR - fromR) * t);
@@ -769,20 +769,22 @@ public class MainHook {
             shadowView.setVisibility(View.GONE);
             return;
         }
-        if (animating(bg)) return;
+        boolean anim = animating(bg);
         try {
-            bgW = bg.getWidth();
-            bgH = bg.getHeight();
-            try {
-                Object r = HookUtil.getField(bg, "mCornerRadius");
-                if (r instanceof Number) bgR = ((Number) r).floatValue();
-            } catch (Throwable ignored) {}
-            if (bgW <= 0 || bgH <= 0) {
-                shadowView.setVisibility(View.GONE);
-                return;
+            if (!anim) {
+                bgW = bg.getWidth();
+                bgH = bg.getHeight();
+                try {
+                    Object r = HookUtil.getField(bg, "mCornerRadius");
+                    if (r instanceof Number) bgR = ((Number) r).floatValue();
+                } catch (Throwable ignored) {}
+                if (bgW <= 0 || bgH <= 0) {
+                    shadowView.setVisibility(View.GONE);
+                    return;
+                }
+                shadowView.setVisibility(View.VISIBLE);
+                syncShadowGeometry();
             }
-            shadowView.setVisibility(View.VISIBLE);
-            syncShadowGeometry();
         } catch (Throwable ignored) {}
     }
 
