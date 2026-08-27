@@ -28,9 +28,7 @@ final class DockGlassItemRegistry {
     }
     static synchronized void observeLaunchAnimationFrame(View view, float progress) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
-        boolean allowEarlyRestore = !VisualRuntimeState.isDockCustomizationEnabled();
-        if (!ANIMATION.observeProxyFrame(
-                view, progress, SystemClock.uptimeMillis(), allowEarlyRestore)) return;
+        if (!ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis())) return;
         view.postInvalidateOnAnimation();
     }
     static synchronized void endLaunchAnimation(View view) {

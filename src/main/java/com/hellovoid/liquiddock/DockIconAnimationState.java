@@ -38,18 +38,13 @@ final class DockIconAnimationState {
     }
 
     synchronized boolean observeProxyFrame(Object icon, float progress, long nowMs) {
-        return observeProxyFrame(icon, progress, nowMs, true);
-    }
-
-    synchronized boolean observeProxyFrame(
-            Object icon, float progress, long nowMs, boolean allowEarlyRestore) {
         if (icon == null) return false;
         Record record = states.get(icon);
         if (record == null) {
             record = new Record();
             states.put(icon, record);
         }
-        if (allowEarlyRestore && record.fadeStartedMs == HIDDEN && Float.isFinite(progress)
+        if (record.fadeStartedMs == HIDDEN && Float.isFinite(progress)
                 && progress >= RESTORE_PROGRESS) {
             record.fadeStartedMs = nowMs;
             return true;
