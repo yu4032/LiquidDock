@@ -51,11 +51,23 @@ public class DockVendorNativeShadowReuseContractTest {
     }
 
     @Test
-    public void geometryCallbacksDoNotReplayWholeDockShadow() throws Exception {
-        String glass = Files.readString(
-                Paths.get("src/main/java/com/hellovoid/liquiddock/MiuixGlassHook.java"),
-                StandardCharsets.UTF_8);
-        assertFalse("vendor updateRoundRect owns native shadow geometry; zero-copy geometry sync must not replay it",
-                glass.contains("MainHook.syncDockShadow(dockBg, config.dock);"));
+    public void geometryCallbacksOnlyTrackConfigAndNeverReplayWholeDockShadow() throws Exception {
+        String main = mainHook();
+        String sync = slice(main,
+                "static void syncDockShadow(",
+                "static void onRuntimeDockShadowDisabled()");
+        assertTrue("geometry sync may keep the current background/config reference",
+                sync.contains("setOldBg(dockBg)"));
+        assertFalse("vendor updateRoundRect owns native shadow geometry; sync must stay shadow-passive",
+                sync.contains("refreshVendorDockShadow()"));
+        assertFalse("geometry sync must never invoke MiShadow directly",
+                sync.contains("applyViewShadow"));
+    }
+
+    private static String slice(String source, String start, String end) {
+        int from = source.indexOf(start);
+        int to = source.indexOf(end, Math.max(0, from));
+        if (from < 0 || to <= from) return "";
+        return source.substring(from, to);
     }
 }
