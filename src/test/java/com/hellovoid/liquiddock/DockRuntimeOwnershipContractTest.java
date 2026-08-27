@@ -25,28 +25,28 @@ public class DockRuntimeOwnershipContractTest {
     public void permanentDockHooksPassThroughWhenCustomizationIsLiveDisabled() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String nativeShadow = methodSlice(main,
-                "private static void installNativeDockShadowSuppression(",
-                "/** Install the independent whole-Dock shadow");
+                "private static void installNativeDockShadowOwnership(",
+                "/** Re-apply the configured native shadow");
 
         assertTrue(nativeShadow.contains("VisualRuntimeState.isDockCustomizationEnabled()"));
-        assertTrue(main.contains("if (!VisualRuntimeState.isDockCustomizationEnabled())"));
-        assertFalse(main.contains("if (dockCustomization) {\n            installNativeDockShadowSuppression"));
+        assertTrue(nativeShadow.contains("return chain.proceed(args);"));
+        assertFalse(main.contains("if (dockCustomization) {\n            installNativeDockShadowOwnership"));
         assertTrue(main.contains("static void onRuntimeDockCustomizationDisabled()"));
+        assertTrue(main.contains("restoreVendorDockShadow();"));
     }
 
     @Test
     public void dockShadowCannotBeResurrectedAfterLiveDisable() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String sync = methodSlice(main, "static void syncDockShadow(",
-                "/** Keep the reusable shadow below");
-        String syncAll = methodSlice(main, "private static void syncAll(",
-                "static boolean isWorkstationMode()");
+                "static void onRuntimeDockShadowDisabled()");
 
         assertTrue(sync.contains("VisualRuntimeState.isDockShadowEnabled()"));
-        assertTrue(sync.contains("removeDockShadow()"));
-        assertTrue(syncAll.contains("VisualRuntimeState.isDockShadowEnabled()"));
+        assertTrue(sync.contains("clearConfiguredNativeDockShadow();"));
         assertTrue(main.contains("static void onRuntimeDockShadowDisabled()"));
-        assertTrue(main.contains("private static void removeDockShadow()"));
+        assertTrue(main.contains("clearNativeDockShadowArgs"));
+        assertFalse("disabled whole-Dock shadow must not be recreated as a separate View",
+                main.contains("makeDockShadow("));
     }
 
     @Test
