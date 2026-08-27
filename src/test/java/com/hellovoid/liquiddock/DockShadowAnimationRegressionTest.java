@@ -24,34 +24,44 @@ public class DockShadowAnimationRegressionTest {
     }
 
     @Test
-    public void geometryCallbacksDoNotReapplyNativeShadowMidAnimation() throws Exception {
+    public void geometryCallbacksStayShadowPassiveDuringResize() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
-        String sync = slice(main,
+        String syncAll = slice(main,
                 "private static void syncAll(View bg)",
                 "static boolean isWorkstationMode()");
+        String syncShadow = slice(main,
+                "static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock)",
+                "static void onRuntimeDockShadowDisabled()");
 
-        assertTrue("geometry callbacks must skip native shadow writes while Dock animation is active",
-                sync.contains("if (workstationMode || animating(bg)) return;"));
-        assertTrue("settled geometry callbacks may refresh the configured native shadow",
-                sync.contains("syncDockShadow(bg, LiquidDockConfig.load().dock);"));
-        assertFalse("native shadow must not publish speculative vendor mWidth/mHeight geometry",
-                sync.contains("HookUtil.getIntField(bg, \"mWidth\")")
-                        || sync.contains("HookUtil.getIntField(bg, \"mHeight\")"));
+        assertTrue("geometry callbacks must skip shadow/config work while Dock animation is active",
+                syncAll.contains("if (workstationMode || animating(bg)) return;"));
+        assertTrue("settled geometry may only publish the latest background/config",
+                syncAll.contains("syncDockShadow(bg, LiquidDockConfig.load().dock);"));
+        assertFalse("geometry sync must not redraw HotSeats shadow",
+                syncShadow.contains("refreshVendorDockShadow()"));
+        assertFalse("geometry sync must not invoke terminal MiShadow directly",
+                syncShadow.contains("applyViewShadow"));
+        assertFalse("geometry sync must not publish speculative vendor mWidth/mHeight geometry",
+                syncAll.contains("HookUtil.getIntField(bg, \"mWidth\")")
+                        || syncAll.contains("HookUtil.getIntField(bg, \"mHeight\")"));
     }
 
     @Test
-    public void internalNativeShadowWritesCannotOverwriteVendorBackup() throws Exception {
+    public void temporaryHotSeatsOverridesAreRestoredAfterVendorCall() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String ownership = slice(main,
                 "private static void installNativeDockShadowOwnership(",
-                "/** Re-apply the configured native shadow");
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(");
 
-        int guard = ownership.indexOf("if (nativeShadowInternalCall) return chain.proceed(args);");
-        int capture = ownership.indexOf("captureVendorDockShadow(args);");
-        assertTrue("internal LiquidDock shadow writes must bypass vendor-state capture",
-                guard >= 0 && capture > guard);
-        assertTrue("direct native writes must always release their recursion guard",
-                main.contains("finally {\n            nativeShadowInternalCall = false;"));
+        assertTrue("vendor showViewShadow must execute inside a temporary override scope",
+                ownership.contains("HotSeatsShadowScope scope = pushConfiguredHotSeatsShadow(hotSeats);")
+                        && ownership.contains("scope.close();"));
+        assertTrue("temporary field values must be restored after the vendor call",
+                main.contains("state.field.set(target, state.value)"));
+        assertFalse("old terminal-API recursion guard must not remain",
+                main.contains("nativeShadowInternalCall"));
+        assertFalse("old vendor MiShadow argument backup must not remain",
+                main.contains("captureVendorDockShadow"));
     }
 
     private static String slice(String source, String start, String end) {
