@@ -55,14 +55,16 @@ public class P1RuntimeLifecycleContractTest {
         int zeroCopyInstall = main.indexOf("Miuix307MaterialPipeline.install(classLoader, config)");
         assertTrue("whole-Dock shadow setup must be installed before the 307 early return",
                 shadowInstall >= 0 && zeroCopyInstall >= 0 && shadowInstall < zeroCopyInstall);
-        assertTrue("zero-copy geometry updates must keep the independent whole-Dock shadow synced",
+        assertTrue("zero-copy geometry updates must keep native whole-Dock shadow ownership synced",
                 glass.contains("MainHook.syncDockShadow(dockBg, config.dock)"));
         assertTrue("shadow setup must resolve the active vendor material, not only mBlurBackground2",
                 main.contains("getHotSeatsBackground"));
-        assertTrue("workstation must keep the Prismal host visible while hiding its shadow",
-                main.contains("if (workstationMode) {\n            dockBg.setAlpha(1f);"));
-        assertTrue("theme replacement in the same parent must move the shadow under the active material",
-                main.contains("ensureShadowBelowBackground(parent, currentShadow, dockBg);"));
+        assertTrue("native shadow target must be discovered from the vendor Dock shadow target",
+                main.contains("getMingouStaticDockBlurShadowTarget"));
+        assertTrue("workstation must return native shadow ownership to the vendor",
+                main.contains("restoreVendorDockShadow();"));
+        assertFalse("theme replacement must not create or reparent a standalone shadow sibling",
+                main.contains("ensureShadowBelowBackground("));
     }
 
     @Test
