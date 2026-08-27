@@ -26,7 +26,6 @@ public class MainHook {
     private static void setNativeShadowTarget(View view) {
         nativeShadowTargetRef = new WeakReference<>(view);
     }
-    private static int lastShadowW;
     private static int bgW, bgH, shadowPad;
     private static float bgR = 30f;
     private static float strokeR = 30f;
@@ -137,7 +136,6 @@ public class MainHook {
 
         try {
             String hsc = "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2";
-
             // spacing
             if (spacing != 0) {
                 try {
@@ -402,7 +400,6 @@ public class MainHook {
             ((ViewGroup) shadow.getParent()).removeView(shadow);
         }
         shadowViewRef = new WeakReference<>(null);
-        lastShadowW = 0;
     }
 
     static void onRuntimeDockShadowDisabled() {
@@ -545,8 +542,10 @@ public class MainHook {
     private static void installWorkstationModeGuard(ClassLoader cl) {
         boolean detected = false;
         try {
-            Class<?> mc = Class.forName("com.miui.home.launcher.allapps.LauncherModeController", false, cl);
-            Object laptopResult = HookUtil.invokeStatic("com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+            Class<?> mc = Class.forName(
+                    "com.miui.home.launcher.allapps.LauncherModeController", false, cl);
+            Object laptopResult = HookUtil.invokeStatic(
+                    "com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
             if (laptopResult instanceof Boolean) {
                 workstationMode = (Boolean) laptopResult;
             } else {
@@ -591,7 +590,8 @@ public class MainHook {
         }
         if (!detected) try {
             Class<?> dc = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
-            workstationMode = (Boolean) HookUtil.invokeStatic("com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
+            workstationMode = (Boolean) HookUtil.invokeStatic(
+                    "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
             HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled", new Class<?>[]{boolean.class},
                     chain -> {
                         setWorkstationMode((Boolean) chain.getArgs().get(0));
@@ -650,8 +650,12 @@ public class MainHook {
         View root = dockBg == null ? null : dockBg.getRootView();
         if (root == null || normalLayoutBackup.isEmpty()) return;
         root.post(() -> restoreNormalHomeLayout(root));
-        root.postDelayed(() -> restoreNormalHomeLayout(root), 250L);
-        root.postDelayed(() -> restoreNormalHomeLayout(root), 700L);
+        root.postDelayed(() -> restoreNormalLayout(root), 250L);
+        root.postDelayed(() -> restoreNormalLayout(root), 700L);
+    }
+
+    private static void restoreNormalLayout(View root) {
+        restoreNormalHomeLayout(root);
     }
 
     private static void collectHomeItemPositions(View view, boolean restore) {
@@ -741,11 +745,19 @@ public class MainHook {
 
     private static void syncShadowGeometry() {
         View shadow = shadowViewRef.get(), dockBg = oldBg();
-        if (shadow == null || dockBg == null || bgW <= 0 || bgH <= 0) return;
+        if (shadow == null || dockBg == null) return;
+        int dockWidth = dockBg.getWidth();
+        int dockHeight = dockBg.getHeight();
+        if (dockWidth <= 0 || dockHeight <= 0) return;
+        int targetWidth = dockBg.getWidth() + shadowPad * 2;
+        int targetHeight = dockBg.getHeight() + shadowPad * 2;
         ViewGroup.LayoutParams lp = shadow.getLayoutParams();
         if (lp != null) {
-            lp.width = bgW + shadowPad * 2; lp.height = bgH + shadowPad * 2;
-            shadow.setLayoutParams(lp);
+            if (lp.width != targetWidth || lp.height != targetHeight) {
+                lp.width = targetWidth;
+                lp.height = targetHeight;
+                shadow.setLayoutParams(lp);
+            }
         }
         shadow.setX(dockBg.getX() - shadowPad);
         shadow.setY(dockBg.getY() - shadowPad);
@@ -759,35 +771,24 @@ public class MainHook {
             removeDockShadow();
             return;
         }
-        boolean anim = animating(bg);
+        if (workstationMode) {
+            shadowView.setVisibility(View.GONE);
+            return;
+        }
+        if (animating(bg)) return;
         try {
-            int width = bg.getWidth();
-            int height = bg.getHeight();
-            try {
-                int fieldWidth = HookUtil.getIntField(bg, "mWidth");
-                if (fieldWidth > 0) width = fieldWidth;
-            } catch (Throwable ignored) {}
-            try {
-                int fieldHeight = HookUtil.getIntField(bg, "mHeight");
-                if (fieldHeight > 0) height = fieldHeight;
-            } catch (Throwable ignored) {}
-            bgW = width;
-            bgH = height;
+            bgW = bg.getWidth();
+            bgH = bg.getHeight();
             try {
                 Object r = HookUtil.getField(bg, "mCornerRadius");
                 if (r instanceof Number) bgR = ((Number) r).floatValue();
             } catch (Throwable ignored) {}
-            if (bgW <= 0 || bgH <= 0 || workstationMode) {
+            if (bgW <= 0 || bgH <= 0) {
                 shadowView.setVisibility(View.GONE);
                 return;
             }
             shadowView.setVisibility(View.VISIBLE);
-            if (!anim) {
-                boolean sizeChanged = bgW != lastShadowW;
-                lastShadowW = bgW;
-                syncShadowGeometry();
-                if (sizeChanged) shadowView.post(MainHook::syncShadowGeometry);
-            }
+            syncShadowGeometry();
         } catch (Throwable ignored) {}
     }
 
