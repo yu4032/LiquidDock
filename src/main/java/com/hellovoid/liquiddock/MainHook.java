@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Color;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Rect;
@@ -15,26 +14,14 @@ import java.lang.ref.WeakReference;
 public class MainHook {
 
     private static WeakReference<View> oldBgRef = new WeakReference<>(null);
-    private static WeakReference<View> nativeShadowTargetRef = new WeakReference<>(null);
-    private static NativeDockShadowState vendorDockShadowState;
-    private static boolean nativeShadowInternalCall;
+    private static WeakReference<Object> hotSeatsShadowOwnerRef = new WeakReference<>(null);
+    private static volatile LiquidDockConfig.Dock nativeShadowConfig;
 
     private static View oldBg() { return oldBgRef.get(); }
     private static void setOldBg(View view) { oldBgRef = new WeakReference<>(view); }
-    private static View nativeShadowTarget() { return nativeShadowTargetRef.get(); }
-    private static void setNativeShadowTarget(View view) {
-        View previous = nativeShadowTargetRef.get();
-        if (previous != view) {
-            vendorDockShadowState = null;
-            nativeShadowTargetRef = new WeakReference<>(view);
-            if (view != null) {
-                android.view.ViewParent parent = view.getParent();
-                log("[DC] native Dock shadow target=" + view.getClass().getName()
-                        + " parent=" + (parent == null ? "null" : parent.getClass().getName())
-                        + " attached=" + view.isAttachedToWindow()
-                        + " size=" + view.getWidth() + "x" + view.getHeight());
-            }
-        }
+    private static Object hotSeatsShadowOwner() { return hotSeatsShadowOwnerRef.get(); }
+    private static void setHotSeatsShadowOwner(Object hotSeats) {
+        if (hotSeats != null) hotSeatsShadowOwnerRef = new WeakReference<>(hotSeats);
     }
     private static float strokeR = 30f;
     private static volatile boolean workstationMode;
@@ -111,7 +98,8 @@ public class MainHook {
                 Math.round(config.workstation.allAppsPortraitBottomSpacing * workstationAllAppsScale));
 
         boolean dockCustomization = config.dock.enabled;
-        // Intercept Launcher's real native Dock shadow owner before zero-copy may return early.
+        // Keep HotSeats itself as the only authority for the whole-Dock native shadow.
+        nativeShadowConfig = config.dock;
         installNativeDockShadowOwnership(classLoader);
         installDockShadowSetupHook(classLoader);
         if (config.glass.enabled) {
@@ -252,46 +240,127 @@ public class MainHook {
     // ── helpers ──────────────────────────────────────────────────────
 
     /**
-     * Reuse Launcher's real native Dock shadow owner and lifecycle. LiquidDock only substitutes
-     * the parameters of the vendor applyViewShadow call while normal Dock customization owns it.
+     * Hook the two HotSeats lifecycle methods that own the stock native shadow. The original
+     * methods always remain the renderer; LiquidDock only supplies temporary state while they run.
      */
     private static void installNativeDockShadowOwnership(ClassLoader cl) {
         try {
-            HookUtil.hookMethod(cl,
-                    "com.miui.home.launcher.hotseats.HotSeats",
-                    "getMingouStaticDockBlurShadowTarget",
-                    chain -> {
-                        Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (r instanceof View) setNativeShadowTarget((View) r);
-                        return r;
-                    });
-            Class<?> ms = Class.forName("com.miui.home.launcher.common.MiShadowUtils", false, cl);
-            HookUtil.hookMethod(ms, "applyViewShadow",
-                    new Class<?>[]{View.class, int.class, float.class, float.class, float.class,
-                            float.class},
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (nativeShadowInternalCall) return chain.proceed(args);
-                        if (!(args[0] instanceof View) || args[0] != nativeShadowTarget()) {
-                            return chain.proceed(args);
-                        }
-                        captureVendorDockShadow(args);
-                        if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) {
-                            return chain.proceed(args);
-                        }
-                        View vendorTarget = (View) args[0];
-                        if (VisualRuntimeState.isDockShadowEnabled()) {
-                            return chain.proceed(configuredNativeDockShadowArgs(
-                                    vendorTarget, LiquidDockConfig.load().dock));
-                        }
-                        return chain.proceed(clearNativeDockShadowArgs(vendorTarget));
-                    });
+            Class<?> hotSeatsClass = Class.forName(
+                    "com.miui.home.launcher.hotseats.HotSeats", false, cl);
+            java.lang.reflect.Method showViewShadow =
+                    hotSeatsClass.getDeclaredMethod("showViewShadow");
+            showViewShadow.setAccessible(true);
+            HookUtil.hook(showViewShadow, chain -> {
+                Object hotSeats = chain.getThisObject();
+                setHotSeatsShadowOwner(hotSeats);
+                HotSeatsShadowScope scope = pushConfiguredHotSeatsShadow(hotSeats);
+                try {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                } finally {
+                    scope.close();
+                }
+            });
+
+            try {
+                // HyperOS animates the native shadow from HotSeats.setTranslationY. Do not replay
+                // another shadow here: any nested showViewShadow call is already intercepted above.
+                java.lang.reflect.Method setTranslationY =
+                        hotSeatsClass.getDeclaredMethod("setTranslationY", float.class);
+                setTranslationY.setAccessible(true);
+                HookUtil.hook(setTranslationY, chain -> {
+                    setHotSeatsShadowOwner(chain.getThisObject());
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
+            } catch (Throwable translationError) {
+                log("[DC] HotSeats setTranslationY shadow hook unavailable: " + translationError);
+            }
+            log("[DC] HotSeats native Dock shadow lifecycle hooked");
         } catch (Throwable e) {
-            log("[DC] native Dock shadow hook unavailable: " + e);
+            log("[DC] native Dock shadow lifecycle unavailable: " + e);
         }
     }
 
-    /** Re-apply the configured native shadow after Launcher setup or settled geometry. */
+    private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(Object hotSeats) {
+        LiquidDockConfig.Dock dock = currentNativeShadowConfig();
+        if (hotSeats == null || dock == null || workstationMode
+                || !VisualRuntimeState.isDockCustomizationEnabled()) {
+            return HotSeatsShadowScope.noop();
+        }
+
+        int configuredAlpha = VisualRuntimeState.isDockShadowEnabled()
+                ? Math.max(0, Math.min(255, dock.shadowAlpha)) : 0;
+        float density = hotSeats instanceof View
+                ? ((View) hotSeats).getResources().getDisplayMetrics().density
+                : android.content.res.Resources.getSystem().getDisplayMetrics().density;
+        float scale = dock.dimensionsDp ? density : 1f;
+        float radiusPx = Math.min(
+                Math.max(0f, dock.shadowRadius * scale),
+                Math.max(0f, dock.shadowSize * scale));
+        float offsetYPx = dock.shadowY * scale;
+
+        HotSeatsShadowScope scope = new HotSeatsShadowScope(hotSeats);
+        scope.overrideNumber("mMiShadowRadius", radiusPx);
+        scope.overrideNumber("mMiShadowOffsetY", offsetYPx);
+
+        // showViewShadow derives its color alpha through the vendor MI_SHADOW_ALPHA path. Prefer a
+        // dedicated multiplier field when this Launcher revision exposes one; otherwise temporarily
+        // scale HotSeats alpha only during the vendor method call and restore it immediately after.
+        float vendorBaseAlpha = readStaticNumber(hotSeats.getClass(), "MI_SHADOW_ALPHA", 1f);
+        float requestedAlpha = configuredAlpha / 255f;
+        float multiplier = vendorBaseAlpha > 0.0001f ? requestedAlpha / vendorBaseAlpha : 0f;
+        boolean explicitAlpha = scope.overrideNumber("mMiShadowAlpha", multiplier)
+                || scope.overrideNumber("mShadowAlpha", multiplier);
+        if (!explicitAlpha && hotSeats instanceof View) {
+            scope.overrideViewAlpha((View) hotSeats, Math.max(0f, Math.min(1f, multiplier)));
+        }
+        return scope;
+    }
+
+    private static LiquidDockConfig.Dock currentNativeShadowConfig() {
+        LiquidDockConfig.Dock current = nativeShadowConfig;
+        if (current != null) return current;
+        try {
+            current = LiquidDockConfig.load().dock;
+            nativeShadowConfig = current;
+        } catch (Throwable ignored) {
+        }
+        return current;
+    }
+
+    private static float readStaticNumber(Class<?> type, String name, float fallback) {
+        try {
+            java.lang.reflect.Field field = HookUtil.findField(type, name);
+            Object value = field.get(java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                    ? null : hotSeatsShadowOwner());
+            if (value instanceof Number) return ((Number) value).floatValue();
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
+
+    private static void setNumericField(java.lang.reflect.Field field, Object target, float value)
+            throws IllegalAccessException {
+        Class<?> type = field.getType();
+        if (type == float.class || type == Float.class) field.set(target, value);
+        else if (type == double.class || type == Double.class) field.set(target, (double) value);
+        else if (type == int.class || type == Integer.class) field.set(target, Math.round(value));
+        else if (type == long.class || type == Long.class) field.set(target, (long) Math.round(value));
+        else if (type == short.class || type == Short.class) field.set(target, (short) Math.round(value));
+        else if (type == byte.class || type == Byte.class) field.set(target, (byte) Math.round(value));
+        else throw new IllegalArgumentException("not numeric: " + type);
+    }
+
+    /** Rebind runtime state by asking HotSeats to execute its own native shadow method. */
+    private static void refreshVendorDockShadow() {
+        Object hotSeats = hotSeatsShadowOwner();
+        if (hotSeats == null) return;
+        try {
+            HookUtil.invoke(hotSeats, "showViewShadow");
+        } catch (Throwable e) {
+            log("[DC] HotSeats native shadow refresh failed: " + e);
+        }
+    }
+
     private static void installDockShadowSetupHook(ClassLoader cl) {
         try {
             HookUtil.hookMethod(cl, "com.miui.home.launcher.Launcher", "setupViews",
@@ -299,13 +368,13 @@ public class MainHook {
                         Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         try {
                             LiquidDockConfig current = LiquidDockConfig.load();
-                            Object hs = HookUtil.getField(chain.getThisObject(), "mHotSeats");
-                            if (hs == null) return r;
-                            Object target = HookUtil.invoke(hs, "getMingouStaticDockBlurShadowTarget");
-                            if (target instanceof View) setNativeShadowTarget((View) target);
-                            View background = resolveActiveDockBackground(hs);
+                            nativeShadowConfig = current.dock;
+                            Object hotSeats = HookUtil.getField(chain.getThisObject(), "mHotSeats");
+                            if (hotSeats == null) return r;
+                            setHotSeatsShadowOwner(hotSeats);
+                            View background = resolveActiveDockBackground(hotSeats);
                             if (background != null) setOldBg(background);
-                            syncDockShadow(background, current.dock);
+                            refreshVendorDockShadow();
                         } catch (Throwable e) {
                             log("[DC] Dock shadow setup failed: " + e);
                         }
@@ -313,64 +382,6 @@ public class MainHook {
                     });
         } catch (Throwable e) {
             log("[DC] Dock shadow setup hook unavailable: " + e);
-        }
-    }
-
-    private static void captureVendorDockShadow(Object[] args) {
-        if (args == null || args.length < 6 || !(args[0] instanceof View)
-                || !(args[1] instanceof Number) || !(args[2] instanceof Number)
-                || !(args[3] instanceof Number) || !(args[4] instanceof Number)
-                || !(args[5] instanceof Number)) return;
-        vendorDockShadowState = new NativeDockShadowState(
-                (View) args[0],
-                ((Number) args[1]).intValue(),
-                ((Number) args[2]).floatValue(),
-                ((Number) args[3]).floatValue(),
-                ((Number) args[4]).floatValue(),
-                ((Number) args[5]).floatValue());
-    }
-
-    private static Object[] configuredNativeDockShadowArgs(
-            View target, LiquidDockConfig.Dock dock) {
-        float scale = dock.dimensionsDp
-                ? target.getResources().getDisplayMetrics().density : 1f;
-        float shadowRadiusPx = Math.max(1f, dock.shadowRadius * scale);
-        float shadowSizePx = Math.max(1f, dock.shadowSize * scale);
-        float blurRadiusPx = Math.min(shadowRadiusPx, shadowSizePx);
-        float offsetYPx = dock.shadowY * scale;
-        int shadowAlpha = Math.max(0, Math.min(255, dock.shadowAlpha));
-        int shadowColor = Color.argb(shadowAlpha, 0, 0, 0);
-        return new Object[]{target, shadowColor, 0f, offsetYPx, blurRadiusPx, 1f};
-    }
-
-    private static Object[] clearNativeDockShadowArgs(View target) {
-        return new Object[]{target, Color.TRANSPARENT, 0f, 0f, 0f, 1f};
-    }
-
-    private static void applyConfiguredNativeDockShadow(View target, LiquidDockConfig.Dock dock) {
-        if (target == null || dock == null) return;
-        invokeNativeDockShadow(configuredNativeDockShadowArgs(target, dock));
-    }
-
-    private static void restoreVendorDockShadow() {
-        NativeDockShadowState state = vendorDockShadowState;
-        if (state == null) return;
-        View target = state.target.get();
-        if (target == null || target != nativeShadowTarget()) return;
-        invokeNativeDockShadow(new Object[]{target, state.color, state.offsetX, state.offsetY,
-                state.blurRadius, state.scale});
-    }
-
-    private static void invokeNativeDockShadow(Object[] args) {
-        if (args == null || args.length < 6) return;
-        nativeShadowInternalCall = true;
-        try {
-            HookUtil.invokeStatic("com.miui.home.launcher.common.MiShadowUtils",
-                    "applyViewShadow", args[0], args[1], args[2], args[3], args[4], args[5]);
-        } catch (Throwable e) {
-            log("[DC] native Dock shadow apply failed: " + e);
-        } finally {
-            nativeShadowInternalCall = false;
         }
     }
 
@@ -389,45 +400,30 @@ public class MainHook {
         }
     }
 
-    /**
-     * Refresh the configured whole-Dock shadow on Launcher's authoritative native shadow target.
-     * The visible Dock material is tracked only for geometry/workstation callbacks; it is not a
-     * second shadow owner.
-     */
+    /** Geometry callbacks only remember the active background/config; HotSeats owns shadow drawing. */
     static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock) {
         if (dockBg != null) setOldBg(dockBg);
-        if (dock == null) return;
-        View target = nativeShadowTarget();
-        if (target == null) return;
-        if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
-            restoreVendorDockShadow();
-            return;
-        }
-        if (!VisualRuntimeState.isDockShadowEnabled()) {
-            invokeNativeDockShadow(clearNativeDockShadowArgs(target));
-            return;
-        }
-        applyConfiguredNativeDockShadow(target, dock);
+        if (dock != null) nativeShadowConfig = dock;
     }
 
     static void onRuntimeDockShadowDisabled() {
-        // Parent Dock customization teardown restores the exact vendor state. Because runtime
-        // booleans are published before callbacks run, do not clear that restored state afterward.
+        // The parent customization callback runs first when the parent itself is disabled. In that
+        // case the current effective state already tells the HotSeats hook to pass vendor values.
         if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) return;
-        View target = nativeShadowTarget();
-        if (target != null) invokeNativeDockShadow(clearNativeDockShadowArgs(target));
+        refreshVendorDockShadow();
     }
 
     static void onRuntimeDockShadowEnabled() {
+        if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) return;
         try {
-            syncDockShadow(oldBg(), LiquidDockConfig.load().dock);
-        } catch (Throwable e) {
-            log("[DC] runtime Dock shadow enable failed: " + e);
+            nativeShadowConfig = LiquidDockConfig.load().dock;
+        } catch (Throwable ignored) {
         }
+        refreshVendorDockShadow();
     }
 
     static void onRuntimeDockCustomizationDisabled() {
-        restoreVendorDockShadow();
+        refreshVendorDockShadow();
         DockStrokeRenderer.refreshInstalledFromCurrentConfig();
         View dockBg = oldBg();
         if (dockBg != null) dockBg.postInvalidateOnAnimation();
@@ -611,23 +607,20 @@ public class MainHook {
         HomeGridHook.setWorkstationMode(enabled);
         WorkstationDockGeometryHook.onWorkstationModeChanged(enabled);
         log("[DC] Mingou workstation mode changed=" + enabled);
+        // The effective workstation flag is published before this refresh, so entering passes the
+        // untouched vendor state and leaving reapplies LiquidDock's temporary native parameters.
+        refreshVendorDockShadow();
         View dockBg = oldBg();
         if (!enabled) {
             if (dockBg != null) dockBg.post(() -> {
                 dockBg.setAlpha(1f);
                 syncAll(dockBg);
             });
-            else {
-                try {
-                    syncDockShadow(null, LiquidDockConfig.load().dock);
-                } catch (Throwable ignored) {}
-            }
             return;
         }
-        restoreVendorDockShadow();
         if (dockBg != null) dockBg.post(() -> {
             // The injected Prismal surface is a child of this vendor material. Keep the host
-            // visible in workstation mode while the vendor owns its native Dock shadow again.
+            // visible while HotSeats owns its native Dock shadow.
             dockBg.setAlpha(1f);
         });
         Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(
@@ -711,7 +704,7 @@ public class MainHook {
         try {
             syncDockShadow(bg, LiquidDockConfig.load().dock);
         } catch (Throwable e) {
-            log("[DC] native Dock shadow sync failed: " + e);
+            log("[DC] native Dock shadow config sync failed: " + e);
         }
     }
 
@@ -743,19 +736,67 @@ public class MainHook {
 
     // ── data ─────────────────────────────────────────────────────────
 
-    private static final class NativeDockShadowState {
-        final WeakReference<View> target;
-        final int color;
-        final float offsetX, offsetY, blurRadius, scale;
+    private static final class HotSeatsShadowScope implements AutoCloseable {
+        private static final HotSeatsShadowScope NOOP = new HotSeatsShadowScope(null);
+        private final Object target;
+        private final java.util.ArrayList<ShadowFieldState> fields = new java.util.ArrayList<>();
+        private View alphaView;
+        private float oldAlpha;
+        private boolean alphaChanged;
 
-        NativeDockShadowState(
-                View target, int color, float offsetX, float offsetY, float blurRadius, float scale) {
-            this.target = new WeakReference<>(target);
-            this.color = color;
-            this.offsetX = offsetX;
-            this.offsetY = offsetY;
-            this.blurRadius = blurRadius;
-            this.scale = scale;
+        HotSeatsShadowScope(Object target) {
+            this.target = target;
+        }
+
+        static HotSeatsShadowScope noop() {
+            return NOOP;
+        }
+
+        boolean overrideNumber(String name, float value) {
+            if (target == null) return false;
+            try {
+                java.lang.reflect.Field field = HookUtil.findField(target.getClass(), name);
+                Object oldValue = field.get(target);
+                setNumericField(field, target, value);
+                fields.add(new ShadowFieldState(field, oldValue));
+                return true;
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        void overrideViewAlpha(View view, float alpha) {
+            if (view == null) return;
+            alphaView = view;
+            oldAlpha = view.getAlpha();
+            alphaChanged = true;
+            view.setAlpha(alpha);
+        }
+
+        @Override public void close() {
+            if (target == null) return;
+            for (int i = fields.size() - 1; i >= 0; i--) {
+                ShadowFieldState state = fields.get(i);
+                try { state.field.set(target, state.value); }
+                catch (Throwable ignored) {}
+            }
+            fields.clear();
+            if (alphaChanged && alphaView != null) {
+                try { alphaView.setAlpha(oldAlpha); }
+                catch (Throwable ignored) {}
+            }
+            alphaView = null;
+            alphaChanged = false;
+        }
+    }
+
+    private static final class ShadowFieldState {
+        final java.lang.reflect.Field field;
+        final Object value;
+
+        ShadowFieldState(java.lang.reflect.Field field, Object value) {
+            this.field = field;
+            this.value = value;
         }
     }
 
