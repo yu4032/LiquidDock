@@ -22,26 +22,30 @@ public class DockShadowVisibleOwnerContractTest {
     }
 
     @Test
-    public void customWholeDockShadowUsesTheActiveVisibleMaterialHost() throws Exception {
+    public void wholeDockShadowUsesLauncherAuthoritativeNativeTarget() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String sync = slice(main,
                 "static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock)",
                 "static void onRuntimeDockShadowDisabled()");
 
-        assertTrue("custom whole-Dock shadow must be applied to the active Dock material",
-                sync.contains("applyConfiguredNativeDockShadow(dockBg, dock);"));
-        assertFalse("vendor shadow target is not a reliable visible custom-shadow owner",
+        assertTrue("whole-Dock shadow refresh must target Launcher's authoritative native owner",
                 sync.contains("View target = nativeShadowTarget();"));
+        assertTrue("configured shadow must be applied to that native target",
+                sync.contains("applyConfiguredNativeDockShadow(target, dock);"));
+        assertFalse("the visible Dock material must not become a second native shadow owner",
+                sync.contains("applyConfiguredNativeDockShadow(dockBg, dock);"));
     }
 
     @Test
-    public void customWholeDockShadowOwnsAndReleasesAncestorClipping() throws Exception {
+    public void nativeWholeDockShadowDoesNotTakeCustomAncestorClippingOwnership() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
 
-        assertTrue("native outer shadow must acquire clipping room around the visible Dock",
-                main.contains("acquireDockShadowClipOwnership(dockBg);"));
-        assertTrue("runtime disable must restore the captured parent clipping state",
-                main.contains("releaseDockShadowClipOwnership();"));
+        assertFalse("Launcher already owns clipping/layer placement for its native shadow target",
+                main.contains("acquireDockShadowClipOwnership"));
+        assertFalse("LiquidDock must not retain a second shadow clipping lifecycle",
+                main.contains("releaseDockShadowClipOwnership"));
+        assertFalse("LiquidDock must not retain a second custom native shadow target",
+                main.contains("customShadowTargetRef"));
     }
 
     private static String slice(String source, String start, String end) {
