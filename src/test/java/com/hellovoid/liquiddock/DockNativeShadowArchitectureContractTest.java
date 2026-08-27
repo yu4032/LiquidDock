@@ -29,24 +29,31 @@ public class DockNativeShadowArchitectureContractTest {
     }
 
     @Test
-    public void wholeDockShadowUsesMiuiNativeShadowOwnership() throws Exception {
+    public void wholeDockShadowUsesHotSeatsNativeLifecycle() throws Exception {
         String main = mainHook();
-        assertTrue("Dock shadow must be applied through MIUI's native shadow target",
-                main.contains("applyConfiguredNativeDockShadow"));
-        assertTrue("vendor shadow inputs must be captured before LiquidDock overrides them",
-                main.contains("captureVendorDockShadow"));
-        assertTrue("leaving Dock customization must restore captured vendor shadow inputs",
-                main.contains("restoreVendorDockShadow"));
+        assertTrue("HotSeats.showViewShadow must remain the native shadow renderer",
+                main.contains("getDeclaredMethod(\"showViewShadow\")"));
+        assertTrue("HotSeats translation lifecycle must remain vendor-owned",
+                main.contains("getDeclaredMethod(\"setTranslationY\", float.class)"));
+        assertTrue("LiquidDock may only wrap the vendor call with temporary state",
+                main.contains("HotSeatsShadowScope scope = pushConfiguredHotSeatsShadow(hotSeats);"));
+        assertFalse("whole-Dock ownership must not hook terminal MiShadowUtils.applyViewShadow",
+                main.contains("HookUtil.hookMethod(ms, \"applyViewShadow\""));
+        assertFalse("whole-Dock ownership must not retain a second native target",
+                main.contains("nativeShadowTargetRef"));
     }
 
     @Test
-    public void configuredNativeShadowKeepsExistingRadiusCapAndYOffset() throws Exception {
+    public void configuredNativeShadowKeepsRadiusCapYOffsetAndVendorAlphaPath() throws Exception {
         String main = mainHook();
-        assertTrue("native blur radius must retain the existing min(radius, size) cap",
-                main.contains("Math.min(shadowRadiusPx, shadowSizePx)"));
+        assertTrue("native radius must retain the min(radius,size) cap",
+                main.contains("Math.max(0f, dock.shadowRadius * scale)")
+                        && main.contains("Math.max(0f, dock.shadowSize * scale)"));
         assertTrue("configured whole-Dock shadow must retain the Y-offset setting",
-                main.contains("dock.shadowY"));
-        assertTrue("configured whole-Dock shadow must retain configured alpha in the color",
+                main.contains("float offsetYPx = dock.shadowY * scale;"));
+        assertTrue("configured whole-Dock shadow must retain configured alpha",
                 main.contains("dock.shadowAlpha"));
+        assertTrue("alpha customization must stay inside the vendor MI_SHADOW_ALPHA path",
+                main.contains("MI_SHADOW_ALPHA"));
     }
 }
