@@ -13,22 +13,25 @@ public class DockShadowDeviceEvidenceContractTest {
 
     @Test
     public void wholeDockCustomizationRewritesTheActualMiShadowBoundary() throws Exception {
-        String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+        String bridge = Files.readString(MAIN.resolve("DockNativeShadowBridge.java"));
+        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
 
         assertTrue("device logs show MiShadowUtils.applyViewShadow is the authoritative Dock shadow boundary",
-                stroke.contains("com.miui.home.launcher.common.MiShadowUtils")
-                        && stroke.contains("applyViewShadow"));
+                bridge.contains("com.miui.home.launcher.common.MiShadowUtils")
+                        && bridge.contains("applyViewShadow"));
         assertTrue("only the real HotSeats blur background may be rewritten",
-                stroke.contains("HotSeatsListContentBlurBackground2"));
+                bridge.contains("HotSeatsListContentBlurBackground2"));
         assertTrue("Dock shadow enable must control the native color/alpha argument",
-                stroke.contains("VisualRuntimeState.isDockShadowEnabled()")
-                        && stroke.contains("args[1]"));
+                bridge.contains("VisualRuntimeState.isDockShadowEnabled()")
+                        && bridge.contains("args[1]"));
         assertTrue("configured Y offset must reach the native call",
-                stroke.contains("dock.shadowY") && stroke.contains("args[3]"));
+                bridge.contains("dock.shadowY") && bridge.contains("args[3]"));
         assertTrue("configured radius/size must reach the native call",
-                stroke.contains("dock.shadowRadius")
-                        && stroke.contains("dock.shadowSize")
-                        && stroke.contains("args[4]"));
+                bridge.contains("dock.shadowRadius")
+                        && bridge.contains("dock.shadowSize")
+                        && bridge.contains("args[4]"));
+        assertTrue("the final-boundary bridge must be installed in Launcher",
+                module.contains("DockNativeShadowBridge.install(classLoader, runtimeConfig.dock)"));
     }
 
     @Test
@@ -41,8 +44,9 @@ public class DockShadowDeviceEvidenceContractTest {
         assertTrue(state.contains("ConfigSchema.Dock.SHADOW_Y.name()"));
         assertTrue(state.contains("ConfigSchema.Dock.STROKE_SHADOW_RADIUS.name()"));
         assertTrue(state.contains("ConfigSchema.Dock.STROKE_SHADOW_ALPHA.name()"));
-        assertTrue("whole-Dock numeric changes must force the vendor native lifecycle to refresh",
-                state.contains("MainHook.onRuntimeDockShadowEnabled()"));
+        assertTrue("native shadow config must be refreshed before asking vendor lifecycle to redraw",
+                state.contains("DockNativeShadowBridge.refreshConfig()")
+                        && state.contains("MainHook.onRuntimeDockShadowEnabled()"));
         assertTrue("stroke-shadow numeric changes must refresh the installed stroke owner",
                 state.contains("DockStrokeRenderer.refreshInstalledFromCurrentConfig()"));
     }
@@ -50,14 +54,15 @@ public class DockShadowDeviceEvidenceContractTest {
     @Test
     public void nativeModeStrokeShadowDoesNotRequireAGlassHost() throws Exception {
         String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+        String bridge = Files.readString(MAIN.resolve("DockNativeShadowBridge.java"));
         String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
 
         assertTrue("native mode must remember the actual HotSeats background as a stroke owner",
                 stroke.contains("KNOWN_NATIVE_HOSTS"));
         assertTrue("native fallback must derive stroke-shadow parameters from the same config",
-                stroke.contains("strokeShadowRadius") && stroke.contains("strokeShadowAlpha"));
+                bridge.contains("strokeShadowRadius") && bridge.contains("strokeShadowAlpha"));
         assertFalse("native stroke-shadow fallback must not require DockLiquidGlassHostView",
-                stroke.contains("DockLiquidGlassHostView"));
+                bridge.contains("DockLiquidGlassHostView"));
         assertTrue("glass mode may still install its border on the glass host",
                 glass.contains("DockStrokeRenderer.configureReplacingForeground(\n                host, config.dock, nativeRadius);"));
     }
