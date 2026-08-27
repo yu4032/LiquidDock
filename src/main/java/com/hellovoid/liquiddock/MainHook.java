@@ -1,8 +1,6 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Rect;
@@ -18,12 +16,16 @@ public class MainHook {
 
     private static WeakReference<View> oldBgRef = new WeakReference<>(null);
     private static WeakReference<View> nativeShadowTargetRef = new WeakReference<>(null);
+    private static WeakReference<View> customShadowTargetRef = new WeakReference<>(null);
     private static NativeDockShadowState vendorDockShadowState;
     private static boolean nativeShadowInternalCall;
+    private static final java.util.ArrayList<DockShadowClipState> dockShadowClipStates =
+            new java.util.ArrayList<>();
 
     private static View oldBg() { return oldBgRef.get(); }
     private static void setOldBg(View view) { oldBgRef = new WeakReference<>(view); }
     private static View nativeShadowTarget() { return nativeShadowTargetRef.get(); }
+    private static View customShadowTarget() { return customShadowTargetRef.get(); }
     private static void setNativeShadowTarget(View view) {
         View previous = nativeShadowTargetRef.get();
         if (previous != view) vendorDockShadowState = null;
@@ -104,9 +106,7 @@ public class MainHook {
                 Math.round(config.workstation.allAppsPortraitBottomSpacing * workstationAllAppsScale));
 
         boolean dockCustomization = config.dock.enabled;
-        // Keep the vendor Mi Shadow path installed permanently. When LiquidDock owns the Dock
-        // shadow we substitute only the native shadow parameters; otherwise vendor calls pass
-        // through unchanged and the last vendor state remains available for exact restoration.
+        // Keep vendor shadow capture/restore separate from the custom visible shadow owner.
         installNativeDockShadowOwnership(classLoader);
         installDockShadowSetupHook(classLoader);
         if (config.glass.enabled) {
@@ -247,8 +247,8 @@ public class MainHook {
     // ── helpers ──────────────────────────────────────────────────────
 
     /**
-     * Own the existing HyperOS Mi Shadow attached to the vendor Dock shadow target. No auxiliary
-     * View is created: the system shadow follows the target's geometry and hardware composition.
+     * Capture and suppress only the vendor's own static Dock shadow while LiquidDock owns normal
+     * Dock customization. The custom shadow itself is applied to the active visible material host.
      */
     private static void installNativeDockShadowOwnership(ClassLoader cl) {
         try {
@@ -274,18 +274,20 @@ public class MainHook {
                         if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) {
                             return chain.proceed(args);
                         }
-                        if (!VisualRuntimeState.isDockShadowEnabled()) {
-                            return chain.proceed(clearNativeDockShadowArgs((View) args[0]));
+                        View vendorTarget = (View) args[0];
+                        if (vendorTarget == customShadowTarget()
+                                && VisualRuntimeState.isDockShadowEnabled()) {
+                            return chain.proceed(configuredNativeDockShadowArgs(
+                                    vendorTarget, LiquidDockConfig.load().dock));
                         }
-                        LiquidDockConfig.Dock dock = LiquidDockConfig.load().dock;
-                        return chain.proceed(configuredNativeDockShadowArgs((View) args[0], dock));
+                        return chain.proceed(clearNativeDockShadowArgs(vendorTarget));
                     });
         } catch (Throwable e) {
             log("[DC] native Dock shadow hook unavailable: " + e);
         }
     }
 
-    /** Re-apply the configured native shadow after Launcher setup or a settled Dock geometry pass. */
+    /** Re-apply the configured visible shadow after Launcher setup or settled geometry. */
     private static void installDockShadowSetupHook(ClassLoader cl) {
         try {
             HookUtil.hookMethod(cl, "com.miui.home.launcher.Launcher", "setupViews",
@@ -299,6 +301,10 @@ public class MainHook {
                             if (target instanceof View) setNativeShadowTarget((View) target);
                             View background = resolveActiveDockBackground(hs);
                             if (background == null) return r;
+                            if (!workstationMode
+                                    && VisualRuntimeState.isDockCustomizationEnabled()) {
+                                suppressVendorDockShadow();
+                            }
                             syncDockShadow(background, current.dock);
                         } catch (Throwable e) {
                             log("[DC] Dock shadow setup failed: " + e);
@@ -346,9 +352,50 @@ public class MainHook {
         invokeNativeDockShadow(configuredNativeDockShadowArgs(target, dock));
     }
 
-    private static void clearConfiguredNativeDockShadow() {
+    private static void suppressVendorDockShadow() {
         View target = nativeShadowTarget();
+        if (target != null && target != customShadowTarget()) {
+            invokeNativeDockShadow(clearNativeDockShadowArgs(target));
+        }
+    }
+
+    private static void clearConfiguredNativeDockShadow() {
+        View target = customShadowTarget();
         if (target != null) invokeNativeDockShadow(clearNativeDockShadowArgs(target));
+        releaseDockShadowClipOwnership();
+    }
+
+    private static synchronized void acquireDockShadowClipOwnership(View dockBg) {
+        if (dockBg == null) return;
+        View current = customShadowTarget();
+        if (current == dockBg && !dockShadowClipStates.isEmpty()) return;
+        if (current != null && current != dockBg) {
+            invokeNativeDockShadow(clearNativeDockShadowArgs(current));
+        }
+        releaseDockShadowClipOwnership();
+        customShadowTargetRef = new WeakReference<>(dockBg);
+
+        android.view.ViewParent parent = dockBg.getParent();
+        for (int level = 0; level < 4 && parent instanceof ViewGroup; level++) {
+            ViewGroup group = (ViewGroup) parent;
+            dockShadowClipStates.add(new DockShadowClipState(
+                    group, group.getClipChildren(), group.getClipToPadding()));
+            group.setClipChildren(false);
+            group.setClipToPadding(false);
+            parent = group.getParent();
+        }
+    }
+
+    private static synchronized void releaseDockShadowClipOwnership() {
+        for (int i = dockShadowClipStates.size() - 1; i >= 0; i--) {
+            DockShadowClipState state = dockShadowClipStates.get(i);
+            ViewGroup group = state.group.get();
+            if (group == null) continue;
+            group.setClipChildren(state.clipChildren);
+            group.setClipToPadding(state.clipToPadding);
+        }
+        dockShadowClipStates.clear();
+        customShadowTargetRef = new WeakReference<>(null);
     }
 
     private static void restoreVendorDockShadow() {
@@ -389,27 +436,32 @@ public class MainHook {
     }
 
     /**
-     * Keep the configured whole-Dock shadow on HyperOS's native shadow target. The native shadow
-     * follows the target's own geometry, so no sibling View or second size/position model exists.
+     * Keep the configured whole-Dock shadow on the active visible Dock material. The vendor static
+     * shadow target is kept only for exact vendor restoration when LiquidDock releases ownership.
      */
     static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock) {
         if (dockBg == null || dock == null) return;
         setOldBg(dockBg);
-        if (workstationMode) return;
-        View target = nativeShadowTarget();
-        if (target == null) return;
+        if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
+            clearConfiguredNativeDockShadow();
+            return;
+        }
+        suppressVendorDockShadow();
         if (!VisualRuntimeState.isDockShadowEnabled()) {
             clearConfiguredNativeDockShadow();
             return;
         }
-        applyConfiguredNativeDockShadow(target, dock);
+        acquireDockShadowClipOwnership(dockBg);
+        applyConfiguredNativeDockShadow(dockBg, dock);
     }
 
     static void onRuntimeDockShadowDisabled() {
+        suppressVendorDockShadow();
         clearConfiguredNativeDockShadow();
     }
 
     static void onRuntimeDockCustomizationDisabled() {
+        clearConfiguredNativeDockShadow();
         restoreVendorDockShadow();
         DockStrokeRenderer.refreshInstalledFromCurrentConfig();
         View dockBg = oldBg();
@@ -596,12 +648,14 @@ public class MainHook {
         log("[DC] Mingou workstation mode changed=" + enabled);
         View dockBg = oldBg();
         if (!enabled) {
+            if (VisualRuntimeState.isDockCustomizationEnabled()) suppressVendorDockShadow();
             if (dockBg != null) dockBg.post(() -> {
                 dockBg.setAlpha(1f);
                 syncAll(dockBg);
             });
             return;
         }
+        clearConfiguredNativeDockShadow();
         restoreVendorDockShadow();
         if (dockBg != null) dockBg.post(() -> {
             // The injected Prismal surface is a child of this vendor material. Keep the host
@@ -716,6 +770,18 @@ public class MainHook {
     }
 
     // ── data ─────────────────────────────────────────────────────────
+
+    private static final class DockShadowClipState {
+        final WeakReference<ViewGroup> group;
+        final boolean clipChildren;
+        final boolean clipToPadding;
+
+        DockShadowClipState(ViewGroup group, boolean clipChildren, boolean clipToPadding) {
+            this.group = new WeakReference<>(group);
+            this.clipChildren = clipChildren;
+            this.clipToPadding = clipToPadding;
+        }
+    }
 
     private static final class NativeDockShadowState {
         final WeakReference<View> target;
