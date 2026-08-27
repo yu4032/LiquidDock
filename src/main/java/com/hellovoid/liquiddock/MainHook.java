@@ -136,6 +136,7 @@ public class MainHook {
 
         try {
             String hsc = "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2";
+
             // spacing
             if (spacing != 0) {
                 try {
@@ -542,10 +543,8 @@ public class MainHook {
     private static void installWorkstationModeGuard(ClassLoader cl) {
         boolean detected = false;
         try {
-            Class<?> mc = Class.forName(
-                    "com.miui.home.launcher.allapps.LauncherModeController", false, cl);
-            Object laptopResult = HookUtil.invokeStatic(
-                    "com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+            Class<?> mc = Class.forName("com.miui.home.launcher.allapps.LauncherModeController", false, cl);
+            Object laptopResult = HookUtil.invokeStatic("com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
             if (laptopResult instanceof Boolean) {
                 workstationMode = (Boolean) laptopResult;
             } else {
@@ -590,8 +589,7 @@ public class MainHook {
         }
         if (!detected) try {
             Class<?> dc = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
-            workstationMode = (Boolean) HookUtil.invokeStatic(
-                    "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
+            workstationMode = (Boolean) HookUtil.invokeStatic("com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
             HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled", new Class<?>[]{boolean.class},
                     chain -> {
                         setWorkstationMode((Boolean) chain.getArgs().get(0));
@@ -650,12 +648,8 @@ public class MainHook {
         View root = dockBg == null ? null : dockBg.getRootView();
         if (root == null || normalLayoutBackup.isEmpty()) return;
         root.post(() -> restoreNormalHomeLayout(root));
-        root.postDelayed(() -> restoreNormalLayout(root), 250L);
-        root.postDelayed(() -> restoreNormalLayout(root), 700L);
-    }
-
-    private static void restoreNormalLayout(View root) {
-        restoreNormalHomeLayout(root);
+        root.postDelayed(() -> restoreNormalHomeLayout(root), 250L);
+        root.postDelayed(() -> restoreNormalHomeLayout(root), 700L);
     }
 
     private static void collectHomeItemPositions(View view, boolean restore) {
