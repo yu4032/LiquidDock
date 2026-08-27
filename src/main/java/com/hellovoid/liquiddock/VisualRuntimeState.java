@@ -117,8 +117,8 @@ final class VisualRuntimeState {
         boolean wasStrokeShadowEnabled = isStrokeShadowEnabled();
         boolean wasDividerEnabled = isDividerEnabled();
 
-        // Publish the new booleans before scheduling teardown. Any callback that was queued before
-        // the preference change must observe the new false value and become inert immediately.
+        // Publish the new booleans before scheduling teardown/reapply. Any callback that was
+        // queued before the preference change must observe the new effective value immediately.
         coreEnabled = nextCoreEnabled;
         dockCustomizationEnabled = nextDockCustomizationEnabled;
         dockStrokeEnabled = nextDockStrokeEnabled;
@@ -142,7 +142,13 @@ final class VisualRuntimeState {
         if (wasDockShadowEnabled && !nextLiveDockShadowEnabled) {
             runOnMain(() -> MainHook.onRuntimeDockShadowDisabled());
         }
+        if (!wasDockShadowEnabled && nextLiveDockShadowEnabled) {
+            runOnMain(() -> MainHook.onRuntimeDockShadowEnabled());
+        }
         if (wasStrokeShadowEnabled && !nextLiveStrokeShadowEnabled) {
+            runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
+        }
+        if (!wasStrokeShadowEnabled && nextLiveStrokeShadowEnabled) {
             runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
         }
         if (wasDividerEnabled && !nextLiveDividerEnabled) {
