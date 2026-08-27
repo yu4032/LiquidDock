@@ -28,12 +28,15 @@ public class DockShadowRuntimeEnableContractTest {
     }
 
     @Test
-    public void strokeShadowFalseToTrueRefreshesInstalledStrokeDrawable() throws Exception {
+    public void strokeShadowTransitionsRefreshInstalledStrokeDrawable() throws Exception {
         String state = Files.readString(MAIN.resolve("VisualRuntimeState.java"));
 
-        assertTrue("false->true stroke_shadow must refresh the installed foreground style",
-                state.contains("!wasStrokeShadowEnabled && nextLiveStrokeShadowEnabled")
+        assertTrue("stroke_shadow transitions must refresh the installed foreground style",
+                state.contains("wasStrokeShadowEnabled != nextLiveStrokeShadowEnabled")
                         && state.contains("DockStrokeRenderer.refreshInstalledFromCurrentConfig()"));
+        assertTrue("the same transition must refresh the final native-shadow bridge",
+                state.contains("DockNativeShadowBridge.refreshConfig()")
+                        && state.contains("MainHook.onRuntimeDockShadowEnabled()"));
     }
 
     private static String slice(String source, String start, String end) {
