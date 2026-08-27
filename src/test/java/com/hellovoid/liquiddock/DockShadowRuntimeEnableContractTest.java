@@ -11,18 +11,20 @@ public class DockShadowRuntimeEnableContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void wholeDockShadowFalseToTrueReappliesAuthoritativeNativeOwner() throws Exception {
+    public void wholeDockShadowFalseToTrueRefreshesHotSeatsNativeLifecycle() throws Exception {
         String state = Files.readString(MAIN.resolve("VisualRuntimeState.java"));
         String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String enable = slice(main,
+                "static void onRuntimeDockShadowEnabled()",
+                "static void onRuntimeDockCustomizationDisabled()");
 
         assertTrue("false->true dock_shadow must dispatch an immediate reapply",
                 state.contains("!wasDockShadowEnabled && nextLiveDockShadowEnabled")
                         && state.contains("MainHook.onRuntimeDockShadowEnabled()"));
-        assertTrue("whole-Dock runtime enable must resync the already-known native target",
-                main.contains("static void onRuntimeDockShadowEnabled()")
-                        && main.contains("syncDockShadow(oldBg(), LiquidDockConfig.load().dock);"));
-        assertTrue("sync must use the authoritative Launcher native owner",
-                main.contains("View target = nativeShadowTarget();"));
+        assertTrue("whole-Dock runtime enable must refresh HotSeats' existing native owner",
+                enable.contains("refreshVendorDockShadow();"));
+        assertTrue("runtime refresh must delegate to HotSeats.showViewShadow",
+                main.contains("HookUtil.invoke(hotSeats, \"showViewShadow\")"));
     }
 
     @Test
@@ -32,5 +34,12 @@ public class DockShadowRuntimeEnableContractTest {
         assertTrue("false->true stroke_shadow must refresh the installed foreground style",
                 state.contains("!wasStrokeShadowEnabled && nextLiveStrokeShadowEnabled")
                         && state.contains("DockStrokeRenderer.refreshInstalledFromCurrentConfig()"));
+    }
+
+    private static String slice(String source, String start, String end) {
+        int from = source.indexOf(start);
+        int to = source.indexOf(end, Math.max(0, from));
+        if (from < 0 || to <= from) return "";
+        return source.substring(from, to);
     }
 }
