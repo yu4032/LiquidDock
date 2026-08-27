@@ -22,18 +22,20 @@ public class DockShadowVisibleOwnerContractTest {
     }
 
     @Test
-    public void wholeDockShadowUsesLauncherAuthoritativeNativeTarget() throws Exception {
+    public void wholeDockShadowUsesLauncherHotSeatsAsTheOnlyNativeLifecycleOwner() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
-        String sync = slice(main,
-                "static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock)",
-                "static void onRuntimeDockShadowDisabled()");
+        String ownership = slice(main,
+                "private static void installNativeDockShadowOwnership(",
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(");
 
-        assertTrue("whole-Dock shadow refresh must target Launcher's authoritative native owner",
-                sync.contains("View target = nativeShadowTarget();"));
-        assertTrue("configured shadow must be applied to that native target",
-                sync.contains("applyConfiguredNativeDockShadow(target, dock);"));
+        assertTrue("whole-Dock shadow must keep HotSeats.showViewShadow as the renderer",
+                ownership.contains("getDeclaredMethod(\"showViewShadow\")"));
+        assertTrue("HotSeats owner must be retained only to request vendor redraws",
+                main.contains("hotSeatsShadowOwnerRef"));
         assertFalse("the visible Dock material must not become a second native shadow owner",
-                sync.contains("applyConfiguredNativeDockShadow(dockBg, dock);"));
+                main.contains("applyConfiguredNativeDockShadow(dockBg"));
+        assertFalse("terminal native target ownership must not remain",
+                main.contains("nativeShadowTargetRef"));
     }
 
     @Test
