@@ -19,35 +19,44 @@ public class DockShadowRegressionContractTest {
     }
 
     @Test
-    public void wholeDockShadowUsesMiuiNativeShadowInsteadOfSoftwareLayer() throws IOException {
+    public void wholeDockShadowUsesVendorHotSeatsInsteadOfSoftwareLayer() throws IOException {
         String source = mainHook();
-        assertTrue("whole-Dock shadow must own the vendor Mi Shadow path",
+        assertTrue("whole-Dock shadow must hook the vendor HotSeats shadow lifecycle",
                 source.contains("installNativeDockShadowOwnership(classLoader)"));
-        assertTrue("configured shadow must be applied through the vendor native shadow helper",
-                source.contains("applyConfiguredNativeDockShadow"));
+        assertTrue("configured shadow must be rendered by HotSeats.showViewShadow",
+                source.contains("getDeclaredMethod(\"showViewShadow\")"));
         assertFalse("whole-Dock shadow must not force a software View layer",
                 source.contains("view.setLayerType(View.LAYER_TYPE_SOFTWARE, null);"));
         assertFalse("whole-Dock shadow must not draw with Paint.setShadowLayer",
                 source.contains("paint.setShadowLayer("));
+        assertFalse("whole-Dock shadow must not maintain a terminal native target",
+                source.contains("nativeShadowTargetRef"));
     }
 
     @Test
-    public void vendorShadowStateIsCapturedAndRestoredOnOwnershipRelease() throws IOException {
+    public void runtimeOwnershipUsesScopedVendorStateAndNeverInventsRestorationValues() throws IOException {
         String source = mainHook();
-        assertTrue("vendor shadow calls must be captured before LiquidDock substitutes parameters",
-                source.contains("captureVendorDockShadow(args);"));
-        assertTrue("Dock customization teardown must restore exact vendor shadow parameters",
-                source.contains("restoreVendorDockShadow();"));
+        String configured = slice(source,
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
+                "private static LiquidDockConfig.Dock currentNativeShadowConfig()");
         String disable = slice(source,
                 "static void onRuntimeDockShadowDisabled()",
                 "static void onRuntimeDockShadowEnabled()");
-        assertTrue("shadow-only disable must clear the authoritative native target while customization still owns it",
-                disable.contains("View target = nativeShadowTarget();")
-                        && disable.contains("clearNativeDockShadowArgs(target)"));
-        assertTrue("parent customization teardown must not be followed by a child clear",
-                disable.contains("!VisualRuntimeState.isDockCustomizationEnabled()"));
-        assertFalse("runtime shadow-only disable must not restore vendor state",
-                disable.contains("restoreVendorDockShadow();"));
+        String customizationDisable = slice(source,
+                "static void onRuntimeDockCustomizationDisabled()",
+                "private static void installDockResizeAnimationBypass(");
+
+        assertTrue("shadow-only disable must feed zero alpha through the vendor method",
+                configured.contains("VisualRuntimeState.isDockShadowEnabled()")
+                        && configured.contains(": 0;"));
+        assertTrue("temporary vendor fields must be restored after each vendor call",
+                source.contains("state.field.set(target, state.value)"));
+        assertTrue("runtime shadow-only disable must ask HotSeats to redraw itself",
+                disable.contains("refreshVendorDockShadow();"));
+        assertTrue("full customization release must ask HotSeats to redraw using untouched state",
+                customizationDisable.contains("refreshVendorDockShadow();"));
+        assertFalse("scoped ownership must not manufacture a vendor backup replay",
+                source.contains("restoreVendorDockShadow"));
     }
 
     @Test
