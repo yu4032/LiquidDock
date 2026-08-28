@@ -29,51 +29,22 @@ public class WidgetDarkContentAdaptationContractTest {
     }
 
     @Test
-    public void remoteViewsRequestsProviderNightResourcesBeforeTextFallback() throws Exception {
+    public void remoteViewsDoesNotForgeProviderNightModeInLightSystemMode() throws Exception {
         Path nightHookPath = MAIN.resolve("LauncherRemoteViewsNightModeHook.java");
-        assertTrue("dark-content adaptation must include a scoped RemoteViews night-resource hook",
-                Files.exists(nightHookPath));
-        if (!Files.exists(nightHookPath)) return;
-
-        String nightHook = Files.readString(nightHookPath);
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
         String adapter = Files.readString(MAIN.resolve("LauncherWidgetDarkContentAdapter.java"));
 
-        assertTrue(nightHook.contains("Configuration.UI_MODE_NIGHT_MASK"));
-        assertTrue(nightHook.contains("Configuration.UI_MODE_NIGHT_YES"));
-        assertTrue(nightHook.contains("createConfigurationContext"));
-        assertTrue(nightHook.contains("GlassRuntimeState.isWidgetDarkContentEnabled"));
-        assertTrue(nightHook.contains("LauncherAppWidgetHostView"));
-        assertTrue(nightHook.contains("applyAsync"));
-        assertTrue(nightHook.contains("reapplyAsync"));
-        assertTrue(nightHook.contains("reapplyCurrent"));
-        assertTrue(module.contains("LauncherRemoteViewsNightModeHook.install(classLoader)"));
-        assertTrue(adapter.contains("LauncherRemoteViewsNightModeHook.reapplyCurrent(host)"));
-        assertTrue(adapter.contains("NATIVE_NIGHT_REQUESTED"));
+        // Launcher 4.50 only reInflates after the real Configuration uiMode changes. Forcing a
+        // night Context while the launcher remains in light mode is not its native path and can
+        // inflate provider layouts against an incompatible host state, producing the error view.
+        assertFalse("do not hook RemoteViews to forge UI_MODE_NIGHT_YES", Files.exists(nightHookPath));
+        assertFalse(module.contains("LauncherRemoteViewsNightModeHook.install"));
+        assertFalse(adapter.contains("LauncherRemoteViewsNightModeHook"));
+        assertFalse(adapter.contains("NATIVE_NIGHT_REQUESTED"));
 
-        // Android's getDarkTextViews() means dark text for a light host background, the opposite
-        // of this feature. Provider night resources must be selected through Configuration instead.
-        assertFalse(nightHook.contains("getDarkTextViews"));
-    }
-
-    @Test
-    public void nativeNightTransitionForcesFreshInflationLikeLauncher450() throws Exception {
-        String nightHook = Files.readString(MAIN.resolve("LauncherRemoteViewsNightModeHook.java"));
-
-        // Launcher 4.50 owns the full reInflate state machine (widget_frame invalidation,
-        // mIsReInflate, and mRemoteViews). Prefer that exact path; keep the explicit framework-tag
-        // invalidation only as a compatibility fallback for launcher revisions without reInflate().
-        assertTrue(nightHook.contains("invokeLauncherReinflate(host)"));
-        assertTrue(nightHook.contains("\"reInflate\""));
-        assertTrue(nightHook.contains("android.R.id.widget_frame"));
-        assertTrue(nightHook.contains("setTagInternal"));
-        assertTrue(nightHook.contains("Integer.valueOf(-1)"));
-
-        int reapply = nightHook.indexOf("static void reapplyCurrent");
-        int nativeCall = nightHook.indexOf("invokeLauncherReinflate(host)", reapply);
-        int fallback = nightHook.indexOf("invalidateRemoteViewsLayoutId(host)", reapply);
-        assertTrue("Launcher native reinflate must be attempted before the compatibility fallback",
-                reapply >= 0 && nativeCall > reapply && fallback > nativeCall);
+        // Standard widgets keep the safe, already device-proven foreground-only fallback.
+        assertTrue(adapter.contains("applyTextTree(host)"));
+        assertTrue(adapter.contains("releaseTextTree(host)"));
     }
 
     @Test
