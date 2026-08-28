@@ -38,6 +38,7 @@ final class LauncherGlassVendorMaterialSuppressor {
         // variable. Keep the content-side contract while LiquidDock replaces the vendor blur.
         if (isMaMlHost(host)) {
             putMaMlBackgroundBlurVariable(host, 1.0d);
+            LauncherMamlBackgroundSuppressor.claim(host);
         }
     }
 
@@ -51,6 +52,7 @@ final class LauncherGlassVendorMaterialSuppressor {
             }
         }
         if (isMaMlHost(host)) {
+            LauncherMamlBackgroundSuppressor.release(host);
             putMaMlBackgroundBlurVariable(host, 0.0d);
         }
     }
