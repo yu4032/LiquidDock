@@ -57,6 +57,22 @@ public class WidgetDarkContentAdaptationContractTest {
     }
 
     @Test
+    public void nativeNightTransitionForcesFreshInflationLikeLauncher450() throws Exception {
+        String nightHook = Files.readString(MAIN.resolve("LauncherRemoteViewsNightModeHook.java"));
+
+        // Launcher 4.50's own reInflate() invalidates the RemoteViews layout-id tag before
+        // updateAppWidget(). Without that boundary, a day view tree may be re-applied with a
+        // night-qualified layout and AppWidgetHostView falls back to its error view.
+        assertTrue(nightHook.contains("android.R.id.widget_frame"));
+        assertTrue(nightHook.contains("setTag(android.R.id.widget_frame, Integer.valueOf(-1))"));
+
+        int reset = nightHook.indexOf("setTag(android.R.id.widget_frame, Integer.valueOf(-1))");
+        int update = nightHook.indexOf("updateAppWidget", reset);
+        assertTrue("layout-id tag must be invalidated before updateAppWidget forces reinflation",
+                reset >= 0 && update > reset);
+    }
+
+    @Test
     public void remoteViewsOnlyRecolorsDarkNeutralTextAndRestoresOriginalColors() throws Exception {
         String adapter = Files.readString(MAIN.resolve("LauncherWidgetDarkContentAdapter.java"));
 
