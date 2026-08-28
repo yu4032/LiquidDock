@@ -13,14 +13,17 @@ public class LauncherMamlWeatherBackgroundContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void weatherMamlSuppressesOnlyItsLiveSkyColorOwner() throws Exception {
+    public void weatherMamlSuppressesOnlyItsCompleteSkyOwner() throws Exception {
         String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
         String vendor = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
 
         assertTrue(suppressor.contains("b8006e83-c497-4642-9815-f674b82842b0"));
-        // Device mElements dump from Launcher 4.50 proves this is the one semantic group that owns
-        // bg_old_ou1b4i + bg_ou1b4i. Hide the group, not the two rectangles individually.
-        assertTrue(suppressor.contains("sky_color_ou1b4i"));
+        // Decompiled Weather MAML shows stable parent group "skyColor" owns both the old/new
+        // full-size gradient group and the following full-size glow Image. The live Launcher 4.50
+        // mElements dump also proves skyColor exists as an ElementGroup. Suppress that one owner;
+        // do not chase generated child suffixes or mutate individual rectangles/images.
+        assertTrue(suppressor.contains("\"skyColor\""));
+        assertFalse(suppressor.contains("sky_color_ou1b4i"));
         assertFalse(suppressor.contains("sky_color_7x3ebn"));
         assertFalse(suppressor.contains("\"bg_old_ou1b4i\""));
         assertFalse(suppressor.contains("\"bg_ou1b4i\""));
