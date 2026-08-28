@@ -52,4 +52,26 @@ public class LauncherMamlWeatherBackgroundContractTest {
         int claim = rootHook.indexOf("LauncherMamlBackgroundSuppressor.claimLoadedRoot");
         assertTrue(original >= 0 && claim > original);
     }
+
+    @Test
+    public void missingWeatherTargetDumpsRealNamedElementRegistryOnceWithoutMutatingIt()
+            throws Exception {
+        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
+
+        assertTrue("Launcher 4.50 ScreenElementRoot registry should be read directly",
+                suppressor.contains("mElements"));
+        assertTrue(suppressor.contains("[MamlWidgetBgDump]"));
+        assertTrue(suppressor.contains("dumpNamedElementsOnce"));
+        assertTrue(suppressor.contains("WeakReference"));
+        assertTrue(suppressor.contains("DUMPED_ROOTS"));
+        assertTrue(suppressor.contains("targetFound=false"));
+
+        int miss = suppressor.indexOf("targetFound=false");
+        int dump = suppressor.indexOf("dumpNamedElementsOnce", miss);
+        assertTrue("registry dump must happen only on the confirmed missing-target path",
+                miss >= 0 && dump > miss);
+
+        assertFalse(suppressor.contains("acceptVisitor"));
+        assertFalse(suppressor.contains("removeElement"));
+    }
 }
