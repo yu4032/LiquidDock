@@ -60,18 +60,20 @@ public class WidgetDarkContentAdaptationContractTest {
     public void nativeNightTransitionForcesFreshInflationLikeLauncher450() throws Exception {
         String nightHook = Files.readString(MAIN.resolve("LauncherRemoteViewsNightModeHook.java"));
 
-        // Launcher 4.50's own reInflate() invalidates the framework RemoteViews layout-id tag via
-        // View.setTagInternal(android.R.id.widget_frame, -1) before updateAppWidget(). The public
-        // keyed-tag API is not the right boundary for this framework-owned key.
+        // Launcher 4.50 owns the full reInflate state machine (widget_frame invalidation,
+        // mIsReInflate, and mRemoteViews). Prefer that exact path; keep the explicit framework-tag
+        // invalidation only as a compatibility fallback for launcher revisions without reInflate().
+        assertTrue(nightHook.contains("invokeLauncherReinflate(host)"));
+        assertTrue(nightHook.contains("\"reInflate\""));
         assertTrue(nightHook.contains("android.R.id.widget_frame"));
         assertTrue(nightHook.contains("setTagInternal"));
         assertTrue(nightHook.contains("Integer.valueOf(-1)"));
 
         int reapply = nightHook.indexOf("static void reapplyCurrent");
-        int resetCall = nightHook.indexOf("invalidateRemoteViewsLayoutId(host)", reapply);
-        int update = nightHook.indexOf("HookUtil.invoke(host, \"updateAppWidget\"", reapply);
-        assertTrue("layout-id invalidation must be called before updateAppWidget reinflates",
-                reapply >= 0 && resetCall > reapply && update > resetCall);
+        int nativeCall = nightHook.indexOf("invokeLauncherReinflate(host)", reapply);
+        int fallback = nightHook.indexOf("invalidateRemoteViewsLayoutId(host)", reapply);
+        assertTrue("Launcher native reinflate must be attempted before the compatibility fallback",
+                reapply >= 0 && nativeCall > reapply && fallback > nativeCall);
     }
 
     @Test
