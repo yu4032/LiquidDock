@@ -9,14 +9,14 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Clears vendor material ownership while preserving real widget/folder content. */
+/** Low-level Launcher material ownership; contains no widget-specific MAML rules. */
 final class LauncherGlassVendorMaterialSuppressor {
     private static final Map<View, Drawable> ORIGINAL_WIDGET_BACKGROUNDS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherGlassVendorMaterialSuppressor() {}
 
-    static void claimWidget(View host) {
+    static void claimWidgetMaterial(View host) {
         if (host == null) return;
         MiBlurBridge.clearContentBlur(host);
         setMaMlBlurIfSupported(host, false);
@@ -34,15 +34,11 @@ final class LauncherGlassVendorMaterialSuppressor {
             remoteViewsContent.setBackground(null);
         }
 
-        // Launcher 4.50 tells MAML content that a background material is available with this
-        // variable. Keep the content-side contract while LiquidDock replaces the vendor blur.
-        if (isMaMlHost(host)) {
-            putMaMlBackgroundBlurVariable(host, 1.0d);
-            LauncherMamlBackgroundRuleExecutor.claim(host);
-        }
+        // This variable is Launcher/MAML vendor material state, not a product-specific hide rule.
+        if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 1.0d);
     }
 
-    static void releaseWidget(View host) {
+    static void releaseWidgetMaterial(View host) {
         if (host == null) return;
         View remoteViewsContent = resolveRemoteViewsContent(host);
         if (remoteViewsContent != null) {
@@ -51,10 +47,7 @@ final class LauncherGlassVendorMaterialSuppressor {
                 remoteViewsContent.setBackground(original);
             }
         }
-        if (isMaMlHost(host)) {
-            LauncherMamlBackgroundRuleExecutor.release(host);
-            putMaMlBackgroundBlurVariable(host, 0.0d);
-        }
+        if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 0.0d);
     }
 
     static void claimFolderMaterial(View material) {
