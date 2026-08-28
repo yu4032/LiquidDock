@@ -60,13 +60,14 @@ public class WidgetDarkContentAdaptationContractTest {
     public void nativeNightTransitionForcesFreshInflationLikeLauncher450() throws Exception {
         String nightHook = Files.readString(MAIN.resolve("LauncherRemoteViewsNightModeHook.java"));
 
-        // Launcher 4.50's own reInflate() invalidates the RemoteViews layout-id tag before
-        // updateAppWidget(). Without that boundary, a day view tree may be re-applied with a
-        // night-qualified layout and AppWidgetHostView falls back to its error view.
+        // Launcher 4.50's own reInflate() invalidates the framework RemoteViews layout-id tag via
+        // View.setTagInternal(android.R.id.widget_frame, -1) before updateAppWidget(). The public
+        // keyed-tag API is not the right boundary for this framework-owned key.
         assertTrue(nightHook.contains("android.R.id.widget_frame"));
-        assertTrue(nightHook.contains("setTag(android.R.id.widget_frame, Integer.valueOf(-1))"));
+        assertTrue(nightHook.contains("setTagInternal"));
+        assertTrue(nightHook.contains("Integer.valueOf(-1)"));
 
-        int reset = nightHook.indexOf("setTag(android.R.id.widget_frame, Integer.valueOf(-1))");
+        int reset = nightHook.indexOf("setTagInternal");
         int update = nightHook.indexOf("updateAppWidget", reset);
         assertTrue("layout-id tag must be invalidated before updateAppWidget forces reinflation",
                 reset >= 0 && update > reset);
