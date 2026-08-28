@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Contracts for opt-in widget dark-content adaptation. */
+/** Contracts for opt-in widget dark-content adaptation without whole-widget inversion. */
 public class WidgetDarkContentAdaptationContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
