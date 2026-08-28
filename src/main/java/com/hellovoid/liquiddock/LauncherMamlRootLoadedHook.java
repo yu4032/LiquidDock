@@ -24,7 +24,7 @@ final class LauncherMamlRootLoadedHook {
                                 && owner.getClass().getName().endsWith(".MaMlHostView")
                                 && GlassRuntimeState.isWidgetEnabled()
                                 && args.length > 1 && args[1] != null) {
-                            LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(
+                            LauncherWidgetBackgroundController.claimLoadedMamlRoot(
                                     (View) owner, args[1]);
                         }
                         return result;
