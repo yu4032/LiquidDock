@@ -2,7 +2,10 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -14,8 +17,12 @@ final class LauncherMamlBackgroundSuppressor {
             "b8006e83-c497-4642-9815-f674b82842b0";
     private static final String WEATHER_SKY_COLOR_ELEMENT = "sky_color_7x3ebn";
     private static final String LOG_TAG = "[MamlWidgetBg]";
+    private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
+    private static final int DUMP_CHUNK_SIZE = 16;
 
     private static final Map<View, Claim> CLAIMS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Object, Boolean> DUMPED_ROOTS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherMamlBackgroundSuppressor() {}
@@ -47,6 +54,7 @@ final class LauncherMamlBackgroundSuppressor {
                     + " root=" + root.getClass().getSimpleName()
                     + " target=" + WEATHER_SKY_COLOR_ELEMENT
                     + " targetFound=false suppressed=false");
+            dumpNamedElementsOnce(productId, root);
             return;
         }
 
@@ -78,6 +86,52 @@ final class LauncherMamlBackgroundSuppressor {
 
     private static void restore(Claim claim) {
         HookUtil.invoke(claim.element, "show", claim.originalShow);
+    }
+
+    /**
+     * Launcher 4.50 ScreenElementRoot.findElement() reads its private mElements registry directly.
+     * When the inspected static payload name is absent, dump that same live registry exactly once
+     * per root. This is diagnostic-only: no visitor, show(), removeElement(), or tree mutation.
+     */
+    private static void dumpNamedElementsOnce(String productId, Object root) {
+        if (root == null) return;
+        synchronized (DUMPED_ROOTS) {
+            if (DUMPED_ROOTS.containsKey(root)) return;
+            DUMPED_ROOTS.put(root, Boolean.TRUE);
+        }
+
+        Object value = readField(root, "mElements");
+        if (!(value instanceof Map)) {
+            MainHook.log(DUMP_LOG_TAG + " productId=" + productId
+                    + " registry=mElements unavailable");
+            return;
+        }
+
+        Map<?, ?> elements = (Map<?, ?>) value;
+        List<String> names = new ArrayList<>(elements.size());
+        for (Map.Entry<?, ?> entry : elements.entrySet()) {
+            String name = String.valueOf(entry.getKey());
+            Object stored = entry.getValue();
+            Object element = stored instanceof WeakReference
+                    ? ((WeakReference<?>) stored).get() : stored;
+            String type = element != null ? element.getClass().getSimpleName() : "collected";
+            names.add(name + ":" + type);
+        }
+        Collections.sort(names);
+
+        int chunks = Math.max(1, (names.size() + DUMP_CHUNK_SIZE - 1) / DUMP_CHUNK_SIZE);
+        if (names.isEmpty()) {
+            MainHook.log(DUMP_LOG_TAG + " productId=" + productId + " count=0 chunk=1/1 names=[]");
+            return;
+        }
+        for (int chunk = 0; chunk < chunks; chunk++) {
+            int from = chunk * DUMP_CHUNK_SIZE;
+            int to = Math.min(names.size(), from + DUMP_CHUNK_SIZE);
+            MainHook.log(DUMP_LOG_TAG + " productId=" + productId
+                    + " count=" + names.size()
+                    + " chunk=" + (chunk + 1) + "/" + chunks
+                    + " names=" + names.subList(from, to));
+        }
     }
 
     private static Object readField(Object target, String name) {
