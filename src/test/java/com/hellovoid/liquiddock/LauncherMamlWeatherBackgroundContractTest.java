@@ -71,7 +71,9 @@ public class LauncherMamlWeatherBackgroundContractTest {
         assertTrue("registry dump must happen only on the confirmed missing-target path",
                 miss >= 0 && dump > miss);
 
-        assertFalse(suppressor.contains("acceptVisitor"));
-        assertFalse(suppressor.contains("removeElement"));
+        assertFalse(suppressor.contains("acceptVisitor("));
+        assertFalse(suppressor.contains("HookUtil.invoke(root, \"removeElement\""));
+        assertFalse(suppressor.contains("elements.remove("));
+        assertFalse(suppressor.contains("elements.clear("));
     }
 }
