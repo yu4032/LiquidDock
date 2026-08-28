@@ -1,0 +1,26 @@
+name: Apply bounded GREEN patch
+on:
+  push:
+    branches: [feat/widget-dark-content-adaptation]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/widget-dark-content-adaptation
+      - name: Apply production patch
+        run: python3 scripts/apply_presentation_dock_label_green.py
+      - name: Commit production patch
+        shell: bash
+        run: |
+          rm -f scripts/apply_presentation_dock_label_green.py
+          rm -f .github/workflows/apply-bounded-green.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'fix: stabilize workspace capture and dock refresh'
+          git push origin HEAD:feat/widget-dark-content-adaptation
