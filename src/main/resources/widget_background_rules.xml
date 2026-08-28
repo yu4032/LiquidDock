@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<widget-background-rules version="1">
+    <rule
+        id="miui-weather-compact"
+        type="maml"
+        productId="b8006e83-c497-4642-9815-f674b82842b0">
+        <hide-element name="skyColor" />
+    </rule>
+
+    <rule
+        id="miui-weather-large"
+        type="maml"
+        productId="c989887f-fa0d-4963-8c57-896c03e37efc">
+        <hide-element name="background" />
+    </rule>
+
+    <rule
+        id="miui-weather-wide"
+        type="maml"
+        productId="bc0f0cd2-43fd-4323-8061-55a8bc997e1f">
+        <hide-element name="background" />
+    </rule>
+
+    <!-- Future Weather products are recognized for diagnostics only. Never guess an owner. -->
+    <rule
+        id="miui-weather-diagnostic"
+        type="maml"
+        appPackage="com.miui.weather2" />
+</widget-background-rules>
