@@ -9,13 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Exact MAML background ownership rules backed by inspected widget payloads. */
+/** Exact MAML background ownership rules backed by inspected widget payloads and live roots. */
 final class LauncherMamlBackgroundSuppressor {
-    // HyperOS 3 Personal Assistant 15.30.35 / Weather "Today's weather" 2x2 payload.
-    // The sky background is one semantic owner group containing the two cross-fade gradients.
+    // HyperOS 3 Weather "Today's weather" MAML on Launcher 4.50.
+    // Live ScreenElementRoot.mElements proves this one semantic group owns the old/new cross-fade
+    // gradient rectangles. Hide only the group; leave clouds, effects, text and weather icon intact.
     private static final String WEATHER_PRODUCT_ID =
             "b8006e83-c497-4642-9815-f674b82842b0";
-    private static final String WEATHER_SKY_COLOR_ELEMENT = "sky_color_7x3ebn";
+    private static final String WEATHER_SKY_COLOR_ELEMENT = "sky_color_ou1b4i";
     private static final String LOG_TAG = "[MamlWidgetBg]";
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
     private static final int DUMP_CHUNK_SIZE = 16;
@@ -90,7 +91,7 @@ final class LauncherMamlBackgroundSuppressor {
 
     /**
      * Launcher 4.50 ScreenElementRoot.findElement() reads its private mElements registry directly.
-     * When the inspected static payload name is absent, dump that same live registry exactly once
+     * If the expected live owner is absent on a future payload, dump that same registry exactly once
      * per root. This is diagnostic-only: no visitor, show(), removeElement(), or tree mutation.
      */
     private static void dumpNamedElementsOnce(String productId, Object root) {
