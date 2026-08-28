@@ -4,7 +4,6 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.w3c.dom.Document;
@@ -15,6 +14,10 @@ import org.w3c.dom.NodeList;
 /** Pure-Java loader and matcher for declarative widget-background rules. */
 final class WidgetBackgroundRuleEngine {
     private static final String BUNDLED_RESOURCE = "widget_background_rules.xml";
+    private static final String ACCESS_EXTERNAL_DTD =
+            "http://javax.xml.XMLConstants/property/accessExternalDTD";
+    private static final String ACCESS_EXTERNAL_SCHEMA =
+            "http://javax.xml.XMLConstants/property/accessExternalSchema";
     private static final WidgetBackgroundRuleEngine EMPTY =
             new WidgetBackgroundRuleEngine(List.of());
 
@@ -45,9 +48,9 @@ final class WidgetBackgroundRuleEngine {
             safeFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
             safeFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
             safeFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false);
-            try { factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, ""); }
+            try { factory.setAttribute(ACCESS_EXTERNAL_DTD, ""); }
             catch (Throwable ignored) {}
-            try { factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, ""); }
+            try { factory.setAttribute(ACCESS_EXTERNAL_SCHEMA, ""); }
             catch (Throwable ignored) {}
 
             Document document = factory.newDocumentBuilder().parse(input);
