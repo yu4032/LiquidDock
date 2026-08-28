@@ -1,0 +1,111 @@
+name: Apply presentation/dock/label GREEN v2
+on:
+  push:
+    branches: [feat/widget-dark-content-adaptation]
+permissions: {contents: write}
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: feat/widget-dark-content-adaptation}
+      - name: Patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          R=Path('src/main/java/com/hellovoid/liquiddock')
+          def patch(name, pairs):
+              p=R/name; s=p.read_text()
+              for old,new in pairs:
+                  if old not in s: raise SystemExit(f'missing anchor {name}: {old[:80]!r}')
+                  s=s.replace(old,new,1)
+              p.write_text(s)
+
+          patch('LauncherGlassSceneController.java', [
+          ('    private static boolean vendorFolderCovered;\n','    private static boolean vendorFolderCovered;\n    private static boolean vendorHomeTransitionPending;\n    private static boolean vendorUnlockTransitionPending;\n'),
+          ('    private boolean recentsCovered;\n','    private boolean recentsCovered;\n    private boolean homeTransitionPending;\n    private boolean unlockTransitionPending;\n'),
+          ('        created.folderCovered = vendorFolderCovered;\n','        created.folderCovered = vendorFolderCovered;\n        created.homeTransitionPending = vendorHomeTransitionPending;\n        created.unlockTransitionPending = vendorUnlockTransitionPending;\n'),
+          ('    static void onWallpaperChangedForAll() {\n','''    static void setHomeTransitionPendingForAll(boolean pending) {\n        ArrayList<LauncherGlassSceneController> snapshot;\n        synchronized (LauncherGlassSceneController.class) {\n            vendorHomeTransitionPending = pending;\n            snapshot = new ArrayList<>(BY_ROOT.values());\n        }\n        for (LauncherGlassSceneController controller : snapshot) {\n            if (controller != null) controller.setHomeTransitionPending(pending);\n        }\n    }\n\n    static void setUnlockTransitionPendingForAll(boolean pending) {\n        ArrayList<LauncherGlassSceneController> snapshot;\n        synchronized (LauncherGlassSceneController.class) {\n            vendorUnlockTransitionPending = pending;\n            snapshot = new ArrayList<>(BY_ROOT.values());\n        }\n        for (LauncherGlassSceneController controller : snapshot) {\n            if (controller != null) controller.setUnlockTransitionPending(pending);\n        }\n    }\n\n    static void onWallpaperChangedForAll() {\n'''),
+          ('        if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);\n        applyLayerVisibility();\n','        if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);\n        applyLayerVisibility();\n        if (isPresentationPending()) session.suspendWorkspaceProducer();\n'),
+          ('    private void requestFreshBackdrop(long generation) {\n        if (state.state() == State.COVERED || generation != state.generation()) return;\n','    private void requestFreshBackdrop(long generation) {\n        if (isPresentationPending()) return;\n        if (state.state() == State.COVERED || generation != state.generation()) return;\n'),
+          ('    private synchronized void flushDeferredWallpaperPulse() {\n        if (state.state() == State.COVERED || wallpaperPulseInFlight) return;\n','    private synchronized void flushDeferredWallpaperPulse() {\n        if (isPresentationPending()) return;\n        if (state.state() == State.COVERED || wallpaperPulseInFlight) return;\n'),
+          ('    private void setFolderCovered(boolean covered) {\n','''    private boolean isPresentationPending() {\n        return homeTransitionPending || unlockTransitionPending;\n    }\n\n    private void setHomeTransitionPending(boolean pending) {\n        boolean wasPending = isPresentationPending();\n        homeTransitionPending = pending;\n        onPresentationPendingChanged(wasPending, isPresentationPending(), "home");\n    }\n\n    private void setUnlockTransitionPending(boolean pending) {\n        boolean wasPending = isPresentationPending();\n        unlockTransitionPending = pending;\n        onPresentationPendingChanged(wasPending, isPresentationPending(), "unlock");\n    }\n\n    private void onPresentationPendingChanged(boolean wasPending, boolean pending, String reason) {\n        if (wasPending == pending) return;\n        if (pending) {\n            deferInFlightWallpaperPulse();\n            state.onGenerationInvalidated();\n            applyLayerVisibility();\n            session.suspendWorkspaceProducer();\n            MainHook.log(TAG + " presentation pending reason=" + reason + " generation=" + state.generation());\n            return;\n        }\n        if (state.state() != State.COVERED && state.state() != State.DETACHED) {\n            MainHook.log(TAG + " presentation settled reason=" + reason + " generation=" + state.generation());\n            requestFreshBackdrop(state.generation());\n        }\n    }\n\n    private void setFolderCovered(boolean covered) {\n'''),
+          ('        if (state.state() == State.COVERED || wallpaperPulseInFlight) {\n','        if (state.state() == State.COVERED || isPresentationPending() || wallpaperPulseInFlight) {\n')])
+
+          patch('DockGlassCompositor.java', [('    void refreshUiSceneIfNeeded(int framebufferWidth, int framebufferHeight,\n','''    void invalidateUiScene() {\n        lastFingerprint = Long.MIN_VALUE;\n        lastOutputFingerprint = Long.MIN_VALUE;\n        for (CachedItem item : cached) item.uiFingerprint = Long.MIN_VALUE;\n    }\n\n    void refreshUiSceneIfNeeded(int framebufferWidth, int framebufferHeight,\n''')])
+          patch('Miuix307PassBlurTextureView.java', [('    /**\n     * Reconnect SurfaceFlinger\'s PassBlur producer without rebuilding the attached TextureView.\n','''    void requestDockSceneRefresh() {\n        if (shuttingDown) return;\n        postOnAnimation(() -> {\n            if (shuttingDown) return;\n            dockCompositor.invalidateUiScene();\n            updateBackdropMapping();\n            if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));\n            postInvalidateOnAnimation();\n        });\n    }\n\n    /**\n     * Reconnect SurfaceFlinger\'s PassBlur producer without rebuilding the attached TextureView.\n''')])
+          patch('Miuix307ZeroCopyRenderer.java', [('    static void clear() {\n','''    static void requestDockSceneRefresh() {\n        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();\n        if (gpuBackdrop != null) gpuBackdrop.requestDockSceneRefresh();\n    }\n\n    static void clear() {\n''')])
+          patch('ModuleMain.java', [('            LauncherGlassRecentsHook.install(classLoader, runtimeConfig);\n','            LauncherGlassRecentsHook.install(classLoader, runtimeConfig);\n            LauncherGlassHomePresentationHook.install(classLoader);\n            DockGlassDropRefreshHook.install(classLoader);\n')])
+
+          m=Path('src/main/AndroidManifest.xml'); s=m.read_text(); key='        android:name=".LiquidDockApp"\n'
+          if key not in s: raise SystemExit('manifest app name anchor missing')
+          m.write_text(s.replace(key,key+'        android:label="@string/app_name"\n',1))
+
+          (R/'LauncherGlassHomePresentationHook.java').write_text(r'''package com.hellovoid.liquiddock;
+
+/** Gates Workspace capture until HyperOS 4.50 HOME/unlock presentation is actually finished. */
+final class LauncherGlassHomePresentationHook {
+    private static final String TAG = "[DC][GlassScene]";
+    private static final String WINDOW_ELEMENT = "com.miui.home.recents.anim.WindowElement";
+    private static final String CLOSE_TO_HOME = "CLOSE_TO_HOME";
+    private static final String CLOSE_TO_HOME_CENTER = "CLOSE_TO_HOME_CENTER";
+    private static final String UNLOCK_STATE = "com.miui.home.launcher.common.UnlockAnimationStateMachine";
+    private static final String PREPARE = "PREPARE";
+    private static final String PRESENT_CALLBACK = "com.miui.home.launcher.compat.UserPresentAnimationCompatV12Folme$1";
+    private static final String VENDOR_RESET_COUNTER = "resetAnimationViewNum";
+    private static boolean installed, homeTransitionArmed, unlockTransitionArmed;
+    private LauncherGlassHomePresentationHook() {}
+    static void install(ClassLoader cl) {
+        if (installed) return;
+        try {
+            HookUtil.hookMethod(cl, WINDOW_ELEMENT, "animTo", chain -> {
+                Object[] a=chain.getArgs().toArray(new Object[0]);
+                for (Object x:a) { String t=String.valueOf(x); if (t.contains(CLOSE_TO_HOME_CENTER)||t.contains(CLOSE_TO_HOME)) { homeTransitionArmed=true; LauncherGlassSceneController.setHomeTransitionPendingForAll(true); break; } }
+                return chain.proceed(a);
+            });
+            HookUtil.hookMethod(cl, WINDOW_ELEMENT, "onAnimationEnd", chain -> {
+                Object r=chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (homeTransitionArmed) { homeTransitionArmed=false; LauncherGlassSceneController.setHomeTransitionPendingForAll(false); }
+                return r;
+            });
+        } catch (Throwable e) { MainHook.log(TAG+" HOME presentation hooks unavailable: "+e); }
+        try {
+            HookUtil.hookMethod(cl, UNLOCK_STATE, "setState", chain -> {
+                Object[] a=chain.getArgs().toArray(new Object[0]);
+                if (a.length>0 && PREPARE.equals(String.valueOf(a[0]))) { unlockTransitionArmed=true; LauncherGlassSceneController.setUnlockTransitionPendingForAll(true); }
+                return chain.proceed(a);
+            });
+        } catch (Throwable e) { MainHook.log(TAG+" unlock PREPARE hook unavailable: "+e); }
+        hookUnlockFinish(cl,"onComplete"); hookUnlockFinish(cl,"onCancel");
+        installed=true;
+    }
+    private static void hookUnlockFinish(ClassLoader cl,String method) {
+        try { HookUtil.hookMethod(cl,PRESENT_CALLBACK,method,chain -> { Object r=chain.proceed(chain.getArgs().toArray(new Object[0])); if (unlockTransitionArmed) { unlockTransitionArmed=false; LauncherGlassSceneController.setUnlockTransitionPendingForAll(false); } return r; });
+            MainHook.log(TAG+" unlock "+method+" barrier installed "+VENDOR_RESET_COUNTER);
+        } catch(Throwable e) { MainHook.log(TAG+" unlock "+method+" hook unavailable: "+e); }
+    }
+}
+''')
+          (R/'DockGlassDropRefreshHook.java').write_text(r'''package com.hellovoid.liquiddock;
+
+/** Recomputes Dock glass after HyperOS commits the final hotseat drop geometry. */
+final class DockGlassDropRefreshHook {
+    private static final String HOTSEATS="com.miui.home.launcher.hotseats.HotSeatsListContent";
+    private static boolean installed;
+    private DockGlassDropRefreshHook() {}
+    static void install(ClassLoader cl) {
+        if (installed) return;
+        try { HookUtil.hookMethod(cl,HOTSEATS,"onDropAnimationFinish",chain -> { Object r=chain.proceed(chain.getArgs().toArray(new Object[0])); Miuix307ZeroCopyRenderer.requestDockSceneRefresh(); return r; }); installed=true; }
+        catch(Throwable e) { MainHook.log("[DC][DockGlass] drop refresh hook unavailable: "+e); }
+    }
+}
+''')
+          PY
+          rm -f .github/workflows/apply-presentation-dock-label-green.yml .github/workflows/apply-presentation-dock-label-green-v2.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'fix: stabilize workspace capture and dock refresh'
+          git push origin HEAD:feat/widget-dark-content-adaptation
