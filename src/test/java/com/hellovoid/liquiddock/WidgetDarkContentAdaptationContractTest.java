@@ -67,10 +67,11 @@ public class WidgetDarkContentAdaptationContractTest {
         assertTrue(nightHook.contains("setTagInternal"));
         assertTrue(nightHook.contains("Integer.valueOf(-1)"));
 
-        int reset = nightHook.indexOf("setTagInternal");
-        int update = nightHook.indexOf("updateAppWidget", reset);
-        assertTrue("layout-id tag must be invalidated before updateAppWidget forces reinflation",
-                reset >= 0 && update > reset);
+        int reapply = nightHook.indexOf("static void reapplyCurrent");
+        int resetCall = nightHook.indexOf("invalidateRemoteViewsLayoutId(host)", reapply);
+        int update = nightHook.indexOf("HookUtil.invoke(host, \"updateAppWidget\"", reapply);
+        assertTrue("layout-id invalidation must be called before updateAppWidget reinflates",
+                reapply >= 0 && resetCall > reapply && update > resetCall);
     }
 
     @Test
