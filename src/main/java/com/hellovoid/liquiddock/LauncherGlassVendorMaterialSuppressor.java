@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.ViewGroup;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -23,14 +24,14 @@ final class LauncherGlassVendorMaterialSuppressor {
         invokeBoolean(host, "setBlurIfNeed", false);
         invokeInt(host, "setBlurRadius", 0);
 
-        // Launcher 4.50's LauncherAppWidgetHostView.setBlurIfNeed() owns only the RemoteViews
-        // android.R.id.widget_frame fallback plate. Its native blur path removes that background
-        // while leaving provider content untouched; LiquidDock mirrors the same ownership.
-        View widgetFrame = host.findViewById(android.R.id.widget_frame);
-        if (widgetFrame != null && widgetFrame != host) {
-            Drawable current = widgetFrame.getBackground();
-            if (current != null) ORIGINAL_WIDGET_BACKGROUNDS.put(widgetFrame, current);
-            widgetFrame.setBackground(null);
+        // RemoteViews stores its layout id under android.R.id.widget_frame as a keyed tag on the
+        // direct content root. Launcher 4.50 clears exactly that root background when native widget
+        // blur owns the fallback plate; mirror that ownership without touching provider children.
+        View remoteViewsContent = resolveRemoteViewsContent(host);
+        if (remoteViewsContent != null) {
+            Drawable current = remoteViewsContent.getBackground();
+            if (current != null) ORIGINAL_WIDGET_BACKGROUNDS.put(remoteViewsContent, current);
+            remoteViewsContent.setBackground(null);
         }
 
         // Launcher 4.50 tells MAML content that a background material is available with this
@@ -42,11 +43,11 @@ final class LauncherGlassVendorMaterialSuppressor {
 
     static void releaseWidget(View host) {
         if (host == null) return;
-        View widgetFrame = host.findViewById(android.R.id.widget_frame);
-        if (widgetFrame != null && widgetFrame != host) {
-            Drawable original = ORIGINAL_WIDGET_BACKGROUNDS.remove(widgetFrame);
-            if (original != null && widgetFrame.getBackground() == null) {
-                widgetFrame.setBackground(original);
+        View remoteViewsContent = resolveRemoteViewsContent(host);
+        if (remoteViewsContent != null) {
+            Drawable original = ORIGINAL_WIDGET_BACKGROUNDS.remove(remoteViewsContent);
+            if (original != null && remoteViewsContent.getBackground() == null) {
+                remoteViewsContent.setBackground(original);
             }
         }
         if (isMaMlHost(host)) {
@@ -59,6 +60,18 @@ final class LauncherGlassVendorMaterialSuppressor {
         MiBlurBridge.clearContentBlur(material);
         invokeBoolean(material, "setViewBlur", false);
         invokeBoolean(material, "setBlurIfNeed", false);
+    }
+
+    private static View resolveRemoteViewsContent(View host) {
+        if (!(host instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) host;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child != null && child.getTag(android.R.id.widget_frame) instanceof Integer) {
+                return child;
+            }
+        }
+        return null;
     }
 
     private static boolean isMaMlHost(View host) {
