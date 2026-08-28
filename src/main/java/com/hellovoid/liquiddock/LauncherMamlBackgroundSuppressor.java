@@ -12,11 +12,12 @@ import java.util.WeakHashMap;
 /** Exact MAML background ownership rules backed by inspected widget payloads and live roots. */
 final class LauncherMamlBackgroundSuppressor {
     // HyperOS 3 Weather "Today's weather" MAML on Launcher 4.50.
-    // Live ScreenElementRoot.mElements proves this one semantic group owns the old/new cross-fade
-    // gradient rectangles. Hide only the group; leave clouds, effects, text and weather icon intact.
+    // Decompiled payload + live ScreenElementRoot.mElements show stable parent "skyColor" owns
+    // both the full-size old/new gradient subgroup and the following full-size glow image. Hide
+    // only that parent; higher/lower weather effects, information and weather icon stay as siblings.
     private static final String WEATHER_PRODUCT_ID =
             "b8006e83-c497-4642-9815-f674b82842b0";
-    private static final String WEATHER_SKY_COLOR_ELEMENT = "sky_color_ou1b4i";
+    private static final String WEATHER_SKY_OWNER_ELEMENT = "skyColor";
     private static final String LOG_TAG = "[MamlWidgetBg]";
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
     private static final int DUMP_CHUNK_SIZE = 16;
@@ -49,11 +50,11 @@ final class LauncherMamlBackgroundSuppressor {
                     + " root=null targetFound=false suppressed=false");
             return;
         }
-        Object target = HookUtil.invoke(root, "findElement", WEATHER_SKY_COLOR_ELEMENT);
+        Object target = HookUtil.invoke(root, "findElement", WEATHER_SKY_OWNER_ELEMENT);
         if (target == null) {
             MainHook.log(LOG_TAG + " productId=" + productId
                     + " root=" + root.getClass().getSimpleName()
-                    + " target=" + WEATHER_SKY_COLOR_ELEMENT
+                    + " target=" + WEATHER_SKY_OWNER_ELEMENT
                     + " targetFound=false suppressed=false");
             dumpNamedElementsOnce(productId, root);
             return;
@@ -75,7 +76,7 @@ final class LauncherMamlBackgroundSuppressor {
         boolean suppressed = !readBooleanField(target, "mShow", true);
         MainHook.log(LOG_TAG + " productId=" + productId
                 + " root=" + root.getClass().getSimpleName()
-                + " target=" + WEATHER_SKY_COLOR_ELEMENT
+                + " target=" + WEATHER_SKY_OWNER_ELEMENT
                 + " targetFound=true suppressed=" + suppressed);
     }
 
