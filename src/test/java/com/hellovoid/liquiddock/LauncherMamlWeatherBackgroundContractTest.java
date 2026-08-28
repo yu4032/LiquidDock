@@ -33,4 +33,19 @@ public class LauncherMamlWeatherBackgroundContractTest {
         assertFalse(suppressor.contains("setVisibility"));
         assertFalse(suppressor.contains("setColorFilter"));
     }
+
+    @Test
+    public void weatherMamlClaimsLoadedRootAtDeterministicSelfInitBoundary() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
+
+        assertTrue(hook.contains("com.miui.maml.component.MamlView"));
+        assertTrue(hook.contains("\"initMamlview\""));
+        assertTrue(hook.contains("com.miui.maml.ScreenElementRoot"));
+        assertTrue(hook.contains("LauncherMamlBackgroundSuppressor.claimLoadedRoot"));
+        assertTrue(suppressor.contains("claimLoadedRoot(View host, Object root)"));
+        assertTrue(suppressor.contains("[MamlWidgetBg]"));
+        assertTrue(suppressor.contains("targetFound="));
+        assertTrue(suppressor.contains("suppressed="));
+    }
 }
