@@ -36,16 +36,24 @@ public class LauncherMamlWeatherBackgroundContractTest {
 
     @Test
     public void weatherMamlClaimsLoadedRootAtDeterministicSelfInitBoundary() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String rootHook = Files.readString(MAIN.resolve("LauncherMamlRootLoadedHook.java"));
+        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
         String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
 
-        assertTrue(hook.contains("com.miui.maml.component.MamlView"));
-        assertTrue(hook.contains("\"initMamlview\""));
-        assertTrue(hook.contains("com.miui.maml.ScreenElementRoot"));
-        assertTrue(hook.contains("LauncherMamlBackgroundSuppressor.claimLoadedRoot"));
+        assertTrue(rootHook.contains("com.miui.maml.component.MamlView"));
+        assertTrue(rootHook.contains("\"initMamlview\""));
+        assertTrue(rootHook.contains("com.miui.maml.ScreenElementRoot"));
+        assertTrue(rootHook.contains("LauncherMamlBackgroundSuppressor.claimLoadedRoot"));
+        assertTrue(module.contains("LauncherMamlRootLoadedHook.install(classLoader)"));
         assertTrue(suppressor.contains("claimLoadedRoot(View host, Object root)"));
         assertTrue(suppressor.contains("[MamlWidgetBg]"));
         assertTrue(suppressor.contains("targetFound="));
         assertTrue(suppressor.contains("suppressed="));
+
+        // The claim must run after the original initMamlview returns: at that point Launcher 4.50
+        // has assigned mRoot and ScreenElementRoot.selfInit() has completed.
+        int original = rootHook.indexOf("chain.proceed(args)");
+        int claim = rootHook.indexOf("LauncherMamlBackgroundSuppressor.claimLoadedRoot");
+        assertTrue(original >= 0 && claim > original);
     }
 }
