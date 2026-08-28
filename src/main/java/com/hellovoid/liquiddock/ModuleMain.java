@@ -33,6 +33,7 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
                     runtimeConfig.glass.iconEnabled,
                     runtimeConfig.glass.widgetEnabled,
+                    runtimeConfig.glass.widgetDarkContent,
                     runtimeConfig.glass.smallFolderStyle.enabled,
                     runtimeConfig.glass.largeFolderStyle.enabled);
             VisualRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
