@@ -68,14 +68,21 @@ final class LauncherRemoteViewsNightModeHook {
     static void reapplyCurrent(View host) {
         if (!isLauncherAppWidgetHost(host) || !LauncherGlassHierarchy.isWorkspace(host)) return;
         try {
+            // Current Launcher 4.50 already owns the complete uiMode re-inflation state machine:
+            // it invalidates android.R.id.widget_frame with setTagInternal(), sets mIsReInflate,
+            // and updates its current mRemoteViews. Reuse that exact boundary whenever available.
+            if (invokeLauncherReinflate(host)) {
+                MainHook.log(TAG + " requested launcher provider reinflate host="
+                        + host.getClass().getSimpleName()
+                        + " night=" + GlassRuntimeState.isWidgetDarkContentEnabled());
+                return;
+            }
+
+            // Compatibility fallback for Launcher revisions without reInflate(). Mirror the key
+            // framework boundary before updateAppWidget; if even that is unavailable, keep the
+            // current widget alive and rely on the text-only dark-content fallback instead.
             Object value = HookUtil.getField(host, "mLastInflatedRemoteViews");
             if (!(value instanceof RemoteViews)) return;
-
-            // Launcher 4.50 does this in LauncherAppWidgetHostView.reInflate() before
-            // updateAppWidget(mRemoteViews). Invalidating the framework-owned layout-id tag forces
-            // AppWidgetHostView to inflate the newly qualified layout instead of re-applying night
-            // RemoteViews actions onto a stale day-mode View tree. If this boundary is unavailable,
-            // keep the existing widget alive and let the text-only fallback handle dark content.
             if (!invalidateRemoteViewsLayoutId(host)) {
                 MainHook.log(TAG + " provider reinflate skipped: widget_frame tag unavailable host="
                         + host.getClass().getSimpleName());
@@ -83,11 +90,24 @@ final class LauncherRemoteViewsNightModeHook {
             }
 
             HookUtil.invoke(host, "updateAppWidget", value);
-            MainHook.log(TAG + " requested provider reinflate host="
+            MainHook.log(TAG + " requested compatibility provider reinflate host="
                     + host.getClass().getSimpleName()
                     + " night=" + GlassRuntimeState.isWidgetDarkContentEnabled());
         } catch (Throwable error) {
             MainHook.log(TAG + " provider reinflate unavailable: " + error);
+        }
+    }
+
+    private static boolean invokeLauncherReinflate(View host) {
+        try {
+            Method reInflate = HookUtil.findMethodExact(host.getClass(), "reInflate",
+                    new Class<?>[0]);
+            reInflate.invoke(host);
+            return true;
+        } catch (Throwable unavailable) {
+            MainHook.log(TAG + " launcher reInflate unavailable; using compatibility fallback: "
+                    + unavailable);
+            return false;
         }
     }
 
