@@ -13,6 +13,7 @@ final class LauncherMamlBackgroundSuppressor {
     private static final String WEATHER_PRODUCT_ID =
             "b8006e83-c497-4642-9815-f674b82842b0";
     private static final String WEATHER_SKY_COLOR_ELEMENT = "sky_color_7x3ebn";
+    private static final String LOG_TAG = "[MamlWidgetBg]";
 
     private static final Map<View, Claim> CLAIMS =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -21,16 +22,33 @@ final class LauncherMamlBackgroundSuppressor {
 
     static void claim(View host) {
         if (host == null) return;
+        claimLoadedRoot(host, readField(host, "mRoot"));
+    }
+
+    static void claimLoadedRoot(View host, Object root) {
+        if (host == null) return;
         Object itemInfo = HookUtil.invoke(host, "getItemInfo");
-        if (!WEATHER_PRODUCT_ID.equals(readStringField(itemInfo, "productId"))) {
+        String productId = readStringField(itemInfo, "productId");
+        if (!WEATHER_PRODUCT_ID.equals(productId)) {
             release(host);
+            MainHook.log(LOG_TAG + " productId=" + productId
+                    + " weather=false rootLoaded=" + (root != null));
             return;
         }
 
-        Object root = readField(host, "mRoot");
-        if (root == null) return;
+        if (root == null) {
+            MainHook.log(LOG_TAG + " productId=" + productId
+                    + " root=null targetFound=false suppressed=false");
+            return;
+        }
         Object target = HookUtil.invoke(root, "findElement", WEATHER_SKY_COLOR_ELEMENT);
-        if (target == null) return;
+        if (target == null) {
+            MainHook.log(LOG_TAG + " productId=" + productId
+                    + " root=" + root.getClass().getSimpleName()
+                    + " target=" + WEATHER_SKY_COLOR_ELEMENT
+                    + " targetFound=false suppressed=false");
+            return;
+        }
 
         Claim previous = CLAIMS.get(host);
         if (previous != null && previous.element != target) {
@@ -45,6 +63,11 @@ final class LauncherMamlBackgroundSuppressor {
 
         // Hide the one semantic sky-background owner. Do not traverse or mutate provider content.
         HookUtil.invoke(target, "show", false);
+        boolean suppressed = !readBooleanField(target, "mShow", true);
+        MainHook.log(LOG_TAG + " productId=" + productId
+                + " root=" + root.getClass().getSimpleName()
+                + " target=" + WEATHER_SKY_COLOR_ELEMENT
+                + " targetFound=true suppressed=" + suppressed);
     }
 
     static void release(View host) {
