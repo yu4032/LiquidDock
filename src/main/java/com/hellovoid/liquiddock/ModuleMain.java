@@ -44,7 +44,6 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.dock.strokeShadow,
                     runtimeConfig.divider.enabled);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
-            LauncherRemoteViewsNightModeHook.install(classLoader);
             new MainHook().install(classLoader);
 
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
