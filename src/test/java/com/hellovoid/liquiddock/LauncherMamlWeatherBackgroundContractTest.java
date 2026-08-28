@@ -8,96 +8,82 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Contracts for HyperOS 3 Weather MAML background ownership across widget sizes. */
+/** Contracts for declarative HyperOS MAML widget background ownership. */
 public class LauncherMamlWeatherBackgroundContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
+    private static final Path RULES = Path.of("src/main/resources/widget_background_rules.xml");
 
     @Test
-    public void weatherMamlSuppressesOnlyItsCompleteSkyOwner() throws Exception {
-        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
-        String vendor = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
+    public void knownWeatherOwnershipLivesInXmlAndExecutorStaysGeneric() throws Exception {
+        String rules = Files.readString(RULES);
+        String executor = Files.readString(MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
-        assertTrue(suppressor.contains("b8006e83-c497-4642-9815-f674b82842b0"));
-        assertTrue(suppressor.contains("\"skyColor\""));
-        assertFalse(suppressor.contains("sky_color_ou1b4i"));
-        assertFalse(suppressor.contains("sky_color_7x3ebn"));
-        assertFalse(suppressor.contains("\"bg_old_ou1b4i\""));
-        assertFalse(suppressor.contains("\"bg_ou1b4i\""));
-        assertTrue(suppressor.contains("findElement"));
-        assertTrue(suppressor.contains("show"));
-        assertTrue(suppressor.contains("false"));
-        assertTrue(suppressor.contains("mShow"));
-        assertTrue(suppressor.contains("release"));
-        assertTrue(vendor.contains("LauncherMamlBackgroundSuppressor.claim(host)"));
-        assertTrue(vendor.contains("LauncherMamlBackgroundSuppressor.release(host)"));
+        assertTrue(rules.contains("b8006e83-c497-4642-9815-f674b82842b0"));
+        assertTrue(rules.contains("name=\"skyColor\""));
+        assertTrue(rules.contains("name=\"background\""));
+        assertTrue(executor.contains("findElement"));
+        assertTrue(executor.contains("\"show\", false"));
+        assertTrue(executor.contains("mShow"));
+        assertTrue(executor.contains("release"));
 
-        assertFalse(suppressor.contains("acceptVisitor"));
-        assertFalse(suppressor.contains("setVisibility"));
-        assertFalse(suppressor.contains("setColorFilter"));
+        assertFalse(executor.contains("b8006e83-c497-4642-9815-f674b82842b0"));
+        assertFalse(executor.contains("c989887f-fa0d-4963-8c57-896c03e37efc"));
+        assertFalse(executor.contains("bc0f0cd2-43fd-4323-8061-55a8bc997e1f"));
+        assertFalse(executor.contains("com.miui.weather2"));
+        assertFalse(executor.contains("acceptVisitor"));
+        assertFalse(executor.contains("setVisibility"));
+        assertFalse(executor.contains("setColorFilter"));
     }
 
     @Test
-    public void weatherMamlRecognizesOtherSizeProductsByExactBoundAppPackage() throws Exception {
-        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
+    public void unknownWeatherProductUsesDiagnosticOnlyPackageRule() throws Exception {
+        String rules = Files.readString(RULES);
+        String executor = Files.readString(MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
-        // Launcher 4.50 MaMlWidgetInfo persists appPackage through its intent. The exact package
-        // identifies unknown Weather products for diagnostics; known product IDs resolve their
-        // observed semantic owner independently (skyColor or background).
-        assertTrue(suppressor.contains("com.miui.weather2"));
-        assertTrue(suppressor.contains("appPackage"));
-        assertTrue(suppressor.contains("isWeatherIdentity"));
-        assertTrue(suppressor.contains("WEATHER_PRODUCT_ID.equals(productId)"));
-        assertTrue(suppressor.contains("WEATHER_APP_PACKAGE.equals(appPackage)"));
-
-        // Keep one-time size diagnostics so device logs prove which product/root each size uses.
-        assertTrue(suppressor.contains("spanX"));
-        assertTrue(suppressor.contains("spanY"));
-        assertTrue(suppressor.contains("configSpanX"));
-        assertTrue(suppressor.contains("configSpanY"));
+        assertTrue(rules.contains("id=\"miui-weather-diagnostic\""));
+        assertTrue(rules.contains("appPackage=\"com.miui.weather2\""));
+        assertTrue(executor.contains("elementNames.isEmpty()"));
+        assertTrue(executor.contains("diagnosticOnly=true"));
+        assertTrue(executor.contains("dumpNamedElementsOnce"));
     }
 
     @Test
-    public void weatherMamlClaimsLoadedRootAtDeterministicSelfInitBoundary() throws Exception {
+    public void mamlClaimsLoadedRootAtDeterministicSelfInitBoundary() throws Exception {
         String rootHook = Files.readString(MAIN.resolve("LauncherMamlRootLoadedHook.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
+        String executor = Files.readString(MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
         assertTrue(rootHook.contains("com.miui.maml.component.MamlView"));
         assertTrue(rootHook.contains("\"initMamlview\""));
         assertTrue(rootHook.contains("com.miui.maml.ScreenElementRoot"));
-        assertTrue(rootHook.contains("LauncherMamlBackgroundSuppressor.claimLoadedRoot"));
+        assertTrue(rootHook.contains("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot"));
         assertTrue(module.contains("LauncherMamlRootLoadedHook.install(classLoader)"));
-        assertTrue(suppressor.contains("claimLoadedRoot(View host, Object root)"));
-        assertTrue(suppressor.contains("[MamlWidgetBg]"));
-        assertTrue(suppressor.contains("targetFound="));
-        assertTrue(suppressor.contains("suppressed="));
+        assertTrue(executor.contains("claimLoadedRoot(View host, Object root)"));
+        assertTrue(executor.contains("[MamlWidgetBg]"));
+        assertTrue(executor.contains("targetFound=false"));
+        assertTrue(executor.contains("suppressed="));
 
         int original = rootHook.indexOf("chain.proceed(args)");
-        int claim = rootHook.indexOf("LauncherMamlBackgroundSuppressor.claimLoadedRoot");
+        int claim = rootHook.indexOf("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot");
         assertTrue(original >= 0 && claim > original);
     }
 
     @Test
-    public void missingWeatherTargetDumpsRealNamedElementRegistryOnceWithoutMutatingIt()
+    public void missingConfiguredTargetDumpsRealRegistryOnceWithoutMutatingIt()
             throws Exception {
-        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
+        String executor = Files.readString(MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
         assertTrue("Launcher 4.50 ScreenElementRoot registry should be read directly",
-                suppressor.contains("mElements"));
-        assertTrue(suppressor.contains("[MamlWidgetBgDump]"));
-        assertTrue(suppressor.contains("dumpNamedElementsOnce"));
-        assertTrue(suppressor.contains("WeakReference"));
-        assertTrue(suppressor.contains("DUMPED_ROOTS"));
-        assertTrue(suppressor.contains("targetFound=false"));
+                executor.contains("mElements"));
+        assertTrue(executor.contains("[MamlWidgetBgDump]"));
+        assertTrue(executor.contains("dumpNamedElementsOnce"));
+        assertTrue(executor.contains("WeakReference"));
+        assertTrue(executor.contains("DUMPED_ROOTS"));
+        assertTrue(executor.contains("targetFound=false"));
 
-        int miss = suppressor.indexOf("targetFound=false");
-        int dump = suppressor.indexOf("dumpNamedElementsOnce", miss);
-        assertTrue("registry dump must happen only on the confirmed missing-target path",
-                miss >= 0 && dump > miss);
-
-        assertFalse(suppressor.contains("acceptVisitor("));
-        assertFalse(suppressor.contains("HookUtil.invoke(root, \"removeElement\""));
-        assertFalse(suppressor.contains("elements.remove("));
-        assertFalse(suppressor.contains("elements.clear("));
+        assertFalse(executor.contains("acceptVisitor("));
+        assertFalse(executor.contains("removeElement"));
+        assertFalse(executor.contains("elements.remove("));
+        assertFalse(executor.contains("elements.clear("));
     }
 }
