@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Contracts for the bundled HyperOS 3 "Today's weather" MAML background owner. */
+/** Contracts for HyperOS 3 Weather MAML background ownership across widget sizes. */
 public class LauncherMamlWeatherBackgroundContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -18,10 +18,6 @@ public class LauncherMamlWeatherBackgroundContractTest {
         String vendor = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
 
         assertTrue(suppressor.contains("b8006e83-c497-4642-9815-f674b82842b0"));
-        // Decompiled Weather MAML shows stable parent group "skyColor" owns both the old/new
-        // full-size gradient group and the following full-size glow Image. The live Launcher 4.50
-        // mElements dump also proves skyColor exists as an ElementGroup. Suppress that one owner;
-        // do not chase generated child suffixes or mutate individual rectangles/images.
         assertTrue(suppressor.contains("\"skyColor\""));
         assertFalse(suppressor.contains("sky_color_ou1b4i"));
         assertFalse(suppressor.contains("sky_color_7x3ebn"));
@@ -38,6 +34,26 @@ public class LauncherMamlWeatherBackgroundContractTest {
         assertFalse(suppressor.contains("acceptVisitor"));
         assertFalse(suppressor.contains("setVisibility"));
         assertFalse(suppressor.contains("setColorFilter"));
+    }
+
+    @Test
+    public void weatherMamlRecognizesOtherSizeProductsByExactBoundAppPackage() throws Exception {
+        String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
+
+        // Launcher 4.50 MaMlWidgetInfo persists appPackage through its intent and the inspected
+        // Weather MAML description binds com.miui.weather2. This lets other size/product variants
+        // share the same exact skyColor ownership rule without guessing their product IDs.
+        assertTrue(suppressor.contains("com.miui.weather2"));
+        assertTrue(suppressor.contains("appPackage"));
+        assertTrue(suppressor.contains("isWeatherIdentity"));
+        assertTrue(suppressor.contains("WEATHER_PRODUCT_ID.equals(productId)"));
+        assertTrue(suppressor.contains("WEATHER_APP_PACKAGE.equals(appPackage)"));
+
+        // Keep one-time size diagnostics so device logs prove which product/root each size uses.
+        assertTrue(suppressor.contains("spanX"));
+        assertTrue(suppressor.contains("spanY"));
+        assertTrue(suppressor.contains("configSpanX"));
+        assertTrue(suppressor.contains("configSpanY"));
     }
 
     @Test
