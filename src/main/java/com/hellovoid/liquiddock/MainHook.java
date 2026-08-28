@@ -1,8 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Rect;
@@ -16,19 +13,16 @@ import java.lang.ref.WeakReference;
 /** Core Launcher hooks for LiquidDock — zero-copy glass, stroke, dock geometry, workstation. */
 public class MainHook {
 
-    private static WeakReference<View> shadowViewRef = new WeakReference<>(null);
     private static WeakReference<View> oldBgRef = new WeakReference<>(null);
-    private static WeakReference<View> nativeShadowTargetRef = new WeakReference<>(null);
+    private static WeakReference<Object> hotSeatsShadowOwnerRef = new WeakReference<>(null);
+    private static volatile LiquidDockConfig.Dock nativeShadowConfig;
 
     private static View oldBg() { return oldBgRef.get(); }
     private static void setOldBg(View view) { oldBgRef = new WeakReference<>(view); }
-    private static View nativeShadowTarget() { return nativeShadowTargetRef.get(); }
-    private static void setNativeShadowTarget(View view) {
-        nativeShadowTargetRef = new WeakReference<>(view);
+    private static Object hotSeatsShadowOwner() { return hotSeatsShadowOwnerRef.get(); }
+    private static void setHotSeatsShadowOwner(Object hotSeats) {
+        if (hotSeats != null) hotSeatsShadowOwnerRef = new WeakReference<>(hotSeats);
     }
-    private static int lastShadowW;
-    private static int bgW, bgH, shadowPad;
-    private static float bgR = 30f;
     private static float strokeR = 30f;
     private static volatile boolean workstationMode;
     private static volatile boolean workstationModeHookConfirmed;
@@ -104,9 +98,9 @@ public class MainHook {
                 Math.round(config.workstation.allAppsPortraitBottomSpacing * workstationAllAppsScale));
 
         boolean dockCustomization = config.dock.enabled;
-        // These hooks are permanent but inert when Dock customization is live-disabled. Keeping
-        // them installed prevents a startup snapshot from continuing to own native shadow state.
-        installNativeDockShadowSuppression(classLoader);
+        // Keep HotSeats itself as the only authority for the whole-Dock native shadow.
+        nativeShadowConfig = config.dock;
+        installNativeDockShadowOwnership(classLoader);
         installDockShadowSetupHook(classLoader);
         if (config.glass.enabled) {
             if (Miuix307MaterialPipeline.install(classLoader, config)) {
@@ -246,41 +240,127 @@ public class MainHook {
     // ── helpers ──────────────────────────────────────────────────────
 
     /**
-     * Suppress MIUI's own static Dock shadow before either the legacy or 307 zero-copy path can
-     * return. LiquidDock's independent whole-Dock shadow is the sole visual shadow owner.
+     * Hook the two HotSeats lifecycle methods that own the stock native shadow. The original
+     * methods always remain the renderer; LiquidDock only supplies temporary state while they run.
      */
-    private static void installNativeDockShadowSuppression(ClassLoader cl) {
+    private static void installNativeDockShadowOwnership(ClassLoader cl) {
         try {
-            HookUtil.hookMethod(cl,
-                    "com.miui.home.launcher.hotseats.HotSeats",
-                    "getMingouStaticDockBlurShadowTarget",
-                    chain -> {
-                        Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (r instanceof View) setNativeShadowTarget((View) r);
-                        return r;
-                    });
-            Class<?> ms = Class.forName("com.miui.home.launcher.common.MiShadowUtils", false, cl);
-            HookUtil.hookMethod(ms, "applyViewShadow",
-                    new Class<?>[]{View.class, int.class, float.class, float.class, float.class,
-                            float.class},
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) {
-                            return chain.proceed(args);
-                        }
-                        if (args[0] != nativeShadowTarget()) return chain.proceed(args);
-                        args[1] = Color.TRANSPARENT;
-                        args[2] = 0f;
-                        args[3] = 0f;
-                        args[4] = 0f;
-                        return chain.proceed(args);
-                    });
+            Class<?> hotSeatsClass = Class.forName(
+                    "com.miui.home.launcher.hotseats.HotSeats", false, cl);
+            java.lang.reflect.Method showViewShadow =
+                    hotSeatsClass.getDeclaredMethod("showViewShadow");
+            showViewShadow.setAccessible(true);
+            HookUtil.hook(showViewShadow, chain -> {
+                Object hotSeats = chain.getThisObject();
+                setHotSeatsShadowOwner(hotSeats);
+                HotSeatsShadowScope scope = pushConfiguredHotSeatsShadow(hotSeats);
+                try {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                } finally {
+                    scope.close();
+                }
+            });
+
+            try {
+                // HyperOS animates the native shadow from HotSeats.setTranslationY. Do not replay
+                // another shadow here: any nested showViewShadow call is already intercepted above.
+                java.lang.reflect.Method setTranslationY =
+                        hotSeatsClass.getDeclaredMethod("setTranslationY", float.class);
+                setTranslationY.setAccessible(true);
+                HookUtil.hook(setTranslationY, chain -> {
+                    setHotSeatsShadowOwner(chain.getThisObject());
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
+            } catch (Throwable translationError) {
+                log("[DC] HotSeats setTranslationY shadow hook unavailable: " + translationError);
+            }
+            log("[DC] HotSeats native Dock shadow lifecycle hooked");
         } catch (Throwable e) {
-            log("[DC] native Dock shadow hook unavailable: " + e);
+            log("[DC] native Dock shadow lifecycle unavailable: " + e);
         }
     }
 
-    /** Install the independent whole-Dock shadow before the MiuiX 307 early return. */
+    private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(Object hotSeats) {
+        LiquidDockConfig.Dock dock = currentNativeShadowConfig();
+        if (hotSeats == null || dock == null || workstationMode
+                || !VisualRuntimeState.isDockCustomizationEnabled()) {
+            return HotSeatsShadowScope.noop();
+        }
+
+        int configuredAlpha = VisualRuntimeState.isDockShadowEnabled()
+                ? Math.max(0, Math.min(255, dock.shadowAlpha)) : 0;
+        float density = hotSeats instanceof View
+                ? ((View) hotSeats).getResources().getDisplayMetrics().density
+                : android.content.res.Resources.getSystem().getDisplayMetrics().density;
+        float scale = dock.dimensionsDp ? density : 1f;
+        float radiusPx = Math.min(
+                Math.max(0f, dock.shadowRadius * scale),
+                Math.max(0f, dock.shadowSize * scale));
+        float offsetYPx = dock.shadowY * scale;
+
+        HotSeatsShadowScope scope = new HotSeatsShadowScope(hotSeats);
+        scope.overrideNumber("mMiShadowRadius", radiusPx);
+        scope.overrideNumber("mMiShadowOffsetY", offsetYPx);
+
+        // showViewShadow derives its color alpha through the vendor MI_SHADOW_ALPHA path. Prefer a
+        // dedicated multiplier field when this Launcher revision exposes one; otherwise temporarily
+        // scale HotSeats alpha only during the vendor method call and restore it immediately after.
+        float vendorBaseAlpha = readStaticNumber(hotSeats.getClass(), "MI_SHADOW_ALPHA", 1f);
+        float requestedAlpha = configuredAlpha / 255f;
+        float multiplier = vendorBaseAlpha > 0.0001f ? requestedAlpha / vendorBaseAlpha : 0f;
+        boolean explicitAlpha = scope.overrideNumber("mMiShadowAlpha", multiplier)
+                || scope.overrideNumber("mShadowAlpha", multiplier);
+        if (!explicitAlpha && hotSeats instanceof View) {
+            scope.overrideViewAlpha((View) hotSeats, Math.max(0f, Math.min(1f, multiplier)));
+        }
+        return scope;
+    }
+
+    private static LiquidDockConfig.Dock currentNativeShadowConfig() {
+        LiquidDockConfig.Dock current = nativeShadowConfig;
+        if (current != null) return current;
+        try {
+            current = LiquidDockConfig.load().dock;
+            nativeShadowConfig = current;
+        } catch (Throwable ignored) {
+        }
+        return current;
+    }
+
+    private static float readStaticNumber(Class<?> type, String name, float fallback) {
+        try {
+            java.lang.reflect.Field field = HookUtil.findField(type, name);
+            Object value = field.get(java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                    ? null : hotSeatsShadowOwner());
+            if (value instanceof Number) return ((Number) value).floatValue();
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
+
+    private static void setNumericField(java.lang.reflect.Field field, Object target, float value)
+            throws IllegalAccessException {
+        Class<?> type = field.getType();
+        if (type == float.class || type == Float.class) field.set(target, value);
+        else if (type == double.class || type == Double.class) field.set(target, (double) value);
+        else if (type == int.class || type == Integer.class) field.set(target, Math.round(value));
+        else if (type == long.class || type == Long.class) field.set(target, (long) Math.round(value));
+        else if (type == short.class || type == Short.class) field.set(target, (short) Math.round(value));
+        else if (type == byte.class || type == Byte.class) field.set(target, (byte) Math.round(value));
+        else throw new IllegalArgumentException("not numeric: " + type);
+    }
+
+    /** Rebind runtime state by asking HotSeats to execute its own native shadow method. */
+    private static void refreshVendorDockShadow() {
+        Object hotSeats = hotSeatsShadowOwner();
+        if (hotSeats == null) return;
+        try {
+            HookUtil.invoke(hotSeats, "showViewShadow");
+        } catch (Throwable e) {
+            log("[DC] HotSeats native shadow refresh failed: " + e);
+        }
+    }
+
     private static void installDockShadowSetupHook(ClassLoader cl) {
         try {
             HookUtil.hookMethod(cl, "com.miui.home.launcher.Launcher", "setupViews",
@@ -288,16 +368,13 @@ public class MainHook {
                         Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         try {
                             LiquidDockConfig current = LiquidDockConfig.load();
-                            LiquidDockConfig.Dock dock = current.dock;
-                            Object hs = HookUtil.getField(chain.getThisObject(), "mHotSeats");
-                            if (hs == null) return r;
-                            if (!workstationMode
-                                    && VisualRuntimeState.isDockCustomizationEnabled()) {
-                                clearNativeDockShadow(hs);
-                            }
-                            View background = resolveActiveDockBackground(hs);
-                            if (background == null) return r;
-                            syncDockShadow(background, dock);
+                            nativeShadowConfig = current.dock;
+                            Object hotSeats = HookUtil.getField(chain.getThisObject(), "mHotSeats");
+                            if (hotSeats == null) return r;
+                            setHotSeatsShadowOwner(hotSeats);
+                            View background = resolveActiveDockBackground(hotSeats);
+                            if (background != null) setOldBg(background);
+                            refreshVendorDockShadow();
                         } catch (Throwable e) {
                             log("[DC] Dock shadow setup failed: " + e);
                         }
@@ -305,21 +382,6 @@ public class MainHook {
                     });
         } catch (Throwable e) {
             log("[DC] Dock shadow setup hook unavailable: " + e);
-        }
-    }
-
-    private static void clearNativeDockShadow(Object hotSeats) {
-        if (!VisualRuntimeState.isDockCustomizationEnabled()) return;
-        try {
-            Object target = HookUtil.invoke(hotSeats, "getMingouStaticDockBlurShadowTarget");
-            if (target instanceof View) {
-                View nativeTarget = (View) target;
-                setNativeShadowTarget(nativeTarget);
-                HookUtil.invokeStatic("com.miui.home.launcher.common.MiShadowUtils",
-                        "applyViewShadow", nativeTarget, Color.TRANSPARENT, 0f, 0f, 0f, 1f);
-            }
-        } catch (Throwable e) {
-            log("[DC] native Dock shadow clear failed: " + e);
         }
     }
 
@@ -338,101 +400,33 @@ public class MainHook {
         }
     }
 
-    /**
-     * Keep one independent shadow bound to the active vendor material. This is also called by the
-     * zero-copy geometry path when HyperOS replaces or resizes the material without setupViews.
-     */
+    /** Geometry callbacks only remember the active background/config; HotSeats owns shadow drawing. */
     static void syncDockShadow(View dockBg, LiquidDockConfig.Dock dock) {
-        if (dockBg == null || dock == null) return;
-        setOldBg(dockBg);
-        if (!VisualRuntimeState.isDockShadowEnabled()) {
-            removeDockShadow();
-            return;
-        }
-
-        float nativeRadius = MiuixGlassHook.readNativeOpticsRadius(dockBg);
-        strokeR = DockStrokeRenderer.resolveConfiguredRadius(dockBg, dock, nativeRadius);
-
-        View currentShadow = shadowViewRef.get();
-        if (workstationMode) {
-            dockBg.setAlpha(1f);
-            if (currentShadow != null) currentShadow.setVisibility(View.GONE);
-            return;
-        }
-
-        ViewGroup parent = dockBg.getParent() instanceof ViewGroup
-                ? (ViewGroup) dockBg.getParent() : null;
-        if (parent == null) return;
-        if (currentShadow == null || currentShadow.getParent() != parent) {
-            if (currentShadow != null && currentShadow.getParent() instanceof ViewGroup) {
-                ((ViewGroup) currentShadow.getParent()).removeView(currentShadow);
-            }
-            float scale = dock.dimensionsDp
-                    ? dockBg.getResources().getDisplayMetrics().density : 1f;
-            int sqOff = Math.round(dock.squircleStrokeOffset * scale);
-            int shadowRadius = Math.max(1, Math.round(dock.shadowRadius * scale));
-            int shadowSize = Math.max(1, Math.round(dock.shadowSize * scale));
-            int shadowY = Math.round(dock.shadowY * scale);
-            View shadow = makeDockShadow(dockBg, dock.squircle, sqOff, dock.squircleCp,
-                    shadowRadius, shadowSize, dock.shadowAlpha, shadowY);
-            shadow.setId(View.generateViewId());
-            int bgIndex = parent.indexOfChild(dockBg);
-            parent.addView(shadow, Math.max(0, bgIndex), new FrameLayout.LayoutParams(1, 1));
-            shadowViewRef = new WeakReference<>(shadow);
-            currentShadow = shadow;
-
-            ViewGroup unclipped = parent;
-            for (int level = 0; level < 4 && unclipped != null; level++) {
-                unclipped.setClipChildren(false);
-                unclipped.setClipToPadding(false);
-                android.view.ViewParent next = unclipped.getParent();
-                unclipped = next instanceof ViewGroup ? (ViewGroup) next : null;
-            }
-        }
-        if (!animating(dockBg)) {
-            ensureShadowBelowBackground(parent, currentShadow, dockBg);
-        }
-        currentShadow.setVisibility(View.VISIBLE);
-        syncAll(dockBg);
-    }
-
-    private static void removeDockShadow() {
-        View shadow = shadowViewRef.get();
-        if (shadow != null && shadow.getParent() instanceof ViewGroup) {
-            ((ViewGroup) shadow.getParent()).removeView(shadow);
-        }
-        shadowViewRef = new WeakReference<>(null);
-        lastShadowW = 0;
+        if (dockBg != null) setOldBg(dockBg);
+        if (dock != null) nativeShadowConfig = dock;
     }
 
     static void onRuntimeDockShadowDisabled() {
-        removeDockShadow();
+        // The parent customization callback runs first when the parent itself is disabled. In that
+        // case the current effective state already tells the HotSeats hook to pass vendor values.
+        if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) return;
+        refreshVendorDockShadow();
+    }
+
+    static void onRuntimeDockShadowEnabled() {
+        if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) return;
+        try {
+            nativeShadowConfig = LiquidDockConfig.load().dock;
+        } catch (Throwable ignored) {
+        }
+        refreshVendorDockShadow();
     }
 
     static void onRuntimeDockCustomizationDisabled() {
-        // Do not invent vendor shadow parameters here. The permanent MiShadow hook now passes
-        // future calls through unchanged; the exact original MIUI shadow inputs were never stored.
-        removeDockShadow();
+        refreshVendorDockShadow();
         DockStrokeRenderer.refreshInstalledFromCurrentConfig();
         View dockBg = oldBg();
         if (dockBg != null) dockBg.postInvalidateOnAnimation();
-    }
-
-    /** Keep the reusable shadow below whichever vendor material is active now. */
-    private static void ensureShadowBelowBackground(
-            ViewGroup parent, View shadow, View dockBg) {
-        if (parent == null || shadow == null || dockBg == null || shadow.getParent() != parent) {
-            return;
-        }
-        int shadowIndex = parent.indexOfChild(shadow);
-        int backgroundIndex = parent.indexOfChild(dockBg);
-        if (shadowIndex < 0 || backgroundIndex < 0 || shadowIndex < backgroundIndex) return;
-
-        ViewGroup.LayoutParams layoutParams = shadow.getLayoutParams();
-        parent.removeView(shadow);
-        int targetIndex = parent.indexOfChild(dockBg);
-        parent.addView(shadow, Math.max(0, targetIndex), layoutParams);
-        shadowViewRef = new WeakReference<>(shadow);
     }
 
     private static void installDockResizeAnimationBypass(
@@ -494,8 +488,8 @@ public class MainHook {
                 android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
                 a.setDuration(durationMs);
                 a.setInterpolator(new android.view.animation.PathInterpolator(.2f, 0f, 0f, 1f));
-                a.addUpdateListener(anim -> {
-                    float t = (Float) anim.getAnimatedValue();
+                a.addUpdateListener(animator -> {
+                    float t = (Float) animator.getAnimatedValue();
                     HookUtil.setIntField(view, "mWidth", Math.round(fromW + (targetW - fromW) * t));
                     HookUtil.setIntField(view, "mHeight", Math.round(fromH + (targetH - fromH) * t));
                     HookUtil.setField(view, "mCornerRadius", fromR + (targetR - fromR) * t);
@@ -613,25 +607,21 @@ public class MainHook {
         HomeGridHook.setWorkstationMode(enabled);
         WorkstationDockGeometryHook.onWorkstationModeChanged(enabled);
         log("[DC] Mingou workstation mode changed=" + enabled);
+        // The effective workstation flag is published before this refresh, so entering passes the
+        // untouched vendor state and leaving reapplies LiquidDock's temporary native parameters.
+        refreshVendorDockShadow();
         View dockBg = oldBg();
         if (!enabled) {
             if (dockBg != null) dockBg.post(() -> {
                 dockBg.setAlpha(1f);
-                View currentShadow = shadowViewRef.get();
-                if (currentShadow != null) {
-                    currentShadow.setVisibility(VisualRuntimeState.isDockShadowEnabled()
-                            ? View.VISIBLE : View.GONE);
-                }
                 syncAll(dockBg);
             });
             return;
         }
         if (dockBg != null) dockBg.post(() -> {
             // The injected Prismal surface is a child of this vendor material. Keep the host
-            // visible in workstation mode and suppress only the independent normal-mode shadow.
+            // visible while HotSeats owns its native Dock shadow.
             dockBg.setAlpha(1f);
-            View currentShadow = shadowViewRef.get();
-            if (currentShadow != null) currentShadow.setVisibility(View.GONE);
         });
         Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(
                 true, "workstation-mode-enabled");
@@ -649,9 +639,13 @@ public class MainHook {
         View dockBg = oldBg();
         View root = dockBg == null ? null : dockBg.getRootView();
         if (root == null || normalLayoutBackup.isEmpty()) return;
-        root.post(() -> restoreNormalHomeLayout(root));
-        root.postDelayed(() -> restoreNormalHomeLayout(root), 250L);
-        root.postDelayed(() -> restoreNormalHomeLayout(root), 700L);
+        root.post(() -> restoreNormalLayout(root));
+        root.postDelayed(() -> restoreNormalLayout(root), 250L);
+        root.postDelayed(() -> restoreNormalLayout(root), 700L);
+    }
+
+    private static void restoreNormalLayout(View root) {
+        restoreNormalHomeLayout(root);
     }
 
     private static void collectHomeItemPositions(View view, boolean restore) {
@@ -703,92 +697,15 @@ public class MainHook {
         p.cubicTo(l + a - c, b, l, b - a + c, l, b - a); p.close(); return p;
     }
 
-    private static View makeDockShadow(View dockBg, boolean sq, int sqOff, float sqCp,
-                                       int radius, int size, int alpha, int offsetY) {
-        final int maxDistance = Math.max(1, size);
-        final int blurRadius = Math.min(Math.max(1, radius), maxDistance);
-        final int spread = Math.max(0, maxDistance - blurRadius);
-        shadowPad = Math.max(4, maxDistance + Math.abs(offsetY) + 4);
-        View view = new View(dockBg.getContext()) {
-            @Override protected void onDraw(Canvas canvas) {
-                if (bgW <= 0 || bgH <= 0) return;
-                float left = shadowPad, top = shadowPad;
-                RectF bounds; float corner;
-                if (sq) {
-                    bounds = new RectF(left - sqOff - spread, top - sqOff - spread,
-                        left + bgW + sqOff + spread, top + bgH + sqOff + spread);
-                    corner = Math.max(0, strokeR + sqOff + spread);
-                } else {
-                    bounds = new RectF(left + 1f - spread, top + 1f - spread,
-                        left + bgW - 1f + spread, top + bgH - 1f + spread);
-                    corner = Math.max(0, strokeR - 1f + spread);
-                }
-                Path shape = sq ? squirclePath(bounds, corner, sqCp) : new Path();
-                if (!sq) shape.addRoundRect(bounds, corner, corner, Path.Direction.CW);
-                Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                paint.setColor(Color.argb(1, 0, 0, 0));
-                paint.setShadowLayer(blurRadius, 0, offsetY, Color.argb(alpha, 0, 0, 0));
-                canvas.drawPath(shape, paint);
-            }
-            @Override protected void onDetachedFromWindow() {
-                if (shadowViewRef.get() == this) shadowViewRef = new WeakReference<>(null);
-                super.onDetachedFromWindow();
-            }
-        };
-        view.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-        return view;
-    }
-
-    private static void syncShadowGeometry() {
-        View shadow = shadowViewRef.get(), dockBg = oldBg();
-        if (shadow == null || dockBg == null || bgW <= 0 || bgH <= 0) return;
-        ViewGroup.LayoutParams lp = shadow.getLayoutParams();
-        if (lp != null) {
-            lp.width = bgW + shadowPad * 2; lp.height = bgH + shadowPad * 2;
-            shadow.setLayoutParams(lp);
-        }
-        shadow.setX(dockBg.getX() - shadowPad);
-        shadow.setY(dockBg.getY() - shadowPad);
-        shadow.invalidate();
-    }
-
     private static void syncAll(View bg) {
-        View shadowView = shadowViewRef.get();
-        if (bg == null || shadowView == null) return;
-        if (!VisualRuntimeState.isDockShadowEnabled()) {
-            removeDockShadow();
-            return;
-        }
-        boolean anim = animating(bg);
+        if (bg == null) return;
+        setOldBg(bg);
+        if (workstationMode || animating(bg)) return;
         try {
-            int width = bg.getWidth();
-            int height = bg.getHeight();
-            try {
-                int fieldWidth = HookUtil.getIntField(bg, "mWidth");
-                if (fieldWidth > 0) width = fieldWidth;
-            } catch (Throwable ignored) {}
-            try {
-                int fieldHeight = HookUtil.getIntField(bg, "mHeight");
-                if (fieldHeight > 0) height = fieldHeight;
-            } catch (Throwable ignored) {}
-            bgW = width;
-            bgH = height;
-            try {
-                Object r = HookUtil.getField(bg, "mCornerRadius");
-                if (r instanceof Number) bgR = ((Number) r).floatValue();
-            } catch (Throwable ignored) {}
-            if (bgW <= 0 || bgH <= 0 || workstationMode) {
-                shadowView.setVisibility(View.GONE);
-                return;
-            }
-            shadowView.setVisibility(View.VISIBLE);
-            if (!anim) {
-                boolean sizeChanged = bgW != lastShadowW;
-                lastShadowW = bgW;
-                syncShadowGeometry();
-                if (sizeChanged) shadowView.post(MainHook::syncShadowGeometry);
-            }
-        } catch (Throwable ignored) {}
+            syncDockShadow(bg, LiquidDockConfig.load().dock);
+        } catch (Throwable e) {
+            log("[DC] native Dock shadow config sync failed: " + e);
+        }
     }
 
     static boolean isWorkstationMode() { return workstationMode; }
@@ -818,6 +735,70 @@ public class MainHook {
     }
 
     // ── data ─────────────────────────────────────────────────────────
+
+    private static final class HotSeatsShadowScope implements AutoCloseable {
+        private static final HotSeatsShadowScope NOOP = new HotSeatsShadowScope(null);
+        private final Object target;
+        private final java.util.ArrayList<ShadowFieldState> fields = new java.util.ArrayList<>();
+        private View alphaView;
+        private float oldAlpha;
+        private boolean alphaChanged;
+
+        HotSeatsShadowScope(Object target) {
+            this.target = target;
+        }
+
+        static HotSeatsShadowScope noop() {
+            return NOOP;
+        }
+
+        boolean overrideNumber(String name, float value) {
+            if (target == null) return false;
+            try {
+                java.lang.reflect.Field field = HookUtil.findField(target.getClass(), name);
+                Object oldValue = field.get(target);
+                setNumericField(field, target, value);
+                fields.add(new ShadowFieldState(field, oldValue));
+                return true;
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        void overrideViewAlpha(View view, float alpha) {
+            if (view == null) return;
+            alphaView = view;
+            oldAlpha = view.getAlpha();
+            alphaChanged = true;
+            view.setAlpha(alpha);
+        }
+
+        @Override public void close() {
+            if (target == null) return;
+            for (int i = fields.size() - 1; i >= 0; i--) {
+                ShadowFieldState state = fields.get(i);
+                try { state.field.set(target, state.value); }
+                catch (Throwable ignored) {}
+            }
+            fields.clear();
+            if (alphaChanged && alphaView != null) {
+                try { alphaView.setAlpha(oldAlpha); }
+                catch (Throwable ignored) {}
+            }
+            alphaView = null;
+            alphaChanged = false;
+        }
+    }
+
+    private static final class ShadowFieldState {
+        final java.lang.reflect.Field field;
+        final Object value;
+
+        ShadowFieldState(java.lang.reflect.Field field, Object value) {
+            this.field = field;
+            this.value = value;
+        }
+    }
 
     private static final class HomeItemPosition {
         final long screenId;

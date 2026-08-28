@@ -44,13 +44,22 @@ final class VisualRuntimeState {
         listener = (sharedPreferences, key) -> {
             boolean strokeStyleChanged = ConfigSchema.Dock.SQUIRCLE.name().equals(key)
                     || ConfigSchema.Dock.FILL_DIFF.name().equals(key);
+            boolean dockShadowStyleChanged = ConfigSchema.Dock.SHADOW_RADIUS.name().equals(key)
+                    || ConfigSchema.Dock.SHADOW_SIZE.name().equals(key)
+                    || ConfigSchema.Dock.SHADOW_ALPHA.name().equals(key)
+                    || ConfigSchema.Dock.SHADOW_Y.name().equals(key);
+            boolean strokeShadowStyleChanged =
+                    ConfigSchema.Dock.STROKE_SHADOW_RADIUS.name().equals(key)
+                    || ConfigSchema.Dock.STROKE_SHADOW_ALPHA.name().equals(key);
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.SHADOW_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_SHADOW.name().equals(key)
                     && !ConfigSchema.Divider.ENABLED.name().equals(key)
-                    && !strokeStyleChanged) return;
+                    && !strokeStyleChanged
+                    && !dockShadowStyleChanged
+                    && !strokeShadowStyleChanged) return;
 
             boolean nextCoreEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Core.ENABLED.name(),
@@ -69,8 +78,15 @@ final class VisualRuntimeState {
                     ConfigSchema.Divider.ENABLED.name(), dividerEnabled);
             apply(nextCoreEnabled, nextDockCustomizationEnabled, nextDockStrokeEnabled,
                     nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled);
-            if (strokeStyleChanged) {
+
+            if (strokeStyleChanged || strokeShadowStyleChanged) {
                 runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
+            }
+            if (dockShadowStyleChanged || strokeShadowStyleChanged) {
+                runOnMain(() -> {
+                    DockNativeShadowBridge.refreshConfig();
+                    MainHook.onRuntimeDockShadowEnabled();
+                });
             }
         };
         nextPrefs.registerOnSharedPreferenceChangeListener(listener);
@@ -117,8 +133,8 @@ final class VisualRuntimeState {
         boolean wasStrokeShadowEnabled = isStrokeShadowEnabled();
         boolean wasDividerEnabled = isDividerEnabled();
 
-        // Publish the new booleans before scheduling teardown. Any callback that was queued before
-        // the preference change must observe the new false value and become inert immediately.
+        // Publish the new booleans before scheduling teardown/reapply. Any callback that was
+        // queued before the preference change must observe the new effective value immediately.
         coreEnabled = nextCoreEnabled;
         dockCustomizationEnabled = nextDockCustomizationEnabled;
         dockStrokeEnabled = nextDockStrokeEnabled;
@@ -139,11 +155,27 @@ final class VisualRuntimeState {
         if (wasDockStrokeEnabled && !nextLiveDockStrokeEnabled) {
             runOnMain(() -> DockStrokeRenderer.onRuntimeStrokeDisabled());
         }
-        if (wasDockShadowEnabled && !nextLiveDockShadowEnabled) {
-            runOnMain(() -> MainHook.onRuntimeDockShadowDisabled());
-        }
-        if (wasStrokeShadowEnabled && !nextLiveStrokeShadowEnabled) {
+        if (!wasDockStrokeEnabled && nextLiveDockStrokeEnabled) {
             runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
+        }
+        if (wasDockShadowEnabled && !nextLiveDockShadowEnabled) {
+            runOnMain(() -> {
+                DockNativeShadowBridge.refreshConfig();
+                MainHook.onRuntimeDockShadowDisabled();
+            });
+        }
+        if (!wasDockShadowEnabled && nextLiveDockShadowEnabled) {
+            runOnMain(() -> {
+                DockNativeShadowBridge.refreshConfig();
+                MainHook.onRuntimeDockShadowEnabled();
+            });
+        }
+        if (wasStrokeShadowEnabled != nextLiveStrokeShadowEnabled) {
+            runOnMain(() -> {
+                DockStrokeRenderer.refreshInstalledFromCurrentConfig();
+                DockNativeShadowBridge.refreshConfig();
+                MainHook.onRuntimeDockShadowEnabled();
+            });
         }
         if (wasDividerEnabled && !nextLiveDividerEnabled) {
             runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());

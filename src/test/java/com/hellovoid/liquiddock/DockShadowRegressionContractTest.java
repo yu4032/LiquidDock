@@ -10,7 +10,7 @@ import java.nio.file.Paths;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Regression contracts for the independent Dock shadow. */
+/** Regression contracts for whole-Dock native shadow ownership. */
 public class DockShadowRegressionContractTest {
     private static String mainHook() throws IOException {
         return Files.readString(
@@ -19,23 +19,44 @@ public class DockShadowRegressionContractTest {
     }
 
     @Test
-    public void customDockShadowUsesSoftwareLayerForPaintShadowLayer() throws IOException {
+    public void wholeDockShadowUsesVendorHotSeatsInsteadOfSoftwareLayer() throws IOException {
         String source = mainHook();
-        assertTrue("Paint.setShadowLayer requires the custom shadow View to stay software-rendered",
+        assertTrue("whole-Dock shadow must hook the vendor HotSeats shadow lifecycle",
+                source.contains("installNativeDockShadowOwnership(classLoader)"));
+        assertTrue("configured shadow must be rendered by HotSeats.showViewShadow",
+                source.contains("getDeclaredMethod(\"showViewShadow\")"));
+        assertFalse("whole-Dock shadow must not force a software View layer",
                 source.contains("view.setLayerType(View.LAYER_TYPE_SOFTWARE, null);"));
+        assertFalse("whole-Dock shadow must not draw with Paint.setShadowLayer",
+                source.contains("paint.setShadowLayer("));
+        assertFalse("whole-Dock shadow must not maintain a terminal native target",
+                source.contains("nativeShadowTargetRef"));
     }
 
     @Test
-    public void dockAnimationDefersButSettledFramesResyncIndependentShadowGeometry() throws IOException {
+    public void runtimeOwnershipUsesScopedVendorStateAndNeverInventsRestorationValues() throws IOException {
         String source = mainHook();
-        assertTrue("glass/stroke may track animation, but the independent shadow must wait until settled",
-                source.contains("boolean anim = animating(bg);"));
-        assertTrue("settled Dock frames must resync independent shadow position",
-                source.contains("if (!anim)"));
-        assertFalse("shadow position must not be gated only by a width change",
-                source.contains("if (!anim && bgW != lastShadowW)"));
-        assertTrue("shadow corner geometry must not follow transient radius animation frames",
-                source.contains("if (!animating(v)) strokeR = Math.max(0f, systemRadius + co);"));
+        String configured = slice(source,
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
+                "private static LiquidDockConfig.Dock currentNativeShadowConfig()");
+        String disable = slice(source,
+                "static void onRuntimeDockShadowDisabled()",
+                "static void onRuntimeDockShadowEnabled()");
+        String customizationDisable = slice(source,
+                "static void onRuntimeDockCustomizationDisabled()",
+                "private static void installDockResizeAnimationBypass(");
+
+        assertTrue("shadow-only disable must feed zero alpha through the vendor method",
+                configured.contains("VisualRuntimeState.isDockShadowEnabled()")
+                        && configured.contains(": 0;"));
+        assertTrue("temporary vendor fields must be restored after each vendor call",
+                source.contains("state.field.set(target, state.value)"));
+        assertTrue("runtime shadow-only disable must ask HotSeats to redraw itself",
+                disable.contains("refreshVendorDockShadow();"));
+        assertTrue("full customization release must ask HotSeats to redraw using untouched state",
+                customizationDisable.contains("refreshVendorDockShadow();"));
+        assertFalse("scoped ownership must not manufacture a vendor backup replay",
+                source.contains("restoreVendorDockShadow"));
     }
 
     @Test
@@ -49,5 +70,12 @@ public class DockShadowRegressionContractTest {
                         || main.contains("liquidGlassHostView.setTranslationY"));
         assertTrue("zero-copy host must be attached directly to the vendor material host",
                 hook.contains("materialHost.addView(host, materialHost.getChildCount(), hostLp);"));
+    }
+
+    private static String slice(String source, String start, String end) {
+        int from = source.indexOf(start);
+        int to = source.indexOf(end, Math.max(0, from));
+        if (from < 0 || to <= from) return "";
+        return source.substring(from, to);
     }
 }

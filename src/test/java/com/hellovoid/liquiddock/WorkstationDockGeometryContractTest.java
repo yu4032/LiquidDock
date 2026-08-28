@@ -52,11 +52,17 @@ public class WorkstationDockGeometryContractTest {
                 hook.contains("DockContainer"));
     }
 
-    @Test public void settledShadowPositionResyncIsNotWidthOnly() throws Exception {
+    @Test public void workstationDoesNotMaintainASecondWholeDockShadowGeometryModel() throws Exception {
         String main = source("MainHook.java");
-        assertFalse("a moved Dock with unchanged width must still move its independent shadow",
-                main.contains("if (!anim && bgW != lastShadowW)"));
-        assertTrue("settled Dock frames must resync shadow geometry",
+        assertFalse("workstation and normal mode must not maintain a standalone shadow position",
                 main.contains("syncShadowGeometry();"));
+        assertFalse("whole-Dock shadow must not have a sibling View geometry owner",
+                main.contains("shadowViewRef"));
+        assertFalse("whole-Dock shadow must not retain a terminal native target owner",
+                main.contains("nativeShadowTargetRef"));
+        assertTrue("workstation transitions must ask HotSeats to render its own current shadow",
+                main.contains("refreshVendorDockShadow();"));
+        assertTrue("leaving workstation may refresh the normal Dock config reference",
+                main.contains("syncAll(dockBg);"));
     }
 }
