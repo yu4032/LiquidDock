@@ -29,6 +29,33 @@ public class WidgetDarkContentAdaptationContractTest {
     }
 
     @Test
+    public void remoteViewsRequestsProviderNightResourcesBeforeTextFallback() throws Exception {
+        Path nightHookPath = MAIN.resolve("LauncherRemoteViewsNightModeHook.java");
+        assertTrue("dark-content adaptation must include a scoped RemoteViews night-resource hook",
+                Files.exists(nightHookPath));
+        if (!Files.exists(nightHookPath)) return;
+
+        String nightHook = Files.readString(nightHookPath);
+        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String staticHook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+
+        assertTrue(nightHook.contains("Configuration.UI_MODE_NIGHT_MASK"));
+        assertTrue(nightHook.contains("Configuration.UI_MODE_NIGHT_YES"));
+        assertTrue(nightHook.contains("createConfigurationContext"));
+        assertTrue(nightHook.contains("GlassRuntimeState.isWidgetDarkContentEnabled"));
+        assertTrue(nightHook.contains("LauncherAppWidgetHostView"));
+        assertTrue(nightHook.contains("applyAsync"));
+        assertTrue(nightHook.contains("reapplyAsync"));
+        assertTrue(nightHook.contains("reapplyCurrent"));
+        assertTrue(module.contains("LauncherRemoteViewsNightModeHook.install(classLoader)"));
+        assertTrue(staticHook.contains("LauncherRemoteViewsNightModeHook.reapplyCurrent(host)"));
+
+        // Android's getDarkTextViews() means dark text for a light host background, the opposite
+        // of this feature. Provider night resources must be selected through Configuration instead.
+        assertFalse(nightHook.contains("getDarkTextViews"));
+    }
+
+    @Test
     public void remoteViewsOnlyRecolorsDarkNeutralTextAndRestoresOriginalColors() throws Exception {
         String adapter = Files.readString(MAIN.resolve("LauncherWidgetDarkContentAdapter.java"));
 
