@@ -13,6 +13,8 @@ final class LauncherGlassSceneController {
     private static final WeakHashMap<View, LauncherGlassSceneController> BY_ROOT = new WeakHashMap<>();
     private static boolean vendorRecentsCovered;
     private static boolean vendorFolderCovered;
+    private static boolean vendorHomeTransitionPending;
+    private static boolean vendorUnlockTransitionPending;
 
     enum State { DETACHED, BOOTSTRAPPING, HOME_WAITING_FRESH_FRAME, HOME_VISIBLE, COVERED }
 
@@ -91,6 +93,8 @@ final class LauncherGlassSceneController {
     private volatile LiquidDockConfig.Glass glassConfig;
     private boolean folderCovered;
     private boolean recentsCovered;
+    private boolean homeTransitionPending;
+    private boolean unlockTransitionPending;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
 
@@ -123,6 +127,8 @@ final class LauncherGlassSceneController {
                 new LauncherGlassSceneController(root, session, glassConfig);
         created.recentsCovered = vendorRecentsCovered;
         created.folderCovered = vendorFolderCovered;
+        created.homeTransitionPending = vendorHomeTransitionPending;
+        created.unlockTransitionPending = vendorUnlockTransitionPending;
         if (created.recentsCovered || created.folderCovered) {
             created.state.setCovered(true);
         }
@@ -168,6 +174,28 @@ final class LauncherGlassSceneController {
         }
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setFolderCovered(covered);
+        }
+    }
+
+    static void setHomeTransitionPendingForAll(boolean pending) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            vendorHomeTransitionPending = pending;
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.setHomeTransitionPending(pending);
+        }
+    }
+
+    static void setUnlockTransitionPendingForAll(boolean pending) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            vendorUnlockTransitionPending = pending;
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.setUnlockTransitionPending(pending);
         }
     }
 
@@ -229,6 +257,7 @@ final class LauncherGlassSceneController {
         state.onRootReady();
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
+        if (isPresentationPending()) session.suspendWorkspaceProducer();
         if (bootstrapPosted) return;
         bootstrapPosted = true;
         root.postOnAnimation(() -> {
@@ -243,6 +272,7 @@ final class LauncherGlassSceneController {
     }
 
     private void requestFreshBackdrop(long generation) {
+        if (isPresentationPending()) return;
         if (state.state() == State.COVERED || generation != state.generation()) return;
         deferInFlightWallpaperPulse();
         session.requestFreshBackdrop(generation);
@@ -320,12 +350,47 @@ final class LauncherGlassSceneController {
     }
 
     private synchronized void flushDeferredWallpaperPulse() {
+        if (isPresentationPending()) return;
         if (state.state() == State.COVERED || wallpaperPulseInFlight) return;
         LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
         if (!deferred.requested()
                 || deferred.generation != wallpaperContentState.generation()) return;
         deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
         requestWallpaperPulse(deferred);
+    }
+
+    private boolean isPresentationPending() {
+        return homeTransitionPending || unlockTransitionPending;
+    }
+
+    private void setHomeTransitionPending(boolean pending) {
+        boolean wasPending = isPresentationPending();
+        homeTransitionPending = pending;
+        onPresentationPendingChanged(wasPending, isPresentationPending(), "home");
+    }
+
+    private void setUnlockTransitionPending(boolean pending) {
+        boolean wasPending = isPresentationPending();
+        unlockTransitionPending = pending;
+        onPresentationPendingChanged(wasPending, isPresentationPending(), "unlock");
+    }
+
+    private void onPresentationPendingChanged(boolean wasPending, boolean pending, String reason) {
+        if (wasPending == pending) return;
+        if (pending) {
+            deferInFlightWallpaperPulse();
+            state.onGenerationInvalidated();
+            applyLayerVisibility();
+            session.suspendWorkspaceProducer();
+            MainHook.log(TAG + " presentation pending reason=" + reason
+                    + " generation=" + state.generation());
+            return;
+        }
+        if (state.state() != State.COVERED && state.state() != State.DETACHED) {
+            MainHook.log(TAG + " presentation settled reason=" + reason
+                    + " generation=" + state.generation());
+            requestFreshBackdrop(state.generation());
+        }
     }
 
     private void setFolderCovered(boolean covered) {
@@ -355,7 +420,7 @@ final class LauncherGlassSceneController {
     private synchronized void requestWallpaperPulse(LauncherWallpaperContentState.Pulse pulse) {
         if (pulse == null || !pulse.requested()
                 || pulse.generation != wallpaperContentState.generation()) return;
-        if (state.state() == State.COVERED || wallpaperPulseInFlight) {
+        if (state.state() == State.COVERED || isPresentationPending() || wallpaperPulseInFlight) {
             LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
             if (!deferred.requested() || pulse.generation >= deferred.generation) {
                 deferredWallpaperPulse = pulse;
