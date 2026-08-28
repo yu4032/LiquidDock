@@ -16,11 +16,16 @@ final class LauncherMamlBackgroundSuppressor {
     // exact bound app package, and Weather description.xml binds com.miui.weather2.
     private static final String WEATHER_PRODUCT_ID =
             "b8006e83-c497-4642-9815-f674b82842b0";
+    private static final String WEATHER_LARGE_PRODUCT_ID =
+            "c989887f-fa0d-4963-8c57-896c03e37efc";
+    private static final String WEATHER_WIDE_PRODUCT_ID =
+            "bc0f0cd2-43fd-4323-8061-55a8bc997e1f";
     private static final String WEATHER_APP_PACKAGE = "com.miui.weather2";
     // Decompiled payload + live ScreenElementRoot.mElements show stable parent "skyColor" owns
     // both the full-size old/new gradient subgroup and the following full-size glow image. Hide
     // only that parent; higher/lower weather effects, information and weather icon stay as siblings.
     private static final String WEATHER_SKY_OWNER_ELEMENT = "skyColor";
+    private static final String WEATHER_BACKGROUND_OWNER_ELEMENT = "background";
     private static final String LOG_TAG = "[MamlWidgetBg]";
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
     private static final int DUMP_CHUNK_SIZE = 16;
@@ -67,11 +72,20 @@ final class LauncherMamlBackgroundSuppressor {
                     + " root=null targetFound=false suppressed=false");
             return;
         }
-        Object target = HookUtil.invoke(root, "findElement", WEATHER_SKY_OWNER_ELEMENT);
+        String ownerElement = resolveWeatherBackgroundOwner(productId);
+        if (ownerElement == null) {
+            release(host);
+            MainHook.log(LOG_TAG + identity
+                    + " root=" + root.getClass().getSimpleName()
+                    + " target=unresolved targetFound=false suppressed=false");
+            dumpNamedElementsOnce(productId, root);
+            return;
+        }
+        Object target = HookUtil.invoke(root, "findElement", ownerElement);
         if (target == null) {
             MainHook.log(LOG_TAG + identity
                     + " root=" + root.getClass().getSimpleName()
-                    + " target=" + WEATHER_SKY_OWNER_ELEMENT
+                    + " target=" + ownerElement
                     + " targetFound=false suppressed=false");
             dumpNamedElementsOnce(productId, root);
             return;
@@ -93,12 +107,24 @@ final class LauncherMamlBackgroundSuppressor {
         boolean suppressed = !readBooleanField(target, "mShow", true);
         MainHook.log(LOG_TAG + identity
                 + " root=" + root.getClass().getSimpleName()
-                + " target=" + WEATHER_SKY_OWNER_ELEMENT
+                + " target=" + ownerElement
                 + " targetFound=true suppressed=" + suppressed);
     }
 
     private static boolean isWeatherIdentity(String productId, String appPackage) {
-        return WEATHER_PRODUCT_ID.equals(productId) || WEATHER_APP_PACKAGE.equals(appPackage);
+        return WEATHER_PRODUCT_ID.equals(productId)
+                || WEATHER_LARGE_PRODUCT_ID.equals(productId)
+                || WEATHER_WIDE_PRODUCT_ID.equals(productId)
+                || WEATHER_APP_PACKAGE.equals(appPackage);
+    }
+
+    private static String resolveWeatherBackgroundOwner(String productId) {
+        if (WEATHER_PRODUCT_ID.equals(productId)) return WEATHER_SKY_OWNER_ELEMENT;
+        if (WEATHER_LARGE_PRODUCT_ID.equals(productId)
+                || WEATHER_WIDE_PRODUCT_ID.equals(productId)) {
+            return WEATHER_BACKGROUND_OWNER_ELEMENT;
+        }
+        return null;
     }
 
     static void release(View host) {
