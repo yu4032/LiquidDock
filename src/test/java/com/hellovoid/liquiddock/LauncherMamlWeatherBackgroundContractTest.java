@@ -40,9 +40,9 @@ public class LauncherMamlWeatherBackgroundContractTest {
     public void weatherMamlRecognizesOtherSizeProductsByExactBoundAppPackage() throws Exception {
         String suppressor = Files.readString(MAIN.resolve("LauncherMamlBackgroundSuppressor.java"));
 
-        // Launcher 4.50 MaMlWidgetInfo persists appPackage through its intent and the inspected
-        // Weather MAML description binds com.miui.weather2. This lets other size/product variants
-        // share the same exact skyColor ownership rule without guessing their product IDs.
+        // Launcher 4.50 MaMlWidgetInfo persists appPackage through its intent. The exact package
+        // identifies unknown Weather products for diagnostics; known product IDs resolve their
+        // observed semantic owner independently (skyColor or background).
         assertTrue(suppressor.contains("com.miui.weather2"));
         assertTrue(suppressor.contains("appPackage"));
         assertTrue(suppressor.contains("isWeatherIdentity"));
