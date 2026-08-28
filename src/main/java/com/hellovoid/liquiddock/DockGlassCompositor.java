@@ -12,9 +12,22 @@ import java.util.ArrayList;
 
 /** Dock body and Dock icon glass are drawn in one output-local Prismal frame/output swap. */
 final class DockGlassCompositor {
+    private static final long HASH_SEED = 0xcbf29ce484222325L;
+    private static final long HASH_PRIME = 0x100000001b3L;
+
+    private static final class CachedItem {
+        final DockGlassItemNode node;
+        long uiFingerprint = Long.MIN_VALUE;
+        LauncherGlassGeometry.Snapshot geometry;
+
+        CachedItem(DockGlassItemNode node) {
+            this.node = node;
+        }
+    }
+
     private final WeakReference<View> ownershipRootRef;
     private final WeakReference<View> outputRootRef;
-    private final ArrayList<DockGlassItemNode> cached = new ArrayList<>();
+    private final ArrayList<CachedItem> cached = new ArrayList<>();
     private volatile GlassComponentStyle iconStyle = new GlassComponentStyle(false, 0f, 0f);
     private volatile PrismalHighlightProfile iconHighlightProfile =
             PrismalHighlightProfile.ALL_ENABLED;
@@ -22,8 +35,10 @@ final class DockGlassCompositor {
     private volatile DockGlassSceneSnapshot latestScene = DockGlassSceneSnapshot.EMPTY;
     private long seenRevision = -1L;
     private long lastFingerprint = Long.MIN_VALUE;
+    private long lastOutputFingerprint = Long.MIN_VALUE;
     private int lastW = -1, lastH = -1;
     private float lastInsetL = Float.NaN, lastInsetT = Float.NaN;
+    private float lastScaleX = Float.NaN, lastScaleY = Float.NaN;
     private boolean lastWorkstationMode;
 
     DockGlassCompositor(View ownershipRoot, View outputRoot) {
@@ -69,7 +84,8 @@ final class DockGlassCompositor {
                 iconStyle.enabled, iconStyle.sizeOffsetDp, resolvedRadiusDp);
         long revision = DockGlassItemRegistry.revision();
         boolean dead = false;
-        for (DockGlassItemNode item : cached) {
+        for (CachedItem cachedItem : cached) {
+            DockGlassItemNode item = cachedItem.node;
             if (item.view() == null || !item.belongsTo(ownershipRoot)) {
                 dead = true;
                 break;
@@ -79,55 +95,89 @@ final class DockGlassCompositor {
             cached.clear();
             for (View candidate : DockGlassItemRegistry.snapshotForRoot(ownershipRoot.getRootView())) {
                 DockGlassItemNode item = new DockGlassItemNode(candidate, resolvedStyle);
-                if (item.belongsTo(ownershipRoot)) cached.add(item);
+                if (item.belongsTo(ownershipRoot)) cached.add(new CachedItem(item));
             }
             seenRevision = revision;
             lastFingerprint = Long.MIN_VALUE;
         }
 
         long nowMs = SystemClock.uptimeMillis();
-        long fingerprint = 0xcbf29ce484222325L;
-        for (DockGlassItemNode item : cached) {
-            fingerprint = (fingerprint ^ item.uiFingerprint(ownershipRoot)) * 0x100000001b3L;
-            fingerprint = (fingerprint ^ Float.floatToIntBits(item.animationOpacity(nowMs)))
-                    * 0x100000001b3L;
+        long fingerprint = HASH_SEED;
+        long outputFingerprint = mixOutputRoot(HASH_SEED, outputRoot);
+        long[] uiFingerprints = new long[cached.size()];
+        DockIconAnimationState.Sample[] animationSamples =
+                new DockIconAnimationState.Sample[cached.size()];
+        for (int i = 0; i < cached.size(); i++) {
+            CachedItem cachedItem = cached.get(i);
+            DockGlassItemNode item = cachedItem.node;
+            long uiFingerprint = item.uiFingerprint(ownershipRoot);
+            DockIconAnimationState.Sample animationSample = item.animationSample(nowMs);
+            uiFingerprints[i] = uiFingerprint;
+            animationSamples[i] = animationSample;
+            fingerprint = mix(fingerprint, uiFingerprint);
+            fingerprint = mix(fingerprint, Float.floatToIntBits(animationSample.opacity));
         }
-        fingerprint = mixOutputRoot(fingerprint, outputRoot);
-        boolean mappingChanged = framebufferWidth != lastW || framebufferHeight != lastH
-                || Float.compare(sampleInsetLeft, lastInsetL) != 0
-                || Float.compare(sampleInsetTop, lastInsetT) != 0;
-        if (!mappingChanged && fingerprint == lastFingerprint) return;
+        fingerprint = mix(fingerprint, outputFingerprint);
 
-        Matrix outputGlobal = new Matrix();
-        outputRoot.transformMatrixToGlobal(outputGlobal);
-        Matrix outputInverse = new Matrix();
-        if (!outputGlobal.invert(outputInverse)) {
-            latestScene = DockGlassSceneSnapshot.EMPTY;
-            return;
+        boolean geometryMappingChanged = framebufferWidth != lastW || framebufferHeight != lastH
+                || Float.compare(sampleInsetLeft, lastInsetL) != 0
+                || Float.compare(sampleInsetTop, lastInsetT) != 0
+                || Float.compare(scaleX, lastScaleX) != 0
+                || Float.compare(scaleY, lastScaleY) != 0
+                || outputFingerprint != lastOutputFingerprint;
+        if (!geometryMappingChanged && fingerprint == lastFingerprint) return;
+
+        boolean anyGeometryChanged = geometryMappingChanged;
+        if (!anyGeometryChanged) {
+            for (int i = 0; i < cached.size(); i++) {
+                if (cached.get(i).uiFingerprint != uiFingerprints[i]) {
+                    anyGeometryChanged = true;
+                    break;
+                }
+            }
+        }
+
+        Matrix outputInverse = null;
+        if (anyGeometryChanged) {
+            Matrix outputGlobal = new Matrix();
+            outputRoot.transformMatrixToGlobal(outputGlobal);
+            outputInverse = new Matrix();
+            if (!outputGlobal.invert(outputInverse)) {
+                latestScene = DockGlassSceneSnapshot.EMPTY;
+                return;
+            }
         }
 
         ArrayList<DockGlassSceneSnapshot.Item> out = new ArrayList<>();
-        for (DockGlassItemNode item : cached) {
-            float opacity = item.animationOpacity(nowMs);
-            if (item.isFading() && item.view() != null) {
-                item.view().postInvalidateOnAnimation();
+        for (int i = 0; i < cached.size(); i++) {
+            CachedItem cachedItem = cached.get(i);
+            DockGlassItemNode item = cachedItem.node;
+            long uiFingerprint = uiFingerprints[i];
+            DockIconAnimationState.Sample animationSample = animationSamples[i];
+            if (geometryMappingChanged || cachedItem.uiFingerprint != uiFingerprint) {
+                cachedItem.geometry = item.capture(
+                        ownershipRoot, outputInverse,
+                        framebufferWidth, framebufferHeight,
+                        sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
+                cachedItem.uiFingerprint = uiFingerprint;
             }
-            if (opacity <= 0f) continue;
-            LauncherGlassGeometry.Snapshot geometry = item.capture(
-                    ownershipRoot, outputInverse,
-                    framebufferWidth, framebufferHeight,
-                    sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
-            if (geometry != null) {
-                out.add(new DockGlassSceneSnapshot.Item(geometry, opacity));
+            View itemView = item.view();
+            if (animationSample.fading && itemView != null) {
+                itemView.postInvalidateOnAnimation();
             }
+            if (animationSample.opacity <= 0f || cachedItem.geometry == null) continue;
+            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, animationSample.opacity));
         }
         latestScene = new DockGlassSceneSnapshot(
                 out.toArray(new DockGlassSceneSnapshot.Item[0]));
         lastFingerprint = fingerprint;
+        lastOutputFingerprint = outputFingerprint;
         lastW = framebufferWidth;
         lastH = framebufferHeight;
         lastInsetL = sampleInsetLeft;
         lastInsetT = sampleInsetTop;
+        lastScaleX = scaleX;
+        lastScaleY = scaleY;
     }
 
     DockGlassSceneSnapshot latestScene() { return latestScene; }
@@ -146,13 +196,17 @@ final class DockGlassCompositor {
         return stable.size();
     }
 
+    private static long mix(long hash, long value) {
+        return (hash ^ value) * HASH_PRIME;
+    }
+
     private static long mixOutputRoot(long hash, View view) {
-        hash = (hash ^ view.getLeft()) * 0x100000001b3L;
-        hash = (hash ^ view.getTop()) * 0x100000001b3L;
-        hash = (hash ^ Float.floatToIntBits(view.getTranslationX())) * 0x100000001b3L;
-        hash = (hash ^ Float.floatToIntBits(view.getTranslationY())) * 0x100000001b3L;
-        hash = (hash ^ Float.floatToIntBits(view.getScaleX())) * 0x100000001b3L;
-        hash = (hash ^ Float.floatToIntBits(view.getScaleY())) * 0x100000001b3L;
+        hash = mix(hash, view.getLeft());
+        hash = mix(hash, view.getTop());
+        hash = mix(hash, Float.floatToIntBits(view.getTranslationX()));
+        hash = mix(hash, Float.floatToIntBits(view.getTranslationY()));
+        hash = mix(hash, Float.floatToIntBits(view.getScaleX()));
+        hash = mix(hash, Float.floatToIntBits(view.getScaleY()));
         return hash;
     }
 }

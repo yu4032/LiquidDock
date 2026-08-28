@@ -2,7 +2,10 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Outline;
 import android.graphics.Path;
+import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
 /** Lightweight clip/geometry host for the zero-copy Prismal TextureView. */
@@ -15,12 +18,27 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        setWillNotDraw(true);
+        // Keep the normal View.draw() path so a foreground StrokeDrawable is actually rendered.
+        // This host still has no onDraw() body; the only local drawing is the foreground edge.
+        setWillNotDraw(false);
         setClipChildren(false);
         setClipToPadding(false);
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        // Mi Shadow / RenderNode shadow geometry comes from the View outline. Keep this outline on
+        // the exact same shape as the manual child clip so the outer stroke shadow cannot drift
+        // away from the visible zero-copy glass edge.
+        setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline outline) {
+                ensureClipPath();
+                if (clipPath.isEmpty()) return;
+                try {
+                    outline.setPath(clipPath);
+                } catch (Throwable ignored) {
+                }
+            }
+        });
     }
 
     void setGeometry(float radius, boolean squircle, float cp) {
@@ -34,6 +52,7 @@ final class DockLiquidGlassHostView extends FrameLayout {
         if (changed) {
             shapeDirty = true;
             DockStrokeRenderer.updateRadius(this, this.radius);
+            invalidateOutline();
             invalidate();
         }
     }
@@ -44,7 +63,10 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        if (w != oldw || h != oldh) shapeDirty = true;
+        if (w != oldw || h != oldh) {
+            shapeDirty = true;
+            invalidateOutline();
+        }
     }
 
     private void ensureClipPath() {

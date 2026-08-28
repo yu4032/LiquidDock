@@ -47,7 +47,7 @@ public class P1RuntimeLifecycleContractTest {
     }
 
     @Test
-    public void zeroCopyPipelineRetainsWholeDockShadowOwner() throws Exception {
+    public void zeroCopyPipelineRetainsWholeDockShadowLifecycle() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
 
@@ -55,14 +55,18 @@ public class P1RuntimeLifecycleContractTest {
         int zeroCopyInstall = main.indexOf("Miuix307MaterialPipeline.install(classLoader, config)");
         assertTrue("whole-Dock shadow setup must be installed before the 307 early return",
                 shadowInstall >= 0 && zeroCopyInstall >= 0 && shadowInstall < zeroCopyInstall);
-        assertTrue("zero-copy geometry updates must keep the independent whole-Dock shadow synced",
+        assertTrue("zero-copy geometry updates must keep the active Dock/config reference current",
                 glass.contains("MainHook.syncDockShadow(dockBg, config.dock)"));
         assertTrue("shadow setup must resolve the active vendor material, not only mBlurBackground2",
                 main.contains("getHotSeatsBackground"));
-        assertTrue("workstation must keep the Prismal host visible while hiding its shadow",
-                main.contains("if (workstationMode) {\n            dockBg.setAlpha(1f);"));
-        assertTrue("theme replacement in the same parent must move the shadow under the active material",
-                main.contains("ensureShadowBelowBackground(parent, currentShadow, dockBg);"));
+        assertTrue("HotSeats.showViewShadow must remain the authoritative native renderer",
+                main.contains("getDeclaredMethod(\"showViewShadow\")"));
+        assertTrue("runtime/workstation changes must request a vendor redraw through HotSeats",
+                main.contains("HookUtil.invoke(hotSeats, \"showViewShadow\")"));
+        assertFalse("theme replacement must not create or reparent a standalone shadow sibling",
+                main.contains("ensureShadowBelowBackground("));
+        assertFalse("zero-copy must not keep a second terminal native shadow target",
+                main.contains("nativeShadowTargetRef"));
     }
 
     @Test

@@ -10,16 +10,16 @@ import java.nio.file.Paths;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Regression contracts for the stroke-shadow setting after stroke rendering moved in-process. */
+/** Regression contracts for stroke shadow: it must remain outside the Dock content. */
 public class DockStrokeShadowContractTest {
-    private static String source() throws IOException {
+    private static String renderer() throws IOException {
         return Files.readString(
                 Paths.get("src/main/java/com/hellovoid/liquiddock/DockStrokeRenderer.java"),
                 StandardCharsets.UTF_8);
     }
 
     @Test public void styleConsumesExistingStrokeShadowConfig() throws IOException {
-        String source = source();
+        String source = renderer();
         assertTrue(source.contains("final boolean shadowEnabled;"));
         assertTrue(source.contains("final float shadowRadiusPx;"));
         assertTrue(source.contains("final int shadowAlpha;"));
@@ -28,25 +28,33 @@ public class DockStrokeShadowContractTest {
         assertTrue(source.contains("config.strokeShadowAlpha"));
     }
 
-    @Test public void shadowUsesSharedStrokeGeometryWithoutIndependentView() throws IOException {
-        String source = source();
-        assertTrue(source.contains("drawStrokeShadow(canvas, s);"));
-        assertTrue(source.contains("buildInterpolatedContour(shadowOuter"));
-        assertTrue(source.contains("buildInterpolatedContour(shadowInner"));
-        assertTrue(source.contains("buildShape(out, shadowRect"));
-        assertTrue(source.contains("outerRect"));
-        assertTrue(source.contains("innerRect"));
-        assertFalse(source.contains("Path.Op."));
+    @Test public void shadowNeverPaintsAnInwardBandOverDockContent() throws IOException {
+        String source = renderer();
+        assertFalse("stroke shadow must not advance from innerRect into the Dock body",
+                source.contains("buildInwardShadowContour"));
+        assertFalse("stroke shadow must not be painted as interior contour bands",
+                source.contains("drawStrokeShadow(canvas, s);"));
         assertFalse(source.contains("setLayerType(View.LAYER_TYPE_SOFTWARE"));
     }
 
-    @Test public void shadowIsClippedOutOfDockInteriorAndDrawnBeforeStroke() throws IOException {
-        String source = source();
-        assertTrue(source.contains("canvas.clipPath(shadowOuter);"));
-        assertTrue(source.contains("canvas.clipOutPath(shadowInner);"));
-        int shadow = source.indexOf("drawStrokeShadow(canvas, s);");
-        int stroke = source.indexOf("canvas.drawPath(outer, paint);", shadow);
-        assertTrue("stroke shadow must be rendered before the foreground stroke",
-                shadow >= 0 && stroke > shadow);
+    @Test public void shadowUsesHardwareOuterShadowOnTheGlassHost() throws Exception {
+        String source = renderer();
+        String host = Files.readString(
+                Paths.get("src/main/java/com/hellovoid/liquiddock/DockLiquidGlassHostView.java"),
+                StandardCharsets.UTF_8);
+        assertTrue("stroke shadow must use a hardware Mi Shadow path",
+                source.contains("applyNativeOuterShadow"));
+        assertTrue("the custom glass host must expose its shape to RenderNode shadow geometry",
+                host.contains("setOutlineProvider"));
+        assertTrue("the host outline must be invalidated when geometry changes",
+                host.contains("invalidateOutline()"));
+    }
+
+    @Test public void transparentStrokeColorDoesNotSuppressEnabledOuterShadow() throws IOException {
+        String source = renderer();
+        assertTrue("stroke and shadow visibility remain independent",
+                source.contains("shadowEnabled") && source.contains("shadowAlpha"));
+        assertFalse("outer shadow lifetime must not be gated by stroke color alpha",
+                source.contains("Color.alpha(s.color) <= 0 && !s.shadowEnabled"));
     }
 }

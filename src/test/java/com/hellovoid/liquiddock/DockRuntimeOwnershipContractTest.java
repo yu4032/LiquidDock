@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Regression contract for live Dock customization, shadow and stroke ownership. */
+/** Regression contract for live Dock customization, native shadow and stroke ownership. */
 public class DockRuntimeOwnershipContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -22,43 +22,51 @@ public class DockRuntimeOwnershipContractTest {
     }
 
     @Test
-    public void permanentDockHooksPassThroughWhenCustomizationIsLiveDisabled() throws Exception {
+    public void nativeShadowHookKeepsVendorMethodAsTheActualRenderer() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String nativeShadow = methodSlice(main,
-                "private static void installNativeDockShadowSuppression(",
-                "/** Install the independent whole-Dock shadow");
+                "private static void installNativeDockShadowOwnership(",
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(");
 
-        assertTrue(nativeShadow.contains("VisualRuntimeState.isDockCustomizationEnabled()"));
-        assertTrue(main.contains("if (!VisualRuntimeState.isDockCustomizationEnabled())"));
-        assertFalse(main.contains("if (dockCustomization) {\n            installNativeDockShadowSuppression"));
-        assertTrue(main.contains("static void onRuntimeDockCustomizationDisabled()"));
+        assertTrue(nativeShadow.contains("\"showViewShadow\""));
+        assertTrue(nativeShadow.contains("\"setTranslationY\""));
+        assertTrue(nativeShadow.contains("chain.proceed("));
+        assertFalse("terminal MiShadow API must not become a second lifecycle authority",
+                nativeShadow.contains("\"applyViewShadow\""));
     }
 
     @Test
-    public void dockShadowCannotBeResurrectedAfterLiveDisable() throws Exception {
+    public void dockShadowLiveDisableUsesVendorAlphaPathInsteadOfCreatingAnotherOwner() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
-        String sync = methodSlice(main, "static void syncDockShadow(",
-                "/** Keep the reusable shadow below");
-        String syncAll = methodSlice(main, "private static void syncAll(",
-                "static boolean isWorkstationMode()");
+        String configured = methodSlice(main,
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
+                "private static LiquidDockConfig.Dock currentNativeShadowConfig()");
 
-        assertTrue(sync.contains("VisualRuntimeState.isDockShadowEnabled()"));
-        assertTrue(sync.contains("removeDockShadow()"));
-        assertTrue(syncAll.contains("VisualRuntimeState.isDockShadowEnabled()"));
-        assertTrue(main.contains("static void onRuntimeDockShadowDisabled()"));
-        assertTrue(main.contains("private static void removeDockShadow()"));
+        assertTrue(configured.contains("VisualRuntimeState.isDockShadowEnabled()"));
+        assertTrue("disabled shadow must feed zero alpha into HotSeats' own lifecycle",
+                configured.contains(": 0;"));
+        assertFalse(main.contains("nativeShadowTargetRef"));
+        assertFalse(main.contains("customShadowTargetRef"));
+        assertFalse(main.contains("makeDockShadow("));
     }
 
     @Test
-    public void strokeAndStrokeShadowUseLiveStateAndHaveImmediateTeardown() throws Exception {
+    public void strokeDisableRetainsWeakOwnerSoFalseToTrueCanReattach() throws Exception {
         String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+        String disable = methodSlice(stroke,
+                "static void onRuntimeStrokeDisabled()",
+                "static void refreshInstalledFromCurrentConfig()");
+        String refresh = methodSlice(stroke,
+                "static void refreshInstalledFromCurrentConfig()",
+                "private static void applyNativeOuterShadow(");
 
         assertTrue(stroke.contains("VisualRuntimeState.isDockStrokeEnabled()"));
         assertTrue(stroke.contains("VisualRuntimeState.isStrokeShadowEnabled()"));
-        assertTrue(stroke.contains("static void onRuntimeStrokeDisabled()"));
-        assertTrue(stroke.contains("static void refreshInstalledFromCurrentConfig()"));
-        assertTrue(stroke.contains("installed.baseForeground()"));
-        assertTrue(stroke.contains("INSTALLED.clear()"));
+        assertTrue(disable.contains("installed.baseForeground()"));
+        assertFalse("live disable must not destroy the weak installation record",
+                disable.contains("INSTALLED.clear()"));
+        assertTrue("live re-enable must reattach the existing StrokeDrawable",
+                refresh.contains("host.setForeground(installed)"));
     }
 
     private static String methodSlice(String source, String startMarker, String endMarker) {
