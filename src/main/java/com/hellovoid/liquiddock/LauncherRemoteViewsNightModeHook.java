@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.RemoteViews;
 
@@ -69,12 +70,41 @@ final class LauncherRemoteViewsNightModeHook {
         try {
             Object value = HookUtil.getField(host, "mLastInflatedRemoteViews");
             if (!(value instanceof RemoteViews)) return;
+
+            // Launcher 4.50 does this in LauncherAppWidgetHostView.reInflate() before
+            // updateAppWidget(mRemoteViews). Invalidating the framework-owned layout-id tag forces
+            // AppWidgetHostView to inflate the newly qualified layout instead of re-applying night
+            // RemoteViews actions onto a stale day-mode View tree. If this boundary is unavailable,
+            // keep the existing widget alive and let the text-only fallback handle dark content.
+            if (!invalidateRemoteViewsLayoutId(host)) {
+                MainHook.log(TAG + " provider reinflate skipped: widget_frame tag unavailable host="
+                        + host.getClass().getSimpleName());
+                return;
+            }
+
             HookUtil.invoke(host, "updateAppWidget", value);
-            MainHook.log(TAG + " requested provider reapply host="
+            MainHook.log(TAG + " requested provider reinflate host="
                     + host.getClass().getSimpleName()
                     + " night=" + GlassRuntimeState.isWidgetDarkContentEnabled());
         } catch (Throwable error) {
-            MainHook.log(TAG + " provider reapply unavailable: " + error);
+            MainHook.log(TAG + " provider reinflate unavailable: " + error);
+        }
+    }
+
+    private static boolean invalidateRemoteViewsLayoutId(View host) {
+        if (!(host instanceof ViewGroup)) return false;
+        ViewGroup group = (ViewGroup) host;
+        if (group.getChildCount() != 1) return false;
+        View child = group.getChildAt(0);
+        if (child == null) return false;
+        try {
+            Method setTagInternal = HookUtil.findMethodExact(View.class, "setTagInternal",
+                    new Class<?>[]{int.class, Object.class});
+            setTagInternal.invoke(child, android.R.id.widget_frame, Integer.valueOf(-1));
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " widget_frame tag invalidation unavailable: " + error);
+            return false;
         }
     }
 
