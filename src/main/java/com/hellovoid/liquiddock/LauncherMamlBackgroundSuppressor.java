@@ -11,12 +11,15 @@ import java.util.WeakHashMap;
 
 /** Exact MAML background ownership rules backed by inspected widget payloads and live roots. */
 final class LauncherMamlBackgroundSuppressor {
-    // HyperOS 3 Weather "Today's weather" MAML on Launcher 4.50.
+    // HyperOS 3 Weather MAML on Launcher 4.50. The bundled default product is known, while
+    // downloaded catalogs may expose other size/product variants. MaMlWidgetInfo persists the
+    // exact bound app package, and Weather description.xml binds com.miui.weather2.
+    private static final String WEATHER_PRODUCT_ID =
+            "b8006e83-c497-4642-9815-f674b82842b0";
+    private static final String WEATHER_APP_PACKAGE = "com.miui.weather2";
     // Decompiled payload + live ScreenElementRoot.mElements show stable parent "skyColor" owns
     // both the full-size old/new gradient subgroup and the following full-size glow image. Hide
     // only that parent; higher/lower weather effects, information and weather icon stay as siblings.
-    private static final String WEATHER_PRODUCT_ID =
-            "b8006e83-c497-4642-9815-f674b82842b0";
     private static final String WEATHER_SKY_OWNER_ELEMENT = "skyColor";
     private static final String LOG_TAG = "[MamlWidgetBg]";
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
@@ -38,21 +41,35 @@ final class LauncherMamlBackgroundSuppressor {
         if (host == null) return;
         Object itemInfo = HookUtil.invoke(host, "getItemInfo");
         String productId = readStringField(itemInfo, "productId");
-        if (!WEATHER_PRODUCT_ID.equals(productId)) {
+        String appPackage = readStringField(itemInfo, "appPackage");
+        int spanX = readIntField(itemInfo, "spanX", -1);
+        int spanY = readIntField(itemInfo, "spanY", -1);
+        int configSpanX = readIntField(itemInfo, "configSpanX", -1);
+        int configSpanY = readIntField(itemInfo, "configSpanY", -1);
+        boolean weather = isWeatherIdentity(productId, appPackage);
+
+        if (!weather) {
             release(host);
             MainHook.log(LOG_TAG + " productId=" + productId
+                    + " appPackage=" + appPackage
+                    + " span=" + spanX + "x" + spanY
+                    + " configSpan=" + configSpanX + "x" + configSpanY
                     + " weather=false rootLoaded=" + (root != null));
             return;
         }
 
+        String identity = " productId=" + productId
+                + " appPackage=" + appPackage
+                + " span=" + spanX + "x" + spanY
+                + " configSpan=" + configSpanX + "x" + configSpanY;
         if (root == null) {
-            MainHook.log(LOG_TAG + " productId=" + productId
+            MainHook.log(LOG_TAG + identity
                     + " root=null targetFound=false suppressed=false");
             return;
         }
         Object target = HookUtil.invoke(root, "findElement", WEATHER_SKY_OWNER_ELEMENT);
         if (target == null) {
-            MainHook.log(LOG_TAG + " productId=" + productId
+            MainHook.log(LOG_TAG + identity
                     + " root=" + root.getClass().getSimpleName()
                     + " target=" + WEATHER_SKY_OWNER_ELEMENT
                     + " targetFound=false suppressed=false");
@@ -74,10 +91,14 @@ final class LauncherMamlBackgroundSuppressor {
         // Hide the one semantic sky-background owner. Do not traverse or mutate provider content.
         HookUtil.invoke(target, "show", false);
         boolean suppressed = !readBooleanField(target, "mShow", true);
-        MainHook.log(LOG_TAG + " productId=" + productId
+        MainHook.log(LOG_TAG + identity
                 + " root=" + root.getClass().getSimpleName()
                 + " target=" + WEATHER_SKY_OWNER_ELEMENT
                 + " targetFound=true suppressed=" + suppressed);
+    }
+
+    private static boolean isWeatherIdentity(String productId, String appPackage) {
+        return WEATHER_PRODUCT_ID.equals(productId) || WEATHER_APP_PACKAGE.equals(appPackage);
     }
 
     static void release(View host) {
@@ -145,6 +166,11 @@ final class LauncherMamlBackgroundSuppressor {
     private static String readStringField(Object target, String name) {
         Object value = readField(target, name);
         return value instanceof String ? (String) value : null;
+    }
+
+    private static int readIntField(Object target, String name, int fallback) {
+        Object value = readField(target, name);
+        return value instanceof Number ? ((Number) value).intValue() : fallback;
     }
 
     private static boolean readBooleanField(Object target, String name, boolean fallback) {
