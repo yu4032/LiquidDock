@@ -27,7 +27,7 @@ final class MiuixLauncherStaticGlassHook {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (isWidgetHost(host)) {
                 LauncherWidgetDarkContentAdapter.release(host);
-                LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+                LauncherWidgetBackgroundController.release(host);
             }
             View.OnAttachStateChangeListener listener = BOOTSTRAP_OBSERVERS.remove(host);
             if (listener != null) host.removeOnAttachStateChangeListener(listener);
@@ -51,7 +51,7 @@ final class MiuixLauncherStaticGlassHook {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (!isWidgetHost(host)) continue;
             LauncherWidgetDarkContentAdapter.release(host);
-            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            LauncherWidgetBackgroundController.release(host);
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
             if (node != null && node.kind() == LauncherGlassDragState.Kind.WIDGET) node.dispose();
@@ -421,7 +421,7 @@ final class MiuixLauncherStaticGlassHook {
         }
         if (kind == LauncherGlassDragState.Kind.WIDGET && !GlassRuntimeState.isWidgetEnabled()) {
             LauncherWidgetDarkContentAdapter.release(host);
-            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            LauncherWidgetBackgroundController.release(host);
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode staleNode = LauncherGlassStaticNode.find(host);
             if (staleNode != null && staleNode.kind() == LauncherGlassDragState.Kind.WIDGET) {
@@ -447,7 +447,7 @@ final class MiuixLauncherStaticGlassHook {
             if (node != null) node.dispose();
             if (kind == LauncherGlassDragState.Kind.WIDGET) {
                 LauncherWidgetDarkContentAdapter.release(host);
-                LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+                LauncherWidgetBackgroundController.release(host);
             }
             if (domain == LauncherGlassHierarchy.Domain.OTHER && node == null
                     && attempt < MAX_BIND_ATTEMPTS) {
@@ -467,7 +467,7 @@ final class MiuixLauncherStaticGlassHook {
         }
         if (node != null && kind == LauncherGlassDragState.Kind.WIDGET
                 && GlassRuntimeState.isWidgetEnabled()) {
-            LauncherGlassVendorMaterialSuppressor.claimWidget(host);
+            LauncherWidgetBackgroundController.claim(host);
             if (GlassRuntimeState.isWidgetDarkContentEnabled()) {
                 LauncherWidgetDarkContentAdapter.apply(host);
             } else {
