@@ -16,8 +16,6 @@ final class LauncherWidgetDarkContentAdapter {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Double> ORIGINAL_MAML_DARK_MODE =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<View, Boolean> NATIVE_NIGHT_REQUESTED =
-            Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherWidgetDarkContentAdapter() {}
 
@@ -28,17 +26,8 @@ final class LauncherWidgetDarkContentAdapter {
             return;
         }
 
-        // Prefer the provider's own -night resources/layout first. Reinflate once when this host
-        // enters adapted state; all subsequent provider refreshes are intercepted by the scoped
-        // RemoteViews night-resource hook. The text pass below remains a compatibility fallback.
-        boolean requestNativeNight = false;
-        synchronized (NATIVE_NIGHT_REQUESTED) {
-            if (!NATIVE_NIGHT_REQUESTED.containsKey(host)) {
-                NATIVE_NIGHT_REQUESTED.put(host, Boolean.TRUE);
-                requestNativeNight = true;
-            }
-        }
-        if (requestNativeNight) LauncherRemoteViewsNightModeHook.reapplyCurrent(host);
+        // Standard RemoteViews stay in the provider/launcher configuration that actually exists.
+        // Only adapt dark-neutral foreground text; do not force provider night resources or reinflate.
         applyTextTree(host);
     }
 
@@ -53,14 +42,7 @@ final class LauncherWidgetDarkContentAdapter {
             return;
         }
 
-        boolean restoreNativeMode;
-        synchronized (NATIVE_NIGHT_REQUESTED) {
-            restoreNativeMode = NATIVE_NIGHT_REQUESTED.remove(host) != null;
-        }
         releaseTextTree(host);
-        // GlassRuntimeState has already committed the new toggle value before this callback. The
-        // same reapply therefore resolves normal provider resources when adaptation is disabled.
-        if (restoreNativeMode) LauncherRemoteViewsNightModeHook.reapplyCurrent(host);
     }
 
     private static void applyMaml(View host) {
