@@ -15,6 +15,7 @@ final class LauncherGlassSceneController {
     private static boolean vendorFolderCovered;
     private static boolean vendorHomeTransitionPending;
     private static boolean vendorUnlockTransitionPending;
+    private static boolean vendorRecentsWallpaperSettlePending;
 
     enum State { DETACHED, BOOTSTRAPPING, HOME_WAITING_FRESH_FRAME, HOME_VISIBLE, COVERED }
 
@@ -95,6 +96,7 @@ final class LauncherGlassSceneController {
     private boolean recentsCovered;
     private boolean homeTransitionPending;
     private boolean unlockTransitionPending;
+    private boolean recentsWallpaperSettlePending;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
 
@@ -129,6 +131,7 @@ final class LauncherGlassSceneController {
         created.folderCovered = vendorFolderCovered;
         created.homeTransitionPending = vendorHomeTransitionPending;
         created.unlockTransitionPending = vendorUnlockTransitionPending;
+        created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.recentsCovered || created.folderCovered) {
             created.state.setCovered(true);
         }
@@ -174,6 +177,17 @@ final class LauncherGlassSceneController {
         }
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setFolderCovered(covered);
+        }
+    }
+
+    static void setRecentsWallpaperSettlePendingForAll(boolean pending) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            vendorRecentsWallpaperSettlePending = pending;
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.setRecentsWallpaperSettlePending(pending);
         }
     }
 
@@ -360,7 +374,13 @@ final class LauncherGlassSceneController {
     }
 
     private boolean isPresentationPending() {
-        return homeTransitionPending || unlockTransitionPending;
+        return homeTransitionPending || unlockTransitionPending || recentsWallpaperSettlePending;
+    }
+
+    private void setRecentsWallpaperSettlePending(boolean pending) {
+        boolean wasPending = isPresentationPending();
+        recentsWallpaperSettlePending = pending;
+        onPresentationPendingChanged(wasPending, isPresentationPending(), "recents-wallpaper");
     }
 
     private void setHomeTransitionPending(boolean pending) {
