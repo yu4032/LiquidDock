@@ -61,6 +61,12 @@ final class DockGlassCompositor {
         lastFingerprint = Long.MIN_VALUE;
     }
 
+    void invalidateUiScene() {
+        lastFingerprint = Long.MIN_VALUE;
+        lastOutputFingerprint = Long.MIN_VALUE;
+        for (CachedItem item : cached) item.uiFingerprint = Long.MIN_VALUE;
+    }
+
     void refreshUiSceneIfNeeded(int framebufferWidth, int framebufferHeight,
             float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
         View ownershipRoot = ownershipRootRef.get();

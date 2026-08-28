@@ -310,6 +310,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
     }
 
+    void requestDockSceneRefresh() {
+        if (shuttingDown) return;
+        postOnAnimation(() -> {
+            if (shuttingDown) return;
+            dockCompositor.invalidateUiScene();
+            updateBackdropMapping();
+            if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
+            postInvalidateOnAnimation();
+        });
+    }
+
     /**
      * Reconnect SurfaceFlinger's PassBlur producer without rebuilding the attached TextureView.
      * The framework Binding can remain stale-true after its BufferQueue has disconnected.
