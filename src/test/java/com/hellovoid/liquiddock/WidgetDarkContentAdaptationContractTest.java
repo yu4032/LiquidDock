@@ -37,7 +37,7 @@ public class WidgetDarkContentAdaptationContractTest {
 
         String nightHook = Files.readString(nightHookPath);
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        String staticHook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String adapter = Files.readString(MAIN.resolve("LauncherWidgetDarkContentAdapter.java"));
 
         assertTrue(nightHook.contains("Configuration.UI_MODE_NIGHT_MASK"));
         assertTrue(nightHook.contains("Configuration.UI_MODE_NIGHT_YES"));
@@ -48,7 +48,8 @@ public class WidgetDarkContentAdaptationContractTest {
         assertTrue(nightHook.contains("reapplyAsync"));
         assertTrue(nightHook.contains("reapplyCurrent"));
         assertTrue(module.contains("LauncherRemoteViewsNightModeHook.install(classLoader)"));
-        assertTrue(staticHook.contains("LauncherRemoteViewsNightModeHook.reapplyCurrent(host)"));
+        assertTrue(adapter.contains("LauncherRemoteViewsNightModeHook.reapplyCurrent(host)"));
+        assertTrue(adapter.contains("NATIVE_NIGHT_REQUESTED"));
 
         // Android's getDarkTextViews() means dark text for a light host background, the opposite
         // of this feature. Provider night resources must be selected through Configuration instead.
