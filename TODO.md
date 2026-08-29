@@ -108,3 +108,16 @@ foreground `DockStrokeRenderer` 已替代旧描边 overlay。后续二选一：
 - 增加 schema/codec/architecture/runtime-ownership regression tests。
 - 每个阶段运行 `testDebugUnitTest` + `assembleDebug`。
 - Grid / Workstation / PassBlur producer lifecycle 等高风险改动必须追加真机回归。
+
+## 10. Widget background hide rules 用户自定义化（后期）
+
+当前 `widget_background_rules.xml` 只承载内置、进程启动时读取的保守规则。后续增加用户自定义隐藏规则层，但不能把它变成任意反射/脚本入口：
+
+- 设置页支持逐条启用/禁用规则，并明确内置规则与用户规则的覆盖/优先级策略；
+- 支持导入/导出带版本号的规则配置，导入前完成 schema/version/字段白名单校验；
+- 自定义 action 仅允许声明式 identity match + `hide-element`，拒绝任意方法调用、字段写入、表达式或脚本；
+- 支持 `productId`、`appPackage`、`spanX/spanY`、`configSpanX/configSpanY` 等现有 identity 条件，后续扩展字段必须保持向后兼容；
+- 提供安全 preview/restore：所有目标解析成功后才允许提交隐藏，失败或目标缺失不得产生 partial mutation；
+- 明确规则冲突、优先级和诊断输出，使用户能知道最终命中了哪条规则；
+- 未知小组件默认保持 diagnostic-only，不通过视觉启发式或递归遍历猜测背景元素；
+- runtime hot reload 只在 claim/release 完整可逆并通过真机回归后再开放，否则保持进程启动时加载。
