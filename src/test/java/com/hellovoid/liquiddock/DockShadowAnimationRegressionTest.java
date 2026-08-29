@@ -64,6 +64,17 @@ public class DockShadowAnimationRegressionTest {
                 main.contains("captureVendorDockShadow"));
     }
 
+    @Test
+    public void nativeShadowAlphaNeverFallsBackToHotSeatsViewAlpha() throws Exception {
+        String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String shadowConfig = slice(main,
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
+                "private static float readStaticNumber(");
+
+        assertFalse("shadow customization must never rewrite parent HotSeats alpha",
+                shadowConfig.contains("overrideViewAlpha((View) hotSeats"));
+    }
+
     private static String slice(String source, String start, String end) {
         int from = source.indexOf(start);
         int to = source.indexOf(end, from);
