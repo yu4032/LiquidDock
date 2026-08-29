@@ -287,8 +287,6 @@ public class MainHook {
             return HotSeatsShadowScope.noop();
         }
 
-        int configuredAlpha = VisualRuntimeState.isDockShadowEnabled()
-                ? Math.max(0, Math.min(255, dock.shadowAlpha)) : 0;
         float density = hotSeats instanceof View
                 ? ((View) hotSeats).getResources().getDisplayMetrics().density
                 : android.content.res.Resources.getSystem().getDisplayMetrics().density;
@@ -302,17 +300,9 @@ public class MainHook {
         scope.overrideNumber("mMiShadowRadius", radiusPx);
         scope.overrideNumber("mMiShadowOffsetY", offsetYPx);
 
-        // showViewShadow derives its color alpha through the vendor MI_SHADOW_ALPHA path. Prefer a
-        // dedicated multiplier field when this Launcher revision exposes one; otherwise temporarily
-        // scale HotSeats alpha only during the vendor method call and restore it immediately after.
-        float vendorBaseAlpha = readStaticNumber(hotSeats.getClass(), "MI_SHADOW_ALPHA", 1f);
-        float requestedAlpha = configuredAlpha / 255f;
-        float multiplier = vendorBaseAlpha > 0.0001f ? requestedAlpha / vendorBaseAlpha : 0f;
-        boolean explicitAlpha = scope.overrideNumber("mMiShadowAlpha", multiplier)
-                || scope.overrideNumber("mShadowAlpha", multiplier);
-        if (!explicitAlpha && hotSeats instanceof View) {
-            scope.overrideViewAlpha((View) hotSeats, Math.max(0f, Math.min(1f, multiplier)));
-        }
+        // Alpha is owned exclusively at the terminal MiShadowUtils.applyViewShadow boundary by
+        // DockNativeShadowBridge. Never mutate HotSeats alpha here: HyperOS 4.50 propagates
+        // HotSeats.setAlpha() to every Dock child, including the real ShortcutIcon hierarchy.
         return scope;
     }
 
@@ -325,17 +315,6 @@ public class MainHook {
         } catch (Throwable ignored) {
         }
         return current;
-    }
-
-    private static float readStaticNumber(Class<?> type, String name, float fallback) {
-        try {
-            java.lang.reflect.Field field = HookUtil.findField(type, name);
-            Object value = field.get(java.lang.reflect.Modifier.isStatic(field.getModifiers())
-                    ? null : hotSeatsShadowOwner());
-            if (value instanceof Number) return ((Number) value).floatValue();
-        } catch (Throwable ignored) {
-        }
-        return fallback;
     }
 
     private static void setNumericField(java.lang.reflect.Field field, Object target, float value)
@@ -740,9 +719,6 @@ public class MainHook {
         private static final HotSeatsShadowScope NOOP = new HotSeatsShadowScope(null);
         private final Object target;
         private final java.util.ArrayList<ShadowFieldState> fields = new java.util.ArrayList<>();
-        private View alphaView;
-        private float oldAlpha;
-        private boolean alphaChanged;
 
         HotSeatsShadowScope(Object target) {
             this.target = target;
@@ -765,14 +741,6 @@ public class MainHook {
             }
         }
 
-        void overrideViewAlpha(View view, float alpha) {
-            if (view == null) return;
-            alphaView = view;
-            oldAlpha = view.getAlpha();
-            alphaChanged = true;
-            view.setAlpha(alpha);
-        }
-
         @Override public void close() {
             if (target == null) return;
             for (int i = fields.size() - 1; i >= 0; i--) {
@@ -781,12 +749,6 @@ public class MainHook {
                 catch (Throwable ignored) {}
             }
             fields.clear();
-            if (alphaChanged && alphaView != null) {
-                try { alphaView.setAlpha(oldAlpha); }
-                catch (Throwable ignored) {}
-            }
-            alphaView = null;
-            alphaChanged = false;
         }
     }
 
