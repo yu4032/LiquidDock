@@ -594,6 +594,10 @@ public class MainHook {
             if (dockBg != null) dockBg.post(() -> {
                 dockBg.setAlpha(1f);
                 syncAll(dockBg);
+                // Workstation mode deliberately ignores native radius callbacks. Once the vendor
+                // transition has returned to the message queue, re-read its authoritative field
+                // so the installed stroke cannot retain the pre-workstation corner radius.
+                DockStrokeRenderer.syncRadiusFromNativeHost(dockBg);
             });
             return;
         }
