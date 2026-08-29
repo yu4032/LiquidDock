@@ -69,6 +69,27 @@ public class DockIconAnimationRenderingContractTest {
     }
 
     @Test
+    public void lateBackAnimStopCannotHideDockSourceAfterVendorRestore() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
+        String visibilityHook = slice(hook,
+                "private static boolean installShortcutVisibilityHook",
+                "private static boolean installFloatingProxyHook");
+
+        assertTrue("the hook must remember when MIUI formally returns native source ownership",
+                hook.contains("SOURCE_RETURNED"));
+        assertTrue("VISIBLE setAnimTargetVisibility must mark the source as returned",
+                visibilityHook.contains("View.VISIBLE")
+                        && visibilityHook.contains("SOURCE_RETURNED.put("));
+        assertTrue("ShortcutIcon.onBackAnimStop must be observed as a separate vendor end lifecycle",
+                hook.contains("\"onBackAnimStop\""));
+        assertTrue("a late onBackAnimStop hide must be repaired through the direct icon drawable API",
+                hook.contains("\"setIconVisibility\"")
+                        && hook.contains("View.VISIBLE"));
+        assertFalse("late-hide repair must not recurse through setAnimTargetVisibility",
+                lateHideGuardSlice(hook).contains("setAnimTargetVisibility"));
+    }
+
+    @Test
     public void membershipRevisionRemainsOwnedByRegistryMembershipChanges() throws Exception {
         String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
 
@@ -99,6 +120,13 @@ public class DockIconAnimationRenderingContractTest {
 
         assertFalse(suppression.contains("setPassWindowBlurRadius(dockBg, 0)"));
         assertTrue(suppression.contains("MiBlurBridge.clearPassWindowBlur(dockBg);"));
+    }
+
+    private static String lateHideGuardSlice(String source) {
+        int from = source.indexOf("onBackAnimStop");
+        int to = source.indexOf("private static boolean installFloatingProxyHook", from);
+        if (from < 0 || to < 0) return source;
+        return source.substring(from, to);
     }
 
     private static String slice(String source, String start, String end) {
