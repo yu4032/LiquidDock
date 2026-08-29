@@ -54,20 +54,18 @@ public class DockIconAnimationRenderingContractTest {
     }
 
     @Test
-    public void zeroCopyEntryPointInstallsDockIconAnimationHookBeforeEarlyReturn() throws Exception {
-        String mainHook = Files.readString(MAIN.resolve("MainHook.java"));
-        String zeroCopyEntry = slice(mainHook,
-                "if (config.glass.enabled) {",
-                "if (!dockCustomization) {");
-        int animationInstall = zeroCopyEntry.indexOf(
-                "DockIconAnimationGlassHook.install(classLoader, config)");
-        int pipelineInstall = zeroCopyEntry.indexOf(
-                "Miuix307MaterialPipeline.install(classLoader, config)");
+    public void zeroCopyRendererInstallsDockIconAnimationHookOnRealLauncherClassLoader() throws Exception {
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String install = slice(renderer,
+                "static boolean install(ViewGroup materialHost",
+                "static boolean isInstalled()");
 
-        assertTrue("the 307 early-return path must actually install the Dock animation hook",
-                animationInstall >= 0);
-        assertTrue("animation hooks must be installed before the zero-copy pipeline can return",
-                pipelineInstall >= 0 && animationInstall < pipelineInstall);
+        assertTrue("the active 307 renderer must install the Dock animation hook",
+                install.contains("DockIconAnimationGlassHook.install("));
+        assertTrue("the hook must resolve Launcher classes from the real material host",
+                install.contains("materialHost.getClass().getClassLoader()"));
+        assertTrue("the runtime config used by the hook must match current settings",
+                install.contains("LiquidDockConfig.load()"));
     }
 
     @Test
