@@ -3,9 +3,16 @@ package com.hellovoid.liquiddock;
 import android.graphics.RectF;
 import android.view.View;
 
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 /** Hides only the animated Dock icon glass, then restores it with a short fade. */
 final class DockIconAnimationGlassHook {
     private static final String TAG = "[DC][DockIconAnimationGlass]";
+    private static final float SOURCE_PRIME_PROGRESS = 1.0f;
+    private static final Map<View, Boolean> HANDOFF_PRIMED =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static boolean installed;
 
     private DockIconAnimationGlassHook() {}
@@ -21,7 +28,8 @@ final class DockIconAnimationGlassHook {
         boolean layer2 = installFloatingProxyHook(classLoader,
                 "com.miui.home.recents.views.FloatingIconLayer2");
         installed = shortcut && (view2 || layer2);
-        if (installed) MainHook.log(TAG + " hooks installed restoreProgress=0.90 fadeMs=450");
+        if (installed) MainHook.log(TAG + " hooks installed restoreProgress=0.90 fadeMs=450"
+                + " sourcePrimeProgress=" + SOURCE_PRIME_PROGRESS);
         return installed;
     }
 
@@ -35,9 +43,14 @@ final class DockIconAnimationGlassHook {
                         Object owner = chain.getThisObject();
                         if (GlassRuntimeState.isIconEnabled()
                                 && owner instanceof View && args.length > 0 && args[0] instanceof Number
-                                && ((Number) args[0]).intValue() == View.VISIBLE
                                 && LauncherGlassHierarchy.isDock((View) owner)) {
-                            DockGlassItemRegistry.endLaunchAnimation((View) owner);
+                            View host = (View) owner;
+                            synchronized (HANDOFF_PRIMED) {
+                                HANDOFF_PRIMED.remove(host);
+                            }
+                            if (((Number) args[0]).intValue() == View.VISIBLE) {
+                                DockGlassItemRegistry.endLaunchAnimation(host);
+                            }
                         }
                         return result;
                     }, int.class);
@@ -62,8 +75,10 @@ final class DockIconAnimationGlassHook {
                             Object target = HookUtil.invoke(chain.getThisObject(), "getAnimTarget");
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
+                                float progress = ((Number) args[2]).floatValue();
+                                primeNativeSourceForHandoff((View) target, progress);
                                 DockGlassItemRegistry.observeLaunchAnimationFrame(
-                                        (View) target, ((Number) args[2]).floatValue());
+                                        (View) target, progress);
                             }
                         }
                         return result;
@@ -75,6 +90,25 @@ final class DockIconAnimationGlassHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " proxy hook unavailable class=" + className + ": " + error);
             return false;
+        }
+    }
+
+    private static void primeNativeSourceForHandoff(View target, float progress) {
+        if (target == null || !target.isAttachedToWindow() || !Float.isFinite(progress)
+                || progress < SOURCE_PRIME_PROGRESS) return;
+        synchronized (HANDOFF_PRIMED) {
+            if (HANDOFF_PRIMED.containsKey(target)) return;
+            HANDOFF_PRIMED.put(target, Boolean.TRUE);
+        }
+        try {
+            HookUtil.findMethodExact(target.getClass(),
+                    "setIconVisibility", new Class<?>[]{int.class})
+                    .invoke(target, View.VISIBLE);
+            MainHook.log(TAG + " native source pre-roll target="
+                    + target.getClass().getSimpleName() + " progress=" + progress);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " native source pre-roll unavailable target="
+                    + target.getClass().getSimpleName() + ": " + error);
         }
     }
 }
