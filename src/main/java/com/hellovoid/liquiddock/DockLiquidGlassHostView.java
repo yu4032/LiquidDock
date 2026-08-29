@@ -78,6 +78,14 @@ final class DockLiquidGlassHostView extends FrameLayout {
         shapeDirty = false;
     }
 
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        Object parent = getParent();
+        if (parent instanceof View) {
+            DockStrokeRenderer.releaseNativeStrokeOwner((View) parent);
+        }
+    }
+
     @Override protected void onDetachedFromWindow() {
         try {
             MiuixGlassHook.onHostDetached(this);
