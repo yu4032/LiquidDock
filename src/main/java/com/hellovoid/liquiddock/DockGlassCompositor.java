@@ -167,10 +167,6 @@ final class DockGlassCompositor {
                         sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
                 cachedItem.uiFingerprint = uiFingerprint;
             }
-            View itemView = item.view();
-            if (animationSample.fading && itemView != null) {
-                itemView.postInvalidateOnAnimation();
-            }
             if (animationSample.opacity <= 0f || cachedItem.geometry == null) continue;
             out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, animationSample.opacity));
         }

@@ -29,12 +29,14 @@ final class DockGlassItemRegistry {
     static synchronized void observeLaunchAnimationFrame(View view, float progress) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
         if (!ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis())) return;
-        view.postInvalidateOnAnimation();
+        Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
     }
     static synchronized void endLaunchAnimation(View view) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
         ANIMATION.end(view, SystemClock.uptimeMillis());
-        view.postInvalidateOnAnimation();
+        if (ANIMATION.isFading(view)) {
+            Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
+        }
     }
     static synchronized DockIconAnimationState.Sample animationSample(View view, long nowMs) {
         return ANIMATION.sample(view, nowMs);
@@ -44,6 +46,12 @@ final class DockGlassItemRegistry {
     }
     static synchronized boolean isFading(View view) {
         return ANIMATION.isFading(view);
+    }
+    static synchronized boolean hasActiveAnimation() {
+        for (View view : new ArrayList<>(ICONS.keySet())) {
+            if (view != null && ANIMATION.isFading(view)) return true;
+        }
+        return false;
     }
     static synchronized long revision() { return membershipRevision; }
     static synchronized ArrayList<View> snapshotForRoot(View root) {

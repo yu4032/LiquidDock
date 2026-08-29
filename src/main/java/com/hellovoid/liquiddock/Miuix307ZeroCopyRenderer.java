@@ -15,6 +15,7 @@ final class Miuix307ZeroCopyRenderer {
     private static WeakReference<DockLiquidGlassHostView> hostRef =
             new WeakReference<>(null);
     private static WeakReference<View> materialHostRef = new WeakReference<>(null);
+    private static boolean dockAnimationFrameScheduled;
 
     private Miuix307ZeroCopyRenderer() {}
 
@@ -46,6 +47,7 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
+        dockAnimationFrameScheduled = false;
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -98,11 +100,26 @@ final class Miuix307ZeroCopyRenderer {
         if (gpuBackdrop != null) gpuBackdrop.requestDockSceneRefresh();
     }
 
+    static void requestDockAnimationFrames() {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
+        dockAnimationFrameScheduled = true;
+        gpuBackdrop.requestDockSceneRefresh();
+        gpuBackdrop.postOnAnimation(() -> {
+            if (gpuBackdropRef.get() != gpuBackdrop) return;
+            dockAnimationFrameScheduled = false;
+            if (DockGlassItemRegistry.hasActiveAnimation()) {
+                requestDockAnimationFrames();
+            }
+        });
+    }
+
     static void clear() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         gpuBackdropRef = new WeakReference<>(null);
         hostRef = new WeakReference<>(null);
         materialHostRef = new WeakReference<>(null);
+        dockAnimationFrameScheduled = false;
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }
