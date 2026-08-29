@@ -53,6 +53,7 @@ final class DockIconAnimationGlassHook {
             HookUtil.hookMethod(classLoader, className, "update",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object result = chain.proceed(args);
                         if (GlassRuntimeState.isIconEnabled()
                                 && args.length == 10 && args[0] instanceof RectF
                                 && args[1] instanceof RectF && args[2] instanceof Number
@@ -65,7 +66,7 @@ final class DockIconAnimationGlassHook {
                                         (View) target, ((Number) args[2]).floatValue());
                             }
                         }
-                        return chain.proceed(args);
+                        return result;
                     }, RectF.class, RectF.class,
                     float.class, float.class, float.class,
                     boolean.class, boolean.class, boolean.class,
