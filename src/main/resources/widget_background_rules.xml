@@ -21,9 +21,22 @@
         <hide-element name="background" />
     </rule>
 
+    <!-- Live Launcher 4.50 registry: background:ElementGroup owns generated bg/bg_old rectangles. -->
+    <rule
+        id="miui-weather-compact-background"
+        type="maml"
+        productId="f34b4e78-9df6-467c-b0ac-e72e62aba073">
+        <hide-element name="background" />
+    </rule>
+
     <!-- Future Weather products are recognized for diagnostics only. Never guess an owner. -->
     <rule
         id="miui-weather-diagnostic"
         type="maml"
         appPackage="com.miui.weather2" />
+
+    <!-- Lowest-specificity fallback: dump unknown MAML roots without changing any ScreenElement. -->
+    <rule
+        id="maml-diagnostic"
+        type="maml" />
 </widget-background-rules>
