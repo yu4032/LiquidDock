@@ -98,6 +98,20 @@ public class WidgetBackgroundRuleEngineTest {
                 "maml", "other", "other.pkg", 1, 1, 2, 2)));
     }
 
+    @Test public void invalidNumericConstraintRejectsWholeRuleInsteadOfBroadeningIt()
+            throws Exception {
+        WidgetBackgroundRuleEngine engine = parse("""
+                <widget-background-rules version="1">
+                  <rule id="bad-size" type="maml" appPackage="pkg" spanX="two">
+                    <hide-element name="background"/>
+                  </rule>
+                </widget-background-rules>
+                """);
+
+        assertNull(engine.match(new WidgetBackgroundIdentity(
+                "maml", null, "pkg", 2, 1, 4, 2)));
+    }
+
     @Test public void malformedXmlFailsClosed() throws Exception {
         WidgetBackgroundRuleEngine engine = parse("<widget-background-rules><rule");
         assertNull(engine.match(new WidgetBackgroundIdentity(
