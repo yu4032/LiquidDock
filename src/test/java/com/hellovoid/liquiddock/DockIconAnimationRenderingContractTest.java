@@ -104,6 +104,25 @@ public class DockIconAnimationRenderingContractTest {
     }
 
     @Test
+    public void nativeSourceProxyHandoffDoesNotRequireIconGlass() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
+        String proxyHook = slice(hook,
+                "private static boolean installFloatingProxyHook",
+                "private static void primeNativeSourceForHandoff");
+        String tailRestore = slice(hook,
+                "private static void restoreTailSourceAfterBackAnimStop",
+                "private static boolean installFloatingProxyHook");
+
+        assertFalse("native source/proxy handoff must still run when icon glass is disabled",
+                proxyHook.contains("boolean traceCandidate = GlassRuntimeState.isIconEnabled()"));
+        assertFalse("tail source ownership must not depend on icon glass being enabled",
+                tailRestore.contains("GlassRuntimeState.isIconEnabled()"));
+        assertTrue("only the LiquidDock glass fade registry should remain icon-glass gated",
+                proxyHook.contains("if (GlassRuntimeState.isIconEnabled())")
+                        && proxyHook.contains("DockGlassItemRegistry.observeLaunchAnimationFrame("));
+    }
+
+    @Test
     public void membershipRevisionRemainsOwnedByRegistryMembershipChanges() throws Exception {
         String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
 
