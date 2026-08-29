@@ -121,3 +121,37 @@ foreground `DockStrokeRenderer` 已替代旧描边 overlay。后续二选一：
 - 明确规则冲突、优先级和诊断输出，使用户能知道最终命中了哪条规则；
 - 未知小组件默认保持 diagnostic-only，不通过视觉启发式或递归遍历猜测背景元素；
 - runtime hot reload 只在 claim/release 完整可逆并通过真机回归后再开放，否则保持进程启动时加载。
+
+## 11. 解锁后 Workspace 玻璃壁纸 freshness 完全修复
+
+**已知未完全解决。** PR #68 已明显缓解锁屏进入桌面时的错误背景，但真机仍观察到少量场景会在解锁后使用到锁屏壁纸帧。因此当前实现只能视为 mitigation，不能标记为 fully fixed。
+
+当前已有保护：
+
+- `PREPARE` 后立即隐藏 Workspace StaticLayer，并阻止 Launcher Workspace PassBlur 新的 bind / pulse / resume；
+- Pad 的 `UserPresentAnimationCompatV12Spring` 与 Fold/Folme 路径都等待厂商最后一个动画对象完成；
+- 动画完成后跨一个 Choreographer frame，再 rollover Launcher Workspace 的 PassBlur / OES / `SurfaceTexture` endpoint；
+- rollover 完成前保持 unlock capture gate，不允许旧 BufferQueue 被重新显示；
+- 新 scene generation 的 fresh frame 真正到达前，StaticLayer 继续保持隐藏；
+- unlock gate 仅作用于 Launcher Workspace binding，不能阻断 Floating Dock 的独立持久 producer。
+
+后续完整修复必须建立**内容权威边界**，不能只依赖“动画已经结束”：
+
+- 引入独立的 unlock backdrop epoch/state machine，例如 `LOCKED/PRESENTING -> WAIT_HOME_WALLPAPER -> WAIT_FRESH_FRAME -> VISIBLE`；所有 OES frame 必须携带或对应当前 epoch，旧 epoch 帧一律丢弃；
+- 找到 HyperOS 4.50 中桌面壁纸真正恢复为 HOME 内容的 authoritative signal，优先使用 Wallpaper/Shell/Launcher 已提交的状态或 transaction-complete 边界，而不是增加固定毫秒延迟；
+- 对比并记录 `UnlockAnimationStateMachine`、`UserPresentAnimationCompat`、`MiuiWallpaperSurfaceAnimation`/wallpaper zoom、Launcher HOME resume、PassBlur `setUpdateTextureFlag`、`SurfaceTexture` frame timestamp 的实际时序；
+- 如果厂商没有可 Hook 的单一 authoritative callback，则组合“解锁动画结束 + HOME wallpaper 状态稳定 + 下一合成帧”三重 gate；
+- 在 producer rollover 后记录一个 post-unlock capture timestamp/fence，只接受严格晚于该边界的新 OES buffer，防止旧 BufferQueue 或延迟 SurfaceFlinger transaction 把锁屏内容重新送入；
+- wallpaper candidate/authoritative pulse 在 unlock epoch 内必须 defer，只有 HOME wallpaper 已确认后才能 flush；不能让普通 wallpaper pulse 绕过 unlock gate；
+- capture 失败或无法确认 HOME wallpaper 权威状态时必须 fail closed：继续隐藏玻璃，而不是显示可能来自锁屏的旧背景；
+- 完整修复不能破坏 Recents settle、rotation settle、Workstation shared producer、Floating Dock persistent producer 和普通 App -> HOME fresh-frame recovery。
+
+真机验收必须重复覆盖：
+
+- 锁屏壁纸与桌面壁纸明显不同的场景；
+- 指纹/密码/滑动等不同解锁路径；
+- 连续锁屏→解锁多次，确认零次出现锁屏壁纸玻璃；
+- 解锁动画过程中玻璃始终隐藏；
+- 只有 HOME 桌面壁纸的新帧到达后才显示玻璃，且不需要手动刷新；
+- 解锁后立即进入 Recents、启动应用、旋转或进入 Workstation 时无 stale-frame 回归；
+- Floating Dock 在整个 unlock gate 生命周期中不被误暂停。
