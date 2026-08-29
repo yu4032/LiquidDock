@@ -11,9 +11,14 @@ final class LauncherGlassHomePresentationHook {
     private static final String UNLOCK_STATE =
             "com.miui.home.launcher.common.UnlockAnimationStateMachine";
     private static final String PREPARE = "PREPARE";
-    private static final String PRESENT_CALLBACK =
+    private static final String IDLE = "IDLE";
+    private static final String SPRING_CALLBACK =
+            "com.miui.home.launcher.compat.UserPresentAnimationCompatV12Spring$1";
+    private static final String FOLME_CALLBACK =
             "com.miui.home.launcher.compat.UserPresentAnimationCompatV12Folme$1";
-    private static final String VENDOR_RESET_COUNTER = "resetAnimationViewNum";
+    private static final String SPRING_REMAINING = "mAllAnimationViewNum";
+    private static final String FOLME_TOTAL = "mNumOfAnimatedView";
+    private static final String FOLME_CURRENT = "mNumOfCurrentAnimatedView";
     private static boolean installed;
     private static boolean homeTransitionArmed;
     private static boolean unlockTransitionArmed;
@@ -24,9 +29,10 @@ final class LauncherGlassHomePresentationHook {
         if (installed) return;
         hookHomeStart(classLoader);
         hookHomeEnd(classLoader);
-        hookUnlockStart(classLoader);
-        hookUnlockFinish(classLoader, "onComplete");
-        hookUnlockFinish(classLoader, "onCancel");
+        hookUnlockState(classLoader);
+        hookUnlockSpringFinish(classLoader);
+        hookUnlockFolmeFinish(classLoader, "onComplete");
+        hookUnlockFolmeFinish(classLoader, "onCancel");
         installed = true;
     }
 
@@ -69,34 +75,126 @@ final class LauncherGlassHomePresentationHook {
         return false;
     }
 
-    private static void hookUnlockStart(ClassLoader classLoader) {
+    /**
+     * Launcher 4.50 can reach PREPARE and then decide not to run any user-present animation.
+     * The state machine always returns to IDLE after showPresent(), so IDLE is the deterministic
+     * escape for that no-animation path. When real Spring/Folme views are active their counters
+     * are already non-zero before IDLE is published, and the barrier remains armed for the real
+     * animation listener below.
+     */
+    private static void hookUnlockState(ClassLoader classLoader) {
         try {
             HookUtil.hookMethod(classLoader, UNLOCK_STATE, "setState", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (args.length > 0 && PREPARE.equals(String.valueOf(args[0]))) {
+                String state = args.length > 0 ? String.valueOf(args[0]) : "";
+                if (PREPARE.equals(state)) {
                     unlockTransitionArmed = true;
                     LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
                 }
-                return chain.proceed(args);
-            });
-        } catch (Throwable error) {
-            MainHook.log(TAG + " unlock PREPARE unavailable: " + error);
-        }
-    }
 
-    private static void hookUnlockFinish(ClassLoader classLoader, String method) {
-        try {
-            HookUtil.hookMethod(classLoader, PRESENT_CALLBACK, method, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (unlockTransitionArmed) {
-                    unlockTransitionArmed = false;
-                    LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
+                Object result = chain.proceed(args);
+                if (IDLE.equals(state)) {
+                    releaseUnlockIfIdleWithoutAnimation(chain.getThisObject());
                 }
                 return result;
             });
-            MainHook.log(TAG + " unlock " + method + " barrier installed " + VENDOR_RESET_COUNTER);
+            MainHook.log(TAG + " unlock state barrier installed PREPARE/IDLE");
         } catch (Throwable error) {
-            MainHook.log(TAG + " unlock " + method + " unavailable: " + error);
+            MainHook.log(TAG + " unlock PREPARE/IDLE unavailable: " + error);
         }
+    }
+
+    /** Non-fold Launcher 4.50 uses V12Spring. Release only after Xiaomi reaches count zero. */
+    private static void hookUnlockSpringFinish(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, SPRING_CALLBACK, "onAnimationEnd", chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                releaseUnlockWhenSpringComplete(chain.getThisObject());
+                return result;
+            });
+            MainHook.log(TAG + " unlock Spring terminal-count barrier installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " unlock Spring completion unavailable: " + error);
+        }
+    }
+
+    /** Fold Launcher 4.50 uses Folme. Its listener resets both counts only on the final view. */
+    private static void hookUnlockFolmeFinish(ClassLoader classLoader, String method) {
+        try {
+            HookUtil.hookMethod(classLoader, FOLME_CALLBACK, method, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                releaseUnlockWhenFolmeComplete(chain.getThisObject());
+                return result;
+            });
+            MainHook.log(TAG + " unlock Folme " + method + " terminal-count barrier installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " unlock Folme " + method + " unavailable: " + error);
+        }
+    }
+
+    private static void releaseUnlockIfIdleWithoutAnimation(Object stateMachine) {
+        if (!unlockTransitionArmed) return;
+        Object launcher = readField(stateMachine, "mLauncher");
+        Object animation = HookUtil.invoke(launcher, "getUserPresentAnimation");
+        if (animation == null) {
+            finishUnlockBarrier("IDLE/no-animation-object");
+            return;
+        }
+
+        Integer springRemaining = readIntField(animation, SPRING_REMAINING);
+        Integer folmeTotal = readIntField(animation, FOLME_TOTAL);
+        if (isPositive(springRemaining) || isPositive(folmeTotal)) return;
+
+        // At least one known Xiaomi counter must be readable. If neither is available, fail closed
+        // and leave the barrier armed rather than exposing a frame during an unknown animation.
+        if (springRemaining != null || folmeTotal != null) {
+            finishUnlockBarrier("IDLE/no-active-animation");
+        } else {
+            MainHook.log(TAG + " unlock IDLE counters unavailable; barrier remains pending");
+        }
+    }
+
+    private static void releaseUnlockWhenSpringComplete(Object callback) {
+        if (!unlockTransitionArmed) return;
+        Object animation = readField(callback, "this$0");
+        Integer remaining = readIntField(animation, SPRING_REMAINING);
+        if (remaining != null && remaining <= 0) {
+            finishUnlockBarrier("Spring/all-views-complete");
+        }
+    }
+
+    private static void releaseUnlockWhenFolmeComplete(Object callback) {
+        if (!unlockTransitionArmed) return;
+        Object animation = readField(callback, "this$0");
+        Integer total = readIntField(animation, FOLME_TOTAL);
+        Integer current = readIntField(animation, FOLME_CURRENT);
+        if (total != null && current != null && total <= 0 && current <= 0) {
+            finishUnlockBarrier("Folme/all-views-complete");
+        }
+    }
+
+    private static void finishUnlockBarrier(String reason) {
+        if (!unlockTransitionArmed) return;
+        unlockTransitionArmed = false;
+        MainHook.log(TAG + " unlock presentation finished: " + reason);
+        LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
+    }
+
+    private static boolean isPositive(Integer value) {
+        return value != null && value > 0;
+    }
+
+    private static Object readField(Object target, String name) {
+        if (target == null) return null;
+        try {
+            return HookUtil.getField(target, name);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Integer readIntField(Object target, String name) {
+        Object value = readField(target, name);
+        return value instanceof Number ? ((Number) value).intValue() : null;
     }
 }
