@@ -37,4 +37,14 @@ public class WorkstationDockBackgroundRecoveryContractTest {
         // Avoid the old inherited View/FrameLayout hook; recover at the concrete HotSeats boundary.
         assertFalse(pipeline.contains("installBackgroundAttachRecovery(backgroundClass"));
     }
+
+    @Test public void zeroCopyGlassIsTheOnlyStrokeOwnerAndWorkstationUsesVendorRadius() throws Exception {
+        String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+
+        assertTrue(glass.contains("DockStrokeRenderer.releaseNativeStrokeOwner(dockBg);"));
+        assertTrue(stroke.contains("static void releaseNativeStrokeOwner(View host)"));
+        assertTrue(stroke.contains("MiuixGlassHook.isBoundTo(background)"));
+        assertTrue(stroke.contains("MainHook.isWorkstationMode() ? 0f"));
+    }
 }
