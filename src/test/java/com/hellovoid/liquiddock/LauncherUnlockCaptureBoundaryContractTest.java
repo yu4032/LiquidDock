@@ -44,28 +44,31 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertTrue(registry.contains("Miuix307PassBlurBridge.pauseUpdates"));
     }
 
-    @Test public void passBlurBindAndRefreshFailClosedWhileUnlockCaptureIsBlocked() throws Exception {
+    @Test public void passBlurGateAppliesOnlyToLauncherWorkspaceBindings() throws Exception {
         String hook = read("LauncherGlassHomePresentationHook.java");
         String bridge = read("Miuix307PassBlurBridge.java");
 
         assertTrue(hook.contains("isUnlockCaptureBlocked"));
+        assertTrue(bridge.contains("final boolean launcherWorkspace"));
+        assertTrue(bridge.contains("LauncherGlassSceneController.findRoot(materialHost) != null"));
 
         int bind = bridge.indexOf("static Binding bind");
-        int bindGate = bridge.indexOf("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", bind);
+        int bindScope = bridge.indexOf("boolean launcherWorkspace", bind);
+        int bindGate = bridge.indexOf("launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", bind);
         int bindTransaction = bridge.indexOf("SetPassBlurSurface", bind);
-        assertTrue("continuous-on-bind must be rejected during unlock",
-                bind >= 0 && bindGate > bind && bindTransaction > bindGate);
+        assertTrue("only Launcher Workspace continuous-on-bind must be rejected during unlock",
+                bind >= 0 && bindScope > bind && bindGate > bindScope && bindTransaction > bindGate);
 
         int pulse = bridge.indexOf("static void requestSingleUpdate");
-        int pulseGate = bridge.indexOf("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", pulse);
+        int pulseGate = bridge.indexOf("binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", pulse);
         int pulseEnable = bridge.indexOf("setUpdatesEnabled(binding, true)", pulse);
-        assertTrue("single-frame refresh must be rejected during unlock",
+        assertTrue("Workspace single-frame refresh must be rejected during unlock",
                 pulse >= 0 && pulseGate > pulse && pulseEnable > pulseGate);
 
         int resume = bridge.indexOf("static void resumeUpdates");
-        int resumeGate = bridge.indexOf("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", resume);
+        int resumeGate = bridge.indexOf("binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", resume);
         int resumeEnable = bridge.indexOf("setUpdatesEnabled(binding, true)", resume);
-        assertTrue("persistent refresh must be rejected during unlock",
+        assertTrue("Workspace persistent refresh must be rejected without blocking Floating Dock",
                 resume >= 0 && resumeGate > resume && resumeEnable > resumeGate);
     }
 
