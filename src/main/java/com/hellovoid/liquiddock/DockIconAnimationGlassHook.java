@@ -23,6 +23,7 @@ final class DockIconAnimationGlassHook {
             return false;
         }
         boolean shortcut = installShortcutVisibilityHook(classLoader);
+        boolean iconTrace = installIconVisibilityTraceHook(classLoader);
         boolean backStop = installBackAnimStopHandoffGuard(classLoader);
         boolean view2 = installFloatingProxyHook(classLoader,
                 "com.miui.home.recents.views.FloatingIconView2");
@@ -30,7 +31,8 @@ final class DockIconAnimationGlassHook {
                 "com.miui.home.recents.views.FloatingIconLayer2");
         installed = shortcut && backStop && (view2 || layer2);
         if (installed) MainHook.log(TAG + " hooks installed restoreProgress=0.90 fadeMs=450"
-                + " sourcePrimeProgress=" + FINAL_PROGRESS);
+                + " sourcePrimeProgress=" + FINAL_PROGRESS
+                + " directIconTrace=" + iconTrace);
         return installed;
     }
 
@@ -40,17 +42,29 @@ final class DockIconAnimationGlassHook {
                     "setAnimTargetVisibility",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
                         Object owner = chain.getThisObject();
-                        if (owner instanceof View && args.length > 0 && args[0] instanceof Number
-                                && LauncherGlassHierarchy.isDock((View) owner)) {
-                            View host = (View) owner;
-                            int visibility = ((Number) args[0]).intValue();
+                        View host = owner instanceof View ? (View) owner : null;
+                        Integer visibility = args.length > 0 && args[0] instanceof Number
+                                ? ((Number) args[0]).intValue() : null;
+                        if (host != null && visibility != null
+                                && LauncherGlassHierarchy.isDock(host)) {
+                            DockAnimationTrace.sourceEvent(
+                                    "setAnimTargetVisibility-pre", host, visibility);
+                        }
+
+                        Object result = chain.proceed(args);
+
+                        if (host != null && visibility != null
+                                && LauncherGlassHierarchy.isDock(host)) {
+                            DockAnimationTrace.sourceEvent(
+                                    "setAnimTargetVisibility-post", host, visibility);
                             if (visibility == View.VISIBLE) {
                                 TAIL_SOURCE_OWNERS.remove(host);
                                 if (GlassRuntimeState.isIconEnabled()) {
                                     DockGlassItemRegistry.endLaunchAnimation(host);
                                 }
+                                DockAnimationTrace.sourceEvent(
+                                        "formal-handoff-complete", host, visibility);
                             } else {
                                 TAIL_SOURCE_OWNERS.remove(host);
                             }
@@ -64,16 +78,58 @@ final class DockIconAnimationGlassHook {
         }
     }
 
+    private static boolean installIconVisibilityTraceHook(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.ShortcutIcon",
+                    "setIconVisibility",
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object owner = chain.getThisObject();
+                        View host = owner instanceof View ? (View) owner : null;
+                        Integer visibility = args.length > 0 && args[0] instanceof Number
+                                ? ((Number) args[0]).intValue() : null;
+                        if (host != null && visibility != null
+                                && LauncherGlassHierarchy.isDock(host)) {
+                            DockAnimationTrace.sourceEvent(
+                                    "setIconVisibility-pre", host, visibility);
+                        }
+                        Object result = chain.proceed(args);
+                        if (host != null && visibility != null
+                                && LauncherGlassHierarchy.isDock(host)) {
+                            DockAnimationTrace.sourceEvent(
+                                    "setIconVisibility-post", host, visibility);
+                        }
+                        return result;
+                    }, int.class);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " direct icon visibility trace unavailable: " + error);
+            return false;
+        }
+    }
+
     private static boolean installBackAnimStopHandoffGuard(ClassLoader classLoader) {
         try {
             HookUtil.hookMethod(classLoader, "com.miui.home.launcher.ShortcutIcon",
                     "onBackAnimStop",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
                         Object owner = chain.getThisObject();
-                        if (owner instanceof View) {
-                            restoreTailSourceAfterBackAnimStop((View) owner);
+                        View host = owner instanceof View ? (View) owner : null;
+                        if (host != null && LauncherGlassHierarchy.isDock(host)) {
+                            DockAnimationTrace.sourceEvent("onBackAnimStop-pre", host, null);
+                        }
+                        Object result = chain.proceed(args);
+                        if (host != null) {
+                            if (LauncherGlassHierarchy.isDock(host)) {
+                                DockAnimationTrace.sourceEvent(
+                                        "onBackAnimStop-post-vendor", host, null);
+                            }
+                            restoreTailSourceAfterBackAnimStop(host);
+                            if (LauncherGlassHierarchy.isDock(host)) {
+                                DockAnimationTrace.sourceEvent(
+                                        "onBackAnimStop-post-guard", host, null);
+                            }
                         }
                         return result;
                     });
@@ -105,19 +161,38 @@ final class DockIconAnimationGlassHook {
             HookUtil.hookMethod(classLoader, className, "update",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
-                        if (GlassRuntimeState.isIconEnabled()
+                        View proxy = chain.getThisObject() instanceof View
+                                ? (View) chain.getThisObject() : null;
+                        boolean traceCandidate = GlassRuntimeState.isIconEnabled()
                                 && args.length == 10 && args[0] instanceof RectF
                                 && args[1] instanceof RectF && args[2] instanceof Number
                                 && args[3] instanceof Number && args[6] instanceof Boolean
-                                && !((Boolean) args[6])) {
+                                && !((Boolean) args[6]);
+                        float proxyAlpha = traceCandidate
+                                ? ((Number) args[2]).floatValue() : Float.NaN;
+                        float progress = traceCandidate
+                                ? ((Number) args[3]).floatValue() : Float.NaN;
+
+                        Object targetBefore = traceCandidate
+                                ? HookUtil.invoke(chain.getThisObject(), "getAnimTarget") : null;
+                        if (targetBefore instanceof View
+                                && LauncherGlassHierarchy.isDock((View) targetBefore)) {
+                            DockAnimationTrace.proxyFrame(
+                                    "proxy-pre", proxy, (View) targetBefore, proxyAlpha, progress);
+                        }
+
+                        Object result = chain.proceed(args);
+
+                        if (traceCandidate) {
                             Object target = HookUtil.invoke(chain.getThisObject(), "getAnimTarget");
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
-                                float progress = ((Number) args[3]).floatValue();
-                                primeNativeSourceForHandoff((View) target, progress);
+                                View dockTarget = (View) target;
+                                DockAnimationTrace.proxyFrame(
+                                        "proxy-post", proxy, dockTarget, proxyAlpha, progress);
+                                primeNativeSourceForHandoff(dockTarget, progress);
                                 DockGlassItemRegistry.observeLaunchAnimationFrame(
-                                        (View) target, progress);
+                                        dockTarget, progress);
                             }
                         }
                         return result;
@@ -139,10 +214,12 @@ final class DockIconAnimationGlassHook {
             if (TAIL_SOURCE_OWNERS.containsKey(target)) return;
             TAIL_SOURCE_OWNERS.put(target, Boolean.TRUE);
         }
+        DockAnimationTrace.sourceEvent("tail-prime-pre", target, View.VISIBLE);
         try {
             HookUtil.findMethodExact(target.getClass(),
                     "setIconVisibility", new Class<?>[]{int.class})
                     .invoke(target, View.VISIBLE);
+            DockAnimationTrace.sourceEvent("tail-prime-post", target, View.VISIBLE);
             MainHook.log(TAG + " native source pre-roll target="
                     + target.getClass().getSimpleName() + " progress=" + progress);
         } catch (Throwable error) {
