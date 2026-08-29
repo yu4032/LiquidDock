@@ -22,6 +22,8 @@ final class LauncherGlassHomePresentationHook {
     private static boolean installed;
     private static boolean homeTransitionArmed;
     private static volatile boolean unlockTransitionArmed;
+    private static boolean unlockPresentationComplete;
+    private static boolean unlockUserPresentObserved;
     private static long unlockTransitionSerial;
     private static long unlockReleaseScheduledSerial = -1L;
 
@@ -32,6 +34,7 @@ final class LauncherGlassHomePresentationHook {
         hookHomeStart(classLoader);
         hookHomeEnd(classLoader);
         hookUnlockState(classLoader);
+        hookUnlockUserPresent(classLoader);
         hookUnlockSpringFinish(classLoader);
         hookUnlockFolmeFinish(classLoader, "onComplete");
         hookUnlockFolmeFinish(classLoader, "onCancel");
@@ -92,6 +95,8 @@ final class LauncherGlassHomePresentationHook {
                 if (PREPARE.equals(state)) {
                     unlockTransitionSerial++;
                     unlockReleaseScheduledSerial = -1L;
+                    unlockPresentationComplete = false;
+                    unlockUserPresentObserved = false;
                     unlockTransitionArmed = true;
                     LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
                     LauncherGlassSessionRegistry.suspendForUnlockCapture();
@@ -106,6 +111,30 @@ final class LauncherGlassHomePresentationHook {
             MainHook.log(TAG + " unlock state barrier installed PREPARE/IDLE");
         } catch (Throwable error) {
             MainHook.log(TAG + " unlock PREPARE/IDLE unavailable: " + error);
+        }
+    }
+
+    /**
+     * ACTION_USER_PRESENT is delivered only after keyguard dismissal. Launcher forwards that
+     * broadcast directly into this state-machine method, so it is the authoritative boundary for
+     * when a HOME backdrop may stop seeing the lockscreen wallpaper. It can arrive before or after
+     * the Launcher-owned icon animation finishes; capture is released only after both conditions.
+     */
+    private static void hookUnlockUserPresent(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, UNLOCK_STATE, "onUserPresent", chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (unlockTransitionArmed) {
+                    unlockUserPresentObserved = true;
+                    MainHook.log(TAG + " unlock USER_PRESENT observed serial="
+                            + unlockTransitionSerial);
+                    tryReleaseUnlockBarrier("USER_PRESENT");
+                }
+                return result;
+            });
+            MainHook.log(TAG + " unlock USER_PRESENT capture barrier installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " unlock USER_PRESENT unavailable: " + error);
         }
     }
 
@@ -142,7 +171,7 @@ final class LauncherGlassHomePresentationHook {
         Object launcher = readField(stateMachine, "mLauncher");
         Object animation = HookUtil.invoke(launcher, "getUserPresentAnimation");
         if (animation == null) {
-            scheduleUnlockBarrierReleaseAfterFrame("IDLE/no-animation-object");
+            markUnlockPresentationComplete("IDLE/no-animation-object");
             return;
         }
 
@@ -151,7 +180,7 @@ final class LauncherGlassHomePresentationHook {
         if (isPositive(springRemaining) || isPositive(folmeTotal)) return;
 
         if (springRemaining != null || folmeTotal != null) {
-            scheduleUnlockBarrierReleaseAfterFrame("IDLE/no-active-animation");
+            markUnlockPresentationComplete("IDLE/no-active-animation");
         } else {
             MainHook.log(TAG + " unlock IDLE counters unavailable; barrier remains pending");
         }
@@ -162,7 +191,7 @@ final class LauncherGlassHomePresentationHook {
         Object animation = readField(callback, "this$0");
         Integer remaining = readIntField(animation, SPRING_REMAINING);
         if (remaining != null && remaining <= 0) {
-            scheduleUnlockBarrierReleaseAfterFrame("Spring/all-views-complete");
+            markUnlockPresentationComplete("Spring/all-views-complete");
         }
     }
 
@@ -172,12 +201,30 @@ final class LauncherGlassHomePresentationHook {
         Integer total = readIntField(animation, FOLME_TOTAL);
         Integer current = readIntField(animation, FOLME_CURRENT);
         if (total != null && current != null && total <= 0 && current <= 0) {
-            scheduleUnlockBarrierReleaseAfterFrame("Folme/all-views-complete");
+            markUnlockPresentationComplete("Folme/all-views-complete");
         }
     }
 
-    private static void scheduleUnlockBarrierReleaseAfterFrame(String reason) {
+    private static void markUnlockPresentationComplete(String reason) {
         if (!unlockTransitionArmed) return;
+        unlockPresentationComplete = true;
+        MainHook.log(TAG + " unlock presentation animation complete reason=" + reason
+                + " userPresent=" + unlockUserPresentObserved
+                + " serial=" + unlockTransitionSerial);
+        tryReleaseUnlockBarrier(reason);
+    }
+
+    private static void tryReleaseUnlockBarrier(String reason) {
+        if (!unlockTransitionArmed || !unlockPresentationComplete || !unlockUserPresentObserved) {
+            return;
+        }
+        scheduleUnlockBarrierReleaseAfterFrame(reason + "/user-present");
+    }
+
+    private static void scheduleUnlockBarrierReleaseAfterFrame(String reason) {
+        if (!unlockTransitionArmed || !unlockPresentationComplete || !unlockUserPresentObserved) {
+            return;
+        }
         final long serial = unlockTransitionSerial;
         if (unlockReleaseScheduledSerial == serial) return;
         unlockReleaseScheduledSerial = serial;
@@ -202,6 +249,9 @@ final class LauncherGlassHomePresentationHook {
     private static void finishUnlockBarrierNow(String reason) {
         if (!unlockTransitionArmed) return;
         unlockTransitionArmed = false;
+        unlockPresentationComplete = false;
+        unlockUserPresentObserved = false;
+        unlockReleaseScheduledSerial = -1L;
         MainHook.log(TAG + " unlock presentation finished: " + reason);
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
     }
