@@ -21,7 +21,9 @@ final class LauncherGlassHomePresentationHook {
     private static final String FOLME_CURRENT = "mNumOfCurrentAnimatedView";
     private static boolean installed;
     private static boolean homeTransitionArmed;
-    private static boolean unlockTransitionArmed;
+    private static volatile boolean unlockTransitionArmed;
+    private static long unlockTransitionSerial;
+    private static long unlockReleaseScheduledSerial = -1L;
 
     private LauncherGlassHomePresentationHook() {}
 
@@ -88,8 +90,11 @@ final class LauncherGlassHomePresentationHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 String state = args.length > 0 ? String.valueOf(args[0]) : "";
                 if (PREPARE.equals(state)) {
+                    unlockTransitionSerial++;
+                    unlockReleaseScheduledSerial = -1L;
                     unlockTransitionArmed = true;
                     LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
+                    LauncherGlassSessionRegistry.suspendForUnlockCapture();
                 }
 
                 Object result = chain.proceed(args);
@@ -137,7 +142,7 @@ final class LauncherGlassHomePresentationHook {
         Object launcher = readField(stateMachine, "mLauncher");
         Object animation = HookUtil.invoke(launcher, "getUserPresentAnimation");
         if (animation == null) {
-            finishUnlockBarrier("IDLE/no-animation-object");
+            scheduleUnlockBarrierReleaseAfterFrame("IDLE/no-animation-object");
             return;
         }
 
@@ -145,10 +150,8 @@ final class LauncherGlassHomePresentationHook {
         Integer folmeTotal = readIntField(animation, FOLME_TOTAL);
         if (isPositive(springRemaining) || isPositive(folmeTotal)) return;
 
-        // At least one known Xiaomi counter must be readable. If neither is available, fail closed
-        // and leave the barrier armed rather than exposing a frame during an unknown animation.
         if (springRemaining != null || folmeTotal != null) {
-            finishUnlockBarrier("IDLE/no-active-animation");
+            scheduleUnlockBarrierReleaseAfterFrame("IDLE/no-active-animation");
         } else {
             MainHook.log(TAG + " unlock IDLE counters unavailable; barrier remains pending");
         }
@@ -159,7 +162,7 @@ final class LauncherGlassHomePresentationHook {
         Object animation = readField(callback, "this$0");
         Integer remaining = readIntField(animation, SPRING_REMAINING);
         if (remaining != null && remaining <= 0) {
-            finishUnlockBarrier("Spring/all-views-complete");
+            scheduleUnlockBarrierReleaseAfterFrame("Spring/all-views-complete");
         }
     }
 
@@ -169,11 +172,34 @@ final class LauncherGlassHomePresentationHook {
         Integer total = readIntField(animation, FOLME_TOTAL);
         Integer current = readIntField(animation, FOLME_CURRENT);
         if (total != null && current != null && total <= 0 && current <= 0) {
-            finishUnlockBarrier("Folme/all-views-complete");
+            scheduleUnlockBarrierReleaseAfterFrame("Folme/all-views-complete");
         }
     }
 
-    private static void finishUnlockBarrier(String reason) {
+    private static void scheduleUnlockBarrierReleaseAfterFrame(String reason) {
+        if (!unlockTransitionArmed) return;
+        final long serial = unlockTransitionSerial;
+        if (unlockReleaseScheduledSerial == serial) return;
+        unlockReleaseScheduledSerial = serial;
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        main.post(() -> {
+            if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
+            android.view.Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
+                if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
+                unlockReleaseScheduledSerial = -1L;
+                LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(() -> {
+                    if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
+                    finishUnlockBarrierNow(reason + "/post-animation-frame/endpoint-rolled");
+                });
+            });
+        });
+    }
+
+    static boolean isUnlockCaptureBlocked() {
+        return unlockTransitionArmed;
+    }
+
+    private static void finishUnlockBarrierNow(String reason) {
         if (!unlockTransitionArmed) return;
         unlockTransitionArmed = false;
         MainHook.log(TAG + " unlock presentation finished: " + reason);
