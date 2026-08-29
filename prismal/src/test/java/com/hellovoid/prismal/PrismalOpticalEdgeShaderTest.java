@@ -17,4 +17,14 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("0.09 * opticalEdgeScale"));
         assertTrue(patched.contains("tw * 0.42 * opticalEdgeScale"));
     }
+
+    @Test
+    public void highlightHairlinesUseDerivativeAwareBandCoverage() {
+        String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+
+        assertTrue(patched.contains("float aaDescendingBand(float outer, float inner, float value, float aa)"));
+        assertTrue(patched.contains("aaDescendingBand(bandR, bandR * 0.06, edgeDist, edgeAa)"));
+        assertTrue(patched.contains("aaDescendingBand(bandR * 1.8, bandR * 0.08, edgeDist, edgeAa)"));
+        assertTrue(patched.contains("aaDescendingBand(bandR * 0.95, bandR * 0.05, edgeDist, edgeAa)"));
+    }
 }
