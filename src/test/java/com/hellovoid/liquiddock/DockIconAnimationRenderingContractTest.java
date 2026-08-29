@@ -69,6 +69,26 @@ public class DockIconAnimationRenderingContractTest {
     }
 
     @Test
+    public void closeToHomeHandoffUsesTrueProgressAndKeepsTailSourceVisible() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
+        String proxyHook = slice(hook,
+                "private static boolean installFloatingProxyHook",
+                "}\n}");
+
+        assertTrue("Launcher 4.50 update arg[2] is proxy alpha; true animation progress is arg[3]",
+                proxyHook.contains("((Number) args[3]).floatValue()"));
+        assertTrue("true final progress must pre-roll the native Dock source before proxy teardown",
+                proxyHook.contains("primeNativeSourceForHandoff((View) target, progress);"));
+        assertTrue("the final-progress source must stay owned until MIUI formally restores it",
+                hook.contains("TAIL_SOURCE_OWNERS")
+                        && hook.contains("installBackAnimStopHandoffGuard")
+                        && hook.contains("restoreTailSourceAfterBackAnimStop"));
+        assertTrue("formal setAnimTargetVisibility(VISIBLE) must end the overlap guard",
+                hook.contains("TAIL_SOURCE_OWNERS.remove(host)")
+                        && hook.contains("DockGlassItemRegistry.endLaunchAnimation(host)"));
+    }
+
+    @Test
     public void membershipRevisionRemainsOwnedByRegistryMembershipChanges() throws Exception {
         String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
 
