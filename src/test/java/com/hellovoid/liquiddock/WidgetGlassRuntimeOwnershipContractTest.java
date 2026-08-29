@@ -28,7 +28,7 @@ public class WidgetGlassRuntimeOwnershipContractTest {
 
         assertTrue(hook.contains("GlassRuntimeState.isWidgetEnabled()"));
         assertTrue(hook.contains("static void onRuntimeWidgetGlassDisabled()"));
-        assertTrue(hook.contains("LauncherGlassVendorMaterialSuppressor.releaseWidget(host)"));
+        assertTrue(hook.contains("LauncherWidgetBackgroundController.release(host)"));
         assertTrue(hook.contains("kind == LauncherGlassDragState.Kind.WIDGET")
                 && hook.contains("!GlassRuntimeState.isWidgetEnabled()"));
     }

@@ -28,12 +28,10 @@ final class Miuix307PassBlurBridge {
         final Method setMiBlurWinExc;
         final float scale;
         final String rootName;
-        // Immutable snapshots. ViewRootImpl may mutate the same SurfaceControl Java wrapper
-        // to point at a new BLAST/native layer, so keeping only rootSurface aliases away the
-        // old generation identity that a later recovery needs to compare.
         final int viewRootIdentity;
         final int surfaceSequenceId;
         final int rootLayerId;
+        final boolean launcherWorkspace;
         boolean bound = true;
         boolean updatesEnabled = true;
 
@@ -46,7 +44,8 @@ final class Miuix307PassBlurBridge {
                 String rootName,
                 int viewRootIdentity,
                 int surfaceSequenceId,
-                int rootLayerId) {
+                int rootLayerId,
+                boolean launcherWorkspace) {
             this.rootSurface = rootSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
@@ -56,6 +55,7 @@ final class Miuix307PassBlurBridge {
             this.viewRootIdentity = viewRootIdentity;
             this.surfaceSequenceId = surfaceSequenceId;
             this.rootLayerId = rootLayerId;
+            this.launcherWorkspace = launcherWorkspace;
         }
     }
 
@@ -63,6 +63,11 @@ final class Miuix307PassBlurBridge {
 
     static Binding bind(View materialHost, Surface producerSurface, float requestedScale) {
         if (materialHost == null || producerSurface == null) return null;
+        boolean launcherWorkspace = LauncherGlassSceneController.findRoot(materialHost) != null;
+        if (launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock presentation");
+            return null;
+        }
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -105,8 +110,6 @@ final class Miuix307PassBlurBridge {
                     "DockAssistantView"
             };
 
-            // Keep the calibration producer at full resolution. TextureView output is composited
-            // into the already-excluded root, so no child-layer exclusion is required.
             float scale = DEMO_SCALE;
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -125,7 +128,8 @@ final class Miuix307PassBlurBridge {
                     rootName,
                     viewRootIdentity,
                     surfaceSequenceId,
-                    rootLayerId);
+                    rootLayerId,
+                    launcherWorkspace);
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + requestedScale
@@ -133,6 +137,7 @@ final class Miuix307PassBlurBridge {
                     + " layerId=" + rootLayerId
                     + " surfaceSeq=" + surfaceSequenceId
                     + " viewRootId=" + viewRootIdentity
+                    + " launcherWorkspace=" + launcherWorkspace
                     + " output=TextureView-in-root"
                     + " mode=continuous-on-bind"
                     + " exclusions=" + Arrays.toString(exclusions));
@@ -146,9 +151,11 @@ final class Miuix307PassBlurBridge {
     /** Workspace-only demand pulse. Dock keeps main's persistent continuous-on-bind mode. */
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
+        if (binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
+            return;
+        }
         setUpdatesEnabled(binding, true);
-        // A static Launcher may have no pending ViewRoot damage. Force one UI frame so the
-        // compositor has a reason to publish a fresh PassBlur buffer before the pulse is paused.
         host.postInvalidateOnAnimation();
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
     }
@@ -156,6 +163,10 @@ final class Miuix307PassBlurBridge {
     /** Persistent resume used by Dock when HyperOS leaves its HOME snapshot state. */
     static void resumeUpdates(Binding binding) {
         if (binding == null) return;
+        if (binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
+            return;
+        }
         setUpdatesEnabled(binding, true);
     }
 

@@ -573,6 +573,7 @@ private fun LiquidPage(
         IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && iconGlass)
         IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && iconGlass)
         BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃", "只替换材质背景，保留 RemoteViews / MAML 内容", masterEnabled && liquidGlass) { widgetGlass = it }
+        BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配", "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容", masterEnabled && liquidGlass && widgetGlass)
         IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)
         IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidGlass && widgetGlass)
         BooleanSetting(prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS, "小文件夹玻璃", "保留 1x1 文件夹缩略预览", masterEnabled && liquidGlass) { smallFolderGlass = it }

@@ -410,6 +410,9 @@
 
         <SwitchPreference android:key="liquid_widget_glass" android:title="Widget Glass"
             android:summary="Shared glass behind widget content" android:defaultValue="true" android:dependency="liquid_glass" />
+        <SwitchPreference android:key="liquid_widget_dark_content" android:title="Widget Dark Content Adaptation"
+            android:summary="Convert dark neutral text to white; keep images and colored content unchanged"
+            android:defaultValue="false" android:dependency="liquid_widget_glass" />
         <com.hellovoid.liquiddock.SeekBarPreference android:key="liquid_widget_size_offset"
             android:title="Widget Size Offset" android:summary="%d dp per edge"
             android:defaultValue="0" app:min="-40" app:max="40" android:dependency="liquid_widget_glass" />
