@@ -39,10 +39,11 @@ public class WorkstationDockBackgroundRecoveryContractTest {
     }
 
     @Test public void zeroCopyGlassIsTheOnlyStrokeOwnerAndWorkstationUsesVendorRadius() throws Exception {
+        String host = Files.readString(MAIN.resolve("DockLiquidGlassHostView.java"));
         String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
 
         assertTrue(stroke.contains("static void releaseNativeStrokeOwner(View host)"));
-        assertTrue(stroke.contains("releaseNativeStrokeOwner((View) parent);"));
+        assertTrue(host.contains("DockStrokeRenderer.releaseNativeStrokeOwner((View) parent);"));
         assertTrue(stroke.contains("MiuixGlassHook.isBoundTo(background)"));
         assertTrue(stroke.contains("MainHook.isWorkstationMode() ? 0f"));
     }
