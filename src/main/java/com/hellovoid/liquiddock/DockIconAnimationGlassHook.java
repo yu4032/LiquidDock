@@ -187,12 +187,11 @@ final class DockIconAnimationGlassHook {
                             Object target = HookUtil.invoke(chain.getThisObject(), "getAnimTarget");
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
-                                View dockTarget = (View) target;
                                 DockAnimationTrace.proxyFrame(
-                                        "proxy-post", proxy, dockTarget, proxyAlpha, progress);
-                                primeNativeSourceForHandoff(dockTarget, progress);
+                                        "proxy-post", proxy, (View) target, proxyAlpha, progress);
+                                primeNativeSourceForHandoff((View) target, progress);
                                 DockGlassItemRegistry.observeLaunchAnimationFrame(
-                                        dockTarget, progress);
+                                        (View) target, progress);
                             }
                         }
                         return result;
