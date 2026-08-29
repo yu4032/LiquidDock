@@ -69,13 +69,21 @@ final class DockStrokeRenderer {
                         Object result =
                                 chain.proceed(chain.getArgs().toArray(new Object[0]));
 
-                        if (MainHook.isWorkstationMode()) return result;
-
                         View background = (View) chain.getThisObject();
                         float radius = readNativeRadius(background);
                         rememberNativeHost(background, radius);
-                        LiquidDockConfig.Dock config = currentNativeConfig();
 
+                        // Once zero-copy Prismal is bound, the injected glass host is the only
+                        // visual stroke owner. Workstation mode also isolates ordinary-home Dock
+                        // customization, so a stale native foreground must never survive either
+                        // boundary.
+                        if (MiuixGlassHook.isBoundTo(background)
+                                || MainHook.isWorkstationMode()) {
+                            releaseNativeStrokeOwner(background);
+                            return result;
+                        }
+
+                        LiquidDockConfig.Dock config = currentNativeConfig();
                         configure(background, config, radius);
                         return result;
                     },
@@ -102,6 +110,21 @@ final class DockStrokeRenderer {
         return host != null && NATIVE_BACKGROUND_CLASS.equals(host.getClass().getName());
     }
 
+    /** Release the native custom foreground when zero-copy glass becomes the visual edge owner. */
+    static void releaseNativeStrokeOwner(View host) {
+        if (!isNativeHost(host)) return;
+        synchronized (INSTALLED) {
+            StrokeDrawable installed = INSTALLED.remove(host);
+            if (installed == null && host.getForeground() instanceof StrokeDrawable) {
+                installed = (StrokeDrawable) host.getForeground();
+            }
+            if (installed != null && host.getForeground() == installed) {
+                host.setForeground(installed.baseForeground());
+                host.invalidate();
+            }
+        }
+    }
+
     /**
      * Configure a View's foreground border. For Liquid Glass this View is the glass
      * itself; for native mode it is HotSeatsListContentBlurBackground2.
@@ -120,7 +143,8 @@ final class DockStrokeRenderer {
     static float resolveConfiguredRadius(
             View host, LiquidDockConfig.Dock config, float nativeBlurRadius) {
         float radius = Math.max(0f, nativeBlurRadius);
-        if (host == null || config == null || !VisualRuntimeState.isDockCustomizationEnabled()) {
+        if (host == null || config == null || !VisualRuntimeState.isDockCustomizationEnabled()
+                || MainHook.isWorkstationMode()) {
             return radius;
         }
         float density = host.getResources().getDisplayMetrics().density;
@@ -212,6 +236,10 @@ final class DockStrokeRenderer {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
+                if (isNativeHost(host) && MiuixGlassHook.isBoundTo(host)) {
+                    releaseNativeStrokeOwner(host);
+                    continue;
+                }
                 Style style = Style.from(config, host);
                 installed.setStyle(style);
                 if (host.getForeground() != installed) {
@@ -230,7 +258,8 @@ final class DockStrokeRenderer {
         }
         for (Map.Entry<View, Float> entry : known) {
             View host = entry.getKey();
-            if (host == null) continue;
+            if (host == null || MiuixGlassHook.isBoundTo(host)
+                    || MainHook.isWorkstationMode()) continue;
             synchronized (INSTALLED) {
                 if (INSTALLED.containsKey(host)) continue;
             }
@@ -355,11 +384,13 @@ final class DockStrokeRenderer {
                             * Math.max(0, Math.min(255, config.strokeAlpha))
                             / 255f);
 
-            // Full customization used:
+            // Ordinary HOME customization uses:
             // stroke radius = system radius + cornerOffset
             // blur radius   = system radius + blurCornerOffset
-            // Liquid-only/native mode simply follows the native radius.
-            float radiusDelta = config.enabled && VisualRuntimeState.isDockCustomizationEnabled()
+            // Workstation radius is already calculated by MIUI from the live Dock height/scale,
+            // so adding the ordinary-home delta there is a mode-phase error.
+            float radiusDelta = MainHook.isWorkstationMode() ? 0f
+                    : config.enabled && VisualRuntimeState.isDockCustomizationEnabled()
                     ? (config.cornerOffset - config.blurCornerOffset) * cornerScale
                     : 0f;
 
