@@ -8,6 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
+/** Source/proxy ownership contracts, including the one-frame handoff A/B probe. */
 public class DockIconAnimationRenderingContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
