@@ -111,7 +111,7 @@ final class LauncherGlassHomePresentationHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 releaseUnlockWhenSpringComplete(chain.getThisObject());
                 return result;
-            });
+            }, android.animation.Animator.class);
             MainHook.log(TAG + " unlock Spring terminal-count barrier installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " unlock Spring completion unavailable: " + error);
@@ -125,7 +125,7 @@ final class LauncherGlassHomePresentationHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 releaseUnlockWhenFolmeComplete(chain.getThisObject());
                 return result;
-            });
+            }, Object.class);
             MainHook.log(TAG + " unlock Folme " + method + " terminal-count barrier installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " unlock Folme " + method + " unavailable: " + error);
