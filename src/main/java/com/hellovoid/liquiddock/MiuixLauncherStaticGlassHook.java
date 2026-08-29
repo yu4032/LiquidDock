@@ -25,7 +25,10 @@ final class MiuixLauncherStaticGlassHook {
 
     static void onRuntimeGlassDisabled() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
-            if (isWidgetHost(host)) LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            if (isWidgetHost(host)) {
+                LauncherWidgetDarkContentAdapter.release(host);
+                LauncherWidgetBackgroundController.release(host);
+            }
             View.OnAttachStateChangeListener listener = BOOTSTRAP_OBSERVERS.remove(host);
             if (listener != null) host.removeOnAttachStateChangeListener(listener);
             DockGlassItemRegistry.unregister(host);
@@ -47,10 +50,23 @@ final class MiuixLauncherStaticGlassHook {
     static void onRuntimeWidgetGlassDisabled() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (!isWidgetHost(host)) continue;
-            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            LauncherWidgetDarkContentAdapter.release(host);
+            LauncherWidgetBackgroundController.release(host);
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
             if (node != null && node.kind() == LauncherGlassDragState.Kind.WIDGET) node.dispose();
+        }
+    }
+
+    static void onRuntimeWidgetDarkContentChanged(boolean enabled) {
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (!isWidgetHost(host)) continue;
+            if (enabled && host.isAttachedToWindow()
+                    && LauncherGlassHierarchy.isWorkspace(host)) {
+                LauncherWidgetDarkContentAdapter.apply(host);
+            } else {
+                LauncherWidgetDarkContentAdapter.release(host);
+            }
         }
     }
 
@@ -404,7 +420,8 @@ final class MiuixLauncherStaticGlassHook {
             return;
         }
         if (kind == LauncherGlassDragState.Kind.WIDGET && !GlassRuntimeState.isWidgetEnabled()) {
-            LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+            LauncherWidgetDarkContentAdapter.release(host);
+            LauncherWidgetBackgroundController.release(host);
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode staleNode = LauncherGlassStaticNode.find(host);
             if (staleNode != null && staleNode.kind() == LauncherGlassDragState.Kind.WIDGET) {
@@ -429,7 +446,8 @@ final class MiuixLauncherStaticGlassHook {
         if (domain != LauncherGlassHierarchy.Domain.WORKSPACE) {
             if (node != null) node.dispose();
             if (kind == LauncherGlassDragState.Kind.WIDGET) {
-                LauncherGlassVendorMaterialSuppressor.releaseWidget(host);
+                LauncherWidgetDarkContentAdapter.release(host);
+                LauncherWidgetBackgroundController.release(host);
             }
             if (domain == LauncherGlassHierarchy.Domain.OTHER && node == null
                     && attempt < MAX_BIND_ATTEMPTS) {
@@ -449,7 +467,12 @@ final class MiuixLauncherStaticGlassHook {
         }
         if (node != null && kind == LauncherGlassDragState.Kind.WIDGET
                 && GlassRuntimeState.isWidgetEnabled()) {
-            LauncherGlassVendorMaterialSuppressor.claimWidget(host);
+            LauncherWidgetBackgroundController.claim(host);
+            if (GlassRuntimeState.isWidgetDarkContentEnabled()) {
+                LauncherWidgetDarkContentAdapter.apply(host);
+            } else {
+                LauncherWidgetDarkContentAdapter.release(host);
+            }
         }
     }
 

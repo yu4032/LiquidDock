@@ -6,6 +6,7 @@
 
     <application
         android:name=".LiquidDockApp"
+        android:label="@string/app_name"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"

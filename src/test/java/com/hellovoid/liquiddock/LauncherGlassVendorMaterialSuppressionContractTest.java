@@ -11,26 +11,32 @@ import org.junit.Test;
 /**
  * Contracts derived from HyperOS Launcher 4.50 native material ownership.
  *
- * <p>Launcher itself removes FolderIcon's icon_icon drawable alpha and AppWidget's
- * android.R.id.widget_frame background when its native blur material is active. LiquidDock must
- * take over those same background owners without hiding preview/content views.</p>
+ * <p>Launcher itself removes FolderIcon's icon_icon drawable alpha and the standard AppWidget
+ * RemoteViews content-root background when native blur is active. RemoteViews marks that direct
+ * content root with the android.R.id.widget_frame keyed tag. LiquidDock must take over those same
+ * background owners without hiding preview/content views.</p>
  */
 public class LauncherGlassVendorMaterialSuppressionContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void standardWidgetGlassOwnsOnlyAndroidWidgetFrameBackground() throws Exception {
+    public void standardWidgetGlassOwnsOnlyTaggedRemoteViewsRootBackground() throws Exception {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
 
         assertTrue(helper.contains("android.R.id.widget_frame"));
-        assertTrue(helper.contains("findViewById"));
+        assertTrue(helper.contains("resolveRemoteViewsContent"));
+        assertTrue(helper.contains("child.getTag(android.R.id.widget_frame)"));
         assertTrue(helper.contains("setBackground(null)"));
         assertTrue(helper.contains("ORIGINAL_WIDGET_BACKGROUNDS"));
-        assertTrue(helper.contains("releaseWidget"));
+        assertTrue(helper.contains("releaseWidgetMaterial"));
         assertTrue(hook.contains("updateAppWidget"));
-        assertTrue(hook.contains("LauncherGlassVendorMaterialSuppressor.claimWidget"));
+        assertTrue(hook.contains("LauncherWidgetBackgroundController.claim(host)"));
+        assertTrue(controller.contains("LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host)"));
 
+        assertFalse(helper.contains("LauncherMamlBackgroundRuleExecutor"));
+        assertFalse(helper.contains("findViewById(android.R.id.widget_frame)"));
         assertFalse(helper.contains("setAlpha(0"));
         assertFalse(helper.contains("removeAllViews"));
         assertFalse(helper.contains("setVisibility(View.INVISIBLE"));
@@ -40,9 +46,11 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
     @Test
     public void runtimeGlassDisableReleasesClaimedWidgetBackgrounds() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
         String disabled = methodSlice(hook, "static void onRuntimeGlassDisabled()", "static boolean install(");
 
-        assertTrue(disabled.contains("LauncherGlassVendorMaterialSuppressor.releaseWidget"));
+        assertTrue(disabled.contains("LauncherWidgetBackgroundController.release(host)"));
+        assertTrue(controller.contains("LauncherGlassVendorMaterialSuppressor.releaseWidgetMaterial(host)"));
     }
 
     @Test
@@ -135,9 +143,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
 
-        // Launcher 4.50 FolderIcon4x4NormalBackgroundDrawable overrides Drawable.setAlpha(int)
-        // with an empty body. ImageView.setImageAlpha(0) therefore cannot suppress this plate.
-        // Launcher itself reaches into getPaint().setAlpha(0) when native folder blur is active.
         assertTrue(folder.contains("suppressLargeFolderDrawablePaint"));
         assertTrue(folder.contains("FolderIcon4x4NormalBackgroundDrawable"));
         assertTrue(folder.contains("FolderIcon4x4DefaultBackgroundDrawable"));

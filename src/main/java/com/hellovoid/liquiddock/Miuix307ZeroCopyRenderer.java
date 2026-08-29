@@ -93,6 +93,11 @@ final class Miuix307ZeroCopyRenderer {
         if (gpuBackdrop != null) gpuBackdrop.setProducerUpdatesEnabled(enabled, reason);
     }
 
+    static void requestDockSceneRefresh() {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop != null) gpuBackdrop.requestDockSceneRefresh();
+    }
+
     static void clear() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         gpuBackdropRef = new WeakReference<>(null);

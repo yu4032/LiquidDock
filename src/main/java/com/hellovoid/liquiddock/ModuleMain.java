@@ -33,6 +33,7 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
                     runtimeConfig.glass.iconEnabled,
                     runtimeConfig.glass.widgetEnabled,
+                    runtimeConfig.glass.widgetDarkContent,
                     runtimeConfig.glass.smallFolderStyle.enabled,
                     runtimeConfig.glass.largeFolderStyle.enabled);
             VisualRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
@@ -52,9 +53,12 @@ public final class ModuleMain extends XposedModule {
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
+            LauncherMamlRootLoadedHook.install(classLoader);
             MiuixLauncherStaticGlassHook.install(classLoader, runtimeConfig);
             DockIconAnimationGlassHook.install(classLoader, runtimeConfig);
             LauncherGlassRecentsHook.install(classLoader, runtimeConfig);
+            LauncherGlassHomePresentationHook.install(classLoader);
+            DockGlassDropRefreshHook.install(classLoader);
             RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
             DockBottomGeometryHook.install(classLoader);
             HomeGridProfileOverlayHook.install(classLoader,
