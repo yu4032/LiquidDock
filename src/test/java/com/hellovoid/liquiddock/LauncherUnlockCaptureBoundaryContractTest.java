@@ -15,50 +15,57 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         return Files.readString(MAIN.resolve(name));
     }
 
-    @Test public void unlockBarrierReleasesOnAFrameAfterVendorAnimationCompletes() throws Exception {
+    @Test public void unlockBarrierReleasesOnlyAfterAnimationFrameAndEndpointRollover() throws Exception {
         String hook = read("LauncherGlassHomePresentationHook.java");
+        String registry = read("LauncherGlassSessionRegistry.java");
 
         assertTrue(hook.contains("postFrameCallback"));
         assertTrue(hook.contains("scheduleUnlockBarrierReleaseAfterFrame"));
+        assertTrue(hook.contains("prepareUnlockCaptureReturn"));
+        assertTrue(registry.contains("prepareUnlockCaptureReturn"));
+        assertTrue(registry.contains("HookUtil.invoke(session, \"rebindProducer\")"));
+        assertTrue(registry.contains("renderHandler.post"));
+
         int terminal = hook.indexOf("releaseUnlockWhenSpringComplete");
         int schedule = hook.indexOf("scheduleUnlockBarrierReleaseAfterFrame", terminal);
-        int clear = hook.indexOf("setUnlockTransitionPendingForAll(false)", schedule);
-        assertTrue("unlock capture gate must remain closed until a later Choreographer frame",
-                terminal >= 0 && schedule > terminal && clear > schedule);
+        int rollover = hook.indexOf("prepareUnlockCaptureReturn", schedule);
+        int clear = hook.indexOf("setUnlockTransitionPendingForAll(false)", rollover);
+        assertTrue("unlock pending must clear only after post-animation endpoint rollover completes",
+                terminal >= 0 && schedule > terminal && rollover > schedule && clear > rollover);
     }
 
-    @Test public void unlockSettlingRollsTheProducerEndpointBeforeRequestingHomeFrame() throws Exception {
-        String scene = read("LauncherGlassSceneController.java");
-        String session = read("LauncherGlassSession.java");
+    @Test public void unlockPreparePausesExistingPassBlurRegardlessOfWorkstationPolicy() throws Exception {
+        String hook = read("LauncherGlassHomePresentationHook.java");
+        String registry = read("LauncherGlassSessionRegistry.java");
 
-        assertTrue(scene.contains("unlockCaptureNeedsFreshEndpoint"));
-        assertTrue(scene.contains("requestFreshBackdropAfterUnlock"));
-        assertTrue(session.contains("void requestFreshBackdropAfterUnlock(long generation)"));
-
-        int method = session.indexOf("void requestFreshBackdropAfterUnlock(long generation)");
-        int invalidate = session.indexOf("invalidateGeneration(generation)", method);
-        int roll = session.indexOf("rebindProducer()", invalidate);
-        assertTrue("old SurfaceTexture/PassBlur endpoint must be discarded before post-unlock capture",
-                method >= 0 && invalidate > method && roll > invalidate);
+        assertTrue(hook.contains("suspendForUnlockCapture"));
+        assertTrue(registry.contains("suspendForUnlockCapture"));
+        assertTrue(registry.contains("Miuix307PassBlurBridge.pauseUpdates"));
     }
 
-    @Test public void passBlurCannotBindOrRefreshWhilePresentationCaptureIsBlocked() throws Exception {
-        String scene = read("LauncherGlassSceneController.java");
-        String session = read("LauncherGlassSession.java");
+    @Test public void passBlurBindAndRefreshFailClosedWhileUnlockCaptureIsBlocked() throws Exception {
+        String hook = read("LauncherGlassHomePresentationHook.java");
+        String bridge = read("Miuix307PassBlurBridge.java");
 
-        assertTrue(scene.contains("isCaptureBlockedForRoot"));
+        assertTrue(hook.contains("isUnlockCaptureBlocked"));
 
-        int bindReady = session.indexOf("private void bindProducerWhenReady");
-        int bindGate = session.indexOf("LauncherGlassSceneController.isCaptureBlockedForRoot(root)", bindReady);
-        int vendorBind = session.indexOf("Miuix307PassBlurBridge.bind", bindReady);
-        assertTrue("default continuous-on-bind must never run during unlock presentation",
-                bindReady >= 0 && bindGate > bindReady && vendorBind > bindGate);
+        int bind = bridge.indexOf("static Binding bind");
+        int bindGate = bridge.indexOf("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", bind);
+        int bindTransaction = bridge.indexOf("SetPassBlurSurface", bind);
+        assertTrue("continuous-on-bind must be rejected during unlock",
+                bind >= 0 && bindGate > bind && bindTransaction > bindGate);
 
-        int refresh = session.indexOf("private void requestProducerRefresh");
-        int refreshGate = session.indexOf("LauncherGlassSceneController.isCaptureBlockedForRoot(root)", refresh);
-        int pulse = session.indexOf("Miuix307PassBlurBridge.requestSingleUpdate", refresh);
-        assertTrue("no existing PassBlur endpoint may pulse while unlock presentation is pending",
-                refresh >= 0 && refreshGate > refresh && pulse > refreshGate);
+        int pulse = bridge.indexOf("static void requestSingleUpdate");
+        int pulseGate = bridge.indexOf("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", pulse);
+        int pulseEnable = bridge.indexOf("setUpdatesEnabled(binding, true)", pulse);
+        assertTrue("single-frame refresh must be rejected during unlock",
+                pulse >= 0 && pulseGate > pulse && pulseEnable > pulseGate);
+
+        int resume = bridge.indexOf("static void resumeUpdates");
+        int resumeGate = bridge.indexOf("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()", resume);
+        int resumeEnable = bridge.indexOf("setUpdatesEnabled(binding, true)", resume);
+        assertTrue("persistent refresh must be rejected during unlock",
+                resume >= 0 && resumeGate > resume && resumeEnable > resumeGate);
     }
 
     @Test public void staticLayerRemainsHiddenUntilPostUnlockFreshGenerationArrives() throws Exception {
