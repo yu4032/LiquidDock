@@ -4,7 +4,6 @@
 
 旧的 ScreenCapture / bitmap readback / `DockLiquidGlassView` 捕获链只保留在 `archive/1.x`，不属于当前功能。
 
-> 工作台 / Laptop 已有较完整实验实现，但整体仍未视为完全支持；详见本文后半部分的兼容边界。
 
 ---
 
@@ -337,8 +336,6 @@ v2.1.1 支持多组可配置 glass 动画时序，包括：
 | All Apps 竖屏垂直偏移 | −240 ~ 240 dp |
 | 工作台 Dock icon top offset | −48 ~ 48 dp |
 | 工作台 Dock icon bottom offset | −48 ~ 48 dp |
-
-**仍未视为完整支持。** 真机至少需要继续验证进入/退出工作台、连续 Recents 往返、旋转、All Apps 横竖屏、Dock 几何恢复、wallpaper freshness 与普通模式无回归。
 
 ---
 
