@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Regression contract from markdown (1).md(9) live Weather MAML element dumps. */
+/** Regression contracts from live Weather MAML element dumps. */
 public class LauncherMamlWeatherSizeOwnerContractTest {
     @Test public void knownWeatherProductsUseObservedOwnersFromXmlNotJava()
             throws Exception {
@@ -31,5 +31,35 @@ public class LauncherMamlWeatherSizeOwnerContractTest {
         assertFalse(combined.contains("bg_old_1idg7e"));
         assertFalse(combined.contains("bg_cmor3u"));
         assertFalse(combined.contains("bg_old_cmor3u"));
+        assertFalse(combined.contains("bg_3wvpbl"));
+        assertFalse(combined.contains("bg_old_3wvpbl"));
+    }
+
+    @Test public void newlyObservedCompactWeatherUsesItsRegisteredBackgroundOwner()
+            throws Exception {
+        String rules = Files.readString(Path.of(
+                "src/main/resources/widget_background_rules.xml"));
+
+        // Device log for this exact product registers semantic parent background:ElementGroup,
+        // with generated bg_3wvpbl/bg_old_3wvpbl rectangles beneath it. Own the stable parent only.
+        int product = rules.indexOf("f34b4e78-9df6-467c-b0ac-e72e62aba073");
+        int background = rules.indexOf("<hide-element name=\"background\"", product);
+        assertTrue(product >= 0);
+        assertTrue(background > product);
+    }
+
+    @Test public void unknownMamlWidgetsFallBackToDiagnosticOnlyWithoutGuessingOwner()
+            throws Exception {
+        String rules = Files.readString(Path.of(
+                "src/main/resources/widget_background_rules.xml"));
+
+        int fallback = rules.indexOf("id=\"maml-diagnostic\"");
+        assertTrue(fallback >= 0);
+        assertTrue(rules.indexOf("type=\"maml\"", fallback) > fallback);
+
+        int nextRule = rules.indexOf("<rule", fallback + 1);
+        String fallbackRule = nextRule >= 0 ? rules.substring(fallback, nextRule) : rules.substring(fallback);
+        assertFalse("generic diagnostic fallback must never hide an element",
+                fallbackRule.contains("hide-element"));
     }
 }
