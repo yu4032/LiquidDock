@@ -3,9 +3,15 @@ package com.hellovoid.liquiddock;
 import android.graphics.RectF;
 import android.view.View;
 
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 /** Hides only the animated Dock icon glass, then restores it with a short fade. */
 final class DockIconAnimationGlassHook {
     private static final String TAG = "[DC][DockIconAnimationGlass]";
+    private static final Map<View, Boolean> SOURCE_RETURNED =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static boolean installed;
 
     private DockIconAnimationGlassHook() {}
@@ -16,12 +22,14 @@ final class DockIconAnimationGlassHook {
             return false;
         }
         boolean shortcut = installShortcutVisibilityHook(classLoader);
+        boolean lateStop = installLateBackAnimStopGuard(classLoader);
         boolean view2 = installFloatingProxyHook(classLoader,
                 "com.miui.home.recents.views.FloatingIconView2");
         boolean layer2 = installFloatingProxyHook(classLoader,
                 "com.miui.home.recents.views.FloatingIconLayer2");
-        installed = shortcut && (view2 || layer2);
-        if (installed) MainHook.log(TAG + " hooks installed restoreProgress=0.90 fadeMs=450");
+        installed = shortcut && lateStop && (view2 || layer2);
+        if (installed) MainHook.log(TAG + " hooks installed restoreProgress=0.90 fadeMs=450"
+                + " lateBackAnimStopGuard=true");
         return installed;
     }
 
@@ -35,15 +43,63 @@ final class DockIconAnimationGlassHook {
                         Object owner = chain.getThisObject();
                         if (GlassRuntimeState.isIconEnabled()
                                 && owner instanceof View && args.length > 0 && args[0] instanceof Number
-                                && ((Number) args[0]).intValue() == View.VISIBLE
                                 && LauncherGlassHierarchy.isDock((View) owner)) {
-                            DockGlassItemRegistry.endLaunchAnimation((View) owner);
+                            View host = (View) owner;
+                            int visibility = ((Number) args[0]).intValue();
+                            synchronized (SOURCE_RETURNED) {
+                                if (visibility == View.VISIBLE) {
+                                    SOURCE_RETURNED.put(host, Boolean.TRUE);
+                                } else {
+                                    SOURCE_RETURNED.remove(host);
+                                }
+                            }
+                            if (visibility == View.VISIBLE) {
+                                DockGlassItemRegistry.endLaunchAnimation(host);
+                            }
                         }
                         return result;
                     }, int.class);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " visibility hook unavailable: " + error);
+            return false;
+        }
+    }
+
+    private static boolean installLateBackAnimStopGuard(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.ShortcutIcon",
+                    "onBackAnimStop",
+                    chain -> {
+                        Object owner = chain.getThisObject();
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (!GlassRuntimeState.isIconEnabled() || !(owner instanceof View)) {
+                            return result;
+                        }
+                        View host = (View) owner;
+                        if (!LauncherGlassHierarchy.isDock(host)) return result;
+
+                        boolean sourceWasReturned;
+                        synchronized (SOURCE_RETURNED) {
+                            sourceWasReturned = Boolean.TRUE.equals(SOURCE_RETURNED.remove(host));
+                        }
+                        if (!sourceWasReturned) return result;
+
+                        try {
+                            HookUtil.findMethodExact(host.getClass(),
+                                    "setIconVisibility", new Class<?>[]{int.class})
+                                    .invoke(host, View.VISIBLE);
+                            MainHook.log(TAG + " rejected stale onBackAnimStop hide target="
+                                    + host.getClass().getSimpleName());
+                        } catch (Throwable error) {
+                            MainHook.log(TAG + " late onBackAnimStop restore unavailable target="
+                                    + host.getClass().getSimpleName() + ": " + error);
+                        }
+                        return result;
+                    });
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " late onBackAnimStop hook unavailable: " + error);
             return false;
         }
     }
