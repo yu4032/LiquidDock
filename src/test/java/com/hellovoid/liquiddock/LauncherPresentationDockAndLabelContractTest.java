@@ -38,6 +38,21 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(module.contains("LauncherGlassHomePresentationHook.install(classLoader)"));
     }
 
+    @Test public void presentationHooksUseLauncher450ExactMethodSignatures() throws Exception {
+        String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
+        String homeStart = methodSlice(hook, "private static void hookHomeStart", "private static void hookHomeEnd");
+        String homeEnd = methodSlice(hook, "private static void hookHomeEnd", "private static boolean containsHomeClose");
+        String unlockState = methodSlice(hook, "private static void hookUnlockState", "private static void hookUnlockSpringFinish");
+
+        // DEX signatures from Launcher 4.50:
+        // WindowElement.animTo(Object)
+        // WindowElement$mRectFSpringAnimListener$1.onAnimationEnd(RectFSpringAnim)
+        // UnlockAnimationStateMachine.setState(UnlockAnimationStateMachine$STATE)
+        assertTrue(homeStart.contains("Object.class"));
+        assertTrue(homeEnd.contains("com.miui.home.recents.util.RectFSpringAnim"));
+        assertTrue(unlockState.contains("com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE"));
+    }
+
     @Test public void padUnlockUsesSpringTerminalCountAndNoAnimationIdleEscape()
             throws Exception {
         String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
@@ -99,5 +114,12 @@ public class LauncherPresentationDockAndLabelContractTest {
 
         assertTrue(manifest.contains("android:label=\"@string/app_name\""));
         assertTrue(strings.contains("<string name=\"app_name\">LiquidDock</string>"));
+    }
+
+    private static String methodSlice(String source, String startMarker, String endMarker) {
+        int start = source.indexOf(startMarker);
+        int end = source.indexOf(endMarker, start);
+        if (start < 0 || end <= start) return "";
+        return source.substring(start, end);
     }
 }
