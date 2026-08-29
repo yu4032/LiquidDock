@@ -54,6 +54,23 @@ public class DockIconAnimationRenderingContractTest {
     }
 
     @Test
+    public void zeroCopyEntryPointInstallsDockIconAnimationHookBeforeEarlyReturn() throws Exception {
+        String mainHook = Files.readString(MAIN.resolve("MainHook.java"));
+        String zeroCopyEntry = slice(mainHook,
+                "if (config.glass.enabled) {",
+                "if (!dockCustomization) {");
+        int animationInstall = zeroCopyEntry.indexOf(
+                "DockIconAnimationGlassHook.install(classLoader, config)");
+        int pipelineInstall = zeroCopyEntry.indexOf(
+                "Miuix307MaterialPipeline.install(classLoader, config)");
+
+        assertTrue("the 307 early-return path must actually install the Dock animation hook",
+                animationInstall >= 0);
+        assertTrue("animation hooks must be installed before the zero-copy pipeline can return",
+                pipelineInstall >= 0 && animationInstall < pipelineInstall);
+    }
+
+    @Test
     public void floatingProxyStateIsObservedAfterVendorUpdate() throws Exception {
         String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
         String proxyHook = slice(hook,
