@@ -48,6 +48,8 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(hook.contains("\"onAnimationEnd\""));
         assertTrue(hook.contains("mAllAnimationViewNum"));
         assertTrue(hook.contains("releaseUnlockWhenSpringComplete"));
+        assertTrue("HookUtil requires the real Animator parameter for this exact override",
+                hook.contains("android.animation.Animator.class"));
 
         // PREPARE can also resolve to no user-present animation at all. setState(IDLE) must then
         // release the barrier instead of waiting forever for a listener that will never run.
@@ -71,6 +73,8 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(hook.contains("mNumOfAnimatedView"));
         assertTrue(hook.contains("mNumOfCurrentAnimatedView"));
         assertTrue(hook.contains("releaseUnlockWhenFolmeComplete"));
+        assertTrue("Folme callback overrides take one Object parameter",
+                hook.contains("Object.class"));
     }
 
     @Test public void hotseatDropAnimationEndForcesDockSceneGeometryRefresh() throws Exception {
