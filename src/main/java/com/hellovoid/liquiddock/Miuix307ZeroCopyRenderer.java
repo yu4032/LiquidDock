@@ -15,6 +15,7 @@ final class Miuix307ZeroCopyRenderer {
     private static WeakReference<DockLiquidGlassHostView> hostRef =
             new WeakReference<>(null);
     private static WeakReference<View> materialHostRef = new WeakReference<>(null);
+    private static boolean dockAnimationFrameScheduled;
 
     private Miuix307ZeroCopyRenderer() {}
 
@@ -24,6 +25,16 @@ final class Miuix307ZeroCopyRenderer {
                            int blurRadiusPx) {
         if (materialHost == null || host == null || glassConfig == null
                 || workstationConfig == null) return false;
+
+        // This is the first zero-copy boundary that owns a real Launcher View. Install the
+        // app-to-home icon handoff hooks here so they use the target Launcher ClassLoader rather
+        // than being skipped by MainHook's successful 307 early return.
+        LiquidDockConfig runtimeConfig = LiquidDockConfig.load();
+        boolean animationHookInstalled = DockIconAnimationGlassHook.install(
+                materialHost.getClass().getClassLoader(), runtimeConfig);
+        MainHook.log(TAG + " Dock icon animation hook installed=" + animationHookInstalled
+                + " iconEnabled=" + GlassRuntimeState.isIconEnabled()
+                + " host=" + materialHost.getClass().getSimpleName());
 
         // The current zero-copy backend binds SurfaceFlinger's PassBlur producer directly to the
         // Floating Dock root through SetPassBlurSurface. It does not depend on the themed
@@ -46,6 +57,7 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
+        dockAnimationFrameScheduled = false;
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -95,7 +107,26 @@ final class Miuix307ZeroCopyRenderer {
 
     static void requestDockSceneRefresh() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop != null) gpuBackdrop.requestDockSceneRefresh();
+        if (gpuBackdrop != null) {
+            DockAnimationTrace.rendererEvent("scene-refresh-request");
+            gpuBackdrop.requestDockSceneRefresh();
+        }
+    }
+
+    static void requestDockAnimationFrames() {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
+        dockAnimationFrameScheduled = true;
+        DockAnimationTrace.rendererEvent("anim-frame-request");
+        gpuBackdrop.requestDockSceneRefresh();
+        gpuBackdrop.postOnAnimation(() -> {
+            if (gpuBackdropRef.get() != gpuBackdrop) return;
+            DockAnimationTrace.rendererEvent("anim-frame-vsync");
+            dockAnimationFrameScheduled = false;
+            if (DockGlassItemRegistry.hasActiveAnimation()) {
+                requestDockAnimationFrames();
+            }
+        });
     }
 
     static void clear() {
@@ -103,6 +134,7 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(null);
         hostRef = new WeakReference<>(null);
         materialHostRef = new WeakReference<>(null);
+        dockAnimationFrameScheduled = false;
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }

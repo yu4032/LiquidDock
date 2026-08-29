@@ -12,47 +12,50 @@ public class DockIconAnimationRenderingContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void animationProgressDoesNotMutateDockMembershipRevision() throws Exception {
-        String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
-        String animationMethods = slice(registry,
-                "static synchronized void observeLaunchAnimationFrame",
-                "static synchronized float animationOpacity");
+    public void zeroCopyRendererInstallsDockAnimationHookOnLauncherClassLoader() throws Exception {
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String install = slice(renderer,
+                "static boolean install(ViewGroup materialHost",
+                "static boolean isInstalled()");
 
-        assertFalse(animationMethods.contains("revision++"));
-        assertTrue(animationMethods.contains("if (!ANIMATION.observeProxyFrame"));
+        assertTrue(install.contains("DockIconAnimationGlassHook.install("));
+        assertTrue(install.contains("materialHost.getClass().getClassLoader()"));
     }
 
     @Test
-    public void membershipRevisionRemainsOwnedByRegistryMembershipChanges() throws Exception {
-        String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
+    public void closeToHomeUsesFrameCommitHandoffWithoutProgressPreroll() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
+        String proxyHook = slice(hook,
+                "private static boolean installFloatingProxyHook",
+                "private static boolean beginFrameCommitHandoff");
+        String handoff = slice(hook,
+                "private static boolean beginFrameCommitHandoff",
+                "private static void rememberCloseToHomeTarget");
 
-        assertTrue(registry.contains("private static long membershipRevision;"));
-        assertTrue(registry.contains("static synchronized long revision() { return membershipRevision; }"));
+        assertTrue(proxyHook.contains("((Number) args[3]).floatValue()"));
+        assertTrue(proxyHook.contains("proxy.setAlpha(1.0f)"));
+        assertTrue(hook.contains("installFloatingViewFinishHandoffHook"));
+        assertTrue(handoff.contains("registerFrameCommitCallback"));
+        assertTrue(handoff.contains("setAnimTargetVisibility"));
+        assertTrue(handoff.contains("completeFrameCommitHandoff"));
+        assertFalse(hook.contains("primeNativeSourceForHandoff"));
+        assertFalse(hook.contains("TAIL_SOURCE_OWNERS"));
+        assertFalse(hook.contains("FINAL_PROGRESS"));
     }
 
     @Test
-    public void compositorSamplesAnimationOnceAndReusesStableGeometry() throws Exception {
-        String node = Files.readString(MAIN.resolve("DockGlassItemNode.java"));
-        String compositor = Files.readString(MAIN.resolve("DockGlassCompositor.java"));
+    public void nativeHandoffIsIndependentFromIconGlass() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
+        String handoff = slice(hook,
+                "private static boolean beginFrameCommitHandoff",
+                "private static void rememberCloseToHomeTarget");
+        String proxyHook = slice(hook,
+                "private static boolean installFloatingProxyHook",
+                "private static boolean beginFrameCommitHandoff");
 
-        assertTrue(node.contains("DockIconAnimationState.Sample animationSample(long nowMs)"));
-        assertTrue(compositor.contains("private static final class CachedItem"));
-        assertTrue(compositor.contains("LauncherGlassGeometry.Snapshot geometry;"));
-        assertTrue(compositor.contains("DockIconAnimationState.Sample[] animationSamples"));
-        assertTrue(compositor.contains("geometryMappingChanged || cachedItem.uiFingerprint != uiFingerprint"));
-        assertFalse(compositor.contains("item.animationOpacity(nowMs)"));
-        assertFalse(compositor.contains("item.isFading()"));
-    }
-
-    @Test
-    public void vendorBlurSuppressionWritesRadiusZeroOnlyOncePerPredraw() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
-        String suppression = slice(hook,
-                "static void suppressVendorGpuBlur",
-                "private static void installVendorGpuBlurSuppressor");
-
-        assertFalse(suppression.contains("setPassWindowBlurRadius(dockBg, 0)"));
-        assertTrue(suppression.contains("MiBlurBridge.clearPassWindowBlur(dockBg);"));
+        assertFalse(handoff.contains("GlassRuntimeState.isIconEnabled()"));
+        assertTrue(proxyHook.contains("if (GlassRuntimeState.isIconEnabled())"));
+        assertTrue(proxyHook.contains("DockGlassItemRegistry.observeLaunchAnimationFrame("));
     }
 
     private static String slice(String source, String start, String end) {

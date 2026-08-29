@@ -18,6 +18,12 @@ public class DockShadowRegressionContractTest {
                 StandardCharsets.UTF_8);
     }
 
+    private static String shadowBridge() throws IOException {
+        return Files.readString(
+                Paths.get("src/main/java/com/hellovoid/liquiddock/DockNativeShadowBridge.java"),
+                StandardCharsets.UTF_8);
+    }
+
     @Test
     public void wholeDockShadowUsesVendorHotSeatsInsteadOfSoftwareLayer() throws IOException {
         String source = mainHook();
@@ -34,8 +40,9 @@ public class DockShadowRegressionContractTest {
     }
 
     @Test
-    public void runtimeOwnershipUsesScopedVendorStateAndNeverInventsRestorationValues() throws IOException {
+    public void runtimeOwnershipRestoresOnlyNumericVendorStateAndAlphaStaysAtTerminalBoundary() throws IOException {
         String source = mainHook();
+        String bridge = shadowBridge();
         String configured = slice(source,
                 "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
                 "private static LiquidDockConfig.Dock currentNativeShadowConfig()");
@@ -46,14 +53,17 @@ public class DockShadowRegressionContractTest {
                 "static void onRuntimeDockCustomizationDisabled()",
                 "private static void installDockResizeAnimationBypass(");
 
-        assertTrue("shadow-only disable must feed zero alpha through the vendor method",
-                configured.contains("VisualRuntimeState.isDockShadowEnabled()")
-                        && configured.contains(": 0;"));
-        assertTrue("temporary vendor fields must be restored after each vendor call",
+        assertFalse("HotSeats temporary state must never carry alpha on Launcher 4.50",
+                configured.contains("dock.shadowAlpha") || configured.contains("overrideViewAlpha(")
+                        || configured.contains("MI_SHADOW_ALPHA"));
+        assertTrue("shadow-only disable must resolve to zero alpha at terminal MiShadow rewrite",
+                bridge.contains("int dockAlpha = dockShadow ? clamp255(dock.shadowAlpha) : 0;")
+                        && bridge.contains("args[1] = Color.argb(outAlpha,"));
+        assertTrue("temporary numeric vendor fields must be restored after each vendor call",
                 source.contains("state.field.set(target, state.value)"));
         assertTrue("runtime shadow-only disable must ask HotSeats to redraw itself",
                 disable.contains("refreshVendorDockShadow();"));
-        assertTrue("full customization release must ask HotSeats to redraw using untouched state",
+        assertTrue("full customization release must ask HotSeats to redraw using untouched lifecycle state",
                 customizationDisable.contains("refreshVendorDockShadow();"));
         assertFalse("scoped ownership must not manufacture a vendor backup replay",
                 source.contains("restoreVendorDockShadow"));
