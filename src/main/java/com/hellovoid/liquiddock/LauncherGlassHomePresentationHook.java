@@ -45,7 +45,7 @@ final class LauncherGlassHomePresentationHook {
                     LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
                 }
                 return chain.proceed(args);
-            });
+            }, Object.class);
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME presentation start unavailable: " + error);
         }
@@ -60,7 +60,7 @@ final class LauncherGlassHomePresentationHook {
                     LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
                 }
                 return result;
-            });
+            }, "com.miui.home.recents.util.RectFSpringAnim");
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME presentation end unavailable: " + error);
         }
@@ -97,7 +97,7 @@ final class LauncherGlassHomePresentationHook {
                     releaseUnlockIfIdleWithoutAnimation(chain.getThisObject());
                 }
                 return result;
-            });
+            }, "com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE");
             MainHook.log(TAG + " unlock state barrier installed PREPARE/IDLE");
         } catch (Throwable error) {
             MainHook.log(TAG + " unlock PREPARE/IDLE unavailable: " + error);
