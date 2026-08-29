@@ -51,12 +51,15 @@ public class LauncherMamlWeatherBackgroundContractTest {
     public void mamlClaimsLoadedRootAtDeterministicSelfInitBoundary() throws Exception {
         String rootHook = Files.readString(MAIN.resolve("LauncherMamlRootLoadedHook.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
         String executor = Files.readString(MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
         assertTrue(rootHook.contains("com.miui.maml.component.MamlView"));
         assertTrue(rootHook.contains("\"initMamlview\""));
         assertTrue(rootHook.contains("com.miui.maml.ScreenElementRoot"));
-        assertTrue(rootHook.contains("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot"));
+        assertTrue(rootHook.contains("LauncherWidgetBackgroundController.claimLoadedMamlRoot"));
+        assertFalse(rootHook.contains("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot"));
+        assertTrue(controller.contains("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(host, root)"));
         assertTrue(module.contains("LauncherMamlRootLoadedHook.install(classLoader)"));
         assertTrue(executor.contains("claimLoadedRoot(View host, Object root)"));
         assertTrue(executor.contains("[MamlWidgetBg]"));
@@ -64,7 +67,7 @@ public class LauncherMamlWeatherBackgroundContractTest {
         assertTrue(executor.contains("suppressed="));
 
         int original = rootHook.indexOf("chain.proceed(args)");
-        int claim = rootHook.indexOf("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot");
+        int claim = rootHook.indexOf("LauncherWidgetBackgroundController.claimLoadedMamlRoot");
         assertTrue(original >= 0 && claim > original);
     }
 
