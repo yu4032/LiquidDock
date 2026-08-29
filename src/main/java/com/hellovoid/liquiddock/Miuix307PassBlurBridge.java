@@ -31,6 +31,7 @@ final class Miuix307PassBlurBridge {
         final int viewRootIdentity;
         final int surfaceSequenceId;
         final int rootLayerId;
+        final boolean launcherWorkspace;
         boolean bound = true;
         boolean updatesEnabled = true;
 
@@ -43,7 +44,8 @@ final class Miuix307PassBlurBridge {
                 String rootName,
                 int viewRootIdentity,
                 int surfaceSequenceId,
-                int rootLayerId) {
+                int rootLayerId,
+                boolean launcherWorkspace) {
             this.rootSurface = rootSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
@@ -53,6 +55,7 @@ final class Miuix307PassBlurBridge {
             this.viewRootIdentity = viewRootIdentity;
             this.surfaceSequenceId = surfaceSequenceId;
             this.rootLayerId = rootLayerId;
+            this.launcherWorkspace = launcherWorkspace;
         }
     }
 
@@ -60,8 +63,9 @@ final class Miuix307PassBlurBridge {
 
     static Binding bind(View materialHost, Surface producerSurface, float requestedScale) {
         if (materialHost == null || producerSurface == null) return null;
-        if (LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur bind blocked by unlock presentation");
+        boolean launcherWorkspace = LauncherGlassSceneController.findRoot(materialHost) != null;
+        if (launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock presentation");
             return null;
         }
         try {
@@ -124,7 +128,8 @@ final class Miuix307PassBlurBridge {
                     rootName,
                     viewRootIdentity,
                     surfaceSequenceId,
-                    rootLayerId);
+                    rootLayerId,
+                    launcherWorkspace);
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + requestedScale
@@ -132,6 +137,7 @@ final class Miuix307PassBlurBridge {
                     + " layerId=" + rootLayerId
                     + " surfaceSeq=" + surfaceSequenceId
                     + " viewRootId=" + viewRootIdentity
+                    + " launcherWorkspace=" + launcherWorkspace
                     + " output=TextureView-in-root"
                     + " mode=continuous-on-bind"
                     + " exclusions=" + Arrays.toString(exclusions));
@@ -145,8 +151,8 @@ final class Miuix307PassBlurBridge {
     /** Workspace-only demand pulse. Dock keeps main's persistent continuous-on-bind mode. */
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
-        if (LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur single update blocked by unlock presentation");
+        if (binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
             return;
         }
         setUpdatesEnabled(binding, true);
@@ -157,8 +163,8 @@ final class Miuix307PassBlurBridge {
     /** Persistent resume used by Dock when HyperOS leaves its HOME snapshot state. */
     static void resumeUpdates(Binding binding) {
         if (binding == null) return;
-        if (LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur resume blocked by unlock presentation");
+        if (binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
         setUpdatesEnabled(binding, true);
