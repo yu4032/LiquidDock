@@ -17,8 +17,9 @@ public final class PrismalOpticalEdgeShader {
             float aaDescendingBand(float outer, float inner, float value, float aa) {
                 float low = min(inner, outer);
                 float high = max(inner, outer);
-                high = max(high, low + max(aa, 0.001));
-                return 1.0 - smoothstep(low, high, value);
+                float center = (low + high) * 0.5;
+                float halfWidth = max((high - low) * 0.5, max(aa, 0.001) * 0.5);
+                return 1.0 - smoothstep(center - halfWidth, center + halfWidth, value);
             }
             """;
 
