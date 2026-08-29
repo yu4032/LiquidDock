@@ -69,6 +69,29 @@ public class DockIconAnimationRenderingContractTest {
     }
 
     @Test
+    public void closeToHomeFinalProxyFramePrimesNativeSourceBeforeProxyTeardown() throws Exception {
+        String hook = Files.readString(MAIN.resolve("DockIconAnimationGlassHook.java"));
+        String proxyHook = slice(hook,
+                "private static boolean installFloatingProxyHook",
+                "private static void primeNativeSourceForHandoff");
+        String handoff = slice(hook,
+                "private static void primeNativeSourceForHandoff",
+                "}\n}");
+
+        assertTrue("pre-roll must wait until MIUI reports final proxy geometry",
+                hook.contains("SOURCE_PRIME_PROGRESS = 1.0f"));
+        assertTrue("the final CLOSE_TO_HOME proxy frame must pre-roll the native source",
+                proxyHook.contains("primeNativeSourceForHandoff((View) target, progress);"));
+        assertTrue("pre-roll must reveal the actual ShortcutIcon content, not recurse through the anim target API",
+                handoff.contains("\"setIconVisibility\", new Class<?>[]{int.class}")
+                        && handoff.contains("View.VISIBLE"));
+        assertFalse("handoff pre-roll must not recurse through setAnimTargetVisibility",
+                handoff.contains("setAnimTargetVisibility"));
+        assertTrue("each native source may only be primed once per handoff",
+                handoff.contains("HANDOFF_PRIMED.containsKey(target)"));
+    }
+
+    @Test
     public void membershipRevisionRemainsOwnedByRegistryMembershipChanges() throws Exception {
         String registry = Files.readString(MAIN.resolve("DockGlassItemRegistry.java"));
 
