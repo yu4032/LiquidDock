@@ -9,7 +9,7 @@ import java.nio.file.Paths;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Regression contract derived from the decompiled HyperOS 3 HotSeats shadow lifecycle. */
+/** Regression contract derived from the decompiled HyperOS 3 / Launcher 4.50 HotSeats lifecycle. */
 public class DockVendorNativeShadowReuseContractTest {
     private static String mainHook() throws Exception {
         return Files.readString(
@@ -17,26 +17,42 @@ public class DockVendorNativeShadowReuseContractTest {
                 StandardCharsets.UTF_8);
     }
 
+    private static String shadowBridge() throws Exception {
+        return Files.readString(
+                Paths.get("src/main/java/com/hellovoid/liquiddock/DockNativeShadowBridge.java"),
+                StandardCharsets.UTF_8);
+    }
+
     @Test
-    public void wholeDockShadowHooksHotSeatsLifecycleInsteadOfTerminalMiShadowApi() throws Exception {
+    public void wholeDockShadowKeepsHotSeatsAsLifecycleOwner() throws Exception {
         String main = mainHook();
+        String bridge = shadowBridge();
         assertTrue("stock shadow authority is HotSeats.showViewShadow",
                 main.contains("\"showViewShadow\""));
         assertTrue("stock animated shadow authority is HotSeats.setTranslationY",
                 main.contains("\"setTranslationY\""));
-        assertFalse("LiquidDock must not replace the terminal MiShadowUtils.applyViewShadow lifecycle",
+        assertTrue("terminal API bridge must only rewrite arguments and proceed vendor rendering",
+                bridge.contains("HookUtil.hookMethod(utils, \"applyViewShadow\"")
+                        && bridge.contains("rewrite(args);")
+                        && bridge.contains("return chain.proceed(args);"));
+        assertFalse("MainHook itself must not replace terminal MiShadow lifecycle",
                 main.contains("HookUtil.hookMethod(ms, \"applyViewShadow\""));
     }
 
     @Test
-    public void configuredShadowTemporarilyUsesVendorHotSeatsState() throws Exception {
+    public void configuredShadowUsesVendorHotSeatsGeometryButTerminalAlpha() throws Exception {
         String main = mainHook();
+        String bridge = shadowBridge();
         assertTrue("custom radius must use HotSeats' native radius field",
                 main.contains("mMiShadowRadius"));
         assertTrue("custom Y offset must use HotSeats' native offset field",
                 main.contains("mMiShadowOffsetY"));
-        assertTrue("custom alpha must preserve the vendor MI_SHADOW_ALPHA calculation path",
-                main.contains("MI_SHADOW_ALPHA"));
+        assertFalse("Launcher 4.50 HotSeats alpha must never be used as a shadow control",
+                main.contains("MI_SHADOW_ALPHA") || main.contains("overrideViewAlpha(")
+                        || main.contains("mMiShadowAlpha") || main.contains("mShadowAlpha"));
+        assertTrue("custom shadow alpha must be rewritten in MiShadow arguments",
+                bridge.contains("int dockAlpha = dockShadow ? clamp255(dock.shadowAlpha) : 0;")
+                        && bridge.contains("args[1] = Color.argb(outAlpha,"));
     }
 
     @Test
