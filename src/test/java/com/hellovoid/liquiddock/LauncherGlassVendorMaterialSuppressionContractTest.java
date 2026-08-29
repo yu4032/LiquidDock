@@ -23,16 +23,19 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
     public void standardWidgetGlassOwnsOnlyTaggedRemoteViewsRootBackground() throws Exception {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
 
         assertTrue(helper.contains("android.R.id.widget_frame"));
         assertTrue(helper.contains("resolveRemoteViewsContent"));
         assertTrue(helper.contains("child.getTag(android.R.id.widget_frame)"));
         assertTrue(helper.contains("setBackground(null)"));
         assertTrue(helper.contains("ORIGINAL_WIDGET_BACKGROUNDS"));
-        assertTrue(helper.contains("releaseWidget"));
+        assertTrue(helper.contains("releaseWidgetMaterial"));
         assertTrue(hook.contains("updateAppWidget"));
-        assertTrue(hook.contains("LauncherGlassVendorMaterialSuppressor.claimWidget"));
+        assertTrue(hook.contains("LauncherWidgetBackgroundController.claim(host)"));
+        assertTrue(controller.contains("LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host)"));
 
+        assertFalse(helper.contains("LauncherMamlBackgroundRuleExecutor"));
         assertFalse(helper.contains("findViewById(android.R.id.widget_frame)"));
         assertFalse(helper.contains("setAlpha(0"));
         assertFalse(helper.contains("removeAllViews"));
@@ -43,9 +46,11 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
     @Test
     public void runtimeGlassDisableReleasesClaimedWidgetBackgrounds() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
         String disabled = methodSlice(hook, "static void onRuntimeGlassDisabled()", "static boolean install(");
 
-        assertTrue(disabled.contains("LauncherGlassVendorMaterialSuppressor.releaseWidget"));
+        assertTrue(disabled.contains("LauncherWidgetBackgroundController.release(host)"));
+        assertTrue(controller.contains("LauncherGlassVendorMaterialSuppressor.releaseWidgetMaterial(host)"));
     }
 
     @Test
