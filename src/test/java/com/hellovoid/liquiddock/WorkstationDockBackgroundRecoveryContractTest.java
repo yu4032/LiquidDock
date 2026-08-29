@@ -37,4 +37,13 @@ public class WorkstationDockBackgroundRecoveryContractTest {
         // Avoid the old inherited View/FrameLayout hook; recover at the concrete HotSeats boundary.
         assertFalse(pipeline.contains("installBackgroundAttachRecovery(backgroundClass"));
     }
+
+    @Test public void leavingWorkstationRebindsStrokeRadiusFromTheRestoredNativeHost() throws Exception {
+        String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+
+        assertTrue(main.contains("DockStrokeRenderer.syncRadiusFromNativeHost(dockBg);"));
+        assertTrue(stroke.contains("static void syncRadiusFromNativeHost(View host)"));
+        assertTrue(stroke.contains("updateRadius(host, readNativeRadius(host));"));
+    }
 }
