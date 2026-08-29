@@ -100,16 +100,22 @@ final class WidgetBackgroundRuleEngine {
             String name = stringAttribute(action, "name");
             if (name != null) hideElements.add(name);
         }
-        return new WidgetBackgroundRule(
-                id,
-                stringAttribute(element, "type"),
-                stringAttribute(element, "productId"),
-                stringAttribute(element, "appPackage"),
-                intAttribute(element, "spanX"),
-                intAttribute(element, "spanY"),
-                intAttribute(element, "configSpanX"),
-                intAttribute(element, "configSpanY"),
-                hideElements);
+        try {
+            return new WidgetBackgroundRule(
+                    id,
+                    stringAttribute(element, "type"),
+                    stringAttribute(element, "productId"),
+                    stringAttribute(element, "appPackage"),
+                    intAttribute(element, "spanX"),
+                    intAttribute(element, "spanY"),
+                    intAttribute(element, "configSpanX"),
+                    intAttribute(element, "configSpanY"),
+                    hideElements);
+        } catch (NumberFormatException invalidConstraint) {
+            // A malformed identity constraint must never silently become a wildcard and broaden
+            // the destructive match. Reject only the invalid rule; keep other valid rules usable.
+            return null;
+        }
     }
 
     private static String stringAttribute(Element element, String name) {
@@ -122,8 +128,7 @@ final class WidgetBackgroundRuleEngine {
     private static Integer intAttribute(Element element, String name) {
         String value = stringAttribute(element, name);
         if (value == null) return null;
-        try { return Integer.valueOf(value); }
-        catch (NumberFormatException ignored) { return null; }
+        return Integer.valueOf(value);
     }
 
     private static void safeFeature(DocumentBuilderFactory factory, String name, boolean value) {
