@@ -26,6 +26,16 @@ final class Miuix307ZeroCopyRenderer {
         if (materialHost == null || host == null || glassConfig == null
                 || workstationConfig == null) return false;
 
+        // This is the first zero-copy boundary that owns a real Launcher View. Install the
+        // app-to-home icon handoff hooks here so they use the target Launcher ClassLoader rather
+        // than being skipped by MainHook's successful 307 early return.
+        LiquidDockConfig runtimeConfig = LiquidDockConfig.load();
+        boolean animationHookInstalled = DockIconAnimationGlassHook.install(
+                materialHost.getClass().getClassLoader(), runtimeConfig);
+        MainHook.log(TAG + " Dock icon animation hook installed=" + animationHookInstalled
+                + " iconEnabled=" + GlassRuntimeState.isIconEnabled()
+                + " host=" + materialHost.getClass().getSimpleName());
+
         // The current zero-copy backend binds SurfaceFlinger's PassBlur producer directly to the
         // Floating Dock root through SetPassBlurSurface. It does not depend on the themed
         // BlurBackground2#setBackgroundBlur path, so both supported HotSeats material owners must
