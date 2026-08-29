@@ -64,6 +64,21 @@ public class DockShadowAnimationRegressionTest {
                 main.contains("captureVendorDockShadow"));
     }
 
+    @Test
+    public void nativeShadowScopeNeverMutatesHotSeatsAlpha() throws Exception {
+        String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String scope = slice(main,
+                "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
+                "private static LiquidDockConfig.Dock currentNativeShadowConfig()");
+
+        assertFalse("shadow customization must never route through HotSeats.setAlpha because HyperOS 4.50 propagates it to every Dock child",
+                scope.contains("overrideViewAlpha("));
+        assertFalse("the temporary shadow scope must not retain any View-alpha mutation helper",
+                main.contains("void overrideViewAlpha(View view, float alpha)"));
+        assertFalse("the temporary shadow scope must not store child-view alpha state",
+                main.contains("alphaChanged") || main.contains("alphaView"));
+    }
+
     private static String slice(String source, String start, String end) {
         int from = source.indexOf(start);
         int to = source.indexOf(end, from);

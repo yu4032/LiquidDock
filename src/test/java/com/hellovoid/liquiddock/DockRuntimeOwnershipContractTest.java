@@ -22,7 +22,7 @@ public class DockRuntimeOwnershipContractTest {
     }
 
     @Test
-    public void nativeShadowHookKeepsVendorMethodAsTheActualRenderer() throws Exception {
+    public void nativeShadowHookKeepsVendorMethodAsTheActualLifecycleRenderer() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String nativeShadow = methodSlice(main,
                 "private static void installNativeDockShadowOwnership(",
@@ -31,20 +31,26 @@ public class DockRuntimeOwnershipContractTest {
         assertTrue(nativeShadow.contains("\"showViewShadow\""));
         assertTrue(nativeShadow.contains("\"setTranslationY\""));
         assertTrue(nativeShadow.contains("chain.proceed("));
-        assertFalse("terminal MiShadow API must not become a second lifecycle authority",
+        assertFalse("terminal MiShadow API must not become a second lifecycle authority in MainHook",
                 nativeShadow.contains("\"applyViewShadow\""));
     }
 
     @Test
-    public void dockShadowLiveDisableUsesVendorAlphaPathInsteadOfCreatingAnotherOwner() throws Exception {
+    public void dockShadowLiveDisableUsesTerminalColorRewriteWithoutTouchingHotSeatsAlpha() throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String bridge = Files.readString(MAIN.resolve("DockNativeShadowBridge.java"));
         String configured = methodSlice(main,
                 "private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(",
                 "private static LiquidDockConfig.Dock currentNativeShadowConfig()");
 
-        assertTrue(configured.contains("VisualRuntimeState.isDockShadowEnabled()"));
-        assertTrue("disabled shadow must feed zero alpha into HotSeats' own lifecycle",
-                configured.contains(": 0;"));
+        assertFalse("HotSeats scope must not own shadow enable/alpha on Launcher 4.50",
+                configured.contains("VisualRuntimeState.isDockShadowEnabled()")
+                        || configured.contains("dock.shadowAlpha")
+                        || configured.contains("overrideViewAlpha("));
+        assertTrue("disabled shadow must resolve to zero alpha at the terminal MiShadow argument boundary",
+                bridge.contains("boolean dockShadow = dockCustomization && VisualRuntimeState.isDockShadowEnabled();")
+                        && bridge.contains("int dockAlpha = dockShadow ? clamp255(dock.shadowAlpha) : 0;")
+                        && bridge.contains("args[1] = Color.argb(outAlpha,"));
         assertFalse(main.contains("nativeShadowTargetRef"));
         assertFalse(main.contains("customShadowTargetRef"));
         assertFalse(main.contains("makeDockShadow("));

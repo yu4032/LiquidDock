@@ -28,13 +28,19 @@ final class DockGlassItemRegistry {
     }
     static synchronized void observeLaunchAnimationFrame(View view, float progress) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
+        DockAnimationTrace.animationRegistry("registry-observe", view, progress);
         if (!ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis())) return;
-        view.postInvalidateOnAnimation();
+        DockAnimationTrace.animationRegistry("registry-state-change", view, progress);
+        Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
     }
     static synchronized void endLaunchAnimation(View view) {
         if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
+        DockAnimationTrace.animationRegistry("registry-end-pre", view, Float.NaN);
         ANIMATION.end(view, SystemClock.uptimeMillis());
-        view.postInvalidateOnAnimation();
+        DockAnimationTrace.animationRegistry("registry-end-post", view, Float.NaN);
+        if (ANIMATION.isFading(view)) {
+            Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
+        }
     }
     static synchronized DockIconAnimationState.Sample animationSample(View view, long nowMs) {
         return ANIMATION.sample(view, nowMs);
@@ -44,6 +50,12 @@ final class DockGlassItemRegistry {
     }
     static synchronized boolean isFading(View view) {
         return ANIMATION.isFading(view);
+    }
+    static synchronized boolean hasActiveAnimation() {
+        for (View view : new ArrayList<>(ICONS.keySet())) {
+            if (view != null && ANIMATION.isFading(view)) return true;
+        }
+        return false;
     }
     static synchronized long revision() { return membershipRevision; }
     static synchronized ArrayList<View> snapshotForRoot(View root) {
