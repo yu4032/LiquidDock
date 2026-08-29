@@ -23,7 +23,8 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertTrue(hook.contains("scheduleUnlockBarrierReleaseAfterFrame"));
         assertTrue(hook.contains("prepareUnlockCaptureReturn"));
         assertTrue(registry.contains("prepareUnlockCaptureReturn"));
-        assertTrue(registry.contains("HookUtil.invoke(session, \"rebindProducer\")"));
+        assertTrue(registry.contains("HookUtil.findMethodExact"));
+        assertTrue(registry.contains("rebind.invoke(session)"));
         assertTrue(registry.contains("renderHandler.post"));
 
         int terminal = hook.indexOf("releaseUnlockWhenSpringComplete");
