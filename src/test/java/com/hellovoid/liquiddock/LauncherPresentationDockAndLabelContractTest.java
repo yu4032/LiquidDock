@@ -27,10 +27,6 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(hook.contains("onAnimationEnd"));
         assertTrue(hook.contains("com.miui.home.launcher.common.UnlockAnimationStateMachine"));
         assertTrue(hook.contains("PREPARE"));
-        assertTrue(hook.contains("UserPresentAnimationCompatV12Folme$1"));
-        assertTrue(hook.contains("onComplete"));
-        assertTrue(hook.contains("onCancel"));
-        assertTrue(hook.contains("resetAnimationViewNum"));
         assertTrue(hook.contains("setHomeTransitionPendingForAll"));
         assertTrue(hook.contains("setUnlockTransitionPendingForAll"));
 
@@ -40,6 +36,41 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(controller.contains("session.suspendWorkspaceProducer()"));
         assertTrue(controller.contains("if (isPresentationPending()) return;"));
         assertTrue(module.contains("LauncherGlassHomePresentationHook.install(classLoader)"));
+    }
+
+    @Test public void padUnlockUsesSpringTerminalCountAndNoAnimationIdleEscape()
+            throws Exception {
+        String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
+
+        // Launcher 4.50 createAnimation() selects V12Spring on non-fold devices. Its listener
+        // decrements mAllAnimationViewNum and resets the animation state only on the final view.
+        assertTrue(hook.contains("UserPresentAnimationCompatV12Spring$1"));
+        assertTrue(hook.contains("\"onAnimationEnd\""));
+        assertTrue(hook.contains("mAllAnimationViewNum"));
+        assertTrue(hook.contains("releaseUnlockWhenSpringComplete"));
+
+        // PREPARE can also resolve to no user-present animation at all. setState(IDLE) must then
+        // release the barrier instead of waiting forever for a listener that will never run.
+        assertTrue(hook.contains("IDLE"));
+        assertTrue(hook.contains("releaseUnlockIfIdleWithoutAnimation"));
+
+        int springHook = hook.indexOf("UserPresentAnimationCompatV12Spring$1");
+        int proceed = hook.indexOf("chain.proceed", springHook);
+        int terminalCheck = hook.indexOf("releaseUnlockWhenSpringComplete", proceed);
+        assertTrue("Spring completion must be evaluated after Xiaomi updates its remaining count",
+                springHook >= 0 && proceed > springHook && terminalCheck > proceed);
+    }
+
+    @Test public void foldFolmeFallbackOnlyReleasesAfterAllAnimatedViewsComplete()
+            throws Exception {
+        String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
+
+        assertTrue(hook.contains("UserPresentAnimationCompatV12Folme$1"));
+        assertTrue(hook.contains("onComplete"));
+        assertTrue(hook.contains("onCancel"));
+        assertTrue(hook.contains("mNumOfAnimatedView"));
+        assertTrue(hook.contains("mNumOfCurrentAnimatedView"));
+        assertTrue(hook.contains("releaseUnlockWhenFolmeComplete"));
     }
 
     @Test public void hotseatDropAnimationEndForcesDockSceneGeometryRefresh() throws Exception {
