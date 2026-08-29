@@ -274,6 +274,12 @@ final class DockStrokeRenderer {
         }
     }
 
+    /** Re-read the vendor field after workstation teardown instead of replaying stale cached state. */
+    static void syncRadiusFromNativeHost(View host) {
+        if (!isNativeHost(host)) return;
+        updateRadius(host, readNativeRadius(host));
+    }
+
     private static float readNativeRadius(View background) {
         try {
             Object value = HookUtil.getField(background, "mCornerRadius");
