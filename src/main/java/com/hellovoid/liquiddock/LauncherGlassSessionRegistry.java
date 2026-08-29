@@ -96,7 +96,9 @@ final class LauncherGlassSessionRegistry {
 
         for (LauncherGlassSession session : sessions) {
             try {
-                HookUtil.invoke(session, "rebindProducer");
+                java.lang.reflect.Method rebind = HookUtil.findMethodExact(
+                        session.getClass(), "rebindProducer", new Class<?>[0]);
+                rebind.invoke(session);
                 Object value = HookUtil.getField(session, "renderHandler");
                 if (!(value instanceof Handler)) throw new IllegalStateException("renderHandler unavailable");
                 Handler renderHandler = (Handler) value;
