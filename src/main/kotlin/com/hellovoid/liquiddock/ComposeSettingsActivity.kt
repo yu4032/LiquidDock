@@ -506,6 +506,7 @@ private fun DockPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
     var smoothResize by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault())) }
     SettingsList(padding, stringResource(R.string.page_dock)) {
         BooleanSetting(prefs, ConfigSchema.Dock.ENABLED, stringResource(R.string.dock_customization), stringResource(R.string.dock_customization_summary), masterEnabled) { dockEnabled = it }
+        RawBooleanSetting(prefs, "dock_hide_mirror_shortcut", false, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }

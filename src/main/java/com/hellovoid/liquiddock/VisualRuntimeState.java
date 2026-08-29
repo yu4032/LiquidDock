@@ -8,12 +8,15 @@ import com.hellovoid.liquiddock.config.ConfigSchema;
 
 /** Process-local state for visual switches that can be changed safely without restarting Launcher. */
 final class VisualRuntimeState {
+    private static final String PREF_HIDE_MIRROR_SHORTCUT = "dock_hide_mirror_shortcut";
+
     private static volatile boolean coreEnabled;
     private static volatile boolean dockCustomizationEnabled;
     private static volatile boolean dockStrokeEnabled;
     private static volatile boolean dockShadowEnabled;
     private static volatile boolean strokeShadowEnabled;
     private static volatile boolean dividerEnabled;
+    private static volatile boolean hideMirrorShortcut;
 
     private static SharedPreferences prefs;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
@@ -39,6 +42,8 @@ final class VisualRuntimeState {
         dockShadowEnabled = initialDockShadowEnabled;
         strokeShadowEnabled = initialStrokeShadowEnabled;
         dividerEnabled = initialDividerEnabled;
+        hideMirrorShortcut = nextPrefs != null
+                && nextPrefs.getBoolean(PREF_HIDE_MIRROR_SHORTCUT, false);
         if (nextPrefs == null) return;
 
         listener = (sharedPreferences, key) -> {
@@ -57,6 +62,7 @@ final class VisualRuntimeState {
                     && !ConfigSchema.Dock.SHADOW_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_SHADOW.name().equals(key)
                     && !ConfigSchema.Divider.ENABLED.name().equals(key)
+                    && !PREF_HIDE_MIRROR_SHORTCUT.equals(key)
                     && !strokeStyleChanged
                     && !dockShadowStyleChanged
                     && !strokeShadowStyleChanged) return;
@@ -76,8 +82,11 @@ final class VisualRuntimeState {
             // Preserve the already-resolved runtime value when the explicit key is absent.
             boolean nextDividerEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Divider.ENABLED.name(), dividerEnabled);
+            boolean nextHideMirrorShortcut = sharedPreferences.getBoolean(
+                    PREF_HIDE_MIRROR_SHORTCUT, hideMirrorShortcut);
             apply(nextCoreEnabled, nextDockCustomizationEnabled, nextDockStrokeEnabled,
-                    nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled);
+                    nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled,
+                    nextHideMirrorShortcut);
 
             if (strokeStyleChanged || strokeShadowStyleChanged) {
                 runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
@@ -113,25 +122,32 @@ final class VisualRuntimeState {
         return coreEnabled && dividerEnabled;
     }
 
+    static boolean isMirrorShortcutHidden() {
+        return coreEnabled && hideMirrorShortcut;
+    }
+
     private static void apply(
             boolean nextCoreEnabled,
             boolean nextDockCustomizationEnabled,
             boolean nextDockStrokeEnabled,
             boolean nextDockShadowEnabled,
             boolean nextStrokeShadowEnabled,
-            boolean nextDividerEnabled) {
+            boolean nextDividerEnabled,
+            boolean nextHideMirrorShortcut) {
         if (coreEnabled == nextCoreEnabled
                 && dockCustomizationEnabled == nextDockCustomizationEnabled
                 && dockStrokeEnabled == nextDockStrokeEnabled
                 && dockShadowEnabled == nextDockShadowEnabled
                 && strokeShadowEnabled == nextStrokeShadowEnabled
-                && dividerEnabled == nextDividerEnabled) return;
+                && dividerEnabled == nextDividerEnabled
+                && hideMirrorShortcut == nextHideMirrorShortcut) return;
 
         boolean wasDockCustomizationEnabled = isDockCustomizationEnabled();
         boolean wasDockStrokeEnabled = isDockStrokeEnabled();
         boolean wasDockShadowEnabled = isDockShadowEnabled();
         boolean wasStrokeShadowEnabled = isStrokeShadowEnabled();
         boolean wasDividerEnabled = isDividerEnabled();
+        boolean wasMirrorShortcutHidden = isMirrorShortcutHidden();
 
         // Publish the new booleans before scheduling teardown/reapply. Any callback that was
         // queued before the preference change must observe the new effective value immediately.
@@ -141,12 +157,14 @@ final class VisualRuntimeState {
         dockShadowEnabled = nextDockShadowEnabled;
         strokeShadowEnabled = nextStrokeShadowEnabled;
         dividerEnabled = nextDividerEnabled;
+        hideMirrorShortcut = nextHideMirrorShortcut;
 
         boolean nextLiveDockCustomizationEnabled = isDockCustomizationEnabled();
         boolean nextLiveDockStrokeEnabled = isDockStrokeEnabled();
         boolean nextLiveDockShadowEnabled = isDockShadowEnabled();
         boolean nextLiveStrokeShadowEnabled = isStrokeShadowEnabled();
         boolean nextLiveDividerEnabled = isDividerEnabled();
+        boolean nextMirrorShortcutHidden = isMirrorShortcutHidden();
         logState("updated");
 
         if (wasDockCustomizationEnabled && !nextLiveDockCustomizationEnabled) {
@@ -180,6 +198,9 @@ final class VisualRuntimeState {
         if (wasDividerEnabled && !nextLiveDividerEnabled) {
             runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());
         }
+        if (wasMirrorShortcutHidden != nextMirrorShortcutHidden) {
+            runOnMain(() -> DockMirrorShortcutHook.onRuntimeVisibilityChanged());
+        }
     }
 
     private static void runOnMain(Runnable action) {
@@ -194,6 +215,7 @@ final class VisualRuntimeState {
                 + " stroke=" + isDockStrokeEnabled()
                 + " dockShadow=" + isDockShadowEnabled()
                 + " strokeShadow=" + isStrokeShadowEnabled()
-                + " divider=" + isDividerEnabled());
+                + " divider=" + isDividerEnabled()
+                + " hideMirror=" + isMirrorShortcutHidden());
     }
 }
