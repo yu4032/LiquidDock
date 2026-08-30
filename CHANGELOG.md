@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.1.3 (2026-08-31)
+
+### Dock rendering and transitions
+
+- 工作台模式下保留 GlassHost 跨 detach 存活，重新附加后重建玻璃渲染器，修复返回桌面后玻璃不刷新
+- 工作台模式下原生 Dock 描边与玻璃描边交接：玻璃生效时保持原生描边休眠，退出后恢复，消除双描边
+- 保持 Dock 宿主裁剪在 v2.1.2 的兼容行为
+- 补充 Dock 运行时所有权与宿主裁剪契约测试
+
 ## v2.1.2 (2026-08-30)
 
 ### Dock rendering and transitions
