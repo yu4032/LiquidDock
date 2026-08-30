@@ -69,13 +69,16 @@ final class DockStrokeRenderer {
                         Object result =
                                 chain.proceed(chain.getArgs().toArray(new Object[0]));
 
-                        if (MainHook.isWorkstationMode()) return result;
-
                         View background = (View) chain.getThisObject();
                         float radius = readNativeRadius(background);
                         rememberNativeHost(background, radius);
-                        LiquidDockConfig.Dock config = currentNativeConfig();
 
+                        if (MainHook.isWorkstationMode()) {
+                            releaseInstalledStroke(background);
+                            return result;
+                        }
+
+                        LiquidDockConfig.Dock config = currentNativeConfig();
                         configure(background, config, radius);
                         return result;
                     },
@@ -100,6 +103,48 @@ final class DockStrokeRenderer {
 
     private static boolean isNativeHost(View host) {
         return host != null && NATIVE_BACKGROUND_CLASS.equals(host.getClass().getName());
+    }
+
+    /**
+     * Workstation keeps the zero-copy glass host as the only LiquidDock edge owner. The vendor
+     * BlurBackground2 can survive the hierarchy transition, so detach any previously installed
+     * native foreground ring immediately instead of waiting for another radius callback.
+     */
+    static void onWorkstationModeChanged(boolean enabled) {
+        if (!enabled) return;
+        int released = releaseNativeStrokeOwners();
+        MainHook.log("[DC] workstation stroke handoff released native owners=" + released);
+    }
+
+    private static int releaseNativeStrokeOwners() {
+        int released = 0;
+        synchronized (INSTALLED) {
+            for (Map.Entry<View, StrokeDrawable> entry
+                    : new ArrayList<>(INSTALLED.entrySet())) {
+                View host = entry.getKey();
+                StrokeDrawable installed = entry.getValue();
+                if (!isNativeHost(host) || installed == null) continue;
+                if (host.getForeground() == installed) released++;
+                releaseInstalledStrokeLocked(host, installed);
+            }
+        }
+        return released;
+    }
+
+    private static void releaseInstalledStroke(View host) {
+        if (host == null) return;
+        synchronized (INSTALLED) {
+            releaseInstalledStrokeLocked(host, INSTALLED.get(host));
+        }
+    }
+
+    private static void releaseInstalledStrokeLocked(View host, StrokeDrawable installed) {
+        if (host == null) return;
+        if (installed != null && host.getForeground() == installed) {
+            host.setForeground(installed.baseForeground());
+        }
+        applyNativeOuterShadow(host, null);
+        host.invalidate();
     }
 
     /**
@@ -133,10 +178,16 @@ final class DockStrokeRenderer {
             View host, LiquidDockConfig.Dock config, float radius,
             boolean preserveExistingForeground) {
         if (host == null) return;
-        if (isNativeHost(host)) rememberNativeHost(host, radius);
+        boolean nativeHost = isNativeHost(host);
+        if (nativeHost) rememberNativeHost(host, radius);
 
         synchronized (INSTALLED) {
             StrokeDrawable installed = INSTALLED.get(host);
+
+            if (nativeHost && MainHook.isWorkstationMode()) {
+                releaseInstalledStrokeLocked(host, installed);
+                return;
+            }
 
             if (config == null || !config.strokeEnabled
                     || !VisualRuntimeState.isDockStrokeEnabled()) {
@@ -183,11 +234,7 @@ final class DockStrokeRenderer {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
-                if (host.getForeground() == installed) {
-                    host.setForeground(installed.baseForeground());
-                }
-                applyNativeOuterShadow(host, null);
-                host.invalidate();
+                releaseInstalledStrokeLocked(host, installed);
             }
         }
     }
@@ -206,12 +253,17 @@ final class DockStrokeRenderer {
             return;
         }
 
+        boolean workstation = MainHook.isWorkstationMode();
         synchronized (INSTALLED) {
             for (Map.Entry<View, StrokeDrawable> entry
                     : new ArrayList<>(INSTALLED.entrySet())) {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
+                if (workstation && isNativeHost(host)) {
+                    releaseInstalledStrokeLocked(host, installed);
+                    continue;
+                }
                 Style style = Style.from(config, host);
                 installed.setStyle(style);
                 if (host.getForeground() != installed) {
@@ -221,6 +273,10 @@ final class DockStrokeRenderer {
                 host.invalidate();
             }
         }
+
+        // Workstation deliberately keeps remembered native owners dormant. The live glass host
+        // remains the only custom edge renderer until the mode transition is complete.
+        if (workstation) return;
 
         // A native owner may have been observed while stroke was disabled, so no StrokeDrawable
         // existed yet. Reconfigure those known hosts now instead of waiting for setBackgroundRadius.
