@@ -62,4 +62,8 @@ User configuration:
 7. Run the complete unit suite and `assembleDebug` through PR CI.
 8. Inspect the generated API101 debug artifact and update PR #83 with the new root cause and verification evidence.
 
+## Implementation status
+
+Steps 1–6 are implemented on PR #83. The final settings wiring is now on the branch: widget discovery remains in the separate `widget_discovery` Remote Preferences group, while bundled-rule enablement and deterministic user selections are registered in the normal config schema and exposed through the Liquid Glass settings subpage. Final full CI and APK artifact verification remain the completion gate.
+
 No merge to `main` is part of this plan.
