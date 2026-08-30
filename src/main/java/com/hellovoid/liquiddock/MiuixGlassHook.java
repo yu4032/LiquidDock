@@ -68,6 +68,7 @@ final class MiuixGlassHook {
         removeVendorGpuBlurSuppressor();
         Miuix307ZeroCopyRenderer.clear();
         restoreVendorMaterialBody();
+        DockStrokeRenderer.restoreNativeForegroundAfterPrismal(background);
         clearTrackedViews();
         if (host != null && host.getParent() instanceof ViewGroup) {
             ((ViewGroup) host.getParent()).removeView(host);
@@ -80,8 +81,10 @@ final class MiuixGlassHook {
 
     static void onHostDetached(DockLiquidGlassHostView detachedHost) {
         if (detachedHost == null || detachedHost != currentHost()) return;
+        View background = currentBackground();
         removeVendorGpuBlurSuppressor();
         Miuix307ZeroCopyRenderer.clear();
+        DockStrokeRenderer.restoreNativeForegroundAfterPrismal(background);
         clearTrackedViews();
     }
 
@@ -138,7 +141,9 @@ final class MiuixGlassHook {
 
         removeVendorGpuBlurSuppressor();
         Miuix307ZeroCopyRenderer.clear();
+        View previousBackground = currentBackground();
         DockLiquidGlassHostView previousHost = currentHost();
+        DockStrokeRenderer.restoreNativeForegroundAfterPrismal(previousBackground);
         if (previousHost != null && previousHost.getParent() instanceof ViewGroup) {
             ((ViewGroup) previousHost.getParent()).removeView(previousHost);
         }
@@ -168,6 +173,7 @@ final class MiuixGlassHook {
 
         backgroundRef = new WeakReference<>(dockBg);
         hostRef = new WeakReference<>(host);
+        DockStrokeRenderer.suppressNativeForegroundForPrismal(dockBg);
 
         if (nativeVisualOwner) suppressVendorGpuBlur(dockBg);
         installVendorGpuBlurSuppressor(dockBg);

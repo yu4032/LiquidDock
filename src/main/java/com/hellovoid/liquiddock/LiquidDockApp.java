@@ -18,7 +18,6 @@ public final class LiquidDockApp extends Application
         implements XposedServiceHelper.OnServiceListener,
         SharedPreferences.OnSharedPreferenceChangeListener {
     private static volatile XposedService service;
-    static final String WIDGET_DISCOVERY_GROUP = "widget_discovery";
     private static volatile LiquidDockApp instance;
     private SharedPreferences localPreferences;
     private boolean reconciling;
@@ -93,10 +92,13 @@ public final class LiquidDockApp extends Application
         return value != null ? value.getRemotePreferences(group) : null;
     }
 
+    /** App-local sink written by the discovery provider; never mirrored into API101 prefs. */
     public static SharedPreferences widgetDiscoveryPreferences() {
         LiquidDockApp value = instance;
-        return value != null ? value.getSharedPreferences(
-                WIDGET_DISCOVERY_GROUP, MODE_PRIVATE) : null;
+        return value != null
+                ? value.getSharedPreferences(
+                WidgetBackgroundDiscoveryProvider.PREFS_NAME, MODE_PRIVATE)
+                : null;
     }
 
     /** Full-seed only — used on initial bind.  Incremental updates use syncKeyToRemote. */

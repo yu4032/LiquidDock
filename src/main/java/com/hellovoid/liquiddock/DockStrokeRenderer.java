@@ -40,6 +40,8 @@ final class DockStrokeRenderer {
 
     private static final WeakHashMap<View, StrokeDrawable> INSTALLED =
             new WeakHashMap<>();
+    private static final WeakHashMap<View, Drawable> SUPPRESSED_NATIVE_FOREGROUNDS =
+            new WeakHashMap<>();
     /** Native backgrounds remain known even when stroke is currently disabled. */
     private static final WeakHashMap<View, Float> KNOWN_NATIVE_HOSTS =
             new WeakHashMap<>();
@@ -154,7 +156,33 @@ final class DockStrokeRenderer {
             }
         }
         host.invalidate();
-        logOwner("release", host);
+        logOwner("release-native", host, readNativeRadius(host));
+    }
+
+    /** Prismal is the sole visible edge owner while bound to the vendor background. */
+    static void suppressNativeForegroundForPrismal(View host) {
+        if (!isNativeHost(host)) return;
+        releaseNativeStrokeOwner(host);
+        synchronized (SUPPRESSED_NATIVE_FOREGROUNDS) {
+            Drawable current = host.getForeground();
+            if (current != null && !SUPPRESSED_NATIVE_FOREGROUNDS.containsKey(host)) {
+                SUPPRESSED_NATIVE_FOREGROUNDS.put(host, current);
+            }
+            if (current != null) host.setForeground(null);
+        }
+        host.invalidate();
+        logOwner("suppress-native-for-prismal", host, readNativeRadius(host));
+    }
+
+    static void restoreNativeForegroundAfterPrismal(View host) {
+        if (!isNativeHost(host)) return;
+        Drawable saved;
+        synchronized (SUPPRESSED_NATIVE_FOREGROUNDS) {
+            saved = SUPPRESSED_NATIVE_FOREGROUNDS.remove(host);
+        }
+        if (host.getForeground() == null && saved != null) host.setForeground(saved);
+        host.invalidate();
+        logOwner("restore-native-after-prismal", host, readNativeRadius(host));
     }
 
     /** Remove only the normal-mode native owner on workstation entry. */
@@ -183,6 +211,7 @@ final class DockStrokeRenderer {
         if (host != null && host.getParent() instanceof View) {
             View parent = (View) host.getParent();
             if (isNativeHost(parent)) releaseNativeStrokeOwner(parent);
+            if (isNativeHost(parent)) suppressNativeForegroundForPrismal(parent);
         }
         configureInternal(host, config, radius, false);
     }
@@ -244,26 +273,8 @@ final class DockStrokeRenderer {
             }
             applyNativeOuterShadow(host, style);
             host.invalidate();
-            logOwner("configure", host);
+            logOwner("configure", host, radius);
         }
-    }
-
-    private static void logOwner(String action, View host) {
-        int activeOwnerCount = 0;
-        synchronized (INSTALLED) {
-            for (Map.Entry<View, StrokeDrawable> entry : INSTALLED.entrySet()) {
-                View candidate = entry.getKey();
-                if (candidate != null && candidate.getForeground() == entry.getValue()) {
-                    activeOwnerCount++;
-                }
-            }
-        }
-        MainHook.log("[StrokeOwner] action=" + action
-                + " host=" + (host != null ? host.getClass().getName() : "null")
-                + " identity=" + (host != null ? System.identityHashCode(host) : 0)
-                + " foreground=" + (host != null && host.getForeground() != null
-                        ? host.getForeground().getClass().getName() : "null")
-                + " activeOwnerCount=" + activeOwnerCount);
     }
 
     static void onRuntimeStrokeDisabled() {
@@ -404,14 +415,40 @@ final class DockStrokeRenderer {
         }
     }
 
+    private static int activeOwnerCount() {
+        int count = 0;
+        synchronized (INSTALLED) {
+            for (Map.Entry<View, StrokeDrawable> entry : INSTALLED.entrySet()) {
+                View owner = entry.getKey();
+                StrokeDrawable drawable = entry.getValue();
+                if (owner != null && drawable != null && owner.getForeground() == drawable) count++;
+            }
+        }
+        return count;
+    }
+
+    private static void logOwner(String action, View host, float radius) {
+        if (host == null) return;
+        Drawable foreground = host.getForeground();
+        MainHook.log("[DC][StrokeOwner] action=" + action
+                + " host=" + host.getClass().getSimpleName() + "@"
+                + Integer.toHexString(System.identityHashCode(host))
+                + " foreground=" + (foreground == null ? "null"
+                : foreground.getClass().getName())
+                + " activeOwnerCount=" + activeOwnerCount()
+                + " radius=" + radius);
+    }
+
     /**
-     * A foreground Drawable is clipped to its host bounds. The legacy overlay offset described
-     * how far an independently sized overlay could extend outside the Dock; it cannot be reused as
-     * a negative inset on the in-place foreground. Keep the complete ring inside the host instead.
+     * The old standalone overlay could draw a squircle outside the Dock bounds.  The current
+     * renderer is a View foreground and is clipped to those bounds, so a legacy outward offset
+     * cannot be represented as a negative inset.  Keep the complete ring inside the host and use
+     * a half-width inner inset to preserve the configured visual weight.
      */
-    private static float[] resolveSquircleRingInsets(float thickness, float legacyOffset) {
-        float safeThickness = Math.max(0f, thickness);
-        return new float[] {0f, safeThickness * 0.5f};
+    private static float[] resolveSquircleRingInsets(
+            float strokeWidthPx, float ignoredLegacyOutwardOffsetPx) {
+        float safeWidth = Math.max(0f, strokeWidthPx);
+        return new float[] {0f, safeWidth * 0.5f};
     }
 
     private static final class Style {
@@ -599,10 +636,10 @@ final class DockStrokeRenderer {
             float innerCp;
 
             if (s.squircle) {
-                float[] ringInsets = resolveSquircleRingInsets(
+                float[] insets = resolveSquircleRingInsets(
                         thickness, s.squircleOffsetPx);
-                outerInset = ringInsets[0];
-                innerInset = ringInsets[1];
+                outerInset = insets[0];
+                innerInset = insets[1];
                 outerRadius = effectiveRadius;
                 innerRadius = Math.max(0f, outerRadius - innerInset);
                 innerCp = 0.65f;

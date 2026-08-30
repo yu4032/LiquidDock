@@ -33,17 +33,16 @@ public class Launcher450OwnershipRegressionTest {
     }
 
     @Test
-    public void workstationExitUsesLauncher450FinalRoundRectInsteadOfAnimatorState()
+    public void workstationExitUsesLauncher450FinalRoundRectBoundary()
             throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String settlement = Files.readString(
                 MAIN.resolve("Launcher450DockTransitionSettlement.java"));
         String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
 
-        assertTrue(main.contains("mViewRadiusAnimator"));
-        assertTrue(main.contains("animatorSet"));
         assertFalse(main.contains("HookUtil.invoke(v, \"isAnimating\")"));
         assertTrue(settlement.contains("updateRoundRect"));
+        assertTrue(settlement.contains("int.class, int.class, float.class"));
         assertFalse(settlement.contains("mViewRadiusAnimator"));
         assertTrue(settlement.contains("settleExit"));
         assertTrue(glass.contains("shouldCommitStrokeGeometry"));

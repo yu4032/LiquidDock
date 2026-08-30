@@ -2,14 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 
-/**
- * Launcher 4.50-specific settlement boundary for workstation -> normal Dock geometry.
- *
- * Launcher 4.50 calls updateRoundRect(width, height, radius) only when the new Dock geometry is
- * ready to become the vendor-visible rounded rectangle. That method is therefore the settlement
- * boundary; private animator fields are implementation details and can finish before the final
- * ordinary-mode geometry is published.
- */
+/** Launcher 4.50 final workstation-exit geometry boundary. */
 final class Launcher450DockTransitionSettlement {
     private static final String BACKGROUND_CLASS =
             "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2";
@@ -22,6 +15,8 @@ final class Launcher450DockTransitionSettlement {
         if (installed) return;
         installed = true;
         try {
+            // Decompiled 4.50 calls this only for an immediate final update or after its 200 ms
+            // width/height animation ends.  It is the vendor final boundary, not an animator hint.
             HookUtil.hookMethod(classLoader, BACKGROUND_CLASS, "updateRoundRect", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Object owner = chain.getThisObject();
@@ -30,36 +25,31 @@ final class Launcher450DockTransitionSettlement {
                 }
                 return result;
             }, int.class, int.class, float.class);
-            MainHook.log("[DC] Launcher 4.50 Dock transition settlement hooks=1"
-                    + " boundary=updateRoundRect");
+            MainHook.log("[DC] Launcher 4.50 Dock settlement boundary=updateRoundRect");
         } catch (Throwable error) {
             MainHook.log("[DC] Launcher 4.50 Dock transition settlement unavailable: " + error);
         }
     }
 
-    /**
-     * Returns true only when this call changes the visual phase from EXITING_WORKSTATION to NORMAL.
-     * The updateRoundRect hook calls this after the vendor method has accepted its final values.
-     */
     static boolean settleIfReady(View background) {
         DockWorkstationVisualTransition state = DockWorkstationVisualTransition.global();
         if (!state.isExiting()) return false;
-        final int generation = state.generation();
-
+        int generation = state.generation();
         if (!MiuixGlassHook.hasReadyNativeGeometry(background)) {
             if (lastDeferredGeneration != generation) {
                 lastDeferredGeneration = generation;
                 MainHook.log("[DC] workstation exit settlement deferred generation=" + generation
-                        + " radius=" + MiuixGlassHook.readNativeOpticsRadius(background)
+                        + " boundary=updateRoundRect radius="
+                        + MiuixGlassHook.readNativeOpticsRadius(background)
                         + " size=" + background.getWidth() + "x" + background.getHeight());
             }
             return false;
         }
-
         if (!state.settleExit(generation)) return false;
         lastDeferredGeneration = Integer.MIN_VALUE;
         MainHook.log("[DC] workstation exit Dock geometry settled generation=" + generation
-                + " radius=" + MiuixGlassHook.readNativeOpticsRadius(background)
+                + " boundary=updateRoundRect radius="
+                + MiuixGlassHook.readNativeOpticsRadius(background)
                 + " size=" + background.getWidth() + "x" + background.getHeight());
         return true;
     }
