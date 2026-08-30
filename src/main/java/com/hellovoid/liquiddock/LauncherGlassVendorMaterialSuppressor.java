@@ -24,9 +24,11 @@ final class LauncherGlassVendorMaterialSuppressor {
         invokeBoolean(host, "setBlurIfNeed", false);
         invokeInt(host, "setBlurRadius", 0);
 
-        // RemoteViews stores its layout id under android.R.id.widget_frame as a keyed tag on the
-        // direct content root. Launcher 4.50 clears exactly that root background when native widget
-        // blur owns the fallback plate; mirror that ownership without touching provider children.
+        // Launcher 4.50 LauncherAppWidgetHostView.updateAppWidget() only calls setBlurIfNeed()
+        // when the AppWidgetHostView has exactly one RemoteViews content child. setBlurIfNeed()
+        // then resolves android.R.id.widget_frame recursively from that child. Mirror that exact
+        // owner path so nested widget-frame backgrounds are covered without walking arbitrary
+        // provider descendants or guessing by class/resource names.
         View remoteViewsContent = resolveRemoteViewsContent(host);
         if (remoteViewsContent != null) {
             Drawable current = remoteViewsContent.getBackground();
@@ -60,13 +62,10 @@ final class LauncherGlassVendorMaterialSuppressor {
     private static View resolveRemoteViewsContent(View host) {
         if (!(host instanceof ViewGroup)) return null;
         ViewGroup group = (ViewGroup) host;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child != null && child.getTag(android.R.id.widget_frame) instanceof Integer) {
-                return child;
-            }
-        }
-        return null;
+        if (group.getChildCount() != 1) return null;
+        View content = group.getChildAt(0);
+        if (content == null) return null;
+        return content.findViewById(android.R.id.widget_frame);
     }
 
     private static boolean isMaMlHost(View host) {
