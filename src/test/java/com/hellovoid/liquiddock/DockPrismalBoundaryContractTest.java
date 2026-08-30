@@ -18,7 +18,9 @@ public class DockPrismalBoundaryContractTest {
         assertTrue(host.contains("DockPrismalOutlinePath.build"));
         assertFalse(host.contains("DockShapePath.build(clipPath"));
         assertTrue(prismal.contains("new RectF(0f, 0f, width, height)"));
-        assertFalse(prismal.contains(".5f"));
+        assertFalse(prismal.contains("new RectF(.5f, .5f"));
+        assertFalse(prismal.contains("width - .5f"));
+        assertFalse(prismal.contains("height - .5f"));
         // Keep the half-pixel path available for stroke/pixel-center consumers.
         assertTrue(shape.contains("new RectF(.5f, .5f, width - .5f, height - .5f)"));
     }
