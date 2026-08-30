@@ -42,6 +42,8 @@ final class MiuixGlassHook {
     private static float transparentMaterialRadius = Float.NaN;
     private static WeakReference<View> materialBodyLoggedFor = new WeakReference<>(null);
     private static WeakReference<View> zeroCopyActiveLoggedFor = new WeakReference<>(null);
+    private static WeakReference<DockLiquidGlassHostView> reattachPendingHost =
+        new WeakReference<>(null);
 
     private MiuixGlassHook() {}
 
@@ -60,6 +62,7 @@ final class MiuixGlassHook {
         transparentMaterialRadius = Float.NaN;
         materialBodyLoggedFor = new WeakReference<>(null);
         zeroCopyActiveLoggedFor = new WeakReference<>(null);
+        reattachPendingHost = new WeakReference<>(null);
     }
 
     static void onRuntimeGlassDisabled() {
@@ -79,22 +82,68 @@ final class MiuixGlassHook {
     }
 
     static void onHostDetached(DockLiquidGlassHostView detachedHost) {
-        if (detachedHost == null || detachedHost != currentHost()) return;
-        // Workstation/window handoff can detach the whole hierarchy while keeping this child in
-        // BlurBackground2. Re-check on the next main-loop turn so a transient detach does not erase
-        // ownership and cause install() to add a second GlassHost when the hierarchy comes back.
-        detachedHost.post(() -> {
-            if (detachedHost != currentHost()) return;
-            if (detachedHost.getParent() instanceof ViewGroup) {
-                MainHook.log(TAG + " transient GlassHost detach retained id="
-                        + Integer.toHexString(System.identityHashCode(detachedHost)));
-                return;
-            }
-            removeVendorGpuBlurSuppressor();
-            Miuix307ZeroCopyRenderer.clear();
-            clearTrackedViews();
-        });
+    if (detachedHost == null || detachedHost != currentHost()) return;
+    // The child TextureView permanently shuts down its EGL/PassBlur renderer on detach.
+    // Retain the unique shell across workstation/window handoff and rebuild only its
+    // renderer when this exact Host is attached again.
+    reattachPendingHost = new WeakReference<>(detachedHost);
+    detachedHost.post(() -> {
+        if (detachedHost != currentHost()
+                || reattachPendingHost.get() != detachedHost) return;
+        if (detachedHost.getParent() instanceof ViewGroup) {
+            MainHook.log(TAG + " transient GlassHost detach retained id="
+                    + Integer.toHexString(System.identityHashCode(detachedHost)));
+            return;
+        }
+        removeVendorGpuBlurSuppressor();
+        Miuix307ZeroCopyRenderer.clear();
+        clearTrackedViews();
+    });
+}
+
+    static void onHostAttached(DockLiquidGlassHostView attachedHost) {
+    if (attachedHost == null || attachedHost != currentHost()
+            || reattachPendingHost.get() != attachedHost) return;
+    // Do not mutate the child list while ViewGroup is still dispatching attach. Rebuild
+    // the dead TextureView/PassBlur renderer on the next main-loop turn.
+    attachedHost.post(() -> rebuildRetainedHostRenderer(attachedHost));
+}
+
+private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attachedHost) {
+    if (attachedHost == null || attachedHost != currentHost()
+            || reattachPendingHost.get() != attachedHost) return;
+    View background = currentBackground();
+    if (!(background instanceof ViewGroup)
+            || attachedHost.getParent() != background
+            || !attachedHost.isAttachedToWindow()
+            || !GlassRuntimeState.isEnabled()) {
+        reattachPendingHost = new WeakReference<>(null);
+        return;
     }
+
+    reattachPendingHost = new WeakReference<>(null);
+    LiquidDockConfig config = LiquidDockConfig.load();
+
+    Miuix307ZeroCopyRenderer.clear();
+    zeroCopyActiveLoggedFor = new WeakReference<>(null);
+    boolean zeroCopyCandidate = Miuix307ZeroCopyRenderer.install(
+            (ViewGroup) background, attachedHost,
+            config.glass, config.workstation, Math.round(config.glass.blur));
+
+    if (isNativeVisualOwner(background)) suppressVendorGpuBlur(background);
+    installVendorGpuBlurSuppressor(background);
+    syncSize(background);
+    syncGeometry(background, config);
+
+    if (zeroCopyCandidate) {
+        scheduleZeroCopyValidation(background, attachedHost, 0);
+    } else {
+        MainHook.log(ZERO_COPY_TAG + " retained Host renderer rebuild unavailable; "
+                + inactiveVisualState(background));
+    }
+    MainHook.log(TAG + " retained GlassHost renderer rebuilt id="
+            + Integer.toHexString(System.identityHashCode(attachedHost)));
+}
 
     static boolean isBoundTo(View dockBg) {
         if (dockBg == null || dockBg != currentBackground()) return false;
