@@ -1,16 +1,16 @@
 package com.hellovoid.liquiddock;
 
 /** Immutable identity fields used to select a widget-background rule. */
-final class WidgetBackgroundIdentity {
-    final String type;
-    final String productId;
-    final String appPackage;
-    final int spanX;
-    final int spanY;
-    final int configSpanX;
-    final int configSpanY;
+public final class WidgetBackgroundIdentity {
+    public final String type;
+    public final String productId;
+    public final String appPackage;
+    public final int spanX;
+    public final int spanY;
+    public final int configSpanX;
+    public final int configSpanY;
 
-    WidgetBackgroundIdentity(
+    public WidgetBackgroundIdentity(
             String type,
             String productId,
             String appPackage,
