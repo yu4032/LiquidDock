@@ -5,11 +5,13 @@ import android.view.View;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 
-/** Executes declarative MAML hide-element rules without widget-specific Java branches. */
+/** Executes built-in or exact user-selected MAML hide-element rules. */
 final class LauncherMamlBackgroundRuleExecutor {
     private static final String LOG_TAG = "[MamlWidgetBg]";
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
@@ -31,46 +33,59 @@ final class LauncherMamlBackgroundRuleExecutor {
 
     static void claimLoadedRoot(View host, Object root) {
         if (host == null) return;
-        Object itemInfo = HookUtil.invoke(host, "getItemInfo");
-        WidgetBackgroundIdentity identity = new WidgetBackgroundIdentity(
-                "maml",
-                readStringField(itemInfo, "productId"),
-                readStringField(itemInfo, "appPackage"),
-                readIntField(itemInfo, "spanX", -1),
-                readIntField(itemInfo, "spanY", -1),
-                readIntField(itemInfo, "configSpanX", -1),
-                readIntField(itemInfo, "configSpanY", -1));
-        WidgetBackgroundRule rule = RULES.match(identity);
+        WidgetBackgroundIdentity identity = WidgetBackgroundIdentityReader.maml(host);
         String identityText = describe(identity);
 
-        if (rule == null) {
-            release(host);
-            MainHook.log(LOG_TAG + identityText
-                    + " rule=none rootLoaded=" + (root != null)
-                    + " suppressed=false");
-            return;
-        }
         if (root == null) {
             release(host);
-            MainHook.log(LOG_TAG + identityText
-                    + " rule=" + rule.id()
-                    + " root=null targetFound=false suppressed=false");
+            MainHook.log(LOG_TAG + identityText + " root=null suppressed=false");
             return;
         }
 
-        List<String> elementNames = rule.elementNames();
-        if (elementNames.isEmpty()) {
+        publishDiscovery(identity, root);
+
+        Set<String> userTargets = new LinkedHashSet<>();
+        for (WidgetBackgroundUserRule rule : WidgetBackgroundUserPreferences.loadRules()) {
+            if (rule.targetKind() == WidgetBackgroundUserRule.TargetKind.MAML_ELEMENT
+                    && rule.matches(identity)) {
+                userTargets.add(rule.target());
+            }
+        }
+
+        String source;
+        WidgetBackgroundRule builtIn = null;
+        List<String> elementNames;
+        if (!userTargets.isEmpty()) {
+            source = "user";
+            elementNames = new ArrayList<>(userTargets);
+            Collections.sort(elementNames);
+        } else if (WidgetBackgroundUserPreferences.builtInRulesEnabled()) {
+            builtIn = RULES.match(identity);
+            if (builtIn == null) {
+                release(host);
+                MainHook.log(LOG_TAG + identityText
+                        + " rule=none rootLoaded=true suppressed=false");
+                return;
+            }
+            source = "builtin:" + builtIn.id();
+            elementNames = builtIn.elementNames();
+            if (elementNames.isEmpty()) {
+                release(host);
+                MainHook.log(LOG_TAG + identityText
+                        + " rule=" + builtIn.id()
+                        + " root=" + root.getClass().getSimpleName()
+                        + " diagnosticOnly=true suppressed=false");
+                dumpNamedElementsOnce(identity, builtIn.id(), root);
+                return;
+            }
+        } else {
             release(host);
-            MainHook.log(LOG_TAG + identityText
-                    + " rule=" + rule.id()
-                    + " root=" + root.getClass().getSimpleName()
-                    + " diagnosticOnly=true suppressed=false");
-            dumpNamedElementsOnce(identity, rule, root);
+            MainHook.log(LOG_TAG + identityText + " rules=disabled suppressed=false");
             return;
         }
 
-        // Resolve the whole rule before mutating any ScreenElement. A structural mismatch must
-        // never leave a partially transparent widget.
+        // Resolve the whole selection before mutating anything. A stale user target or changed
+        // provider structure must never leave a partially hidden widget.
         List<Object> resolved = new ArrayList<>(elementNames.size());
         String missingName = null;
         for (String elementName : elementNames) {
@@ -84,11 +99,11 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (resolved.size() != elementNames.size()) {
             release(host);
             MainHook.log(LOG_TAG + identityText
-                    + " rule=" + rule.id()
+                    + " source=" + source
                     + " root=" + root.getClass().getSimpleName()
                     + " target=" + missingName
                     + " targetFound=false suppressed=false");
-            dumpNamedElementsOnce(identity, rule, root);
+            dumpNamedElementsOnce(identity, source, root);
             return;
         }
 
@@ -96,7 +111,7 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (previous != null && previous.matches(root, resolved)) {
             for (Object target : resolved) HookUtil.invoke(target, "show", false);
             MainHook.log(LOG_TAG + identityText
-                    + " rule=" + rule.id()
+                    + " source=" + source
                     + " targets=" + elementNames
                     + " targetFound=true suppressed=" + allHidden(resolved));
             return;
@@ -115,7 +130,7 @@ final class LauncherMamlBackgroundRuleExecutor {
         for (Object target : resolved) HookUtil.invoke(target, "show", false);
 
         MainHook.log(LOG_TAG + identityText
-                + " rule=" + rule.id()
+                + " source=" + source
                 + " targets=" + elementNames
                 + " targetFound=true suppressed=" + allHidden(resolved));
     }
@@ -124,6 +139,27 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (host == null) return;
         Claim claim = CLAIMS.remove(host);
         if (claim != null) restore(claim);
+    }
+
+    private static void publishDiscovery(WidgetBackgroundIdentity identity, Object root) {
+        Object value = readField(root, "mElements");
+        if (!(value instanceof Map)) return;
+        Map<?, ?> elements = (Map<?, ?>) value;
+        List<WidgetBackgroundDiscoveryTarget> targets = new ArrayList<>();
+        for (Map.Entry<?, ?> entry : elements.entrySet()) {
+            String name = String.valueOf(entry.getKey());
+            if (name == null || name.isEmpty() || "null".equals(name)) continue;
+            Object stored = entry.getValue();
+            Object element = stored instanceof WeakReference
+                    ? ((WeakReference<?>) stored).get() : stored;
+            if (element == null) continue;
+            targets.add(new WidgetBackgroundDiscoveryTarget(
+                    WidgetBackgroundUserRule.TargetKind.MAML_ELEMENT,
+                    name, element.getClass().getSimpleName()));
+        }
+        targets.sort((a, b) -> a.name().compareTo(b.name()));
+        WidgetBackgroundDiscoveryStore.publish(new WidgetBackgroundDiscoverySnapshot(
+                identity, targets, System.currentTimeMillis()));
     }
 
     private static boolean allHidden(List<Object> elements) {
@@ -141,7 +177,7 @@ final class LauncherMamlBackgroundRuleExecutor {
 
     /** Dump Launcher 4.50's real ScreenElementRoot registry once per root, diagnostic-only. */
     private static void dumpNamedElementsOnce(
-            WidgetBackgroundIdentity identity, WidgetBackgroundRule rule, Object root) {
+            WidgetBackgroundIdentity identity, String source, Object root) {
         if (root == null) return;
         synchronized (DUMPED_ROOTS) {
             if (DUMPED_ROOTS.containsKey(root)) return;
@@ -151,7 +187,7 @@ final class LauncherMamlBackgroundRuleExecutor {
         Object value = readField(root, "mElements");
         if (!(value instanceof Map)) {
             MainHook.log(DUMP_LOG_TAG + describe(identity)
-                    + " rule=" + rule.id() + " registry=mElements unavailable");
+                    + " source=" + source + " registry=mElements unavailable");
             return;
         }
 
@@ -170,14 +206,14 @@ final class LauncherMamlBackgroundRuleExecutor {
         int chunks = Math.max(1, (names.size() + DUMP_CHUNK_SIZE - 1) / DUMP_CHUNK_SIZE);
         if (names.isEmpty()) {
             MainHook.log(DUMP_LOG_TAG + describe(identity)
-                    + " rule=" + rule.id() + " count=0 chunk=1/1 names=[]");
+                    + " source=" + source + " count=0 chunk=1/1 names=[]");
             return;
         }
         for (int chunk = 0; chunk < chunks; chunk++) {
             int from = chunk * DUMP_CHUNK_SIZE;
             int to = Math.min(names.size(), from + DUMP_CHUNK_SIZE);
             MainHook.log(DUMP_LOG_TAG + describe(identity)
-                    + " rule=" + rule.id()
+                    + " source=" + source
                     + " count=" + names.size()
                     + " chunk=" + (chunk + 1) + "/" + chunks
                     + " names=" + names.subList(from, to));
@@ -195,16 +231,6 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (target == null) return null;
         try { return HookUtil.getField(target, name); }
         catch (Throwable ignored) { return null; }
-    }
-
-    private static String readStringField(Object target, String name) {
-        Object value = readField(target, name);
-        return value instanceof String ? (String) value : null;
-    }
-
-    private static int readIntField(Object target, String name, int fallback) {
-        Object value = readField(target, name);
-        return value instanceof Number ? ((Number) value).intValue() : fallback;
     }
 
     private static boolean readBooleanField(Object target, String name, boolean fallback) {
