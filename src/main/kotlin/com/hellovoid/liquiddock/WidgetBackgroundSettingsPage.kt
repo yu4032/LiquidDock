@@ -140,7 +140,7 @@ private fun loadDiscoveredWidgetBackgrounds(): List<WidgetBackgroundDiscoverySna
     return remote.all.values
         .asSequence()
         .filterIsInstance<String>()
-        .mapNotNull(WidgetBackgroundDiscoveryCodec::decode)
+        .mapNotNull { WidgetBackgroundDiscoveryCodec.decode(it) }
         .filter { it.targets().isNotEmpty() }
         .sortedWith(
             compareByDescending<WidgetBackgroundDiscoverySnapshot> { it.lastSeenMillis() }
