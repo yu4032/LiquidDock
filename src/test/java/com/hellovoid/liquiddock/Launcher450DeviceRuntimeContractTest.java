@@ -7,31 +7,38 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.Test;
 
-/** Source gates derived from Launcher 4.50 device logs, not just JADX structure. */
+/** Source gates derived from the actual Launcher 4.50 mode/layout implementation. */
 public class Launcher450DeviceRuntimeContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void workstationExitCannotSettleBeforeNativeGeometryIsReady() throws Exception {
+    @Test public void workstationExitUsesModeMessageAndVendorRoundRectBoundary() throws Exception {
         String settlement = Files.readString(
                 MAIN.resolve("Launcher450DockTransitionSettlement.java"));
-        String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String mainHook = Files.readString(MAIN.resolve("MainHook.java"));
 
+        assertTrue(settlement.contains("LauncherModeChangedMessage"));
+        assertTrue(settlement.contains("isEnterLaptopMode"));
+        assertTrue(settlement.contains("isExitLaptopMode"));
+        assertTrue(settlement.contains("updateRoundRect"));
         assertTrue(settlement.contains("MiuixGlassHook.hasReadyNativeGeometry(background)"));
-        assertTrue(settlement.contains("settleIfReady"));
-        assertTrue(glass.contains("Launcher450DockTransitionSettlement.settleIfReady(dockBg)"));
+        assertTrue(settlement.contains("boundary=updateRoundRect"));
+        assertFalse(settlement.contains("mViewRadiusAnimator"));
+        assertFalse(settlement.contains("AnimatorListenerAdapter"));
+
+        int setMode = mainHook.indexOf("private static void setWorkstationMode(boolean enabled)");
+        assertTrue(setMode >= 0);
+        String logicalModeBody = mainHook.substring(setMode,
+                Math.min(mainHook.length(), setMode + 900));
+        assertFalse(logicalModeBody.contains("DockWorkstationVisualTransition.global().onModeChanged"));
+        assertFalse(logicalModeBody.contains("syncAll(dockBg)"));
     }
 
-    @Test public void boundPrismalHostOwnsShadowInsteadOfVendorParent() throws Exception {
-        String bridge = Files.readString(MAIN.resolve("DockNativeShadowBridge.java"));
-        String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+    @Test public void onlyModeMessageHookOwnsVisualStrokeTransition() throws Exception {
         String renderer = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+        String settlement = Files.readString(
+                MAIN.resolve("Launcher450DockTransitionSettlement.java"));
 
-        assertTrue(glass.contains("boundHostFor"));
-        assertTrue(glass.contains("isCurrentHost"));
-        assertTrue(bridge.contains("MiuixGlassHook.boundHostFor(target)"));
-        assertTrue(bridge.contains("applyViewShadow"));
-        assertTrue(bridge.contains("[ShadowOwner]"));
-        assertTrue(renderer.contains("MiuixGlassHook.isCurrentHost(host)"));
-        assertFalse(renderer.contains("if (isNativeHost(host)) return;\n\n        boolean enabled"));
+        assertFalse(renderer.contains("LaptopStateManager"));
+        assertTrue(settlement.contains("DockStrokeRenderer.onWorkstationModeChanged(true)"));
     }
 }
