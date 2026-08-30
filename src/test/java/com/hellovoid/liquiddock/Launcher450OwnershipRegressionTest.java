@@ -20,8 +20,8 @@ public class Launcher450OwnershipRegressionTest {
                 renderer.contains("releaseNativeStrokeOwner"));
         assertTrue("a live Prismal binding must suppress a second native foreground stroke",
                 renderer.contains("MiuixGlassHook.isBoundTo(background)"));
-        assertTrue("binding Prismal must actively retire any foreground installed before hook order settles",
-                glass.contains("DockStrokeRenderer.releaseNativeStrokeOwner(dockBg)"));
+        assertTrue("configuring the Prismal edge must retire the native parent foreground",
+                renderer.contains("if (isNativeHost(parent)) releaseNativeStrokeOwner(parent);"));
         assertTrue("the actual Prismal host remains the configured edge owner",
                 glass.contains("DockStrokeRenderer.configureReplacingForeground(\n                host, config.dock, nativeRadius);"));
     }
@@ -29,11 +29,15 @@ public class Launcher450OwnershipRegressionTest {
     @Test
     public void workstationEntryCannotLeaveTheNormalModeNativeStrokeAttached() throws Exception {
         String renderer = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
-        String main = Files.readString(MAIN.resolve("MainHook.java"));
 
+        assertTrue(renderer.contains("installWorkstationTransitionHook(classLoader);"));
+        assertTrue(renderer.contains("com.miui.home.launcher.laptop.LaptopStateManager"));
+        assertTrue(renderer.contains("\"onLaptopModeChanged\""));
+        assertTrue(renderer.contains("if (entering) onWorkstationModeChanged(true);"));
         assertTrue(renderer.contains("onWorkstationModeChanged(boolean enabled)"));
         assertTrue(renderer.contains("if (!enabled) return;"));
-        assertTrue(main.contains("DockStrokeRenderer.onWorkstationModeChanged(enabled);"));
+        assertFalse("workstation exit must not synthesize or restore a stale radius",
+                renderer.contains("onWorkstationModeChanged(false)"));
     }
 
     @Test
