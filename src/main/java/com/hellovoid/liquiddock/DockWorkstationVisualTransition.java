@@ -21,8 +21,17 @@ final class DockWorkstationVisualTransition {
     }
 
     synchronized int onModeChanged(boolean entering) {
+        // Launcher 4.50 emits onLaptopModeChanged(false) during ordinary process startup.
+        // That is an idempotent state announcement, not a workstation-exit transition.
+        if (entering) {
+            if (phase == Phase.WORKSTATION) return generation;
+            generation++;
+            phase = Phase.WORKSTATION;
+            return generation;
+        }
+        if (phase != Phase.WORKSTATION) return generation;
         generation++;
-        phase = entering ? Phase.WORKSTATION : Phase.EXITING_WORKSTATION;
+        phase = Phase.EXITING_WORKSTATION;
         return generation;
     }
 
