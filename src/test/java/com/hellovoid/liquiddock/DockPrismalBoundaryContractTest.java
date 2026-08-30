@@ -25,12 +25,19 @@ public class DockPrismalBoundaryContractTest {
         assertTrue(shape.contains("new RectF(.5f, .5f, width - .5f, height - .5f)"));
     }
 
-    @Test public void textureViewIsNotClippedByASecondAndroidMask() throws Exception {
+    /**
+     * Isolation experiment for the 2.1.2 regression: restore only the Host mask removed by
+     * 35939d6, while keeping every later Prismal/shadow/stroke change unchanged.
+     */
+    @Test public void textureViewIsClippedByHostMaskAsBefore212HighlightFix() throws Exception {
         String host = Files.readString(MAIN.resolve("DockLiquidGlassHostView.java"));
         int dispatch = host.indexOf("dispatchDraw(Canvas canvas)");
         assertTrue(dispatch >= 0);
         String body = host.substring(dispatch);
+        assertTrue(body.contains("ensureClipPath();"));
+        assertTrue(body.contains("if (clipPath.isEmpty()) return;"));
+        assertTrue(body.contains("canvas.clipPath(clipPath);"));
         assertTrue(body.contains("super.dispatchDraw(canvas);"));
-        assertFalse(body.contains("canvas.clipPath"));
+        assertTrue(body.contains("canvas.restoreToCount(save);"));
     }
 }
