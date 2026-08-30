@@ -22,124 +22,85 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          def replace_once(path: Path, old: str, new: str, label: str):
-              text = path.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
-              path.write_text(text.replace(old, new, 1))
+          def lines(path):
+              return path.read_text().splitlines()
+
+          def unique_index(rows, stripped, label):
+              matches = [i for i, row in enumerate(rows) if row.strip() == stripped]
+              if len(matches) != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {len(matches)}")
+              return matches[0]
 
           schema = Path("src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java")
-          replace_once(
-              schema,
-              '''        public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
-                  "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
-          ''',
-              '''        public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
-                  "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
-          public static final ConfigKey<Boolean> WIDGET_BACKGROUND_BUILTIN_RULES = bool(
-                  "liquid_widget_background_builtin_rules", true, true, true,
-                  ConfigKey.ExportMode.ALWAYS);
-          public static final ConfigKey<String> WIDGET_BACKGROUND_USER_RULES = string(
-                  "liquid_widget_background_user_rules", "", "", "",
-                  ConfigKey.ExportMode.ALWAYS);
-          ''',
-              "ConfigSchema widget keys",
-          )
-          replace_once(
-              schema,
-              '''        add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
-                  Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
-          ''',
-              '''        add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
-                  Glass.WIDGET_DARK_CONTENT, Glass.WIDGET_BACKGROUND_BUILTIN_RULES,
-                  Glass.WIDGET_BACKGROUND_USER_RULES, Glass.ICON_GLASS,
-          ''',
-              "ConfigSchema all() registration",
-          )
+          rows = lines(schema)
+          i = unique_index(rows,
+              "public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(",
+              "ConfigSchema widget key anchor")
+          if rows[i + 1].strip() != '"liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);':
+              raise SystemExit("ConfigSchema widget key body changed")
+          rows[i + 2:i + 2] = [
+              "        public static final ConfigKey<Boolean> WIDGET_BACKGROUND_BUILTIN_RULES = bool(",
+              "                \"liquid_widget_background_builtin_rules\", true, true, true,",
+              "                ConfigKey.ExportMode.ALWAYS);",
+              "        public static final ConfigKey<String> WIDGET_BACKGROUND_USER_RULES = string(",
+              "                \"liquid_widget_background_user_rules\", \"\", \"\", \"\",",
+              "                ConfigKey.ExportMode.ALWAYS);",
+          ]
+          j = unique_index(rows,
+              "Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,",
+              "ConfigSchema all() anchor")
+          rows[j:j + 1] = [
+              "                Glass.WIDGET_DARK_CONTENT, Glass.WIDGET_BACKGROUND_BUILTIN_RULES,",
+              "                Glass.WIDGET_BACKGROUND_USER_RULES, Glass.ICON_GLASS,",
+          ]
+          schema.write_text("\n".join(rows) + "\n")
 
           compose = Path("src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt")
-          replace_once(
-              compose,
-              '''    Liquid(R.string.page_liquid),
-              LauncherHighlights(R.string.page_launcher_highlights),
-          ''',
-              '''    Liquid(R.string.page_liquid),
-              WidgetBackgrounds(R.string.page_widget_backgrounds),
-              LauncherHighlights(R.string.page_launcher_highlights),
-          ''',
-              "Compose Page enum",
-          )
-          replace_once(
-              compose,
-              '''private fun parentPage(page: Page): Page = when (page) {
-              Page.LauncherHighlights -> Page.Liquid
-              else -> Page.Home
-          }
-          ''',
-              '''private fun parentPage(page: Page): Page = when (page) {
-              Page.LauncherHighlights, Page.WidgetBackgrounds -> Page.Liquid
-              else -> Page.Home
-          }
-          ''',
-              "Compose parent page",
-          )
-          replace_once(
-              compose,
-              '''                Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }
-              Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
-          ''',
-              '''                Page.Liquid -> LiquidPage(
-                  padding,
-                  prefs,
-                  masterEnabled,
-                  openLauncherHighlights = { page = Page.LauncherHighlights },
-                  openWidgetBackgrounds = { page = Page.WidgetBackgrounds },
-              )
-              Page.WidgetBackgrounds -> WidgetBackgroundSettingsPage(padding, prefs, masterEnabled)
-              Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
-          ''',
-              "Compose route",
-          )
-          replace_once(
-              compose,
-              '''private fun LiquidPage(
-              padding: PaddingValues,
-              prefs: SharedPreferences,
-              masterEnabled: Boolean,
-              openLauncherHighlights: () -> Unit,
-          ) {
-          ''',
-              '''private fun LiquidPage(
-              padding: PaddingValues,
-              prefs: SharedPreferences,
-              masterEnabled: Boolean,
-              openLauncherHighlights: () -> Unit,
-              openWidgetBackgrounds: () -> Unit,
-          ) {
-          ''',
-              "LiquidPage signature",
-          )
-          replace_once(
-              compose,
-              '''        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
-              IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
-              ArrowPreference(
-                  stringResource(R.string.launcher_highlights_entry),
-          ''',
-              '''        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
-              IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
-              ArrowPreference(
-                  stringResource(R.string.page_widget_backgrounds),
-                  summary = "从 Launcher 4.50 实时发现的 MAML / RemoteViews 元素中逐项选择要隐藏的背景",
-                  enabled = masterEnabled && liquidGlass && widgetGlass,
-                  onClick = openWidgetBackgrounds,
-              )
-              ArrowPreference(
-                  stringResource(R.string.launcher_highlights_entry),
-          ''',
-              "LiquidPage widget background entry",
-          )
+          rows = lines(compose)
+          i = unique_index(rows, "LauncherHighlights(R.string.page_launcher_highlights),", "Compose Page enum")
+          if rows[i - 1].strip() != "Liquid(R.string.page_liquid),":
+              raise SystemExit("Compose Liquid enum anchor changed")
+          rows.insert(i, "    WidgetBackgrounds(R.string.page_widget_backgrounds),")
+
+          i = unique_index(rows, "Page.LauncherHighlights -> Page.Liquid", "Compose parent page")
+          rows[i] = "    Page.LauncherHighlights, Page.WidgetBackgrounds -> Page.Liquid"
+
+          i = unique_index(rows,
+              "Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }",
+              "Compose Liquid route")
+          if rows[i + 1].strip() != "Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)":
+              raise SystemExit("Compose LauncherHighlights route anchor changed")
+          rows[i:i + 2] = [
+              "                Page.Liquid -> LiquidPage(",
+              "                    padding,",
+              "                    prefs,",
+              "                    masterEnabled,",
+              "                    openLauncherHighlights = { page = Page.LauncherHighlights },",
+              "                    openWidgetBackgrounds = { page = Page.WidgetBackgrounds },",
+              "                )",
+              "                Page.WidgetBackgrounds -> WidgetBackgroundSettingsPage(padding, prefs, masterEnabled)",
+              "                Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)",
+          ]
+
+          i = unique_index(rows, "openLauncherHighlights: () -> Unit,", "LiquidPage signature")
+          if not any(row.strip() == "private fun LiquidPage(" for row in rows[max(0, i - 5):i]):
+              raise SystemExit("LiquidPage signature anchor changed")
+          rows.insert(i + 1, "    openWidgetBackgrounds: () -> Unit,")
+
+          i = unique_index(rows,
+              "IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)",
+              "LiquidPage widget entry anchor")
+          if rows[i + 1].strip() != "ArrowPreference(" or rows[i + 2].strip() != "stringResource(R.string.launcher_highlights_entry),":
+              raise SystemExit("LiquidPage launcher highlight entry anchor changed")
+          rows[i + 1:i + 1] = [
+              "        ArrowPreference(",
+              "            stringResource(R.string.page_widget_backgrounds),",
+              "            summary = \"从 Launcher 4.50 实时发现的 MAML / RemoteViews 元素中逐项选择要隐藏的背景\",",
+              "            enabled = masterEnabled && liquidGlass && widgetGlass,",
+              "            onClick = openWidgetBackgrounds,",
+              "        )",
+          ]
+          compose.write_text("\n".join(rows) + "\n")
           PY
       - name: Commit exact wiring patch
         shell: bash
