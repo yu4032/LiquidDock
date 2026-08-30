@@ -244,8 +244,10 @@ final class MiuixGlassHook {
         suppressVendorMaterialBody(dockBg, nativeRadius);
         host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
         Miuix307ZeroCopyRenderer.sync(config.glass, Math.round(config.glass.blur));
-        DockStrokeRenderer.configureReplacingForeground(
-                host, config.dock, nativeRadius);
+        if (DockWorkstationVisualTransition.global().shouldCommitStrokeGeometry()) {
+            DockStrokeRenderer.configureReplacingForeground(
+                    host, config.dock, nativeRadius);
+        }
         MainHook.syncDockShadow(dockBg, config.dock);
         host.bringToFront();
         host.invalidate();
