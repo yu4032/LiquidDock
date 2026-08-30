@@ -10,8 +10,9 @@ public class DockWorkstationVisualTransitionTest {
         DockWorkstationVisualTransition state = new DockWorkstationVisualTransition();
         assertTrue(state.shouldCommitStrokeGeometry());
 
+        // Workstation itself still has one Prismal-host stroke; only the exit transition is held.
         state.onModeChanged(true);
-        assertFalse(state.shouldCommitStrokeGeometry());
+        assertTrue(state.shouldCommitStrokeGeometry());
 
         int exitGeneration = state.onModeChanged(false);
         assertFalse(state.shouldCommitStrokeGeometry());
@@ -29,6 +30,6 @@ public class DockWorkstationVisualTransitionTest {
         state.onModeChanged(true);
 
         assertFalse(state.settleExit(exitGeneration));
-        assertFalse(state.shouldCommitStrokeGeometry());
+        assertTrue(state.shouldCommitStrokeGeometry());
     }
 }
