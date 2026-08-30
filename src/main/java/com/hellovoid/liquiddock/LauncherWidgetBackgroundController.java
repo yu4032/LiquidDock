@@ -10,20 +10,24 @@ final class LauncherWidgetBackgroundController {
         if (host == null) return;
         LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host);
         if (isMamlHost(host)) {
+            LauncherRemoteViewsBackgroundRuleExecutor.release(host);
             LauncherMamlBackgroundRuleExecutor.claim(host);
+        } else {
+            LauncherMamlBackgroundRuleExecutor.release(host);
+            LauncherRemoteViewsBackgroundRuleExecutor.claim(host);
         }
     }
 
     static void claimLoadedMamlRoot(View host, Object root) {
         if (host == null || root == null || !isMamlHost(host)) return;
+        LauncherRemoteViewsBackgroundRuleExecutor.release(host);
         LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(host, root);
     }
 
     static void release(View host) {
         if (host == null) return;
-        if (isMamlHost(host)) {
-            LauncherMamlBackgroundRuleExecutor.release(host);
-        }
+        LauncherMamlBackgroundRuleExecutor.release(host);
+        LauncherRemoteViewsBackgroundRuleExecutor.release(host);
         LauncherGlassVendorMaterialSuppressor.releaseWidgetMaterial(host);
     }
 
