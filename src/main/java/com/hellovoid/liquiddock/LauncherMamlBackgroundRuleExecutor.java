@@ -42,7 +42,7 @@ final class LauncherMamlBackgroundRuleExecutor {
             return;
         }
 
-        publishDiscovery(identity, root);
+        publishDiscovery(host.getContext(), identity, root);
 
         Set<String> userTargets = new LinkedHashSet<>();
         for (WidgetBackgroundUserRule rule : WidgetBackgroundUserPreferences.loadRules()) {
@@ -141,7 +141,8 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (claim != null) restore(claim);
     }
 
-    private static void publishDiscovery(WidgetBackgroundIdentity identity, Object root) {
+    private static void publishDiscovery(
+            android.content.Context context, WidgetBackgroundIdentity identity, Object root) {
         Object value = readField(root, "mElements");
         if (!(value instanceof Map)) return;
         Map<?, ?> elements = (Map<?, ?>) value;
@@ -158,7 +159,7 @@ final class LauncherMamlBackgroundRuleExecutor {
                     name, element.getClass().getSimpleName()));
         }
         targets.sort((a, b) -> a.name().compareTo(b.name()));
-        WidgetBackgroundDiscoveryStore.publish(new WidgetBackgroundDiscoverySnapshot(
+        WidgetBackgroundDiscoveryStore.publish(context, new WidgetBackgroundDiscoverySnapshot(
                 identity, targets, System.currentTimeMillis()));
     }
 

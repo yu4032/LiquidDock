@@ -33,7 +33,7 @@ public class Launcher450OwnershipRegressionTest {
     }
 
     @Test
-    public void workstationExitUsesLauncher450AnimatorStateInsteadOfNonexistentIsAnimating()
+    public void workstationExitUsesLauncher450FinalRoundRectInsteadOfAnimatorState()
             throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
         String settlement = Files.readString(
@@ -43,8 +43,8 @@ public class Launcher450OwnershipRegressionTest {
         assertTrue(main.contains("mViewRadiusAnimator"));
         assertTrue(main.contains("animatorSet"));
         assertFalse(main.contains("HookUtil.invoke(v, \"isAnimating\")"));
-        assertTrue(settlement.contains("updateBackgroundSize"));
-        assertTrue(settlement.contains("mViewRadiusAnimator"));
+        assertTrue(settlement.contains("updateRoundRect"));
+        assertFalse(settlement.contains("mViewRadiusAnimator"));
         assertTrue(settlement.contains("settleExit"));
         assertTrue(glass.contains("shouldCommitStrokeGeometry"));
     }

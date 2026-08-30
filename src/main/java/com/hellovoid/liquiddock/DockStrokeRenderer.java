@@ -154,6 +154,7 @@ final class DockStrokeRenderer {
             }
         }
         host.invalidate();
+        logOwner("release", host);
     }
 
     /** Remove only the normal-mode native owner on workstation entry. */
@@ -243,7 +244,26 @@ final class DockStrokeRenderer {
             }
             applyNativeOuterShadow(host, style);
             host.invalidate();
+            logOwner("configure", host);
         }
+    }
+
+    private static void logOwner(String action, View host) {
+        int activeOwnerCount = 0;
+        synchronized (INSTALLED) {
+            for (Map.Entry<View, StrokeDrawable> entry : INSTALLED.entrySet()) {
+                View candidate = entry.getKey();
+                if (candidate != null && candidate.getForeground() == entry.getValue()) {
+                    activeOwnerCount++;
+                }
+            }
+        }
+        MainHook.log("[StrokeOwner] action=" + action
+                + " host=" + (host != null ? host.getClass().getName() : "null")
+                + " identity=" + (host != null ? System.identityHashCode(host) : 0)
+                + " foreground=" + (host != null && host.getForeground() != null
+                        ? host.getForeground().getClass().getName() : "null")
+                + " activeOwnerCount=" + activeOwnerCount);
     }
 
     static void onRuntimeStrokeDisabled() {
@@ -382,6 +402,16 @@ final class DockStrokeRenderer {
             }
             return cachedNativeConfig;
         }
+    }
+
+    /**
+     * A foreground Drawable is clipped to its host bounds. The legacy overlay offset described
+     * how far an independently sized overlay could extend outside the Dock; it cannot be reused as
+     * a negative inset on the in-place foreground. Keep the complete ring inside the host instead.
+     */
+    private static float[] resolveSquircleRingInsets(float thickness, float legacyOffset) {
+        float safeThickness = Math.max(0f, thickness);
+        return new float[] {0f, safeThickness * 0.5f};
     }
 
     private static final class Style {
@@ -569,10 +599,12 @@ final class DockStrokeRenderer {
             float innerCp;
 
             if (s.squircle) {
-                outerInset = -s.squircleOffsetPx;
-                innerInset = outerInset + thickness;
-                outerRadius = Math.max(0f, effectiveRadius + s.squircleOffsetPx);
-                innerRadius = Math.max(0f, outerRadius - thickness * 0.5f);
+                float[] ringInsets = resolveSquircleRingInsets(
+                        thickness, s.squircleOffsetPx);
+                outerInset = ringInsets[0];
+                innerInset = ringInsets[1];
+                outerRadius = effectiveRadius;
+                innerRadius = Math.max(0f, outerRadius - innerInset);
                 innerCp = 0.65f;
             } else if (s.fillDiff) {
                 outerInset = 0f;

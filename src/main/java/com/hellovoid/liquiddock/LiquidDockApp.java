@@ -18,12 +18,15 @@ public final class LiquidDockApp extends Application
         implements XposedServiceHelper.OnServiceListener,
         SharedPreferences.OnSharedPreferenceChangeListener {
     private static volatile XposedService service;
+    static final String WIDGET_DISCOVERY_GROUP = "widget_discovery";
+    private static volatile LiquidDockApp instance;
     private SharedPreferences localPreferences;
     private boolean reconciling;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         localPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         // Upgrade the app-local authority before XposedService can synchronously bind and seed
         // Remote Preferences. Otherwise a stale local store can overwrite the Launcher's freshly
@@ -88,6 +91,12 @@ public final class LiquidDockApp extends Application
     public static SharedPreferences remotePreferences(String group) {
         XposedService value = service;
         return value != null ? value.getRemotePreferences(group) : null;
+    }
+
+    public static SharedPreferences widgetDiscoveryPreferences() {
+        LiquidDockApp value = instance;
+        return value != null ? value.getSharedPreferences(
+                WIDGET_DISCOVERY_GROUP, MODE_PRIVATE) : null;
     }
 
     /** Full-seed only — used on initial bind.  Incremental updates use syncKeyToRemote. */

@@ -30,7 +30,7 @@ final class LauncherRemoteViewsBackgroundRuleExecutor {
 
         Map<String, View> namedBackgrounds = new LinkedHashMap<>();
         collectNamedBackgroundViews(root, namedBackgrounds);
-        publishDiscovery(identity, namedBackgrounds);
+        publishDiscovery(host.getContext(), identity, namedBackgrounds);
 
         List<String> selected = new ArrayList<>();
         for (WidgetBackgroundUserRule rule : WidgetBackgroundUserPreferences.loadRules()) {
@@ -100,7 +100,7 @@ final class LauncherRemoteViewsBackgroundRuleExecutor {
         }
     }
 
-    private static void publishDiscovery(
+    private static void publishDiscovery(android.content.Context context,
             WidgetBackgroundIdentity identity, Map<String, View> namedBackgrounds) {
         List<WidgetBackgroundDiscoveryTarget> targets = new ArrayList<>();
         for (Map.Entry<String, View> entry : namedBackgrounds.entrySet()) {
@@ -110,7 +110,7 @@ final class LauncherRemoteViewsBackgroundRuleExecutor {
                     entry.getKey(), view.getClass().getSimpleName()));
         }
         targets.sort((a, b) -> a.name().compareTo(b.name()));
-        WidgetBackgroundDiscoveryStore.publish(new WidgetBackgroundDiscoverySnapshot(
+        WidgetBackgroundDiscoveryStore.publish(context, new WidgetBackgroundDiscoverySnapshot(
                 identity, targets, System.currentTimeMillis()));
     }
 

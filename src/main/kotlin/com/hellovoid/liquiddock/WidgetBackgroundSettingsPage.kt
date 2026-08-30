@@ -136,8 +136,8 @@ internal fun WidgetBackgroundSettingsPage(
 }
 
 private fun loadDiscoveredWidgetBackgrounds(): List<WidgetBackgroundDiscoverySnapshot> {
-    val remote = LiquidDockApp.remotePreferences("widget_discovery") ?: return emptyList()
-    return remote.all.values
+    val local = LiquidDockApp.widgetDiscoveryPreferences() ?: return emptyList()
+    return local.all.values
         .asSequence()
         .filterIsInstance<String>()
         .mapNotNull { WidgetBackgroundDiscoveryCodec.decode(it) }

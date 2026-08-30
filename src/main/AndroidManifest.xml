@@ -11,6 +11,11 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
+        <provider
+            android:name=".WidgetBackgroundDiscoveryProvider"
+            android:authorities="com.hellovoid.liquiddock.widget-discovery"
+            android:enabled="true"
+            android:exported="true" />
         <activity
             android:name=".ComposeSettingsActivity"
             android:exported="true"
