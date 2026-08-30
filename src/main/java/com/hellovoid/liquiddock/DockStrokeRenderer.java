@@ -445,12 +445,6 @@ final class DockStrokeRenderer {
      * cannot be represented as a negative inset.  Keep the complete ring inside the host and use
      * a half-width inner inset to preserve the configured visual weight.
      */
-    private static float[] resolveSquircleRingInsets(
-            float strokeWidthPx, float ignoredLegacyOutwardOffsetPx) {
-        float safeWidth = Math.max(0f, strokeWidthPx);
-        return new float[] {0f, safeWidth * 0.5f};
-    }
-
     private static final class Style {
         final boolean squircle;
         final boolean fillDiff;
@@ -636,7 +630,7 @@ final class DockStrokeRenderer {
             float innerCp;
 
             if (s.squircle) {
-                float[] insets = resolveSquircleRingInsets(
+                float[] insets = DockStrokeGeometry.resolveSquircleRingInsets(
                         thickness, s.squircleOffsetPx);
                 outerInset = insets[0];
                 innerInset = insets[1];

@@ -32,7 +32,7 @@ public class WidgetBackgroundSettingsContractTest {
         assertTrue(Files.exists(pagePath));
 
         String page = Files.readString(pagePath);
-        assertTrue(page.contains("LiquidDockApp.remotePreferences"));
+        assertTrue(page.contains("LiquidDockApp.widgetDiscoveryPreferences()"));
         assertTrue(page.contains("WidgetBackgroundDiscoveryCodec.decode"));
         assertTrue(page.contains("WidgetBackgroundUserRuleCodec.encode"));
         assertTrue(page.contains("SwitchPreference("));
