@@ -11,23 +11,25 @@ import org.junit.Test;
 /**
  * Contracts derived from HyperOS Launcher 4.50 native material ownership.
  *
- * <p>Launcher itself removes FolderIcon's icon_icon drawable alpha and the standard AppWidget
- * RemoteViews content-root background when native blur is active. RemoteViews marks that direct
- * content root with the android.R.id.widget_frame keyed tag. LiquidDock must take over those same
- * background owners without hiding preview/content views.</p>
+ * <p>Launcher itself removes FolderIcon's icon_icon drawable alpha and, for standard AppWidgets,
+ * resolves android.R.id.widget_frame recursively from the single direct RemoteViews child before
+ * clearing that resolved view's background. LiquidDock must take over those same background owners
+ * without hiding preview/content views.</p>
  */
 public class LauncherGlassVendorMaterialSuppressionContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void standardWidgetGlassOwnsOnlyTaggedRemoteViewsRootBackground() throws Exception {
+    public void standardWidgetGlassOwnsLauncher450ResolvedWidgetFrameBackground() throws Exception {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
 
         assertTrue(helper.contains("android.R.id.widget_frame"));
         assertTrue(helper.contains("resolveRemoteViewsContent"));
-        assertTrue(helper.contains("child.getTag(android.R.id.widget_frame)"));
+        assertTrue(helper.contains("group.getChildCount() != 1"));
+        assertTrue(helper.contains("View content = group.getChildAt(0);"));
+        assertTrue(helper.contains("content.findViewById(android.R.id.widget_frame)"));
         assertTrue(helper.contains("setBackground(null)"));
         assertTrue(helper.contains("ORIGINAL_WIDGET_BACKGROUNDS"));
         assertTrue(helper.contains("releaseWidgetMaterial"));
@@ -36,7 +38,7 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(controller.contains("LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host)"));
 
         assertFalse(helper.contains("LauncherMamlBackgroundRuleExecutor"));
-        assertFalse(helper.contains("findViewById(android.R.id.widget_frame)"));
+        assertFalse(helper.contains("child.getTag(android.R.id.widget_frame)"));
         assertFalse(helper.contains("setAlpha(0"));
         assertFalse(helper.contains("removeAllViews"));
         assertFalse(helper.contains("setVisibility(View.INVISIBLE"));
