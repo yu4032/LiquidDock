@@ -16,6 +16,10 @@ final class DockWorkstationVisualTransition {
 
     static DockWorkstationVisualTransition global() { return GLOBAL; }
 
+    synchronized void initialize(boolean workstation) {
+        phase = workstation ? Phase.WORKSTATION : Phase.NORMAL;
+    }
+
     synchronized int onModeChanged(boolean entering) {
         generation++;
         phase = entering ? Phase.WORKSTATION : Phase.EXITING_WORKSTATION;
