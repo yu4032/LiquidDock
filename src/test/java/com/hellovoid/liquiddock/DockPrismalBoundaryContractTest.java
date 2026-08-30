@@ -16,7 +16,7 @@ public class DockPrismalBoundaryContractTest {
         String prismal = Files.readString(MAIN.resolve("DockPrismalOutlinePath.java"));
 
         assertTrue(host.contains("DockPrismalOutlinePath.build"));
-        assertFalse(host.contains("DockShapePath.build(clipPath"));
+        assertFalse(host.contains("DockShapePath.build(outlinePath"));
         assertTrue(prismal.contains("new RectF(0f, 0f, width, height)"));
         assertFalse(prismal.contains("new RectF(.5f, .5f"));
         assertFalse(prismal.contains("width - .5f"));
@@ -34,9 +34,9 @@ public class DockPrismalBoundaryContractTest {
         int dispatch = host.indexOf("dispatchDraw(Canvas canvas)");
         assertTrue(dispatch >= 0);
         String body = host.substring(dispatch);
-        assertTrue(body.contains("ensureClipPath();"));
-        assertTrue(body.contains("if (clipPath.isEmpty()) return;"));
-        assertTrue(body.contains("canvas.clipPath(clipPath);"));
+        assertTrue(body.contains("ensureOutlinePath();"));
+        assertTrue(body.contains("if (outlinePath.isEmpty()) return;"));
+        assertTrue(body.contains("canvas.clipPath(outlinePath);"));
         assertTrue(body.contains("super.dispatchDraw(canvas);"));
         assertTrue(body.contains("canvas.restoreToCount(save);"));
     }
