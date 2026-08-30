@@ -3,14 +3,14 @@ package com.hellovoid.liquiddock;
 import java.util.Objects;
 
 /** Exact, user-selected widget background target discovered from a live Launcher 4.50 widget. */
-final class WidgetBackgroundUserRule {
-    enum TargetKind { MAML_ELEMENT, REMOTE_VIEWS_RESOURCE }
+public final class WidgetBackgroundUserRule {
+    public enum TargetKind { MAML_ELEMENT, REMOTE_VIEWS_RESOURCE }
 
     private final WidgetBackgroundIdentity identity;
     private final TargetKind targetKind;
     private final String target;
 
-    WidgetBackgroundUserRule(
+    public WidgetBackgroundUserRule(
             WidgetBackgroundIdentity identity, TargetKind targetKind, String target) {
         if (identity == null) throw new IllegalArgumentException("identity == null");
         if (targetKind == null) throw new IllegalArgumentException("targetKind == null");
@@ -20,11 +20,11 @@ final class WidgetBackgroundUserRule {
         this.target = target;
     }
 
-    WidgetBackgroundIdentity identity() { return identity; }
-    TargetKind targetKind() { return targetKind; }
-    String target() { return target; }
+    public WidgetBackgroundIdentity identity() { return identity; }
+    public TargetKind targetKind() { return targetKind; }
+    public String target() { return target; }
 
-    boolean matches(WidgetBackgroundIdentity candidate) {
+    public boolean matches(WidgetBackgroundIdentity candidate) {
         if (candidate == null) return false;
         return Objects.equals(identity.type, candidate.type)
                 && Objects.equals(identity.productId, candidate.productId)
