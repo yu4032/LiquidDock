@@ -17,7 +17,7 @@ public class Launcher450OwnershipRegressionTest {
         assertTrue(renderer.contains("releaseNativeStrokeOwner"));
         assertTrue(renderer.contains("MiuixGlassHook.isBoundTo(background)"));
         assertTrue(renderer.contains("if (isNativeHost(parent)) releaseNativeStrokeOwner(parent);"));
-        assertTrue(glass.contains("DockStrokeRenderer.configureReplacingForeground(\n                host, config.dock, nativeRadius);"));
+        assertTrue(glass.contains("DockStrokeRenderer.configureReplacingForeground(\n                    host, config.dock, nativeRadius);"));
     }
 
     @Test
@@ -36,15 +36,17 @@ public class Launcher450OwnershipRegressionTest {
     public void workstationExitUsesLauncher450AnimatorStateInsteadOfNonexistentIsAnimating()
             throws Exception {
         String main = Files.readString(MAIN.resolve("MainHook.java"));
-        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String settlement = Files.readString(
+                MAIN.resolve("Launcher450DockTransitionSettlement.java"));
+        String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
 
         assertTrue(main.contains("mViewRadiusAnimator"));
         assertTrue(main.contains("animatorSet"));
         assertFalse(main.contains("HookUtil.invoke(v, \"isAnimating\")"));
-        assertTrue(pipeline.contains("DockWorkstationVisualTransition"));
-        assertTrue(pipeline.contains("shouldCommitStrokeGeometry"));
-        assertTrue(pipeline.contains("mViewRadiusAnimator"));
-        assertTrue(pipeline.contains("settleExit"));
+        assertTrue(settlement.contains("updateBackgroundSize"));
+        assertTrue(settlement.contains("mViewRadiusAnimator"));
+        assertTrue(settlement.contains("settleExit"));
+        assertTrue(glass.contains("shouldCommitStrokeGeometry"));
     }
 
     @Test
