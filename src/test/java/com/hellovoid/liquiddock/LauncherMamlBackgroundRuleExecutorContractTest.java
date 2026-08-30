@@ -20,10 +20,13 @@ public class LauncherMamlBackgroundRuleExecutorContractTest {
                 + executor;
 
         assertTrue(executor.contains("WidgetBackgroundRuleEngine.loadBundled()"));
-        assertTrue(executor.contains("WidgetBackgroundIdentity"));
-        assertTrue(executor.contains("rule.elementNames()"));
+        assertTrue(executor.contains("WidgetBackgroundIdentityReader.maml(host)"));
+        assertTrue(executor.contains("WidgetBackgroundUserPreferences.loadRules()"));
+        assertTrue(executor.contains("WidgetBackgroundUserRule.TargetKind.MAML_ELEMENT"));
+        assertTrue(executor.contains("builtIn.elementNames()"));
         assertTrue(executor.contains("List<ElementClaim>"));
         assertTrue(executor.contains("originalShow"));
+        assertTrue(executor.contains("publishDiscovery"));
         assertTrue(executor.contains("dumpNamedElementsOnce"));
 
         assertFalse(allJava.contains("b8006e83-c497-4642-9815-f674b82842b0"));
@@ -36,13 +39,16 @@ public class LauncherMamlBackgroundRuleExecutorContractTest {
         String executor = Files.readString(
                 MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
-        int names = executor.indexOf("List<String> elementNames = rule.elementNames()");
-        int resolved = executor.indexOf("List<Object> resolved = new ArrayList<>", names);
+        int userSelection = executor.indexOf("elementNames = new ArrayList<>(userTargets)");
+        int builtInSelection = executor.indexOf("elementNames = builtIn.elementNames()");
+        int resolved = executor.indexOf("List<Object> resolved = new ArrayList<>(elementNames.size())");
         int missing = executor.indexOf("if (resolved.size() != elementNames.size())", resolved);
         int firstHide = executor.indexOf("\"show\", false", missing);
 
-        assertTrue(names >= 0);
-        assertTrue(resolved > names);
+        assertTrue(userSelection >= 0);
+        assertTrue(builtInSelection >= 0);
+        assertTrue(resolved > userSelection);
+        assertTrue(resolved > builtInSelection);
         assertTrue(missing > resolved);
         assertTrue("no MAML element may be hidden before every configured target resolves",
                 firstHide > missing);
