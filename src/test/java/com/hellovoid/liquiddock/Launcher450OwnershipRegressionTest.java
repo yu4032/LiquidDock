@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.Test;
 
-/** Regression contracts derived directly from the HyperOS Launcher 4.50 JADX output. */
 public class Launcher450OwnershipRegressionTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -15,29 +14,37 @@ public class Launcher450OwnershipRegressionTest {
     public void prismalDockAndVendorBackgroundNeverOwnStrokeAtTheSameTime() throws Exception {
         String renderer = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
         String glass = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
-
-        assertTrue("the native foreground owner must have an explicit glass handoff",
-                renderer.contains("releaseNativeStrokeOwner"));
-        assertTrue("a live Prismal binding must suppress a second native foreground stroke",
-                renderer.contains("MiuixGlassHook.isBoundTo(background)"));
-        assertTrue("configuring the Prismal edge must retire the native parent foreground",
-                renderer.contains("if (isNativeHost(parent)) releaseNativeStrokeOwner(parent);"));
-        assertTrue("the actual Prismal host remains the configured edge owner",
-                glass.contains("DockStrokeRenderer.configureReplacingForeground(\n                host, config.dock, nativeRadius);"));
+        assertTrue(renderer.contains("releaseNativeStrokeOwner"));
+        assertTrue(renderer.contains("MiuixGlassHook.isBoundTo(background)"));
+        assertTrue(renderer.contains("if (isNativeHost(parent)) releaseNativeStrokeOwner(parent);"));
+        assertTrue(glass.contains("DockStrokeRenderer.configureReplacingForeground(\n                host, config.dock, nativeRadius);"));
     }
 
     @Test
     public void workstationEntryCannotLeaveTheNormalModeNativeStrokeAttached() throws Exception {
         String renderer = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
-
         assertTrue(renderer.contains("installWorkstationTransitionHook(classLoader);"));
         assertTrue(renderer.contains("com.miui.home.launcher.laptop.LaptopStateManager"));
         assertTrue(renderer.contains("\"onLaptopModeChanged\""));
         assertTrue(renderer.contains("if (entering) onWorkstationModeChanged(true);"));
         assertTrue(renderer.contains("onWorkstationModeChanged(boolean enabled)"));
         assertTrue(renderer.contains("if (!enabled) return;"));
-        assertFalse("workstation exit must not synthesize or restore a stale radius",
-                renderer.contains("onWorkstationModeChanged(false)"));
+        assertFalse(renderer.contains("onWorkstationModeChanged(false)"));
+    }
+
+    @Test
+    public void workstationExitUsesLauncher450AnimatorStateInsteadOfNonexistentIsAnimating()
+            throws Exception {
+        String main = Files.readString(MAIN.resolve("MainHook.java"));
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+
+        assertTrue(main.contains("mViewRadiusAnimator"));
+        assertTrue(main.contains("animatorSet"));
+        assertFalse(main.contains("HookUtil.invoke(v, \"isAnimating\")"));
+        assertTrue(pipeline.contains("DockWorkstationVisualTransition"));
+        assertTrue(pipeline.contains("shouldCommitStrokeGeometry"));
+        assertTrue(pipeline.contains("mViewRadiusAnimator"));
+        assertTrue(pipeline.contains("settleExit"));
     }
 
     @Test
@@ -45,14 +52,9 @@ public class Launcher450OwnershipRegressionTest {
             throws Exception {
         String suppressor = Files.readString(
                 MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
-
-        assertTrue("Launcher 4.50 only enters setBlurIfNeed when the host has one RemoteViews child",
-                suppressor.contains("group.getChildCount() != 1"));
-        assertTrue("resolve from the same direct RemoteViews content object Launcher 4.50 uses",
-                suppressor.contains("View content = group.getChildAt(0);"));
-        assertTrue("Launcher 4.50 recursively finds android.R.id.widget_frame inside that content",
-                suppressor.contains("content.findViewById(android.R.id.widget_frame)"));
-        assertFalse("the old direct keyed-tag heuristic misses nested widget background owners",
-                suppressor.contains("child.getTag(android.R.id.widget_frame)"));
+        assertTrue(suppressor.contains("group.getChildCount() != 1"));
+        assertTrue(suppressor.contains("View content = group.getChildAt(0);"));
+        assertTrue(suppressor.contains("content.findViewById(android.R.id.widget_frame)"));
+        assertFalse(suppressor.contains("child.getTag(android.R.id.widget_frame)"));
     }
 }
