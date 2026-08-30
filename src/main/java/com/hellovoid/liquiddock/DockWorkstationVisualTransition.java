@@ -23,7 +23,7 @@ final class DockWorkstationVisualTransition {
     }
 
     synchronized boolean shouldCommitStrokeGeometry() {
-        return phase == Phase.NORMAL;
+        return phase != Phase.EXITING_WORKSTATION;
     }
 
     synchronized boolean isExiting() {
