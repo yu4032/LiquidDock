@@ -7,13 +7,13 @@ import java.util.Collections;
 import java.util.List;
 
 /** Stable text format used by ordinary LiquidDock config for user-selected widget targets. */
-final class WidgetBackgroundUserRuleCodec {
+public final class WidgetBackgroundUserRuleCodec {
     private static final String VERSION = "v1";
     private static final String NULL = "~";
 
     private WidgetBackgroundUserRuleCodec() {}
 
-    static String encode(List<WidgetBackgroundUserRule> rules) {
+    public static String encode(List<WidgetBackgroundUserRule> rules) {
         if (rules == null || rules.isEmpty()) return "";
         List<String> rows = new ArrayList<>();
         for (WidgetBackgroundUserRule rule : rules) {
@@ -35,7 +35,7 @@ final class WidgetBackgroundUserRuleCodec {
         return String.join("\n", rows);
     }
 
-    static List<WidgetBackgroundUserRule> decode(String encoded) {
+    public static List<WidgetBackgroundUserRule> decode(String encoded) {
         if (encoded == null || encoded.trim().isEmpty()) return List.of();
         List<WidgetBackgroundUserRule> result = new ArrayList<>();
         for (String row : encoded.split("\\n")) {
