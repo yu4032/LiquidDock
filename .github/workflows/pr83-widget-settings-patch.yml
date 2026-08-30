@@ -1,0 +1,153 @@
+name: PR83 widget settings patch
+
+on:
+  push:
+    branches:
+      - fix/450-workstation-stroke-widget-backgrounds
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/450-workstation-stroke-widget-backgrounds
+      - name: Patch schema and Compose routing
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str, label: str):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              path.write_text(text.replace(old, new, 1))
+
+          schema = Path("src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java")
+          replace_once(
+              schema,
+              '''        public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
+                  "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
+          ''',
+              '''        public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
+                  "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
+          public static final ConfigKey<Boolean> WIDGET_BACKGROUND_BUILTIN_RULES = bool(
+                  "liquid_widget_background_builtin_rules", true, true, true,
+                  ConfigKey.ExportMode.ALWAYS);
+          public static final ConfigKey<String> WIDGET_BACKGROUND_USER_RULES = string(
+                  "liquid_widget_background_user_rules", "", "", "",
+                  ConfigKey.ExportMode.ALWAYS);
+          ''',
+              "ConfigSchema widget keys",
+          )
+          replace_once(
+              schema,
+              '''        add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
+                  Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
+          ''',
+              '''        add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
+                  Glass.WIDGET_DARK_CONTENT, Glass.WIDGET_BACKGROUND_BUILTIN_RULES,
+                  Glass.WIDGET_BACKGROUND_USER_RULES, Glass.ICON_GLASS,
+          ''',
+              "ConfigSchema all() registration",
+          )
+
+          compose = Path("src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt")
+          replace_once(
+              compose,
+              '''    Liquid(R.string.page_liquid),
+              LauncherHighlights(R.string.page_launcher_highlights),
+          ''',
+              '''    Liquid(R.string.page_liquid),
+              WidgetBackgrounds(R.string.page_widget_backgrounds),
+              LauncherHighlights(R.string.page_launcher_highlights),
+          ''',
+              "Compose Page enum",
+          )
+          replace_once(
+              compose,
+              '''private fun parentPage(page: Page): Page = when (page) {
+              Page.LauncherHighlights -> Page.Liquid
+              else -> Page.Home
+          }
+          ''',
+              '''private fun parentPage(page: Page): Page = when (page) {
+              Page.LauncherHighlights, Page.WidgetBackgrounds -> Page.Liquid
+              else -> Page.Home
+          }
+          ''',
+              "Compose parent page",
+          )
+          replace_once(
+              compose,
+              '''                Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }
+              Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
+          ''',
+              '''                Page.Liquid -> LiquidPage(
+                  padding,
+                  prefs,
+                  masterEnabled,
+                  openLauncherHighlights = { page = Page.LauncherHighlights },
+                  openWidgetBackgrounds = { page = Page.WidgetBackgrounds },
+              )
+              Page.WidgetBackgrounds -> WidgetBackgroundSettingsPage(padding, prefs, masterEnabled)
+              Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
+          ''',
+              "Compose route",
+          )
+          replace_once(
+              compose,
+              '''private fun LiquidPage(
+              padding: PaddingValues,
+              prefs: SharedPreferences,
+              masterEnabled: Boolean,
+              openLauncherHighlights: () -> Unit,
+          ) {
+          ''',
+              '''private fun LiquidPage(
+              padding: PaddingValues,
+              prefs: SharedPreferences,
+              masterEnabled: Boolean,
+              openLauncherHighlights: () -> Unit,
+              openWidgetBackgrounds: () -> Unit,
+          ) {
+          ''',
+              "LiquidPage signature",
+          )
+          replace_once(
+              compose,
+              '''        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
+              IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
+              ArrowPreference(
+                  stringResource(R.string.launcher_highlights_entry),
+          ''',
+              '''        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
+              IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
+              ArrowPreference(
+                  stringResource(R.string.page_widget_backgrounds),
+                  summary = "从 Launcher 4.50 实时发现的 MAML / RemoteViews 元素中逐项选择要隐藏的背景",
+                  enabled = masterEnabled && liquidGlass && widgetGlass,
+                  onClick = openWidgetBackgrounds,
+              )
+              ArrowPreference(
+                  stringResource(R.string.launcher_highlights_entry),
+          ''',
+              "LiquidPage widget background entry",
+          )
+          PY
+      - name: Commit exact wiring patch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/pr83-widget-settings-patch.yml
+          git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java
+          git add src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
+          git commit -m "feat: wire widget background settings controls"
+          git push origin HEAD:fix/450-workstation-stroke-widget-backgrounds
