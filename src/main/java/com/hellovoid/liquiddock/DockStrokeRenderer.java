@@ -69,13 +69,21 @@ final class DockStrokeRenderer {
                         Object result =
                                 chain.proceed(chain.getArgs().toArray(new Object[0]));
 
-                        if (MainHook.isWorkstationMode()) return result;
-
                         View background = (View) chain.getThisObject();
                         float radius = readNativeRadius(background);
                         rememberNativeHost(background, radius);
-                        LiquidDockConfig.Dock config = currentNativeConfig();
 
+                        // Launcher 4.50 updates BlurBackground2 radius repeatedly while normal /
+                        // workstation geometry changes. Once the in-place Prismal child owns the
+                        // visible edge, or while workstation mode owns vendor geometry, leaving a
+                        // second StrokeDrawable on this parent creates two different round-rects.
+                        if (MainHook.isWorkstationMode()
+                                || MiuixGlassHook.isBoundTo(background)) {
+                            releaseNativeStrokeOwner(background);
+                            return result;
+                        }
+
+                        LiquidDockConfig.Dock config = currentNativeConfig();
                         configure(background, config, radius);
                         return result;
                     },
@@ -83,6 +91,33 @@ final class DockStrokeRenderer {
             MainHook.log("[DC] native blur Dock stroke renderer installed");
         } catch (Throwable error) {
             MainHook.log("[DC] native blur Dock stroke renderer unavailable: " + error);
+        }
+
+        installWorkstationTransitionHook(classLoader);
+    }
+
+    /**
+     * Launcher 4.50 LaptopStateManager is the explicit workstation transition boundary. Remove
+     * the normal-mode native foreground before vendor workstation geometry starts mutating; exit
+     * does not guess a radius and instead lets the next real setBackgroundRadius callback decide.
+     */
+    private static void installWorkstationTransitionHook(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader,
+                    "com.miui.home.launcher.laptop.LaptopStateManager",
+                    "onLaptopModeChanged",
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        boolean entering = args.length > 0 && args[0] instanceof Boolean
+                                && (Boolean) args[0];
+                        if (entering) onWorkstationModeChanged(true);
+                        return chain.proceed(args);
+                    },
+                    boolean.class);
+            MainHook.log("[DC] native Dock stroke workstation ownership hook installed");
+        } catch (Throwable error) {
+            MainHook.log("[DC] native Dock stroke workstation ownership hook unavailable: "
+                    + error);
         }
     }
 
@@ -103,6 +138,37 @@ final class DockStrokeRenderer {
     }
 
     /**
+     * Retire the native parent foreground while another renderer owns the visible Dock edge.
+     * KNOWN_NATIVE_HOSTS is deliberately preserved so a later non-glass native callback can
+     * reattach from an authoritative Launcher radius rather than from a synthetic transition value.
+     */
+    static void releaseNativeStrokeOwner(View host) {
+        if (!isNativeHost(host)) return;
+        synchronized (INSTALLED) {
+            StrokeDrawable installed = INSTALLED.remove(host);
+            if (installed != null && host.getForeground() == installed) {
+                host.setForeground(installed.baseForeground());
+            } else if (host.getForeground() instanceof StrokeDrawable) {
+                StrokeDrawable current = (StrokeDrawable) host.getForeground();
+                host.setForeground(current.baseForeground());
+            }
+        }
+        host.invalidate();
+    }
+
+    /** Remove only the normal-mode native owner on workstation entry. */
+    static void onWorkstationModeChanged(boolean enabled) {
+        if (!enabled) return;
+        ArrayList<View> nativeOwners = new ArrayList<>();
+        synchronized (INSTALLED) {
+            for (View host : new ArrayList<>(INSTALLED.keySet())) {
+                if (isNativeHost(host)) nativeOwners.add(host);
+            }
+        }
+        for (View host : nativeOwners) releaseNativeStrokeOwner(host);
+    }
+
+    /**
      * Configure a View's foreground border. For Liquid Glass this View is the glass
      * itself; for native mode it is HotSeatsListContentBlurBackground2.
      */
@@ -113,6 +179,10 @@ final class DockStrokeRenderer {
     /** 307 in-place glass owns the visual edge, so do not redraw the vendor foreground below it. */
     static void configureReplacingForeground(
             View host, LiquidDockConfig.Dock config, float radius) {
+        if (host != null && host.getParent() instanceof View) {
+            View parent = (View) host.getParent();
+            if (isNativeHost(parent)) releaseNativeStrokeOwner(parent);
+        }
         configureInternal(host, config, radius, false);
     }
 
@@ -212,6 +282,10 @@ final class DockStrokeRenderer {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
+                if (isNativeHost(host) && (MainHook.isWorkstationMode()
+                        || MiuixGlassHook.isBoundTo(host))) {
+                    continue;
+                }
                 Style style = Style.from(config, host);
                 installed.setStyle(style);
                 if (host.getForeground() != installed) {
@@ -230,7 +304,8 @@ final class DockStrokeRenderer {
         }
         for (Map.Entry<View, Float> entry : known) {
             View host = entry.getKey();
-            if (host == null) continue;
+            if (host == null || MainHook.isWorkstationMode()
+                    || MiuixGlassHook.isBoundTo(host)) continue;
             synchronized (INSTALLED) {
                 if (INSTALLED.containsKey(host)) continue;
             }
@@ -263,7 +338,13 @@ final class DockStrokeRenderer {
 
     static void updateRadius(View host, float radius) {
         if (host == null) return;
-        if (isNativeHost(host)) rememberNativeHost(host, radius);
+        if (isNativeHost(host)) {
+            rememberNativeHost(host, radius);
+            if (MainHook.isWorkstationMode() || MiuixGlassHook.isBoundTo(host)) {
+                releaseNativeStrokeOwner(host);
+                return;
+            }
+        }
         synchronized (INSTALLED) {
             StrokeDrawable drawable = INSTALLED.get(host);
             if (drawable == null && host.getForeground() instanceof StrokeDrawable) {
