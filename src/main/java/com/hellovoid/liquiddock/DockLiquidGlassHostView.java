@@ -26,9 +26,9 @@ final class DockLiquidGlassHostView extends FrameLayout {
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Prismal is the one visible alpha-mask authority. The View outline is shadow geometry
-        // only, so it must use Prismal's full zero-contour rather than DockShapePath's .5px
-        // pixel-center inset. No child clipping is performed with this path.
+        // Keep Prismal's full zero-contour as the authoritative boundary. The 2.1.2 isolation
+        // experiment also reuses this exact path for dispatchDraw clipping, restoring only the
+        // host-mask behavior removed by 35939d6 without restoring the old .5px geometry.
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
                 ensureOutlinePath();
@@ -90,10 +90,11 @@ final class DockLiquidGlassHostView extends FrameLayout {
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
-        // Prismal already produces the final rounded alpha mask. Clipping that TextureView again
-        // makes two independently antialiased masks meet at the same pixel boundary; on long
-        // horizontal edges their subpixel phases show up as a dotted white seam. The cached path
-        // remains the authoritative View outline for native shadow geometry only.
+        ensureOutlinePath();
+        if (outlinePath.isEmpty()) return;
+        int save = canvas.save();
+        canvas.clipPath(outlinePath);
         super.dispatchDraw(canvas);
+        canvas.restoreToCount(save);
     }
 }
