@@ -232,6 +232,12 @@ public final class ConfigSchema {
                 "liquid_widget_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
                 "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> WIDGET_BACKGROUND_BUILTIN_RULES = bool(
+                "liquid_widget_background_builtin_rules", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> WIDGET_BACKGROUND_USER_RULES = string(
+                "liquid_widget_background_user_rules", "", "", "",
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ICON_GLASS = bool(
                 "liquid_icon_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> FOLDER_CORNER_RADIUS = integer(
@@ -498,7 +504,8 @@ public final class ConfigSchema {
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
-                Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
+                Glass.WIDGET_DARK_CONTENT, Glass.WIDGET_BACKGROUND_BUILTIN_RULES,
+                Glass.WIDGET_BACKGROUND_USER_RULES, Glass.ICON_GLASS,
                 Glass.FOLDER_CORNER_RADIUS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
                 Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,

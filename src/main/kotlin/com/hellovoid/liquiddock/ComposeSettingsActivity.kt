@@ -74,6 +74,7 @@ private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     Liquid(R.string.page_liquid),
+    WidgetBackgrounds(R.string.page_widget_backgrounds),
     LauncherHighlights(R.string.page_launcher_highlights),
     Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
     Data(R.string.page_data),
@@ -81,7 +82,7 @@ private enum class Page(val titleRes: Int) {
 }
 
 private fun parentPage(page: Page): Page = when (page) {
-    Page.LauncherHighlights -> Page.Liquid
+    Page.LauncherHighlights, Page.WidgetBackgrounds -> Page.Liquid
     else -> Page.Home
 }
 
@@ -410,7 +411,14 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
-                Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }
+                Page.Liquid -> LiquidPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    openLauncherHighlights = { page = Page.LauncherHighlights },
+                    openWidgetBackgrounds = { page = Page.WidgetBackgrounds },
+                )
+                Page.WidgetBackgrounds -> WidgetBackgroundSettingsPage(padding, prefs, masterEnabled)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
                 Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
@@ -552,6 +560,7 @@ private fun LiquidPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     openLauncherHighlights: () -> Unit,
+    openWidgetBackgrounds: () -> Unit,
 ) {
     var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
     var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
@@ -583,6 +592,12 @@ private fun LiquidPage(
         BooleanSetting(prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS, "大文件夹玻璃", "独立控制大文件夹材质", masterEnabled && liquidGlass) { largeFolderGlass = it }
         IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
         IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
+        ArrowPreference(
+            stringResource(R.string.page_widget_backgrounds),
+            summary = "从 Launcher 4.50 实时发现的 MAML / RemoteViews 元素中逐项选择要隐藏的背景",
+            enabled = masterEnabled && liquidGlass && widgetGlass,
+            onClick = openWidgetBackgrounds,
+        )
         ArrowPreference(
             stringResource(R.string.launcher_highlights_entry),
             summary = stringResource(R.string.launcher_highlights_entry_summary),
