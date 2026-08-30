@@ -35,6 +35,7 @@ public class MainHook {
 
     public void install(ClassLoader classLoader) {
         installWorkstationModeGuard(classLoader);
+        DockWorkstationVisualTransition.global().initialize(workstationMode);
         LiquidDockConfig config = LiquidDockConfig.load();
         WidgetGridSizing.setWidgetAdaptationEnabled(
                 WidgetGridSizing.shouldAdaptWidgets(config.grid.enabled, config.grid.widgetAdaptation));
@@ -45,6 +46,7 @@ public class MainHook {
             return;
         }
         DockStrokeRenderer.installNativeHook(classLoader, config.dock);
+        Launcher450DockTransitionSettlement.install(classLoader);
         installWorkstationDockHooks(classLoader, config.workstation);
         WorkstationDockGeometryHook.install(classLoader, config.workstation);
         if (!config.dock.resizeAnimation)
@@ -582,6 +584,7 @@ public class MainHook {
     }
 
     private static void setWorkstationMode(boolean enabled) {
+        DockWorkstationVisualTransition.global().onModeChanged(enabled);
         workstationMode = enabled;
         HomeGridHook.setWorkstationMode(enabled);
         WorkstationDockGeometryHook.onWorkstationModeChanged(enabled);
@@ -708,9 +711,24 @@ public class MainHook {
         } catch (Throwable ignored) {}
     }
 
+    /** Launcher 4.50 exposes animator fields, not an isAnimating() method on BlurBackground2. */
     private static boolean animating(View v) {
-        try { return Boolean.TRUE.equals(HookUtil.invoke(v, "isAnimating")); }
-        catch (Throwable e) { return false; }
+        if (v == null) return false;
+        synchronized (dockResizeAnimators) {
+            android.animation.ValueAnimator local = dockResizeAnimators.get(v);
+            if (local != null && local.isRunning()) return true;
+        }
+        try {
+            Object radius = HookUtil.getField(v, "mViewRadiusAnimator");
+            if (radius instanceof android.animation.Animator
+                    && ((android.animation.Animator) radius).isRunning()) return true;
+        } catch (Throwable ignored) {}
+        try {
+            Object set = HookUtil.getField(v, "animatorSet");
+            if (set instanceof android.animation.Animator
+                    && ((android.animation.Animator) set).isRunning()) return true;
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     // ── data ─────────────────────────────────────────────────────────
