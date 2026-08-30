@@ -59,6 +59,9 @@ public class DockRuntimeOwnershipContractTest {
     @Test
     public void strokeDisableRetainsWeakOwnerSoFalseToTrueCanReattach() throws Exception {
         String stroke = Files.readString(MAIN.resolve("DockStrokeRenderer.java"));
+        String release = methodSlice(stroke,
+                "private static void releaseInstalledStrokeLocked(",
+                "static void configure(View host,");
         String disable = methodSlice(stroke,
                 "static void onRuntimeStrokeDisabled()",
                 "static void refreshInstalledFromCurrentConfig()");
@@ -68,7 +71,10 @@ public class DockRuntimeOwnershipContractTest {
 
         assertTrue(stroke.contains("VisualRuntimeState.isDockStrokeEnabled()"));
         assertTrue(stroke.contains("VisualRuntimeState.isStrokeShadowEnabled()"));
-        assertTrue(disable.contains("installed.baseForeground()"));
+        assertTrue("live disable must release through the shared owner-preserving helper",
+                disable.contains("releaseInstalledStrokeLocked(host, installed)"));
+        assertTrue("shared release helper must restore the pre-stroke foreground",
+                release.contains("installed.baseForeground()"));
         assertFalse("live disable must not destroy the weak installation record",
                 disable.contains("INSTALLED.clear()"));
         assertTrue("live re-enable must reattach the existing StrokeDrawable",
