@@ -8,9 +8,9 @@ import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
-/** Lightweight clip/geometry host for the zero-copy Prismal TextureView. */
+/** Lightweight geometry host for the zero-copy Prismal TextureView. */
 final class DockLiquidGlassHostView extends FrameLayout {
-    private final Path clipPath = new Path();
+    private final Path outlinePath = new Path();
     private float radius;
     private boolean squircle;
     private float squircleCp = .58f;
@@ -26,15 +26,15 @@ final class DockLiquidGlassHostView extends FrameLayout {
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Mi Shadow / RenderNode shadow geometry comes from the View outline. Keep this outline on
-        // the exact same shape as the manual child clip so the outer stroke shadow cannot drift
-        // away from the visible zero-copy glass edge.
+        // Prismal is the one visible alpha-mask authority. The View outline is shadow geometry
+        // only, so it must use Prismal's full zero-contour rather than DockShapePath's .5px
+        // pixel-center inset. No child clipping is performed with this path.
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
-                ensureClipPath();
-                if (clipPath.isEmpty()) return;
+                ensureOutlinePath();
+                if (outlinePath.isEmpty()) return;
                 try {
-                    outline.setPath(clipPath);
+                    outline.setPath(outlinePath);
                 } catch (Throwable ignored) {
                 }
             }
@@ -51,7 +51,9 @@ final class DockLiquidGlassHostView extends FrameLayout {
         this.squircleCp = nextCp;
         if (changed) {
             shapeDirty = true;
-            DockStrokeRenderer.updateRadius(this, this.radius);
+            // Do not implicitly mutate the foreground stroke here. Launcher 4.50 feeds this host
+            // intermediate radius values during workstation exit. MiuixGlassHook commits stroke
+            // geometry explicitly only after the vendor radius animator is authoritative again.
             invalidateOutline();
             invalidate();
         }
@@ -69,11 +71,12 @@ final class DockLiquidGlassHostView extends FrameLayout {
         }
     }
 
-    private void ensureClipPath() {
+    private void ensureOutlinePath() {
         if (!shapeDirty) return;
-        clipPath.rewind();
-        if (getWidth() > 1 && getHeight() > 1) {
-            DockShapePath.build(clipPath, getWidth(), getHeight(), radius, squircle, squircleCp);
+        outlinePath.rewind();
+        if (getWidth() > 0 && getHeight() > 0) {
+            DockPrismalOutlinePath.build(
+                    outlinePath, getWidth(), getHeight(), radius, squircle, squircleCp);
         }
         shapeDirty = false;
     }
@@ -90,7 +93,7 @@ final class DockLiquidGlassHostView extends FrameLayout {
         // Prismal already produces the final rounded alpha mask. Clipping that TextureView again
         // makes two independently antialiased masks meet at the same pixel boundary; on long
         // horizontal edges their subpixel phases show up as a dotted white seam. The cached path
-        // remains the authoritative View outline for the native shadow only.
+        // remains the authoritative View outline for native shadow geometry only.
         super.dispatchDraw(canvas);
     }
 }
