@@ -131,6 +131,9 @@ final class GlassRuntimeState {
                 LauncherGlassSessionRegistry.shutdownAll();
                 Miuix307MaterialPipeline.onRuntimeGlassDisabled();
                 MiuixGlassHook.onRuntimeGlassDisabled();
+                // Teardown cleared the GlassHost binding; native BlurBackground2 can own
+                // the edge again, so restore its remembered stroke immediately.
+                DockStrokeRenderer.refreshInstalledFromCurrentConfig();
                 MainHook.log("[DC][GlassRuntime] GPU glass teardown complete");
             });
             return;

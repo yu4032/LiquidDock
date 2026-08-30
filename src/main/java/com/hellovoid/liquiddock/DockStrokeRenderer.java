@@ -73,7 +73,7 @@ final class DockStrokeRenderer {
                         float radius = readNativeRadius(background);
                         rememberNativeHost(background, radius);
 
-                        if (MainHook.isWorkstationMode()) {
+                        if (isNativeStrokeSuppressed(background)) {
                             releaseInstalledStroke(background);
                             return result;
                         }
@@ -103,6 +103,12 @@ final class DockStrokeRenderer {
 
     private static boolean isNativeHost(View host) {
         return host != null && NATIVE_BACKGROUND_CLASS.equals(host.getClass().getName());
+    }
+
+    /** Native BlurBackground2 stays dormant while GlassHost owns the visible edge. */
+    private static boolean isNativeStrokeSuppressed(View host) {
+        return isNativeHost(host)
+                && (MainHook.isWorkstationMode() || MiuixGlassHook.isBoundTo(host));
     }
 
     /**
@@ -159,6 +165,16 @@ final class DockStrokeRenderer {
     static void configureReplacingForeground(
             View host, LiquidDockConfig.Dock config, float radius) {
         configureInternal(host, config, radius, false);
+
+        // A bound GlassHost owns the custom edge. Release any foreground ring that the
+        // vendor BlurBackground2 carried before this host was installed or refreshed.
+        Object parent = host != null ? host.getParent() : null;
+        if (parent instanceof View) {
+            View parentView = (View) parent;
+            if (isNativeHost(parentView) && MiuixGlassHook.isBoundTo(parentView)) {
+                releaseInstalledStroke(parentView);
+            }
+        }
     }
 
     /** Match the glass clip to the same radius basis used by the configured custom stroke. */
@@ -184,7 +200,7 @@ final class DockStrokeRenderer {
         synchronized (INSTALLED) {
             StrokeDrawable installed = INSTALLED.get(host);
 
-            if (nativeHost && MainHook.isWorkstationMode()) {
+            if (isNativeStrokeSuppressed(host)) {
                 releaseInstalledStrokeLocked(host, installed);
                 return;
             }
@@ -253,14 +269,13 @@ final class DockStrokeRenderer {
             return;
         }
 
-        boolean workstation = MainHook.isWorkstationMode();
         synchronized (INSTALLED) {
             for (Map.Entry<View, StrokeDrawable> entry
                     : new ArrayList<>(INSTALLED.entrySet())) {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
-                if (workstation && isNativeHost(host)) {
+                if (isNativeStrokeSuppressed(host)) {
                     releaseInstalledStrokeLocked(host, installed);
                     continue;
                 }
@@ -274,10 +289,6 @@ final class DockStrokeRenderer {
             }
         }
 
-        // Workstation deliberately keeps remembered native owners dormant. The live glass host
-        // remains the only custom edge renderer until the mode transition is complete.
-        if (workstation) return;
-
         // A native owner may have been observed while stroke was disabled, so no StrokeDrawable
         // existed yet. Reconfigure those known hosts now instead of waiting for setBackgroundRadius.
         ArrayList<Map.Entry<View, Float>> known;
@@ -287,6 +298,10 @@ final class DockStrokeRenderer {
         for (Map.Entry<View, Float> entry : known) {
             View host = entry.getKey();
             if (host == null) continue;
+            if (isNativeStrokeSuppressed(host)) {
+                releaseInstalledStroke(host);
+                continue;
+            }
             synchronized (INSTALLED) {
                 if (INSTALLED.containsKey(host)) continue;
             }
