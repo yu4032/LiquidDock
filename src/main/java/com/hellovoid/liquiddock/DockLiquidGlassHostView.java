@@ -87,11 +87,10 @@ final class DockLiquidGlassHostView extends FrameLayout {
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
-        ensureClipPath();
-        if (clipPath.isEmpty()) return;
-        int save = canvas.save();
-        canvas.clipPath(clipPath);
+        // Prismal already produces the final rounded alpha mask. Clipping that TextureView again
+        // makes two independently antialiased masks meet at the same pixel boundary; on long
+        // horizontal edges their subpixel phases show up as a dotted white seam. The cached path
+        // remains the authoritative View outline for the native shadow only.
         super.dispatchDraw(canvas);
-        canvas.restoreToCount(save);
     }
 }
