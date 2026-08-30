@@ -80,9 +80,20 @@ final class MiuixGlassHook {
 
     static void onHostDetached(DockLiquidGlassHostView detachedHost) {
         if (detachedHost == null || detachedHost != currentHost()) return;
-        removeVendorGpuBlurSuppressor();
-        Miuix307ZeroCopyRenderer.clear();
-        clearTrackedViews();
+        // Workstation/window handoff can detach the whole hierarchy while keeping this child in
+        // BlurBackground2. Re-check on the next main-loop turn so a transient detach does not erase
+        // ownership and cause install() to add a second GlassHost when the hierarchy comes back.
+        detachedHost.post(() -> {
+            if (detachedHost != currentHost()) return;
+            if (detachedHost.getParent() instanceof ViewGroup) {
+                MainHook.log(TAG + " transient GlassHost detach retained id="
+                        + Integer.toHexString(System.identityHashCode(detachedHost)));
+                return;
+            }
+            removeVendorGpuBlurSuppressor();
+            Miuix307ZeroCopyRenderer.clear();
+            clearTrackedViews();
+        });
     }
 
     static boolean isBoundTo(View dockBg) {
@@ -128,6 +139,7 @@ final class MiuixGlassHook {
         boolean nativeVisualOwner = isNativeVisualOwner(dockBg);
 
         DockLiquidGlassHostView existingHost = currentHost();
+        removeOrphanGlassHosts(materialHost, existingHost);
         if (currentBackground() == dockBg && existingHost != null
                 && existingHost.getParent() == materialHost) {
             syncSize(dockBg);
@@ -185,6 +197,22 @@ final class MiuixGlassHook {
                 + dockBg.getClass().getSimpleName()
                 + " renderer=" + (zeroCopyCandidate ? "passblur-gles-pending" : "none"));
         return true;
+    }
+
+    private static void removeOrphanGlassHosts(
+            ViewGroup materialHost, DockLiquidGlassHostView keep) {
+        if (materialHost == null) return;
+        int removed = 0;
+        for (int i = materialHost.getChildCount() - 1; i >= 0; i--) {
+            View child = materialHost.getChildAt(i);
+            if (!(child instanceof DockLiquidGlassHostView) || child == keep) continue;
+            materialHost.removeViewAt(i);
+            removed++;
+        }
+        if (removed > 0) {
+            MainHook.log(TAG + " removed orphan GlassHost count=" + removed
+                    + " parent=" + Integer.toHexString(System.identityHashCode(materialHost)));
+        }
     }
 
     private static void scheduleZeroCopyValidation(
