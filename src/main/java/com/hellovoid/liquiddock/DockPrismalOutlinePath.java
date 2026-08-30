@@ -19,7 +19,7 @@ final class DockPrismalOutlinePath {
         if (width <= 0f || height <= 0f) return;
         RectF bounds = new RectF(0f, 0f, width, height);
         float safeRadius = Math.max(0f,
-                Math.min(radius, Math.min(bounds.width(), bounds.height()) * .5f));
+                Math.min(radius, Math.min(bounds.width(), bounds.height()) * 0.5f));
         if (!squircle || safeRadius <= 1f) {
             out.addRoundRect(bounds, safeRadius, safeRadius, Path.Direction.CW);
             return;
