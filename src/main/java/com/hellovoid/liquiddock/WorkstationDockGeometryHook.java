@@ -51,6 +51,10 @@ final class WorkstationDockGeometryHook {
     }
 
     static void onWorkstationModeChanged(boolean enabled) {
+        // Workstation and the normal HotSeats background can overlap during the hierarchy handoff.
+        // Release the remembered native foreground ring before changing visible Dock geometry.
+        DockStrokeRenderer.onWorkstationModeChanged(enabled);
+
         ArrayList<Binding> snapshot = new ArrayList<>();
         synchronized (bindings) {
             Iterator<Map.Entry<View, WeakReference<Binding>>> iterator = bindings.entrySet().iterator();
