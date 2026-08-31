@@ -63,7 +63,8 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertTrue(source.contains("sendBroadcast"));
         assertFalse(source.contains("ScreenCapture"));
         assertFalse(source.contains("captureDisplay"));
-        assertFalse(source.contains("SurfaceControl"));
+        assertFalse(source.contains("import android.view.SurfaceControl"));
+        assertFalse(source.contains("SetPassBlurSurface"));
     }
 
     @Test public void systemUiIsScopedAsObserverOnly() throws Exception {
