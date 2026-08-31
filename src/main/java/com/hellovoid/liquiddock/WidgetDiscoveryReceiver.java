@@ -9,6 +9,7 @@ import androidx.preference.PreferenceManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -32,15 +33,26 @@ public final class WidgetDiscoveryReceiver extends BroadcastReceiver {
             return;
         }
 
-        String encoded = intent.getStringExtra(WidgetComponentStore.EXTRA_DESCRIPTOR);
-        if (WidgetComponentStore.parseCatalog(encoded) == null) return;
+        ArrayList<String> batch = intent.getStringArrayListExtra(WidgetComponentStore.EXTRA_DESCRIPTORS);
+        if (batch == null || batch.isEmpty()) {
+            String single = intent.getStringExtra(WidgetComponentStore.EXTRA_DESCRIPTOR);
+            if (single == null) return;
+            batch = new ArrayList<>(1);
+            batch.add(single);
+        }
 
         SharedPreferences catalog = context.getSharedPreferences(
                 WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE);
         Set<String> current = catalog.getStringSet(WidgetComponentStore.CATALOG_KEY, null);
         HashSet<String> updated = current == null ? new HashSet<>() : new HashSet<>(current);
-        if (!updated.add(encoded)) return;
-        catalog.edit().putStringSet(WidgetComponentStore.CATALOG_KEY, updated).apply();
+        boolean changed = false;
+        for (String encoded : batch) {
+            if (WidgetComponentStore.parseCatalog(encoded) == null) continue;
+            changed |= updated.add(encoded);
+        }
+        if (changed) {
+            catalog.edit().putStringSet(WidgetComponentStore.CATALOG_KEY, updated).apply();
+        }
     }
 
     private static boolean secureEquals(String expected, String actual) {
