@@ -1,13 +1,9 @@
 package com.hellovoid.liquiddock;
 
-import android.os.Handler;
-import android.os.Looper;
 import android.view.View;
 
 import java.util.ArrayList;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /** One shared GPU glass session and one scene controller per stable Launcher ViewRoot. */
 final class LauncherGlassSessionRegistry {
@@ -45,72 +41,6 @@ final class LauncherGlassSessionRegistry {
             return null;
         }
         return root;
-    }
-
-    /** Stop every existing Launcher PassBlur producer as soon as unlock presentation starts. */
-    static synchronized void suspendForUnlockCapture() {
-        int paused = 0;
-        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
-            if (session == null || session.isShutdown()) continue;
-            try {
-                Object value = HookUtil.getField(session, "binding");
-                if (value instanceof Miuix307PassBlurBridge.Binding) {
-                    Miuix307PassBlurBridge.pauseUpdates((Miuix307PassBlurBridge.Binding) value);
-                    paused++;
-                }
-            } catch (Throwable error) {
-                MainHook.log("[DC][LauncherGlass] unlock producer pause failed: " + error);
-            }
-        }
-        MainHook.log("[DC][LauncherGlass] unlock producer capture suspended sessions=" + paused);
-    }
-
-    /**
-     * Roll all live OES/SurfaceTexture endpoints after the vendor unlock animation. The callback
-     * runs only after each session's render queue has executed the rollover task queued by
-     * rebindProducer(), so the old lockscreen buffer queue cannot survive into HOME capture.
-     */
-    static void prepareUnlockCaptureReturn(Runnable ready) {
-        ArrayList<LauncherGlassSession> sessions;
-        synchronized (LauncherGlassSessionRegistry.class) {
-            sessions = new ArrayList<>(SESSIONS.values());
-        }
-        sessions.removeIf(session -> session == null || session.isShutdown());
-        if (sessions.isEmpty()) {
-            if (ready != null) ready.run();
-            return;
-        }
-
-        Handler main = new Handler(Looper.getMainLooper());
-        AtomicInteger remaining = new AtomicInteger(sessions.size());
-        AtomicBoolean failed = new AtomicBoolean(false);
-        Runnable completeOne = () -> {
-            if (remaining.decrementAndGet() != 0) return;
-            if (failed.get()) {
-                MainHook.log("[DC][LauncherGlass] unlock endpoint rollover incomplete; capture remains blocked");
-                return;
-            }
-            MainHook.log("[DC][LauncherGlass] unlock endpoint rollover complete sessions=" + sessions.size());
-            if (ready != null) ready.run();
-        };
-
-        for (LauncherGlassSession session : sessions) {
-            try {
-                java.lang.reflect.Method rebind = HookUtil.findMethodExact(
-                        session.getClass(), "rebindProducer", new Class<?>[0]);
-                rebind.invoke(session);
-                Object value = HookUtil.getField(session, "renderHandler");
-                if (!(value instanceof Handler)) throw new IllegalStateException("renderHandler unavailable");
-                Handler renderHandler = (Handler) value;
-                if (!renderHandler.post(() -> main.post(completeOne))) {
-                    throw new IllegalStateException("render queue rejected unlock sentinel");
-                }
-            } catch (Throwable error) {
-                failed.set(true);
-                MainHook.log("[DC][LauncherGlass] unlock endpoint rollover failed: " + error);
-                main.post(completeOne);
-            }
-        }
     }
 
     /**
