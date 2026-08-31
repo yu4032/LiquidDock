@@ -6,20 +6,17 @@ import android.content.res.Resources;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/**
- * Read-only runtime discovery for the future widget-component picker UI.
- *
- * This spike deliberately does not hide, recolor, resize, or otherwise mutate provider content.
- * It only publishes stable-ish descriptors from the real Launcher widget trees so device testing
- * can tell us which selector fields are actually available on HyperOS.
- */
+/** Read-only runtime discovery feeding the widget-component picker catalog. */
 final class LauncherWidgetComponentDiscovery {
     private static final String TAG = "[DC][WidgetDiscover]";
     private static final Map<View, Boolean> DUMPED_REMOTE_ROOTS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Object, Boolean> DUMPED_MAML_ROOTS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherWidgetComponentDiscovery() {}
@@ -33,38 +30,61 @@ final class LauncherWidgetComponentDiscovery {
             DUMPED_REMOTE_ROOTS.put(content, Boolean.TRUE);
         }
         String provider = providerIdentity(host);
-        scanNode(content, provider, "0");
+        // The direct RemoteViews content root is diagnostic only. Never publish it as selectable:
+        // hiding that node would suppress the entire provider widget instead of one component.
+        scanNode(content, provider, "0", false);
     }
 
-    static void publishMaml(
-            WidgetBackgroundIdentity identity, String elementName, String className) {
-        if (elementName == null || elementName.isEmpty()) return;
-        MainHook.log(TAG
-                + " source=maml"
-                + " provider=" + safe(identity != null ? identity.appPackage : null)
-                + " productId=" + safe(identity != null ? identity.productId : null)
-                + " name=" + elementName
-                + " class=" + safe(className)
-                + " hierarchyPath=mElements/" + elementName);
+    static void scanMaml(View host, WidgetBackgroundIdentity identity, Object root) {
+        if (host == null || identity == null || root == null) return;
+        synchronized (DUMPED_MAML_ROOTS) {
+            if (DUMPED_MAML_ROOTS.containsKey(root)) return;
+            DUMPED_MAML_ROOTS.put(root, Boolean.TRUE);
+        }
+        Object value = readField(root, "mElements");
+        if (!(value instanceof Map)) return;
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            String name = String.valueOf(entry.getKey());
+            Object stored = entry.getValue();
+            Object element = stored instanceof WeakReference
+                    ? ((WeakReference<?>) stored).get() : stored;
+            if (element == null) continue;
+            String className = element.getClass().getName();
+            MainHook.log(TAG
+                    + " source=maml"
+                    + " provider=" + safe(identity.appPackage)
+                    + " productId=" + safe(identity.productId)
+                    + " name=" + name
+                    + " class=" + className
+                    + " hierarchyPath=mElements/" + name);
+            WidgetComponentStore.publishMaml(host.getContext(), identity, name, className);
+        }
     }
 
-    private static void scanNode(View view, String provider, String hierarchyPath) {
+    private static void scanNode(
+            View view, String provider, String hierarchyPath, boolean selectable) {
         if (view == null) return;
+        String resourceName = resourceEntryName(view);
+        String className = view.getClass().getName();
         MainHook.log(TAG
                 + " source=remoteviews"
                 + " provider=" + safe(provider)
-                + " class=" + view.getClass().getName()
-                + " resource=" + resourceEntryName(view)
+                + " class=" + className
+                + " resource=" + resourceName
                 + " hierarchyPath=" + hierarchyPath);
+        if (selectable && !resourceName.isEmpty()) {
+            WidgetComponentStore.publishRemoteViews(
+                    view.getContext(), provider, resourceName, className);
+        }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
-            if (child != null) scanNode(child, provider, hierarchyPath + "/" + i);
+            if (child != null) scanNode(child, provider, hierarchyPath + "/" + i, true);
         }
     }
 
-    private static View resolveRemoteViewsContent(View host) {
+    static View resolveRemoteViewsContent(View host) {
         if (!(host instanceof ViewGroup)) return null;
         ViewGroup group = (ViewGroup) host;
         for (int i = 0; i < group.getChildCount(); i++) {
@@ -76,7 +96,7 @@ final class LauncherWidgetComponentDiscovery {
         return null;
     }
 
-    private static String providerIdentity(View host) {
+    static String providerIdentity(View host) {
         if (!(host instanceof AppWidgetHostView)) return host.getClass().getName();
         try {
             AppWidgetProviderInfo info = ((AppWidgetHostView) host).getAppWidgetInfo();
@@ -85,7 +105,7 @@ final class LauncherWidgetComponentDiscovery {
         return host.getClass().getName();
     }
 
-    private static String resourceEntryName(View view) {
+    static String resourceEntryName(View view) {
         int id = view.getId();
         if (id == View.NO_ID) return "";
         try {
@@ -97,9 +117,15 @@ final class LauncherWidgetComponentDiscovery {
         }
     }
 
-    private static boolean isMamlHost(View host) {
+    static boolean isMamlHost(View host) {
         String name = host.getClass().getName();
         return name.endsWith(".MaMlHostView") || name.contains(".maml.");
+    }
+
+    private static Object readField(Object target, String name) {
+        if (target == null) return null;
+        try { return HookUtil.getField(target, name); }
+        catch (Throwable ignored) { return null; }
     }
 
     private static String safe(String value) {
