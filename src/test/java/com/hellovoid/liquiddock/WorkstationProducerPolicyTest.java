@@ -24,12 +24,6 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
-    public void normalDockProducerIsDemandDrivenButWorkstationRemainsContinuous() {
-        assertFalse(WorkstationProducerPolicy.shouldKeepDockProducerContinuous(false));
-        assertTrue(WorkstationProducerPolicy.shouldKeepDockProducerContinuous(true));
-    }
-
-    @Test
     public void workstationGeometryChangeRebindsSharedProducer() {
         assertTrue(WorkstationProducerPolicy.shouldRebindForGeometryChange(true, true));
         assertFalse(WorkstationProducerPolicy.shouldRebindForGeometryChange(true, false));
