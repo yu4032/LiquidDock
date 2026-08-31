@@ -34,11 +34,23 @@ final class LauncherGlassHomePresentationHook {
         try {
             HookUtil.hookMethod(classLoader, WINDOW_ELEMENT, "animTo", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (containsHomeClose(args)) {
+                boolean closeToHome = containsHomeClose(args);
+                if (closeToHome) {
                     homeTransitionArmed = true;
+                    // Freeze capture and force the cached root layer to alpha=0 before the vendor
+                    // CLOSE_TO_HOME spring starts. The same semantic boundary is emitted for the
+                    // direct taskFromApp=true App -> HOME path on Launcher 4.50.
                     LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
                 }
-                return chain.proceed(args);
+                Object result = chain.proceed(args);
+                if (closeToHome) {
+                    // Start presentation only after WindowElement has accepted/started the vendor
+                    // animation. Capture remains blocked by homeTransitionPending until the real
+                    // RectFSpringAnim onAnimationEnd callback below.
+                    LauncherGlassSceneController.beginHomeReturnRevealForAll();
+                    MainHook.log(TAG + " APP HOME CLOSE_TO_HOME reveal started");
+                }
+                return result;
             }, Object.class);
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME presentation start unavailable: " + error);
