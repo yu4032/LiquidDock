@@ -13,6 +13,8 @@ public class WidgetComponentSelectionContractTest {
     private static final Path ROOT = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Path KOTLIN = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
+    private static final Path PICKER = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
     private static final Path MANIFEST = Path.of("src/main/AndroidManifest.xml");
 
     @Test public void discoveryReportsUpstreamThroughExplicitAuthenticatedReceiver() throws Exception {
@@ -65,7 +67,7 @@ public class WidgetComponentSelectionContractTest {
         String source = Files.readString(executor);
         assertTrue(source.contains("View.INVISIBLE"));
         assertTrue(source.contains("getVisibility()"));
-        assertTrue(source.contains("setVisibility(claim.originalVisibility)"));
+        assertTrue(source.contains("setVisibility(item.originalVisibility)"));
         assertTrue(source.contains("HookUtil.invoke(target, \"show\", false)"));
         assertTrue(source.contains("originalShow"));
         assertFalse(source.contains("View.GONE"));
@@ -86,12 +88,14 @@ public class WidgetComponentSelectionContractTest {
     }
 
     @Test public void composeExposesWidgetComponentPickerGroupedFromLocalDiscoveryCatalog() throws Exception {
+        assertTrue(Files.exists(PICKER));
         String source = Files.readString(KOTLIN);
+        String picker = Files.readString(PICKER);
         assertTrue(source.contains("WidgetComponents(R.string.page_widget_components)"));
-        assertTrue(source.contains("WidgetComponentsPage"));
-        assertTrue(source.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)"));
-        assertTrue(source.contains("WidgetComponentStore.CATALOG_KEY"));
-        assertTrue(source.contains("WidgetComponentStore.SELECTION_KEY"));
-        assertTrue(source.contains("显示全部内部元素"));
+        assertTrue(source.contains("Page.WidgetComponents -> WidgetComponentsPage"));
+        assertTrue(picker.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)"));
+        assertTrue(picker.contains("WidgetComponentStore.CATALOG_KEY"));
+        assertTrue(picker.contains("WidgetComponentStore.SELECTION_KEY"));
+        assertTrue(picker.contains("显示全部内部元素"));
     }
 }
