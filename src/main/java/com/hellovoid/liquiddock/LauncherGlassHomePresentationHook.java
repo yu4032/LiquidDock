@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
-/** Gates Workspace capture until HyperOS 4.50 HOME/unlock presentation is actually finished. */
+import android.content.Context;
+
+/** Gates Workspace wallpaper capture across HOME and keyguard presentation boundaries. */
 final class LauncherGlassHomePresentationHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String WINDOW_ELEMENT = "com.miui.home.recents.anim.WindowElement";
@@ -11,19 +13,10 @@ final class LauncherGlassHomePresentationHook {
     private static final String UNLOCK_STATE =
             "com.miui.home.launcher.common.UnlockAnimationStateMachine";
     private static final String PREPARE = "PREPARE";
-    private static final String IDLE = "IDLE";
-    private static final String SPRING_CALLBACK =
-            "com.miui.home.launcher.compat.UserPresentAnimationCompatV12Spring$1";
-    private static final String FOLME_CALLBACK =
-            "com.miui.home.launcher.compat.UserPresentAnimationCompatV12Folme$1";
-    private static final String SPRING_REMAINING = "mAllAnimationViewNum";
-    private static final String FOLME_TOTAL = "mNumOfAnimatedView";
-    private static final String FOLME_CURRENT = "mNumOfCurrentAnimatedView";
+
     private static boolean installed;
     private static boolean homeTransitionArmed;
     private static volatile boolean unlockTransitionArmed;
-    private static boolean unlockPresentationComplete;
-    private static boolean unlockUserPresentObserved;
     private static long unlockTransitionSerial;
     private static long unlockReleaseScheduledSerial = -1L;
 
@@ -34,10 +27,6 @@ final class LauncherGlassHomePresentationHook {
         hookHomeStart(classLoader);
         hookHomeEnd(classLoader);
         hookUnlockState(classLoader);
-        hookUnlockUserPresent(classLoader);
-        hookUnlockSpringFinish(classLoader);
-        hookUnlockFolmeFinish(classLoader, "onComplete");
-        hookUnlockFolmeFinish(classLoader, "onCancel");
         installed = true;
     }
 
@@ -81,11 +70,9 @@ final class LauncherGlassHomePresentationHook {
     }
 
     /**
-     * Launcher 4.50 can reach PREPARE and then decide not to run any user-present animation.
-     * The state machine always returns to IDLE after showPresent(), so IDLE is the deterministic
-     * escape for that no-animation path. When real Spring/Folme views are active their counters
-     * are already non-zero before IDLE is published, and the barrier remains armed for the real
-     * animation listener below.
+     * Launcher PREPARE is only an early freeze signal. It may hide the glass and pause the
+     * zero-copy producer, but it is never allowed to release capture again. The sole release
+     * authority is SystemUI's LOCKSCREEN -> GONE FINISHED TransitionStep.
      */
     private static void hookUnlockState(ClassLoader classLoader) {
         try {
@@ -93,154 +80,46 @@ final class LauncherGlassHomePresentationHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 String state = args.length > 0 ? String.valueOf(args[0]) : "";
                 if (PREPARE.equals(state)) {
-                    unlockTransitionSerial++;
-                    unlockReleaseScheduledSerial = -1L;
-                    unlockPresentationComplete = false;
-                    unlockUserPresentObserved = false;
-                    unlockTransitionArmed = true;
-                    LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
-                    LauncherGlassSessionRegistry.suspendForUnlockCapture();
+                    Object launcher = readField(chain.getThisObject(), "mLauncher");
+                    if (launcher instanceof Context) {
+                        SystemUiKeyguardGoneRuntime.ensureRegistered((Context) launcher);
+                    }
+                    armUnlockCapture("Launcher/PREPARE");
                 }
-
-                Object result = chain.proceed(args);
-                if (IDLE.equals(state)) {
-                    releaseUnlockIfIdleWithoutAnimation(chain.getThisObject());
-                }
-                return result;
+                return chain.proceed(args);
             }, "com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE");
-            MainHook.log(TAG + " unlock state barrier installed PREPARE/IDLE");
+            MainHook.log(TAG + " unlock freeze installed PREPARE; release=SystemUI FINISHED only");
         } catch (Throwable error) {
-            MainHook.log(TAG + " unlock PREPARE/IDLE unavailable: " + error);
+            MainHook.log(TAG + " unlock PREPARE freeze unavailable: " + error);
         }
     }
 
-    /**
-     * ACTION_USER_PRESENT is delivered only after keyguard dismissal. Launcher forwards that
-     * broadcast directly into this state-machine method, so it is the authoritative boundary for
-     * when a HOME backdrop may stop seeing the lockscreen wallpaper. It can arrive before or after
-     * the Launcher-owned icon animation finishes; capture is released only after both conditions.
-     */
-    private static void hookUnlockUserPresent(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader, UNLOCK_STATE, "onUserPresent", chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (unlockTransitionArmed) {
-                    unlockUserPresentObserved = true;
-                    MainHook.log(TAG + " unlock USER_PRESENT observed serial="
-                            + unlockTransitionSerial);
-                    tryReleaseUnlockBarrier("USER_PRESENT");
-                }
-                return result;
-            });
-            MainHook.log(TAG + " unlock USER_PRESENT capture barrier installed");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " unlock USER_PRESENT unavailable: " + error);
-        }
-    }
-
-    /** Non-fold Launcher 4.50 uses V12Spring. Release only after Xiaomi reaches count zero. */
-    private static void hookUnlockSpringFinish(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader, SPRING_CALLBACK, "onAnimationEnd", chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                releaseUnlockWhenSpringComplete(chain.getThisObject());
-                return result;
-            }, android.animation.Animator.class);
-            MainHook.log(TAG + " unlock Spring terminal-count barrier installed");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " unlock Spring completion unavailable: " + error);
-        }
-    }
-
-    /** Fold Launcher 4.50 uses Folme. Its listener resets both counts only on the final view. */
-    private static void hookUnlockFolmeFinish(ClassLoader classLoader, String method) {
-        try {
-            HookUtil.hookMethod(classLoader, FOLME_CALLBACK, method, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                releaseUnlockWhenFolmeComplete(chain.getThisObject());
-                return result;
-            }, Object.class);
-            MainHook.log(TAG + " unlock Folme " + method + " terminal-count barrier installed");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " unlock Folme " + method + " unavailable: " + error);
-        }
-    }
-
-    private static void releaseUnlockIfIdleWithoutAnimation(Object stateMachine) {
-        if (!unlockTransitionArmed) return;
-        Object launcher = readField(stateMachine, "mLauncher");
-        Object animation = HookUtil.invoke(launcher, "getUserPresentAnimation");
-        if (animation == null) {
-            markUnlockPresentationComplete("IDLE/no-animation-object");
-            return;
-        }
-
-        Integer springRemaining = readIntField(animation, SPRING_REMAINING);
-        Integer folmeTotal = readIntField(animation, FOLME_TOTAL);
-        if (isPositive(springRemaining) || isPositive(folmeTotal)) return;
-
-        if (springRemaining != null || folmeTotal != null) {
-            markUnlockPresentationComplete("IDLE/no-active-animation");
-        } else {
-            // IDLE is the vendor-owned animation endpoint. Counter reflection can be unavailable
-            // for some presentation variants; USER_PRESENT still independently gates release.
-            markUnlockPresentationComplete("IDLE/counters-unavailable");
-        }
-    }
-
-    private static void releaseUnlockWhenSpringComplete(Object callback) {
-        if (!unlockTransitionArmed) return;
-        Object animation = readField(callback, "this$0");
-        Integer remaining = readIntField(animation, SPRING_REMAINING);
-        if (remaining != null && remaining <= 0) {
-            markUnlockPresentationComplete("Spring/all-views-complete");
-        }
-    }
-
-    private static void releaseUnlockWhenFolmeComplete(Object callback) {
-        if (!unlockTransitionArmed) return;
-        Object animation = readField(callback, "this$0");
-        Integer total = readIntField(animation, FOLME_TOTAL);
-        Integer current = readIntField(animation, FOLME_CURRENT);
-        if (total != null && current != null && total <= 0 && current <= 0) {
-            markUnlockPresentationComplete("Folme/all-views-complete");
-        }
-    }
-
-    private static void markUnlockPresentationComplete(String reason) {
-        if (!unlockTransitionArmed) return;
-        unlockPresentationComplete = true;
-        MainHook.log(TAG + " unlock presentation animation complete reason=" + reason
-                + " userPresent=" + unlockUserPresentObserved
+    private static void armUnlockCapture(String reason) {
+        unlockTransitionSerial++;
+        unlockReleaseScheduledSerial = -1L;
+        unlockTransitionArmed = true;
+        LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
+        LauncherGlassSessionRegistry.suspendForUnlockCapture();
+        MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
                 + " serial=" + unlockTransitionSerial);
-        tryReleaseUnlockBarrier(reason);
     }
 
-    private static void tryReleaseUnlockBarrier(String reason) {
-        if (!unlockTransitionArmed || !unlockPresentationComplete || !unlockUserPresentObserved) {
-            return;
-        }
-        scheduleUnlockBarrierReleaseAfterFrame(reason + "/user-present");
-    }
-
-    private static void scheduleUnlockBarrierReleaseAfterFrame(String reason) {
-        if (!unlockTransitionArmed || !unlockPresentationComplete || !unlockUserPresentObserved) {
-            return;
+    /** Sole unlock capture boundary: SystemUI LOCKSCREEN -> GONE FINISHED. */
+    static void onSystemUiLockscreenGoneFinished() {
+        if (!unlockTransitionArmed) {
+            // PREPARE can be skipped on vendor edge paths. Fail closed before rebuilding so the
+            // old lockscreen-backed OES generation can never be reused.
+            armUnlockCapture("SystemUI/FINISHED-failsafe-arm");
         }
         final long serial = unlockTransitionSerial;
         if (unlockReleaseScheduledSerial == serial) return;
         unlockReleaseScheduledSerial = serial;
-        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
-        main.post(() -> {
+
+        MainHook.log(TAG + " SystemUI LOCKSCREEN->GONE FINISHED; rebuilding wallpaper endpoint"
+                + " serial=" + serial);
+        LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(() -> {
             if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
-            android.view.Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
-                if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
-                unlockReleaseScheduledSerial = -1L;
-                LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(() -> {
-                    if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
-                    finishUnlockBarrierNow(reason + "/post-animation-frame/endpoint-rolled");
-                });
-            });
+            finishUnlockBarrierNow("SystemUI LOCKSCREEN->GONE FINISHED/endpoint-rolled");
         });
     }
 
@@ -251,15 +130,10 @@ final class LauncherGlassHomePresentationHook {
     private static void finishUnlockBarrierNow(String reason) {
         if (!unlockTransitionArmed) return;
         unlockTransitionArmed = false;
-        unlockPresentationComplete = false;
-        unlockUserPresentObserved = false;
         unlockReleaseScheduledSerial = -1L;
-        MainHook.log(TAG + " unlock presentation finished: " + reason);
+        MainHook.log(TAG + " unlock wallpaper capture released: " + reason);
+        // SceneController keeps the glass hidden until the first fresh producer generation lands.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
-    }
-
-    private static boolean isPositive(Integer value) {
-        return value != null && value > 0;
     }
 
     private static Object readField(Object target, String name) {
@@ -269,10 +143,5 @@ final class LauncherGlassHomePresentationHook {
         } catch (Throwable ignored) {
             return null;
         }
-    }
-
-    private static Integer readIntField(Object target, String name) {
-        Object value = readField(target, name);
-        return value instanceof Number ? ((Number) value).intValue() : null;
     }
 }
