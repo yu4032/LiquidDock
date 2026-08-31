@@ -19,7 +19,7 @@ import java.util.WeakHashMap;
 /** Read-only runtime discovery feeding the widget-component picker catalog. */
 final class LauncherWidgetComponentDiscovery {
     private static final String TAG = "[DC][WidgetDiscover]";
-    private static final Map<View, Boolean> DUMPED_REMOTE_ROOTS =
+    private static final Map<View, Integer> DUMPED_REMOTE_ROOTS =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<Object, Boolean> DUMPED_MAML_ROOTS =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -31,16 +31,34 @@ final class LauncherWidgetComponentDiscovery {
         if (host == null || isMamlHost(host)) return;
         View content = resolveRemoteViewsContent(host);
         if (content == null) return;
+
+        // Launcher can expose a RemoteViews content root before a provider has finished populating
+        // its descendants. Calendar does this during restore/update. A permanent "seen root" bit
+        // would lock in that empty/partial tree. Use a shallow structural snapshot instead: normal
+        // re-bind attempts with the same shape are cheap skips, while the same root becoming richer
+        // after updateAppWidget is allowed one new full discovery pass.
+        int snapshotSignature = remoteSnapshotSignature(content);
+        Integer previousSignature;
         synchronized (DUMPED_REMOTE_ROOTS) {
-            if (DUMPED_REMOTE_ROOTS.containsKey(content)) return;
-            DUMPED_REMOTE_ROOTS.put(content, Boolean.TRUE);
+            previousSignature = DUMPED_REMOTE_ROOTS.get(content);
+            if (previousSignature != null && previousSignature == snapshotSignature) return;
         }
+
         String provider = providerIdentity(host);
         ArrayList<WidgetComponentStore.Descriptor> descriptors = new ArrayList<>();
         // Root path 0 may itself own the visual background. It is selectable for property-level
         // background/image actions, but never for the destructive whole-node hide action.
         scanNode(content, provider, "0", false, new HashSet<>(), descriptors);
-        WidgetComponentStore.publishBatch(host.getContext(), descriptors);
+
+        if (!descriptors.isEmpty()) {
+            WidgetComponentStore.publishBatch(host.getContext(), descriptors);
+            synchronized (DUMPED_REMOTE_ROOTS) {
+                DUMPED_REMOTE_ROOTS.put(content, snapshotSignature);
+            }
+        }
+        // ACK even when this early snapshot is empty. The persisted one-shot request must still be
+        // cleared, while this Launcher process keeps its in-memory discovery session active so a
+        // later provider update can retry the same root when its snapshot changes.
         WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
     }
 
@@ -133,6 +151,31 @@ final class LauncherWidgetComponentDiscovery {
         WidgetComponentStore.Descriptor descriptor = WidgetComponentStore.remoteDescriptor(
                 provider, action, resourceName, className, hierarchyPath, componentType);
         if (descriptor != null) descriptors.add(descriptor);
+    }
+
+    /**
+     * Cheap provider-update signal without walking a potentially huge Calendar tree on every bind.
+     * Depth 2 includes the root, its direct children, and grandchildren plus each group's child
+     * count, which captures Calendar's background -> widget_frame -> main_container population.
+     */
+    private static int remoteSnapshotSignature(View content) {
+        return appendRemoteSnapshot(content, 2, 17);
+    }
+
+    private static int appendRemoteSnapshot(View view, int depth, int signature) {
+        if (view == null) return signature * 31;
+        int result = signature;
+        result = 31 * result + view.getClass().getName().hashCode();
+        result = 31 * result + view.getId();
+        if (!(view instanceof ViewGroup)) return result;
+        ViewGroup group = (ViewGroup) view;
+        int childCount = group.getChildCount();
+        result = 31 * result + childCount;
+        if (depth <= 0) return result;
+        for (int i = 0; i < childCount; i++) {
+            result = appendRemoteSnapshot(group.getChildAt(i), depth - 1, result);
+        }
+        return result;
     }
 
     private static String classifyWholeNode(View view) {
