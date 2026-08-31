@@ -21,6 +21,10 @@ final class LauncherWidgetDarkContentAdapter {
 
     static void apply(View host) {
         if (host == null) return;
+        if (!LauncherWidgetGlassSelection.isEnabled(host)) {
+            release(host);
+            return;
+        }
         if (isMaMlHost(host)) {
             applyMaml(host);
             return;
