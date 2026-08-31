@@ -8,7 +8,9 @@ import android.view.ViewGroup;
 
 import java.lang.ref.WeakReference;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 /** Read-only runtime discovery feeding the widget-component picker catalog. */
@@ -32,7 +34,7 @@ final class LauncherWidgetComponentDiscovery {
         String provider = providerIdentity(host);
         // The direct RemoteViews content root is diagnostic only. Never publish it as selectable:
         // hiding that node would suppress the entire provider widget instead of one component.
-        scanNode(content, provider, "0", false);
+        scanNode(content, provider, "0", false, new HashSet<>());
     }
 
     static void scanMaml(View host, WidgetBackgroundIdentity identity, Object root) {
@@ -62,7 +64,8 @@ final class LauncherWidgetComponentDiscovery {
     }
 
     private static void scanNode(
-            View view, String provider, String hierarchyPath, boolean selectable) {
+            View view, String provider, String hierarchyPath, boolean selectable,
+            Set<String> published) {
         if (view == null) return;
         String resourceName = resourceEntryName(view);
         String className = view.getClass().getName();
@@ -73,14 +76,19 @@ final class LauncherWidgetComponentDiscovery {
                 + " resource=" + resourceName
                 + " hierarchyPath=" + hierarchyPath);
         if (selectable && !resourceName.isEmpty()) {
-            WidgetComponentStore.publishRemoteViews(
-                    view.getContext(), provider, resourceName, className);
+            String publishKey = resourceName + '\t' + className;
+            if (published.add(publishKey)) {
+                WidgetComponentStore.publishRemoteViews(
+                        view.getContext(), provider, resourceName, className);
+            }
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
-            if (child != null) scanNode(child, provider, hierarchyPath + "/" + i, true);
+            if (child != null) {
+                scanNode(child, provider, hierarchyPath + "/" + i, true, published);
+            }
         }
     }
 
