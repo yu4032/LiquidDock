@@ -1,7 +1,9 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,13 +33,56 @@ final class LauncherWidgetComponentSelectionExecutor {
         List<WidgetComponentStore.Descriptor> selectors = selectors(encoded, true, provider);
         if (selectors.isEmpty()) return;
         View content = LauncherWidgetComponentDiscovery.resolveRemoteViewsContent(host);
-        if (!(content instanceof ViewGroup)) return;
-        ArrayList<ViewClaim> claims = new ArrayList<>();
-        ViewGroup group = (ViewGroup) content;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            collectRemote(group.getChildAt(i), selectors, claims);
+        if (content == null) return;
+
+        ArrayList<BackgroundClaim> backgrounds = new ArrayList<>();
+        ArrayList<ImageClaim> images = new ArrayList<>();
+        ArrayList<ViewClaim> views = new ArrayList<>();
+        for (WidgetComponentStore.Descriptor selector : selectors) {
+            View target = resolveExactRemoteView(content, selector.hierarchyPath);
+            if (target == null) continue;
+            String resource = LauncherWidgetComponentDiscovery.resourceEntryName(target);
+            if (!selector.className.equals(target.getClass().getName())
+                    || !selector.name.equals(resource)) continue;
+
+            if (WidgetComponentStore.ACTION_CLEAR_BACKGROUND.equals(selector.action)) {
+                Drawable original = target.getBackground();
+                if (original == null) continue;
+                backgrounds.add(new BackgroundClaim(target, original));
+                target.setBackground(null);
+            } else if (WidgetComponentStore.ACTION_CLEAR_IMAGE.equals(selector.action)) {
+                if (!(target instanceof ImageView)) continue;
+                ImageView image = (ImageView) target;
+                Drawable original = image.getDrawable();
+                if (original == null) continue;
+                images.add(new ImageClaim(image, original));
+                image.setImageDrawable(null);
+            } else if (WidgetComponentStore.ACTION_HIDE_VIEW.equals(selector.action)) {
+                views.add(new ViewClaim(target, target.getVisibility()));
+                target.setVisibility(View.INVISIBLE);
+            }
         }
-        if (!claims.isEmpty()) CLAIMS.put(host, new Claim(claims, List.of()));
+        if (!backgrounds.isEmpty() || !images.isEmpty() || !views.isEmpty()) {
+            CLAIMS.put(host, new Claim(backgrounds, images, views, List.of()));
+        }
+    }
+
+    static View resolveExactRemoteView(View content, String hierarchyPath) {
+        if (content == null || hierarchyPath == null || hierarchyPath.isEmpty()) return null;
+        String[] parts = hierarchyPath.split("/");
+        if (parts.length == 0 || !"0".equals(parts[0])) return null;
+        View current = content;
+        for (int i = 1; i < parts.length; i++) {
+            if (!(current instanceof ViewGroup)) return null;
+            int index;
+            try { index = Integer.parseInt(parts[i]); }
+            catch (NumberFormatException ignored) { return null; }
+            ViewGroup group = (ViewGroup) current;
+            if (index < 0 || index >= group.getChildCount()) return null;
+            current = group.getChildAt(index);
+            if (current == null) return null;
+        }
+        return current;
     }
 
     static void claimLoadedMamlRoot(View host, Object root) {
@@ -57,37 +102,26 @@ final class LauncherWidgetComponentSelectionExecutor {
             claims.add(new MamlClaim(target, originalShow));
             HookUtil.invoke(target, "show", false);
         }
-        if (!claims.isEmpty()) CLAIMS.put(host, new Claim(List.of(), claims));
+        if (!claims.isEmpty()) {
+            CLAIMS.put(host, new Claim(List.of(), List.of(), List.of(), claims));
+        }
     }
 
     static void release(View host) {
         if (host == null) return;
         Claim claim = CLAIMS.remove(host);
         if (claim == null) return;
+        for (BackgroundClaim item : claim.backgrounds) {
+            if (item.view != null) item.view.setBackground(item.originalBackground);
+        }
+        for (ImageClaim item : claim.images) {
+            if (item.view != null) item.view.setImageDrawable(item.originalImage);
+        }
         for (ViewClaim item : claim.views) {
             if (item.view != null) item.view.setVisibility(item.originalVisibility);
         }
         for (MamlClaim item : claim.maml) {
             HookUtil.invoke(item.element, "show", item.originalShow);
-        }
-    }
-
-    private static void collectRemote(
-            View view, List<WidgetComponentStore.Descriptor> selectors, List<ViewClaim> claims) {
-        if (view == null) return;
-        String resource = LauncherWidgetComponentDiscovery.resourceEntryName(view);
-        String className = view.getClass().getName();
-        for (WidgetComponentStore.Descriptor selector : selectors) {
-            if (selector.name.equals(resource) && selector.className.equals(className)) {
-                claims.add(new ViewClaim(view, view.getVisibility()));
-                view.setVisibility(View.INVISIBLE);
-                break;
-            }
-        }
-        if (!(view instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            collectRemote(group.getChildAt(i), selectors, claims);
         }
     }
 
@@ -139,11 +173,37 @@ final class LauncherWidgetComponentSelectionExecutor {
     }
 
     private static final class Claim {
+        final List<BackgroundClaim> backgrounds;
+        final List<ImageClaim> images;
         final List<ViewClaim> views;
         final List<MamlClaim> maml;
-        Claim(List<ViewClaim> views, List<MamlClaim> maml) {
+        Claim(
+                List<BackgroundClaim> backgrounds,
+                List<ImageClaim> images,
+                List<ViewClaim> views,
+                List<MamlClaim> maml) {
+            this.backgrounds = List.copyOf(backgrounds);
+            this.images = List.copyOf(images);
             this.views = List.copyOf(views);
             this.maml = List.copyOf(maml);
+        }
+    }
+
+    private static final class BackgroundClaim {
+        final View view;
+        final Drawable originalBackground;
+        BackgroundClaim(View view, Drawable originalBackground) {
+            this.view = view;
+            this.originalBackground = originalBackground;
+        }
+    }
+
+    private static final class ImageClaim {
+        final ImageView view;
+        final Drawable originalImage;
+        ImageClaim(ImageView view, Drawable originalImage) {
+            this.view = view;
+            this.originalImage = originalImage;
         }
     }
 
