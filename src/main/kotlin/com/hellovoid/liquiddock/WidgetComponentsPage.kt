@@ -148,7 +148,7 @@ internal fun loadWidgetCatalog(catalogPrefs: SharedPreferences): List<WidgetComp
         )
 
 internal fun widgetGroupKey(descriptor: WidgetComponentStore.Descriptor): String =
-    descriptor.source + "\t" + descriptor.owner
+    (if (descriptor.isMaml()) "M" else descriptor.source) + "\t" + descriptor.owner
 
 internal fun defaultWidgetComponentVisible(descriptor: WidgetComponentStore.Descriptor): Boolean {
     if (!descriptor.isMaml()) return true
