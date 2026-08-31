@@ -24,7 +24,9 @@ final class LauncherWidgetComponentDiscovery {
     private LauncherWidgetComponentDiscovery() {}
 
     static void scan(View host) {
+        if (!WidgetComponentStore.discoveryRequested()) return;
         if (host == null || isMamlHost(host)) return;
+        WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
         View content = resolveRemoteViewsContent(host);
         if (content == null) return;
         synchronized (DUMPED_REMOTE_ROOTS) {
@@ -38,7 +40,9 @@ final class LauncherWidgetComponentDiscovery {
     }
 
     static void scanMaml(View host, WidgetBackgroundIdentity identity, Object root) {
+        if (!WidgetComponentStore.discoveryRequested()) return;
         if (host == null || identity == null || root == null) return;
+        WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
         synchronized (DUMPED_MAML_ROOTS) {
             if (DUMPED_MAML_ROOTS.containsKey(root)) return;
             DUMPED_MAML_ROOTS.put(root, Boolean.TRUE);
