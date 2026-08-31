@@ -43,6 +43,13 @@ public class SystemUiHomeTransitionWiringContractTest {
         assertTrue(module.contains("SystemUiHomeTransitionRuntime.install()"));
     }
 
+    @Test public void workspaceRootRetriesReceiverRegistrationWithLiveContext() throws Exception {
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        assertTrue("PackageReady may run before ActivityThread.currentApplication exists; a live"
+                        + " Workspace root must retry receiver registration",
+                scene.contains("SystemUiHomeTransitionRuntime.ensureRegistered(root.getContext())"));
+    }
+
     @Test public void launcherTreatsSystemUiHomeStartAsAuthorityWithVendorFallback() throws Exception {
         String runtime = Files.readString(MAIN.resolve("SystemUiHomeTransitionRuntime.java"));
         String hook = Files.readString(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
