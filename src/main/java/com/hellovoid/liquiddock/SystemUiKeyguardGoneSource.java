@@ -36,7 +36,17 @@ final class SystemUiKeyguardGoneSource {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object step = findStep(args, stepClass);
                     Object result = chain.proceed(args);
-                    if (step != null) onTransitionStep(step);
+                    try {
+                        if (step != null) onTransitionStep(step);
+                    } catch (Throwable error) {
+                        // Never let LiquidDock observation failures escape into SystemUI's keyguard
+                        // transition path. Even diagnostic logging is best-effort only.
+                        try {
+                            Api101Bridge.log("[DC] SystemUI unlock observer failed", error);
+                        } catch (Throwable ignored) {
+                            // SystemUI has already completed the original method; preserve that result.
+                        }
+                    }
                     return result;
                 });
                 hooked++;
