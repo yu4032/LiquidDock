@@ -26,6 +26,7 @@ public final class WidgetComponentStore {
     private static final String REMOTE = "R"; // retired coarse selector, parse-only rejection marker
     public static final String REMOTE_V2 = "R2";
     private static final String MAML = "M";
+    public static final String MAML_V2 = "M2";
     private static final String SEP = "\t";
     static final int BATCH_MAX_ITEMS = 128;
 
@@ -92,6 +93,23 @@ public final class WidgetComponentStore {
                 MAML, identity.productId, ACTION_HIDE_VIEW, elementName, className,
                 identity.appPackage == null ? "" : identity.appPackage,
                 "mElements/" + elementName, classifyMamlType(className));
+    }
+
+    /**
+     * Exact render-tree descriptor for MAML elements that cannot be safely addressed through
+     * ScreenElementRoot.findElement(name), including anonymous and dontAddToMap elements.
+     */
+    static Descriptor mamlRenderDescriptor(
+            WidgetBackgroundIdentity identity,
+            String elementName,
+            String className,
+            String hierarchyPath) {
+        if (identity == null || blank(identity.productId) || unsafe(elementName)
+                || blank(className) || blank(hierarchyPath)) return null;
+        return new Descriptor(
+                MAML_V2, identity.productId, ACTION_HIDE_VIEW, safe(elementName), className,
+                identity.appPackage == null ? "" : identity.appPackage,
+                hierarchyPath, classifyMamlType(className));
     }
 
     /**
@@ -163,6 +181,12 @@ public final class WidgetComponentStore {
             return new Descriptor(MAML, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3], parts[4],
                     "mElements/" + parts[2], classifyMamlType(parts[3]));
         }
+        if (parts.length == 7 && MAML_V2.equals(parts[0])) {
+            if (blank(parts[1]) || unsafe(parts[2]) || blank(parts[3]) || blank(parts[4])
+                    || unsafe(parts[5]) || blank(parts[6])) return null;
+            return new Descriptor(MAML_V2, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3],
+                    parts[5], parts[4], parts[6]);
+        }
         return null;
     }
 
@@ -180,6 +204,11 @@ public final class WidgetComponentStore {
             if (blank(parts[1]) || blank(parts[2]) || blank(parts[3])) return null;
             return new Descriptor(MAML, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3], "",
                     "mElements/" + parts[2], classifyMamlType(parts[3]));
+        }
+        if (parts.length == 5 && MAML_V2.equals(parts[0])) {
+            if (blank(parts[1]) || unsafe(parts[2]) || blank(parts[3]) || blank(parts[4])) return null;
+            return new Descriptor(MAML_V2, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3], "",
+                    parts[4], classifyMamlType(parts[3]));
         }
         return null;
     }
@@ -237,18 +266,25 @@ public final class WidgetComponentStore {
         }
 
         public boolean isRemoteViews() { return REMOTE_V2.equals(source); }
-        public boolean isMaml() { return MAML.equals(source); }
+        public boolean isMaml() { return MAML.equals(source) || MAML_V2.equals(source); }
+        public boolean isExactMamlRender() { return MAML_V2.equals(source); }
 
         public String selectorKey() {
             if (isRemoteViews()) {
                 return REMOTE_V2 + SEP + owner + SEP + action + SEP + name + SEP
                         + className + SEP + hierarchyPath;
             }
+            if (isExactMamlRender()) {
+                return MAML_V2 + SEP + owner + SEP + name + SEP + className + SEP + hierarchyPath;
+            }
             return MAML + SEP + owner + SEP + name + SEP + className;
         }
 
         public String encodeCatalog() {
             if (isRemoteViews()) {
+                return selectorKey() + SEP + label + SEP + componentType;
+            }
+            if (isExactMamlRender()) {
                 return selectorKey() + SEP + label + SEP + componentType;
             }
             return selectorKey() + SEP + label;
