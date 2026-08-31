@@ -23,7 +23,8 @@ public class WidgetMamlRenderTreeDiscoveryContractTest {
         assertTrue(store.contains("MAML_V2 = \"M2\""));
         assertTrue(store.contains("mamlRenderDescriptor"));
         assertTrue(discovery.contains("readField(root, \"mInnerGroup\")"));
-        assertTrue(discovery.contains("readField(element, \"mElements\")"));
+        assertTrue(discovery.contains("scanMamlRenderChildren"));
+        assertTrue(discovery.contains("readField(group, \"mElements\")"));
         assertTrue(discovery.contains("render/"));
         assertTrue(discovery.contains("mamlRenderDescriptor"));
     }
