@@ -22,25 +22,23 @@ public class GlassFrameSchedulingContractTest {
     @Test
     public void dockProducerGeometryIsNotPolledFromRootPreDraw() throws Exception {
         String source = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        String observer = methodSlice(source,
-                "private void installGeometryObserver()",
-                "private void removeGeometryObserver()");
-        assertFalse("Dock producer geometry must not be reflected on every root frame",
-                observer.contains("addOnPreDrawListener"));
+        assertFalse("Dock producer geometry must not install a root OnPreDraw listener",
+                source.contains("addOnPreDrawListener"));
         assertTrue("geometry changes need an explicit event-driven refresh entry",
                 source.contains("void requestGeometryRefresh()"));
     }
 
     @Test
-    public void workspacePreDrawDoesNotPollProducerSurface() throws Exception {
+    public void workspacePreDrawChecksProducerOnlyWhenRootGeometryChanges() throws Exception {
         String source = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
         String sync = methodSlice(source,
                 "private void syncSceneOnUiThread()",
                 "private boolean refreshProducerGeometryOnUi(View root)");
-        assertFalse("node synchronization must not reflect producer geometry every frame",
-                sync.contains("refreshProducerGeometryOnUi(root)"));
+        assertFalse("node synchronization must not unconditionally reflect producer geometry",
+                sync.contains("boolean producerGeometryChanged = refreshProducerGeometryOnUi(root);"));
         assertTrue("root-size changes still need an explicit producer geometry check",
-                source.contains("if (rootGeometryChanged) refreshProducerGeometryOnUi(root);"));
+                sync.contains("boolean producerGeometryChanged = rootGeometryChanged"
+                        + " && refreshProducerGeometryOnUi(root);"));
     }
 
     private static String methodSlice(String source, String startMarker, String endMarker) {
