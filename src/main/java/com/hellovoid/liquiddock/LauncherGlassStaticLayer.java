@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.os.Handler;
@@ -10,6 +11,7 @@ import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.WeakHashMap;
 
 /** One transparent static Launcher glass output for an entire stable Launcher root. */
@@ -21,6 +23,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final Handler mainHandler;
     private Surface outputSurface;
     private boolean disposed;
+    private ValueAnimator systemUiTimingAnimator;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -69,8 +72,29 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (root != null && BY_ROOT.get(root) == layer) BY_ROOT.remove(root);
     }
 
+    static void revealFromSystemUiTimingForAll(long sourceUptimeMs, long receiveUptimeMs) {
+        ArrayList<LauncherGlassStaticLayer> snapshot;
+        synchronized (LauncherGlassStaticLayer.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassStaticLayer layer : snapshot) {
+            if (layer != null) layer.revealFromSystemUiTiming(sourceUptimeMs, receiveUptimeMs);
+        }
+    }
+
+    static void hideFromSystemUiTimingForAll() {
+        ArrayList<LauncherGlassStaticLayer> snapshot;
+        synchronized (LauncherGlassStaticLayer.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassStaticLayer layer : snapshot) {
+            if (layer != null) layer.hideFromSystemUiTiming();
+        }
+    }
+
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
         if (disposed) return;
+        cancelSystemUiTimingAnimator();
         animate().cancel();
         if (!visible && immediateHide) {
             setAlpha(0f);
@@ -93,9 +117,54 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 .start();
     }
 
+    private void revealFromSystemUiTiming(long sourceUptimeMs, long receiveUptimeMs) {
+        if (disposed) return;
+        animate().cancel();
+        cancelSystemUiTimingAnimator();
+        LauncherGlassVisibilityTransition.Plan plan =
+                LauncherGlassVisibilityTransition.plan(getAlpha(), true);
+        setAlpha(plan.startAlpha);
+        if (plan.durationMs == 0L) {
+            setAlpha(1f);
+            return;
+        }
+        long elapsedMs = SystemUiHomeTransitionTimingPolicy.elapsedMs(
+                sourceUptimeMs, receiveUptimeMs, plan.durationMs);
+        if (elapsedMs >= plan.durationMs) {
+            setAlpha(plan.targetAlpha);
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(plan.startAlpha, plan.targetAlpha);
+        systemUiTimingAnimator = animator;
+        animator.setDuration(plan.durationMs);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(valueAnimator -> {
+            if (!disposed && systemUiTimingAnimator == valueAnimator) {
+                Object value = valueAnimator.getAnimatedValue();
+                if (value instanceof Float) setAlpha((Float) value);
+            }
+        });
+        animator.start();
+        if (elapsedMs > 0L) animator.setCurrentPlayTime(elapsedMs);
+    }
+
+    private void hideFromSystemUiTiming() {
+        if (disposed) return;
+        animate().cancel();
+        cancelSystemUiTimingAnimator();
+        setAlpha(0f);
+    }
+
+    private void cancelSystemUiTimingAnimator() {
+        ValueAnimator current = systemUiTimingAnimator;
+        systemUiTimingAnimator = null;
+        if (current != null) current.cancel();
+    }
+
     void dispose() {
         if (disposed) return;
         disposed = true;
+        cancelSystemUiTimingAnimator();
         View root = rootRef.get();
         if (root != null) {
             root.removeOnAttachStateChangeListener(rootAttachListener);
