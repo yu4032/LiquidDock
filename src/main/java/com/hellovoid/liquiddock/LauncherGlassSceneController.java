@@ -14,7 +14,6 @@ final class LauncherGlassSceneController {
     private static boolean vendorRecentsCovered;
     private static boolean vendorFolderCovered;
     private static boolean vendorHomeTransitionPending;
-    private static boolean vendorUnlockTransitionPending;
     private static boolean vendorRecentsWallpaperSettlePending;
 
     enum State { DETACHED, BOOTSTRAPPING, HOME_WAITING_FRESH_FRAME, HOME_VISIBLE, COVERED }
@@ -115,7 +114,6 @@ final class LauncherGlassSceneController {
     private boolean folderCovered;
     private boolean recentsCovered;
     private boolean homeTransitionPending;
-    private boolean unlockTransitionPending;
     private boolean recentsWallpaperSettlePending;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
@@ -150,7 +148,6 @@ final class LauncherGlassSceneController {
         created.recentsCovered = vendorRecentsCovered;
         created.folderCovered = vendorFolderCovered;
         created.homeTransitionPending = vendorHomeTransitionPending;
-        created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.recentsCovered || created.folderCovered) {
             created.state.setCovered(true);
@@ -244,17 +241,6 @@ final class LauncherGlassSceneController {
         }
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setHomeTransitionPending(pending);
-        }
-    }
-
-    static void setUnlockTransitionPendingForAll(boolean pending) {
-        ArrayList<LauncherGlassSceneController> snapshot;
-        synchronized (LauncherGlassSceneController.class) {
-            vendorUnlockTransitionPending = pending;
-            snapshot = new ArrayList<>(BY_ROOT.values());
-        }
-        for (LauncherGlassSceneController controller : snapshot) {
-            if (controller != null) controller.setUnlockTransitionPending(pending);
         }
     }
 
@@ -419,7 +405,7 @@ final class LauncherGlassSceneController {
     }
 
     private boolean isPresentationPending() {
-        return homeTransitionPending || unlockTransitionPending || recentsWallpaperSettlePending;
+        return homeTransitionPending || recentsWallpaperSettlePending;
     }
 
     private void setRecentsWallpaperSettlePending(boolean pending) {
@@ -432,12 +418,6 @@ final class LauncherGlassSceneController {
         boolean wasPending = isPresentationPending();
         homeTransitionPending = pending;
         onPresentationPendingChanged(wasPending, isPresentationPending(), "home");
-    }
-
-    private void setUnlockTransitionPending(boolean pending) {
-        boolean wasPending = isPresentationPending();
-        unlockTransitionPending = pending;
-        onPresentationPendingChanged(wasPending, isPresentationPending(), "unlock");
     }
 
     private void onPresentationPendingChanged(boolean wasPending, boolean pending, String reason) {
@@ -480,7 +460,7 @@ final class LauncherGlassSceneController {
         // return flow keep ownership whenever its coverage/settle state is active; this entry is
         // for the direct taskFromApp=true App -> HOME transition.
         if (!homeTransitionPending || recentsCovered || folderCovered
-                || recentsWallpaperSettlePending || unlockTransitionPending) return;
+                || recentsWallpaperSettlePending) return;
         state.beginRevealBeforeFreshFrame();
         applyLayerVisibility();
     }
