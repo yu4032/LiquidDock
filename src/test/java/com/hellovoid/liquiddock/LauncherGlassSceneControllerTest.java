@@ -37,10 +37,6 @@ public class LauncherGlassSceneControllerTest {
         return (Boolean) call(state, "isLayerVisible", new Class<?>[0]);
     }
 
-    private static boolean ownsNodePresentation(Object state) throws Exception {
-        return (Boolean) call(state, "ownsNodePresentation", new Class<?>[0]);
-    }
-
     @Test public void coveredSceneRequiresFreshFrameBeforeReveal() throws Exception {
         Object state = machine();
         call(state, "onRootReady", new Class<?>[0]);
@@ -83,49 +79,6 @@ public class LauncherGlassSceneControllerTest {
 
         call(state, "onGenerationInvalidated", new Class<?>[0]);
         call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
-        assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
-    }
-
-    @Test public void recentsReturnCanRevealBeforeFreshFrameWithoutSecondFade() throws Exception {
-        Object state = machine();
-        call(state, "onRootReady", new Class<?>[0]);
-        call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
-        call(state, "consumeFadeReveal", new Class<?>[0]);
-
-        call(state, "setCovered", new Class<?>[]{boolean.class}, true);
-        assertTrue(ownsNodePresentation(state));
-        call(state, "setCovered", new Class<?>[]{boolean.class}, false);
-        assertFalse(visible(state));
-        assertFalse(ownsNodePresentation(state));
-
-        call(state, "beginRevealBeforeFreshFrame", new Class<?>[0]);
-        assertTrue("cached static pixels should fade in during the HOME return animation",
-                visible(state));
-        assertTrue("scene fade owns node opacity during the early reveal window",
-                ownsNodePresentation(state));
-        assertTrue((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
-        assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
-
-        call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
-        assertTrue(visible(state));
-        assertFalse("fresh OES frame must not start a second fade",
-                (Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
-        assertFalse("normal HOME presentation returns to native-alpha ownership after fresh frame",
-                ownsNodePresentation(state));
-    }
-
-    @Test public void recentsReentryCancelsEarlyRevealOwnership() throws Exception {
-        Object state = machine();
-        call(state, "onRootReady", new Class<?>[0]);
-        call(state, "onFreshFrameReady", new Class<?>[]{long.class}, generation(state));
-        call(state, "setCovered", new Class<?>[]{boolean.class}, true);
-        call(state, "setCovered", new Class<?>[]{boolean.class}, false);
-        call(state, "beginRevealBeforeFreshFrame", new Class<?>[0]);
-        assertTrue(visible(state));
-
-        call(state, "setCovered", new Class<?>[]{boolean.class}, true);
-        assertFalse(visible(state));
-        assertTrue(ownsNodePresentation(state));
         assertFalse((Boolean) call(state, "consumeFadeReveal", new Class<?>[0]));
     }
 }

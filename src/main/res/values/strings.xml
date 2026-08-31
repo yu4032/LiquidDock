@@ -3,6 +3,7 @@
     <string name="app_name">LiquidDock</string>
     <string name="action_back">Back</string>
     <string name="action_restart_launcher">Restart desktop</string>
+    <string name="action_restart_system_ui">Restart System UI</string>
     <string name="page_grid">Home screen layout</string>
     <string name="page_dock">Dock size and blur</string>
     <string name="page_divider">Dock divider</string>

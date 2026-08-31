@@ -33,20 +33,15 @@ final class LauncherGlassRecentsHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 // Workstation can reuse an apparently-valid Launcher Surface while retiring the
                 // old PassBlur BufferQueue producer. Roll that endpoint before HOME asks for its
-                // freshness frame; capture freshness remains independently barriered below.
+                // freshness frame; the scene controller still owns the final reveal barrier.
                 LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();
 
-                // onRecentViewHide is the Overview -> HOME return-animation start. The static
-                // layer already owns a safe cached pre-Recents frame, so visual reveal must start
-                // here rather than after wallpaper/capture settle. Launcher 4.50 traces place the
-                // return-animation end inside the existing 450 ms glass fade window, therefore
-                // "animation end - one fade window" clamps to this start boundary. Keep the
-                // producer frozen until wallpaper scale-to-1.0 has settled; the fresh OES frame
-                // later replaces pixels without starting a second fade.
+                // onRecentViewHide precedes MiuiWallpaperSurfaceAnimation.IDLE on the pure
+                // HOME -> Recents -> HOME path. Arm the capture barrier before uncovering HOME,
+                // then release it after the observed wallpaper scale-to-1.0 tail has settled.
                 long token = ++recentsReturnToken;
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(true);
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
-                LauncherGlassSceneController.beginRecentsReturnRevealForAll();
                 Handler handler = mainHandler;
                 if (handler != null) {
                     handler.postDelayed(() -> {
