@@ -7,7 +7,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** SystemUI is no longer an Xposed scope, so the settings UI must not expose restart controls. */
+/** Launcher-only settings must not expose any obsolete SystemUI restart action. */
 public class SystemUiRestartUiContractTest {
     @Test public void settingsDoNotExposeSystemUiRestart() throws Exception {
         String compose = Files.readString(Path.of(
