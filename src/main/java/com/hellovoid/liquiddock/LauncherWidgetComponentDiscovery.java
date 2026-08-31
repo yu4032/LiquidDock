@@ -9,6 +9,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -28,7 +29,6 @@ final class LauncherWidgetComponentDiscovery {
     static void scan(View host) {
         if (!WidgetComponentStore.discoveryRequested()) return;
         if (host == null || isMamlHost(host)) return;
-        WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
         View content = resolveRemoteViewsContent(host);
         if (content == null) return;
         synchronized (DUMPED_REMOTE_ROOTS) {
@@ -36,21 +36,24 @@ final class LauncherWidgetComponentDiscovery {
             DUMPED_REMOTE_ROOTS.put(content, Boolean.TRUE);
         }
         String provider = providerIdentity(host);
+        ArrayList<WidgetComponentStore.Descriptor> descriptors = new ArrayList<>();
         // Root path 0 may itself own the visual background. It is selectable for property-level
         // background/image actions, but never for the destructive whole-node hide action.
-        scanNode(content, provider, "0", false, new HashSet<>());
+        scanNode(content, provider, "0", false, new HashSet<>(), descriptors);
+        WidgetComponentStore.publishBatch(host.getContext(), descriptors);
+        WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
     }
 
     static void scanMaml(View host, WidgetBackgroundIdentity identity, Object root) {
         if (!WidgetComponentStore.discoveryRequested()) return;
         if (host == null || identity == null || root == null) return;
-        WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
         synchronized (DUMPED_MAML_ROOTS) {
             if (DUMPED_MAML_ROOTS.containsKey(root)) return;
             DUMPED_MAML_ROOTS.put(root, Boolean.TRUE);
         }
         Object value = readField(root, "mElements");
         if (!(value instanceof Map)) return;
+        ArrayList<WidgetComponentStore.Descriptor> descriptors = new ArrayList<>();
         for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
             String name = String.valueOf(entry.getKey());
             Object stored = entry.getValue();
@@ -65,13 +68,17 @@ final class LauncherWidgetComponentDiscovery {
                     + " name=" + name
                     + " class=" + className
                     + " hierarchyPath=mElements/" + name);
-            WidgetComponentStore.publishMaml(host.getContext(), identity, name, className);
+            WidgetComponentStore.Descriptor descriptor =
+                    WidgetComponentStore.mamlDescriptor(identity, name, className);
+            if (descriptor != null) descriptors.add(descriptor);
         }
+        WidgetComponentStore.publishBatch(host.getContext(), descriptors);
+        WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
     }
 
     private static void scanNode(
             View view, String provider, String hierarchyPath, boolean allowWholeNodeHide,
-            Set<String> published) {
+            Set<String> published, ArrayList<WidgetComponentStore.Descriptor> descriptors) {
         if (view == null) return;
         String resourceName = resourceEntryName(view);
         String className = view.getClass().getName();
@@ -87,18 +94,19 @@ final class LauncherWidgetComponentDiscovery {
                 + " hasImage=" + hasImage);
 
         if (hasBackground) {
-            publishRemoteAction(view, provider, WidgetComponentStore.ACTION_CLEAR_BACKGROUND,
+            collectRemoteAction(provider, WidgetComponentStore.ACTION_CLEAR_BACKGROUND,
                     resourceName, className, hierarchyPath, WidgetComponentStore.TYPE_BACKGROUND,
-                    published);
+                    published, descriptors);
         }
         if (hasImage) {
-            publishRemoteAction(view, provider, WidgetComponentStore.ACTION_CLEAR_IMAGE,
+            collectRemoteAction(provider, WidgetComponentStore.ACTION_CLEAR_IMAGE,
                     resourceName, className, hierarchyPath, WidgetComponentStore.TYPE_IMAGE,
-                    published);
+                    published, descriptors);
         }
         if (allowWholeNodeHide) {
-            publishRemoteAction(view, provider, WidgetComponentStore.ACTION_HIDE_VIEW,
-                    resourceName, className, hierarchyPath, classifyWholeNode(view), published);
+            collectRemoteAction(provider, WidgetComponentStore.ACTION_HIDE_VIEW,
+                    resourceName, className, hierarchyPath, classifyWholeNode(view),
+                    published, descriptors);
         }
 
         if (!(view instanceof ViewGroup)) return;
@@ -106,25 +114,25 @@ final class LauncherWidgetComponentDiscovery {
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
             if (child != null) {
-                scanNode(child, provider, hierarchyPath + "/" + i, true, published);
+                scanNode(child, provider, hierarchyPath + "/" + i, true, published, descriptors);
             }
         }
     }
 
-    private static void publishRemoteAction(
-            View view,
+    private static void collectRemoteAction(
             String provider,
             String action,
             String resourceName,
             String className,
             String hierarchyPath,
             String componentType,
-            Set<String> published) {
+            Set<String> published,
+            ArrayList<WidgetComponentStore.Descriptor> descriptors) {
         String key = action + '\t' + hierarchyPath + '\t' + className + '\t' + resourceName;
         if (!published.add(key)) return;
-        WidgetComponentStore.publishRemoteViews(
-                view.getContext(), provider, action, resourceName, className,
-                hierarchyPath, componentType);
+        WidgetComponentStore.Descriptor descriptor = WidgetComponentStore.remoteDescriptor(
+                provider, action, resourceName, className, hierarchyPath, componentType);
+        if (descriptor != null) descriptors.add(descriptor);
     }
 
     private static String classifyWholeNode(View view) {
