@@ -11,8 +11,9 @@
     <string name="page_recents">多任务</string>
     <string name="page_liquid">液态玻璃</string>
     <string name="page_widget_components">小组件组件</string>
+    <string name="page_widget_component_detail">小组件组件详情</string>
     <string name="widget_components_entry">小组件组件隐藏</string>
-    <string name="widget_components_entry_summary">扫描当前桌面小组件并选择要隐藏的内部组件</string>
+    <string name="widget_components_entry_summary">手动载入当前桌面小组件，再选择要隐藏的内部组件</string>
     <string name="page_stroke">描边</string>
     <string name="page_shadow">阴影</string>
     <string name="page_animation">动画</string>
