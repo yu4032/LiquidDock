@@ -21,5 +21,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".WidgetComponentDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LiquidDock"
+            android:label="@string/page_widget_component_detail" />
+        <receiver
+            android:name=".WidgetDiscoveryReceiver"
+            android:exported="true" />
     </application>
 </manifest>

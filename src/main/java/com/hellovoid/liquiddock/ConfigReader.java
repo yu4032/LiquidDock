@@ -5,7 +5,9 @@ import android.util.Log;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** Runtime config reader backed by API101 Remote Preferences. */
 public class ConfigReader {
@@ -57,6 +59,16 @@ public class ConfigReader {
     public String s(String key, String def) {
         Object value = prefs.get(key);
         return value != null ? String.valueOf(value) : def;
+    }
+
+    public Set<String> stringSet(String key) {
+        Object value = prefs.get(key);
+        if (!(value instanceof Set)) return Collections.emptySet();
+        HashSet<String> result = new HashSet<>();
+        for (Object item : (Set<?>) value) {
+            if (item instanceof String) result.add((String) item);
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     public int i(String key, int def) {
