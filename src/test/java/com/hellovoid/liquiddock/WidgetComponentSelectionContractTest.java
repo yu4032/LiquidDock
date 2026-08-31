@@ -41,14 +41,6 @@ public class WidgetComponentSelectionContractTest {
         String manifest = Files.readString(MANIFEST);
         assertTrue(manifest.contains("android:name=\".WidgetDiscoveryReceiver\""));
         assertTrue(manifest.contains("android:exported=\"true\""));
-
-        String app = Files.readString(ROOT.resolve("LiquidDockApp.java"));
-        assertTrue(app.contains("WidgetComponentStore.DISCOVERY_TOKEN_KEY"));
-        assertTrue(app.contains("UUID.randomUUID().toString()"));
-
-        String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
-        assertTrue(discovery.contains("WidgetComponentStore.publishRemoteViews"));
-        assertTrue(discovery.contains("WidgetComponentStore.publishMaml"));
     }
 
     @Test public void discoveryOnlyRunsForExplicitOneShotRequest() throws Exception {
@@ -73,32 +65,45 @@ public class WidgetComponentSelectionContractTest {
         assertFalse(picker.contains("重新扫描桌面"));
     }
 
-    @Test public void selectedRulesLiveInNormalConfigAndAreReadableAtRuntime() throws Exception {
-        Path store = ROOT.resolve("WidgetComponentStore.java");
-        assertTrue(Files.exists(store));
-        String source = Files.readString(store);
-        assertTrue(source.contains("SELECTION_KEY = \"widget_hidden_components\""));
+    @Test public void remoteDiscoveryPublishesPropertyActionsWithExactHierarchyPath() throws Exception {
+        String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
+        String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
 
-        String reader = Files.readString(ROOT.resolve("ConfigReader.java"));
-        assertTrue(reader.contains("Set<String> stringSet("));
-        assertTrue(reader.contains("prefs.get(key)"));
+        assertTrue(store.contains("REMOTE_V2 = \"R2\""));
+        assertTrue(store.contains("ACTION_CLEAR_BACKGROUND = \"background\""));
+        assertTrue(store.contains("ACTION_CLEAR_IMAGE = \"image\""));
+        assertTrue(store.contains("ACTION_HIDE_VIEW = \"hide\""));
+        assertTrue(store.contains("hierarchyPath"));
+        assertTrue(store.contains("componentType"));
+
+        assertTrue(discovery.contains("view.getBackground() != null"));
+        assertTrue(discovery.contains("instanceof ImageView"));
+        assertTrue(discovery.contains("getDrawable() != null"));
+        assertTrue(discovery.contains("hierarchyPath"));
+        assertTrue(discovery.contains("ACTION_CLEAR_BACKGROUND"));
+        assertTrue(discovery.contains("ACTION_CLEAR_IMAGE"));
+        assertTrue(discovery.contains("ACTION_HIDE_VIEW"));
     }
 
-    @Test public void runtimeExecutorRestoresRemoteViewsAndMamlWithoutGone() throws Exception {
-        Path executor = ROOT.resolve("LauncherWidgetComponentSelectionExecutor.java");
-        assertTrue(Files.exists(executor));
-        String source = Files.readString(executor);
-        assertTrue(source.contains("View.INVISIBLE"));
-        assertTrue(source.contains("getVisibility()"));
-        assertTrue(source.contains("setVisibility(item.originalVisibility)"));
-        assertTrue(source.contains("HookUtil.invoke(target, \"show\", false)"));
-        assertTrue(source.contains("originalShow"));
-        assertFalse(source.contains("View.GONE"));
+    @Test public void oldRemoteSelectorsAreRejectedAndRuntimeUsesExactPropertyMutation() throws Exception {
+        String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
+        String executor = Files.readString(ROOT.resolve("LauncherWidgetComponentSelectionExecutor.java"));
 
-        String controller = Files.readString(ROOT.resolve("LauncherWidgetBackgroundController.java"));
-        assertTrue(controller.contains("LauncherWidgetComponentSelectionExecutor.claim(host)"));
-        assertTrue(controller.contains("LauncherWidgetComponentSelectionExecutor.claimLoadedMamlRoot(host, root)"));
-        assertTrue(controller.contains("LauncherWidgetComponentSelectionExecutor.release(host)"));
+        assertTrue(store.contains("if (REMOTE.equals(parts[0])) return null"));
+        assertTrue(executor.contains("resolveExactRemoteView"));
+        assertTrue(executor.contains("selector.hierarchyPath"));
+        assertTrue(executor.contains("selector.className.equals"));
+        assertTrue(executor.contains("selector.name.equals"));
+
+        assertTrue(executor.contains("getBackground()"));
+        assertTrue(executor.contains("setBackground(null)"));
+        assertTrue(executor.contains("setBackground(item.originalBackground)"));
+        assertTrue(executor.contains("getDrawable()"));
+        assertTrue(executor.contains("setImageDrawable(null)"));
+        assertTrue(executor.contains("setImageDrawable(item.originalImage)"));
+
+        assertTrue(executor.contains("View.INVISIBLE"));
+        assertFalse(executor.contains("View.GONE"));
     }
 
     @Test public void mamlDiscoveryRunsForEveryLoadedRootNotOnlyDiagnostics() throws Exception {
@@ -110,23 +115,28 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(maml.contains("LauncherWidgetComponentDiscovery.scanMaml(host, identity, root)"));
     }
 
-    @Test public void composePaginatesByWidgetBeforeShowingComponents() throws Exception {
+    @Test public void composePaginatesWidgetThenComponentTypeThenExactNode() throws Exception {
         assertTrue(Files.exists(PICKER));
         assertTrue(Files.exists(DETAIL));
         String picker = Files.readString(PICKER);
         String detail = Files.readString(DETAIL);
         String manifest = Files.readString(MANIFEST);
 
-        assertTrue(picker.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)"));
-        assertTrue(picker.contains("WidgetComponentStore.CATALOG_KEY"));
         assertTrue(picker.contains("WidgetComponentDetailActivity"));
         assertTrue(picker.contains("已隐藏"));
         assertFalse(picker.contains("SwitchPreference("));
 
-        assertTrue(detail.contains("WidgetComponentStore.SELECTION_KEY"));
-        assertTrue(detail.contains("显示全部内部元素"));
+        assertTrue(detail.contains("selectedType"));
+        assertTrue(detail.contains("组件类型"));
+        assertTrue(detail.contains("背景层"));
+        assertTrue(detail.contains("图像层"));
+        assertTrue(detail.contains("文本"));
+        assertTrue(detail.contains("容器"));
+        assertTrue(detail.contains("其他"));
+        assertTrue(detail.contains("高级整节点隐藏"));
+        assertTrue(detail.contains("ArrowPreference("));
         assertTrue(detail.contains("SwitchPreference("));
-        assertTrue(detail.contains("finish()"));
+        assertTrue(detail.contains("descriptor.componentType"));
         assertTrue(manifest.contains("android:name=\".WidgetComponentDetailActivity\""));
     }
 }
