@@ -204,6 +204,16 @@ final class LauncherGlassSceneController {
         }
     }
 
+    static void beginHomeReturnRevealForAll() {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.beginHomeReturnReveal();
+        }
+    }
+
     static void setFolderCoveredForAll(boolean covered) {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
@@ -465,6 +475,16 @@ final class LauncherGlassSceneController {
         applyLayerVisibility();
     }
 
+    private void beginHomeReturnReveal() {
+        // CLOSE_TO_HOME is also used by some Overview -> HOME paths. Let the dedicated Recents
+        // return flow keep ownership whenever its coverage/settle state is active; this entry is
+        // for the direct taskFromApp=true App -> HOME transition.
+        if (!homeTransitionPending || recentsCovered || folderCovered
+                || recentsWallpaperSettlePending || unlockTransitionPending) return;
+        state.beginRevealBeforeFreshFrame();
+        applyLayerVisibility();
+    }
+
     private void setEffectiveCovered(boolean covered) {
         boolean wasCovered = state.state() == State.COVERED;
         state.setCovered(covered);
@@ -507,7 +527,11 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal(), folderCovered);
+            // Recents and App->HOME are semantic scene cuts: reset cached presentation to zero
+            // immediately, then their dedicated return flow may fade it back in. Folder already
+            // had the same immediate-hide contract. Ordinary Workspace visibility remains smooth.
+            boolean immediateHide = folderCovered || recentsCovered || homeTransitionPending;
+            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal(), immediateHide);
         }
     }
 
