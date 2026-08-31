@@ -163,7 +163,9 @@ final class LauncherMamlBackgroundRuleExecutor {
             Object element = stored instanceof WeakReference
                     ? ((WeakReference<?>) stored).get() : stored;
             String type = element != null ? element.getClass().getSimpleName() : "collected";
+            String className = element != null ? element.getClass().getName() : "collected";
             names.add(name + ":" + type);
+            LauncherWidgetComponentDiscovery.publishMaml(identity, name, className);
         }
         Collections.sort(names);
 
