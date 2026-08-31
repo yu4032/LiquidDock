@@ -7,6 +7,7 @@ import android.widget.ImageView;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,9 +96,20 @@ final class LauncherWidgetComponentSelectionExecutor {
                 selectors(encoded, false, identity.productId);
         if (selectors.isEmpty()) return;
         ArrayList<MamlClaim> claims = new ArrayList<>();
+        Set<Object> claimed = Collections.newSetFromMap(new IdentityHashMap<>());
         for (WidgetComponentStore.Descriptor selector : selectors) {
-            Object target = HookUtil.invoke(root, "findElement", selector.name);
+            Object target;
+            if (selector.isExactMamlRender()) {
+                target = resolveExactMamlElement(root, selector.hierarchyPath);
+                if (target == null) continue;
+                String targetName = stringField(target, "mName");
+                if (targetName == null) targetName = "";
+                if (!selector.name.equals(targetName)) continue;
+            } else {
+                target = HookUtil.invoke(root, "findElement", selector.name);
+            }
             if (target == null || !selector.className.equals(target.getClass().getName())) continue;
+            if (!claimed.add(target)) continue;
             boolean originalShow = readBooleanField(target, "mShow", true);
             claims.add(new MamlClaim(target, originalShow));
             HookUtil.invoke(target, "show", false);
@@ -105,6 +117,27 @@ final class LauncherWidgetComponentSelectionExecutor {
         if (!claims.isEmpty()) {
             CLAIMS.put(host, new Claim(List.of(), List.of(), List.of(), claims));
         }
+    }
+
+    /** Resolve only through Launcher 4.50's actual ScreenElementRoot.mInnerGroup render tree. */
+    static Object resolveExactMamlElement(Object root, String hierarchyPath) {
+        if (root == null || hierarchyPath == null || hierarchyPath.isEmpty()) return null;
+        String[] parts = hierarchyPath.split("/");
+        if (parts.length < 2 || !"render".equals(parts[0])) return null;
+        Object current = readField(root, "mInnerGroup");
+        if (current == null) return null;
+        for (int i = 1; i < parts.length; i++) {
+            int index;
+            try { index = Integer.parseInt(parts[i]); }
+            catch (NumberFormatException ignored) { return null; }
+            Object childrenValue = readField(current, "mElements");
+            if (!(childrenValue instanceof List)) return null;
+            List<?> children = (List<?>) childrenValue;
+            if (index < 0 || index >= children.size()) return null;
+            current = children.get(index);
+            if (current == null) return null;
+        }
+        return current;
     }
 
     static void release(View host) {
