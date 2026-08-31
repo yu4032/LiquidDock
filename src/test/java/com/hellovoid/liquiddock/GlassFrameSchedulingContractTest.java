@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -13,38 +12,37 @@ public class GlassFrameSchedulingContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void dockVendorBlurSuppressionIsEventDriven() throws Exception {
-        String source = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
-        assertFalse("vendor blur suppression must not run from a root OnPreDraw listener",
-                source.contains("installVendorGpuBlurSuppressor"));
+    public void vendorBlurWritesAreInterceptedInsteadOfReplayedEveryPreDraw() throws Exception {
+        String source = Files.readString(MAIN.resolve("GlassPerformanceHook.java"));
+        assertTrue(source.contains("hookVendorBlurSuppression"));
+        assertTrue(source.contains("installVendorGpuBlurSuppressor"));
+        assertTrue(source.contains("setPassWindowBlurEnabled"));
+        assertTrue(source.contains("setMiBackgroundBlurRadius"));
     }
 
     @Test
-    public void dockProducerGeometryIsNotPolledFromRootPreDraw() throws Exception {
-        String source = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        assertFalse("Dock producer geometry must not install a root OnPreDraw listener",
-                source.contains("addOnPreDrawListener"));
-        assertTrue("geometry changes need an explicit event-driven refresh entry",
-                source.contains("void requestGeometryRefresh()"));
+    public void dockGeometryObserverUsesCheapFingerprintBeforeExpensiveRefresh() throws Exception {
+        String source = Files.readString(MAIN.resolve("GlassPerformanceHook.java"));
+        assertTrue(source.contains("installLightDockObserver"));
+        assertTrue(source.contains("producerFingerprint"));
+        assertTrue(source.contains("mappingFingerprint"));
+        assertTrue(source.contains("refreshProducerGeometryInPlace"));
     }
 
     @Test
-    public void workspacePreDrawChecksProducerOnlyWhenRootGeometryChanges() throws Exception {
-        String source = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
-        String sync = methodSlice(source,
-                "private void syncSceneOnUiThread()",
-                "private boolean refreshProducerGeometryOnUi(View root)");
-        assertFalse("node synchronization must not unconditionally reflect producer geometry",
-                sync.contains("boolean producerGeometryChanged = refreshProducerGeometryOnUi(root);"));
-        assertTrue("root-size changes still need an explicit producer geometry check",
-                sync.contains("boolean producerGeometryChanged = rootGeometryChanged"
-                        + " && refreshProducerGeometryOnUi(root);"));
+    public void workspaceFrameSyncSuppressesProducerReflectionOnOrdinaryFrames() throws Exception {
+        String source = Files.readString(MAIN.resolve("GlassPerformanceHook.java"));
+        assertTrue(source.contains("installLauncherObserver"));
+        assertTrue(source.contains("FRAME_PRODUCER_REFRESH"));
+        assertTrue(source.contains("refreshProducerGeometryOnUi"));
     }
 
-    private static String methodSlice(String source, String startMarker, String endMarker) {
-        int start = source.indexOf(startMarker);
-        int end = source.indexOf(endMarker, start + 1);
-        if (start < 0 || end < 0 || end <= start) return "";
-        return source.substring(start, end);
+    @Test
+    public void dockAnimationUsesSceneOnlyFastPath() throws Exception {
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String performance = Files.readString(MAIN.resolve("GlassPerformanceHook.java"));
+        assertTrue(renderer.contains("GlassPerformanceHook.requestDockAnimationFrame(gpuBackdrop)"));
+        assertTrue(performance.contains("drawDockSceneOnly"));
+        assertTrue(performance.contains("DockGlassFramePolicy"));
     }
 }
