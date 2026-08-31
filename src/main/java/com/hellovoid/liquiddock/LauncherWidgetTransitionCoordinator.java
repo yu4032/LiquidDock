@@ -58,9 +58,14 @@ final class LauncherWidgetTransitionCoordinator {
     static void onAnimTargetWillHide(View material) {
         Entry entry = entryFor(material);
         if (entry == null) return;
-        if (entry.state.isReturnTransition()) {
+        if (entry.state.isReturnWaitingFresh()) {
             hideImmediately(entry);
             return;
+        }
+        if (entry.state.isReturnFadeIn()) {
+            // The user launched the widget again while its return fade was still running. That is a
+            // new launch-away transition, not another hide belonging to the previous HOME return.
+            entry.state.cancel();
         }
 
         LauncherGlassStaticNode node = entry.nodeRef.get();
