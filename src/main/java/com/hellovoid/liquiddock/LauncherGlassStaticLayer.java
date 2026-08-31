@@ -121,9 +121,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (disposed) return;
         animate().cancel();
         cancelSystemUiTimingAnimator();
+        // HOME-hidden-ready owns the previous foreground exit, and HOME presentation pending may
+        // have just queued an asynchronous fade-out. Restart from an explicit compositor alpha 0
+        // so this reveal always represents the WMShell HOME-visible edge rather than the alpha at
+        // the instant the Launcher main thread happens to receive the broadcast.
+        setAlpha(0f);
         LauncherGlassVisibilityTransition.Plan plan =
-                LauncherGlassVisibilityTransition.plan(getAlpha(), true);
-        setAlpha(plan.startAlpha);
+                LauncherGlassVisibilityTransition.plan(0f, true);
         if (plan.durationMs == 0L) {
             setAlpha(1f);
             return;
