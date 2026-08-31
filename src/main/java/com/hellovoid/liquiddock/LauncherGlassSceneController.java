@@ -294,6 +294,7 @@ final class LauncherGlassSceneController {
     void onRootReady() {
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        SystemUiHomeTransitionRuntime.ensureRegistered(root.getContext());
         state.onRootReady();
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
