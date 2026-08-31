@@ -43,6 +43,10 @@ final class LauncherMamlBackgroundRuleExecutor {
         WidgetBackgroundRule rule = RULES.match(identity);
         String identityText = describe(identity);
 
+        if (root != null) {
+            LauncherWidgetComponentDiscovery.scanMaml(host, identity, root);
+        }
+
         if (rule == null) {
             release(host);
             MainHook.log(LOG_TAG + identityText
@@ -163,9 +167,7 @@ final class LauncherMamlBackgroundRuleExecutor {
             Object element = stored instanceof WeakReference
                     ? ((WeakReference<?>) stored).get() : stored;
             String type = element != null ? element.getClass().getSimpleName() : "collected";
-            String className = element != null ? element.getClass().getName() : "collected";
             names.add(name + ":" + type);
-            LauncherWidgetComponentDiscovery.publishMaml(identity, name, className);
         }
         Collections.sort(names);
 
