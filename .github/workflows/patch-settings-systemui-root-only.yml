@@ -1,0 +1,50 @@
+name: Patch settings SystemUI restart visibility
+
+on:
+  push:
+    branches:
+      - feature-systemui-home-transition-timing
+    paths:
+      - .github/workflows/patch-settings-systemui-root-only.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature-systemui-home-transition-timing
+      - name: Guard SystemUI restart behind Home page
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt')
+          source = path.read_text()
+          old = '''                actions = {
+                    TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
+                },'''
+          new = '''                actions = {
+                    TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    if (page == Page.Home) {
+                        TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
+                    }
+                },'''
+          if old not in source:
+              raise SystemExit('expected SmallTopAppBar restart actions block not found')
+          path.write_text(source.replace(old, new, 1))
+          PY
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
+          git rm .github/workflows/patch-settings-systemui-root-only.yml
+          git commit -m 'ui: show SystemUI restart only on root settings page'
+          git push origin HEAD:feature-systemui-home-transition-timing
