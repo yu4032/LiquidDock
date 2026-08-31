@@ -13,15 +13,35 @@ public class WidgetComponentSelectionContractTest {
     private static final Path ROOT = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Path KOTLIN = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
+    private static final Path MANIFEST = Path.of("src/main/AndroidManifest.xml");
 
-    @Test public void discoveryPublishesCatalogToIndependentRemotePreferencesGroup() throws Exception {
+    @Test public void discoveryReportsUpstreamThroughExplicitAuthenticatedReceiver() throws Exception {
         Path store = ROOT.resolve("WidgetComponentStore.java");
+        Path receiver = ROOT.resolve("WidgetDiscoveryReceiver.java");
         assertTrue(Files.exists(store));
-        String source = Files.readString(store);
-        assertTrue(source.contains("DISCOVERY_GROUP = \"widget_components\""));
-        assertTrue(source.contains("CATALOG_KEY = \"catalog\""));
-        assertTrue(source.contains("Api101Bridge.remotePreferences(DISCOVERY_GROUP)"));
-        assertTrue(source.contains("putStringSet(CATALOG_KEY"));
+        assertTrue(Files.exists(receiver));
+
+        String storeSource = Files.readString(store);
+        assertTrue(storeSource.contains("CATALOG_PREFS = \"widget_components\""));
+        assertTrue(storeSource.contains("CATALOG_KEY = \"catalog\""));
+        assertTrue(storeSource.contains("DISCOVERY_TOKEN_KEY = \"widget_discovery_token\""));
+        assertTrue(storeSource.contains("context.sendBroadcast(intent)"));
+        assertTrue(storeSource.contains("intent.setComponent(new ComponentName(MODULE_PACKAGE, RECEIVER_CLASS))"));
+
+        String receiverSource = Files.readString(receiver);
+        assertTrue(receiverSource.contains("WidgetComponentStore.EXTRA_DESCRIPTOR"));
+        assertTrue(receiverSource.contains("WidgetComponentStore.EXTRA_TOKEN"));
+        assertTrue(receiverSource.contains("MessageDigest.isEqual"));
+        assertTrue(receiverSource.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS"));
+        assertTrue(receiverSource.contains("putStringSet(WidgetComponentStore.CATALOG_KEY"));
+
+        String manifest = Files.readString(MANIFEST);
+        assertTrue(manifest.contains("android:name=\".WidgetDiscoveryReceiver\""));
+        assertTrue(manifest.contains("android:exported=\"true\""));
+
+        String app = Files.readString(ROOT.resolve("LiquidDockApp.java"));
+        assertTrue(app.contains("WidgetComponentStore.DISCOVERY_TOKEN_KEY"));
+        assertTrue(app.contains("UUID.randomUUID().toString()"));
 
         String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
         assertTrue(discovery.contains("WidgetComponentStore.publishRemoteViews"));
@@ -58,18 +78,18 @@ public class WidgetComponentSelectionContractTest {
 
     @Test public void mamlDiscoveryRunsForEveryLoadedRootNotOnlyDiagnostics() throws Exception {
         String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
-        assertTrue(discovery.contains("scanMaml(WidgetBackgroundIdentity identity, Object root)"));
+        assertTrue(discovery.contains("scanMaml(View host, WidgetBackgroundIdentity identity, Object root)"));
         assertTrue(discovery.contains("readField(root, \"mElements\")"));
 
         String maml = Files.readString(ROOT.resolve("LauncherMamlBackgroundRuleExecutor.java"));
-        assertTrue(maml.contains("LauncherWidgetComponentDiscovery.scanMaml(identity, root)"));
+        assertTrue(maml.contains("LauncherWidgetComponentDiscovery.scanMaml(host, identity, root)"));
     }
 
-    @Test public void composeExposesWidgetComponentPickerGroupedFromDiscoveryCatalog() throws Exception {
+    @Test public void composeExposesWidgetComponentPickerGroupedFromLocalDiscoveryCatalog() throws Exception {
         String source = Files.readString(KOTLIN);
         assertTrue(source.contains("WidgetComponents(R.string.page_widget_components)"));
         assertTrue(source.contains("WidgetComponentsPage"));
-        assertTrue(source.contains("LiquidDockApp.remotePreferences(WidgetComponentStore.DISCOVERY_GROUP)"));
+        assertTrue(source.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)"));
         assertTrue(source.contains("WidgetComponentStore.CATALOG_KEY"));
         assertTrue(source.contains("WidgetComponentStore.SELECTION_KEY"));
         assertTrue(source.contains("显示全部内部元素"));
