@@ -39,6 +39,8 @@ public class LauncherUnlockCaptureBoundaryContractTest {
     @Test public void launcherGlassDoesNotGateWallpaperCaptureOnUnlockState() throws Exception {
         String hook = read("LauncherGlassHomePresentationHook.java");
         String bridge = read("Miuix307PassBlurBridge.java");
+        String scene = read("LauncherGlassSceneController.java");
+        String registry = read("LauncherGlassSessionRegistry.java");
 
         assertFalse(hook.contains("UnlockAnimationStateMachine"));
         assertFalse(hook.contains("onSystemUiLockscreenGoneFinished"));
@@ -48,5 +50,9 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertFalse(hook.contains("prepareUnlockCaptureReturn"));
         assertFalse(hook.contains("isUnlockCaptureBlocked"));
         assertFalse(bridge.contains("isUnlockCaptureBlocked"));
+        assertFalse(scene.contains("unlockTransitionPending"));
+        assertFalse(scene.contains("setUnlockTransitionPendingForAll"));
+        assertFalse(registry.contains("suspendForUnlockCapture"));
+        assertFalse(registry.contains("prepareUnlockCaptureReturn"));
     }
 }
