@@ -11,10 +11,10 @@ import static org.junit.Assert.assertTrue;
 /** Contract for runtime-discovered, user-selectable widget component suppression. */
 public class WidgetComponentSelectionContractTest {
     private static final Path ROOT = Path.of("src/main/java/com/hellovoid/liquiddock");
-    private static final Path KOTLIN = Path.of(
-            "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
     private static final Path PICKER = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
+    private static final Path DETAIL = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentDetailActivity.kt");
     private static final Path MANIFEST = Path.of("src/main/AndroidManifest.xml");
 
     @Test public void discoveryReportsUpstreamThroughExplicitAuthenticatedReceiver() throws Exception {
@@ -112,17 +112,21 @@ public class WidgetComponentSelectionContractTest {
 
     @Test public void composePaginatesByWidgetBeforeShowingComponents() throws Exception {
         assertTrue(Files.exists(PICKER));
-        String source = Files.readString(KOTLIN);
+        assertTrue(Files.exists(DETAIL));
         String picker = Files.readString(PICKER);
-        assertTrue(source.contains("WidgetComponents(R.string.page_widget_components)"));
-        assertTrue(source.contains("WidgetComponentDetail(R.string.page_widget_component_detail)"));
-        assertTrue(source.contains("Page.WidgetComponentDetail -> WidgetComponentDetailPage"));
-        assertTrue(source.contains("Page.WidgetComponentDetail -> Page.WidgetComponents"));
+        String detail = Files.readString(DETAIL);
+        String manifest = Files.readString(MANIFEST);
+
         assertTrue(picker.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)"));
         assertTrue(picker.contains("WidgetComponentStore.CATALOG_KEY"));
-        assertTrue(picker.contains("WidgetComponentStore.SELECTION_KEY"));
-        assertTrue(picker.contains("internal fun WidgetComponentDetailPage"));
-        assertTrue(picker.contains("openWidget: (String) -> Unit"));
-        assertTrue(picker.contains("显示全部内部元素"));
+        assertTrue(picker.contains("WidgetComponentDetailActivity"));
+        assertTrue(picker.contains("已隐藏"));
+        assertFalse(picker.contains("SwitchPreference("));
+
+        assertTrue(detail.contains("WidgetComponentStore.SELECTION_KEY"));
+        assertTrue(detail.contains("显示全部内部元素"));
+        assertTrue(detail.contains("SwitchPreference("));
+        assertTrue(detail.contains("finish()"));
+        assertTrue(manifest.contains("android:name=\".WidgetComponentDetailActivity\""));
     }
 }
