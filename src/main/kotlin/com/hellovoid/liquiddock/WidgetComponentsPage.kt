@@ -1,30 +1,29 @@
 package com.hellovoid.liquiddock
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.UUID
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 internal fun WidgetComponentsPage(
@@ -36,42 +35,38 @@ internal fun WidgetComponentsPage(
         activity.getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)
     }
     var catalogRevision by remember { mutableIntStateOf(0) }
-    var showAllMaml by rememberSaveable { mutableStateOf(false) }
-    var selected by remember {
-        mutableStateOf(
-            prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())
-                ?.toSet().orEmpty()
-        )
-    }
+    var selectionRevision by remember { mutableIntStateOf(0) }
 
-    DisposableEffect(catalogPrefs) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    DisposableEffect(catalogPrefs, prefs) {
+        val catalogListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == WidgetComponentStore.CATALOG_KEY) catalogRevision++
         }
-        catalogPrefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { catalogPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+        val selectionListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == WidgetComponentStore.SELECTION_KEY) selectionRevision++
+        }
+        catalogPrefs.registerOnSharedPreferenceChangeListener(catalogListener)
+        prefs.registerOnSharedPreferenceChangeListener(selectionListener)
+        onDispose {
+            catalogPrefs.unregisterOnSharedPreferenceChangeListener(catalogListener)
+            prefs.unregisterOnSharedPreferenceChangeListener(selectionListener)
+        }
     }
 
-    val descriptors = remember(catalogRevision) {
-        catalogPrefs.getStringSet(WidgetComponentStore.CATALOG_KEY, emptySet())
-            .orEmpty()
-            .mapNotNull(WidgetComponentStore::parseCatalog)
-            .distinctBy { it.selectorKey() }
-            .sortedWith(
-                compareBy<WidgetComponentStore.Descriptor>(
-                    { it.displayOwner() }, { it.name }, { it.className }
-                )
-            )
+    val descriptors = remember(catalogRevision) { loadWidgetCatalog(catalogPrefs) }
+    val selected = remember(selectionRevision) {
+        prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())?.toSet().orEmpty()
     }
-    val visible = if (showAllMaml) descriptors else descriptors.filter(::defaultVisible)
-    val groups = visible.groupBy { it.displayOwner() }.toSortedMap()
+    val groups = descriptors
+        .groupBy(::widgetGroupKey)
+        .entries
+        .sortedBy { it.value.firstOrNull()?.displayOwner().orEmpty() }
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text("小组件组件隐藏", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "扫描当前桌面已加载的小组件，并选择要隐藏的内部视觉组件。选择后重启桌面生效。",
+                    "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
                     fontSize = 13.sp,
                     modifier = Modifier.padding(top = 5.dp),
                 )
@@ -79,33 +74,25 @@ internal fun WidgetComponentsPage(
         }
         item {
             Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Column {
-                    SwitchPreference(
-                        checked = showAllMaml,
-                        onCheckedChange = { showAllMaml = it },
-                        title = "显示全部内部元素",
-                        summary = "默认隐藏 MAML VariableElement 等非视觉内部状态",
-                    )
-                    ArrowPreference(
-                        title = "刷新列表",
-                        summary = "重新读取已扫描到的组件目录",
-                        onClick = { catalogRevision++ },
-                    )
-                    ArrowPreference(
-                        title = "重新扫描桌面",
-                        summary = "清空发现目录并重启桌面；桌面重新加载后会重新扫描",
-                        onClick = {
-                            catalogPrefs.edit().remove(WidgetComponentStore.CATALOG_KEY).apply()
-                            catalogRevision++
-                            activity.restartLauncher()
-                        },
-                    )
-                    ArrowPreference(
-                        title = "应用并重启桌面",
-                        summary = "让当前勾选的隐藏规则立即进入新的桌面进程",
-                        onClick = activity::restartLauncher,
-                    )
-                }
+                ArrowPreference(
+                    title = "载入当前小组件",
+                    summary = "仅下一次桌面启动执行一轮扫描，完成后自动关闭扫描",
+                    onClick = {
+                        val request = UUID.randomUUID().toString()
+                        val stored = prefs.edit()
+                            .putString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, request)
+                            .commit()
+                        val synced = stored && LiquidDockApp.syncToRemote(prefs)
+                        if (!synced) {
+                            prefs.edit().remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY).commit()
+                            Toast.makeText(activity, "Xposed 服务未连接，无法载入小组件", Toast.LENGTH_SHORT).show()
+                            return@ArrowPreference
+                        }
+                        catalogPrefs.edit().remove(WidgetComponentStore.CATALOG_KEY).commit()
+                        catalogRevision++
+                        activity.restartLauncher()
+                    },
+                )
             }
         }
 
@@ -113,9 +100,9 @@ internal fun WidgetComponentsPage(
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("尚未发现小组件")
+                        Text("尚未载入小组件")
                         Text(
-                            "首次安装后先打开一次 LiquidDock，再重启桌面；返回此页后点击刷新列表。",
+                            "点击上方“载入当前小组件”；LiquidDock 只会在这次手动触发后扫描一次。",
                             fontSize = 13.sp,
                             modifier = Modifier.padding(top = 5.dp),
                         )
@@ -123,30 +110,24 @@ internal fun WidgetComponentsPage(
                 }
             }
         } else {
-            groups.forEach { (owner, components) ->
-                item { SmallTitle(owner) }
-                item {
-                    Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                        Column {
-                            components.forEach { descriptor ->
-                                val key = descriptor.selectorKey()
-                                SwitchPreference(
-                                    checked = key in selected,
-                                    onCheckedChange = { checked ->
-                                        val next = selected.toMutableSet()
-                                        if (checked) next.add(key) else next.remove(key)
-                                        selected = next.toSet()
-                                        prefs.edit()
-                                            .putStringSet(
-                                                WidgetComponentStore.SELECTION_KEY,
-                                                HashSet(selected),
-                                            )
-                                            .apply()
-                                    },
-                                    title = descriptor.name,
-                                    summary = buildSummary(descriptor),
-                                )
-                            }
+            item { SmallTitle("已载入小组件") }
+            item {
+                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Column {
+                        groups.forEach { (key, components) ->
+                            val first = components.first()
+                            val selectedCount = components.count { it.selectorKey() in selected }
+                            val source = if (first.isMaml()) "MAML" else "RemoteViews"
+                            ArrowPreference(
+                                title = first.displayOwner(),
+                                summary = "$source · 已隐藏 $selectedCount / ${components.size}",
+                                onClick = {
+                                    activity.startActivity(
+                                        Intent(activity, WidgetComponentDetailActivity::class.java)
+                                            .putExtra(WidgetComponentDetailActivity.EXTRA_WIDGET_KEY, key)
+                                    )
+                                },
+                            )
                         }
                     }
                 }
@@ -155,13 +136,27 @@ internal fun WidgetComponentsPage(
     }
 }
 
-private fun defaultVisible(descriptor: WidgetComponentStore.Descriptor): Boolean {
+internal fun loadWidgetCatalog(catalogPrefs: SharedPreferences): List<WidgetComponentStore.Descriptor> =
+    catalogPrefs.getStringSet(WidgetComponentStore.CATALOG_KEY, emptySet())
+        .orEmpty()
+        .mapNotNull(WidgetComponentStore::parseCatalog)
+        .distinctBy { it.selectorKey() }
+        .sortedWith(
+            compareBy<WidgetComponentStore.Descriptor>(
+                { it.displayOwner() }, { it.name }, { it.className }
+            )
+        )
+
+internal fun widgetGroupKey(descriptor: WidgetComponentStore.Descriptor): String =
+    descriptor.source + "\t" + descriptor.owner
+
+internal fun defaultWidgetComponentVisible(descriptor: WidgetComponentStore.Descriptor): Boolean {
     if (!descriptor.isMaml()) return true
     val simple = descriptor.className.substringAfterLast('.')
     return !simple.contains("VariableElement")
 }
 
-private fun buildSummary(descriptor: WidgetComponentStore.Descriptor): String {
+internal fun widgetComponentSummary(descriptor: WidgetComponentStore.Descriptor): String {
     val source = if (descriptor.isMaml()) "MAML" else "RemoteViews"
     return "$source · ${descriptor.className.substringAfterLast('.')}"
 }
