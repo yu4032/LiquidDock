@@ -5,6 +5,8 @@ import android.appwidget.AppWidgetProviderInfo;
 import android.content.res.Resources;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
 import java.util.Collections;
@@ -34,8 +36,8 @@ final class LauncherWidgetComponentDiscovery {
             DUMPED_REMOTE_ROOTS.put(content, Boolean.TRUE);
         }
         String provider = providerIdentity(host);
-        // The direct RemoteViews content root is diagnostic only. Never publish it as selectable:
-        // hiding that node would suppress the entire provider widget instead of one component.
+        // Root path 0 may itself own the visual background. It is selectable for property-level
+        // background/image actions, but never for the destructive whole-node hide action.
         scanNode(content, provider, "0", false, new HashSet<>());
     }
 
@@ -68,24 +70,37 @@ final class LauncherWidgetComponentDiscovery {
     }
 
     private static void scanNode(
-            View view, String provider, String hierarchyPath, boolean selectable,
+            View view, String provider, String hierarchyPath, boolean allowWholeNodeHide,
             Set<String> published) {
         if (view == null) return;
         String resourceName = resourceEntryName(view);
         String className = view.getClass().getName();
+        boolean hasBackground = view.getBackground() != null;
+        boolean hasImage = view instanceof ImageView && ((ImageView) view).getDrawable() != null;
         MainHook.log(TAG
                 + " source=remoteviews"
                 + " provider=" + safe(provider)
                 + " class=" + className
                 + " resource=" + resourceName
-                + " hierarchyPath=" + hierarchyPath);
-        if (selectable && !resourceName.isEmpty()) {
-            String publishKey = resourceName + '\t' + className;
-            if (published.add(publishKey)) {
-                WidgetComponentStore.publishRemoteViews(
-                        view.getContext(), provider, resourceName, className);
-            }
+                + " hierarchyPath=" + hierarchyPath
+                + " hasBackground=" + hasBackground
+                + " hasImage=" + hasImage);
+
+        if (hasBackground) {
+            publishRemoteAction(view, provider, WidgetComponentStore.ACTION_CLEAR_BACKGROUND,
+                    resourceName, className, hierarchyPath, WidgetComponentStore.TYPE_BACKGROUND,
+                    published);
         }
+        if (hasImage) {
+            publishRemoteAction(view, provider, WidgetComponentStore.ACTION_CLEAR_IMAGE,
+                    resourceName, className, hierarchyPath, WidgetComponentStore.TYPE_IMAGE,
+                    published);
+        }
+        if (allowWholeNodeHide) {
+            publishRemoteAction(view, provider, WidgetComponentStore.ACTION_HIDE_VIEW,
+                    resourceName, className, hierarchyPath, classifyWholeNode(view), published);
+        }
+
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
@@ -94,6 +109,29 @@ final class LauncherWidgetComponentDiscovery {
                 scanNode(child, provider, hierarchyPath + "/" + i, true, published);
             }
         }
+    }
+
+    private static void publishRemoteAction(
+            View view,
+            String provider,
+            String action,
+            String resourceName,
+            String className,
+            String hierarchyPath,
+            String componentType,
+            Set<String> published) {
+        String key = action + '\t' + hierarchyPath + '\t' + className + '\t' + resourceName;
+        if (!published.add(key)) return;
+        WidgetComponentStore.publishRemoteViews(
+                view.getContext(), provider, action, resourceName, className,
+                hierarchyPath, componentType);
+    }
+
+    private static String classifyWholeNode(View view) {
+        if (view instanceof TextView) return WidgetComponentStore.TYPE_TEXT;
+        if (view instanceof ViewGroup) return WidgetComponentStore.TYPE_CONTAINER;
+        if (view.isClickable() || view.isLongClickable()) return WidgetComponentStore.TYPE_INTERACTIVE;
+        return WidgetComponentStore.TYPE_OTHER;
     }
 
     static View resolveRemoteViewsContent(View host) {
