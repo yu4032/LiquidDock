@@ -9,7 +9,7 @@ import java.util.Locale;
 
 import org.junit.Test;
 
-/** UI contract for settings whose hook/layout structure requires a Launcher restart. */
+/** UI contract for restart-bound settings and restart action visibility. */
 public class RestartBoundSettingsContractTest {
     private static final Path UI = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
