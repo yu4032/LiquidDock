@@ -465,7 +465,7 @@ final class LauncherGlassStaticNode {
 
         if (!LauncherGlassHierarchy.isWorkspace(material)) return null;
         boolean semanticSceneOwnsVisibility =
-                LauncherGlassSceneController.isCoveredForRoot(root);
+                LauncherGlassSceneController.ownsNodePresentationForRoot(root);
         LauncherGlassVisibility.Sample presentation =
                 LauncherGlassVisibility.sample(material, root);
         syncNativePresentation(presentation, semanticSceneOwnsVisibility);
