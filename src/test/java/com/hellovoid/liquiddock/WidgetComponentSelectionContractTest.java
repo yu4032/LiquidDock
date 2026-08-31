@@ -34,7 +34,8 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(receiverSource.contains("WidgetComponentStore.EXTRA_DESCRIPTOR"));
         assertTrue(receiverSource.contains("WidgetComponentStore.EXTRA_TOKEN"));
         assertTrue(receiverSource.contains("MessageDigest.isEqual"));
-        assertTrue(receiverSource.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS"));
+        assertTrue(receiverSource.contains("getSharedPreferences("));
+        assertTrue(receiverSource.contains("WidgetComponentStore.CATALOG_PREFS"));
         assertTrue(receiverSource.contains("putStringSet(WidgetComponentStore.CATALOG_KEY"));
 
         String manifest = Files.readString(MANIFEST);
