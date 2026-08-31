@@ -259,17 +259,20 @@ private fun WidgetExactNodePage(
     selected: Set<String>,
     onSelectionChanged: (WidgetComponentStore.Descriptor, Boolean) -> Unit,
 ) {
+    val isMaml = components.firstOrNull()?.isMaml() == true
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text(componentTypeTitle(type), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (type == WidgetComponentStore.TYPE_BACKGROUND) {
-                        "仅移除 View.background，不隐藏 View 与子内容。"
-                    } else if (type == WidgetComponentStore.TYPE_IMAGE) {
-                        "仅移除 ImageView 图像 Drawable，不隐藏其他内容。"
-                    } else {
-                        "高级整节点隐藏：只命中当前精确路径；容器节点会同时隐藏其子内容。"
+                    when {
+                        isMaml -> "MAML 元素按名称或精确渲染路径隐藏；路径或类型变化时不会回退误命中。"
+                        type == WidgetComponentStore.TYPE_BACKGROUND ->
+                            "仅移除 View.background，不隐藏 View 与子内容。"
+                        type == WidgetComponentStore.TYPE_IMAGE ->
+                            "仅移除 ImageView 图像 Drawable，不隐藏其他内容。"
+                        else ->
+                            "高级整节点隐藏：只命中当前精确路径；容器节点会同时隐藏其子内容。"
                     },
                     fontSize = 13.sp,
                     modifier = Modifier.padding(top = 5.dp),
@@ -311,7 +314,9 @@ private fun componentTypeTitle(type: String): String = when (type) {
 }
 
 private fun exactNodeTitle(descriptor: WidgetComponentStore.Descriptor): String {
-    val name = descriptor.name.ifEmpty { "(无资源 ID)" }
+    val name = descriptor.name.ifEmpty {
+        if (descriptor.isMaml()) "(匿名元素)" else "(无资源 ID)"
+    }
     return when (descriptor.action) {
         WidgetComponentStore.ACTION_CLEAR_BACKGROUND -> "移除背景 · $name"
         WidgetComponentStore.ACTION_CLEAR_IMAGE -> "移除图像 · $name"
