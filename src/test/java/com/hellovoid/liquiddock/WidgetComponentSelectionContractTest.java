@@ -160,9 +160,7 @@ public class WidgetComponentSelectionContractTest {
 
         assertTrue(picker.contains("WidgetComponentDetailActivity"));
         assertTrue(picker.contains("已隐藏"));
-        assertTrue(picker.contains("SwitchPreference("));
-        assertTrue(picker.contains("title = \"液态玻璃背景\""));
-        assertTrue(picker.contains("WidgetGlassSelectionPolicy.SELECTION_KEY"));
+        assertFalse(picker.contains("SwitchPreference("));
 
         assertTrue(detail.contains("selectedType"));
         assertTrue(detail.contains("组件类型"));
