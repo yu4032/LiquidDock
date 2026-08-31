@@ -8,9 +8,10 @@ import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
 import io.github.libxposed.api.XposedModule;
 
-/** libxposed API 101 entry point. Launcher is the sole injected process; SystemUI stays untouched. */
+/** libxposed API 101 entry point. SystemUI is injected only as a read-only unlock event source. */
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
+    private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
     @Override
     public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
@@ -21,7 +22,16 @@ public final class ModuleMain extends XposedModule {
 
     @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
-        if (!LAUNCHER_PACKAGE.equals(param.getPackageName())) return;
+        String packageName = param.getPackageName();
+        if (SYSTEM_UI_PACKAGE.equals(packageName)) {
+            try {
+                SystemUiKeyguardGoneSource.install(param.getClassLoader());
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC] SystemUI unlock source init failed", error);
+            }
+            return;
+        }
+        if (!LAUNCHER_PACKAGE.equals(packageName)) return;
         try {
             LegacyConfigMigration.migrateAtProcessStart();
             ConfigMigration.migrateAtProcessStart();
@@ -58,6 +68,7 @@ public final class ModuleMain extends XposedModule {
             MiuixLauncherStaticGlassHook.install(classLoader, runtimeConfig);
             DockIconAnimationGlassHook.install(classLoader, runtimeConfig);
             LauncherGlassRecentsHook.install(classLoader, runtimeConfig);
+            SystemUiKeyguardGoneRuntime.install();
             LauncherGlassHomePresentationHook.install(classLoader);
             DockGlassDropRefreshHook.install(classLoader);
             RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
