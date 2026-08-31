@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -21,15 +22,18 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import com.hellovoid.liquiddock.config.ConfigCodec;
 import com.hellovoid.liquiddock.config.ConfigMigration;
 import com.hellovoid.liquiddock.config.PresetManager;
 
 public class SettingsActivity extends AppCompatActivity {
+    private static final int WIDGET_HIDDEN_BACKUP_MAX_BYTES = 1024 * 1024;
 
     private final ActivityResultLauncher<String> exportConfigLauncher =
         registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
@@ -37,6 +41,12 @@ public class SettingsActivity extends AppCompatActivity {
     private final ActivityResultLauncher<String[]> importConfigLauncher =
         registerForActivityResult(new ActivityResultContracts.OpenDocument(),
             uri -> { if (uri != null) importParameters(uri); });
+    private final ActivityResultLauncher<String> exportWidgetHiddenLauncher =
+        registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
+            uri -> { if (uri != null) exportWidgetHiddenRules(uri); });
+    private final ActivityResultLauncher<String[]> importWidgetHiddenLauncher =
+        registerForActivityResult(new ActivityResultContracts.OpenDocument(),
+            uri -> { if (uri != null) importWidgetHiddenRules(uri); });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,6 +84,15 @@ public class SettingsActivity extends AppCompatActivity {
 
     void launchImport() {
         importConfigLauncher.launch(new String[]{"application/json", "text/json", "text/plain"});
+    }
+
+    void launchWidgetHiddenExport() {
+        exportWidgetHiddenLauncher.launch("LiquidDock-widget-hidden.json");
+    }
+
+    void launchWidgetHiddenImport() {
+        importWidgetHiddenLauncher.launch(
+                new String[]{"application/json", "text/json", "text/plain"});
     }
 
     private void exportCurrentParameters(Uri uri) {
@@ -122,6 +141,87 @@ public class SettingsActivity extends AppCompatActivity {
                 showError("Import failed: " + e.getMessage());
             }
         }).start();
+    }
+
+    private void exportWidgetHiddenRules(Uri uri) {
+        new Thread(() -> {
+            try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+                if (out == null) throw new IOException("Unable to open destination");
+                SharedPreferences preferences =
+                        PreferenceManager.getDefaultSharedPreferences(this);
+                Set<String> selected = preferences.getStringSet(
+                        WidgetComponentStore.SELECTION_KEY, Set.of());
+                Map<String, Object> backup = WidgetHiddenRulesBackup.exportValues(selected);
+                JSONObject json = new JSONObject();
+                json.put(WidgetHiddenRulesBackup.KEY_FORMAT,
+                        backup.get(WidgetHiddenRulesBackup.KEY_FORMAT));
+                json.put(WidgetHiddenRulesBackup.KEY_VERSION,
+                        backup.get(WidgetHiddenRulesBackup.KEY_VERSION));
+                JSONArray selectors = new JSONArray();
+                Object values = backup.get(WidgetHiddenRulesBackup.KEY_SELECTORS);
+                if (values instanceof Iterable<?>) {
+                    for (Object value : (Iterable<?>) values) selectors.put(value);
+                }
+                json.put(WidgetHiddenRulesBackup.KEY_SELECTORS, selectors);
+                out.write((json.toString(2) + "\n").getBytes(StandardCharsets.UTF_8));
+                runOnUiThread(() -> Toast.makeText(this,
+                        "小组件隐藏规则已导出", Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                showError("导出小组件隐藏规则失败: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void importWidgetHiddenRules(Uri uri) {
+        new Thread(() -> {
+            try {
+                JSONObject json = readJsonDocument(uri, WIDGET_HIDDEN_BACKUP_MAX_BYTES,
+                        "小组件隐藏规则文件超过 1 MiB");
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put(WidgetHiddenRulesBackup.KEY_FORMAT,
+                        json.opt(WidgetHiddenRulesBackup.KEY_FORMAT));
+                values.put(WidgetHiddenRulesBackup.KEY_VERSION,
+                        json.opt(WidgetHiddenRulesBackup.KEY_VERSION));
+                JSONArray array = json.optJSONArray(WidgetHiddenRulesBackup.KEY_SELECTORS);
+                if (array == null) {
+                    values.put(WidgetHiddenRulesBackup.KEY_SELECTORS, null);
+                } else {
+                    ArrayList<Object> selectors = new ArrayList<>(array.length());
+                    for (int i = 0; i < array.length(); i++) selectors.add(array.opt(i));
+                    values.put(WidgetHiddenRulesBackup.KEY_SELECTORS, selectors);
+                }
+
+                Set<String> imported = WidgetHiddenRulesBackup.importValues(values);
+                SharedPreferences preferences =
+                        PreferenceManager.getDefaultSharedPreferences(this);
+                if (!WidgetHiddenRulesBackup.replaceSelections(preferences, imported)) {
+                    throw new IOException("无法保存小组件隐藏规则");
+                }
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "小组件隐藏规则已导入并覆盖当前设置",
+                            Toast.LENGTH_LONG).show();
+                    restartLauncher();
+                });
+            } catch (Exception e) {
+                showError("导入小组件隐藏规则失败: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private JSONObject readJsonDocument(Uri uri, int maxBytes, String tooLargeMessage)
+            throws Exception {
+        try (InputStream in = getContentResolver().openInputStream(uri);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            if (in == null) throw new IOException("Unable to open selected file");
+            byte[] buffer = new byte[4096];
+            int count, total = 0;
+            while ((count = in.read(buffer)) != -1) {
+                total += count;
+                if (total > maxBytes) throw new IOException(tooLargeMessage);
+                out.write(buffer, 0, count);
+            }
+            return new JSONObject(out.toString(StandardCharsets.UTF_8.name()));
+        }
     }
 
     private void showError(String message) {
