@@ -9,6 +9,7 @@ import androidx.preference.PreferenceManager;
 import com.hellovoid.liquiddock.config.ConfigMigration;
 
 import java.util.Map;
+import java.util.UUID;
 
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
@@ -29,8 +30,16 @@ public final class LiquidDockApp extends Application
         // Remote Preferences. Otherwise a stale local store can overwrite the Launcher's freshly
         // migrated API101 store during reconciliation.
         ConfigMigration.migrate(this, localPreferences);
+        ensureWidgetDiscoveryToken();
         localPreferences.registerOnSharedPreferenceChangeListener(this);
         XposedServiceHelper.registerListener(this);
+    }
+
+    private void ensureWidgetDiscoveryToken() {
+        if (localPreferences.contains(WidgetComponentStore.DISCOVERY_TOKEN_KEY)) return;
+        localPreferences.edit().putString(
+                WidgetComponentStore.DISCOVERY_TOKEN_KEY,
+                UUID.randomUUID().toString()).commit();
     }
 
     @Override
@@ -73,6 +82,7 @@ public final class LiquidDockApp extends Application
             reconciling = true;
             try {
                 copyAll(remote, localPreferences);
+                ensureWidgetDiscoveryToken();
                 Log.i("LiquidDock", "seeded local UI prefs from API101 Remote Preferences");
             } finally {
                 reconciling = false;
