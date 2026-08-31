@@ -96,6 +96,24 @@ internal fun WidgetComponentsPage(
             }
         }
 
+        item { SmallTitle("隐藏规则备份") }
+        item {
+            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Column {
+                    ArrowPreference(
+                        title = "导出隐藏规则",
+                        summary = "仅保存已选择的小组件隐藏规则，不包含扫描目录",
+                        onClick = { activity.launchWidgetHiddenExport() },
+                    )
+                    ArrowPreference(
+                        title = "导入隐藏规则",
+                        summary = "覆盖当前隐藏规则并重启桌面，不重新扫描小组件",
+                        onClick = { activity.launchWidgetHiddenImport() },
+                    )
+                }
+            }
+        }
+
         if (groups.isEmpty()) {
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
