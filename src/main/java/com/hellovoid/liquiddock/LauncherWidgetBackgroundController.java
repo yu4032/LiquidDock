@@ -8,6 +8,9 @@ final class LauncherWidgetBackgroundController {
 
     static void claim(View host) {
         if (host == null) return;
+        // Read-only discovery is orthogonal to material ownership. It lets the future GUI learn
+        // the actual provider tree without changing current suppression behavior.
+        LauncherWidgetComponentDiscovery.scan(host);
         LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host);
         if (isMamlHost(host)) {
             LauncherMamlBackgroundRuleExecutor.claim(host);
