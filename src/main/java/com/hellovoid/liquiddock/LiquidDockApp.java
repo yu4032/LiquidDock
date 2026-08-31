@@ -9,6 +9,7 @@ import androidx.preference.PreferenceManager;
 import com.hellovoid.liquiddock.config.ConfigMigration;
 
 import java.util.Map;
+import java.util.UUID;
 
 import io.github.libxposed.service.XposedService;
 import io.github.libxposed.service.XposedServiceHelper;
@@ -29,8 +30,16 @@ public final class LiquidDockApp extends Application
         // Remote Preferences. Otherwise a stale local store can overwrite the Launcher's freshly
         // migrated API101 store during reconciliation.
         ConfigMigration.migrate(this, localPreferences);
+        ensureWidgetDiscoveryToken();
         localPreferences.registerOnSharedPreferenceChangeListener(this);
         XposedServiceHelper.registerListener(this);
+    }
+
+    private void ensureWidgetDiscoveryToken() {
+        if (localPreferences.contains(WidgetComponentStore.DISCOVERY_TOKEN_KEY)) return;
+        localPreferences.edit().putString(
+                WidgetComponentStore.DISCOVERY_TOKEN_KEY,
+                UUID.randomUUID().toString()).commit();
     }
 
     @Override
@@ -63,20 +72,40 @@ public final class LiquidDockApp extends Application
         if (remote == null || localPreferences == null) return;
         Map<String, ?> localAll = localPreferences.getAll();
         Map<String, ?> remoteAll = remote.getAll();
+        boolean hasLocalConfig = false;
+        if (localAll != null) {
+            for (String key : localAll.keySet()) {
+                if (!WidgetComponentStore.DISCOVERY_TOKEN_KEY.equals(key)
+                        && !WidgetComponentStore.DISCOVERY_REQUEST_KEY.equals(key)) {
+                    hasLocalConfig = true;
+                    break;
+                }
+            }
+        }
 
-        // Normal upgrade path: the existing app-local settings are authoritative and are
-        // copied once into API101 Remote Preferences.  If the local store is empty but the
-        // injected module has already migrated legacy JSON into Remote Preferences, pull that
-        // data back into the UI instead of accidentally clearing the newly migrated group.
-        if ((localAll == null || localAll.isEmpty())
-                && remoteAll != null && !remoteAll.isEmpty()) {
+        // Discovery token/request are transport metadata, not user config. Ignore them when
+        // deciding whether an otherwise-empty local store should pull a legacy-migrated config.
+        if (!hasLocalConfig && remoteAll != null && !remoteAll.isEmpty()) {
+            String token = localPreferences.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, null);
+            String request = localPreferences.getString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, null);
             reconciling = true;
             try {
                 copyAll(remote, localPreferences);
+                SharedPreferences.Editor metadata = localPreferences.edit();
+                if (token != null && !token.isEmpty()) {
+                    metadata.putString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, token);
+                }
+                if (request != null && !request.isEmpty()) {
+                    metadata.putString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, request);
+                }
+                metadata.commit();
+                ensureWidgetDiscoveryToken();
                 Log.i("LiquidDock", "seeded local UI prefs from API101 Remote Preferences");
             } finally {
                 reconciling = false;
             }
+            // Publish retained/generated discovery metadata back down after pulling config.
+            syncToRemote(localPreferences);
         } else if (localAll != null && !localAll.isEmpty()) {
             syncToRemote(localPreferences);
             Log.i("LiquidDock", "seeded API101 Remote Preferences from local UI prefs");

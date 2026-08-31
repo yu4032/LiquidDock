@@ -74,6 +74,7 @@ private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     Liquid(R.string.page_liquid),
+    WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
     Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
     Data(R.string.page_data),
@@ -81,7 +82,7 @@ private enum class Page(val titleRes: Int) {
 }
 
 private fun parentPage(page: Page): Page = when (page) {
-    Page.LauncherHighlights -> Page.Liquid
+    Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
     else -> Page.Home
 }
 
@@ -411,7 +412,14 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
-                Page.Liquid -> LiquidPage(padding, prefs, masterEnabled) { page = Page.LauncherHighlights }
+                Page.Liquid -> LiquidPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                    openLauncherHighlights = { page = Page.LauncherHighlights },
+                    openWidgetComponents = { page = Page.WidgetComponents },
+                )
+                Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
                 Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
@@ -553,6 +561,7 @@ private fun LiquidPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     openLauncherHighlights: () -> Unit,
+    openWidgetComponents: () -> Unit,
 ) {
     var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
     var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
@@ -578,6 +587,12 @@ private fun LiquidPage(
         BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配", "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容", masterEnabled && liquidGlass && widgetGlass)
         IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)
         IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidGlass && widgetGlass)
+        ArrowPreference(
+            stringResource(R.string.widget_components_entry),
+            summary = stringResource(R.string.widget_components_entry_summary),
+            enabled = masterEnabled && liquidGlass && widgetGlass,
+            onClick = openWidgetComponents,
+        )
         BooleanSetting(prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS, "小文件夹玻璃", "保留 1x1 文件夹缩略预览", masterEnabled && liquidGlass) { smallFolderGlass = it }
         IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidGlass && smallFolderGlass)
         IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidGlass && smallFolderGlass)

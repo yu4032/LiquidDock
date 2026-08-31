@@ -8,19 +8,28 @@ final class LauncherWidgetBackgroundController {
 
     static void claim(View host) {
         if (host == null) return;
+        // Discovery must observe provider-owned properties before LiquidDock clears the vendor
+        // material. In particular Calendar's direct RemoteViews root owns the background that the
+        // material suppressor intentionally removes immediately afterwards.
+        LauncherWidgetComponentDiscovery.scan(host);
         LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host);
         if (isMamlHost(host)) {
             LauncherMamlBackgroundRuleExecutor.claim(host);
         }
+        LauncherWidgetComponentSelectionExecutor.claim(host);
     }
 
     static void claimLoadedMamlRoot(View host, Object root) {
         if (host == null || root == null || !isMamlHost(host)) return;
         LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(host, root);
+        LauncherWidgetComponentSelectionExecutor.claimLoadedMamlRoot(host, root);
     }
 
     static void release(View host) {
         if (host == null) return;
+        // User MAML claims observe the state after bundled compatibility rules have run. Restore
+        // them first, then let the bundled rule executor restore the provider's real mShow value.
+        LauncherWidgetComponentSelectionExecutor.release(host);
         if (isMamlHost(host)) {
             LauncherMamlBackgroundRuleExecutor.release(host);
         }
