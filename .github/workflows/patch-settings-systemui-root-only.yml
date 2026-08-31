@@ -22,22 +22,25 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt')
           source = path.read_text()
-          old = '''                actions = {
-                    TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
-                    TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
-                },'''
-          new = '''                actions = {
-                    TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
-                    if (page == Page.Home) {
-                        TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
-                    }
-                },'''
-          if old not in source:
-              raise SystemExit('expected SmallTopAppBar restart actions block not found')
-          path.write_text(source.replace(old, new, 1))
+          pattern = re.compile(
+              r'(?m)^(?P<indent>[ \t]*)TextButton\(text = stringResource\(R\.string\.action_restart_launcher\), onClick = \{ activity\.restartLauncher\(\) \}\)\n'
+              r'(?P=indent)TextButton\(text = stringResource\(R\.string\.action_restart_system_ui\), onClick = \{ activity\.restartSystemUi\(\) \}\)$'
+          )
+          match = pattern.search(source)
+          if match is None:
+              raise SystemExit('expected adjacent restart actions not found')
+          indent = match.group('indent')
+          replacement = (
+              indent + 'TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })\n'
+              + indent + 'if (page == Page.Home) {\n'
+              + indent + '    TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })\n'
+              + indent + '}'
+          )
+          path.write_text(source[:match.start()] + replacement + source[match.end():])
           PY
       - name: Commit patch and remove temporary workflow
         shell: bash
