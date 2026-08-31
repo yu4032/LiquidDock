@@ -75,31 +75,36 @@ public final class LiquidDockApp extends Application
         boolean hasLocalConfig = false;
         if (localAll != null) {
             for (String key : localAll.keySet()) {
-                if (!WidgetComponentStore.DISCOVERY_TOKEN_KEY.equals(key)) {
+                if (!WidgetComponentStore.DISCOVERY_TOKEN_KEY.equals(key)
+                        && !WidgetComponentStore.DISCOVERY_REQUEST_KEY.equals(key)) {
                     hasLocalConfig = true;
                     break;
                 }
             }
         }
 
-        // The discovery token is transport metadata, not user config. Ignore it when deciding
-        // whether an otherwise-empty local store should pull a legacy-migrated remote config.
+        // Discovery token/request are transport metadata, not user config. Ignore them when
+        // deciding whether an otherwise-empty local store should pull a legacy-migrated config.
         if (!hasLocalConfig && remoteAll != null && !remoteAll.isEmpty()) {
             String token = localPreferences.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, null);
+            String request = localPreferences.getString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, null);
             reconciling = true;
             try {
                 copyAll(remote, localPreferences);
+                SharedPreferences.Editor metadata = localPreferences.edit();
                 if (token != null && !token.isEmpty()) {
-                    localPreferences.edit().putString(
-                            WidgetComponentStore.DISCOVERY_TOKEN_KEY, token).commit();
-                } else {
-                    ensureWidgetDiscoveryToken();
+                    metadata.putString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, token);
                 }
+                if (request != null && !request.isEmpty()) {
+                    metadata.putString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, request);
+                }
+                metadata.commit();
+                ensureWidgetDiscoveryToken();
                 Log.i("LiquidDock", "seeded local UI prefs from API101 Remote Preferences");
             } finally {
                 reconciling = false;
             }
-            // Publish the retained/generated discovery token back down after pulling config.
+            // Publish retained/generated discovery metadata back down after pulling config.
             syncToRemote(localPreferences);
         } else if (localAll != null && !localAll.isEmpty()) {
             syncToRemote(localPreferences);
