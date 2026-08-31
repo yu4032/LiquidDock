@@ -13,16 +13,46 @@ public final class WidgetComponentStore {
     public static final String ACTION_DISCOVER = MODULE_PACKAGE + ".WIDGET_COMPONENT_DISCOVERED";
     public static final String EXTRA_DESCRIPTOR = "descriptor";
     public static final String EXTRA_TOKEN = "token";
+    public static final String EXTRA_REQUEST_ACK = "request_ack";
     public static final String CATALOG_PREFS = "widget_components";
     public static final String CATALOG_KEY = "catalog";
     public static final String DISCOVERY_TOKEN_KEY = "widget_discovery_token";
+    public static final String DISCOVERY_REQUEST_KEY = "widget_discovery_request";
     public static final String SELECTION_KEY = "widget_hidden_components";
 
     private static final String REMOTE = "R";
     private static final String MAML = "M";
     private static final String SEP = "\t";
 
+    // A manual load always restarts Launcher. Cache that process's request/token so the first ACK
+    // can clear persistent state without interrupting the rest of this one discovery pass.
+    private static volatile boolean discoverySessionLoaded;
+    private static volatile boolean discoveryActive;
+    private static volatile String discoveryToken = "";
+    private static volatile boolean discoveryAckSent;
+
     private WidgetComponentStore() {}
+
+    static boolean discoveryRequested() {
+        ensureDiscoverySession();
+        return discoveryActive;
+    }
+
+    static void acknowledgeDiscoveryRequest(Context context) {
+        ensureDiscoverySession();
+        if (!discoveryActive || context == null || discoveryAckSent || blank(discoveryToken)) return;
+        synchronized (WidgetComponentStore.class) {
+            if (discoveryAckSent) return;
+            discoveryAckSent = true;
+        }
+        try {
+            Intent intent = baseIntent();
+            intent.putExtra(EXTRA_REQUEST_ACK, true);
+            context.sendBroadcast(intent);
+        } catch (Throwable error) {
+            if (MainHook.debugLogging) MainHook.log("[DC][WidgetDiscover] ack failed: " + error);
+        }
+    }
 
     static void publishRemoteViews(
             Context context, String provider, String resourceName, String className) {
@@ -40,21 +70,37 @@ public final class WidgetComponentStore {
     }
 
     private static void publish(Context context, Descriptor descriptor) {
-        String token;
+        ensureDiscoverySession();
+        if (!discoveryActive || blank(discoveryToken)) return;
         try {
-            token = ConfigReader.load().s(DISCOVERY_TOKEN_KEY, "");
-        } catch (Throwable ignored) {
-            return;
-        }
-        if (blank(token)) return;
-        try {
-            Intent intent = new Intent(ACTION_DISCOVER);
-            intent.setComponent(new ComponentName(MODULE_PACKAGE, RECEIVER_CLASS));
+            Intent intent = baseIntent();
             intent.putExtra(EXTRA_DESCRIPTOR, descriptor.encodeCatalog());
-            intent.putExtra(EXTRA_TOKEN, token);
             context.sendBroadcast(intent);
         } catch (Throwable error) {
             if (MainHook.debugLogging) MainHook.log("[DC][WidgetDiscover] publish failed: " + error);
+        }
+    }
+
+    private static Intent baseIntent() {
+        Intent intent = new Intent(ACTION_DISCOVER);
+        intent.setComponent(new ComponentName(MODULE_PACKAGE, RECEIVER_CLASS));
+        intent.putExtra(EXTRA_TOKEN, discoveryToken);
+        return intent;
+    }
+
+    private static void ensureDiscoverySession() {
+        if (discoverySessionLoaded) return;
+        synchronized (WidgetComponentStore.class) {
+            if (discoverySessionLoaded) return;
+            try {
+                ConfigReader config = ConfigReader.load();
+                discoveryToken = config.s(DISCOVERY_TOKEN_KEY, "");
+                discoveryActive = !blank(config.s(DISCOVERY_REQUEST_KEY, ""));
+            } catch (Throwable ignored) {
+                discoveryToken = "";
+                discoveryActive = false;
+            }
+            discoverySessionLoaded = true;
         }
     }
 
