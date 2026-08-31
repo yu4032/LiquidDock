@@ -19,11 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.HashSet
 import java.util.UUID
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 internal fun WidgetComponentsPage(
@@ -36,6 +38,7 @@ internal fun WidgetComponentsPage(
     }
     var catalogRevision by remember { mutableIntStateOf(0) }
     var selectionRevision by remember { mutableIntStateOf(0) }
+    var glassSelectionRevision by remember { mutableIntStateOf(0) }
 
     DisposableEffect(catalogPrefs, prefs) {
         val catalogListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -43,6 +46,7 @@ internal fun WidgetComponentsPage(
         }
         val selectionListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == WidgetComponentStore.SELECTION_KEY) selectionRevision++
+            if (key == WidgetGlassSelectionPolicy.SELECTION_KEY) glassSelectionRevision++
         }
         catalogPrefs.registerOnSharedPreferenceChangeListener(catalogListener)
         prefs.registerOnSharedPreferenceChangeListener(selectionListener)
@@ -56,6 +60,9 @@ internal fun WidgetComponentsPage(
     val selected = remember(selectionRevision) {
         prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())?.toSet().orEmpty()
     }
+    val glassSelected = remember(glassSelectionRevision) {
+        prefs.getStringSet(WidgetGlassSelectionPolicy.SELECTION_KEY, emptySet())?.toSet().orEmpty()
+    }
     val groups = descriptors
         .groupBy(::widgetGroupKey)
         .entries
@@ -64,9 +71,9 @@ internal fun WidgetComponentsPage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text("小组件组件隐藏", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                Text("小组件组件与玻璃", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
+                    "液态玻璃背景默认关闭；仅为手动启用的小组件类型创建玻璃。隐藏组件规则独立生效。",
                     fontSize = 13.sp,
                     modifier = Modifier.padding(top = 5.dp),
                 )
@@ -128,6 +135,25 @@ internal fun WidgetComponentsPage(
                                     )
                                 },
                             )
+                            SwitchPreference(
+                                checked = key in glassSelected,
+                                onCheckedChange = { checked ->
+                                    val next = glassSelected.toMutableSet()
+                                    if (checked) next.add(key) else next.remove(key)
+                                    prefs.edit()
+                                        .putStringSet(
+                                            WidgetGlassSelectionPolicy.SELECTION_KEY,
+                                            HashSet(next),
+                                        )
+                                        .apply()
+                                },
+                                title = "液态玻璃背景",
+                                summary = if (key in glassSelected) {
+                                    "已启用 · 重启桌面后应用到该类型的全部实例"
+                                } else {
+                                    "默认关闭 · 不创建该类型的小组件玻璃节点"
+                                },
+                            )
                         }
                     }
                 }
@@ -148,7 +174,7 @@ internal fun loadWidgetCatalog(catalogPrefs: SharedPreferences): List<WidgetComp
         )
 
 internal fun widgetGroupKey(descriptor: WidgetComponentStore.Descriptor): String =
-    (if (descriptor.isMaml()) "M" else descriptor.source) + "\t" + descriptor.owner
+    WidgetGlassSelectionPolicy.groupKey(descriptor)
 
 internal fun defaultWidgetComponentVisible(descriptor: WidgetComponentStore.Descriptor): Boolean {
     if (!descriptor.isMaml()) return true
