@@ -67,6 +67,24 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertFalse(source.contains("SetPassBlurSurface"));
     }
 
+    @Test public void systemUiObserverFailsOpenAfterOriginalTransitionCompletes() throws Exception {
+        String source = read("SystemUiKeyguardGoneSource.java");
+
+        int proceed = source.indexOf("Object result = chain.proceed(args);");
+        int observerTry = source.indexOf("try {", proceed);
+        int observe = source.indexOf("onTransitionStep(step);", observerTry);
+        int observerCatch = source.indexOf("catch (Throwable error)", observe);
+        int returnResult = source.indexOf("return result;", observerCatch);
+
+        assertTrue("SystemUI original transition must complete before LiquidDock observes it",
+                proceed >= 0 && observerTry > proceed);
+        assertTrue("LiquidDock observation must be isolated from the SystemUI call path",
+                observe > observerTry && observerCatch > observe);
+        assertTrue("Observer failures must keep the original SystemUI result",
+                returnResult > observerCatch);
+        assertTrue(source.contains("SystemUI unlock observer failed"));
+    }
+
     @Test public void systemUiIsScopedAsObserverOnly() throws Exception {
         String module = read("ModuleMain.java");
         String scope = Files.readString(SCOPE);
