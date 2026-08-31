@@ -47,4 +47,14 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertTrue(bridge.contains(
                 "binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()"));
     }
+
+    @Test public void idleUnlockCannotRemainBlockedWhenVendorCountersAreUnavailable()
+            throws Exception {
+        String hook = read("LauncherGlassHomePresentationHook.java");
+
+        assertTrue(hook.contains(
+                "markUnlockPresentationComplete(\"IDLE/counters-unavailable\")"));
+        assertTrue(!hook.contains(
+                "unlock IDLE counters unavailable; barrier remains pending"));
+    }
 }

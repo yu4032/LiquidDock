@@ -182,7 +182,9 @@ final class LauncherGlassHomePresentationHook {
         if (springRemaining != null || folmeTotal != null) {
             markUnlockPresentationComplete("IDLE/no-active-animation");
         } else {
-            MainHook.log(TAG + " unlock IDLE counters unavailable; barrier remains pending");
+            // IDLE is the vendor-owned animation endpoint. Counter reflection can be unavailable
+            // for some presentation variants; USER_PRESENT still independently gates release.
+            markUnlockPresentationComplete("IDLE/counters-unavailable");
         }
     }
 
