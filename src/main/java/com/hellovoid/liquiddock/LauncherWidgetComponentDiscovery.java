@@ -12,6 +12,8 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -69,29 +71,84 @@ final class LauncherWidgetComponentDiscovery {
             if (DUMPED_MAML_ROOTS.containsKey(root)) return;
             DUMPED_MAML_ROOTS.put(root, Boolean.TRUE);
         }
-        Object value = readField(root, "mElements");
-        if (!(value instanceof Map)) return;
+
         ArrayList<WidgetComponentStore.Descriptor> descriptors = new ArrayList<>();
-        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-            String name = String.valueOf(entry.getKey());
-            Object stored = entry.getValue();
-            Object element = stored instanceof WeakReference
-                    ? ((WeakReference<?>) stored).get() : stored;
-            if (element == null) continue;
-            String className = element.getClass().getName();
-            MainHook.log(TAG
-                    + " source=maml"
-                    + " provider=" + safe(identity.appPackage)
-                    + " productId=" + safe(identity.productId)
-                    + " name=" + name
-                    + " class=" + className
-                    + " hierarchyPath=mElements/" + name);
-            WidgetComponentStore.Descriptor descriptor =
-                    WidgetComponentStore.mamlDescriptor(identity, name, className);
-            if (descriptor != null) descriptors.add(descriptor);
+
+        // Preserve the legacy, stable name-based selector for every element that Launcher exposes
+        // through ScreenElementRoot.findElement(name). Existing user selections remain valid.
+        Object value = readField(root, "mElements");
+        if (value instanceof Map) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                String name = String.valueOf(entry.getKey());
+                Object stored = entry.getValue();
+                Object element = stored instanceof WeakReference
+                        ? ((WeakReference<?>) stored).get() : stored;
+                if (element == null) continue;
+                String className = element.getClass().getName();
+                MainHook.log(TAG
+                        + " source=maml"
+                        + " provider=" + safe(identity.appPackage)
+                        + " productId=" + safe(identity.productId)
+                        + " name=" + name
+                        + " class=" + className
+                        + " hierarchyPath=mElements/" + name);
+                WidgetComponentStore.Descriptor descriptor =
+                        WidgetComponentStore.mamlDescriptor(identity, name, className);
+                if (descriptor != null) descriptors.add(descriptor);
+            }
         }
+
+        // Launcher 4.50 renders ScreenElementRoot.mInnerGroup, whose ElementGroup.mElements list
+        // contains every XML child. ScreenElementRoot.mElements is only a name index, so anonymous
+        // and dontAddToMap visual layers never appear there. Walk the real render tree and publish
+        // M2 only for nodes that cannot already be addressed safely by root.findElement(name).
+        Object innerGroup = readField(root, "mInnerGroup");
+        if (innerGroup != null) {
+            Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+            scanMamlRenderChildren(root, identity, innerGroup, "render", visited, descriptors);
+        }
+
         WidgetComponentStore.publishBatch(host.getContext(), descriptors);
         WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
+    }
+
+    private static void scanMamlRenderChildren(
+            Object root,
+            WidgetBackgroundIdentity identity,
+            Object group,
+            String parentPath,
+            Set<Object> visited,
+            ArrayList<WidgetComponentStore.Descriptor> descriptors) {
+        if (group == null || !visited.add(group)) return;
+        Object childrenValue = readField(group, "mElements");
+        if (!(childrenValue instanceof List)) return;
+        List<?> children = (List<?>) childrenValue;
+        for (int i = 0; i < children.size(); i++) {
+            Object element = children.get(i);
+            if (element == null) continue;
+            String hierarchyPath = parentPath + "/" + i;
+            String name = readStringField(element, "mName");
+            String className = element.getClass().getName();
+
+            Object namedTarget = name.isEmpty() ? null : HookUtil.invoke(root, "findElement", name);
+            if (namedTarget != element) {
+                MainHook.log(TAG
+                        + " source=maml-render"
+                        + " provider=" + safe(identity.appPackage)
+                        + " productId=" + safe(identity.productId)
+                        + " name=" + safe(name)
+                        + " class=" + className
+                        + " hierarchyPath=" + hierarchyPath);
+                WidgetComponentStore.Descriptor descriptor =
+                        WidgetComponentStore.mamlRenderDescriptor(
+                                identity, name, className, hierarchyPath);
+                if (descriptor != null) descriptors.add(descriptor);
+            }
+
+            // ElementGroup subclasses expose their actual children through mElements. Other
+            // ScreenElements simply stop here because the reflected field is unavailable.
+            scanMamlRenderChildren(root, identity, element, hierarchyPath, visited, descriptors);
+        }
     }
 
     private static void scanNode(
@@ -227,6 +284,11 @@ final class LauncherWidgetComponentDiscovery {
         if (target == null) return null;
         try { return HookUtil.getField(target, name); }
         catch (Throwable ignored) { return null; }
+    }
+
+    private static String readStringField(Object target, String name) {
+        Object value = readField(target, name);
+        return value instanceof String ? (String) value : "";
     }
 
     private static String safe(String value) {
