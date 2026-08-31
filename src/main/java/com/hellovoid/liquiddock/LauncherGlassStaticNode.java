@@ -39,6 +39,11 @@ final class LauncherGlassStaticNode {
     private ValueAnimator pressAnimator;
     private ValueAnimator visibilityAnimator;
     private volatile float visibilityAlpha;
+    private ValueAnimator nativePresentationAnimator;
+    private volatile float nativePresentationAlpha = 1f;
+    private float nativePresentationTargetAlpha = 1f;
+    private boolean nativeStructurallyVisible = true;
+    private volatile boolean nativeRetainLastGeometry;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassStaticNode(
@@ -190,10 +195,15 @@ final class LauncherGlassStaticNode {
         animateVisibilityTo(!suppressedByFolderOpen && !suppressedByDrag);
     }
 
-    float visibilityAlpha() { return visibilityAlpha; }
+    float visibilityAlpha() {
+        return LauncherGlassPresentationPolicy.composeAlpha(
+                visibilityAlpha, nativePresentationAlpha);
+    }
 
     boolean retainLastGeometryDuringFade() {
-        return visibilityAlpha > 0.001f && (suppressedByFolderOpen || suppressedByDrag);
+        return visibilityAlpha > 0.001f
+                && (suppressedByFolderOpen || suppressedByDrag
+                || (nativeRetainLastGeometry && nativePresentationAlpha > 0.001f));
     }
 
     private void animateVisibilityTo(boolean visible) {
@@ -226,6 +236,86 @@ final class LauncherGlassStaticNode {
             visibilityAnimator = null;
         }
         visibilityAlpha = 0f;
+        resetNativePresentation();
+    }
+
+    private void syncNativePresentation(
+            LauncherGlassVisibility.Sample sample, boolean semanticSceneOwnsVisibility) {
+        if (disposed || sample == null) return;
+        LauncherGlassPresentationPolicy.Decision decision =
+                LauncherGlassPresentationPolicy.decide(
+                        semanticSceneOwnsVisibility,
+                        nativeStructurallyVisible,
+                        sample.structurallyVisible,
+                        sample.alpha);
+        nativeRetainLastGeometry = decision.retainLastGeometry;
+        if (decision.mode == LauncherGlassPresentationPolicy.Mode.BYPASS) {
+            nativeStructurallyVisible = true;
+            setNativePresentationDirect(1f);
+            return;
+        }
+        boolean nextStructurallyVisible = sample.structurallyVisible;
+        nativeStructurallyVisible = nextStructurallyVisible;
+        if (decision.mode == LauncherGlassPresentationPolicy.Mode.DIRECT) {
+            setNativePresentationDirect(decision.targetAlpha);
+        } else {
+            animateNativePresentationTo(decision.targetAlpha > 0.5f);
+        }
+    }
+
+    private void setNativePresentationDirect(float alpha) {
+        float next = Math.max(0f, Math.min(1f, alpha));
+        if (nativePresentationAnimator != null) {
+            nativePresentationAnimator.cancel();
+            nativePresentationAnimator = null;
+        }
+        nativePresentationTargetAlpha = next;
+        if (Math.abs(nativePresentationAlpha - next) <= 0.001f) {
+            nativePresentationAlpha = next;
+            return;
+        }
+        nativePresentationAlpha = next;
+        LauncherGlassSession live = session;
+        if (live != null) live.requestStaticRedraw();
+    }
+
+    private void animateNativePresentationTo(boolean visible) {
+        float target = visible ? 1f : 0f;
+        if (nativePresentationAnimator != null
+                && Math.abs(nativePresentationTargetAlpha - target) <= 0.001f) return;
+        if (nativePresentationAnimator != null) nativePresentationAnimator.cancel();
+        LauncherGlassVisibilityTransition.Plan plan =
+                LauncherGlassVisibilityTransition.plan(nativePresentationAlpha, visible);
+        nativePresentationAlpha = plan.startAlpha;
+        nativePresentationTargetAlpha = plan.targetAlpha;
+        if (plan.durationMs == 0L) {
+            nativePresentationAlpha = plan.targetAlpha;
+            LauncherGlassSession live = session;
+            if (live != null) live.requestStaticRedraw();
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(plan.startAlpha, plan.targetAlpha);
+        nativePresentationAnimator = animator;
+        animator.setDuration(plan.durationMs);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(valueAnimator -> {
+            if (nativePresentationAnimator != valueAnimator || disposed) return;
+            nativePresentationAlpha = (Float) valueAnimator.getAnimatedValue();
+            LauncherGlassSession live = session;
+            if (live != null) live.requestStaticRedraw();
+        });
+        animator.start();
+    }
+
+    private void resetNativePresentation() {
+        if (nativePresentationAnimator != null) {
+            nativePresentationAnimator.cancel();
+            nativePresentationAnimator = null;
+        }
+        nativePresentationAlpha = 1f;
+        nativePresentationTargetAlpha = 1f;
+        nativeStructurallyVisible = true;
+        nativeRetainLastGeometry = false;
     }
 
     boolean holdLaunchProxyHidden() {
@@ -373,8 +463,13 @@ final class LauncherGlassStaticNode {
                             requestedRadius * radiusScale, proxyWidth, proxyHeight));
         }
 
-        if (!LauncherGlassHierarchy.isWorkspace(material)
-                || !LauncherGlassVisibility.isVisible(material, root)) return null;
+        if (!LauncherGlassHierarchy.isWorkspace(material)) return null;
+        boolean semanticSceneOwnsVisibility =
+                LauncherGlassSceneController.isCoveredForRoot(root);
+        LauncherGlassVisibility.Sample presentation =
+                LauncherGlassVisibility.sample(material, root);
+        syncNativePresentation(presentation, semanticSceneOwnsVisibility);
+        if (!presentation.structurallyVisible || presentation.alpha <= 0.001f) return null;
         if (hostWidth <= 0 || hostHeight <= 0) return null;
 
         float localLeft = 0f;
