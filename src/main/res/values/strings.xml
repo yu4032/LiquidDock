@@ -10,6 +10,9 @@
     <string name="page_workstation">Workstation Dock</string>
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
+    <string name="page_widget_components">Widget components</string>
+    <string name="widget_components_entry">Widget component hiding</string>
+    <string name="widget_components_entry_summary">Scan desktop widgets and choose internal components to hide</string>
     <string name="page_stroke">Stroke</string>
     <string name="page_shadow">Shadow</string>
     <string name="page_animation">Animation</string>
