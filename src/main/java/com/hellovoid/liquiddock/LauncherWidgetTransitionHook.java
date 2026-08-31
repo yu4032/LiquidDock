@@ -39,18 +39,25 @@ final class LauncherWidgetTransitionHook {
             HookUtil.hookMethod(classLoader, className, "setAnimTargetVisibility", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object owner = chain.getThisObject();
-                if (GlassRuntimeState.isWidgetEnabled() && owner != null
-                        && args.length > 0 && args[0] instanceof Number
-                        && ((Number) args[0]).intValue() != View.VISIBLE) {
-                    View material = resolveAnimTargetContainer(owner);
-                    if (material != null) {
-                        // Launch-away and return-to-widget both hide the native widget. The return
-                        // path is already marked by findClosingWidgetView(), so the coordinator can
-                        // distinguish it without treating VISIBLE as a HOME semantic event.
-                        LauncherWidgetTransitionCoordinator.onAnimTargetWillHide(material);
-                    }
+                View material = GlassRuntimeState.isWidgetEnabled() && owner != null
+                        ? resolveAnimTargetContainer(owner) : null;
+                int visibility = args.length > 0 && args[0] instanceof Number
+                        ? ((Number) args[0]).intValue() : View.VISIBLE;
+
+                if (material != null && visibility != View.VISIBLE) {
+                    // Launch-away and return-to-widget both hide the native widget. The return
+                    // path is already marked by findClosingWidgetView(), so the coordinator can
+                    // distinguish it without treating VISIBLE as a HOME semantic event.
+                    LauncherWidgetTransitionCoordinator.onAnimTargetWillHide(material);
                 }
-                return chain.proceed(args);
+
+                Object result = chain.proceed(args);
+                if (material != null && visibility == View.VISIBLE) {
+                    // VISIBLE alone is not a HOME signal. It is only used to release suppression
+                    // owned by launch-away; a marked return remains gated on the fresh HOME scene.
+                    LauncherWidgetTransitionCoordinator.onAnimTargetVisible(material);
+                }
+                return result;
             }, int.class);
             MainHook.log(TAG + " widget visibility hook installed class=" + className);
             return true;
