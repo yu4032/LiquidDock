@@ -72,21 +72,35 @@ public final class LiquidDockApp extends Application
         if (remote == null || localPreferences == null) return;
         Map<String, ?> localAll = localPreferences.getAll();
         Map<String, ?> remoteAll = remote.getAll();
+        boolean hasLocalConfig = false;
+        if (localAll != null) {
+            for (String key : localAll.keySet()) {
+                if (!WidgetComponentStore.DISCOVERY_TOKEN_KEY.equals(key)) {
+                    hasLocalConfig = true;
+                    break;
+                }
+            }
+        }
 
-        // Normal upgrade path: the existing app-local settings are authoritative and are
-        // copied once into API101 Remote Preferences.  If the local store is empty but the
-        // injected module has already migrated legacy JSON into Remote Preferences, pull that
-        // data back into the UI instead of accidentally clearing the newly migrated group.
-        if ((localAll == null || localAll.isEmpty())
-                && remoteAll != null && !remoteAll.isEmpty()) {
+        // The discovery token is transport metadata, not user config. Ignore it when deciding
+        // whether an otherwise-empty local store should pull a legacy-migrated remote config.
+        if (!hasLocalConfig && remoteAll != null && !remoteAll.isEmpty()) {
+            String token = localPreferences.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, null);
             reconciling = true;
             try {
                 copyAll(remote, localPreferences);
-                ensureWidgetDiscoveryToken();
+                if (token != null && !token.isEmpty()) {
+                    localPreferences.edit().putString(
+                            WidgetComponentStore.DISCOVERY_TOKEN_KEY, token).commit();
+                } else {
+                    ensureWidgetDiscoveryToken();
+                }
                 Log.i("LiquidDock", "seeded local UI prefs from API101 Remote Preferences");
             } finally {
                 reconciling = false;
             }
+            // Publish the retained/generated discovery token back down after pulling config.
+            syncToRemote(localPreferences);
         } else if (localAll != null && !localAll.isEmpty()) {
             syncToRemote(localPreferences);
             Log.i("LiquidDock", "seeded API101 Remote Preferences from local UI prefs");
