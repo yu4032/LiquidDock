@@ -42,7 +42,7 @@ final class LauncherGlassStaticNode {
     private ValueAnimator nativePresentationAnimator;
     private volatile float nativePresentationAlpha = 1f;
     private float nativePresentationTargetAlpha = 1f;
-    private boolean nativeStructurallyVisible = true;
+    private boolean nativeAtVisibleEndpoint = true;
     private volatile boolean nativeRetainLastGeometry;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
@@ -245,22 +245,23 @@ final class LauncherGlassStaticNode {
         LauncherGlassPresentationPolicy.Decision decision =
                 LauncherGlassPresentationPolicy.decide(
                         semanticSceneOwnsVisibility,
-                        nativeStructurallyVisible,
+                        nativeAtVisibleEndpoint,
                         sample.structurallyVisible,
                         sample.alpha);
         nativeRetainLastGeometry = decision.retainLastGeometry;
         if (decision.mode == LauncherGlassPresentationPolicy.Mode.BYPASS) {
-            nativeStructurallyVisible = true;
+            nativeAtVisibleEndpoint = true;
             setNativePresentationDirect(1f);
             return;
         }
-        boolean nextStructurallyVisible = sample.structurallyVisible;
-        nativeStructurallyVisible = nextStructurallyVisible;
-        if (decision.mode == LauncherGlassPresentationPolicy.Mode.DIRECT) {
-            setNativePresentationDirect(decision.targetAlpha);
-        } else {
-            animateNativePresentationTo(decision.targetAlpha > 0.5f);
+        if (decision.mode == LauncherGlassPresentationPolicy.Mode.HOLD) {
+            // Intermediate vendor alpha belongs to the Launcher/compositor animation. Do not
+            // translate it into a Prismal node invalidation: one node update would redraw and
+            // swap the entire shared static layer on every Launcher animation frame.
+            return;
         }
+        nativeAtVisibleEndpoint = decision.targetAlpha > 0.5f;
+        animateNativePresentationTo(nativeAtVisibleEndpoint);
     }
 
     private void setNativePresentationDirect(float alpha) {
@@ -314,7 +315,7 @@ final class LauncherGlassStaticNode {
         }
         nativePresentationAlpha = 1f;
         nativePresentationTargetAlpha = 1f;
-        nativeStructurallyVisible = true;
+        nativeAtVisibleEndpoint = true;
         nativeRetainLastGeometry = false;
     }
 
