@@ -64,10 +64,6 @@ final class Miuix307PassBlurBridge {
     static Binding bind(View materialHost, Surface producerSurface, float requestedScale) {
         if (materialHost == null || producerSurface == null) return null;
         boolean launcherWorkspace = LauncherGlassSceneController.findRoot(materialHost) != null;
-        if (launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock presentation");
-            return null;
-        }
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -151,10 +147,6 @@ final class Miuix307PassBlurBridge {
     /** Workspace-only demand pulse. Dock keeps main's persistent continuous-on-bind mode. */
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
-        if (binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
-            return;
-        }
         setUpdatesEnabled(binding, true);
         host.postInvalidateOnAnimation();
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
@@ -163,10 +155,6 @@ final class Miuix307PassBlurBridge {
     /** Persistent resume used by Dock when HyperOS leaves its HOME snapshot state. */
     static void resumeUpdates(Binding binding) {
         if (binding == null) return;
-        if (binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
-            return;
-        }
         setUpdatesEnabled(binding, true);
     }
 
