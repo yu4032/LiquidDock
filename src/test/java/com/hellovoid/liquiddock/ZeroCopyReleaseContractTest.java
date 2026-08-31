@@ -22,19 +22,24 @@ public class ZeroCopyReleaseContractTest {
         assertNoProductionToken("glReadPixels");
     }
 
-    @Test public void systemUiIsNoLongerInModuleScope() throws Exception {
+    @Test public void systemUiScopeIsReadOnlyUnlockObserverOnly() throws Exception {
         List<String> packages = Files.readAllLines(SCOPE).stream()
                 .map(String::trim)
                 .filter(line -> !line.isEmpty())
                 .toList();
-        assertEquals(List.of("com.miui.home"), packages);
+        assertEquals(List.of("com.miui.home", "com.android.systemui"), packages);
 
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        assertFalse(module.contains("com.android.systemui"));
+        String source = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
+        assertTrue(module.contains("SystemUiKeyguardGoneSource.install"));
         assertFalse(module.contains("SystemUiTaskExecutorSource"));
         assertFalse(module.contains("SystemUiTransitionSource"));
         assertFalse(module.contains("SystemUiHomeOwnershipSource"));
         assertFalse(module.contains("SystemUiFreeformLeashProvider"));
+        assertFalse(source.contains("ScreenCapture"));
+        assertFalse(source.contains("captureDisplay"));
+        assertFalse(source.contains("SetPassBlurSurface"));
+        assertFalse(source.contains("Miuix307PassBlur"));
     }
 
     @Test public void retiredSceneAndSystemUiBridgesArePhysicallyRemoved() {
