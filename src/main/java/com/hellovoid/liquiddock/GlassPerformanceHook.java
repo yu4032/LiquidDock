@@ -22,13 +22,8 @@ import java.util.WeakHashMap;
 
 /**
  * Replaces the legacy glass polling hot paths without duplicating the established EGL renderer.
- *
- * <p>The old implementation intentionally used conservative root OnPreDraw polling while the
- * HyperOS 4.50 surface lifecycle was still being reverse engineered. That is correct but too
- * expensive for production: it repeats hidden-API Surface queries on every Launcher frame and the
- * Dock producer remains continuous even when its wallpaper source is unchanged. This coordinator
- * keeps the existing renderer as the visual authority while changing only when expensive work is
- * allowed to run.</p>
+ * Expensive producer checks are event-driven; ordinary Launcher frames only do cheap geometry
+ * fingerprints, and Dock icon animation reuses the already prepared Prismal backdrop.
  */
 final class GlassPerformanceHook {
     private static final String TAG = "[DC][GlassPerf]";
@@ -36,6 +31,8 @@ final class GlassPerformanceHook {
     private static final Map<Miuix307PassBlurTextureView, DockState> DOCK_STATES =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<LauncherGlassSession, LauncherState> LAUNCHER_STATES =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Class<?>, MappingReflection> MAPPING_REFLECTIONS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private static WeakReference<Miuix307PassBlurTextureView> currentDockRef =
@@ -60,13 +57,34 @@ final class GlassPerformanceHook {
     static void registerDock(Miuix307PassBlurTextureView view) {
         if (view == null) return;
         currentDockRef = new WeakReference<>(view);
-        stateFor(view);
+        DockState state = stateFor(view);
+        if (state.attachListener == null) {
+            state.attachListener = new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {
+                    v.post(() -> installLightDockObserver(view));
+                }
+
+                @Override public void onViewDetachedFromWindow(View v) {
+                    removeLightDockObserver(view);
+                }
+            };
+            view.addOnAttachStateChangeListener(state.attachListener);
+        }
         if (view.isAttachedToWindow()) installLightDockObserver(view);
+        View host = materialHost(view);
+        if (host != null) host.post(() -> cleanupLegacyVendorSuppressor(host));
     }
 
     static void unregisterDock(Miuix307PassBlurTextureView view) {
         if (view == null) return;
+        DockState state;
+        synchronized (DOCK_STATES) { state = DOCK_STATES.get(view); }
         removeLightDockObserver(view);
+        removeLegacyDockObserver(view);
+        if (state != null && state.attachListener != null) {
+            try { view.removeOnAttachStateChangeListener(state.attachListener); }
+            catch (Throwable ignored) {}
+        }
         synchronized (DOCK_STATES) { DOCK_STATES.remove(view); }
         if (currentDockRef.get() == view) currentDockRef = new WeakReference<>(null);
     }
@@ -76,16 +94,13 @@ final class GlassPerformanceHook {
         if (view == null) return;
         DockState state = stateFor(view);
         ensureLightDockObserver(view);
-        try {
-            state.sceneMapping = dock().backdropSnapshot.get(view);
-        } catch (Throwable ignored) {
-            state.sceneMapping = null;
-        }
+        try { state.sceneMapping = dock().backdropSnapshot.get(view); }
+        catch (Throwable ignored) { state.sceneMapping = null; }
         state.policy.requestScene();
         view.requestDockSceneRefresh();
     }
 
-    /** Explicit geometry repair entry used by event boundaries and the cheap fingerprint observer. */
+    /** Explicit recovery boundary for a real root/geometry generation change. */
     static void requestDockGeometryRefresh(Miuix307PassBlurTextureView view) {
         if (view == null) return;
         DockState state = stateFor(view);
@@ -95,7 +110,7 @@ final class GlassPerformanceHook {
         refreshDockGeometry(view, state, true, true);
     }
 
-    /** One-shot normal-HOME backdrop refresh; workstation keeps its historical continuous source. */
+    /** One-shot normal-HOME backdrop refresh; workstation keeps its continuous source. */
     static void requestFreshDockBackdrop(String reason) {
         Miuix307PassBlurTextureView view = currentDockRef.get();
         if (view != null) pulseDockBackdrop(view, reason != null ? reason : "freshness-event");
@@ -110,15 +125,12 @@ final class GlassPerformanceHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 View background = args.length > 0 && args[0] instanceof View
                         ? (View) args[0] : null;
-                // Existing geometry/lifecycle hooks already know every legitimate material write.
-                // Keep one immediate cleanup at bind, then prevent later vendor writes at source.
                 if (background != null) MiuixGlassHook.suppressVendorGpuBlur(background);
                 return null;
             });
         } catch (Throwable error) {
             MainHook.log(TAG + " vendor preDraw suppressor hook unavailable: " + error);
         }
-
         hookDockBlurSetter("setPassWindowBlurEnabled", boolean.class, Boolean.FALSE);
         hookDockBlurSetter("setMiViewBlurMode", int.class, Integer.valueOf(0));
         hookDockBlurSetter("setMiBackgroundBlurRadius", int.class, Integer.valueOf(0));
@@ -141,31 +153,55 @@ final class GlassPerformanceHook {
         }
     }
 
+    private static void cleanupLegacyVendorSuppressor(View background) {
+        try {
+            Field observerField = MiuixGlassHook.class.getDeclaredField("vendorBlurObserver");
+            Field listenerField = MiuixGlassHook.class.getDeclaredField("vendorBlurSuppressor");
+            observerField.setAccessible(true);
+            listenerField.setAccessible(true);
+            Object observerRef = observerField.get(null);
+            Object listenerValue = listenerField.get(null);
+            ViewTreeObserver observer = observerRef instanceof WeakReference<?>
+                    && ((WeakReference<?>) observerRef).get() instanceof ViewTreeObserver
+                    ? (ViewTreeObserver) ((WeakReference<?>) observerRef).get() : null;
+            if (observer != null && listenerValue instanceof ViewTreeObserver.OnPreDrawListener) {
+                try {
+                    if (observer.isAlive()) observer.removeOnPreDrawListener(
+                            (ViewTreeObserver.OnPreDrawListener) listenerValue);
+                } catch (Throwable ignored) {}
+            }
+            observerField.set(null, new WeakReference<ViewTreeObserver>(null));
+            listenerField.set(null, null);
+            if (background != null) MiuixGlassHook.suppressVendorGpuBlur(background);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " legacy vendor suppressor cleanup unavailable: " + error);
+        }
+    }
+
     private static void hookDockRenderer() {
         try {
             Method installObserver = HookUtil.findMethodExact(
                     Miuix307PassBlurTextureView.class, "installGeometryObserver", new Class<?>[0]);
             HookUtil.hook(installObserver, chain -> {
-                Miuix307PassBlurTextureView view =
-                        (Miuix307PassBlurTextureView) chain.getThisObject();
-                installLightDockObserver(view);
+                installLightDockObserver((Miuix307PassBlurTextureView) chain.getThisObject());
                 return null;
             });
         } catch (Throwable error) {
             MainHook.log(TAG + " Dock observer install hook unavailable: " + error);
         }
-
         try {
             Method removeObserver = HookUtil.findMethodExact(
                     Miuix307PassBlurTextureView.class, "removeGeometryObserver", new Class<?>[0]);
             HookUtil.hook(removeObserver, chain -> {
-                removeLightDockObserver((Miuix307PassBlurTextureView) chain.getThisObject());
+                Miuix307PassBlurTextureView view =
+                        (Miuix307PassBlurTextureView) chain.getThisObject();
+                removeLightDockObserver(view);
+                removeLegacyDockObserver(view);
                 return null;
             });
         } catch (Throwable error) {
             MainHook.log(TAG + " Dock observer remove hook unavailable: " + error);
         }
-
         try {
             Method draw = HookUtil.findMethodExact(
                     Miuix307PassBlurTextureView.class, "drawLatestFrame",
@@ -174,10 +210,10 @@ final class GlassPerformanceHook {
                 Miuix307PassBlurTextureView view =
                         (Miuix307PassBlurTextureView) chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                boolean fromFrameCallback = args.length > 0 && args[0] instanceof Boolean
+                boolean sourceFrame = args.length > 0 && args[0] instanceof Boolean
                         && (Boolean) args[0];
                 DockState state = stateFor(view);
-                if (fromFrameCallback) {
+                if (sourceFrame) {
                     Object result = chain.proceed(args);
                     state.pulsePending = false;
                     state.backdropReady = true;
@@ -185,7 +221,6 @@ final class GlassPerformanceHook {
                     state.policy.consume();
                     return result;
                 }
-
                 DockGlassFramePolicy.Work work = state.policy.consume();
                 Object currentMapping = null;
                 try { currentMapping = dock().backdropSnapshot.get(view); }
@@ -204,7 +239,6 @@ final class GlassPerformanceHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " Dock scene fast-path hook unavailable: " + error);
         }
-
         try {
             Method setUpdates = HookUtil.findMethodExact(
                     Miuix307PassBlurTextureView.class, "setProducerUpdatesEnabled",
@@ -228,7 +262,6 @@ final class GlassPerformanceHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " Dock producer policy hook unavailable: " + error);
         }
-
         try {
             Method finishBind = findDeclaredMethod(
                     Miuix307PassBlurTextureView.class, "finishBindProducer", 3);
@@ -242,7 +275,6 @@ final class GlassPerformanceHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " Dock producer bind hook unavailable: " + error);
         }
-
         try {
             Method readWindowFrame = HookUtil.findMethodExact(
                     Miuix307PassBlurTextureView.class, "readViewRootRectField",
@@ -277,14 +309,12 @@ final class GlassPerformanceHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " Launcher observer hook unavailable: " + error);
         }
-
         try {
             Method refreshProducer = HookUtil.findMethodExact(
                     LauncherGlassSession.class, "refreshProducerGeometryOnUi",
                     new Class<?>[]{View.class});
             HookUtil.hook(refreshProducer, chain -> {
-                Boolean allow = FRAME_PRODUCER_REFRESH.get();
-                if (Boolean.FALSE.equals(allow)) return Boolean.FALSE;
+                if (Boolean.FALSE.equals(FRAME_PRODUCER_REFRESH.get())) return Boolean.FALSE;
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
         } catch (Throwable error) {
@@ -304,9 +334,9 @@ final class GlassPerformanceHook {
                 "com.miui.home.launcher.Workspace", "onWallpaperColorChanged");
     }
 
-    private static void hookWallpaperMethod(ClassLoader classLoader, String className, String name) {
+    private static void hookWallpaperMethod(ClassLoader loader, String className, String name) {
         try {
-            Class<?> type = Class.forName(className, false, classLoader);
+            Class<?> type = Class.forName(className, false, loader);
             int count = 0;
             for (Method method : type.getDeclaredMethods()) {
                 if (!name.equals(method.getName())) continue;
@@ -346,6 +376,7 @@ final class GlassPerformanceHook {
     private static void installLightDockObserver(Miuix307PassBlurTextureView view) {
         if (view == null) return;
         DockState state = stateFor(view);
+        removeLegacyDockObserver(view);
         removeLightDockObserver(view);
         View root = view.getRootView();
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
@@ -370,6 +401,25 @@ final class GlassPerformanceHook {
         state.listener = listener;
     }
 
+    private static void removeLegacyDockObserver(Miuix307PassBlurTextureView view) {
+        if (view == null) return;
+        try {
+            DockReflection reflection = dock();
+            Object observerValue = reflection.preDrawObserver.get(view);
+            Object listenerValue = reflection.preDrawListener.get(view);
+            if (observerValue instanceof ViewTreeObserver
+                    && listenerValue instanceof ViewTreeObserver.OnPreDrawListener) {
+                ViewTreeObserver observer = (ViewTreeObserver) observerValue;
+                try {
+                    if (observer.isAlive()) observer.removeOnPreDrawListener(
+                            (ViewTreeObserver.OnPreDrawListener) listenerValue);
+                } catch (Throwable ignored) {}
+            }
+            reflection.preDrawObserver.set(view, null);
+            reflection.preDrawListener.set(view, null);
+        } catch (Throwable ignored) {}
+    }
+
     private static void removeLightDockObserver(Miuix307PassBlurTextureView view) {
         DockState state;
         synchronized (DOCK_STATES) { state = DOCK_STATES.get(view); }
@@ -384,9 +434,8 @@ final class GlassPerformanceHook {
         }
     }
 
-    private static void refreshDockGeometry(
-            Miuix307PassBlurTextureView view, DockState state,
-            boolean producerChanged, boolean mappingChanged) {
+    private static void refreshDockGeometry(Miuix307PassBlurTextureView view, DockState state,
+                                            boolean producerChanged, boolean mappingChanged) {
         if (view == null) return;
         try {
             DockReflection reflection = dock();
@@ -394,9 +443,7 @@ final class GlassPerformanceHook {
                 reflection.refreshProducerGeometry.invoke(view);
                 state.policy.requestMapping();
             }
-            if (mappingChanged) {
-                reflection.updateBackdropMapping.invoke(view);
-            }
+            if (mappingChanged) reflection.updateBackdropMapping.invoke(view);
         } catch (Throwable error) {
             MainHook.log(TAG + " Dock geometry refresh failed: " + rootCause(error));
         }
@@ -410,8 +457,7 @@ final class GlassPerformanceHook {
         hash = mix(hash, root.getHeight());
         hash = mix(hash, System.identityHashCode(root.getWindowToken()));
         Display display = root.getDisplay();
-        hash = mix(hash, display != null ? display.getRotation() : 0);
-        return hash;
+        return mix(hash, display != null ? display.getRotation() : 0);
     }
 
     private static long mappingFingerprint(Miuix307PassBlurTextureView view) {
@@ -441,15 +487,13 @@ final class GlassPerformanceHook {
         hash = mix(hash, Float.floatToIntBits(view.getTranslationX()));
         hash = mix(hash, Float.floatToIntBits(view.getTranslationY()));
         hash = mix(hash, Float.floatToIntBits(view.getScaleX()));
-        hash = mix(hash, Float.floatToIntBits(view.getScaleY()));
-        return hash;
+        return mix(hash, Float.floatToIntBits(view.getScaleY()));
     }
 
     private static long mix(long hash, long value) {
         return (hash ^ value) * 0x100000001b3L;
     }
 
-    @SuppressWarnings("unchecked")
     private static View materialHost(Miuix307PassBlurTextureView view) {
         if (view == null) return null;
         try {
@@ -498,8 +542,8 @@ final class GlassPerformanceHook {
         }
     }
 
-    private static void clearPulseIfStale(
-            Miuix307PassBlurTextureView view, DockState state, long serial, int framesLeft) {
+    private static void clearPulseIfStale(Miuix307PassBlurTextureView view, DockState state,
+                                          long serial, int framesLeft) {
         if (view == null || state == null || !state.pulsePending || state.pulseSerial != serial) return;
         if (framesLeft <= 0) {
             state.pulsePending = false;
@@ -513,8 +557,7 @@ final class GlassPerformanceHook {
         catch (Throwable ignored) { return false; }
     }
 
-    private static boolean drawDockSceneOnly(
-            Miuix307PassBlurTextureView view, Object mapping) {
+    private static boolean drawDockSceneOnly(Miuix307PassBlurTextureView view, Object mapping) {
         if (view == null || mapping == null) return false;
         try {
             DockReflection reflection = dock();
@@ -529,19 +572,16 @@ final class GlassPerformanceHook {
             int sampleWidth = mapped.sampleWidth.getInt(mapping);
             int sampleHeight = mapped.sampleHeight.getInt(mapping);
             PrismalGeometry body = (PrismalGeometry) reflection.createPrismalGeometry.invoke(view, mapping);
-            DockGlassSceneSnapshot scene = compositor.latestScene();
-            compositor.drawFrame(renderer, body, params, scene, sampleWidth, sampleHeight);
+            compositor.drawFrame(renderer, body, params, compositor.latestScene(), sampleWidth, sampleHeight);
             reflection.renderCompositePass.invoke(view, renderer.outputTexture(), mapping);
             if (reflection.backdropSnapshot.get(view) != mapping) return false;
             EGLDisplay display = (EGLDisplay) reflection.eglDisplay.get(view);
             EGLSurface surface = (EGLSurface) reflection.eglWindowSurface.get(view);
             if (display == null || surface == null
-                    || display == EGL14.EGL_NO_DISPLAY || surface == EGL14.EGL_NO_SURFACE) {
-                return false;
-            }
+                    || display == EGL14.EGL_NO_DISPLAY || surface == EGL14.EGL_NO_SURFACE) return false;
             if (!EGL14.eglSwapBuffers(display, surface)) return false;
-            long rendered = reflection.renderedFrameCount.getLong(view) + 1L;
-            reflection.renderedFrameCount.setLong(view, rendered);
+            reflection.renderedFrameCount.setLong(
+                    view, reflection.renderedFrameCount.getLong(view) + 1L);
             reflection.maybeLogPowerStats.invoke(view);
             return true;
         } catch (Throwable error) {
@@ -555,20 +595,31 @@ final class GlassPerformanceHook {
         try {
             LauncherReflection reflection = launcher();
             @SuppressWarnings("unchecked")
-            WeakReference<View> rootReference =
-                    (WeakReference<View>) reflection.rootRef.get(session);
+            WeakReference<View> rootReference = (WeakReference<View>) reflection.rootRef.get(session);
             View root = rootReference != null ? rootReference.get() : null;
             if (root == null) return;
             ViewTreeObserver observer = root.getViewTreeObserver();
             if (observer == null || !observer.isAlive()) return;
-            LauncherState state;
+
+            LauncherState mutableState;
             synchronized (LAUNCHER_STATES) {
-                state = LAUNCHER_STATES.get(session);
-                if (state == null) {
-                    state = new LauncherState();
-                    LAUNCHER_STATES.put(session, state);
+                mutableState = LAUNCHER_STATES.get(session);
+                if (mutableState == null) {
+                    mutableState = new LauncherState();
+                    LAUNCHER_STATES.put(session, mutableState);
                 }
             }
+            final LauncherState state = mutableState;
+            if (state.attachListener == null) {
+                state.attachListener = new View.OnAttachStateChangeListener() {
+                    @Override public void onViewAttachedToWindow(View v) {
+                        v.post(() -> installLauncherObserver(session));
+                    }
+                    @Override public void onViewDetachedFromWindow(View v) {}
+                };
+                root.addOnAttachStateChangeListener(state.attachListener);
+            }
+
             Object currentObserver = reflection.rootObserver.get(session);
             Object currentListener = reflection.preDrawListener.get(session);
             if (currentObserver == observer && currentListener == state.listener
@@ -581,20 +632,21 @@ final class GlassPerformanceHook {
                             (ViewTreeObserver.OnPreDrawListener) currentListener);
                 } catch (Throwable ignored) {}
             }
+
             state.lastDisplayRotation = displayRotation(root);
             ViewTreeObserver.OnPreDrawListener listener = () -> {
-                int rootWidth;
-                int rootHeight;
+                int storedWidth;
+                int storedHeight;
                 try {
-                    rootWidth = reflection.rootWidth.getInt(session);
-                    rootHeight = reflection.rootHeight.getInt(session);
+                    storedWidth = reflection.rootWidth.getInt(session);
+                    storedHeight = reflection.rootHeight.getInt(session);
                 } catch (Throwable ignored) {
-                    rootWidth = root.getWidth();
-                    rootHeight = root.getHeight();
+                    storedWidth = root.getWidth();
+                    storedHeight = root.getHeight();
                 }
                 int rotation = displayRotation(root);
                 boolean rootGeometryChanged = (root.getWidth() > 0 && root.getHeight() > 0
-                        && (root.getWidth() != rootWidth || root.getHeight() != rootHeight))
+                        && (root.getWidth() != storedWidth || root.getHeight() != storedHeight))
                         || rotation != state.lastDisplayRotation;
                 state.lastDisplayRotation = rotation;
                 FRAME_PRODUCER_REFRESH.set(rootGeometryChanged);
@@ -616,7 +668,6 @@ final class GlassPerformanceHook {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static void optimizeExistingLauncherSessions() {
         try {
             Field sessionsField = LauncherGlassSessionRegistry.class.getDeclaredField("SESSIONS");
@@ -669,9 +720,6 @@ final class GlassPerformanceHook {
         }
     }
 
-    private static final Map<Class<?>, MappingReflection> MAPPING_REFLECTIONS =
-            Collections.synchronizedMap(new WeakHashMap<>());
-
     private static MappingReflection mapping(Class<?> type) throws ReflectiveOperationException {
         synchronized (MAPPING_REFLECTIONS) {
             MappingReflection result = MAPPING_REFLECTIONS.get(type);
@@ -684,9 +732,9 @@ final class GlassPerformanceHook {
     }
 
     private static Field field(Class<?> type, String name) throws NoSuchFieldException {
-        Field field = type.getDeclaredField(name);
-        field.setAccessible(true);
-        return field;
+        Field result = type.getDeclaredField(name);
+        result.setAccessible(true);
+        return result;
     }
 
     private static String rootCause(Throwable error) {
@@ -699,6 +747,7 @@ final class GlassPerformanceHook {
         final DockGlassFramePolicy policy = new DockGlassFramePolicy();
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener listener;
+        View.OnAttachStateChangeListener attachListener;
         long producerFingerprint = Long.MIN_VALUE;
         long mappingFingerprint = Long.MIN_VALUE;
         Rect cachedWindowFrame;
@@ -710,6 +759,7 @@ final class GlassPerformanceHook {
 
     private static final class LauncherState {
         ViewTreeObserver.OnPreDrawListener listener;
+        View.OnAttachStateChangeListener attachListener;
         int lastDisplayRotation;
     }
 
@@ -723,6 +773,8 @@ final class GlassPerformanceHook {
         final Field eglDisplay;
         final Field eglWindowSurface;
         final Field renderedFrameCount;
+        final Field preDrawObserver;
+        final Field preDrawListener;
         final Method refreshProducerGeometry;
         final Method updateBackdropMapping;
         final Method makeCurrent;
@@ -741,6 +793,8 @@ final class GlassPerformanceHook {
             eglDisplay = field(type, "eglDisplay");
             eglWindowSurface = field(type, "eglWindowSurface");
             renderedFrameCount = field(type, "renderedFrameCount");
+            preDrawObserver = field(type, "preDrawObserver");
+            preDrawListener = field(type, "preDrawListener");
             refreshProducerGeometry = findDeclaredMethod(type, "refreshProducerGeometryInPlace", 0);
             updateBackdropMapping = findDeclaredMethod(type, "updateBackdropMapping", 0);
             makeCurrent = findDeclaredMethod(type, "makeCurrent", 0);
