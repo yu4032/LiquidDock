@@ -51,7 +51,8 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
     }
 
     @Test
-    public void recoveryNeverRevealsStaticLayerBeforeFreshOesFrame() throws Exception {
+    public void recentsReturnRevealsCachedLayerEarlyWithoutReleasingFreshCaptureBarrier()
+            throws Exception {
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
         String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
         String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
@@ -59,13 +60,28 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
         String preparation = methodSlice(registry,
                 "static synchronized void prepareWorkstationRecentsReturn()",
                 "static synchronized void shutdownAll()");
-        assertFalse("producer recovery must not bypass the scene freshness barrier",
+        assertFalse("producer recovery must not directly control scene visibility",
                 preparation.contains("setSceneVisible"));
-        assertFalse(preparation.contains("onFreshFrameRendered"));
-        assertFalse(recents.contains("setSceneVisible(true)"));
+        assertFalse("producer recovery must not pretend that a fresh OES frame landed",
+                preparation.contains("onFreshFrameRendered"));
+        assertFalse("Recents hook must keep the scene controller as the sole visibility owner",
+                recents.contains("setSceneVisible(true)"));
 
+        String hide = methodSlice(recents,
+                "\"onRecentViewHide\"",
+                "installed = true;");
+        int settle = hide.indexOf("setRecentsWallpaperSettlePendingForAll(true);");
+        int uncover = hide.indexOf("setRecentsCoveredForAll(false);");
+        int reveal = hide.indexOf("beginRecentsReturnRevealForAll();");
+        int release = hide.indexOf("setRecentsWallpaperSettlePendingForAll(false);");
+        assertTrue("capture barrier must arm before HOME is uncovered",
+                settle >= 0 && uncover > settle);
+        assertTrue("cached-layer reveal must start after uncover and before capture release",
+                reveal > uncover && release > reveal);
+
+        assertTrue(controller.contains("state.beginRevealBeforeFreshFrame();"));
         assertTrue(controller.contains("state.onFreshFrameReady(generation);"));
-        assertTrue(controller.contains("applyLayerVisibility();"));
+        assertTrue(controller.contains("requestFreshBackdrop(state.generation());"));
     }
 
     private static String methodSlice(String source, String startMarker, String endMarker) {
