@@ -37,6 +37,7 @@ final class LauncherGlassHomePresentationHook {
         hookHomeStart(classLoader);
         hookHomeEnd(classLoader);
         hookUnlockState(classLoader);
+        LauncherWidgetTransitionHook.install(classLoader);
         installed = true;
     }
 
@@ -52,6 +53,7 @@ final class LauncherGlassHomePresentationHook {
                     // This is the fallback freeze boundary. If SystemUI START was already received,
                     // the flag is already set and this is intentionally idempotent.
                     LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
+                    LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
                 }
 
                 Object result = chain.proceed(args);
@@ -89,6 +91,7 @@ final class LauncherGlassHomePresentationHook {
                 }
                 if (releaseFallback) {
                     LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+                    LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
                     MainHook.log(TAG + " APP HOME barrier released by Launcher fallback");
                 } else if (heldForSystemUi) {
                     MainHook.log(TAG + " APP HOME Launcher end observed; waiting for SystemUI FINISH");
@@ -141,8 +144,10 @@ final class LauncherGlassHomePresentationHook {
 
         // Freeze fresh capture first, then fade the already prepared static layer. The cached layer
         // may be presented during the WMShell animation, but requestFreshBackdrop remains blocked by
-        // homeTransitionPending until the matching SystemUI FINISH arrives.
+        // homeTransitionPending until the matching SystemUI FINISH arrives. A returning widget is
+        // separately kept at alpha 0 until this new scene generation has actually rendered fresh.
         LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
+        LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
         LauncherGlassSceneController.beginHomeReturnRevealForAll();
         MainHook.log(TAG + " SystemUI HOME START authority serial=" + serial
                 + " t=" + eventTimeNanos);
@@ -166,6 +171,7 @@ final class LauncherGlassHomePresentationHook {
 
         if (release) {
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+            LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
             MainHook.log(TAG + " SystemUI HOME FINISH authority serial=" + serial
                     + " t=" + eventTimeNanos + " aborted=" + aborted);
         }
