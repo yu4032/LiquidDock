@@ -3,6 +3,7 @@
     <string name="app_name">LiquidDock</string>
     <string name="action_back">返回</string>
     <string name="action_restart_launcher">重启桌面</string>
+    <string name="action_restart_system_ui">重启系统界面</string>
     <string name="page_grid">主屏幕布局</string>
     <string name="page_dock">Dock 尺寸与模糊</string>
     <string name="page_divider">Dock 分隔线</string>

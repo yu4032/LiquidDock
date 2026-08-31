@@ -382,6 +382,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 },
                 actions = {
                     TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
                 },
             )
         },
