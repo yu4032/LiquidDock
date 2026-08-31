@@ -65,6 +65,27 @@ public class WidgetComponentSelectionContractTest {
         assertFalse(picker.contains("重新扫描桌面"));
     }
 
+    @Test public void discoveryBatchesDescriptorsInsteadOfBroadcastingEveryNode() throws Exception {
+        String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
+        String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
+        String receiver = Files.readString(ROOT.resolve("WidgetDiscoveryReceiver.java"));
+
+        assertTrue(store.contains("EXTRA_DESCRIPTORS = \"descriptors\""));
+        assertTrue(store.contains("BATCH_MAX_ITEMS"));
+        assertTrue(store.contains("publishBatch("));
+        assertTrue(store.contains("putStringArrayListExtra(EXTRA_DESCRIPTORS"));
+
+        assertTrue(discovery.contains("ArrayList<WidgetComponentStore.Descriptor>"));
+        assertTrue(discovery.contains("WidgetComponentStore.publishBatch"));
+        assertFalse(discovery.contains("WidgetComponentStore.publishRemoteViews("));
+        int remotePublish = discovery.indexOf("WidgetComponentStore.publishBatch");
+        int remoteAck = discovery.indexOf("WidgetComponentStore.acknowledgeDiscoveryRequest", remotePublish);
+        assertTrue(remotePublish >= 0 && remoteAck > remotePublish);
+
+        assertTrue(receiver.contains("getStringArrayListExtra(WidgetComponentStore.EXTRA_DESCRIPTORS)"));
+        assertTrue(receiver.contains("for (String encoded : batch)"));
+    }
+
     @Test public void remoteDiscoveryPublishesPropertyActionsWithExactHierarchyPath() throws Exception {
         String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
         String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
