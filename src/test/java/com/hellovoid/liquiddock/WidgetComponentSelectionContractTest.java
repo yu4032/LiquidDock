@@ -51,6 +51,28 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(discovery.contains("WidgetComponentStore.publishMaml"));
     }
 
+    @Test public void discoveryOnlyRunsForExplicitOneShotRequest() throws Exception {
+        String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
+        assertTrue(store.contains("DISCOVERY_REQUEST_KEY = \"widget_discovery_request\""));
+        assertTrue(store.contains("discoveryRequested()"));
+        assertTrue(store.contains("acknowledgeDiscoveryRequest"));
+
+        String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
+        assertTrue(discovery.contains("if (!WidgetComponentStore.discoveryRequested()) return;"));
+        assertTrue(discovery.contains("WidgetComponentStore.acknowledgeDiscoveryRequest"));
+
+        String receiver = Files.readString(ROOT.resolve("WidgetDiscoveryReceiver.java"));
+        assertTrue(receiver.contains("WidgetComponentStore.EXTRA_REQUEST_ACK"));
+        assertTrue(receiver.contains("remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY)"));
+
+        String picker = Files.readString(PICKER);
+        assertTrue(picker.contains("UUID.randomUUID().toString()"));
+        assertTrue(picker.contains("WidgetComponentStore.DISCOVERY_REQUEST_KEY"));
+        assertTrue(picker.contains("LiquidDockApp.syncToRemote(prefs)"));
+        assertTrue(picker.contains("载入当前小组件"));
+        assertFalse(picker.contains("重新扫描桌面"));
+    }
+
     @Test public void selectedRulesLiveInNormalConfigAndAreReadableAtRuntime() throws Exception {
         Path store = ROOT.resolve("WidgetComponentStore.java");
         assertTrue(Files.exists(store));
@@ -88,15 +110,19 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(maml.contains("LauncherWidgetComponentDiscovery.scanMaml(host, identity, root)"));
     }
 
-    @Test public void composeExposesWidgetComponentPickerGroupedFromLocalDiscoveryCatalog() throws Exception {
+    @Test public void composePaginatesByWidgetBeforeShowingComponents() throws Exception {
         assertTrue(Files.exists(PICKER));
         String source = Files.readString(KOTLIN);
         String picker = Files.readString(PICKER);
         assertTrue(source.contains("WidgetComponents(R.string.page_widget_components)"));
-        assertTrue(source.contains("Page.WidgetComponents -> WidgetComponentsPage"));
+        assertTrue(source.contains("WidgetComponentDetail(R.string.page_widget_component_detail)"));
+        assertTrue(source.contains("Page.WidgetComponentDetail -> WidgetComponentDetailPage"));
+        assertTrue(source.contains("Page.WidgetComponentDetail -> Page.WidgetComponents"));
         assertTrue(picker.contains("getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)"));
         assertTrue(picker.contains("WidgetComponentStore.CATALOG_KEY"));
         assertTrue(picker.contains("WidgetComponentStore.SELECTION_KEY"));
+        assertTrue(picker.contains("internal fun WidgetComponentDetailPage"));
+        assertTrue(picker.contains("openWidget: (String) -> Unit"));
         assertTrue(picker.contains("显示全部内部元素"));
     }
 }
