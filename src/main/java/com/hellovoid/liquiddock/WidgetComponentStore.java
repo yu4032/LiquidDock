@@ -4,6 +4,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /** Shared descriptor/selector codec plus the narrow Launcher -> module discovery channel. */
@@ -11,7 +13,8 @@ public final class WidgetComponentStore {
     public static final String MODULE_PACKAGE = "com.hellovoid.liquiddock";
     public static final String RECEIVER_CLASS = MODULE_PACKAGE + ".WidgetDiscoveryReceiver";
     public static final String ACTION_DISCOVER = MODULE_PACKAGE + ".WIDGET_COMPONENT_DISCOVERED";
-    public static final String EXTRA_DESCRIPTOR = "descriptor";
+    public static final String EXTRA_DESCRIPTOR = "descriptor"; // legacy single-item receive fallback
+    public static final String EXTRA_DESCRIPTORS = "descriptors";
     public static final String EXTRA_TOKEN = "token";
     public static final String EXTRA_REQUEST_ACK = "request_ack";
     public static final String CATALOG_PREFS = "widget_components";
@@ -24,6 +27,7 @@ public final class WidgetComponentStore {
     public static final String REMOTE_V2 = "R2";
     private static final String MAML = "M";
     private static final String SEP = "\t";
+    static final int BATCH_MAX_ITEMS = 128;
 
     public static final String ACTION_CLEAR_BACKGROUND = "background";
     public static final String ACTION_CLEAR_IMAGE = "image";
@@ -36,8 +40,8 @@ public final class WidgetComponentStore {
     public static final String TYPE_OTHER = "other";
     public static final String TYPE_INTERNAL = "internal";
 
-    // A manual load always restarts Launcher. Cache that process's request/token so the first ACK
-    // can clear persistent state without interrupting the rest of this one discovery pass.
+    // A manual load always restarts Launcher. Cache that process's request/token so clearing the
+    // persisted request does not interrupt the remainder of this one Launcher discovery session.
     private static volatile boolean discoverySessionLoaded;
     private static volatile boolean discoveryActive;
     private static volatile String discoveryToken = "";
@@ -66,40 +70,59 @@ public final class WidgetComponentStore {
         }
     }
 
-    static void publishRemoteViews(
-            Context context,
+    static Descriptor remoteDescriptor(
             String provider,
             String action,
             String resourceName,
             String className,
             String hierarchyPath,
             String componentType) {
-        if (context == null || blank(provider) || blank(action) || blank(className)
-                || blank(hierarchyPath) || blank(componentType) || unsafe(resourceName)) return;
-        publish(context, new Descriptor(
+        if (blank(provider) || blank(action) || blank(className)
+                || blank(hierarchyPath) || blank(componentType) || unsafe(resourceName)) return null;
+        return new Descriptor(
                 REMOTE_V2, provider, action, safe(resourceName), className, "",
-                hierarchyPath, componentType));
+                hierarchyPath, componentType);
     }
 
-    static void publishMaml(
-            Context context, WidgetBackgroundIdentity identity, String elementName, String className) {
-        if (context == null || identity == null || blank(identity.productId)
-                || blank(elementName) || blank(className)) return;
-        publish(context, new Descriptor(
+    static Descriptor mamlDescriptor(
+            WidgetBackgroundIdentity identity, String elementName, String className) {
+        if (identity == null || blank(identity.productId)
+                || blank(elementName) || blank(className)) return null;
+        return new Descriptor(
                 MAML, identity.productId, ACTION_HIDE_VIEW, elementName, className,
                 identity.appPackage == null ? "" : identity.appPackage,
-                "mElements/" + elementName, classifyMamlType(className)));
+                "mElements/" + elementName, classifyMamlType(className));
     }
 
-    private static void publish(Context context, Descriptor descriptor) {
+    /**
+     * Sends descriptors in bounded chunks instead of one broadcast per node. Exact-path discovery
+     * can produce hundreds of descriptors for a single calendar widget, so per-node IPC is both
+     * expensive and prone to partial catalog delivery under a restart burst.
+     */
+    static void publishBatch(Context context, List<Descriptor> descriptors) {
         ensureDiscoverySession();
-        if (!discoveryActive || blank(discoveryToken)) return;
+        if (!discoveryActive || context == null || blank(discoveryToken)
+                || descriptors == null || descriptors.isEmpty()) return;
+
+        ArrayList<String> batch = new ArrayList<>(BATCH_MAX_ITEMS);
+        for (Descriptor descriptor : descriptors) {
+            if (descriptor == null) continue;
+            batch.add(descriptor.encodeCatalog());
+            if (batch.size() >= BATCH_MAX_ITEMS) {
+                sendBatch(context, batch);
+                batch = new ArrayList<>(BATCH_MAX_ITEMS);
+            }
+        }
+        if (!batch.isEmpty()) sendBatch(context, batch);
+    }
+
+    private static void sendBatch(Context context, ArrayList<String> batch) {
         try {
             Intent intent = baseIntent();
-            intent.putExtra(EXTRA_DESCRIPTOR, descriptor.encodeCatalog());
+            intent.putStringArrayListExtra(EXTRA_DESCRIPTORS, batch);
             context.sendBroadcast(intent);
         } catch (Throwable error) {
-            if (MainHook.debugLogging) MainHook.log("[DC][WidgetDiscover] publish failed: " + error);
+            if (MainHook.debugLogging) MainHook.log("[DC][WidgetDiscover] batch publish failed: " + error);
         }
     }
 
