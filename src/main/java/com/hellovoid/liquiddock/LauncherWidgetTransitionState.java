@@ -44,6 +44,10 @@ final class LauncherWidgetTransitionState {
         return phase == Phase.RETURN_WAITING_FRESH || phase == Phase.RETURN_FADING_IN;
     }
 
+    long expectedFreshGeneration() {
+        return expectedFreshGeneration;
+    }
+
     boolean onFreshFrame(long generation) {
         if (phase != Phase.RETURN_WAITING_FRESH
                 || expectedFreshGeneration < 0L
