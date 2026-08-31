@@ -26,10 +26,6 @@ final class Miuix307ZeroCopyRenderer {
         if (materialHost == null || host == null || glassConfig == null
                 || workstationConfig == null) return false;
 
-        // Install the scheduler before constructing the TextureView so its first attach already
-        // uses the optimized observer rather than briefly entering the legacy polling path.
-        GlassPerformanceHook.install(materialHost.getClass().getClassLoader());
-
         // This is the first zero-copy boundary that owns a real Launcher View. Install the
         // app-to-home icon handoff hooks here so they use the target Launcher ClassLoader rather
         // than being skipped by MainHook's successful 307 early return.
@@ -46,7 +42,6 @@ final class Miuix307ZeroCopyRenderer {
         // reach the same TextureView renderer.
         Miuix307PassBlurTextureView gpuBackdrop = new Miuix307PassBlurTextureView(
                 materialHost.getContext(), materialHost);
-        GlassPerformanceHook.registerDock(gpuBackdrop);
         gpuBackdrop.setGlassConfig(glassConfig);
         gpuBackdrop.setWorkstationDockIconCornerRadiusDp(
                 workstationConfig.dockIconGlassCornerRadius);
@@ -118,21 +113,12 @@ final class Miuix307ZeroCopyRenderer {
         }
     }
 
-    static void requestDockGeometryRefresh() {
-        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop != null) GlassPerformanceHook.requestDockGeometryRefresh(gpuBackdrop);
-    }
-
-    static void requestFreshBackdrop(String reason) {
-        GlassPerformanceHook.requestFreshDockBackdrop(reason);
-    }
-
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
         dockAnimationFrameScheduled = true;
         DockAnimationTrace.rendererEvent("anim-frame-request");
-        GlassPerformanceHook.requestDockAnimationFrame(gpuBackdrop);
+        gpuBackdrop.requestDockSceneRefresh();
         gpuBackdrop.postOnAnimation(() -> {
             if (gpuBackdropRef.get() != gpuBackdrop) return;
             DockAnimationTrace.rendererEvent("anim-frame-vsync");
@@ -149,9 +135,6 @@ final class Miuix307ZeroCopyRenderer {
         hostRef = new WeakReference<>(null);
         materialHostRef = new WeakReference<>(null);
         dockAnimationFrameScheduled = false;
-        if (gpuBackdrop != null) {
-            GlassPerformanceHook.unregisterDock(gpuBackdrop);
-            gpuBackdrop.shutdown();
-        }
+        if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }
