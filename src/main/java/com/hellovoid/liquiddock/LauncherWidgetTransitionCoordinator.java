@@ -28,6 +28,7 @@ final class LauncherWidgetTransitionCoordinator {
         final WeakReference<View> materialRef;
         final WeakReference<LauncherGlassStaticNode> nodeRef;
         final LauncherWidgetTransitionState state = new LauncherWidgetTransitionState();
+        boolean launchSuppressionOwned;
 
         Entry(View material, LauncherGlassStaticNode node) {
             materialRef = new WeakReference<>(material);
@@ -64,6 +65,7 @@ final class LauncherWidgetTransitionCoordinator {
 
         LauncherGlassStaticNode node = entry.nodeRef.get();
         if (node == null) return;
+        entry.launchSuppressionOwned = true;
         entry.state.beginLaunchFadeOut();
         float startAlpha = node.visibilityAlpha();
         node.setSuppressedByDrag(true);
@@ -77,6 +79,26 @@ final class LauncherWidgetTransitionCoordinator {
     }
 
     /**
+     * Launcher restores the native widget to VISIBLE at launch-away animation end even though the
+     * app is now foreground. Release only launch-owned suppression here. Return-to-widget ignores
+     * this signal and remains hidden until a fresh HOME scene is rendered.
+     */
+    static void onAnimTargetVisible(View material) {
+        if (material == null) return;
+        Entry entry = ENTRIES.get(material);
+        if (entry == null || entry.state.isReturnTransition() || !entry.launchSuppressionOwned) {
+            return;
+        }
+        LauncherGlassStaticNode node = entry.nodeRef.get();
+        entry.launchSuppressionOwned = false;
+        entry.state.cancel();
+        if (node != null) node.setSuppressedByDrag(false);
+        removeEntry(entry);
+        MainHook.log(TAG + " widget->app launch suppression released host="
+                + material.getClass().getSimpleName());
+    }
+
+    /**
      * Called from the vendor's real findClosingWidgetView() result, before it hides the widget for
      * App -> HOME. This removes the large widget from the old cached StaticLayer immediately.
      */
@@ -84,6 +106,7 @@ final class LauncherWidgetTransitionCoordinator {
         Entry entry = entryFor(material);
         if (entry == null) return;
 
+        entry.launchSuppressionOwned = false;
         if (!entry.state.isReturnTransition()) {
             SceneSnapshot scene = readScene(material);
             long generation = scene != null && scene.homePending ? scene.generation : -1L;
