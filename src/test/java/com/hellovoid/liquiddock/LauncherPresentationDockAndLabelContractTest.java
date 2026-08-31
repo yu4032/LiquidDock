@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -15,7 +16,7 @@ public class LauncherPresentationDockAndLabelContractTest {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void workspaceFreshBackdropWaitsForRealHomeAndUnlockPresentationEnd()
+    @Test public void workspaceFreshBackdropWaitsForRealHomeAndUnlockBoundary()
             throws Exception {
         String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
         String controller = read(MAIN.resolve("LauncherGlassSceneController.java"));
@@ -27,6 +28,7 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(hook.contains("onAnimationEnd"));
         assertTrue(hook.contains("com.miui.home.launcher.common.UnlockAnimationStateMachine"));
         assertTrue(hook.contains("PREPARE"));
+        assertTrue(hook.contains("onSystemUiLockscreenGoneFinished"));
         assertTrue(hook.contains("setHomeTransitionPendingForAll"));
         assertTrue(hook.contains("setUnlockTransitionPendingForAll"));
 
@@ -42,7 +44,7 @@ public class LauncherPresentationDockAndLabelContractTest {
         String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
         String homeStart = methodSlice(hook, "private static void hookHomeStart", "private static void hookHomeEnd");
         String homeEnd = methodSlice(hook, "private static void hookHomeEnd", "private static boolean containsHomeClose");
-        String unlockState = methodSlice(hook, "private static void hookUnlockState", "private static void hookUnlockSpringFinish");
+        String unlockState = methodSlice(hook, "private static void hookUnlockState", "private static void armUnlockCapture");
 
         // DEX signatures from Launcher 4.50:
         // WindowElement.animTo(Object)
@@ -53,43 +55,34 @@ public class LauncherPresentationDockAndLabelContractTest {
         assertTrue(unlockState.contains("com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE"));
     }
 
-    @Test public void padUnlockUsesSpringTerminalCountAndNoAnimationIdleEscape()
+    @Test public void launcherPrepareOnlyFreezesWorkspaceWallpaperCapture()
             throws Exception {
         String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
+        String unlockState = methodSlice(
+                hook, "private static void hookUnlockState", "private static void armUnlockCapture");
 
-        // Launcher 4.50 createAnimation() selects V12Spring on non-fold devices. Its listener
-        // decrements mAllAnimationViewNum and resets the animation state only on the final view.
-        assertTrue(hook.contains("UserPresentAnimationCompatV12Spring$1"));
-        assertTrue(hook.contains("\"onAnimationEnd\""));
-        assertTrue(hook.contains("mAllAnimationViewNum"));
-        assertTrue(hook.contains("releaseUnlockWhenSpringComplete"));
-        assertTrue("HookUtil requires the real Animator parameter for this exact override",
-                hook.contains("android.animation.Animator.class"));
+        assertTrue(unlockState.contains("PREPARE.equals(state)"));
+        assertTrue(unlockState.contains("armUnlockCapture(\"Launcher/PREPARE\")"));
+        assertFalse(unlockState.contains("finishUnlockBarrierNow"));
+        assertFalse(unlockState.contains("prepareUnlockCaptureReturn"));
 
-        // PREPARE can also resolve to no user-present animation at all. setState(IDLE) must then
-        // release the barrier instead of waiting forever for a listener that will never run.
-        assertTrue(hook.contains("IDLE"));
-        assertTrue(hook.contains("releaseUnlockIfIdleWithoutAnimation"));
-
-        int springHook = hook.indexOf("UserPresentAnimationCompatV12Spring$1");
-        int proceed = hook.indexOf("chain.proceed", springHook);
-        int terminalCheck = hook.indexOf("releaseUnlockWhenSpringComplete", proceed);
-        assertTrue("Spring completion must be evaluated after Xiaomi updates its remaining count",
-                springHook >= 0 && proceed > springHook && terminalCheck > proceed);
+        // Xiaomi's Spring/Folme completion is presentation detail, not capture authority anymore.
+        assertFalse(hook.contains("UserPresentAnimationCompatV12Spring$1"));
+        assertFalse(hook.contains("UserPresentAnimationCompatV12Folme$1"));
+        assertFalse(hook.contains("mAllAnimationViewNum"));
+        assertFalse(hook.contains("mNumOfAnimatedView"));
     }
 
-    @Test public void foldFolmeFallbackOnlyReleasesAfterAllAnimatedViewsComplete()
+    @Test public void onlySystemUiFinishedCanRebuildAndReleaseUnlockCapture()
             throws Exception {
         String hook = read(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
 
-        assertTrue(hook.contains("UserPresentAnimationCompatV12Folme$1"));
-        assertTrue(hook.contains("onComplete"));
-        assertTrue(hook.contains("onCancel"));
-        assertTrue(hook.contains("mNumOfAnimatedView"));
-        assertTrue(hook.contains("mNumOfCurrentAnimatedView"));
-        assertTrue(hook.contains("releaseUnlockWhenFolmeComplete"));
-        assertTrue("Folme callback overrides take one Object parameter",
-                hook.contains("Object.class"));
+        int boundary = hook.indexOf("static void onSystemUiLockscreenGoneFinished()");
+        int rollover = hook.indexOf("prepareUnlockCaptureReturn", boundary);
+        int release = hook.indexOf("finishUnlockBarrierNow", rollover);
+        assertTrue(boundary >= 0 && rollover > boundary && release > rollover);
+        assertFalse(hook.contains("onUserPresent"));
+        assertFalse(hook.contains("Choreographer"));
     }
 
     @Test public void hotseatDropAnimationEndForcesDockSceneGeometryRefresh() throws Exception {
