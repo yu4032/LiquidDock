@@ -201,37 +201,6 @@ public class SettingsActivity extends AppCompatActivity {
         }).start();
     }
 
-    void restartSystemUi() {
-        // Kill only the currently running SystemUI process. system_server owns its lifecycle and
-        // will start a fresh instance; do not force-stop the package or touch MIUI Home here.
-        new Thread(() -> {
-            try {
-                Process p = new ProcessBuilder("su")
-                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                        .start();
-                try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes("PIDS=$(pidof com.android.systemui); "
-                            + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
-                            + "kill -TERM $PIDS\nexit\n");
-                    os.flush();
-                }
-                if (!p.waitFor(8, TimeUnit.SECONDS)) {
-                    p.destroy();
-                    if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
-                    throw new IOException("su timed out while restarting SystemUI");
-                }
-                int exitCode = p.exitValue();
-                if (exitCode != 0) throw new IOException("su failed with exit code " + exitCode);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                runOnUiThread(() -> Toast.makeText(this,
-                        "System UI restart interrupted", Toast.LENGTH_SHORT).show());
-            } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
-            }
-        }).start();
-    }
 
     public static class SettingsFragment extends PreferenceFragmentCompat {
         @Override public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
