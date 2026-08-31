@@ -34,12 +34,25 @@ public class Miuix307MaterialPipelineContractTest {
         assertTrue(renderer.contains("new Miuix307PassBlurTextureView"));
     }
 
-    @Test public void noSceneOrSystemUiAuthorityIsPartOfMaterialPipeline() throws Exception {
+    @Test public void systemUiUnlockSourceRemainsOutsideMaterialPipeline() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String source = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+
         assertFalse(pipeline.contains("GestureToHome"));
         assertFalse(pipeline.contains("CaptureScene"));
         assertFalse(pipeline.contains("Miuix307DragCaptureHook"));
-        assertFalse(module.contains("SystemUi"));
+        assertFalse(pipeline.contains("SystemUiKeyguardGone"));
+        assertFalse(bridge.contains("KeyguardTransitionRepository"));
+        assertFalse(source.contains("Miuix307MaterialPipeline"));
+        assertFalse(source.contains("Miuix307PassBlurBridge"));
+
+        int systemUiBranch = module.indexOf("SYSTEM_UI_PACKAGE.equals(packageName)");
+        int sourceInstall = module.indexOf("SystemUiKeyguardGoneSource.install", systemUiBranch);
+        int earlyReturn = module.indexOf("return;", sourceInstall);
+        int launcherInstall = module.indexOf("new MainHook().install(classLoader)", earlyReturn);
+        assertTrue(systemUiBranch >= 0 && sourceInstall > systemUiBranch
+                && earlyReturn > sourceInstall && launcherInstall > earlyReturn);
     }
 }
