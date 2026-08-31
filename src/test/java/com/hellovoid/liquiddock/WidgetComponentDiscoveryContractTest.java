@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Spike contract for read-only widget component discovery before any GUI or hide-rule work. */
+/** Read-only discovery contract retained by the formal widget-component picker. */
 public class WidgetComponentDiscoveryContractTest {
     private static final Path DISCOVERY = Path.of(
             "src/main/java/com/hellovoid/liquiddock/LauncherWidgetComponentDiscovery.java");
@@ -36,10 +36,12 @@ public class WidgetComponentDiscoveryContractTest {
     }
 
     @Test public void mamlDiscoveryReusesRealElementRegistryNamesAndTypes() throws Exception {
+        String discovery = Files.readString(DISCOVERY);
+        assertTrue(discovery.contains("scanMaml(View host, WidgetBackgroundIdentity identity, Object root)"));
+        assertTrue(discovery.contains("mElements"));
+        assertTrue(discovery.contains("entry.getKey()"));
+        assertTrue(discovery.contains("element.getClass().getName()"));
         String maml = Files.readString(MAML);
-        assertTrue(maml.contains("LauncherWidgetComponentDiscovery.publishMaml"));
-        assertTrue(maml.contains("mElements"));
-        assertTrue(maml.contains("entry.getKey()"));
-        assertTrue(maml.contains("element.getClass().getName()"));
+        assertTrue(maml.contains("LauncherWidgetComponentDiscovery.scanMaml(host, identity, root)"));
     }
 }
