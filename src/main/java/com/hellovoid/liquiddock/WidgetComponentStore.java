@@ -154,9 +154,9 @@ public final class WidgetComponentStore {
         String[] parts = encoded.split(SEP, -1);
         if (parts.length == 8 && REMOTE_V2.equals(parts[0])) {
             if (blank(parts[1]) || blank(parts[2]) || unsafe(parts[3]) || blank(parts[4])
-                    || unsafe(parts[5]) || blank(parts[6]) || blank(parts[7])) return null;
-            return new Descriptor(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5],
-                    parts[6], parts[7]);
+                    || unsafe(parts[5]) || unsafe(parts[6]) || blank(parts[7])) return null;
+            return new Descriptor(parts[0], parts[1], parts[2], parts[3], parts[4], parts[6],
+                    parts[5], parts[7]);
         }
         if (parts.length == 5 && MAML.equals(parts[0])) {
             if (blank(parts[1]) || blank(parts[2]) || blank(parts[3]) || unsafe(parts[4])) return null;
