@@ -7,11 +7,11 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class LauncherGlassPresentationPolicyTest {
-    @Test public void continuousNativeAlphaTracksDirectly() {
+    @Test public void continuousNativeAlphaHoldsNodePresentation() {
         LauncherGlassPresentationPolicy.Decision decision =
                 LauncherGlassPresentationPolicy.decide(false, true, true, 0.42f);
-        assertEquals(LauncherGlassPresentationPolicy.Mode.DIRECT, decision.mode);
-        assertEquals(0.42f, decision.targetAlpha, 0f);
+        assertEquals("continuous ancestor alpha must stay off the Prismal redraw path",
+                LauncherGlassPresentationPolicy.Mode.HOLD, decision.mode);
         assertFalse(decision.retainLastGeometry);
     }
 
@@ -19,6 +19,15 @@ public class LauncherGlassPresentationPolicyTest {
         LauncherGlassPresentationPolicy.Decision decision =
                 LauncherGlassPresentationPolicy.decide(false, true, false, 0f);
         assertEquals(LauncherGlassPresentationPolicy.Mode.ANIMATE, decision.mode);
+        assertEquals(0f, decision.targetAlpha, 0f);
+        assertTrue(decision.retainLastGeometry);
+    }
+
+    @Test public void zeroAlphaEndpointAlsoUsesHardVisibilityFallback() {
+        LauncherGlassPresentationPolicy.Decision decision =
+                LauncherGlassPresentationPolicy.decide(false, true, true, 0f);
+        assertEquals("a VISIBLE host that reaches alpha=0 still has to disappear",
+                LauncherGlassPresentationPolicy.Mode.ANIMATE, decision.mode);
         assertEquals(0f, decision.targetAlpha, 0f);
         assertTrue(decision.retainLastGeometry);
     }
@@ -31,11 +40,12 @@ public class LauncherGlassPresentationPolicyTest {
         assertFalse(decision.retainLastGeometry);
     }
 
-    @Test public void partialRevealTracksVendorAlphaInsteadOfAddingSecondAnimation() {
+    @Test public void partialRevealDoesNotMirrorVendorAlphaThroughPrismal() {
         LauncherGlassPresentationPolicy.Decision decision =
                 LauncherGlassPresentationPolicy.decide(false, false, true, 0.35f);
-        assertEquals(LauncherGlassPresentationPolicy.Mode.DIRECT, decision.mode);
-        assertEquals(0.35f, decision.targetAlpha, 0f);
+        assertEquals("partial vendor alpha must not cause one full static-layer redraw per frame",
+                LauncherGlassPresentationPolicy.Mode.HOLD, decision.mode);
+        assertFalse(decision.retainLastGeometry);
     }
 
     @Test public void semanticSceneOwnershipBypassesNativeAlpha() {
