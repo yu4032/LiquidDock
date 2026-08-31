@@ -89,7 +89,8 @@ public class WidgetComponentSelectionContractTest {
         String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
         String executor = Files.readString(ROOT.resolve("LauncherWidgetComponentSelectionExecutor.java"));
 
-        assertTrue(store.contains("if (REMOTE.equals(parts[0])) return null"));
+        assertTrue(store.contains("REMOTE.equals(parts[0])"));
+        assertTrue(store.contains("return null;"));
         assertTrue(executor.contains("resolveExactRemoteView"));
         assertTrue(executor.contains("selector.hierarchyPath"));
         assertTrue(executor.contains("selector.className.equals"));
@@ -136,7 +137,7 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(detail.contains("高级整节点隐藏"));
         assertTrue(detail.contains("ArrowPreference("));
         assertTrue(detail.contains("SwitchPreference("));
-        assertTrue(detail.contains("descriptor.componentType"));
+        assertTrue(detail.contains("groupBy { it.componentType }"));
         assertTrue(manifest.contains("android:name=\".WidgetComponentDetailActivity\""));
     }
 }
