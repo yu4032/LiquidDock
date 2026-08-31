@@ -17,15 +17,23 @@ public final class WidgetDiscoveryReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         if (context == null || intent == null
                 || !WidgetComponentStore.ACTION_DISCOVER.equals(intent.getAction())) return;
-        String encoded = intent.getStringExtra(WidgetComponentStore.EXTRA_DESCRIPTOR);
         String actualToken = intent.getStringExtra(WidgetComponentStore.EXTRA_TOKEN);
-        if (WidgetComponentStore.parseCatalog(encoded) == null || actualToken == null) return;
+        if (actualToken == null) return;
 
         SharedPreferences config = PreferenceManager.getDefaultSharedPreferences(context);
         String expectedToken = config.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "");
         if (expectedToken == null || expectedToken.isEmpty() || !secureEquals(expectedToken, actualToken)) {
             return;
         }
+
+        if (intent.getBooleanExtra(WidgetComponentStore.EXTRA_REQUEST_ACK, false)) {
+            config.edit().remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY).commit();
+            LiquidDockApp.syncToRemote(config);
+            return;
+        }
+
+        String encoded = intent.getStringExtra(WidgetComponentStore.EXTRA_DESCRIPTOR);
+        if (WidgetComponentStore.parseCatalog(encoded) == null) return;
 
         SharedPreferences catalog = context.getSharedPreferences(
                 WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE);
