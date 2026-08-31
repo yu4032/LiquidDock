@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 /** Gates Workspace wallpaper capture across HOME and keyguard presentation boundaries. */
 final class LauncherGlassHomePresentationHook {
@@ -20,6 +21,12 @@ final class LauncherGlassHomePresentationHook {
     private static long unlockTransitionSerial;
     private static long unlockReleaseScheduledSerial = -1L;
 
+    // WMShell HomeTransitionObserver emits this at Transitions#onTransitionReady. It is a visual
+    // timing hint only: capture freshness remains owned by LauncherGlassSceneController.
+    private static boolean systemUiHomeVisibleReady;
+    private static long systemUiHomeVisibleSourceUptimeMs;
+    private static long lastSystemUiRevealSourceUptimeMs = -1L;
+
     private LauncherGlassHomePresentationHook() {}
 
     static void install(ClassLoader classLoader) {
@@ -34,11 +41,18 @@ final class LauncherGlassHomePresentationHook {
         try {
             HookUtil.hookMethod(classLoader, WINDOW_ELEMENT, "animTo", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (containsHomeClose(args)) {
+                boolean closingToHome = containsHomeClose(args);
+                if (closingToHome) {
                     homeTransitionArmed = true;
+                    // Freeze producer/freshness first. The cached visual may be revealed only after
+                    // the vendor HOME animation has actually been entered.
                     LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
                 }
-                return chain.proceed(args);
+                Object result = chain.proceed(args);
+                if (closingToHome) {
+                    maybeRevealFromSystemUi("Launcher/animTo");
+                }
+                return result;
             }, Object.class);
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME presentation start unavailable: " + error);
@@ -58,6 +72,46 @@ final class LauncherGlassHomePresentationHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME presentation end unavailable: " + error);
         }
+    }
+
+    static void onSystemUiHomeVisibilityReady(
+            boolean visible, long sourceUptimeMs, long receiveUptimeMs) {
+        systemUiHomeVisibleReady = visible;
+        if (!visible) {
+            systemUiHomeVisibleSourceUptimeMs = 0L;
+            lastSystemUiRevealSourceUptimeMs = -1L;
+            // HOME is leaving the foreground. Hiding the cached glass immediately is compositor-
+            // only and makes the next HOME-visible edge start from alpha 0.
+            LauncherGlassStaticLayer.hideFromSystemUiTimingForAll();
+            MainHook.log(TAG + " SystemUI HOME hidden-ready");
+            return;
+        }
+
+        systemUiHomeVisibleSourceUptimeMs = sourceUptimeMs;
+        MainHook.log(TAG + " SystemUI HOME visible-ready source=" + sourceUptimeMs
+                + " latency=" + Math.max(0L, receiveUptimeMs - sourceUptimeMs)
+                + "ms homeArmed=" + homeTransitionArmed
+                + " unlockArmed=" + unlockTransitionArmed);
+        if (homeTransitionArmed && !unlockTransitionArmed) {
+            revealFromSystemUi(sourceUptimeMs, receiveUptimeMs, "SystemUI/ready");
+        }
+    }
+
+    private static void maybeRevealFromSystemUi(String reason) {
+        if (!systemUiHomeVisibleReady || unlockTransitionArmed) return;
+        long sourceUptimeMs = systemUiHomeVisibleSourceUptimeMs;
+        revealFromSystemUi(sourceUptimeMs, SystemClock.uptimeMillis(), reason);
+    }
+
+    private static void revealFromSystemUi(
+            long sourceUptimeMs, long receiveUptimeMs, String reason) {
+        if (sourceUptimeMs <= 0L || sourceUptimeMs == lastSystemUiRevealSourceUptimeMs) return;
+        lastSystemUiRevealSourceUptimeMs = sourceUptimeMs;
+        LauncherGlassStaticLayer.revealFromSystemUiTimingForAll(
+                sourceUptimeMs, receiveUptimeMs);
+        MainHook.log(TAG + " SystemUI HOME reveal consumed reason=" + reason
+                + " source=" + sourceUptimeMs
+                + " applied=" + receiveUptimeMs);
     }
 
     private static boolean containsHomeClose(Object[] args) {
