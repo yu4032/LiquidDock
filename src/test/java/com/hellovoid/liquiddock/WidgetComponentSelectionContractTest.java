@@ -65,6 +65,20 @@ public class WidgetComponentSelectionContractTest {
         assertFalse(picker.contains("重新扫描桌面"));
     }
 
+    @Test public void remoteDiscoveryRetriesWhenProviderPopulatesSameRoot() throws Exception {
+        String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
+        String controller = Files.readString(ROOT.resolve("LauncherWidgetBackgroundController.java"));
+
+        assertTrue(discovery.contains("Map<View, Integer> DUMPED_REMOTE_ROOTS"));
+        assertTrue(discovery.contains("remoteSnapshotSignature"));
+        assertTrue(discovery.contains("previousSignature"));
+        assertTrue(discovery.contains("previousSignature == snapshotSignature"));
+
+        int discoveryCall = controller.indexOf("LauncherWidgetComponentDiscovery.scan(host)");
+        int suppressorCall = controller.indexOf("LauncherGlassVendorMaterialSuppressor.claimWidgetMaterial(host)");
+        assertTrue(discoveryCall >= 0 && suppressorCall > discoveryCall);
+    }
+
     @Test public void discoveryBatchesDescriptorsInsteadOfBroadcastingEveryNode() throws Exception {
         String store = Files.readString(ROOT.resolve("WidgetComponentStore.java"));
         String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
