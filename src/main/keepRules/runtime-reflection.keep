@@ -1,6 +1,11 @@
 # LauncherGlassSessionRegistry invokes this internal recovery entry by reflection so the
 # 1400-line renderer does not expose a broader public API. Preserve only the method name/member;
 # the class itself may still be optimized/repackaged by R8.
+-keepclassmembers class com.hellovoid.liquiddock.LauncherGlassSession {
+    android.os.Handler renderHandler;
+    com.hellovoid.liquiddock.Miuix307PassBlurBridge$Binding binding;
+}
+
 -keepclassmembers,allowoptimization class com.hellovoid.liquiddock.LauncherGlassSession {
     void rebindProducer();
 }
