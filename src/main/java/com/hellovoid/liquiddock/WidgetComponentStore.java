@@ -170,22 +170,31 @@ public final class WidgetComponentStore {
     public static Descriptor parseCatalog(String encoded) {
         if (encoded == null) return null;
         String[] parts = encoded.split(SEP, -1);
-        if (parts.length == 8 && REMOTE_V2.equals(parts[0])) {
+        if ((parts.length == 8 || parts.length == 12) && REMOTE_V2.equals(parts[0])) {
             if (blank(parts[1]) || blank(parts[2]) || unsafe(parts[3]) || blank(parts[4])
                     || unsafe(parts[5]) || unsafe(parts[6]) || blank(parts[7])) return null;
-            return new Descriptor(parts[0], parts[1], parts[2], parts[3], parts[4], parts[6],
-                    parts[5], parts[7]);
+            Descriptor descriptor = new Descriptor(parts[0], parts[1], parts[2], parts[3], parts[4],
+                    parts[6], parts[5], parts[7]);
+            return parts.length == 12 ? descriptor.withDiscoveryMetadata(
+                    parseInt(parts[8]), parseInt(parts[9]), parseFloat(parts[10]), parseFloat(parts[11]))
+                    : descriptor;
         }
-        if (parts.length == 5 && MAML.equals(parts[0])) {
+        if ((parts.length == 5 || parts.length == 9) && MAML.equals(parts[0])) {
             if (blank(parts[1]) || blank(parts[2]) || blank(parts[3]) || unsafe(parts[4])) return null;
-            return new Descriptor(MAML, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3], parts[4],
-                    "mElements/" + parts[2], classifyMamlType(parts[3]));
+            Descriptor descriptor = new Descriptor(MAML, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3],
+                    parts[4], "mElements/" + parts[2], classifyMamlType(parts[3]));
+            return parts.length == 9 ? descriptor.withDiscoveryMetadata(
+                    parseInt(parts[5]), parseInt(parts[6]), parseFloat(parts[7]), parseFloat(parts[8]))
+                    : descriptor;
         }
-        if (parts.length == 7 && MAML_V2.equals(parts[0])) {
+        if ((parts.length == 7 || parts.length == 11) && MAML_V2.equals(parts[0])) {
             if (blank(parts[1]) || unsafe(parts[2]) || blank(parts[3]) || blank(parts[4])
                     || unsafe(parts[5]) || blank(parts[6])) return null;
-            return new Descriptor(MAML_V2, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3],
+            Descriptor descriptor = new Descriptor(MAML_V2, parts[1], ACTION_HIDE_VIEW, parts[2], parts[3],
                     parts[5], parts[4], parts[6]);
+            return parts.length == 11 ? descriptor.withDiscoveryMetadata(
+                    parseInt(parts[7]), parseInt(parts[8]), parseFloat(parts[9]), parseFloat(parts[10]))
+                    : descriptor;
         }
         return null;
     }
@@ -231,6 +240,25 @@ public final class WidgetComponentStore {
         return TYPE_OTHER;
     }
 
+    private static int parseInt(String value) {
+        try { return Integer.parseInt(value); }
+        catch (Throwable ignored) { return -1; }
+    }
+
+    private static float parseFloat(String value) {
+        if (value == null || value.isEmpty()) return Float.NaN;
+        try {
+            float parsed = Float.parseFloat(value);
+            return Float.isInfinite(parsed) ? Float.NaN : parsed;
+        } catch (Throwable ignored) {
+            return Float.NaN;
+        }
+    }
+
+    private static String encodeFloat(float value) {
+        return Float.isNaN(value) || Float.isInfinite(value) ? "" : Float.toString(value);
+    }
+
     private static boolean unsafe(String value) {
         return value == null || value.indexOf('\t') >= 0 || value.indexOf('\n') >= 0
                 || value.indexOf('\r') >= 0;
@@ -251,10 +279,22 @@ public final class WidgetComponentStore {
         public final String label;
         public final String hierarchyPath;
         public final String componentType;
+        public final int renderOrdinal;
+        public final int depth;
+        public final float areaRatio;
+        public final float effectiveZ;
 
         Descriptor(
                 String source, String owner, String action, String name, String className,
                 String label, String hierarchyPath, String componentType) {
+            this(source, owner, action, name, className, label, hierarchyPath, componentType,
+                    -1, -1, Float.NaN, Float.NaN);
+        }
+
+        private Descriptor(
+                String source, String owner, String action, String name, String className,
+                String label, String hierarchyPath, String componentType,
+                int renderOrdinal, int depth, float areaRatio, float effectiveZ) {
             this.source = source;
             this.owner = owner;
             this.action = action;
@@ -263,6 +303,22 @@ public final class WidgetComponentStore {
             this.label = label == null ? "" : label;
             this.hierarchyPath = hierarchyPath == null ? "" : hierarchyPath;
             this.componentType = componentType == null ? TYPE_OTHER : componentType;
+            this.renderOrdinal = renderOrdinal < 0 ? -1 : renderOrdinal;
+            this.depth = depth < 0 ? -1 : depth;
+            this.areaRatio = Float.isNaN(areaRatio) || Float.isInfinite(areaRatio)
+                    ? Float.NaN : Math.max(0f, Math.min(1f, areaRatio));
+            this.effectiveZ = Float.isNaN(effectiveZ) || Float.isInfinite(effectiveZ)
+                    ? Float.NaN : effectiveZ;
+        }
+
+        public Descriptor withDiscoveryMetadata(
+                int renderOrdinal, int depth, float areaRatio, float effectiveZ) {
+            return new Descriptor(source, owner, action, name, className, label,
+                    hierarchyPath, componentType, renderOrdinal, depth, areaRatio, effectiveZ);
+        }
+
+        public boolean hasDiscoveryMetadata() {
+            return renderOrdinal >= 0 && depth >= 0;
         }
 
         public boolean isRemoteViews() { return REMOTE_V2.equals(source); }
@@ -281,13 +337,17 @@ public final class WidgetComponentStore {
         }
 
         public String encodeCatalog() {
+            String base;
             if (isRemoteViews()) {
-                return selectorKey() + SEP + label + SEP + componentType;
+                base = selectorKey() + SEP + label + SEP + componentType;
+            } else if (isExactMamlRender()) {
+                base = selectorKey() + SEP + label + SEP + componentType;
+            } else {
+                base = selectorKey() + SEP + label;
             }
-            if (isExactMamlRender()) {
-                return selectorKey() + SEP + label + SEP + componentType;
-            }
-            return selectorKey() + SEP + label;
+            if (!hasDiscoveryMetadata()) return base;
+            return base + SEP + renderOrdinal + SEP + depth + SEP
+                    + encodeFloat(areaRatio) + SEP + encodeFloat(effectiveZ);
         }
 
         public String displayOwner() {
@@ -301,12 +361,15 @@ public final class WidgetComponentStore {
                     && action.equals(that.action) && name.equals(that.name)
                     && className.equals(that.className) && label.equals(that.label)
                     && hierarchyPath.equals(that.hierarchyPath)
-                    && componentType.equals(that.componentType);
+                    && componentType.equals(that.componentType)
+                    && renderOrdinal == that.renderOrdinal && depth == that.depth
+                    && Float.compare(areaRatio, that.areaRatio) == 0
+                    && Float.compare(effectiveZ, that.effectiveZ) == 0;
         }
 
         @Override public int hashCode() {
             return Objects.hash(source, owner, action, name, className, label,
-                    hierarchyPath, componentType);
+                    hierarchyPath, componentType, renderOrdinal, depth, areaRatio, effectiveZ);
         }
     }
 }
