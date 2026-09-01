@@ -15,7 +15,7 @@ LiquidDock 是一个面向 **HyperOS 3 平板系统桌面** 的 LSPosed / libxpo
 - **HOME / APP / Recents 动画适配**：Launcher 提供语义 fallback，`com.android.systemui` 仅作为只读精确时序源；App→Home、Widget↔App、Recents→Home 均有独立的 freshness / visibility 生命周期。
 - **Widget 背景自定义**：可扫描 RemoteViews 与 MAML 的真实组件结构，显示 `Render # / Depth / Area / Z`，并将“疑似底层背景”候选优先展示。已有 selector 规则保持兼容，诊断元数据不会改变 selectorKey。
 - **Workspace 边缘几何**：静态玻璃滑出页面时保留完整形状、中心和圆角，由 framebuffer 自然裁屏；不会再贴住屏幕边缘只缩短宽度。
-- **桌面网格**：支持横屏 8×4 / 竖屏 4×8、自定义边距/行距/页面指示器，并保持方向独立的 placement memory。
+- **桌面网格**：提供 **8×4** 与 **10×6** 两档横屏 profile（竖屏分别为 4×8 / 6×10），支持自定义边距/行距/页面指示器，并保持方向独立的 placement memory。
 - **Dock 外观**：宽高、底部偏移、图标间距、圆角、原生模糊、Squircle / Fill-Diff、描边、整体阴影等。
 - **工作台 / Laptop**：已有 Dock、Grid、All Apps、Divider、Recents producer recovery 等实验适配，但整体仍不视为完整支持。
 - **多任务界面**：支持 Recents 背景模糊度调整。
