@@ -18,9 +18,7 @@ LiquidDock 是一个面向 HyperOS 3 平板系统桌面 的 LSPosed / libxposed 
 - **Dock 分隔线**：可调宽度、高度比例、垂直偏移、颜色与透明度。
 - **多任务界面自定义**：支持自定义多任务界面背景模糊度
 
-<p align="center">
-  <img src="artwork/detail.gif" alt="LiquidDock detail"/>
-</p>
+
 
 ## 注入边界
 
