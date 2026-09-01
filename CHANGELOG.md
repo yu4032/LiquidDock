@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.2.1 (2026-09-01)
+
+### Workspace glass
+
+- 修复 Workspace 静态玻璃边缘裁剪：使用完整几何体计算静态玻璃形状并保留到视口之外，消除边缘裁切
+
+### Widget background ranking
+
+- 新增小组件背景排序策略：优先揭示最可能的小组件背景，并收集、持久化排序元数据
+- 渲染诊断中暴露候选小组件背景，便于验证排序结果
+
 ## v2.2.0 (2026-09-01)
 
 ### Home transitions and widget glass
