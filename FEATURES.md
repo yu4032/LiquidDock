@@ -8,7 +8,12 @@
 
 # 桌面网格 (Grid)
 
-主开关 `home_grid_8x4` 启用后，桌面使用横屏 8×4 / 竖屏 4×8 自定义网格，并保留 orientation-specific placement memory。
+启用自定义桌面网格后，可选择两档 `HomeGridProfile`：
+
+- **8×4** 横屏 / **4×8** 竖屏；
+- **10×6** 横屏 / **6×10** 竖屏。
+
+两个 profile 都保留 orientation-specific placement memory。
 
 当前主要能力：
 
