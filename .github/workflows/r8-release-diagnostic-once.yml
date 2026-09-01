@@ -5,6 +5,7 @@ on:
     branches: [ fix-r8-xposed-release-keep ]
     paths:
       - .github/workflows/r8-release-diagnostic-once.yml
+      - src/main/keepRules/**
 
 jobs:
   diagnose:
@@ -29,28 +30,41 @@ jobs:
           EOF
       - name: Build optimized release
         run: ./gradlew assembleRelease --stacktrace
-      - name: Inspect R8 output
+      - name: Assert R8 timing boundary
         shell: bash
         run: |
           set -euo pipefail
           APK=$(find build/outputs/apk/release -name '*.apk' -type f | head -1)
+          MAP=$(find build/outputs/mapping/release -name mapping.txt -type f | head -1)
           echo "APK=$APK"
           sha256sum "$APK"
-          echo '=== Xposed entry ==='
-          unzip -p "$APK" META-INF/xposed/java_init.list || true
-          echo
-          echo '=== Xposed scope ==='
-          unzip -p "$APK" META-INF/xposed/scope.list || true
-          echo
-          echo '=== Mapping files ==='
-          find build/outputs/mapping -maxdepth 3 -type f -print 2>/dev/null || true
-          MAP=$(find build/outputs/mapping/release -name mapping.txt -type f 2>/dev/null | head -1 || true)
-          if [ -n "$MAP" ]; then
-            echo '=== Critical mapping ==='
-            grep -E '^(com\.hellovoid\.liquiddock\.(ModuleMain|SystemUiKeyguardGoneSource|SystemUiKeyguardGonePolicy|SystemUiKeyguardGoneRuntime|LauncherGlassHomePresentationHook|HookUtil)) ->' "$MAP" || true
-            echo '=== ModuleMain members ==='
-            awk '/^com\.hellovoid\.liquiddock\.ModuleMain ->/{p=1;print;next} p&&/^[^ ]/{exit} p{print}' "$MAP" | head -80
+
+          test "$(unzip -p "$APK" META-INF/xposed/java_init.list | tr -d '\r\n')" = 'com.hellovoid.liquiddock.ModuleMain'
+          unzip -p "$APK" META-INF/xposed/scope.list | grep -Fx 'com.miui.home'
+          unzip -p "$APK" META-INF/xposed/scope.list | grep -Fx 'com.android.systemui'
+
+          classes=(
+            ModuleMain
+            SystemUiKeyguardGoneSource
+            SystemUiKeyguardGonePolicy
+            SystemUiKeyguardGoneProtocol
+            SystemUiKeyguardGoneRuntime
+            SystemUiHomeTransitionSource
+            SystemUiHomeTransitionProtocol
+            SystemUiHomeTransitionRuntime
+            SystemUiHomeTransitionTracker
+            LauncherGlassHomePresentationHook
+          )
+          for cls in "${classes[@]}"; do
+            fqcn="com.hellovoid.liquiddock.${cls}"
+            echo "assert keep: $fqcn"
+            grep -Fqx "$fqcn -> $fqcn:" "$MAP"
+          done
+
+          if grep -E '^com\.hellovoid\.liquiddock\.(SystemUi(KeyguardGone|HomeTransition)|LauncherGlassHomePresentationHook).* -> (R8\$\$REMOVED|[a-z][a-z0-9]{0,3})(:|\.)' "$MAP"; then
+            echo 'Critical timing boundary was removed/repackaged by R8' >&2
+            exit 1
           fi
-          unzip -p "$APK" classes.dex > /tmp/classes.dex
-          echo '=== Critical DEX strings ==='
-          strings /tmp/classes.dex | grep -E 'SystemUiKeyguardGone(Source|Policy)|ModuleMain|KeyguardTransitionRepositoryImpl|emitTransition|SYSTEMUI_LOCKSCREEN_GONE_FINISHED|com\.android\.systemui' | head -100 || true
+
+          echo '=== Critical mapping ==='
+          grep -E '^(com\.hellovoid\.liquiddock\.(ModuleMain|SystemUiKeyguardGone(Source|Policy|Protocol|Runtime)|SystemUiHomeTransition(Source|Protocol|Runtime|Tracker)|LauncherGlassHomePresentationHook)) ->' "$MAP"
