@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.2.0 (2026-09-01)
+
+### Home transitions and widget glass
+
+- 新增 SystemUI HOME 转场时序桥接，并与 Launcher fallback 协同，减少返回桌面期间的黑帧与过早揭示
+- 增强 Widget 应用动画与玻璃场景协同，等待新鲜 HOME 场景后恢复，修复快速重启 Widget 时的残留抑制状态
+- 收敛 Launcher-only 玻璃路径，移除不再需要的 SystemUI 解锁门控与过时重启入口
+
+### Performance and settings
+
+- Dock 玻璃 producer 改为按需、事件驱动调度，并加入优化路径的自愈处理
+- 设置页的 SystemUI 重启操作仅在根设置页显示，并使一次性设置补丁兼容空白差异
+
 ## v2.1.3 (2026-08-31)
 
 ### Dock rendering and transitions
