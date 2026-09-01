@@ -136,9 +136,13 @@ internal fun WidgetComponentsPage(
                             val first = components.first()
                             val selectedCount = components.count { it.selectorKey() in selected }
                             val source = if (first.isMaml()) "MAML" else "RemoteViews"
+                            val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
                             ArrowPreference(
                                 title = first.displayOwner(),
-                                summary = "$source · 已隐藏 $selectedCount / ${components.size}",
+                                summary = buildString {
+                                    append("$source · 已隐藏 $selectedCount / ${components.size}")
+                                    if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
+                                },
                                 onClick = {
                                     activity.startActivity(
                                         Intent(activity, WidgetComponentDetailActivity::class.java)
@@ -159,11 +163,10 @@ internal fun loadWidgetCatalog(catalogPrefs: SharedPreferences): List<WidgetComp
         .orEmpty()
         .mapNotNull(WidgetComponentStore::parseCatalog)
         .distinctBy { it.selectorKey() }
-        .sortedWith(
-            compareBy<WidgetComponentStore.Descriptor>(
-                { it.displayOwner() }, { it.name }, { it.className }
-            )
-        )
+        .sortedWith { left, right ->
+            val ownerOrder = left.displayOwner().compareTo(right.displayOwner())
+            if (ownerOrder != 0) ownerOrder else WidgetComponentRanking.compare(left, right)
+        }
 
 internal fun widgetGroupKey(descriptor: WidgetComponentStore.Descriptor): String =
     (if (descriptor.isMaml()) "M" else descriptor.source) + "\t" + descriptor.owner
