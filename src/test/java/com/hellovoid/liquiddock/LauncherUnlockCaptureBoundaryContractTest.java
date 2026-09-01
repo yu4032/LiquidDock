@@ -52,14 +52,17 @@ public class LauncherUnlockCaptureBoundaryContractTest {
                 "binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()"));
     }
 
-    @Test public void systemUiSourceMatchesExactKeyguardTransitionOnly() throws Exception {
+    @Test public void systemUiSourceUsesSemanticGoneFinishedBoundary() throws Exception {
         String source = read("SystemUiKeyguardGoneSource.java");
+        String policy = read("SystemUiKeyguardGonePolicy.java");
 
         assertTrue(source.contains("KeyguardTransitionRepositoryImpl"));
         assertTrue(source.contains("TransitionStep"));
-        assertTrue(source.contains("\"LOCKSCREEN\""));
-        assertTrue(source.contains("\"GONE\""));
-        assertTrue(source.contains("\"FINISHED\""));
+        assertTrue(source.contains("SystemUiKeyguardGonePolicy.isGoneTransitionAttempt(from, to)"));
+        assertTrue(source.contains("SystemUiKeyguardGonePolicy.shouldPublishFinished(from, to, state)"));
+        assertFalse(source.contains("\"LOCKSCREEN\".equals(from)"));
+        assertTrue(policy.contains("GONE.equals(to)"));
+        assertTrue(policy.contains("FINISHED.equals(transitionState)"));
         assertTrue(source.contains("sendBroadcast"));
         assertFalse(source.contains("ScreenCapture"));
         assertFalse(source.contains("captureDisplay"));
