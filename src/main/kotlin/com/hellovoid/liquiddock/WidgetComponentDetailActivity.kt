@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
 import java.util.HashSet
+import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -101,8 +102,11 @@ private fun WidgetComponentDetailScreen(
         else -> components
     }
     val typeGroups = categoryVisible.groupBy { it.componentType }
+    val likelyBackgrounds = WidgetComponentRanking.sorted(
+        categoryVisible.filter { WidgetComponentRanking.isLikelyBackground(it) }
+    )
     val currentTypeComponents = selectedType?.let { type ->
-        categoryVisible.filter { it.componentType == type }
+        WidgetComponentRanking.sorted(categoryVisible.filter { it.componentType == type })
     }.orEmpty()
 
     BackHandler(enabled = selectedType != null) { selectedType = null }
@@ -132,6 +136,7 @@ private fun WidgetComponentDetailScreen(
                 isMaml = isMaml,
                 components = components,
                 typeGroups = typeGroups,
+                likelyBackgrounds = likelyBackgrounds,
                 selected = selected,
                 showAllMaml = showAllMaml,
                 onShowAllMaml = { showAllMaml = it },
@@ -166,6 +171,7 @@ private fun WidgetComponentTypePage(
     isMaml: Boolean,
     components: List<WidgetComponentStore.Descriptor>,
     typeGroups: Map<String, List<WidgetComponentStore.Descriptor>>,
+    likelyBackgrounds: List<WidgetComponentStore.Descriptor>,
     selected: Set<String>,
     showAllMaml: Boolean,
     onShowAllMaml: (Boolean) -> Unit,
@@ -209,6 +215,26 @@ private fun WidgetComponentTypePage(
             }
         }
 
+        if (likelyBackgrounds.isNotEmpty()) {
+            item { SmallTitle("疑似底层背景") }
+            item {
+                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Column {
+                        likelyBackgrounds.forEach { descriptor ->
+                            ArrowPreference(
+                                title = exactNodeTitle(descriptor),
+                                summary = buildString {
+                                    append(exactNodeSummary(descriptor))
+                                    if (descriptor.selectorKey() in selected) append(" · 已选择")
+                                },
+                                onClick = { onOpenType(descriptor.componentType) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         if (components.isEmpty()) {
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -235,12 +261,16 @@ private fun WidgetComponentTypePage(
                 Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Column {
                         componentTypeOrder.forEach { type ->
-                            val group = typeGroups[type].orEmpty()
+                            val group = WidgetComponentRanking.sorted(typeGroups[type].orEmpty())
                             if (group.isEmpty()) return@forEach
                             val selectedCount = group.count { it.selectorKey() in selected }
+                            val likelyCount = group.count(WidgetComponentRanking::isLikelyBackground)
                             ArrowPreference(
                                 title = componentTypeTitle(type),
-                                summary = "已选择 $selectedCount / ${group.size}",
+                                summary = buildString {
+                                    append("已选择 $selectedCount / ${group.size}")
+                                    if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
+                                },
                                 onClick = { onOpenType(type) },
                             )
                         }
@@ -260,6 +290,7 @@ private fun WidgetExactNodePage(
     onSelectionChanged: (WidgetComponentStore.Descriptor, Boolean) -> Unit,
 ) {
     val isMaml = components.firstOrNull()?.isMaml() == true
+    val rankedComponents = WidgetComponentRanking.sorted(components)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
@@ -279,7 +310,7 @@ private fun WidgetExactNodePage(
                 )
             }
         }
-        items(components, key = { it.selectorKey() }) { descriptor ->
+        items(rankedComponents, key = { it.selectorKey() }) { descriptor ->
             val key = descriptor.selectorKey()
             Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                 SwitchPreference(
@@ -317,18 +348,40 @@ private fun exactNodeTitle(descriptor: WidgetComponentStore.Descriptor): String 
     val name = descriptor.name.ifEmpty {
         if (descriptor.isMaml()) "(匿名元素)" else "(无资源 ID)"
     }
-    return when (descriptor.action) {
+    val actionTitle = when (descriptor.action) {
         WidgetComponentStore.ACTION_CLEAR_BACKGROUND -> "移除背景 · $name"
         WidgetComponentStore.ACTION_CLEAR_IMAGE -> "移除图像 · $name"
         else -> "隐藏节点 · $name"
+    }
+    return if (WidgetComponentRanking.isLikelyBackground(descriptor)) {
+        "疑似背景 · $actionTitle"
+    } else {
+        actionTitle
     }
 }
 
 private fun exactNodeSummary(descriptor: WidgetComponentStore.Descriptor): String {
     val type = descriptor.className.substringAfterLast('.')
-    return if (descriptor.isRemoteViews()) {
+    val source = if (descriptor.isRemoteViews()) {
         "$type · 精确路径 ${descriptor.hierarchyPath}"
     } else {
         "MAML · $type · ${descriptor.hierarchyPath}"
     }
+    return "$source · ${renderMetadataSummary(descriptor)}"
+}
+
+private fun renderMetadataSummary(descriptor: WidgetComponentStore.Descriptor): String {
+    val render = if (descriptor.renderOrdinal >= 0) "Render #${descriptor.renderOrdinal}" else "Render —"
+    val depth = if (descriptor.depth >= 0) "Depth ${descriptor.depth}" else "Depth —"
+    val area = if (descriptor.areaRatio.isNaN()) {
+        "Area —"
+    } else {
+        "Area ${String.format(Locale.ROOT, "%.0f%%", descriptor.areaRatio * 100f)}"
+    }
+    val z = if (descriptor.effectiveZ.isNaN()) {
+        "Z —"
+    } else {
+        "Z ${String.format(Locale.ROOT, "%.1f", descriptor.effectiveZ)}"
+    }
+    return "$render · $depth · $area · $z"
 }
