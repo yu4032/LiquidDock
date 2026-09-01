@@ -6,6 +6,10 @@
 
 - 修复 Workspace 静态玻璃边缘裁剪：使用完整几何体计算静态玻璃形状并保留到视口之外，消除边缘裁切
 
+### Unlock transition recovery
+
+- 修复经由 Bouncer、AOD 或 Dozing 解锁后，SystemUI 转场未释放 unlock barrier 导致 Workspace 玻璃持续隐藏的问题
+
 ### Widget background ranking
 
 - 新增小组件背景排序策略：优先揭示最可能的小组件背景，并收集、持久化排序元数据
