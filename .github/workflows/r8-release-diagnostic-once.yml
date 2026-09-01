@@ -61,10 +61,8 @@ jobs:
             grep -Fqx "$fqcn -> $fqcn:" "$MAP"
           done
 
-          if grep -E '^com\.hellovoid\.liquiddock\.(SystemUi(KeyguardGone|HomeTransition)|LauncherGlassHomePresentationHook).* -> (R8\$\$REMOVED|[a-z][a-z0-9]{0,3})(:|\.)' "$MAP"; then
-            echo 'Critical timing boundary was removed/repackaged by R8' >&2
-            exit 1
-          fi
-
-          echo '=== Critical mapping ==='
-          grep -E '^(com\.hellovoid\.liquiddock\.(ModuleMain|SystemUiKeyguardGone(Source|Policy|Protocol|Runtime)|SystemUiHomeTransition(Source|Protocol|Runtime|Tracker)|LauncherGlassHomePresentationHook)) ->' "$MAP"
+          echo '=== Stable timing boundary mapping ==='
+          for cls in "${classes[@]}"; do
+            fqcn="com.hellovoid.liquiddock.${cls}"
+            grep -F "$fqcn -> $fqcn:" "$MAP"
+          done
