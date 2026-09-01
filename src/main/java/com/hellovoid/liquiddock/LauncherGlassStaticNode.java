@@ -366,7 +366,7 @@ final class LauncherGlassStaticNode {
             }
             float radiusScale = Math.max(0.01f, Math.min(
                     proxyWidth / referenceWidth, proxyHeight / referenceHeight));
-            return LauncherGlassGeometry.resolve(
+            return LauncherGlassGeometry.resolveStatic(
                     rootWidth, rootHeight,
                     proxyRect[0], proxyRect[1], proxyRect[2], proxyRect[3],
                     LauncherGlassBoundsPolicy.capRadius(
@@ -427,7 +427,7 @@ final class LauncherGlassStaticNode {
         float scaleY = distance(geometryPoints[0], geometryPoints[1],
                 geometryPoints[4], geometryPoints[5]) / localHeight;
         float radiusScale = Math.max(0.01f, Math.min(scaleX, scaleY));
-        return LauncherGlassGeometry.resolve(
+        return LauncherGlassGeometry.resolveStatic(
                 root.getWidth(), root.getHeight(), left, top, right, bottom,
                 LauncherGlassBoundsPolicy.capRadius(
                         requestedRadius * radiusScale, right - left, bottom - top));
