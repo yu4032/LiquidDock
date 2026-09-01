@@ -34,6 +34,44 @@ final class LauncherGlassGeometry {
                 Math.max(0f, Math.min(cornerRadius, Math.min(width, height) * 0.5f)));
     }
 
+    /**
+     * Full-shape geometry for the Workspace StaticLayer. The static renderer draws into a
+     * full-screen framebuffer, so partially offscreen glass must retain its original center,
+     * dimensions and corner radius and let framebuffer clipping hide the out-of-bounds pixels.
+     * Crop fields still describe the visible viewport intersection for Snapshot compatibility.
+     */
+    static Snapshot resolveStatic(
+            int rootWidth, int rootHeight,
+            float left, float top, float right, float bottom,
+            float cornerRadius) {
+        if (rootWidth <= 0 || rootHeight <= 0
+                || !finite(left) || !finite(top) || !finite(right) || !finite(bottom)
+                || right <= left || bottom <= top) {
+            return null;
+        }
+        if (right <= 0f || bottom <= 0f || left >= rootWidth || top >= rootHeight) return null;
+
+        float width = right - left;
+        float height = bottom - top;
+        float clippedLeft = clamp(left, 0f, rootWidth);
+        float clippedTop = clamp(top, 0f, rootHeight);
+        float clippedRight = clamp(right, 0f, rootWidth);
+        float clippedBottom = clamp(bottom, 0f, rootHeight);
+        float clippedWidth = clippedRight - clippedLeft;
+        float clippedHeight = clippedBottom - clippedTop;
+        if (clippedWidth <= 0f || clippedHeight <= 0f) return null;
+
+        return new Snapshot(
+                left, top, width, height,
+                clippedLeft / rootWidth,
+                (rootHeight - clippedBottom) / rootHeight,
+                clippedWidth / rootWidth,
+                clippedHeight / rootHeight,
+                left + width * 0.5f,
+                top + height * 0.5f,
+                Math.max(0f, Math.min(cornerRadius, Math.min(width, height) * 0.5f)));
+    }
+
     private static boolean finite(float value) {
         return !Float.isNaN(value) && !Float.isInfinite(value);
     }
