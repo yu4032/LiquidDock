@@ -9,7 +9,7 @@ import java.util.Locale;
 
 import org.junit.Test;
 
-/** UI contract for settings whose hook/layout structure requires a Launcher restart. */
+/** UI contract for restart-bound settings and restart action visibility. */
 public class RestartBoundSettingsContractTest {
     private static final Path UI = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
@@ -77,6 +77,23 @@ public class RestartBoundSettingsContractTest {
         String source = Files.readString(UI);
         String line = lineContaining(source, "ConfigSchema.Debug.LOGGING");
         assertTrue(line.contains("重启桌面生效"));
+    }
+
+    @Test
+    public void systemUiRestartIsOnlyRenderedOnHomePage() throws Exception {
+        String source = Files.readString(UI);
+        int actionsAt = source.indexOf("actions = {");
+        int launcherRestartAt = source.indexOf("action_restart_launcher", actionsAt);
+        int systemUiRestartAt = source.indexOf("action_restart_system_ui", actionsAt);
+        int homeGuardAt = source.lastIndexOf("if (page == Page.Home)", systemUiRestartAt);
+
+        assertTrue("top app bar actions must exist", actionsAt >= 0);
+        assertTrue("launcher restart must remain visible on every page", launcherRestartAt > actionsAt);
+        assertTrue("SystemUI restart must still exist", systemUiRestartAt > launcherRestartAt);
+        assertTrue("SystemUI restart must be guarded by the Home page",
+                homeGuardAt > launcherRestartAt && homeGuardAt < systemUiRestartAt);
+        assertTrue("Home-page guard must directly wrap the SystemUI action",
+                systemUiRestartAt - homeGuardAt < 300);
     }
 
     private static String stringValue(String xml, String name) {

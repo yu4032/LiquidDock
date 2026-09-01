@@ -25,6 +25,7 @@ final class LauncherGlassSceneController {
         private long generation = 1L;
         private boolean fadeAfterFreshFrame;
         private boolean fadeRevealReady;
+        private boolean revealBeforeFreshFrame;
 
         void onRootReady() {
             if (state == State.DETACHED) {
@@ -47,10 +48,12 @@ final class LauncherGlassSceneController {
                 state = State.COVERED;
                 fadeAfterFreshFrame = false;
                 fadeRevealReady = false;
+                revealBeforeFreshFrame = false;
             } else {
                 generation++;
                 state = State.HOME_WAITING_FRESH_FRAME;
                 fadeAfterFreshFrame = true;
+                revealBeforeFreshFrame = false;
             }
         }
 
@@ -61,23 +64,36 @@ final class LauncherGlassSceneController {
             }
         }
 
+        void beginRevealBeforeFreshFrame() {
+            if (state != State.HOME_WAITING_FRESH_FRAME || revealBeforeFreshFrame) return;
+            revealBeforeFreshFrame = true;
+            fadeAfterFreshFrame = false;
+            fadeRevealReady = true;
+        }
+
         void onFreshFrameReady(long frameGeneration) {
             if (frameGeneration != generation || state == State.COVERED || state == State.DETACHED) {
                 return;
             }
+            boolean revealedEarly = revealBeforeFreshFrame;
             state = State.HOME_VISIBLE;
-            fadeRevealReady = fadeAfterFreshFrame;
+            fadeRevealReady = !revealedEarly && fadeAfterFreshFrame;
             fadeAfterFreshFrame = false;
+            revealBeforeFreshFrame = false;
         }
 
         void detach() {
             state = State.DETACHED;
             fadeAfterFreshFrame = false;
             fadeRevealReady = false;
+            revealBeforeFreshFrame = false;
         }
 
         long generation() { return generation; }
-        boolean isLayerVisible() { return state == State.HOME_VISIBLE; }
+        boolean isLayerVisible() {
+            return state == State.HOME_VISIBLE
+                    || (state == State.HOME_WAITING_FRESH_FRAME && revealBeforeFreshFrame);
+        }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
             fadeRevealReady = false;
@@ -202,6 +218,16 @@ final class LauncherGlassSceneController {
         }
     }
 
+    static void beginHomeReturnRevealForAll() {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.beginHomeReturnReveal();
+        }
+    }
+
     static void setUnlockTransitionPendingForAll(boolean pending) {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
@@ -268,6 +294,7 @@ final class LauncherGlassSceneController {
     void onRootReady() {
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        SystemUiHomeTransitionRuntime.ensureRegistered(root.getContext());
         state.onRootReady();
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
@@ -389,6 +416,13 @@ final class LauncherGlassSceneController {
         onPresentationPendingChanged(wasPending, isPresentationPending(), "home");
     }
 
+    private void beginHomeReturnReveal() {
+        if (!homeTransitionPending || unlockTransitionPending || recentsWallpaperSettlePending
+                || folderCovered || recentsCovered) return;
+        state.beginRevealBeforeFreshFrame();
+        applyLayerVisibility();
+    }
+
     private void setUnlockTransitionPending(boolean pending) {
         boolean wasPending = isPresentationPending();
         unlockTransitionPending = pending;
@@ -466,7 +500,9 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal(), folderCovered);
+            boolean immediateHide = folderCovered || recentsCovered || homeTransitionPending
+                    || unlockTransitionPending || recentsWallpaperSettlePending;
+            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal(), immediateHide);
         }
     }
 
