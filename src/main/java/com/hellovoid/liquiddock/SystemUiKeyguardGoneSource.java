@@ -56,10 +56,10 @@ final class SystemUiKeyguardGoneSource {
                 throw new IllegalStateException(
                         "KeyguardTransitionRepositoryImpl.emitTransition(TransitionStep) unavailable");
             }
-            Api101Bridge.log("[DC] SystemUI keyguard FINISHED source installed hooks=" + hooked);
+            Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source installed hooks=" + hooked);
         } catch (Throwable error) {
             INSTALLED.set(false);
-            Api101Bridge.log("[DC] SystemUI keyguard FINISHED source unavailable", error);
+            Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source unavailable", error);
         }
     }
 
@@ -82,15 +82,15 @@ final class SystemUiKeyguardGoneSource {
         String from = token(read(step, "getFrom", "from"));
         String to = token(read(step, "getTo", "to"));
         String state = token(read(step, "getTransitionState", "transitionState"));
-        if (!"LOCKSCREEN".equals(from) || !"GONE".equals(to)) return;
+        if (!SystemUiKeyguardGonePolicy.isGoneTransitionAttempt(from, to)) return;
 
-        if (!"FINISHED".equals(state)) {
-            // A new LOCKSCREEN -> GONE attempt allows its later FINISHED step to publish once.
+        if (!SystemUiKeyguardGonePolicy.shouldPublishFinished(from, to, state)) {
+            // Any new real transition into GONE allows its later FINISHED step to publish once.
             GONE_FINISHED_SENT.set(false);
             return;
         }
         if (!GONE_FINISHED_SENT.compareAndSet(false, true)) return;
-        publishFinished();
+        publishFinished(from);
     }
 
     private static Object read(Object owner, String getter, String field) {
@@ -107,12 +107,12 @@ final class SystemUiKeyguardGoneSource {
         return value == null ? "" : String.valueOf(value);
     }
 
-    private static void publishFinished() {
+    private static void publishFinished(String from) {
         Object application = HookUtil.invokeStatic(
                 "android.app.ActivityThread", "currentApplication");
         if (!(application instanceof Context)) {
             GONE_FINISHED_SENT.set(false);
-            Api101Bridge.log("[DC] SystemUI keyguard FINISHED publish skipped: no application");
+            Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED publish skipped: no application");
             return;
         }
         try {
@@ -120,10 +120,10 @@ final class SystemUiKeyguardGoneSource {
                     .setPackage(SystemUiKeyguardGoneProtocol.LAUNCHER_PACKAGE)
                     .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
             ((Context) application).sendBroadcast(intent);
-            Api101Bridge.log("[DC] SystemUI LOCKSCREEN->GONE FINISHED published");
+            Api101Bridge.log("[DC] SystemUI " + from + "->GONE FINISHED published");
         } catch (Throwable error) {
             GONE_FINISHED_SENT.set(false);
-            Api101Bridge.log("[DC] SystemUI keyguard FINISHED publish unavailable", error);
+            Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED publish unavailable", error);
         }
     }
 }
