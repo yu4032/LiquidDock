@@ -1,6 +1,6 @@
 # LiquidDock Workstation Divider
 
-本文档描述当前 `main` / **v2.1.1** 的 `DockDividerHook` 行为。
+本文档描述当前 `main` / **v2.2.1** 的 `DockDividerHook` 行为。
 
 Divider 属于 Workstation/Laptop Dock 的实验性适配部分；参数可以使用，但工作台整体仍未视为完全支持。
 
@@ -30,79 +30,71 @@ Divider 的 width / Y offset 历史存储语义与普通 Dock dimension key 不�
 
 ## 3. Runtime ownership
 
-v2.1.1 起 Divider 开关使用 `VisualRuntimeState`。
+Divider 开关使用 `VisualRuntimeState`。
 
 关闭顺序：
 
 1. 先发布 `dividerEnabled=false`；
-2. 已排队的 geometry callback 执行时先看到 disabled；
+2. 已排队 geometry callback 执行时先看到 disabled；
 3. 取消 pending pre-draw listener；
 4. 恢复原始 layout/background；
 5. `requestLayout()`；
 6. 清除 ownership snapshot。
 
-因此关闭后不会出现 queued callback 再次把 Divider 改回 LiquidDock 样式的问题。
+因此关闭后不会出现 queued callback 又把 Divider 改回 LiquidDock 样式的问题。
 
 ## 4. OriginalState snapshot
 
-第一次修改某个 divider View 前，保存：
+第一次修改某个 divider View 前保存：
 
-- `LayoutParams.width`；
-- `LayoutParams.height`；
-- `MarginLayoutParams.leftMargin`；
-- `topMargin`；
-- `rightMargin`；
-- `bottomMargin`；
+- `LayoutParams.width` / `height`；
+- 四边 margin；
 - 原始 background Drawable。
 
 snapshot 按 View 弱引用持有，不延长 Launcher View 生命周期。
 
 ### Drawable alias 防护
 
-不能只保存：
+单纯保存：
 
 ```java
 Drawable original = view.getBackground();
 ```
 
-因为后续 `setBackgroundColor()` 可能原地修改同一个 `ColorDrawable`，导致“原始 background 引用”已经被污染。
+并不安全，因为后续 `setBackgroundColor()` 可能原地修改同一个 `ColorDrawable`。
 
 当前实现优先通过 `Drawable.ConstantState.newDrawable(resources).mutate()` 创建独立 snapshot；无法复制时才退化为原引用。
 
-这保证常见 `ColorDrawable` 能恢复真正的 vendor 原色。
-
 ## 5. Disable / re-enable
 
-关闭 Divider 后会删除该 View 的 snapshot ownership。
-
-以后重新开启时，第一次 mutation 会重新捕获**当时**的 vendor layout/background，而不是永远恢复到进程启动时的旧状态。
-
-这很重要，因为 HyperOS 可能在主题、Workstation 切换或重新 bind 时更换 Divider View 或 background。
+关闭 Divider 后删除该 View 的 snapshot ownership。重新开启时，第一次 mutation 会重新捕获**当时**的 vendor layout/background，而不是永远恢复到进程启动时状态。
 
 ## 6. 与 Workstation 的关系
 
-Divider 自身视觉开关可以 live disable/restore，但 Workstation composite customization 仍是 restart-bound。
+Divider 自身可以 live disable/restore，但 Workstation composite customization 仍是 restart-bound。
 
-不要把“Divider 可即时恢复”理解为整个工作台 Dock 都支持完整热切换。工作台同时涉及：
+工作台同时涉及：
 
 - Dock width；
 - icon offset；
 - Grid / All Apps offset；
-- producer lifecycle；
+- Workspace producer lifecycle；
 - Recents；
 - normal-layout backup/restore。
+
+独立 Dock Glass 的 continuous-on-bind 语义不由 Divider/Workstation 的 Workspace producer policy 改变。
 
 ## 7. 回归要求
 
 修改 `DockDividerHook` 时至少验证：
 
-- 初次 bind 后 geometry 正确；
-- parent height 为 0 时会延迟而不是使用错误 fallback；
+- 初次 bind geometry；
+- parent height=0 时延迟计算；
 - disable 精确恢复 width/height/margins/background；
 - pending callback 在 disable 后不能重新修改 View；
-- background snapshot 不受 `setBackgroundColor()` alias 污染；
-- re-enable 会重新捕获新的 vendor state；
-- 普通模式不受影响。
+- Drawable snapshot 不被 alias 污染；
+- re-enable 重新捕获新 vendor state；
+- 普通模式无回归。
 
 CI 基线：
 

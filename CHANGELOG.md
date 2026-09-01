@@ -4,25 +4,37 @@
 
 ### Workspace glass
 
-- 修复 Workspace 静态玻璃边缘裁剪：使用完整几何体计算静态玻璃形状并保留到视口之外，消除边缘裁切
+- 修复 Workspace StaticLayer 的视口边缘几何：部分离屏时保留完整 shape 的宽高、中心与圆角，只让 framebuffer 裁掉屏幕外像素；完全离屏后才 cull，消除“贴住屏幕边缘、只缩短长度”的错误。
+- 新增 StaticLayer 专用 `resolveStatic()`，同时保留旧 clipped `resolve()` 给 sink/drag 等需要可见区域裁切的路径，避免全局裁切语义回归。
 
-### Widget background ranking
+### Widget background discovery / ranking
 
-- 新增小组件背景排序策略：优先揭示最可能的小组件背景，并收集、持久化排序元数据
-- 渲染诊断中暴露候选小组件背景，便于验证排序结果
+- RemoteViews 与 MAML discovery 新增 `Render # / Depth / Area / Z` 元数据；MAML 以 `ScreenElementRoot.mInnerGroup -> ElementGroup.mElements` 真实 render tree 为顺序来源。
+- 新增 `WidgetComponentRanking`，综合组件类型、面积、render ordinal、depth 与 Z 标记“疑似底层背景”，并在 Widget GUI 中优先展示。
+- discovery metadata 不进入 selectorKey，已有 RemoteViews/MAML 隐藏规则保持兼容；旧 catalog 无 metadata 时保持可读且不会误判。
+
+### Documentation
+
+- 根目录文档统一更新到 v2.2.1/current main，明确 SystemUI 只读时序源、Dock continuous-on-bind、Widget fresh-before-reveal 与 StaticLayer full-shape geometry 等不变量。
 
 ## v2.2.0 (2026-09-01)
 
-### Home transitions and widget glass
+### HOME transitions / unlock timing
 
-- 新增 SystemUI HOME 转场时序桥接，并与 Launcher fallback 协同，减少返回桌面期间的黑帧与过早揭示
-- 增强 Widget 应用动画与玻璃场景协同，等待新鲜 HOME 场景后恢复，修复快速重启 Widget 时的残留抑制状态
-- 收敛 Launcher-only 玻璃路径，移除不再需要的 SystemUI 解锁门控与过时重启入口
+- 新增 SystemUI WMShell HOME transition 时序桥接：读取 `HomeTransitionObserver` 的 ready/visibility/starting/finished/merged 生命周期，以 serial + monotonic timestamp 与 Launcher fallback 协同。
+- 保留 Launcher 4.50 `WindowElement.animTo(CLOSE_TO_HOME*)` 作为 fail-open fallback；SystemUI START 已接管时，Launcher animation end 不再提前释放 HOME barrier。
+- 保留/恢复 SystemUI Keyguard Gone 作为解锁 release authority；Launcher `PREPARE` 仅负责早期 freeze，SystemUI 不参与 Glass 内容捕获或渲染。
 
-### Performance and settings
+### Widget ↔ App animation / freshness
 
-- Dock 玻璃 producer 改为按需、事件驱动调度，并加入优化路径的自愈处理
-- 设置页的 SystemUI 重启操作仅在根设置页显示，并使一次性设置补丁兼容空白差异
+- 接入 Launcher 4.50 独立 `WidgetTypeAnimTarget` 生命周期，补齐 Widget→App 淡出与 App→Widget 淡入。
+- App→Widget 返回时先从 cached StaticLayer 抑制目标 Widget，HOME barrier 解除后继续等待当前 scene generation 的 fresh render，再淡入，修复大尺寸 Widget 旧 backdrop→新 backdrop 跳变。
+- 补充快速往返、launch-only suppression release 与 return fresh gate 的 race 防护。
+
+### Dock / settings
+
+- 锁定 Dock PassBlur 为 continuous-on-bind / 实时 producer；Workspace shared session 可按需 pulse/pause，但其策略不得外溢到独立 Floating Dock。
+- 设置页“重启系统界面”只在根页面显示；所有子页面仅显示“重启系统桌面”。
 
 ## v2.1.3 (2026-08-31)
 
