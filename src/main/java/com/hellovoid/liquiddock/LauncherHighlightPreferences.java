@@ -1,49 +1,50 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.liquiddock.config.ConfigKey;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.prismal.PrismalHighlightProfile;
 
-/** Independent component switches for compact and large Launcher glass surfaces. */
+/** Reads schema-owned component switches for compact and large Launcher glass surfaces. */
 public final class LauncherHighlightPreferences {
-    private static final String LARGE_PREFIX = "launcher_large_surface_component_";
-    public static final String SKY_HAZE = "launcher_surface_component_sky_haze";
-    public static final String SPECULAR = "launcher_surface_component_specular";
-    public static final String LIT_RIM = "launcher_surface_component_lit_rim";
-    public static final String OPPOSITE_RIM = "launcher_surface_component_opposite_rim";
-    public static final String CORNER_RIM = "launcher_surface_component_corner_rim";
-    public static final String FACE_SHEEN = "launcher_surface_component_face_sheen";
-    public static final String PLAIN_HIGHLIGHT = "launcher_surface_component_plain_highlight";
-    public static final String CAUSTICS = "launcher_surface_component_caustics";
-    public static final String PRESS_GLOW = "launcher_surface_component_press_glow";
-
     private LauncherHighlightPreferences() {}
 
     static PrismalHighlightProfile read(ConfigReader c) {
-        return new PrismalHighlightProfile(
-                c.b(SKY_HAZE, true),
-                c.b(SPECULAR, true),
-                c.b(LIT_RIM, true),
-                c.b(OPPOSITE_RIM, true),
-                c.b(CORNER_RIM, true),
-                c.b(FACE_SHEEN, true),
-                c.b(PLAIN_HIGHLIGHT, true),
-                c.b(CAUSTICS, true),
-                c.b(PRESS_GLOW, true));
+        return readProfile(c,
+                ConfigSchema.LauncherHighlight.SKY_HAZE,
+                ConfigSchema.LauncherHighlight.SPECULAR,
+                ConfigSchema.LauncherHighlight.LIT_RIM,
+                ConfigSchema.LauncherHighlight.OPPOSITE_RIM,
+                ConfigSchema.LauncherHighlight.CORNER_RIM,
+                ConfigSchema.LauncherHighlight.FACE_SHEEN,
+                ConfigSchema.LauncherHighlight.PLAIN_HIGHLIGHT,
+                ConfigSchema.LauncherHighlight.CAUSTICS,
+                ConfigSchema.LauncherHighlight.PRESS_GLOW);
     }
 
     static PrismalHighlightProfile readLargeSurfaces(ConfigReader c) {
-        return new PrismalHighlightProfile(
-                c.b(largeSurfaceKey(SKY_HAZE), true),
-                c.b(largeSurfaceKey(SPECULAR), true),
-                c.b(largeSurfaceKey(LIT_RIM), true),
-                c.b(largeSurfaceKey(OPPOSITE_RIM), true),
-                c.b(largeSurfaceKey(CORNER_RIM), true),
-                c.b(largeSurfaceKey(FACE_SHEEN), true),
-                c.b(largeSurfaceKey(PLAIN_HIGHLIGHT), true),
-                c.b(largeSurfaceKey(CAUSTICS), true),
-                c.b(largeSurfaceKey(PRESS_GLOW), true));
+        return readProfile(c,
+                ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE,
+                ConfigSchema.LauncherHighlight.LARGE_SPECULAR,
+                ConfigSchema.LauncherHighlight.LARGE_LIT_RIM,
+                ConfigSchema.LauncherHighlight.LARGE_OPPOSITE_RIM,
+                ConfigSchema.LauncherHighlight.LARGE_CORNER_RIM,
+                ConfigSchema.LauncherHighlight.LARGE_FACE_SHEEN,
+                ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT,
+                ConfigSchema.LauncherHighlight.LARGE_CAUSTICS,
+                ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW);
     }
 
-    public static String largeSurfaceKey(String compactKey) {
-        return LARGE_PREFIX + compactKey.substring("launcher_surface_component_".length());
+    @SafeVarargs
+    private static PrismalHighlightProfile readProfile(
+            ConfigReader c, ConfigKey<Boolean>... keys) {
+        if (keys.length != 9) throw new IllegalArgumentException("highlight key count != 9");
+        return new PrismalHighlightProfile(
+                read(c, keys[0]), read(c, keys[1]), read(c, keys[2]),
+                read(c, keys[3]), read(c, keys[4]), read(c, keys[5]),
+                read(c, keys[6]), read(c, keys[7]), read(c, keys[8]));
+    }
+
+    private static boolean read(ConfigReader c, ConfigKey<Boolean> key) {
+        return c.b(key.name(), key.runtimeFallback());
     }
 }
