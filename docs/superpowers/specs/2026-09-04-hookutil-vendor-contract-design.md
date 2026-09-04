@@ -76,7 +76,7 @@ The old silent-null `invoke()` / `invokeStatic()` APIs are removed rather than r
 
 ### 4.2 Pure resolver
 
-Introduce a package-private pure-Java component, tentatively `VendorMemberResolver`.
+Introduce a package-private pure-Java component named `VendorMemberResolver`.
 
 Responsibilities:
 
@@ -98,10 +98,12 @@ It must not depend on Android, libxposed, Views, or project runtime state. This 
 
 `tryInvoke*` returns an explicit result type instead of a nullable method result.
 
+The implementation uses `HookUtil.InvocationResult<T>` so call sites do not depend directly on resolver internals.
+
 Conceptual shape:
 
 ```java
-final class InvocationResult<T> {
+static final class InvocationResult<T> {
     boolean succeeded();
     T value();
     Failure failure();
@@ -137,7 +139,7 @@ At minimum, failures distinguish:
 
 `INVOCATION_FAILURE` preserves the underlying target exception/cause rather than swallowing it.
 
-The result should contain enough context to diagnose:
+The result contains enough context to diagnose:
 
 - target/declaring class;
 - method name;
@@ -254,9 +256,11 @@ Caches are process-local static concurrent maps. Java class member sets do not m
 
 The design must not use class-name strings as cache identity because different ClassLoaders may load classes with the same name.
 
+For tests, `VendorMemberResolver` exposes package-private cache reset and cache-size inspection methods. They are not part of the production façade and exist only to make cache behavior directly verifiable without timing-based assertions.
+
 ## 8. Field access policy
 
-Existing field getters/setters currently have required semantics: they throw when the field cannot be accessed. They should be migrated internally to the cached resolver without changing their external behavior in this phase.
+Existing field getters/setters currently have required semantics: they throw when the field cannot be accessed. They are migrated internally to the cached resolver without changing their external behavior in this phase.
 
 Examples:
 
@@ -300,7 +304,7 @@ Production code must not use `HookUtil` to access members declared on project-ow
 
 This phase explicitly eliminates every `LauncherGlassSessionRegistry -> LauncherGlassSession` reflective access.
 
-An architecture test will guard this concrete boundary. Broader enforcement may be added where mechanically reliable, but the test must not incorrectly reject vendor objects merely because the call site itself lives in the LiquidDock package.
+An architecture test guards this concrete boundary. Broader enforcement may be added where mechanically reliable, but the test must not incorrectly reject vendor objects merely because the call site itself lives in the LiquidDock package.
 
 ## 11. LauncherGlassSession typed API
 
@@ -310,44 +314,49 @@ The Registry currently reaches into three Session internals:
 - `renderHandler` to enqueue a completion sentinel;
 - private `rebindProducer()`.
 
-All three are removed.
+All three reflective accesses are removed.
 
-`LauncherGlassSession` exposes package-private lifecycle operations that preserve ownership inside Session.
-
-Required behavior:
-
-### 11.1 Unlock suspension
-
-A package-private Session method, e.g. `suspendProducerForUnlockCapture()`, owns access to `binding` and returns a boolean indicating whether a live producer was actually paused.
-
-The Registry logs counts based on real operation results, not reflective access attempts.
-
-### 11.2 Producer rollover
-
-`rebindProducer()` becomes package-private or is wrapped by a package-private lifecycle method with an explicit result.
-
-Workstation return uses this typed call and increments its rebound count only when rollover was actually accepted/enqueued.
-
-### 11.3 Rollover completion
-
-Unlock capture return needs stronger semantics than "method call returned". Existing behavior waits until the Session render queue has executed the endpoint rollover work by posting a sentinel after `rebindProducer()` schedules its render task.
-
-The typed Session API owns this sequencing directly, e.g. a package-private method conceptually equivalent to:
+`LauncherGlassSession` exposes these exact package-private lifecycle operations:
 
 ```java
+boolean suspendProducerForUnlockCapture();
+boolean rebindProducer();
 boolean rebindProducer(Runnable rolloverComplete);
 ```
 
-The callback means:
+### 11.1 `suspendProducerForUnlockCapture()`
 
-- the render queue has executed the old endpoint release/new endpoint creation rollover task;
+This method owns access to `binding`.
+
+It returns `true` only when the Session is live, a binding exists, and the Session actually issues the producer pause operation. It returns `false` when there is no live producer to pause or the Session is shutting down.
+
+The Registry logs counts based on this boolean result, not reflective access attempts.
+
+### 11.2 `rebindProducer()`
+
+This overload is used by Session-internal lifecycle paths and Workstation return.
+
+It returns `true` only when endpoint rollover work is accepted by the Session render queue. It returns `false` when the Session is shutting down, the render thread is dead, or queue submission is rejected.
+
+A `true` return means rollover work was enqueued; it does not mean a fresh frame or vendor re-bind has completed.
+
+Workstation return increments its rebound count only for `true` results.
+
+### 11.3 `rebindProducer(Runnable rolloverComplete)`
+
+This overload is used by unlock capture return.
+
+Its producer teardown/recreate work is the same as `rebindProducer()`. After the render-thread rollover task has completed, the Session posts `rolloverComplete` to its existing `mainHandler`.
+
+The callback therefore means:
+
+- the render queue has executed old endpoint release and new endpoint creation;
+- completion has been marshalled back to the Launcher/main looper;
 - it does **not** claim that asynchronous vendor `bindProducerWhenReady()` has already produced a fresh frame.
 
-The callback is marshalled to the appropriate caller/main queue according to the existing unlock flow.
+If queue submission fails, the method returns `false` and does not invoke the success callback. The Registry marks that Session as failed and keeps unlock capture fail-closed.
 
-If the Session is shutting down, the render thread is dead, or queue submission is rejected, the operation reports failure and the Registry keeps unlock capture fail-closed.
-
-This preserves the existing freshness barrier and removes direct Registry access to `renderHandler`.
+This preserves the current render-queue ordering while removing direct Registry access to `renderHandler`.
 
 ## 12. R8 cleanup
 
@@ -379,7 +388,7 @@ Pure JVM tests use fixture classes to verify:
 - successful invocation returning null is distinct from failure;
 - target-thrown exception is preserved as invocation failure;
 - `requireInvoke` throws the typed exception at the boundary;
-- repeated method and field resolution reuses cache entries.
+- repeated method and field resolution reuse cache entries via the package-private resolver cache inspection hooks.
 
 Tests must not assert JDK reflection enumeration order.
 
