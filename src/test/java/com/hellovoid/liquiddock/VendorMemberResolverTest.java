@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 
@@ -18,12 +19,21 @@ public class VendorMemberResolverTest {
 
         String choose(Object value) { return "object"; }
         String choose(Number value) { return "base-number"; }
+        String primitive(Object value) { return "object"; }
         String primitive(int value) { return "int"; }
         String nullable(Object value) { return "object"; }
         String ambiguous(CharSequence value) { return "chars"; }
         String ambiguous(Number value) { return "number"; }
         static String staticOnly(Integer value) { return "static"; }
         String instanceOnly(Integer value) { return "instance"; }
+    }
+
+    static class GenericBase<T> {
+        Object bridgeCandidate(String value) { return value; }
+    }
+
+    static class GenericDerived extends GenericBase<String> {
+        @Override String bridgeCandidate(String value) { return value; }
     }
 
     static class Derived extends Base {
@@ -76,6 +86,16 @@ public class VendorMemberResolverTest {
                 Derived.class, "ambiguous", new Object[]{null}, false);
         assertEquals(VendorMemberResolver.MethodStatus.AMBIGUOUS, resolution.status());
         assertEquals(2, resolution.candidateSignatures().size());
+    }
+
+    @Test public void realDeclarationWinsOverCompilerBridgeForEquivalentSignature() {
+        VendorMemberResolver.MethodResolution resolution = resolve(
+                GenericDerived.class, "bridgeCandidate", new Object[]{"x"}, false);
+        assertEquals(VendorMemberResolver.MethodStatus.RESOLVED, resolution.status());
+        assertEquals(GenericDerived.class, resolution.method().getDeclaringClass());
+        assertEquals(String.class, resolution.method().getReturnType());
+        assertFalse(resolution.method().isBridge());
+        assertFalse(resolution.method().isSynthetic());
     }
 
     @Test public void staticAndInstanceMethodsDoNotCrossResolve() {
