@@ -80,18 +80,18 @@ public final class PresetManager {
         editor.putBoolean(ConfigSchema.Grid.ENABLED.name(), true);
         editor.putBoolean(ConfigSchema.Grid.MARGINS_DP.name(), true);
         editor.putBoolean(ConfigSchema.Grid.MARGINS_OFFSET.name(), true);
-        editor.putInt("grid_landscape_margin_left", 0);
-        editor.putInt("grid_landscape_margin_right", 0);
-        editor.putInt("grid_landscape_margin_top", 0);
-        editor.putInt("grid_landscape_margin_bottom", 0);
-        editor.putInt("grid_portrait_margin_left", 0);
-        editor.putInt("grid_portrait_margin_right", 0);
-        editor.putInt("grid_portrait_margin_top", 0);
-        editor.putInt("grid_portrait_margin_bottom", 0);
-        editor.putInt("grid_landscape_row_gap", 0);
-        editor.putInt("grid_portrait_row_gap", 0);
-        editor.putInt("indicator_landscape_y", 0);
-        editor.putInt("indicator_portrait_y", 0);
+        putDp(editor, ConfigSchema.Grid.LANDSCAPE_MARGIN_LEFT, 0f);
+        putDp(editor, ConfigSchema.Grid.LANDSCAPE_MARGIN_RIGHT, 0f);
+        putDp(editor, ConfigSchema.Grid.LANDSCAPE_MARGIN_TOP, 0f);
+        putDp(editor, ConfigSchema.Grid.LANDSCAPE_MARGIN_BOTTOM, 0f);
+        putDp(editor, ConfigSchema.Grid.PORTRAIT_MARGIN_LEFT, 0f);
+        putDp(editor, ConfigSchema.Grid.PORTRAIT_MARGIN_RIGHT, 0f);
+        putDp(editor, ConfigSchema.Grid.PORTRAIT_MARGIN_TOP, 0f);
+        putDp(editor, ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM, 0f);
+        putDp(editor, ConfigSchema.Grid.LANDSCAPE_ROW_GAP, 0f);
+        putDp(editor, ConfigSchema.Grid.PORTRAIT_ROW_GAP, 0f);
+        putDp(editor, ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, 0f);
+        putDp(editor, ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, 0f);
         editor.putBoolean(ConfigSchema.Dock.ENABLED.name(), true);
         editor.putBoolean(ConfigSchema.Dock.STROKE_ENABLED.name(), true);
         editor.putInt(ConfigSchema.Dock.STROKE_RED.name(), 255);
@@ -122,139 +122,74 @@ public final class PresetManager {
 
     private static Map<String, Object> createDefaultValues() {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("liquiddock_enabled", true);
-        values.put(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(), 450);
-        values.put(ConfigSchema.Animation.DOCK_ICON_REVEAL.name(), 450);
-        values.put(ConfigSchema.Animation.PRESS_IN.name(), 90);
-        values.put(ConfigSchema.Animation.PRESS_OUT.name(), 160);
-        values.put(ConfigSchema.Animation.DOCK_RESIZE.name(), 180);
-        values.put(ConfigSchema.Animation.SETTINGS_PAGE.name(), 300);
-        values.put("home_grid_8x4", false);
-        values.put("grid_widget_adaptation", false);
-        values.put("grid_margins_dp", true);
-        values.put("grid_margins_offset", true);
-        putDp(values, "grid_landscape_margin_left", 30f);
-        putDp(values, "grid_landscape_margin_right", 30f);
-        putDp(values, "grid_landscape_margin_top", -35f);
-        putDp(values, "grid_landscape_margin_bottom", 20f);
-        putDp(values, "grid_portrait_margin_left", 0f);
-        putDp(values, "grid_portrait_margin_right", 0f);
-        putDp(values, "grid_portrait_margin_top", 0f);
-        putDp(values, "grid_portrait_margin_bottom", 100f);
-        putDp(values, "grid_landscape_row_gap", 0f);
-        putDp(values, "grid_portrait_row_gap", -16f);
-        putDp(values, "grid_landscape_horizontal_distance", 30f);
-        putDp(values, "grid_landscape_top_distance", 0f);
-        putDp(values, "grid_landscape_bottom_distance", 20f);
-        putDp(values, "grid_portrait_horizontal_distance", 0f);
-        putDp(values, "grid_portrait_top_distance", 10.3f);
-        putDp(values, "grid_portrait_bottom_distance", 0f);
-        putDp(values, "indicator_landscape_y", -8.8f);
-        putDp(values, "indicator_portrait_y", 11.8f);
-        values.put("dock_customization", true);
-        values.put("dock_dimensions_dp", true);
-        values.put("dock_resize_animation", false);
-        values.put("dock_smooth_resize_animation", true);
-        values.put("workstation_dock_customization", false);
-        values.put("dock_divider_enabled", false);
-        values.put("blur_radius", 100);
-        values.put("recents_background_blur_percent", 100);
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (key.exportMode() != ConfigKey.ExportMode.ALWAYS) continue;
+            putSchemaDefault(values, key);
+        }
 
-        // Effective Prismal v1.0.6 Quick Start optics: PrismalFrameLayout defaults followed
-        // by PrismalLiquidGlass.applyBase(). Keep synchronized with runtime fallbacks.
-        values.put("liquid_glass", true);
-        values.put("liquid_dimensions_dp", true);
-        values.put("liquid_blur_mode", "shader");
-        values.put("liquid_ior", 155);
-        values.put("liquid_normal_strength", 115);
-        values.put("liquid_dome", 130);
-        values.put("liquid_chromatic", 26);
-        values.put("liquid_tint_alpha", 35);
-        values.put("liquid_tint_r", 0);
-        values.put("liquid_tint_g", 0);
-        values.put("liquid_tint_b", 255);
-        values.put("liquid_highlight_width", 100);
-        values.put("liquid_highlight_alpha", 100);
-        values.put("liquid_depth_effect", 0);
-        values.put("liquid_brightness", 108);
-        values.put("liquid_specular_sharp", 88);
-        values.put("liquid_specular_strength", 152);
-        values.put("liquid_rim_light", 122);
-        values.put("liquid_caustics", 28);
-        values.put("liquid_edge_band", 32);
-        values.put("liquid_capture_power_limit_fps", 30);
-        values.put("liquid_dynamic_app_capture", true);
-        values.put("liquid_dynamic_app_probe_fps", 3);
-        values.put("liquid_dynamic_motion_threshold", 12);
-        values.put("liquid_dynamic_bit_threshold", 18);
-        values.put("liquid_dynamic_hold_ms", 900);
-        values.put("liquid_black_threshold", 10);
-        values.put("liquid_capture_scale", 100);
-        values.put("liquid_capture_stop_delay", 150);
-        putDp(values, "liquid_blur", 2f);
-        putDp(values, "liquid_thickness", 18f);
-        putDp(values, "liquid_lens_refraction", 1.3f);
-        values.put("liquid_sampling_extra_top", 0);
-        values.put("liquid_sampling_extra_bottom", 0);
-        values.put("liquid_sampling_extra_left", 0);
-        values.put("liquid_sampling_extra_right", 0);
-        putDp(values, "liquid_recents_prearm_distance", 8f);
+        // Explicit preset inclusions/deltas only. IF_PRESENT keys stay absent unless they were
+        // historically part of the preset; values that differ from UI defaults are typed here.
+        put(values, ConfigSchema.Divider.ENABLED, false);
 
-        putDp(values, "liquid_prismal_refraction_inset", 20f);
-        values.put("liquid_prismal_displacement_scale", 115);
-        putDp(values, "liquid_prismal_height_transition_width", 19f);
-        putDp(values, "liquid_prismal_smin_smoothing", 1.8f);
-        values.put("liquid_prismal_edge_refraction_falloff", 400);
-        values.put("liquid_prismal_fresnel_reflect", 198);
-        values.put("liquid_prismal_dispersion_r", 100);
-        values.put("liquid_prismal_dispersion_b", 100);
-        values.put("liquid_prismal_vibrancy", 128);
-        values.put("liquid_prismal_plain_highlight", 8);
-        values.put("liquid_prismal_light_dir_x", -50);
-        values.put("liquid_prismal_light_dir_y", -80);
-        values.put("liquid_prismal_shadow_r", 255);
-        values.put("liquid_prismal_shadow_g", 255);
-        values.put("liquid_prismal_shadow_b", 255);
-        values.put("liquid_prismal_shadow_alpha", 35);
-        values.put("liquid_prismal_shadow_softness", 1000);
-        values.put("liquid_prismal_transmittance", 100);
-        values.put("liquid_prismal_backdrop_scale_x", 100);
-        values.put("liquid_prismal_backdrop_scale_y", 100);
-        values.put("liquid_prismal_parallax_scale", 100);
-        values.put("liquid_prismal_show_normals", false);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_LEFT, 30f);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_RIGHT, 30f);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_TOP, -35f);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_BOTTOM, 20f);
+        putDp(values, ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM, 100f);
+        putDp(values, ConfigSchema.Grid.PORTRAIT_ROW_GAP, -16f);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, 30f);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE, 20f);
+        putDp(values, ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE, 10.3f);
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, -8.8f);
+        putDp(values, ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, 11.8f);
 
-        values.put("corners_dp", true);
-        values.put("dock_stroke", true);
-        values.put("stroke_base_r", 180);
-        values.put("stroke_base_g", 180);
-        values.put("stroke_base_b", 180);
-        values.put("stroke_base_alpha", 119);
-        values.put("squircle", true);
-        values.put("sq_outer_cp", 65);
-        values.put("fill_diff", true);
-        values.put("dock_shadow", true);
-        values.put("dock_shadow_alpha", 64);
-        values.put("stroke_shadow", false);
-        values.put("shadow_alpha", 70);
-        putDp(values, "height_offset", 2.2f);
-        putDp(values, "width_offset", 0f);
-        putDp(values, "corner_offset", 1f);
-        putDp(values, "blur_corner_offset", -1f);
-        putDp(values, "sq_stroke_w", 1f);
-        putDp(values, "sq_stroke_off", 0f);
-        putDp(values, "stroke_w", 1f);
-        putDp(values, "std_stroke_w", 1f);
-        putDp(values, "dock_shadow_radius", 10f);
-        putDp(values, "dock_shadow_size", 4.7f);
-        putDp(values, "dock_shadow_y", 0f);
-        putDp(values, "shadow_radius", 3f);
-        putDp(values, "dock_spacing", 0f);
-        putDp(values, "dock_bottom_offset", -2f);
-        putDp(values, "workstation_dock_width_offset", 0f);
-        putDp(values, "workstation_grid_horizontal_offset", 0f);
-        putDp(values, "workstation_dock_icon_top_offset", 0f);
-        putDp(values, "workstation_dock_icon_bottom_offset", 0f);
+        put(values, ConfigSchema.Glass.ENABLED, true);
+        put(values, ConfigSchema.Glass.CAPTURE_FPS, 30);
+        put(values, ConfigSchema.Glass.CAPTURE_SCALE, 100);
+        putDp(values, ConfigSchema.Glass.LENS_REFRACTION, 1.3f);
+        putDp(values, ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING, 1.8f);
+
+        put(values, ConfigSchema.Dock.STROKE_RED, 180);
+        put(values, ConfigSchema.Dock.STROKE_GREEN, 180);
+        put(values, ConfigSchema.Dock.STROKE_BLUE, 180);
+        put(values, ConfigSchema.Dock.STROKE_ALPHA, 119);
+        put(values, ConfigSchema.Dock.SQUIRCLE, true);
+        put(values, ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT, 65);
+        put(values, ConfigSchema.Dock.FILL_DIFF, true);
+        put(values, ConfigSchema.Dock.SHADOW_ALPHA, 64);
+        putDp(values, ConfigSchema.Dock.HEIGHT_OFFSET, 2.2f);
+        putDp(values, ConfigSchema.Dock.CORNER_OFFSET, 1f);
+        putDp(values, ConfigSchema.Dock.BLUR_CORNER_OFFSET, -1f);
+        putDp(values, ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET, 0f);
+        putDp(values, ConfigSchema.Dock.SHADOW_RADIUS, 10f);
+        putDp(values, ConfigSchema.Dock.SHADOW_SIZE, 4.7f);
+        putDp(values, ConfigSchema.Dock.SHADOW_Y, 0f);
+        putDp(values, ConfigSchema.Dock.BOTTOM_OFFSET, -2f);
         return Collections.unmodifiableMap(values);
+    }
+
+    private static void putSchemaDefault(Map<String, Object> values, ConfigKey<?> key) {
+        Object value = key.uiDefault();
+        if (value == null) return;
+        if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
+            int dp = (Integer) value;
+            values.put(key.name(), dp);
+            values.put(key.name() + "_tenths", dp * 10);
+        } else {
+            values.put(key.name(), value);
+        }
+    }
+
+    private static <T> void put(Map<String, Object> values, ConfigKey<T> key, T value) {
+        values.put(key.name(), value);
+    }
+
+    private static void putDp(Map<String, Object> values, ConfigKey<Integer> key, float value) {
+        float clamped = value;
+        if (key.minInt() != null) clamped = Math.max(key.minInt(), clamped);
+        if (key.maxInt() != null) clamped = Math.min(key.maxInt(), clamped);
+        values.put(key.name(), Math.round(clamped));
+        values.put(key.name() + "_tenths", Math.round(clamped * 10f));
     }
 
     private static void putDp(SharedPreferences.Editor editor, ConfigKey<Integer> key,
@@ -264,11 +199,6 @@ public final class PresetManager {
         if (key.maxInt() != null) clamped = Math.min(key.maxInt(), clamped);
         editor.putInt(key.name(), Math.round(clamped));
         editor.putInt(key.name() + "_tenths", Math.round(clamped * 10f));
-    }
-
-    private static void putDp(Map<String, Object> values, String key, float value) {
-        values.put(key, Math.round(value));
-        values.put(key + "_tenths", Math.round(value * 10f));
     }
 
     private static int dimenPx(Resources resources, String packageName,
