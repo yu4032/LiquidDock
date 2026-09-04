@@ -113,7 +113,8 @@ private data class IntSpec(
 }
 
 private data class HighlightToggleSpec(
-    val key: String,
+    val compactConfig: ConfigKey<Boolean>,
+    val largeConfig: ConfigKey<Boolean>,
     val titleRes: Int,
     val summaryRes: Int,
 )
@@ -335,15 +336,15 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE, "视差倍率", "%"),
 )
 private val launcherHighlightSpecs = listOf(
-    HighlightToggleSpec(LauncherHighlightPreferences.SKY_HAZE, R.string.highlight_sky_haze, R.string.highlight_sky_haze_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.SPECULAR, R.string.highlight_specular, R.string.highlight_specular_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.LIT_RIM, R.string.highlight_lit_rim, R.string.highlight_lit_rim_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.OPPOSITE_RIM, R.string.highlight_opposite_rim, R.string.highlight_opposite_rim_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.CORNER_RIM, R.string.highlight_corner_rim, R.string.highlight_corner_rim_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.FACE_SHEEN, R.string.highlight_face_sheen, R.string.highlight_face_sheen_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.PLAIN_HIGHLIGHT, R.string.highlight_plain, R.string.highlight_plain_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.CAUSTICS, R.string.highlight_caustics, R.string.highlight_caustics_summary),
-    HighlightToggleSpec(LauncherHighlightPreferences.PRESS_GLOW, R.string.highlight_press_glow, R.string.highlight_press_glow_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.SKY_HAZE, ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE, R.string.highlight_sky_haze, R.string.highlight_sky_haze_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.SPECULAR, ConfigSchema.LauncherHighlight.LARGE_SPECULAR, R.string.highlight_specular, R.string.highlight_specular_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.LIT_RIM, ConfigSchema.LauncherHighlight.LARGE_LIT_RIM, R.string.highlight_lit_rim, R.string.highlight_lit_rim_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.OPPOSITE_RIM, ConfigSchema.LauncherHighlight.LARGE_OPPOSITE_RIM, R.string.highlight_opposite_rim, R.string.highlight_opposite_rim_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.CORNER_RIM, ConfigSchema.LauncherHighlight.LARGE_CORNER_RIM, R.string.highlight_corner_rim, R.string.highlight_corner_rim_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.FACE_SHEEN, ConfigSchema.LauncherHighlight.LARGE_FACE_SHEEN, R.string.highlight_face_sheen, R.string.highlight_face_sheen_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.PLAIN_HIGHLIGHT, ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT, R.string.highlight_plain, R.string.highlight_plain_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.CAUSTICS, ConfigSchema.LauncherHighlight.LARGE_CAUSTICS, R.string.highlight_caustics, R.string.highlight_caustics_summary),
+    HighlightToggleSpec(ConfigSchema.LauncherHighlight.PRESS_GLOW, ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW, R.string.highlight_press_glow, R.string.highlight_press_glow_summary),
 )
 private val strokeSpecs = listOf(
     IntSpec(ConfigSchema.Dock.CORNER_OFFSET, "描边圆角偏移", "dp", null, IntSection.StrokeGeometry),
@@ -494,9 +495,8 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                 BooleanSetting(prefs, ConfigSchema.Grid.ENABLED, stringResource(R.string.enable_grid_8x4), stringResource(R.string.enable_grid_8x4_summary), masterEnabled) { customGrid = it }
                 StringDropdown(
                     prefs = prefs,
-                    key = GridProfileConfig.PROFILE_KEY,
+                    config = ConfigSchema.Grid.PROFILE,
                     title = stringResource(R.string.grid_profile_title),
-                    default = GridProfileConfig.DEFAULT_PROFILE,
                     options = profileOptions,
                     enabled = masterEnabled && customGrid,
                 )
@@ -517,7 +517,7 @@ private fun DockPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
     var smoothResize by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault())) }
     SettingsList(padding, stringResource(R.string.page_dock)) {
         BooleanSetting(prefs, ConfigSchema.Dock.ENABLED, stringResource(R.string.dock_customization), stringResource(R.string.dock_customization_summary), masterEnabled) { dockEnabled = it }
-        RawBooleanSetting(prefs, "dock_hide_mirror_shortcut", false, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
+        BooleanSetting(prefs, ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
@@ -636,8 +636,8 @@ private fun LauncherHighlightsPage(
         item {
             SettingsCard {
                 launcherHighlightSpecs.forEach { spec ->
-                    RawBooleanSetting(
-                        prefs, spec.key, true,
+                    BooleanSetting(
+                        prefs, spec.compactConfig,
                         stringResource(spec.titleRes), stringResource(spec.summaryRes),
                         masterEnabled && liquidEnabled,
                     )
@@ -648,8 +648,8 @@ private fun LauncherHighlightsPage(
         item {
             SettingsCard {
                 launcherHighlightSpecs.forEach { spec ->
-                    RawBooleanSetting(
-                        prefs, LauncherHighlightPreferences.largeSurfaceKey(spec.key), true,
+                    BooleanSetting(
+                        prefs, spec.largeConfig,
                         stringResource(spec.titleRes), stringResource(spec.summaryRes),
                         masterEnabled && liquidEnabled,
                     )
@@ -798,25 +798,6 @@ private fun BooleanSetting(
 }
 
 @Composable
-private fun RawBooleanSetting(
-    prefs: SharedPreferences,
-    key: String,
-    default: Boolean,
-    title: String,
-    summary: String? = null,
-    enabled: Boolean = true,
-) {
-    var value by remember(key) { mutableStateOf(prefs.getBoolean(key, default)) }
-    SwitchPreference(
-        checked = value,
-        onCheckedChange = { value = it; prefs.edit().putBoolean(key, it).apply() },
-        title = title,
-        summary = summary,
-        enabled = enabled,
-    )
-}
-
-@Composable
 private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride: Boolean? = null) {
     val decimalDp = spec.isDecimal
     val resetValue = spec.resetValue()
@@ -878,9 +859,11 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
 
 @Composable
 private fun StringDropdown(
-    prefs: SharedPreferences, key: String, title: String, default: String,
+    prefs: SharedPreferences, config: ConfigKey<String>, title: String,
     options: List<Pair<String, String>>, enabled: Boolean = true,
 ) {
+    val key = config.name()
+    val default = config.uiDefault()
     var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
     val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
     ArrowPreference(

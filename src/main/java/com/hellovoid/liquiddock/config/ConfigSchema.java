@@ -44,6 +44,10 @@ public final class ConfigSchema {
     public static final class Grid {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "home_grid_8x4", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> PROFILE = string(
+                "grid_profile", GridProfileConfig.DEFAULT_PROFILE,
+                GridProfileConfig.DEFAULT_PROFILE, GridProfileConfig.DEFAULT_PROFILE,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_ADAPTATION = bool(
                 "grid_widget_adaptation", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> MARGINS_DP = bool(
@@ -133,6 +137,9 @@ public final class ConfigSchema {
     public static final class Dock {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "dock_customization", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> HIDE_MIRROR_SHORTCUT = bool(
+                "dock_hide_mirror_shortcut", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> RESIZE_ANIMATION = bool(
                 "dock_resize_animation", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SMOOTH_RESIZE_ANIMATION = bool(
@@ -388,6 +395,31 @@ public final class ConfigSchema {
         private Glass() {}
     }
 
+
+    public static final class LauncherHighlight {
+        public static final ConfigKey<Boolean> SKY_HAZE = highlight("sky_haze");
+        public static final ConfigKey<Boolean> SPECULAR = highlight("specular");
+        public static final ConfigKey<Boolean> LIT_RIM = highlight("lit_rim");
+        public static final ConfigKey<Boolean> OPPOSITE_RIM = highlight("opposite_rim");
+        public static final ConfigKey<Boolean> CORNER_RIM = highlight("corner_rim");
+        public static final ConfigKey<Boolean> FACE_SHEEN = highlight("face_sheen");
+        public static final ConfigKey<Boolean> PLAIN_HIGHLIGHT = highlight("plain_highlight");
+        public static final ConfigKey<Boolean> CAUSTICS = highlight("caustics");
+        public static final ConfigKey<Boolean> PRESS_GLOW = highlight("press_glow");
+
+        public static final ConfigKey<Boolean> LARGE_SKY_HAZE = largeHighlight("sky_haze");
+        public static final ConfigKey<Boolean> LARGE_SPECULAR = largeHighlight("specular");
+        public static final ConfigKey<Boolean> LARGE_LIT_RIM = largeHighlight("lit_rim");
+        public static final ConfigKey<Boolean> LARGE_OPPOSITE_RIM = largeHighlight("opposite_rim");
+        public static final ConfigKey<Boolean> LARGE_CORNER_RIM = largeHighlight("corner_rim");
+        public static final ConfigKey<Boolean> LARGE_FACE_SHEEN = largeHighlight("face_sheen");
+        public static final ConfigKey<Boolean> LARGE_PLAIN_HIGHLIGHT = largeHighlight("plain_highlight");
+        public static final ConfigKey<Boolean> LARGE_CAUSTICS = largeHighlight("caustics");
+        public static final ConfigKey<Boolean> LARGE_PRESS_GLOW = largeHighlight("press_glow");
+
+        private LauncherHighlight() {}
+    }
+
     public static final class Workstation {
         public static final ConfigKey<Boolean> DOCK_CUSTOMIZATION = bool(
                 "workstation_dock_customization", false, false, false, ConfigKey.ExportMode.ALWAYS);
@@ -471,7 +503,8 @@ public final class ConfigSchema {
         add(keys, Animation.WORKSPACE_VISIBILITY, Animation.DOCK_ICON_REVEAL,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SETTINGS_PAGE);
-        add(keys, Grid.ENABLED, Grid.WIDGET_ADAPTATION, Grid.MARGINS_DP, Grid.MARGINS_OFFSET,
+        add(keys, Grid.ENABLED, Grid.PROFILE, Grid.WIDGET_ADAPTATION,
+                Grid.MARGINS_DP, Grid.MARGINS_OFFSET,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,
@@ -485,7 +518,8 @@ public final class ConfigSchema {
                 Grid.LEGACY_PORTRAIT_HORIZONTAL_MARGIN, Grid.LEGACY_MARGIN_LEFT,
                 Grid.LEGACY_MARGIN_RIGHT, Grid.LEGACY_MARGIN_TOP,
                 Grid.LEGACY_MARGIN_BOTTOM);
-        add(keys, Dock.ENABLED, Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
+        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT,
+                Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
                 Dock.DIMENSIONS_DP, Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
                 Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS, Dock.CORNERS_DP, Dock.CORNER_OFFSET,
                 Dock.BLUR_CORNER_OFFSET, Dock.SQUIRCLE, Dock.FILL_DIFF, Dock.STROKE_ENABLED,
@@ -529,6 +563,15 @@ public final class ConfigSchema {
                 Glass.PRISMAL_SHADOW_SOFTNESS, Glass.PRISMAL_TRANSMITTANCE,
                 Glass.PRISMAL_BACKDROP_SCALE_X, Glass.PRISMAL_BACKDROP_SCALE_Y,
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
+        add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.SPECULAR,
+                LauncherHighlight.LIT_RIM, LauncherHighlight.OPPOSITE_RIM,
+                LauncherHighlight.CORNER_RIM, LauncherHighlight.FACE_SHEEN,
+                LauncherHighlight.PLAIN_HIGHLIGHT, LauncherHighlight.CAUSTICS,
+                LauncherHighlight.PRESS_GLOW, LauncherHighlight.LARGE_SKY_HAZE,
+                LauncherHighlight.LARGE_SPECULAR, LauncherHighlight.LARGE_LIT_RIM,
+                LauncherHighlight.LARGE_OPPOSITE_RIM, LauncherHighlight.LARGE_CORNER_RIM,
+                LauncherHighlight.LARGE_FACE_SHEEN, LauncherHighlight.LARGE_PLAIN_HIGHLIGHT,
+                LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.DOCK_WIDTH_OFFSET,
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
                 Workstation.GRID_HORIZONTAL_OFFSET,
@@ -550,6 +593,17 @@ public final class ConfigSchema {
 
     private static void add(List<ConfigKey<?>> keys, ConfigKey<?>... added) {
         Collections.addAll(keys, added);
+    }
+
+
+    private static ConfigKey<Boolean> highlight(String suffix) {
+        return bool("launcher_surface_component_" + suffix,
+                true, true, true, ConfigKey.ExportMode.ALWAYS);
+    }
+
+    private static ConfigKey<Boolean> largeHighlight(String suffix) {
+        return bool("launcher_large_surface_component_" + suffix,
+                true, true, true, ConfigKey.ExportMode.ALWAYS);
     }
 
     private static ConfigKey<Boolean> bool(String name, Boolean uiDefault, Boolean runtimeFallback,

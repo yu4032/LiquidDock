@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import androidx.annotation.NonNull;
 
 import com.hellovoid.liquiddock.config.ConfigMigration;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.liquiddock.config.GridProfileConfig;
 import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
@@ -60,7 +61,8 @@ public final class ModuleMain extends XposedModule {
 
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
                     GridProfileConfig.normalizeProfile(configReader.s(
-                            GridProfileConfig.PROFILE_KEY, GridProfileConfig.DEFAULT_PROFILE)));
+                            ConfigSchema.Grid.PROFILE.name(),
+                            ConfigSchema.Grid.PROFILE.runtimeFallback())));
             boolean customGridEnabled = runtimeConfig.enabled && runtimeConfig.grid.enabled;
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);

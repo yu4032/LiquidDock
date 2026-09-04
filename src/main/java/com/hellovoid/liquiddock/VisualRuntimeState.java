@@ -8,8 +8,6 @@ import com.hellovoid.liquiddock.config.ConfigSchema;
 
 /** Process-local state for visual switches that can be changed safely without restarting Launcher. */
 final class VisualRuntimeState {
-    private static final String PREF_HIDE_MIRROR_SHORTCUT = "dock_hide_mirror_shortcut";
-
     private static volatile boolean coreEnabled;
     private static volatile boolean dockCustomizationEnabled;
     private static volatile boolean dockStrokeEnabled;
@@ -43,7 +41,8 @@ final class VisualRuntimeState {
         strokeShadowEnabled = initialStrokeShadowEnabled;
         dividerEnabled = initialDividerEnabled;
         hideMirrorShortcut = nextPrefs != null
-                && nextPrefs.getBoolean(PREF_HIDE_MIRROR_SHORTCUT, false);
+                && nextPrefs.getBoolean(ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name(),
+                        ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.runtimeFallback());
         if (nextPrefs == null) return;
 
         listener = (sharedPreferences, key) -> {
@@ -62,7 +61,7 @@ final class VisualRuntimeState {
                     && !ConfigSchema.Dock.SHADOW_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_SHADOW.name().equals(key)
                     && !ConfigSchema.Divider.ENABLED.name().equals(key)
-                    && !PREF_HIDE_MIRROR_SHORTCUT.equals(key)
+                    && !ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name().equals(key)
                     && !strokeStyleChanged
                     && !dockShadowStyleChanged
                     && !strokeShadowStyleChanged) return;
@@ -83,7 +82,7 @@ final class VisualRuntimeState {
             boolean nextDividerEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Divider.ENABLED.name(), dividerEnabled);
             boolean nextHideMirrorShortcut = sharedPreferences.getBoolean(
-                    PREF_HIDE_MIRROR_SHORTCUT, hideMirrorShortcut);
+                    ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name(), hideMirrorShortcut);
             apply(nextCoreEnabled, nextDockCustomizationEnabled, nextDockStrokeEnabled,
                     nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled,
                     nextHideMirrorShortcut);

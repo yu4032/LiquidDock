@@ -15,10 +15,6 @@ public final class ConfigCodec {
                     && !preferences.containsKey(key.name())) continue;
             out.put(key.name(), exportValue(key, preferences));
         }
-        if (preferences.containsKey(GridProfileConfig.PROFILE_KEY)) {
-            out.put(GridProfileConfig.PROFILE_KEY, GridProfileConfig.normalizeProfile(
-                    String.valueOf(preferences.get(GridProfileConfig.PROFILE_KEY))));
-        }
         return out;
     }
 
@@ -29,10 +25,6 @@ public final class ConfigCodec {
             if (!isDirectlyImportable(key) || !jsonValues.containsKey(key.name())) continue;
             importValue(key, jsonValues.get(key.name()), out);
         }
-        if (jsonValues.containsKey(GridProfileConfig.PROFILE_KEY)) {
-            out.put(GridProfileConfig.PROFILE_KEY, GridProfileConfig.normalizeProfile(
-                    String.valueOf(jsonValues.get(GridProfileConfig.PROFILE_KEY))));
-        }
         importLegacyHorizontalMargins(jsonValues, out);
         importPreAxisLegacyMargins(jsonValues, out);
         importLegacyWorkstationAllAppsOffsets(jsonValues, out);
@@ -40,6 +32,11 @@ public final class ConfigCodec {
     }
 
     private static Object exportValue(ConfigKey<?> key, Map<String, ?> preferences) {
+        if (key == ConfigSchema.Grid.PROFILE) {
+            Object value = preferences.get(key.name());
+            return GridProfileConfig.normalizeProfile(value == null
+                    ? String.valueOf(key.exportDefault()) : String.valueOf(value));
+        }
         if (key == ConfigSchema.Dock.DIMENSIONS_DP || key == ConfigSchema.Glass.DIMENSIONS_DP) {
             return Boolean.TRUE;
         }
@@ -72,6 +69,8 @@ public final class ConfigCodec {
             out.put(key.name(), booleanValue(value));
         } else if (key.type() == ConfigKey.Type.INT && value instanceof Number) {
             out.put(key.name(), clamp(((Number) value).intValue(), key.minInt(), key.maxInt()));
+        } else if (key == ConfigSchema.Grid.PROFILE && value != null) {
+            out.put(key.name(), GridProfileConfig.normalizeProfile(String.valueOf(value)));
         } else if (key.type() == ConfigKey.Type.STRING && value != null) {
             out.put(key.name(), String.valueOf(value));
         }
