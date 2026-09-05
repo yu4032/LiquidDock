@@ -101,7 +101,11 @@ final class DockAnimationTrace {
 
     private static void log(String event, View target, String extra) {
         long now = SystemClock.uptimeMillis();
-        Object iconVisibility = HookUtil.invoke(target, "getIconVisibility");
+        HookUtil.InvocationResult<Object> iconVisibilityResult =
+                HookUtil.tryInvoke(target, "getIconVisibility");
+        Object iconVisibility = iconVisibilityResult.succeeded()
+                ? iconVisibilityResult.value()
+                : "<unavailable:" + iconVisibilityResult.failure().kind() + ">";
         float glassOpacity;
         try {
             glassOpacity = DockGlassItemRegistry.animationOpacity(target, now);

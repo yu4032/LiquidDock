@@ -182,8 +182,10 @@ final class DockIconAnimationGlassHook {
                         float progress = closeToHome
                                 ? ((Number) args[3]).floatValue() : Float.NaN;
 
-                        Object targetBefore = closeToHome
-                                ? HookUtil.invoke(chain.getThisObject(), "getAnimTarget") : null;
+                        HookUtil.InvocationResult<Object> targetBeforeResult = closeToHome
+                                ? HookUtil.tryInvoke(chain.getThisObject(), "getAnimTarget") : null;
+                        Object targetBefore = targetBeforeResult != null && targetBeforeResult.succeeded()
+                                ? targetBeforeResult.value() : null;
                         if (targetBefore instanceof View
                                 && LauncherGlassHierarchy.isDock((View) targetBefore)) {
                             DockAnimationTrace.proxyFrame(
@@ -193,7 +195,9 @@ final class DockIconAnimationGlassHook {
                         Object result = chain.proceed(args);
 
                         if (closeToHome) {
-                            Object target = HookUtil.invoke(chain.getThisObject(), "getAnimTarget");
+                            HookUtil.InvocationResult<Object> targetResult =
+                                    HookUtil.tryInvoke(chain.getThisObject(), "getAnimTarget");
+                            Object target = targetResult.succeeded() ? targetResult.value() : null;
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
                                 View dockTarget = (View) target;
@@ -286,8 +290,12 @@ final class DockIconAnimationGlassHook {
             removeAnimationEndListener.invoke(pending.proxy);
         } catch (Throwable error) {
             MainHook.log(TAG + " committed proxy retire failed reason=" + reason + ": " + error);
-            HookUtil.invoke(pending.proxy, "recycle",
-                    pending.recycleSynchronously, (Object) null);
+            HookUtil.InvocationResult<Object> recycleResult = HookUtil.tryInvoke(
+                    pending.proxy, "recycle", pending.recycleSynchronously, (Object) null);
+            if (!recycleResult.succeeded()) {
+                MainHook.log(TAG + " fallback proxy recycle failed reason=" + reason
+                        + ": " + recycleResult.failure());
+            }
         }
     }
 
