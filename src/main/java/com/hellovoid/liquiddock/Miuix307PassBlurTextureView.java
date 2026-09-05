@@ -182,6 +182,9 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile boolean gpuBackdropActive;
     private volatile boolean producerUpdatesEnabled = true;
     private volatile int configRotation;
+    // Required producer generation and the generation stamped onto the currently published endpoint.
+    private volatile long producerBindEpoch;
+    private volatile long inputProducerBindEpoch = -1L;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
     private volatile SurfaceTexture outputSurfaceTexture;
@@ -341,6 +344,10 @@ final class Miuix307PassBlurTextureView extends TextureView
         ZeroCopyProducerRecoveryState.Decision recovery =
                 producerRecovery.onRebindRequested();
         if (!recovery.accepted) return;
+        // Retire the current endpoint generation synchronously. Delayed retries may still run
+        // before the render thread replaces the BufferQueue, but the old endpoint keeps its old
+        // stamp and therefore cannot become eligible again.
+        producerBindEpoch++;
         if (recovery.clearFrameworkBinding) {
             Miuix307PassBlurBridge.Binding stale = binding;
             binding = null;
@@ -369,6 +376,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         SurfaceTexture staleInput = inputSurfaceTexture;
         try {
             makeCurrent();
+            inputProducerBindEpoch = -1L;
             inputProducerSurface = null;
             inputSurfaceTexture = null;
 
@@ -621,6 +629,9 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         SurfaceTexture input = new SurfaceTexture(oesTexture);
         Surface producer = new Surface(input);
+        // Publish the endpoint stamp before the endpoint references. A reader that observes this
+        // producer can only bind it with the generation under which it was actually created.
+        inputProducerBindEpoch = producerBindEpoch;
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
         input.setOnFrameAvailableListener(texture -> {
@@ -932,6 +943,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         View materialHost = materialHostRef.get();
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
+        long bindEpoch = inputProducerBindEpoch;
+        if (bindEpoch != producerBindEpoch) return;
         if (materialHost == null || !materialHost.isAttachedToWindow()
                 || !isAttachedToWindow() || !isAvailable()
                 || producer == null || input == null) {
@@ -951,15 +964,17 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown || currentInput == null || currentInput != input) return;
             try {
                 currentInput.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-                post(() -> finishBindProducer(geometry, producer, attempt));
+                post(() -> finishBindProducer(geometry, producer, attempt, bindEpoch));
             } catch (Throwable error) {
                 post(() -> retryBind(attempt, error.getClass().getSimpleName()));
             }
         });
     }
 
-    private void finishBindProducer(ProducerGeometry geometry, Surface producer, int attempt) {
-        if (shuttingDown || binding != null || producer != inputProducerSurface) return;
+    private void finishBindProducer(
+            ProducerGeometry geometry, Surface producer, int attempt, long bindEpoch) {
+        if (shuttingDown || binding != null || producer != inputProducerSurface
+                || bindEpoch != producerBindEpoch || bindEpoch != inputProducerBindEpoch) return;
         View materialHost = materialHostRef.get();
         if (materialHost == null) return;
 
@@ -1487,6 +1502,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         normalizeProgram = 0;
         compositeProgram = 0;
 
+        inputProducerBindEpoch = -1L;
         Surface producer = inputProducerSurface;
         inputProducerSurface = null;
         if (producer != null) {

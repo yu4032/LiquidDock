@@ -23,6 +23,12 @@ public class LauncherGlassProducerRolloverContractTest {
         }
     }
 
+    @Test public void retiredEndpointKeepsItsOwnCapturedEpoch() throws Exception {
+        Field endpointEpoch = LauncherGlassSession.class.getDeclaredField("inputProducerBindEpoch");
+        assertNotNull(endpointEpoch);
+        assertEquals(long.class, endpointEpoch.getType());
+    }
+
     @Test public void genericRolloverReportsTerminalSuccessOrFailure() throws Exception {
         Method method = LauncherGlassSession.class.getDeclaredMethod(
                 "rebindProducer", LauncherGlassSessionRegistry.RolloverCompletion.class);
