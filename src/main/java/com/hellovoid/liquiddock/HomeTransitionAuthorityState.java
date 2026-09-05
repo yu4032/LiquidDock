@@ -1,45 +1,38 @@
 package com.hellovoid.liquiddock;
 
-/** Android-free authority state for Launcher fallback and SystemUI HOME transition handoff. */
+/** Android-free authority state for Launcher fallback and SystemUI HOME capture handoff. */
 final class HomeTransitionAuthorityState {
     static final class Decision {
         final boolean freezeBarrier;
-        final boolean beginReveal;
         final boolean releaseBarrier;
         final boolean releaseWidgetBarrier;
         final boolean waitForSystemUi;
 
         private Decision(
                 boolean freezeBarrier,
-                boolean beginReveal,
                 boolean releaseBarrier,
                 boolean releaseWidgetBarrier,
                 boolean waitForSystemUi) {
             this.freezeBarrier = freezeBarrier;
-            this.beginReveal = beginReveal;
             this.releaseBarrier = releaseBarrier;
             this.releaseWidgetBarrier = releaseWidgetBarrier;
             this.waitForSystemUi = waitForSystemUi;
         }
 
         static Decision none() {
-            return new Decision(false, false, false, false, false);
+            return new Decision(false, false, false, false);
         }
 
-        static Decision freeze(boolean beginReveal) {
-            return new Decision(true, beginReveal, false, false, false);
-        }
-
-        static Decision reveal() {
-            return new Decision(false, true, false, false, false);
+        static Decision freeze() {
+            return new Decision(true, false, false, false);
         }
 
         static Decision release(boolean releaseWidgetBarrier) {
-            return new Decision(false, false, true, releaseWidgetBarrier, false);
+            return new Decision(false, true, releaseWidgetBarrier, false);
         }
 
         static Decision waitForSystemUi() {
-            return new Decision(false, false, false, false, true);
+            return new Decision(false, false, false, true);
         }
     }
 
@@ -51,11 +44,7 @@ final class HomeTransitionAuthorityState {
 
     synchronized Decision onLauncherHomeStarted() {
         launcherHomeArmed = true;
-        return Decision.freeze(false);
-    }
-
-    synchronized Decision onLauncherHomeAnimationStarted() {
-        return launcherHomeArmed ? Decision.reveal() : Decision.none();
+        return Decision.freeze();
     }
 
     synchronized Decision onLauncherHomeEnded(long eventTimeNanos) {
@@ -87,7 +76,7 @@ final class HomeTransitionAuthorityState {
 
         systemUiHomeArmed = true;
         activeSystemUiSerial = serial;
-        return Decision.freeze(false);
+        return Decision.freeze();
     }
 
     synchronized Decision onSystemUiFinished(
