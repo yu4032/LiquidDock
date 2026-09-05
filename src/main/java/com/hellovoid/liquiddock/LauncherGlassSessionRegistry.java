@@ -15,8 +15,11 @@ final class LauncherGlassSessionRegistry {
         void onComplete(boolean success);
     }
 
+    interface WorkstationRecoveryCompletion {
+        void onComplete(LauncherGlassProducerRecoveryState.Result result);
+    }
+
     private static final WeakHashMap<View, LauncherGlassSession> SESSIONS = new WeakHashMap<>();
-    private static long workstationRolloverGeneration;
 
     private LauncherGlassSessionRegistry() {}
 
@@ -114,39 +117,77 @@ final class LauncherGlassSessionRegistry {
     }
 
     /**
-     * HyperOS Workstation can keep the same valid root Surface across Recents while silently
-     * retiring the PassBlur BufferQueue producer. Return true only when every live session
-     * accepts the rollover request. Actual endpoint recreation is logged asynchronously by the
-     * session; scene freshness remains owned by LauncherGlassSceneController.
+     * Recover every live shared Launcher producer for one authoritative Workstation Recents return.
+     * Completion is terminal: ACCEPTED means endpoint recreated, PassBlur bind succeeded and a
+     * fresh frame from that endpoint generation arrived. Queue acceptance is never aggregate
+     * success. REJECTED/FAILED therefore keep HOME fail-closed in the Recents adapter.
      */
-    static synchronized boolean prepareWorkstationRecentsReturn() {
-        if (!MainHook.isWorkstationMode()) return true;
-        long generation = ++workstationRolloverGeneration;
-        int live = 0;
-        int accepted = 0;
-        int rejected = 0;
-        int failed = 0;
-        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
-            if (session == null || session.isShutdown()) continue;
-            live++;
+    static void prepareWorkstationRecentsReturn(
+            long recoverySerial, WorkstationRecoveryCompletion completion) {
+        ArrayList<LauncherGlassSession> sessions;
+        synchronized (LauncherGlassSessionRegistry.class) {
+            sessions = new ArrayList<>(SESSIONS.values());
+        }
+        sessions.removeIf(session -> session == null || session.isShutdown());
+
+        WorkstationProducerRecoveryAggregate aggregate =
+                new WorkstationProducerRecoveryAggregate(sessions.size());
+        AtomicBoolean completionDelivered = new AtomicBoolean(false);
+
+        if (aggregate.isComplete()) {
+            logWorkstationAggregate(recoverySerial, aggregate);
+            if (completion != null) completion.onComplete(aggregate.terminalResult());
+            return;
+        }
+
+        for (LauncherGlassSession session : sessions) {
+            LauncherGlassProducerRecoveryState.Result requestResult;
             try {
-                if (session.rebindWorkstationProducer("workstation-recents", generation)) accepted++;
-                else rejected++;
+                requestResult = session.rebindWorkstationProducer(
+                        "workstation-recents", recoverySerial,
+                        terminal -> recordWorkstationTerminal(
+                                recoverySerial, aggregate, completionDelivered,
+                                completion, terminal));
             } catch (Throwable error) {
-                failed++;
+                requestResult = LauncherGlassProducerRecoveryState.Result.FAILED;
                 MainHook.log("[DC][LauncherGlass][ProducerRecovery] reason=workstation-recents"
                         + " session=" + session.diagnosticSessionId()
-                        + " generation=" + generation
-                        + " result=FAILED stage=request error=" + error);
+                        + " producerGeneration=-1 recoverySerial=" + recoverySerial
+                        + " result=FAILED stage=request endpointRecreated=false"
+                        + " bindSucceeded=false freshFrameArrived=false error=" + error);
+            }
+
+            if (requestResult != LauncherGlassProducerRecoveryState.Result.ACCEPTED) {
+                recordWorkstationTerminal(
+                        recoverySerial, aggregate, completionDelivered,
+                        completion, requestResult);
             }
         }
-        String result = failed > 0 ? "FAILED" : rejected > 0 ? "REJECTED" : "ACCEPTED";
+    }
+
+    private static void recordWorkstationTerminal(
+            long recoverySerial,
+            WorkstationProducerRecoveryAggregate aggregate,
+            AtomicBoolean completionDelivered,
+            WorkstationRecoveryCompletion completion,
+            LauncherGlassProducerRecoveryState.Result terminal) {
+        if (terminal == null || !aggregate.record(terminal)) return;
+        logWorkstationAggregate(recoverySerial, aggregate);
+        if (!completionDelivered.compareAndSet(false, true)) return;
+        if (completion != null) completion.onComplete(aggregate.terminalResult());
+    }
+
+    private static void logWorkstationAggregate(
+            long recoverySerial, WorkstationProducerRecoveryAggregate aggregate) {
         MainHook.log("[DC][LauncherGlass][ProducerRecovery] reason=workstation-recents"
-                + " session=aggregate generation=" + generation
-                + " result=" + result + " stage=request"
-                + " accepted=" + accepted + " rejected=" + rejected
-                + " failed=" + failed + " total=" + live);
-        return rejected == 0 && failed == 0;
+                + " session=aggregate producerGeneration=-1 recoverySerial=" + recoverySerial
+                + " result=" + aggregate.terminalResult()
+                + " stage=terminal endpointRecreated=n/a bindSucceeded=n/a freshFrameArrived=n/a"
+                + " accepted=" + aggregate.acceptedCount()
+                + " rejected=" + aggregate.rejectedCount()
+                + " failed=" + aggregate.failedCount()
+                + " total=" + aggregate.expectedCount()
+                + " aggregateTerminal=" + aggregate.terminalResult());
     }
 
     static synchronized void shutdownAll() {

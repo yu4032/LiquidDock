@@ -43,6 +43,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Sink views own only output surfaces; producer, EGL context and backdrop textures live here.
  */
 final class LauncherGlassSession {
+    interface ProducerRecoveryCompletion {
+        void onComplete(LauncherGlassProducerRecoveryState.Result result);
+    }
+
     private static final String TAG = "[DC][LauncherGlass]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
@@ -150,6 +154,13 @@ final class LauncherGlassSession {
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
     // Main-thread epoch invalidates finishBind callbacks queued before a Workstation rollover.
     private volatile long workstationBindEpoch;
+    // Producer endpoint identity. This is deliberately independent from sceneGeneration.
+    private volatile long producerGeneration;
+    private final LauncherGlassProducerRecoveryState workstationProducerRecovery =
+            new LauncherGlassProducerRecoveryState();
+    private volatile ProducerRecoveryCompletion workstationRecoveryCompletion;
+    private volatile long workstationRecoveryCompletionSerial = -1L;
+    private volatile String workstationRecoveryReason = "workstation-recents";
     private final float[] textureMatrix = new float[16];
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -773,6 +784,9 @@ final class LauncherGlassSession {
     }
 
     private void beginRotationSettle(int targetRotation) {
+        // Rotation already owns the next endpoint transition. Invalidate every bind completion from
+        // the previous endpoint before exposing that ownership to a Workstation recovery request.
+        workstationBindEpoch++;
         rotationSettleSerial++;
         rotationSettlePending = true;
         rotationSettleTargetRotation = targetRotation;
@@ -803,9 +817,15 @@ final class LauncherGlassSession {
         rotationSettleTargetRotation = -1;
         MainHook.log(TAG + " rotation capture released rotation=" + targetRotation
                 + " serial=" + serial);
-        // Always roll here, even if binding became null while the transition was running.
-        // This guarantees SetPassBlurSurface sees a producer created after the rotation leash.
-        rebindProducer();
+        // Rotation owns exactly one endpoint transition. If a Workstation recovery arrived while
+        // the leash was active, continue that same ownership instead of launching another rollover.
+        long recoverySerial = workstationProducerRecovery.activeSerial();
+        if (recoverySerial > 0L) {
+            queueWorkstationEndpointRecreate(
+                    workstationRecoveryReason, recoverySerial, false, "rotation-owner");
+        } else {
+            rebindProducer();
+        }
     }
 
     private float readLauncherTransitionDurationRatio(View root) {
@@ -867,9 +887,11 @@ final class LauncherGlassSession {
                 makePbufferCurrent();
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
+                long consumedProducerGeneration = producerGeneration;
                 consumedGeneration = sceneGeneration;
                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
+                completeWorkstationRecoveryOnFreshFrame(consumedProducerGeneration);
                 if (WorkstationProducerPolicy.shouldPauseSharedProducer(
                         true, MainHook.isWorkstationMode())) {
                     Miuix307PassBlurBridge.pauseUpdates(binding);
@@ -892,6 +914,10 @@ final class LauncherGlassSession {
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " render failed: " + error);
+            long recoverySerial = workstationProducerRecovery.activeSerial();
+            if (recoverySerial > 0L) {
+                failWorkstationRecovery(recoverySerial, "render", error);
+            }
         }
     }
 
@@ -993,7 +1019,19 @@ final class LauncherGlassSession {
         Surface producer = new Surface(input);
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
+        long endpointGeneration = ++producerGeneration;
         backdropPrepared = false;
+
+        long recoverySerial = workstationProducerRecovery.activeSerial();
+        if (recoverySerial > 0L
+                && workstationProducerRecovery.onEndpointRecreated(
+                        recoverySerial, endpointGeneration)) {
+            logWorkstationProducerRecovery(
+                    workstationRecoveryReason, recoverySerial,
+                    LauncherGlassProducerRecoveryState.Result.ACCEPTED,
+                    "endpoint-recreated", null);
+        }
+
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
             frameAvailable.set(true);
@@ -1004,33 +1042,41 @@ final class LauncherGlassSession {
 
     private void bindProducerWhenReady(int attempt) {
         if (shuttingDown || binding != null || rotationSettlePending) return;
+        long endpointGeneration = producerGeneration;
+        long recoverySerial = workstationProducerRecovery.activeSerial();
         View root = rootRef.get();
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
         if (root == null || !root.isAttachedToWindow() || producer == null || input == null) {
-            retryBind(attempt);
+            retryBind(attempt, endpointGeneration, recoverySerial);
             return;
         }
         ProducerGeometry geometry = readSurfaceGeometry(root);
         if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
-            retryBind(attempt);
+            retryBind(attempt, endpointGeneration, recoverySerial);
             return;
         }
         long bindEpoch = workstationBindEpoch;
         postRender(() -> {
-            if (shuttingDown || input != inputSurfaceTexture) return;
+            if (shuttingDown || input != inputSurfaceTexture
+                    || endpointGeneration != producerGeneration) return;
             input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-            mainHandler.post(() -> finishBind(root, producer, geometry, attempt, bindEpoch));
+            mainHandler.post(() -> finishBind(
+                    root, producer, geometry, attempt, bindEpoch,
+                    endpointGeneration, recoverySerial));
         }, null);
     }
 
     private void finishBind(
-            View root, Surface producer, ProducerGeometry geometry, int attempt, long bindEpoch) {
-        if (shuttingDown || binding != null || producer != inputProducerSurface
+            View root, Surface producer, ProducerGeometry geometry, int attempt, long bindEpoch,
+            long endpointGeneration, long recoverySerial) {
+        if (shuttingDown || binding != null || rotationSettlePending
+                || producer != inputProducerSurface
+                || endpointGeneration != producerGeneration
                 || bindEpoch != workstationBindEpoch) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(root, producer, 1f);
         if (next == null) {
-            retryBind(attempt);
+            retryBind(attempt, endpointGeneration, recoverySerial);
             return;
         }
         binding = next;
@@ -1050,13 +1096,70 @@ final class LauncherGlassSession {
                 + geometry.bufferWidth + "x" + geometry.bufferHeight
                 + " insets=" + geometry.insetLeft + "," + geometry.insetTop
                 + "," + geometry.insetRight + "," + geometry.insetBottom);
+
+        if (workstationProducerRecovery.onBindSucceeded(recoverySerial, endpointGeneration)) {
+            logWorkstationProducerRecovery(
+                    workstationRecoveryReason, recoverySerial,
+                    LauncherGlassProducerRecoveryState.Result.ACCEPTED,
+                    "bind-succeeded", null);
+            scheduleWorkstationFreshFrameWatchdog(recoverySerial, endpointGeneration, 0);
+        }
         requestFrame(true);
     }
 
-    private void retryBind(int attempt) {
-        if (shuttingDown || binding != null || attempt >= MAX_BIND_RETRY_FRAMES) return;
+    private void retryBind(int attempt, long endpointGeneration, long recoverySerial) {
+        if (shuttingDown || binding != null || endpointGeneration != producerGeneration) return;
+        if (attempt >= MAX_BIND_RETRY_FRAMES) {
+            if (workstationProducerRecovery.isActive(recoverySerial)
+                    && workstationProducerRecovery.endpointGeneration() == endpointGeneration) {
+                failWorkstationRecovery(recoverySerial, "bind-exhausted", null);
+            }
+            return;
+        }
         View root = rootRef.get();
-        if (root != null) root.postOnAnimation(() -> bindProducerWhenReady(attempt + 1));
+        if (root == null) {
+            if (workstationProducerRecovery.isActive(recoverySerial)) {
+                failWorkstationRecovery(recoverySerial, "bind-root-unavailable", null);
+            }
+            return;
+        }
+        root.postOnAnimation(() -> {
+            if (shuttingDown || endpointGeneration != producerGeneration) return;
+            bindProducerWhenReady(attempt + 1);
+        });
+    }
+
+    private void scheduleWorkstationFreshFrameWatchdog(
+            long recoverySerial, long endpointGeneration, int attempt) {
+        if (!workstationProducerRecovery.isActive(recoverySerial)
+                || workstationProducerRecovery.endpointGeneration() != endpointGeneration) return;
+        if (attempt >= MAX_BIND_RETRY_FRAMES) {
+            failWorkstationRecovery(recoverySerial, "fresh-frame-exhausted", null);
+            return;
+        }
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) {
+            failWorkstationRecovery(recoverySerial, "fresh-frame-root-unavailable", null);
+            return;
+        }
+        root.postOnAnimation(() -> {
+            if (!workstationProducerRecovery.isActive(recoverySerial)
+                    || workstationProducerRecovery.endpointGeneration() != endpointGeneration) {
+                return;
+            }
+            scheduleWorkstationFreshFrameWatchdog(
+                    recoverySerial, endpointGeneration, attempt + 1);
+        });
+    }
+
+    private void completeWorkstationRecoveryOnFreshFrame(long endpointGeneration) {
+        long recoverySerial = workstationProducerRecovery.activeSerial();
+        if (recoverySerial <= 0L) return;
+        LauncherGlassProducerRecoveryState.Result terminal =
+                workstationProducerRecovery.onFreshFrame(recoverySerial, endpointGeneration);
+        if (terminal == null) return;
+        dispatchWorkstationRecoveryTerminal(
+                recoverySerial, terminal, "fresh-frame", null);
     }
 
     boolean suspendProducerForUnlockCapture() {
@@ -1088,53 +1191,154 @@ final class LauncherGlassSession {
         }, null);
     }
 
-    boolean rebindWorkstationProducer(String reason, long generation) {
+    LauncherGlassProducerRecoveryState.Result rebindWorkstationProducer(
+            String reason, long recoverySerial, ProducerRecoveryCompletion completion) {
+        String resolvedReason = reason != null ? reason : "workstation-recents";
         if (shuttingDown || !renderThread.isAlive()) {
-            logWorkstationProducerRollover(reason, generation, "REJECTED", "request", null);
-            return false;
+            logWorkstationProducerRecovery(
+                    resolvedReason, recoverySerial,
+                    LauncherGlassProducerRecoveryState.Result.REJECTED,
+                    "request", null);
+            return LauncherGlassProducerRecoveryState.Result.REJECTED;
         }
-        // Invalidate old main-thread finishBind callbacks before yielding back to the Looper.
+
+        LauncherGlassProducerRecoveryState.Result request =
+                workstationProducerRecovery.onRequest(recoverySerial);
+        if (request != LauncherGlassProducerRecoveryState.Result.ACCEPTED) {
+            logWorkstationProducerRecovery(
+                    resolvedReason, recoverySerial, request, "request", null);
+            return request;
+        }
+
+        synchronized (this) {
+            workstationRecoveryCompletion = completion;
+            workstationRecoveryCompletionSerial = recoverySerial;
+            workstationRecoveryReason = resolvedReason;
+        }
+        logWorkstationProducerRecovery(
+                resolvedReason, recoverySerial,
+                LauncherGlassProducerRecoveryState.Result.ACCEPTED,
+                rotationSettlePending ? "request-rotation-owner" : "request", null);
+
+        // Invalidate old main-thread finishBind callbacks before yielding back to either Looper.
         workstationBindEpoch++;
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
-        backdropPrepared = false;
+        invalidateBackdropFrameState();
+        clearWallpaperRequest();
+
+        if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
+                rotationSettlePending)) {
+            // Rotation already owns the endpoint transition. Its settle completion will create the
+            // one replacement endpoint and the common generation/bind/fresh milestones finish us.
+            return LauncherGlassProducerRecoveryState.Result.ACCEPTED;
+        }
+        return queueWorkstationEndpointRecreate(
+                resolvedReason, recoverySerial, true, "workstation-owner");
+    }
+
+    private LauncherGlassProducerRecoveryState.Result queueWorkstationEndpointRecreate(
+            String reason, long recoverySerial, boolean requestBoundary, String owner) {
         boolean queued = postRender(() -> {
+            if (!workstationProducerRecovery.isActive(recoverySerial)) return;
+            if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
+                    rotationSettlePending)) {
+                logWorkstationProducerRecovery(
+                        reason, recoverySerial,
+                        LauncherGlassProducerRecoveryState.Result.ACCEPTED,
+                        "deferred-to-rotation", null);
+                return;
+            }
             try {
                 if (shuttingDown) {
-                    logWorkstationProducerRollover(
-                            reason, generation, "FAILED", "shutdown", null);
+                    failWorkstationRecovery(recoverySerial, "shutdown", null);
                     return;
                 }
                 makePbufferCurrent();
                 releaseInputProducerEndpointOnRenderThread();
-                if (shuttingDown) {
-                    logWorkstationProducerRollover(
-                            reason, generation, "FAILED", "shutdown", null);
+                if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
+                        rotationSettlePending)) {
+                    logWorkstationProducerRecovery(
+                            reason, recoverySerial,
+                            LauncherGlassProducerRecoveryState.Result.ACCEPTED,
+                            "deferred-to-rotation", null);
                     return;
                 }
-                MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
+                if (shuttingDown) {
+                    failWorkstationRecovery(recoverySerial, "shutdown", null);
+                    return;
+                }
+                MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel()
+                        + " owner=" + owner + " recoverySerial=" + recoverySerial);
                 createInputProducer();
-                logWorkstationProducerRollover(
-                        reason, generation, "ACCEPTED", "endpoint-recreated", null);
             } catch (Throwable error) {
-                logWorkstationProducerRollover(
-                        reason, generation, "FAILED", "endpoint-recreate", error);
+                failWorkstationRecovery(recoverySerial, "endpoint-recreate", error);
             }
         }, null);
-        if (!queued) {
-            logWorkstationProducerRollover(
-                    reason, generation, "REJECTED", "request", null);
+
+        if (queued) return LauncherGlassProducerRecoveryState.Result.ACCEPTED;
+        if (requestBoundary) {
+            LauncherGlassProducerRecoveryState.Result rejected =
+                    workstationProducerRecovery.onRejected(recoverySerial);
+            if (rejected != null) {
+                logWorkstationProducerRecovery(
+                        reason, recoverySerial, rejected, "request", null);
+                clearWorkstationRecoveryCompletion(recoverySerial);
+            }
+            return LauncherGlassProducerRecoveryState.Result.REJECTED;
         }
-        return queued;
+        failWorkstationRecovery(recoverySerial, "endpoint-queue", null);
+        return LauncherGlassProducerRecoveryState.Result.FAILED;
     }
 
-    private void logWorkstationProducerRollover(
-            String reason, long generation, String result, String stage, Throwable error) {
+    private void failWorkstationRecovery(long recoverySerial, String stage, Throwable error) {
+        LauncherGlassProducerRecoveryState.Result failed =
+                workstationProducerRecovery.onFailure(recoverySerial);
+        if (failed == null) return;
+        dispatchWorkstationRecoveryTerminal(recoverySerial, failed, stage, error);
+    }
+
+    private void dispatchWorkstationRecoveryTerminal(
+            long recoverySerial, LauncherGlassProducerRecoveryState.Result result,
+            String stage, Throwable error) {
+        String reason = workstationRecoveryReason;
+        logWorkstationProducerRecovery(reason, recoverySerial, result, stage, error);
+
+        ProducerRecoveryCompletion completion = null;
+        synchronized (this) {
+            if (workstationRecoveryCompletionSerial == recoverySerial) {
+                completion = workstationRecoveryCompletion;
+                workstationRecoveryCompletion = null;
+                workstationRecoveryCompletionSerial = -1L;
+            }
+        }
+        if (completion == null) return;
+        ProducerRecoveryCompletion terminalCompletion = completion;
+        if (!mainHandler.post(() -> terminalCompletion.onComplete(result))) {
+            terminalCompletion.onComplete(result);
+        }
+    }
+
+    private void clearWorkstationRecoveryCompletion(long recoverySerial) {
+        synchronized (this) {
+            if (workstationRecoveryCompletionSerial != recoverySerial) return;
+            workstationRecoveryCompletion = null;
+            workstationRecoveryCompletionSerial = -1L;
+        }
+    }
+
+    private void logWorkstationProducerRecovery(
+            String reason, long recoverySerial,
+            LauncherGlassProducerRecoveryState.Result result, String stage, Throwable error) {
         MainHook.log(TAG + "[ProducerRecovery] reason=" + reason
                 + " session=" + diagnosticSessionId()
-                + " generation=" + generation
+                + " producerGeneration=" + producerGeneration
+                + " recoverySerial=" + recoverySerial
                 + " result=" + result + " stage=" + stage
+                + " endpointRecreated=" + workstationProducerRecovery.endpointRecreated()
+                + " bindSucceeded=" + workstationProducerRecovery.bindSucceeded()
+                + " freshFrameArrived=" + workstationProducerRecovery.freshFrameArrived()
                 + (error != null ? " error=" + error : ""));
     }
 
@@ -1349,6 +1553,10 @@ final class LauncherGlassSession {
 
     void shutdown() {
         if (shuttingDown) return;
+        long recoverySerial = workstationProducerRecovery.activeSerial();
+        if (recoverySerial > 0L) {
+            failWorkstationRecovery(recoverySerial, "shutdown", null);
+        }
         MainHook.log(TAG + " shutdown " + debugLabel());
         shuttingDown = true;
         rotationSettleSerial++;

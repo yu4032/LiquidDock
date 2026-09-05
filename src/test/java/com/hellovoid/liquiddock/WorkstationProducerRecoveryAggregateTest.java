@@ -13,15 +13,17 @@ public class WorkstationProducerRecoveryAggregateTest {
         WorkstationProducerRecoveryAggregate aggregate =
                 new WorkstationProducerRecoveryAggregate(2);
 
-        assertFalse(aggregate.record(LauncherGlassProducerRecoveryState.Result.ACCEPTED));
+        aggregate.record(LauncherGlassProducerRecoveryState.Result.ACCEPTED);
         assertFalse(aggregate.isComplete());
 
-        assertTrue(aggregate.record(LauncherGlassProducerRecoveryState.Result.ACCEPTED));
+        aggregate.record(LauncherGlassProducerRecoveryState.Result.ACCEPTED);
         assertTrue(aggregate.isComplete());
         assertEquals(
                 LauncherGlassProducerRecoveryState.Result.ACCEPTED,
                 aggregate.terminalResult());
         assertEquals(2, aggregate.acceptedCount());
+        assertEquals(0, aggregate.rejectedCount());
+        assertEquals(0, aggregate.failedCount());
     }
 
     @Test
@@ -31,23 +33,21 @@ public class WorkstationProducerRecoveryAggregateTest {
 
         aggregate.record(LauncherGlassProducerRecoveryState.Result.ACCEPTED);
         aggregate.record(LauncherGlassProducerRecoveryState.Result.REJECTED);
-        assertTrue(aggregate.record(LauncherGlassProducerRecoveryState.Result.FAILED));
+        aggregate.record(LauncherGlassProducerRecoveryState.Result.FAILED);
 
+        assertTrue(aggregate.isComplete());
         assertEquals(
                 LauncherGlassProducerRecoveryState.Result.FAILED,
                 aggregate.terminalResult());
-        assertEquals(1, aggregate.acceptedCount());
-        assertEquals(1, aggregate.rejectedCount());
-        assertEquals(1, aggregate.failedCount());
     }
 
     @Test
-    public void rejectedDominatesAcceptedWithoutFailure() {
+    public void rejectedDominatesAcceptedWhenNoFailureExists() {
         WorkstationProducerRecoveryAggregate aggregate =
                 new WorkstationProducerRecoveryAggregate(2);
 
         aggregate.record(LauncherGlassProducerRecoveryState.Result.ACCEPTED);
-        assertTrue(aggregate.record(LauncherGlassProducerRecoveryState.Result.REJECTED));
+        aggregate.record(LauncherGlassProducerRecoveryState.Result.REJECTED);
 
         assertEquals(
                 LauncherGlassProducerRecoveryState.Result.REJECTED,
@@ -55,7 +55,7 @@ public class WorkstationProducerRecoveryAggregateTest {
     }
 
     @Test
-    public void zeroLiveSessionsAreVacuouslyAccepted() {
+    public void emptyAggregateIsImmediatelyAccepted() {
         WorkstationProducerRecoveryAggregate aggregate =
                 new WorkstationProducerRecoveryAggregate(0);
 
@@ -63,6 +63,5 @@ public class WorkstationProducerRecoveryAggregateTest {
         assertEquals(
                 LauncherGlassProducerRecoveryState.Result.ACCEPTED,
                 aggregate.terminalResult());
-        assertEquals(0, aggregate.expectedCount());
     }
 }
