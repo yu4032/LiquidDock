@@ -1,8 +1,11 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import io.github.libxposed.api.XposedInterface;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -73,11 +76,23 @@ public class HookUtilArchitectureContractTest {
                 offenders.isEmpty());
     }
 
-    @Test public void forwardedClassArrayUsesExplicitObjectVarargsSemantics() throws Exception {
-        String source = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
-        assertTrue("Class<?>[] forwarding into HookUtil Object... must be explicitly cast to Object[] "
-                        + "so javac and the hook resolver agree that each Class<?> is one parameter spec",
-                source.contains("}, (Object[]) parameterTypes);"));
+    @Test public void classArrayForwardingHasAnExactPackageBoundary() throws Exception {
+        Method overload = HookUtil.class.getDeclaredMethod(
+                "hookMethod",
+                ClassLoader.class,
+                String.class,
+                String.class,
+                XposedInterface.Hooker.class,
+                Class[].class);
+        assertNotNull(overload);
+        assertFalse("Class<?>[] forwarding overload should remain package-private rather than expand "
+                        + "the public HookUtil API",
+                java.lang.reflect.Modifier.isPublic(overload.getModifiers()));
+
+        String source = Files.readString(MAIN.resolve("HookUtil.java"));
+        assertTrue("the exact Class<?>[] overload must explicitly forward each class as an Object "
+                        + "parameter spec into the existing resolver",
+                source.contains("(Object[]) paramTypeSpecs"));
     }
 
     @Test public void legacyCompatibilityApiIsRemoved() throws Exception {
