@@ -8,11 +8,18 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.Test;
 
 /** Architecture gate: persisted ConfigKey construction is owned by ConfigSchema. */
 public class ConfigKeyOwnershipContractTest {
+    private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
+
     @Test
     public void configKeyConstructionRequiresPrivateConfigSchemaAuthority() throws Exception {
         for (Constructor<?> constructor : ConfigKey.class.getDeclaredConstructors()) {
@@ -64,5 +71,30 @@ public class ConfigKeyOwnershipContractTest {
         }
         assertTrue("ConfigSchema must own the registration authority instance",
                 foundAuthorityInstance);
+
+        for (Method method : ConfigSchema.class.getDeclaredMethods()) {
+            if (!method.getReturnType().equals(authority)) continue;
+            assertTrue("ConfigSchema must never expose its registration authority",
+                    Modifier.isPrivate(method.getModifiers()));
+        }
+    }
+
+    @Test
+    public void productionRegistrationCallsStayInsideConfigSchema() throws Exception {
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(MAIN)) {
+            for (Path file : (Iterable<Path>) files
+                    .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"))
+                    ::iterator) {
+                if (file.getFileName().toString().equals("ConfigSchema.java")) continue;
+                String source = Files.readString(file);
+                if (source.contains("ConfigKey.register(")) {
+                    offenders.add(MAIN.relativize(file).toString());
+                }
+            }
+        }
+        assertTrue("persisted ConfigKey registration must remain centralized in ConfigSchema: "
+                        + offenders,
+                offenders.isEmpty());
     }
 }
