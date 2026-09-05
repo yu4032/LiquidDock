@@ -84,6 +84,12 @@ final class GlassRuntimeState {
     static boolean isSmallFolderEnabled() { return enabled && smallFolderEnabled; }
     static boolean isLargeFolderEnabled() { return enabled && largeFolderEnabled; }
 
+    private static GlassRuntimeTransitionPolicy.Snapshot snapshot() {
+        return new GlassRuntimeTransitionPolicy.Snapshot(
+                isEnabled(), isIconEnabled(), isWidgetEnabled(), isWidgetDarkContentEnabled(),
+                isSmallFolderEnabled(), isLargeFolderEnabled());
+    }
+
     private static void apply(
             boolean nextEnabled,
             boolean nextIconEnabled,
@@ -91,12 +97,6 @@ final class GlassRuntimeState {
             boolean nextWidgetDarkContentEnabled,
             boolean nextSmallFolderEnabled,
             boolean nextLargeFolderEnabled) {
-        boolean wasEnabled = enabled;
-        boolean wasIconEnabled = isIconEnabled();
-        boolean wasWidgetEnabled = isWidgetEnabled();
-        boolean wasWidgetDarkContentEnabled = isWidgetDarkContentEnabled();
-        boolean wasSmallFolderEnabled = isSmallFolderEnabled();
-        boolean wasLargeFolderEnabled = isLargeFolderEnabled();
         if (enabled == nextEnabled
                 && iconEnabled == nextIconEnabled
                 && widgetEnabled == nextWidgetEnabled
@@ -104,25 +104,25 @@ final class GlassRuntimeState {
                 && smallFolderEnabled == nextSmallFolderEnabled
                 && largeFolderEnabled == nextLargeFolderEnabled) return;
 
+        GlassRuntimeTransitionPolicy.Snapshot before = snapshot();
+
         enabled = nextEnabled;
         iconEnabled = nextIconEnabled;
         widgetEnabled = nextWidgetEnabled;
         widgetDarkContentEnabled = nextWidgetDarkContentEnabled;
         smallFolderEnabled = nextSmallFolderEnabled;
         largeFolderEnabled = nextLargeFolderEnabled;
-        boolean nextLiveIconEnabled = isIconEnabled();
-        boolean nextLiveWidgetEnabled = isWidgetEnabled();
-        boolean nextLiveWidgetDarkContentEnabled = isWidgetDarkContentEnabled();
-        boolean nextLiveSmallFolderEnabled = isSmallFolderEnabled();
-        boolean nextLiveLargeFolderEnabled = isLargeFolderEnabled();
-        MainHook.log("[DC][GlassRuntime] enabled=" + enabled
-                + " iconEnabled=" + nextLiveIconEnabled
-                + " widgetEnabled=" + nextLiveWidgetEnabled
-                + " widgetDarkContentEnabled=" + nextLiveWidgetDarkContentEnabled
-                + " smallFolderEnabled=" + nextLiveSmallFolderEnabled
-                + " largeFolderEnabled=" + nextLiveLargeFolderEnabled);
 
-        if (wasEnabled && !nextEnabled) {
+        GlassRuntimeTransitionPolicy.Transition transition =
+                GlassRuntimeTransitionPolicy.plan(before, snapshot());
+        MainHook.log("[DC][GlassRuntime] enabled=" + enabled
+                + " iconEnabled=" + isIconEnabled()
+                + " widgetEnabled=" + isWidgetEnabled()
+                + " widgetDarkContentEnabled=" + isWidgetDarkContentEnabled()
+                + " smallFolderEnabled=" + isSmallFolderEnabled()
+                + " largeFolderEnabled=" + isLargeFolderEnabled());
+
+        if (transition.fullTeardown) {
             runOnMain(() -> {
                 MiuixFolderGlassHook.onRuntimeGlassDisabled();
                 MiuixLauncherStaticGlassHook.onRuntimeGlassDisabled();
@@ -139,34 +139,34 @@ final class GlassRuntimeState {
             return;
         }
 
-        if (wasIconEnabled && !nextLiveIconEnabled) {
+        if (transition.iconRelease) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeIconGlassDisabled();
                 MiuixLauncherDragOverlayHook.onRuntimeIconGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] icon glass ownership released");
             });
         }
-        if (wasWidgetEnabled && !nextLiveWidgetEnabled) {
+        if (transition.widgetRelease) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] widget glass ownership released");
             });
         }
-        if (wasWidgetDarkContentEnabled != nextLiveWidgetDarkContentEnabled) {
+        if (transition.widgetDarkContentChanged) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeWidgetDarkContentChanged(
-                        nextLiveWidgetDarkContentEnabled);
+                        transition.nextWidgetDarkContent);
                 MainHook.log("[DC][GlassRuntime] widget dark-content="
-                        + nextLiveWidgetDarkContentEnabled);
+                        + transition.nextWidgetDarkContent);
             });
         }
-        if (wasSmallFolderEnabled && !nextLiveSmallFolderEnabled) {
+        if (transition.smallFolderRelease) {
             runOnMain(() -> {
                 MiuixFolderGlassHook.onRuntimeSmallFolderGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] small-folder glass ownership released");
             });
         }
-        if (wasLargeFolderEnabled && !nextLiveLargeFolderEnabled) {
+        if (transition.largeFolderRelease) {
             runOnMain(() -> {
                 MiuixFolderGlassHook.onRuntimeLargeFolderGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] large-folder glass ownership released");
