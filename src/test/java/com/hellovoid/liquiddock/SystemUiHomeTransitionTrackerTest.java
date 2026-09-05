@@ -68,4 +68,86 @@ public class SystemUiHomeTransitionTrackerTest {
         tracker.recordCurrentReadyVisibility(true);
         assertEquals(null, tracker.onStarting(new Object()));
     }
+
+    @Test public void unstartedMergedHomeSourcePublishesStartAtMergeAndFinishesOnTarget() {
+        SystemUiHomeTransitionTracker tracker = new SystemUiHomeTransitionTracker();
+        Object source = new Object();
+        Object target = new Object();
+
+        tracker.beginReady(source);
+        tracker.recordCurrentReadyVisibility(true);
+        tracker.endReady();
+
+        SystemUiHomeTransitionTracker.Event mergedStart = tracker.onMerged(source, target);
+        assertNotNull(mergedStart);
+        assertTrue(mergedStart.homeVisible());
+        assertTrue(mergedStart.serial() > 0L);
+        assertEquals(null, tracker.onStarting(target));
+
+        SystemUiHomeTransitionTracker.Event finish = tracker.onFinished(target);
+        assertNotNull(finish);
+        assertTrue(finish.homeVisible());
+        assertEquals(mergedStart.serial(), finish.serial());
+    }
+
+    @Test public void newerMergedHomeSourceSupersedesOlderPlayingTargetClassification() {
+        SystemUiHomeTransitionTracker tracker = new SystemUiHomeTransitionTracker();
+        Object target = new Object();
+        Object source = new Object();
+
+        tracker.beginReady(target);
+        tracker.recordCurrentReadyVisibility(false);
+        tracker.endReady();
+        SystemUiHomeTransitionTracker.Event oldStart = tracker.onStarting(target);
+        assertNotNull(oldStart);
+        assertFalse(oldStart.homeVisible());
+
+        tracker.beginReady(source);
+        tracker.recordCurrentReadyVisibility(true);
+        tracker.endReady();
+        SystemUiHomeTransitionTracker.Event mergedStart = tracker.onMerged(source, target);
+
+        assertNotNull(mergedStart);
+        assertTrue(mergedStart.homeVisible());
+        assertTrue(mergedStart.serial() > oldStart.serial());
+
+        SystemUiHomeTransitionTracker.Event finish = tracker.onFinished(target);
+        assertNotNull(finish);
+        assertTrue(finish.homeVisible());
+        assertEquals(mergedStart.serial(), finish.serial());
+    }
+
+    @Test public void targetFinishUsesSameSerialPublishedAtMerge() {
+        SystemUiHomeTransitionTracker tracker = new SystemUiHomeTransitionTracker();
+        Object source = new Object();
+        Object target = new Object();
+
+        tracker.beginReady(source);
+        tracker.recordCurrentReadyVisibility(true);
+        tracker.endReady();
+        SystemUiHomeTransitionTracker.Event mergedStart = tracker.onMerged(source, target);
+        SystemUiHomeTransitionTracker.Event finish = tracker.onFinished(target);
+
+        assertNotNull(mergedStart);
+        assertNotNull(finish);
+        assertEquals(mergedStart.serial(), finish.serial());
+        assertEquals(mergedStart.homeVisible(), finish.homeVisible());
+    }
+
+    @Test public void alreadyStartedSourceDoesNotPublishDuplicateStartWhenMerged() {
+        SystemUiHomeTransitionTracker tracker = new SystemUiHomeTransitionTracker();
+        Object source = new Object();
+        Object target = new Object();
+
+        tracker.beginReady(source);
+        tracker.recordCurrentReadyVisibility(true);
+        tracker.endReady();
+        SystemUiHomeTransitionTracker.Event start = tracker.onStarting(source);
+        assertNotNull(start);
+
+        assertEquals(null, tracker.onMerged(source, target));
+        SystemUiHomeTransitionTracker.Event finish = tracker.onFinished(target);
+        assertNotNull(finish);
+        assertEquals(start.serial(), finish.serial());
+    }
 }
