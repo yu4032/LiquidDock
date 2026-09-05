@@ -9,8 +9,13 @@ final class LauncherGlassProducerTransitionPolicy {
         return surfaceChanged || previousRotation != nextRotation;
     }
 
-    /** Rotation owns the endpoint transition while its Shell settle barrier is active. */
+    /** Rotation owns the explicit endpoint transition while its Shell settle barrier is active. */
     static boolean workstationCanOwnEndpointTransition(boolean rotationTransitionPending) {
         return !rotationTransitionPending;
+    }
+
+    /** Generic EGL/bootstrap work may create an endpoint only when no explicit transition owns it. */
+    static boolean canCreateProducerEndpoint(boolean explicitTransitionOwned) {
+        return !explicitTransitionOwned;
     }
 }
