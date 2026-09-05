@@ -26,9 +26,8 @@ final class LauncherGlassHomePresentationHook {
     private static long lastSystemUiHomeEventElapsedNanos = -1L;
     private static long lastLauncherHomeEndElapsedNanos = -1L;
 
-    private static volatile boolean unlockTransitionArmed;
-    private static long unlockTransitionSerial;
-    private static long unlockReleaseScheduledSerial = -1L;
+    private static final UnlockCaptureRecoveryState UNLOCK_RECOVERY =
+            new UnlockCaptureRecoveryState();
 
     private LauncherGlassHomePresentationHook() {}
 
@@ -205,7 +204,7 @@ final class LauncherGlassHomePresentationHook {
                     if (launcher instanceof Context) {
                         SystemUiKeyguardGoneRuntime.ensureRegistered((Context) launcher);
                     }
-                    armUnlockCapture("Launcher/PREPARE");
+                    applyUnlockDecision(UNLOCK_RECOVERY.onPrepare(), "Launcher/PREPARE");
                 }
                 return chain.proceed(args);
             }, "com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE");
@@ -215,44 +214,50 @@ final class LauncherGlassHomePresentationHook {
         }
     }
 
-    private static void armUnlockCapture(String reason) {
-        unlockTransitionSerial++;
-        unlockReleaseScheduledSerial = -1L;
-        unlockTransitionArmed = true;
-        LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
-        LauncherGlassSessionRegistry.suspendForUnlockCapture();
-        MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
-                + " serial=" + unlockTransitionSerial);
-    }
-
     /** Sole unlock capture boundary: SystemUI LOCKSCREEN -> GONE FINISHED. */
     static void onSystemUiLockscreenGoneFinished() {
-        if (!unlockTransitionArmed) {
-            // PREPARE can be skipped on vendor edge paths. Fail closed before rebuilding so the
-            // old lockscreen-backed OES generation can never be reused.
-            armUnlockCapture("SystemUI/FINISHED-failsafe-arm");
-        }
-        final long serial = unlockTransitionSerial;
-        if (unlockReleaseScheduledSerial == serial) return;
-        unlockReleaseScheduledSerial = serial;
-
-        MainHook.log(TAG + " SystemUI LOCKSCREEN->GONE FINISHED; rebuilding wallpaper endpoint"
-                + " serial=" + serial);
-        LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(() -> {
-            if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
-            finishUnlockBarrierNow("SystemUI LOCKSCREEN->GONE FINISHED/endpoint-rolled");
-        });
+        UnlockCaptureRecoveryState.Decision decision = UNLOCK_RECOVERY.onSystemUiGoneFinished();
+        applyUnlockDecision(decision, decision.suspendProducers
+                ? "SystemUI/FINISHED-failsafe-arm"
+                : "SystemUI LOCKSCREEN->GONE FINISHED");
     }
 
     static boolean isUnlockCaptureBlocked() {
-        return unlockTransitionArmed;
+        return UNLOCK_RECOVERY.isBlocked();
     }
 
-    private static void finishUnlockBarrierNow(String reason) {
-        if (!unlockTransitionArmed) return;
-        unlockTransitionArmed = false;
-        unlockReleaseScheduledSerial = -1L;
-        MainHook.log(TAG + " unlock wallpaper capture released: " + reason);
+    private static void applyUnlockDecision(
+            UnlockCaptureRecoveryState.Decision decision, String reason) {
+        if (decision == null) return;
+        if (decision.suspendProducers) {
+            LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
+            LauncherGlassSessionRegistry.suspendForUnlockCapture();
+            MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
+                    + " serial=" + decision.serial);
+        }
+        if (!decision.requestRollover) return;
+
+        final long serial = decision.serial;
+        MainHook.log(TAG + " SystemUI LOCKSCREEN->GONE FINISHED; rebuilding wallpaper endpoint"
+                + " serial=" + serial);
+        LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(success -> {
+            UnlockCaptureRecoveryState.Decision finished =
+                    UNLOCK_RECOVERY.onRolloverFinished(serial, success);
+            if (!finished.releaseBarrier) {
+                if (!success) {
+                    MainHook.log(TAG + " unlock endpoint rollover failed; capture remains blocked"
+                            + " serial=" + serial);
+                }
+                return;
+            }
+            finishUnlockBarrierNow(
+                    "SystemUI LOCKSCREEN->GONE FINISHED/endpoint-rolled", finished.serial);
+        });
+    }
+
+    private static void finishUnlockBarrierNow(String reason, long serial) {
+        MainHook.log(TAG + " unlock wallpaper capture released: " + reason
+                + " serial=" + serial);
         // SceneController keeps the glass hidden until the first fresh producer generation lands.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
     }
