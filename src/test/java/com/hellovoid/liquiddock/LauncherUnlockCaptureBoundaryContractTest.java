@@ -52,6 +52,21 @@ public class LauncherUnlockCaptureBoundaryContractTest {
                 "binding.launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()"));
     }
 
+    @Test public void unlockProducerRolloverUsesTypedSessionLifecycle() throws Exception {
+        String registry = read("LauncherGlassSessionRegistry.java");
+        String session = read("LauncherGlassSession.java");
+
+        assertTrue(session.contains("boolean suspendProducerForUnlockCapture()"));
+        assertTrue(session.contains("boolean rebindProducer(Runnable rolloverComplete)"));
+        assertTrue(registry.contains("session.suspendProducerForUnlockCapture()"));
+        assertTrue(registry.contains("session.rebindProducer(completeOne)"));
+        assertFalse(registry.contains("HookUtil.getField(session, \"binding\")"));
+        assertFalse(registry.contains("HookUtil.findMethodExact("));
+        assertFalse(registry.contains("renderHandler"));
+        assertTrue(registry.contains("failed.set(true)"));
+        assertTrue(registry.contains("main.post(completeOne)"));
+    }
+
     @Test public void systemUiSourceUsesSemanticGoneFinishedBoundary() throws Exception {
         String source = read("SystemUiKeyguardGoneSource.java");
         String policy = read("SystemUiKeyguardGonePolicy.java");
