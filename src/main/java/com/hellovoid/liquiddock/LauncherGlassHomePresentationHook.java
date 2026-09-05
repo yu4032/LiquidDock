@@ -7,7 +7,7 @@ import android.os.SystemClock;
 final class LauncherGlassHomePresentationHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String WINDOW_ELEMENT = "com.miui.home.recents.anim.WindowElement";
-    private static final String HOME_END_CALLBACK =
+    private static final String HOME_ANIMATION_CALLBACK =
             "com.miui.home.recents.anim.WindowElement$mRectFSpringAnimListener$1";
     private static final String CLOSE_TO_HOME = "CLOSE_TO_HOME";
     private static final String CLOSE_TO_HOME_CENTER = "CLOSE_TO_HOME_CENTER";
@@ -27,6 +27,7 @@ final class LauncherGlassHomePresentationHook {
     static void install(ClassLoader classLoader) {
         if (installed) return;
         hookHomeStart(classLoader);
+        hookHomeAnimationStart(classLoader);
         hookHomeEnd(classLoader);
         hookUnlockState(classLoader);
         LauncherWidgetTransitionHook.install(classLoader);
@@ -44,11 +45,11 @@ final class LauncherGlassHomePresentationHook {
 
                 Object result = chain.proceed(args);
                 if (closeToHome && HOME_AUTHORITY.shouldRevealFromLauncherFallback()) {
-                    // Fallback only: SystemUI START normally reveals earlier, before WMShell starts
-                    // its transition animation. If that cross-process signal is unavailable, retain
-                    // the proven Launcher 4.50 WindowElement timing rather than leaving glass hidden.
+                    // Fallback only: when SystemUI HOME START is unavailable, retain the proven
+                    // Launcher 4.50 WindowElement timing. The precise local presentation edge is
+                    // still the RectFSpringAnim onAnimationStart hook below.
                     LauncherGlassSceneController.beginHomeReturnRevealForAll();
-                    MainHook.log(TAG + " APP HOME reveal started by Launcher fallback");
+                    MainHook.log(TAG + " APP HOME reveal armed by Launcher fallback");
                 }
                 return result;
             }, Object.class);
@@ -57,9 +58,29 @@ final class LauncherGlassHomePresentationHook {
         }
     }
 
+    private static void hookHomeAnimationStart(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, HOME_ANIMATION_CALLBACK, "onAnimationStart", chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object animation = args.length > 0 ? args[0] : null;
+                if (isHomeCloseAnimation(animation)) {
+                    HomeTransitionAuthorityState.Decision decision =
+                            HOME_AUTHORITY.onLauncherHomeAnimationStarted();
+                    if (decision.beginReveal) {
+                        LauncherGlassSceneController.beginHomeReturnRevealForAll();
+                        MainHook.log(TAG + " APP HOME reveal started by Launcher spring");
+                    }
+                }
+                return chain.proceed(args);
+            }, "com.miui.home.recents.util.RectFSpringAnim");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " HOME spring start unavailable: " + error);
+        }
+    }
+
     private static void hookHomeEnd(ClassLoader classLoader) {
         try {
-            HookUtil.hookMethod(classLoader, HOME_END_CALLBACK, "onAnimationEnd", chain -> {
+            HookUtil.hookMethod(classLoader, HOME_ANIMATION_CALLBACK, "onAnimationEnd", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 HomeTransitionAuthorityState.Decision decision =
                         HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
@@ -138,6 +159,15 @@ final class LauncherGlassHomePresentationHook {
             if (token.contains(CLOSE_TO_HOME_CENTER) || token.contains(CLOSE_TO_HOME)) return true;
         }
         return false;
+    }
+
+    private static boolean isHomeCloseAnimation(Object animation) {
+        if (animation == null) return false;
+        HookUtil.InvocationResult<Object> typeResult =
+                HookUtil.tryInvoke(animation, "getCancelAnimType");
+        if (!typeResult.succeeded()) return false;
+        String token = String.valueOf(typeResult.value());
+        return token.contains(CLOSE_TO_HOME_CENTER) || token.contains(CLOSE_TO_HOME);
     }
 
     /**
