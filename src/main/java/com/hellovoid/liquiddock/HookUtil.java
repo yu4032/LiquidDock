@@ -317,41 +317,4 @@ public final class HookUtil {
         }
         return Collections.unmodifiableList(labels);
     }
-
-    // ── Temporary compatibility API, removed after call-site migration ──
-
-    public static Method findMethodBestMatch(Class<?> clazz, String name,
-                                             Object[] args, boolean requireStatic) {
-        VendorMemberResolver.MethodResolution resolution =
-                VendorMemberResolver.resolveMethod(clazz, name,
-                        args == null ? new Object[0] : args, requireStatic);
-        if (!resolution.resolved()) {
-            throw new RuntimeException("method resolution failed: " + clazz.getName()
-                    + "#" + name + " status=" + resolution.status()
-                    + " candidates=" + resolution.candidateSignatures(),
-                    resolution.cause());
-        }
-        return resolution.method();
-    }
-
-    /** @deprecated migrate to tryInvoke/requireInvoke. */
-    @Deprecated
-    public static Object invoke(Object target, String methodName, Object... args) {
-        InvocationResult<Object> result = tryInvoke(target, methodName, args);
-        return result.succeeded() ? result.value() : null;
-    }
-
-    /** @deprecated migrate to tryInvokeStatic/requireInvokeStatic. */
-    @Deprecated
-    public static Object invokeStatic(Class<?> clazz, String methodName, Object... args) {
-        InvocationResult<Object> result = tryInvokeStatic(clazz, methodName, args);
-        return result.succeeded() ? result.value() : null;
-    }
-
-    /** @deprecated migrate to tryInvokeStatic/requireInvokeStatic. */
-    @Deprecated
-    public static Object invokeStatic(String className, String methodName, Object... args) {
-        InvocationResult<Object> result = tryInvokeStatic(className, methodName, args);
-        return result.succeeded() ? result.value() : null;
-    }
 }
