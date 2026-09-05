@@ -3,8 +3,10 @@ package com.hellovoid.liquiddock.config;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -192,8 +194,42 @@ public class ConfigCodecTest {
         assertEquals(Boolean.TRUE, exported.get("liquid_dimensions_dp"));
     }
 
-    @Test public void absentPreferencesExportCompleteHistoricalDefaults() {
- Map<String,Object> e=ConfigCodec.exportValues(new HashMap<>()); assertEquals(170,e.size()); assertEquals(Boolean.FALSE,e.get("liquid_glass")); assertEquals(Boolean.FALSE,e.get("liquid_widget_dark_content")); assertEquals(Boolean.TRUE,e.get("liquid_folder_glass")); assertFalse(e.containsKey("liquid_folder_corner_radius")); assertEquals(Boolean.TRUE,e.get("liquid_small_folder_glass")); assertEquals(Boolean.TRUE,e.get("liquid_large_folder_glass")); assertEquals(0.0d,((Number)e.get("liquid_icon_size_offset")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("liquid_widget_corner_radius")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("liquid_small_folder_corner_radius")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("liquid_large_folder_corner_radius")).doubleValue(),.0001d); assertEquals(0.0d,((Number)e.get("workstation_dock_icon_glass_corner_radius")).doubleValue(),.0001d); assertEquals(100,e.get("recents_background_blur_percent")); assertEquals(450,e.get("animation_workspace_visibility_ms")); assertEquals(300,e.get("animation_settings_page_ms"));
+    @Test
+    public void absentPreferencesExportCompleteHistoricalDefaultsFromSchema() {
+        Map<String, Object> exported = ConfigCodec.exportValues(new HashMap<>());
+        Set<String> expectedAlwaysKeys = new HashSet<>();
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (key.exportMode() == ConfigKey.ExportMode.ALWAYS) {
+                expectedAlwaysKeys.add(key.name());
+            }
+        }
+
+        assertEquals(expectedAlwaysKeys, exported.keySet());
+        assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.ENABLED.name()));
+        assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.MIUIX_307_PIPELINE.name()));
+        assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.WIDGET_DARK_CONTENT.name()));
+        assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.FOLDER_GLASS.name()));
+        assertFalse(exported.containsKey(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name()));
+        assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name()));
+        assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name()));
+        assertEquals(0.0d,
+                ((Number) exported.get(ConfigSchema.Glass.ICON_SIZE_OFFSET.name())).doubleValue(),
+                0.0001d);
+        assertEquals(0.0d,
+                ((Number) exported.get(ConfigSchema.Glass.WIDGET_CORNER_RADIUS.name())).doubleValue(),
+                0.0001d);
+        assertEquals(0.0d,
+                ((Number) exported.get(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name())).doubleValue(),
+                0.0001d);
+        assertEquals(0.0d,
+                ((Number) exported.get(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name())).doubleValue(),
+                0.0001d);
+        assertEquals(0.0d,
+                ((Number) exported.get(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.name())).doubleValue(),
+                0.0001d);
+        assertEquals(100, exported.get(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()));
+        assertEquals(450, exported.get(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name()));
+        assertEquals(300, exported.get(ConfigSchema.Animation.SETTINGS_PAGE.name()));
     }
 
     @Test
