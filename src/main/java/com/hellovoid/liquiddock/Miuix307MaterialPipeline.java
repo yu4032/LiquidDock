@@ -304,7 +304,7 @@ final class Miuix307MaterialPipeline {
                             if (MainHook.isWorkstationMode()) {
                                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
                             }
-                            int itemCount = (Integer) HookUtil.invoke(
+                            int itemCount = (Integer) HookUtil.requireInvoke(
                                     chain.getThisObject(), "getItemCount");
                             Object[] args = chain.getArgs().toArray(new Object[0]);
                             if (itemCount > 0) args[1] = (Integer) args[1] + spacing * 2 * itemCount;
@@ -694,13 +694,13 @@ final class Miuix307MaterialPipeline {
 
         // New Launcher exposes whichever material background is currently active. Theme packs can
         // switch between the MiuiX implementation and BlurBackground2 without restarting Launcher.
-        try {
-            Object value = HookUtil.invoke(hotSeats, "getHotSeatsBackground");
-            if (value instanceof View && isSupportedBackground((View) value)) {
-                MainHook.log("[DC] getHotSeatsBackground returned " + value.getClass().getName());
-                return (View) value;
-            }
-        } catch (Throwable ignored) {}
+        HookUtil.InvocationResult<Object> backgroundResult =
+                HookUtil.tryInvoke(hotSeats, "getHotSeatsBackground");
+        Object value = backgroundResult.succeeded() ? backgroundResult.value() : null;
+        if (value instanceof View && isSupportedBackground((View) value)) {
+            MainHook.log("[DC] getHotSeatsBackground returned " + value.getClass().getName());
+            return (View) value;
+        }
 
         return hotSeats instanceof View ? findBackground((View) hotSeats) : null;
     }

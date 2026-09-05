@@ -324,11 +324,12 @@ final class DockStrokeRenderer {
                 ? Color.argb(Math.max(0, Math.min(255, style.shadowAlpha)), 0, 0, 0)
                 : Color.TRANSPARENT;
         float radius = enabled ? style.shadowRadiusPx : 0f;
-        try {
-            HookUtil.invokeStatic("com.miui.home.launcher.common.MiShadowUtils",
-                    "applyViewShadow", host, color, 0f, 0f, radius, 1f);
-        } catch (Throwable error) {
-            MainHook.log("[DC] native stroke outer shadow unavailable: " + error);
+        HookUtil.InvocationResult<Object> shadowResult = HookUtil.tryInvokeStatic(
+                "com.miui.home.launcher.common.MiShadowUtils",
+                "applyViewShadow", host, color, 0f, 0f, radius, 1f);
+        if (!shadowResult.succeeded()) {
+            MainHook.log("[DC] native stroke outer shadow unavailable: "
+                    + shadowResult.failure());
         }
     }
 
