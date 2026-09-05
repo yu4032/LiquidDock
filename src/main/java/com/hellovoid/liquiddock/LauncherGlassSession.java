@@ -107,7 +107,6 @@ final class LauncherGlassSession {
             this.generation = generation;
             this.authoritative = authoritative;
         }
-
     }
 
     private static final class NodeState {
@@ -119,7 +118,6 @@ final class LauncherGlassSession {
             sinkRef = new WeakReference<>(sink);
         }
     }
-
 
     private static final class StaticNodeState {
         final WeakReference<LauncherGlassStaticNode> nodeRef;
@@ -309,7 +307,6 @@ final class LauncherGlassSession {
         requestDragRedraw();
     }
 
-
     void registerStaticNode(LauncherGlassStaticNode node) {
         if (node == null || shuttingDown) return;
         synchronized (staticNodes) {
@@ -429,8 +426,6 @@ final class LauncherGlassSession {
             return;
         }
 
-        // ViewRootImpl replacement does not necessarily detach the stable DecorView, so the old
-        // ViewTreeObserver can die without the root attach listener firing. Reinstall it here.
         installRootObserver();
         ProducerGeometry geometry = readSurfaceGeometry(root);
         if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
@@ -458,8 +453,6 @@ final class LauncherGlassSession {
 
         current = binding;
         if (current == null) {
-            // Startup may reach the fresh boundary before EGL/input creation; a Surface rebind can
-            // also already be pending. Start exactly one existing bootstrap/rebind path.
             if (inputSurfaceTexture == null || inputProducerSurface == null) requestFrame(true);
             else bindProducerWhenReady(0);
             return;
@@ -549,7 +542,6 @@ final class LauncherGlassSession {
             else if (surface != null) surface.release();
         }, () -> { if (surface != null) surface.release(); });
     }
-
 
     void attachStaticOutput(Surface surface, int width, int height) {
         if (surface == null) return;
@@ -747,15 +739,8 @@ final class LauncherGlassSession {
                     + "," + geometry.insetRight + "," + geometry.insetBottom);
         }
 
-        // Rotation changes SurfaceFlinger's orientation/crop generation. A Workspace producer is
-        // one-shot, so never let the first post-rotation buffer come through an endpoint that was
-        // registered under the previous orientation. Rollover establishes default buffer size
-        // before SetPassBlurSurface binds the new endpoint.
         if (endpointRollover) {
             if (rotationChanged) {
-                // Keep the pre-rotation endpoint suspended until Shell removes RotationLayer.
-                // Binding a new endpoint here would immediately publish a screenshot-animation
-                // frame because the vendor bridge is continuous-on-bind.
                 binding = null;
                 Miuix307PassBlurBridge.unbind(current);
                 scheduleRotationSettle(root, nextRotation);
@@ -784,8 +769,6 @@ final class LauncherGlassSession {
     }
 
     private void beginRotationSettle(int targetRotation) {
-        // Rotation already owns the next endpoint transition. Invalidate every bind completion from
-        // the previous endpoint before exposing that ownership to a Workstation recovery request.
         workstationBindEpoch++;
         rotationSettleSerial++;
         rotationSettlePending = true;
@@ -804,8 +787,6 @@ final class LauncherGlassSession {
                     || configRotation != targetRotation) return;
             View liveRoot = rootRef.get();
             if (liveRoot == null || !liveRoot.isAttachedToWindow()) return;
-            // The delay models HyperOS' vendor transition duration. Commit on the following
-            // Choreographer frame so the final Shell transaction has reached composition.
             liveRoot.postOnAnimation(() -> finishRotationSettle(serial, targetRotation));
         }, delayMs);
     }
@@ -817,8 +798,6 @@ final class LauncherGlassSession {
         rotationSettleTargetRotation = -1;
         MainHook.log(TAG + " rotation capture released rotation=" + targetRotation
                 + " serial=" + serial);
-        // Rotation owns exactly one endpoint transition. If a Workstation recovery arrived while
-        // the leash was active, continue that same ownership instead of launching another rollover.
         long recoverySerial = workstationProducerRecovery.activeSerial();
         if (recoverySerial > 0L) {
             queueWorkstationEndpointRecreate(
@@ -834,10 +813,10 @@ final class LauncherGlassSession {
             ClassLoader loader = root.getContext().getClassLoader();
             Class<?> helper = Class.forName(
                     "com.miui.home.recents.TransitionAnimDurationHelper", false, loader);
-            java.lang.reflect.Method getInstance = helper.getDeclaredMethod("getInstance");
+            Method getInstance = helper.getDeclaredMethod("getInstance");
             getInstance.setAccessible(true);
             Object instance = getInstance.invoke(null);
-            java.lang.reflect.Method getRatio = helper.getDeclaredMethod("getAnimDurationRatio");
+            Method getRatio = helper.getDeclaredMethod("getAnimDurationRatio");
             getRatio.setAccessible(true);
             Object value = getRatio.invoke(instance);
             if (value instanceof Number) return ((Number) value).floatValue();
@@ -957,7 +936,13 @@ final class LauncherGlassSession {
             prismalRenderer = new PrismalRenderer();
             backdropPrepared = false;
         }
-        if (oesTexture == 0 || inputSurfaceTexture == null || inputProducerSurface == null) {
+        boolean endpointMissing = oesTexture == 0
+                || inputSurfaceTexture == null || inputProducerSurface == null;
+        boolean explicitTransitionOwned = rotationSettlePending
+                || workstationProducerRecovery.activeSerial() > 0L;
+        if (endpointMissing
+                && LauncherGlassProducerTransitionPolicy.canCreateProducerEndpoint(
+                        explicitTransitionOwned)) {
             createInputProducer();
         }
         if (maxTextureSize <= 0) {
@@ -1037,7 +1022,11 @@ final class LauncherGlassSession {
             frameAvailable.set(true);
             requestFrame(false);
         }, renderHandler);
-        mainHandler.post(() -> bindProducerWhenReady(0));
+        if (!mainHandler.post(() -> bindProducerWhenReady(0))
+                && workstationProducerRecovery.isActive(recoverySerial)
+                && workstationProducerRecovery.endpointGeneration() == endpointGeneration) {
+            failWorkstationRecovery(recoverySerial, "bind-main-queue", null);
+        }
     }
 
     private void bindProducerWhenReady(int attempt) {
@@ -1057,14 +1046,22 @@ final class LauncherGlassSession {
             return;
         }
         long bindEpoch = workstationBindEpoch;
-        postRender(() -> {
+        boolean queued = postRender(() -> {
             if (shuttingDown || input != inputSurfaceTexture
                     || endpointGeneration != producerGeneration) return;
             input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-            mainHandler.post(() -> finishBind(
+            boolean posted = mainHandler.post(() -> finishBind(
                     root, producer, geometry, attempt, bindEpoch,
                     endpointGeneration, recoverySerial));
+            if (!posted && workstationProducerRecovery.isActive(recoverySerial)
+                    && workstationProducerRecovery.endpointGeneration() == endpointGeneration) {
+                failWorkstationRecovery(recoverySerial, "bind-main-queue", null);
+            }
         }, null);
+        if (!queued && workstationProducerRecovery.isActive(recoverySerial)
+                && workstationProducerRecovery.endpointGeneration() == endpointGeneration) {
+            failWorkstationRecovery(recoverySerial, "bind-render-queue", null);
+        }
     }
 
     private void finishBind(
@@ -1083,8 +1080,6 @@ final class LauncherGlassSession {
         if (WorkstationProducerPolicy.shouldPauseSharedProducer(
                 LauncherGlassSceneController.isCoveredForRoot(root),
                 MainHook.isWorkstationMode())) {
-            // Coverage can predate the asynchronous producer bind. Do not leave a hidden
-            // Workspace producer in the bridge's default continuous-on-bind state.
             Miuix307PassBlurBridge.pauseUpdates(next);
         }
         configRotation = geometry.configRotation;
@@ -1202,6 +1197,11 @@ final class LauncherGlassSession {
             return LauncherGlassProducerRecoveryState.Result.REJECTED;
         }
 
+        long previousSerial = workstationProducerRecovery.activeSerial();
+        if (previousSerial > 0L && previousSerial != recoverySerial) {
+            failWorkstationRecovery(previousSerial, "superseded-by-new-episode", null);
+        }
+
         LauncherGlassProducerRecoveryState.Result request =
                 workstationProducerRecovery.onRequest(recoverySerial);
         if (request != LauncherGlassProducerRecoveryState.Result.ACCEPTED) {
@@ -1220,7 +1220,6 @@ final class LauncherGlassSession {
                 LauncherGlassProducerRecoveryState.Result.ACCEPTED,
                 rotationSettlePending ? "request-rotation-owner" : "request", null);
 
-        // Invalidate old main-thread finishBind callbacks before yielding back to either Looper.
         workstationBindEpoch++;
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
@@ -1230,8 +1229,6 @@ final class LauncherGlassSession {
 
         if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
                 rotationSettlePending)) {
-            // Rotation already owns the endpoint transition. Its settle completion will create the
-            // one replacement endpoint and the common generation/bind/fresh milestones finish us.
             return LauncherGlassProducerRecoveryState.Result.ACCEPTED;
         }
         return queueWorkstationEndpointRecreate(
@@ -1352,22 +1349,16 @@ final class LauncherGlassSession {
         clearWallpaperRequest();
 
         if (input != null) {
-            try {
-                input.setOnFrameAvailableListener(null);
-            } catch (Throwable ignored) {
-            }
+            try { input.setOnFrameAvailableListener(null); }
+            catch (Throwable ignored) {}
         }
         if (producer != null) {
-            try {
-                producer.release();
-            } catch (Throwable ignored) {
-            }
+            try { producer.release(); }
+            catch (Throwable ignored) {}
         }
         if (input != null) {
-            try {
-                input.release();
-            } catch (Throwable ignored) {
-            }
+            try { input.release(); }
+            catch (Throwable ignored) {}
         }
         if (oesTexture != 0) {
             GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
@@ -1701,7 +1692,6 @@ final class LauncherGlassSession {
     private static boolean sameProducerSurfaceGeneration(
             Miuix307PassBlurBridge.Binding current, ProducerGeometry geometry) {
         if (current == null || geometry == null) return false;
-        // ViewRoot replacement is a generation change even if WMS happens to reuse a layer id.
         if (current.viewRootIdentity != 0 && geometry.viewRootIdentity != 0
                 && current.viewRootIdentity != geometry.viewRootIdentity) {
             return false;
@@ -1716,8 +1706,6 @@ final class LauncherGlassSession {
             if (current.surfaceSequenceId != geometry.surfaceSequenceId) return false;
         }
         if (comparedImmutableGeneration) return true;
-        // Last-resort compatibility fallback only. It is intentionally not the primary key because
-        // ViewRootImpl can mutate the same SurfaceControl wrapper to a new native BLAST layer.
         return isSameSurface(current.rootSurface, geometry.rootSurface);
     }
 
