@@ -98,7 +98,17 @@ final class LauncherMamlBackgroundRuleExecutor {
 
         Claim previous = CLAIMS.get(host);
         if (previous != null && previous.matches(root, resolved)) {
-            for (Object target : resolved) invokeOptional(target, "show", false);
+            for (Object target : resolved) {
+                if (!invokeOptionalMutation(target, "show", false)) {
+                    restore(previous);
+                    CLAIMS.remove(host);
+                    MainHook.log(LOG_TAG + identityText
+                            + " rule=" + rule.id()
+                            + " targets=" + elementNames
+                            + " targetFound=true mutationFailed=true suppressed=false");
+                    return;
+                }
+            }
             MainHook.log(LOG_TAG + identityText
                     + " rule=" + rule.id()
                     + " targets=" + elementNames
@@ -115,8 +125,20 @@ final class LauncherMamlBackgroundRuleExecutor {
             elementClaims.add(new ElementClaim(
                     target, readBooleanField(target, "mShow", true)));
         }
+
+        int appliedCount = 0;
+        for (Object target : resolved) {
+            appliedCount++;
+            if (!invokeOptionalMutation(target, "show", false)) {
+                restoreElements(elementClaims, appliedCount);
+                MainHook.log(LOG_TAG + identityText
+                        + " rule=" + rule.id()
+                        + " targets=" + elementNames
+                        + " targetFound=true mutationFailed=true suppressed=false");
+                return;
+            }
+        }
         CLAIMS.put(host, new Claim(root, elementClaims));
-        for (Object target : resolved) invokeOptional(target, "show", false);
 
         MainHook.log(LOG_TAG + identityText
                 + " rule=" + rule.id()
@@ -139,6 +161,16 @@ final class LauncherMamlBackgroundRuleExecutor {
         return result.value();
     }
 
+    private static boolean invokeOptionalMutation(
+            Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log(LOG_TAG + " " + methodName + " unavailable: " + result.failure());
+            return false;
+        }
+        return true;
+    }
+
     private static boolean allHidden(List<Object> elements) {
         for (Object element : elements) {
             if (readBooleanField(element, "mShow", true)) return false;
@@ -147,8 +179,14 @@ final class LauncherMamlBackgroundRuleExecutor {
     }
 
     private static void restore(Claim claim) {
-        for (ElementClaim element : claim.elements) {
-            invokeOptional(element.element, "show", element.originalShow);
+        restoreElements(claim.elements, claim.elements.size());
+    }
+
+    private static void restoreElements(List<ElementClaim> elements, int count) {
+        int limit = Math.min(count, elements.size());
+        for (int i = 0; i < limit; i++) {
+            ElementClaim element = elements.get(i);
+            invokeOptionalMutation(element.element, "show", element.originalShow);
         }
     }
 
