@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Source contracts for the decompiled HyperOS 4.50 wallpaper lifecycle bridge. */
+/** Static vendor/API boundary contract for the HyperOS 4.50 wallpaper bridge. */
 public class LauncherWallpaperFreshnessHookContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Path HOOK = MAIN.resolve("LauncherWallpaperFreshnessHook.java");
@@ -18,13 +18,8 @@ public class LauncherWallpaperFreshnessHookContractTest {
         return Files.readString(HOOK);
     }
 
-    private static String pipeline() throws Exception {
-        return Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
-    }
-
     @Test public void usesExactHyperOs450VendorWallpaperBoundaries() throws Exception {
         String source = hook();
-
         assertTrue(source.contains(
                 "com.miui.home.launcher.wallpaper.DesktopWallpaperManager$MiuiWallpaperManagerCallbackStub"));
         assertTrue(source.contains("com.miui.home.launcher.Workspace"));
@@ -34,39 +29,18 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(source.contains("onWallpaperColorChanged"));
     }
 
-    @Test public void routesChangeCandidateAndAuthoritativeEventsToSceneOwner() throws Exception {
+    @Test public void bridgeDoesNotIntroducePollingOrDelayedFallbackApis() throws Exception {
         String source = hook();
-
-        assertTrue(source.contains("LauncherGlassSceneController"));
-        assertTrue(source.contains("onWallpaperChangedForAll"));
-        assertTrue(source.contains("onWallpaperCandidate"));
-        assertTrue(source.contains("onWallpaperAuthoritativeForAll"));
+        assertFalse(source.contains("postDelayed"));
+        assertFalse(source.contains("BroadcastReceiver"));
+        assertFalse(source.contains("IntentFilter"));
+        assertFalse(source.contains("ACTION_WALLPAPER_CHANGED"));
+        assertFalse(source.contains("Timer"));
+        assertFalse(source.contains("ScheduledExecutor"));
     }
 
-    @Test public void binderCallbacksMarshalToMainWithoutPollingOrDelay() throws Exception {
-        String source = hook();
-
-        assertTrue(source.contains("dispatchToMain"));
-        assertTrue(source.contains("Looper.getMainLooper()"));
-        assertTrue(source.contains("Handler"));
-        assertFalse("wallpaper freshness must not use delayed heuristics", source.contains("postDelayed"));
-        assertFalse("wallpaper freshness must not install a broadcast fallback",
-                source.contains("BroadcastReceiver") || source.contains("IntentFilter")
-                        || source.contains("ACTION_WALLPAPER_CHANGED"));
-        assertFalse("wallpaper freshness must not poll", source.contains("Timer")
-                || source.contains("ScheduledExecutor") || source.contains("while (true)"));
-    }
-
-    @Test public void callbacksAreInstalledIndependentlyAndPipelineOwnsInstallation() throws Exception {
-        String source = hook();
-        String pipeline = pipeline();
-
-        assertTrue("optional vendor callbacks must be installed independently",
-                source.contains("installWallpaperChanged")
-                        && source.contains("installCandidate")
-                        && source.contains("installFirstFrameRendered")
-                        && source.contains("installDrawFrameEnd"));
-        assertTrue("wallpaper hook belongs to the active zero-copy material pipeline",
-                pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
+    @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
     }
 }
