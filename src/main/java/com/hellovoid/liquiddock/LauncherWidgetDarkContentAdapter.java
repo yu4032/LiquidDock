@@ -36,8 +36,8 @@ final class LauncherWidgetDarkContentAdapter {
         if (isMaMlHost(host)) {
             Double original = ORIGINAL_MAML_DARK_MODE.remove(host);
             if (original != null) {
-                HookUtil.invoke(host, "putVariableNumber", "__darkmode", original);
-                HookUtil.invoke(host, "requestUpdate");
+                invokeOptional(host, "putVariableNumber", "__darkmode", original);
+                invokeOptional(host, "requestUpdate");
             }
             return;
         }
@@ -47,12 +47,21 @@ final class LauncherWidgetDarkContentAdapter {
 
     private static void applyMaml(View host) {
         if (!ORIGINAL_MAML_DARK_MODE.containsKey(host)) {
-            Object value = HookUtil.invoke(host, "getVariableNumber", "__darkmode");
+            Object value = invokeOptional(host, "getVariableNumber", "__darkmode");
             ORIGINAL_MAML_DARK_MODE.put(host, value instanceof Number
                     ? ((Number) value).doubleValue() : 0.0d);
         }
-        HookUtil.invoke(host, "putVariableNumber", "__darkmode", 1.0d);
-        HookUtil.invoke(host, "requestUpdate");
+        invokeOptional(host, "putVariableNumber", "__darkmode", 1.0d);
+        invokeOptional(host, "requestUpdate");
+    }
+
+    private static Object invokeOptional(Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log("[DC][WidgetDarkContent] " + methodName + " unavailable: " + result.failure());
+            return null;
+        }
+        return result.value();
     }
 
     private static void applyTextTree(View view) {

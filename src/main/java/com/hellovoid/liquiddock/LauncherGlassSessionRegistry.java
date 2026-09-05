@@ -53,11 +53,7 @@ final class LauncherGlassSessionRegistry {
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session == null || session.isShutdown()) continue;
             try {
-                Object value = HookUtil.getField(session, "binding");
-                if (value instanceof Miuix307PassBlurBridge.Binding) {
-                    Miuix307PassBlurBridge.pauseUpdates((Miuix307PassBlurBridge.Binding) value);
-                    paused++;
-                }
+                if (session.suspendProducerForUnlockCapture()) paused++;
             } catch (Throwable error) {
                 MainHook.log("[DC][LauncherGlass] unlock producer pause failed: " + error);
             }
@@ -96,14 +92,10 @@ final class LauncherGlassSessionRegistry {
 
         for (LauncherGlassSession session : sessions) {
             try {
-                java.lang.reflect.Method rebind = HookUtil.findMethodExact(
-                        session.getClass(), "rebindProducer", new Class<?>[0]);
-                rebind.invoke(session);
-                Object value = HookUtil.getField(session, "renderHandler");
-                if (!(value instanceof Handler)) throw new IllegalStateException("renderHandler unavailable");
-                Handler renderHandler = (Handler) value;
-                if (!renderHandler.post(() -> main.post(completeOne))) {
-                    throw new IllegalStateException("render queue rejected unlock sentinel");
+                if (!session.rebindProducer(completeOne)) {
+                    failed.set(true);
+                    MainHook.log("[DC][LauncherGlass] unlock endpoint rollover rejected by render queue");
+                    main.post(completeOne);
                 }
             } catch (Throwable error) {
                 failed.set(true);
@@ -124,8 +116,7 @@ final class LauncherGlassSessionRegistry {
         int rebound = 0;
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session == null || session.isShutdown()) continue;
-            HookUtil.invoke(session, "rebindProducer");
-            rebound++;
+            if (session.rebindProducer()) rebound++;
         }
         MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover sessions=" + rebound);
     }

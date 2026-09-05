@@ -38,18 +38,25 @@ final class DockBottomGeometryHook {
             Api101Bridge.module().hook(getter)
                     .setPriority(XposedInterface.PRIORITY_HIGHEST)
                     .intercept(chain -> {
-                        try {
-                            Object controller = HookUtil.invokeStatic(GRID_CONTROLLER, "getInstance");
-                            Object grid = HookUtil.invoke(controller, "getActiveGridConfigInDock");
-                            Object bottom = HookUtil.invoke(grid, "getBottom");
-                            Object mingou = HookUtil.invokeStatic(
-                                    DEVICE_CONFIG, "getMingouLaptopDockBottomOffsetPx");
-                            if (bottom instanceof Number && mingou instanceof Number) {
-                                return DockBottomGeometryPolicy.stockMargin(
-                                        ((Number) bottom).intValue(), ((Number) mingou).intValue());
-                            }
-                        } catch (Throwable error) {
-                            MainHook.log("[DC] stock Dock margin reconstruction failed: " + error);
+                        HookUtil.InvocationResult<Object> controllerResult =
+                                HookUtil.tryInvokeStatic(GRID_CONTROLLER, "getInstance");
+                        Object controller = controllerResult.succeeded()
+                                ? controllerResult.value() : null;
+                        HookUtil.InvocationResult<Object> gridResult = controller != null
+                                ? HookUtil.tryInvoke(controller, "getActiveGridConfigInDock")
+                                : null;
+                        Object grid = gridResult != null && gridResult.succeeded()
+                                ? gridResult.value() : null;
+                        HookUtil.InvocationResult<Object> bottomResult = grid != null
+                                ? HookUtil.tryInvoke(grid, "getBottom") : null;
+                        Object bottom = bottomResult != null && bottomResult.succeeded()
+                                ? bottomResult.value() : null;
+                        HookUtil.InvocationResult<Object> mingouResult = HookUtil.tryInvokeStatic(
+                                DEVICE_CONFIG, "getMingouLaptopDockBottomOffsetPx");
+                        Object mingou = mingouResult.succeeded() ? mingouResult.value() : null;
+                        if (bottom instanceof Number && mingou instanceof Number) {
+                            return DockBottomGeometryPolicy.stockMargin(
+                                    ((Number) bottom).intValue(), ((Number) mingou).intValue());
                         }
                         return chain.proceed();
                     });

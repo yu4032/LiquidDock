@@ -31,7 +31,7 @@ final class LauncherMamlBackgroundRuleExecutor {
 
     static void claimLoadedRoot(View host, Object root) {
         if (host == null) return;
-        Object itemInfo = HookUtil.invoke(host, "getItemInfo");
+        Object itemInfo = invokeOptional(host, "getItemInfo");
         WidgetBackgroundIdentity identity = new WidgetBackgroundIdentity(
                 "maml",
                 readStringField(itemInfo, "productId"),
@@ -78,7 +78,7 @@ final class LauncherMamlBackgroundRuleExecutor {
         List<Object> resolved = new ArrayList<>(elementNames.size());
         String missingName = null;
         for (String elementName : elementNames) {
-            Object target = HookUtil.invoke(root, "findElement", elementName);
+            Object target = invokeOptional(root, "findElement", elementName);
             if (target == null) {
                 missingName = elementName;
                 break;
@@ -98,7 +98,17 @@ final class LauncherMamlBackgroundRuleExecutor {
 
         Claim previous = CLAIMS.get(host);
         if (previous != null && previous.matches(root, resolved)) {
-            for (Object target : resolved) HookUtil.invoke(target, "show", false);
+            for (Object target : resolved) {
+                if (!invokeOptionalMutation(target, "show", false)) {
+                    restore(previous);
+                    CLAIMS.remove(host);
+                    MainHook.log(LOG_TAG + identityText
+                            + " rule=" + rule.id()
+                            + " targets=" + elementNames
+                            + " targetFound=true mutationFailed=true suppressed=false");
+                    return;
+                }
+            }
             MainHook.log(LOG_TAG + identityText
                     + " rule=" + rule.id()
                     + " targets=" + elementNames
@@ -115,8 +125,20 @@ final class LauncherMamlBackgroundRuleExecutor {
             elementClaims.add(new ElementClaim(
                     target, readBooleanField(target, "mShow", true)));
         }
+
+        int appliedCount = 0;
+        for (Object target : resolved) {
+            appliedCount++;
+            if (!invokeOptionalMutation(target, "show", false)) {
+                restoreElements(elementClaims, appliedCount);
+                MainHook.log(LOG_TAG + identityText
+                        + " rule=" + rule.id()
+                        + " targets=" + elementNames
+                        + " targetFound=true mutationFailed=true suppressed=false");
+                return;
+            }
+        }
         CLAIMS.put(host, new Claim(root, elementClaims));
-        for (Object target : resolved) HookUtil.invoke(target, "show", false);
 
         MainHook.log(LOG_TAG + identityText
                 + " rule=" + rule.id()
@@ -130,6 +152,25 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (claim != null) restore(claim);
     }
 
+    private static Object invokeOptional(Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log(LOG_TAG + " " + methodName + " unavailable: " + result.failure());
+            return null;
+        }
+        return result.value();
+    }
+
+    private static boolean invokeOptionalMutation(
+            Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log(LOG_TAG + " " + methodName + " unavailable: " + result.failure());
+            return false;
+        }
+        return true;
+    }
+
     private static boolean allHidden(List<Object> elements) {
         for (Object element : elements) {
             if (readBooleanField(element, "mShow", true)) return false;
@@ -138,8 +179,14 @@ final class LauncherMamlBackgroundRuleExecutor {
     }
 
     private static void restore(Claim claim) {
-        for (ElementClaim element : claim.elements) {
-            HookUtil.invoke(element.element, "show", element.originalShow);
+        restoreElements(claim.elements, claim.elements.size());
+    }
+
+    private static void restoreElements(List<ElementClaim> elements, int count) {
+        int limit = Math.min(count, elements.size());
+        for (int i = 0; i < limit; i++) {
+            ElementClaim element = elements.get(i);
+            invokeOptionalMutation(element.element, "show", element.originalShow);
         }
     }
 

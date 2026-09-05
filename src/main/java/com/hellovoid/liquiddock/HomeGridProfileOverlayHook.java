@@ -247,17 +247,22 @@ final class HomeGridProfileOverlayHook {
     }
 
     private static int[] transformCounts(Object transform) {
-        Object horizontal = HookUtil.invoke(transform, "getMHCells");
-        Object vertical = HookUtil.invoke(transform, "getMVCells");
+        HookUtil.InvocationResult<Object> horizontalResult =
+                HookUtil.tryInvoke(transform, "getMHCells");
+        HookUtil.InvocationResult<Object> verticalResult =
+                HookUtil.tryInvoke(transform, "getMVCells");
+        if (!horizontalResult.succeeded() || !verticalResult.succeeded()) return null;
+        Object horizontal = horizontalResult.value();
+        Object vertical = verticalResult.value();
         if (!(horizontal instanceof Integer) || !(vertical instanceof Integer)) return null;
         return new int[]{(Integer) horizontal, (Integer) vertical};
     }
 
     private static String gridName(Object gridConfig) {
-        try {
-            Object value = HookUtil.invoke(gridConfig, "getName");
-            if (value instanceof String) return (String) value;
-        } catch (Throwable ignored) {}
+        HookUtil.InvocationResult<Object> nameResult = HookUtil.tryInvoke(gridConfig, "getName");
+        if (nameResult.succeeded() && nameResult.value() instanceof String) {
+            return (String) nameResult.value();
+        }
         try {
             Object field = HookUtil.getField(gridConfig, "name");
             return field instanceof String ? (String) field : null;
