@@ -150,7 +150,7 @@ final class LauncherGlassSession {
     private final FloatBuffer quadBuffer;
     private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-    // Main-thread epoch invalidates finishBind callbacks queued before a Workstation rollover.
+    // Transition epoch invalidates queued bind/frame callbacks before an endpoint-owner rollover.
     private volatile long workstationBindEpoch;
     // Producer endpoint identity. This is deliberately independent from sceneGeneration.
     private volatile long producerGeneration;
@@ -1005,6 +1005,7 @@ final class LauncherGlassSession {
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
         long endpointGeneration = ++producerGeneration;
+        long endpointCallbackEpoch = workstationBindEpoch;
         backdropPrepared = false;
 
         long recoverySerial = workstationProducerRecovery.activeSerial();
@@ -1018,7 +1019,11 @@ final class LauncherGlassSession {
         }
 
         input.setOnFrameAvailableListener(texture -> {
-            if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
+            if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture
+                    || !LauncherGlassProducerTransitionPolicy.isEndpointCallbackCurrent(
+                            endpointCallbackEpoch, workstationBindEpoch)) {
+                return;
+            }
             frameAvailable.set(true);
             requestFrame(false);
         }, renderHandler);
