@@ -17,13 +17,15 @@ import org.junit.Test;
 /**
  * Testing-architecture gate for production-source readers.
  *
- * <p>Every Java test is scanned. Production source/config inspection is denied by default.
+ * <p>Every Java/Kotlin test is scanned. Production source/config inspection is denied by default.
  * Audited static API/architecture contracts are explicit exceptions; historical non-runtime
  * source readers outside this migration are explicit debt and may only shrink. Runtime behavior
  * must be exercised through typed production state/policy APIs.
  */
 public class RuntimeBehaviorTestPolicyContractTest {
-    private static final Path TEST_ROOT = Path.of("src/test/java");
+    private static final List<Path> TEST_ROOTS = List.of(
+            Path.of("src/test/java"),
+            Path.of("src/test/kotlin"));
 
     /**
      * Source inspection is permitted here only for static vendor/API/architecture/schema bans.
@@ -74,12 +76,16 @@ public class RuntimeBehaviorTestPolicyContractTest {
         Set<String> seenStaticReaders = new HashSet<>();
         Set<String> seenDebtReaders = new HashSet<>();
 
-        try (Stream<Path> paths = Files.walk(TEST_ROOT)) {
-            paths.filter(Files::isRegularFile)
-                    .filter(path -> path.toString().endsWith(".java"))
-                    .filter(path -> !path.getFileName().toString()
-                            .equals("RuntimeBehaviorTestPolicyContractTest.java"))
-                    .forEach(path -> inspect(path, violations, seenStaticReaders, seenDebtReaders));
+        for (Path testRoot : TEST_ROOTS) {
+            if (!Files.isDirectory(testRoot)) continue;
+            try (Stream<Path> paths = Files.walk(testRoot)) {
+                paths.filter(Files::isRegularFile)
+                        .filter(RuntimeBehaviorTestPolicyContractTest::isTestSource)
+                        .filter(path -> !path.getFileName().toString()
+                                .equals("RuntimeBehaviorTestPolicyContractTest.java"))
+                        .forEach(path -> inspect(
+                                path, violations, seenStaticReaders, seenDebtReaders));
+            }
         }
 
         Set<String> staleDebt = new HashSet<>(LEGACY_SOURCE_DEBT);
@@ -107,6 +113,11 @@ public class RuntimeBehaviorTestPolicyContractTest {
                 "Files.newBufferedReader(Path.of(\"src/main/java/Foo.java\"));"));
         assertTrue(isProductionSourceReader(
                 "File(\"src/main/kotlin/Foo.kt\").readText()"));
+    }
+
+    private static boolean isTestSource(Path path) {
+        String text = path.toString();
+        return text.endsWith(".java") || text.endsWith(".kt");
     }
 
     private static void inspect(
@@ -139,14 +150,12 @@ public class RuntimeBehaviorTestPolicyContractTest {
     }
 
     private static boolean isProductionSourceReader(String source) {
-        boolean productionReference = source.contains("src/main/java")
-                || source.contains("src/main/kotlin")
-                || source.contains("src/main/AndroidManifest.xml")
+        // Default-deny by production/config reference instead of trying to enumerate all reader
+        // APIs. That keeps Files.lines/readAllLines/newBufferedReader and Kotlin readText/readLines
+        // from becoming trivial bypasses while audited static source contracts remain allowlisted.
+        return source.contains("src/main/")
                 || source.contains("build.gradle")
                 || source.contains("settings.gradle");
-        boolean readsText = source.contains("Files.readString(")
-                || source.contains("Files.readAllBytes(");
-        return productionReference && readsText;
     }
 
     private static void rejectStaticRuntimeProof(
