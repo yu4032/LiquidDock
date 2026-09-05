@@ -16,6 +16,7 @@ final class LauncherGlassSessionRegistry {
     }
 
     private static final WeakHashMap<View, LauncherGlassSession> SESSIONS = new WeakHashMap<>();
+    private static long workstationRolloverGeneration;
 
     private LauncherGlassSessionRegistry() {}
 
@@ -114,28 +115,38 @@ final class LauncherGlassSessionRegistry {
 
     /**
      * HyperOS Workstation can keep the same valid root Surface across Recents while silently
-     * retiring the PassBlur BufferQueue producer. Return true only when every live Workstation
-     * session accepted its endpoint rollover; scene freshness is still decided elsewhere.
+     * retiring the PassBlur BufferQueue producer. Return true only when every live session
+     * accepts the rollover request. Actual endpoint recreation is logged asynchronously by the
+     * session; scene freshness remains owned by LauncherGlassSceneController.
      */
     static synchronized boolean prepareWorkstationRecentsReturn() {
         if (!MainHook.isWorkstationMode()) return true;
+        long generation = ++workstationRolloverGeneration;
         int live = 0;
-        int rebound = 0;
-        boolean accepted = true;
+        int accepted = 0;
+        int rejected = 0;
+        int failed = 0;
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session == null || session.isShutdown()) continue;
             live++;
             try {
-                if (session.rebindProducer()) rebound++;
-                else accepted = false;
+                if (session.rebindWorkstationProducer("workstation-recents", generation)) accepted++;
+                else rejected++;
             } catch (Throwable error) {
-                accepted = false;
-                MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover failed: " + error);
+                failed++;
+                MainHook.log("[DC][LauncherGlass][ProducerRecovery] reason=workstation-recents"
+                        + " session=" + session.diagnosticSessionId()
+                        + " generation=" + generation
+                        + " result=FAILED stage=request error=" + error);
             }
         }
-        MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover sessions="
-                + rebound + "/" + live + " accepted=" + accepted);
-        return accepted;
+        String result = failed > 0 ? "FAILED" : rejected > 0 ? "REJECTED" : "ACCEPTED";
+        MainHook.log("[DC][LauncherGlass][ProducerRecovery] reason=workstation-recents"
+                + " session=aggregate generation=" + generation
+                + " result=" + result + " stage=request"
+                + " accepted=" + accepted + " rejected=" + rejected
+                + " failed=" + failed + " total=" + live);
+        return rejected == 0 && failed == 0;
     }
 
     static synchronized void shutdownAll() {

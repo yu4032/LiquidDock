@@ -169,6 +169,10 @@ final class LauncherGlassSceneController {
         return controller != null && controller.state.state() == State.COVERED;
     }
 
+    static synchronized boolean isRecentsCoveredByVendor() {
+        return vendorRecentsCovered;
+    }
+
     static void setWorkspaceCovered(View anyView, boolean covered) {
         LauncherGlassSceneController controller = find(anyView);
         if (controller != null) controller.setFolderCovered(covered);
