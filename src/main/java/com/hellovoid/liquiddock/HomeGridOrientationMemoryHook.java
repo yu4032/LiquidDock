@@ -31,8 +31,8 @@ final class HomeGridOrientationMemoryHook {
     private static volatile HomeGridProfile profile;
     private static volatile HomeGridOrientationRuntime runtime;
     private static volatile HomeGridOrientation lastOrientation;
-    // Every newly scheduled target resolution, workspace replacement, or Workstation edge
-    // invalidates callbacks from the previous orientation-memory generation.
+    // Every newly scheduled target resolution, replaced workspace setup, or Workstation-owned
+    // setup/rotation invalidates callbacks from the previous orientation-memory generation.
     private static volatile long resolutionGeneration;
     private static WeakReference<View> workspaceRef = new WeakReference<>(null);
 
@@ -267,30 +267,32 @@ final class HomeGridOrientationMemoryHook {
             }
         }
 
-        AtomicMutationClaimState mutation = new AtomicMutationClaimState(snapshot.size());
-        if (!mutation.beginIfFullyResolved(orderedTags.size())) return false;
+        if (snapshot.size() > 0) {
+            AtomicMutationClaimState mutation = new AtomicMutationClaimState(snapshot.size());
+            if (!mutation.beginIfFullyResolved(orderedTags.size())) return false;
 
-        List<HomeGridItemPosition> targets = new ArrayList<>(snapshot.positions());
-        for (int index = 0; index < targets.size(); index++) {
-            boolean succeeded = false;
-            Throwable failure = null;
-            try {
-                writePosition(orderedTags.get(index), targets.get(index));
-                succeeded = true;
-            } catch (Throwable error) {
-                failure = error;
-            }
+            List<HomeGridItemPosition> targets = new ArrayList<>(snapshot.positions());
+            for (int index = 0; index < targets.size(); index++) {
+                boolean succeeded = false;
+                Throwable failure = null;
+                try {
+                    writePosition(orderedTags.get(index), targets.get(index));
+                    succeeded = true;
+                } catch (Throwable error) {
+                    failure = error;
+                }
 
-            AtomicMutationClaimState.Decision decision = mutation.onMutationResult(succeeded);
-            if (!succeeded) {
-                rollbackPositions(orderedTags, previous, decision.rollbackCount);
-                MainHook.log("[DC] orientation snapshot apply failed: " + failure);
-                return false;
-            }
-            if (!decision.continueMutation && !decision.commitClaim) {
-                rollbackPositions(orderedTags, previous, index + 1);
-                MainHook.log("[DC] orientation snapshot apply aborted before commit");
-                return false;
+                AtomicMutationClaimState.Decision decision = mutation.onMutationResult(succeeded);
+                if (!succeeded) {
+                    rollbackPositions(orderedTags, previous, decision.rollbackCount);
+                    MainHook.log("[DC] orientation snapshot apply failed: " + failure);
+                    return false;
+                }
+                if (!decision.continueMutation && !decision.commitClaim) {
+                    rollbackPositions(orderedTags, previous, index + 1);
+                    MainHook.log("[DC] orientation snapshot apply aborted before commit");
+                    return false;
+                }
             }
         }
 
