@@ -18,4 +18,9 @@ final class LauncherGlassProducerTransitionPolicy {
     static boolean canCreateProducerEndpoint(boolean explicitTransitionOwned) {
         return !explicitTransitionOwned;
     }
+
+    /** A delayed endpoint callback belongs only to the transition epoch that created it. */
+    static boolean isEndpointCallbackCurrent(long callbackEpoch, long currentEpoch) {
+        return callbackEpoch == currentEpoch;
+    }
 }
