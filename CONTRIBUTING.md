@@ -169,7 +169,9 @@ Workstation composite customization 当前保持 restart-bound。不要只恢复
 - Android Manifest / Xposed scope；
 - 明确的 architecture/API 禁令，例如“不得使用某 API / 不得跨自有模块反射”。
 
-`RuntimeBehaviorTestPolicyContractTest` 会对 runtime-category tests 执行这一结构性 gate，防止后续重新退化为 source-string runtime contract。
+`RuntimeBehaviorTestPolicyContractTest` 会扫描**全部 Java tests**。任何新的 production source/config reader 默认失败；合法静态 reader 必须进入显式审计的 static allowlist，并且不能通过 `indexOf()` / `substring()` 做调用顺序或方法体切片证明。
+
+本次迁移之外仍有少量历史 source-reader debt，由 gate 的 `LEGACY_SOURCE_DEBT` 精确列名。该清单只允许减少，不允许新增；尤其不得把 ownership、freshness、animation、recovery 的 runtime contract 放进 debt 清单绕过 typed-state 测试。
 
 ## 文档规则
 
