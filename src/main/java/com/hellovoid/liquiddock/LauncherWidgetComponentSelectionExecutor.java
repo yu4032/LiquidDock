@@ -111,8 +111,9 @@ final class LauncherWidgetComponentSelectionExecutor {
             if (target == null || !selector.className.equals(target.getClass().getName())) continue;
             if (!claimed.add(target)) continue;
             boolean originalShow = readBooleanField(target, "mShow", true);
-            claims.add(new MamlClaim(target, originalShow));
-            invokeOptional(target, "show", false);
+            if (invokeOptionalMutation(target, "show", false)) {
+                claims.add(new MamlClaim(target, originalShow));
+            }
         }
         if (!claims.isEmpty()) {
             CLAIMS.put(host, new Claim(List.of(), List.of(), List.of(), claims));
@@ -154,7 +155,7 @@ final class LauncherWidgetComponentSelectionExecutor {
             if (item.view != null) item.view.setVisibility(item.originalVisibility);
         }
         for (MamlClaim item : claim.maml) {
-            invokeOptional(item.element, "show", item.originalShow);
+            invokeOptionalMutation(item.element, "show", item.originalShow);
         }
     }
 
@@ -165,6 +166,16 @@ final class LauncherWidgetComponentSelectionExecutor {
             return null;
         }
         return result.value();
+    }
+
+    private static boolean invokeOptionalMutation(
+            Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log("[DC][WidgetComponent] " + methodName + " unavailable: " + result.failure());
+            return false;
+        }
+        return true;
     }
 
     private static List<WidgetComponentStore.Descriptor> selectors(
