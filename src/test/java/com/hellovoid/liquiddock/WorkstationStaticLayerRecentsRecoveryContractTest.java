@@ -20,7 +20,8 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
         assertTrue(recents.contains("LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();"));
         assertTrue(registry.contains("static synchronized void prepareWorkstationRecentsReturn()"));
         assertTrue(registry.contains("if (!MainHook.isWorkstationMode()) return;"));
-        assertTrue(registry.contains("HookUtil.invoke(session, \"rebindProducer\")"));
+        assertTrue(registry.contains("if (session.rebindProducer()) rebound++;"));
+        assertFalse(registry.contains("HookUtil.invoke(session, \"rebindProducer\")"));
 
         String hide = methodSlice(recents,
                 "\"onRecentViewHide\"",
@@ -32,13 +33,15 @@ public class WorkstationStaticLayerRecentsRecoveryContractTest {
     }
 
     @Test
-    public void reflectiveRecoveryEntrySurvivesR8Optimization() throws Exception {
-        Path keep = Path.of("src/main/keepRules/runtime-reflection.keep");
-        assertTrue("AGP 9.3 optimization requires a keep rule for the reflective method",
-                Files.exists(keep));
-        String rules = Files.readString(keep);
-        assertTrue(rules.contains("class com.hellovoid.liquiddock.LauncherGlassSession"));
-        assertTrue(rules.contains("void rebindProducer();"));
+    public void registryUsesTypedSessionLifecycleBoundary() throws Exception {
+        String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertFalse("Registry must not reflect into LauncherGlassSession", registry.contains("HookUtil"));
+        assertFalse(registry.contains("renderHandler"));
+        assertFalse(registry.contains("HookUtil.getField(session, \"binding\")"));
+        assertTrue(session.contains("boolean rebindProducer()"));
+        assertTrue(session.contains("boolean rebindProducer(Runnable rolloverComplete)"));
     }
 
     @Test
