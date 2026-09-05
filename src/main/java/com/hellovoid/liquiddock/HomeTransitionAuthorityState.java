@@ -54,10 +54,6 @@ final class HomeTransitionAuthorityState {
         return Decision.freeze(false);
     }
 
-    synchronized boolean shouldRevealFromLauncherFallback() {
-        return launcherHomeArmed && !systemUiHomeArmed;
-    }
-
     synchronized Decision onLauncherHomeAnimationStarted() {
         return launcherHomeArmed ? Decision.reveal() : Decision.none();
     }
