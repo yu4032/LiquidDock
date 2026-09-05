@@ -23,8 +23,10 @@ public class WorkspaceDropRuleHookContractTest {
         assertTrue(hook.contains("\"isLegalXY\""));
         assertTrue(hook.contains("int.class, int.class, int.class, int.class"));
         assertTrue(hook.contains("HomeGridProfile selectedProfile"));
-        assertTrue(hook.contains("getCellCountX"));
-        assertTrue(hook.contains("getCellCountY"));
+        assertTrue(hook.contains("HookUtil.tryInvokeStatic(deviceConfig, \"getCellCountX\")"));
+        assertTrue(hook.contains("HookUtil.tryInvokeStatic(deviceConfig, \"getCellCountY\")"));
+        assertTrue(hook.contains("columnsResult.succeeded()"));
+        assertTrue(hook.contains("rowsResult.succeeded()"));
         assertTrue(hook.contains("HomeGridDropLegalityPolicy.isLegal"));
         assertTrue(hook.contains("chain.getArg(0)"));
         assertTrue(hook.contains("chain.getArg(1)"));
