@@ -25,6 +25,13 @@ public class HookUtilArchitectureContractTest {
                     + "|\\((?:[^()]|\\([^()]*\\))*\\)"
                     + ")*\\s*\\)",
             Pattern.DOTALL);
+    private static final Pattern CLASS_ARRAY_FORWARDING_OVERLOAD = Pattern.compile(
+            "\\n\\s*static void hookMethod\\(ClassLoader cl, String className,\\s*"
+                    + "String methodName,\\s*XposedInterface\\.Hooker callback,\\s*"
+                    + "Class<\\?>\\[\\] paramTypeSpecs\\)\\s*\\{\\s*"
+                    + "hookMethod\\(cl, className, methodName, callback, "
+                    + "\\(Object\\[\\]\\) paramTypeSpecs\\);\\s*\\}",
+            Pattern.DOTALL);
 
     @Test public void productionCallSitesDoNotUseLegacySilentInvocation() throws Exception {
         List<String> offenders = new ArrayList<>();
@@ -71,6 +78,13 @@ public class HookUtilArchitectureContractTest {
         assertTrue("production Class.forName must explicitly name the target process ClassLoader; "
                         + "the audited boot/framework exception lives only in HookUtil: " + offenders,
                 offenders.isEmpty());
+    }
+
+    @Test public void classArrayForwardingHasAnExactPackageBoundary() throws Exception {
+        String source = Files.readString(MAIN.resolve("HookUtil.java"));
+        assertTrue("Class<?>[] forwarding must use a package-private exact overload that explicitly "
+                        + "forwards the array as Object[] into the existing resolver",
+                CLASS_ARRAY_FORWARDING_OVERLOAD.matcher(source).find());
     }
 
     @Test public void legacyCompatibilityApiIsRemoved() throws Exception {
