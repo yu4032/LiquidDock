@@ -11,6 +11,13 @@ import java.util.List;
 public final class ConfigSchema {
     private ConfigSchema() {}
 
+    static final class RegistrationAuthority {
+        private RegistrationAuthority() {}
+    }
+
+    private static final RegistrationAuthority REGISTRATION_AUTHORITY =
+            new RegistrationAuthority();
+
     public static final class Core {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquiddock_enabled", true, true, true, ConfigKey.ExportMode.ALWAYS);
@@ -395,7 +402,6 @@ public final class ConfigSchema {
         private Glass() {}
     }
 
-
     public static final class LauncherHighlight {
         public static final ConfigKey<Boolean> SKY_HAZE = highlight("sky_haze");
         public static final ConfigKey<Boolean> SPECULAR = highlight("specular");
@@ -596,7 +602,6 @@ public final class ConfigSchema {
         Collections.addAll(keys, added);
     }
 
-
     private static ConfigKey<Boolean> highlight(String suffix) {
         return bool("launcher_surface_component_" + suffix,
                 true, true, true, ConfigKey.ExportMode.ALWAYS);
@@ -609,29 +614,33 @@ public final class ConfigSchema {
 
     private static ConfigKey<Boolean> bool(String name, Boolean uiDefault, Boolean runtimeFallback,
                                            Boolean exportDefault, ConfigKey.ExportMode exportMode) {
-        return new ConfigKey<>(name, ConfigKey.Type.BOOLEAN, uiDefault, runtimeFallback,
-                exportDefault, null, null, ConfigKey.StorageMode.DIRECT, exportMode);
+        return ConfigKey.register(REGISTRATION_AUTHORITY, name, ConfigKey.Type.BOOLEAN,
+                uiDefault, runtimeFallback, exportDefault, null, null,
+                ConfigKey.StorageMode.DIRECT, exportMode);
     }
 
     private static ConfigKey<String> string(String name, String uiDefault,
                                              String runtimeFallback, String exportDefault,
                                              ConfigKey.ExportMode exportMode) {
-        return new ConfigKey<>(name, ConfigKey.Type.STRING, uiDefault, runtimeFallback,
-                exportDefault, null, null, ConfigKey.StorageMode.DIRECT, exportMode);
+        return ConfigKey.register(REGISTRATION_AUTHORITY, name, ConfigKey.Type.STRING,
+                uiDefault, runtimeFallback, exportDefault, null, null,
+                ConfigKey.StorageMode.DIRECT, exportMode);
     }
 
     private static ConfigKey<Integer> integer(String name, Integer uiDefault,
                                                Integer runtimeFallback, Integer exportDefault,
                                                Integer min, Integer max,
                                                ConfigKey.ExportMode exportMode) {
-        return new ConfigKey<>(name, ConfigKey.Type.INT, uiDefault, runtimeFallback,
-                exportDefault, min, max, ConfigKey.StorageMode.DIRECT, exportMode);
+        return ConfigKey.register(REGISTRATION_AUTHORITY, name, ConfigKey.Type.INT,
+                uiDefault, runtimeFallback, exportDefault, min, max,
+                ConfigKey.StorageMode.DIRECT, exportMode);
     }
 
     private static ConfigKey<Integer> dp(String name, Integer uiDefault, Integer runtimeFallback,
                                           Integer exportDefault, Integer min, Integer max,
                                           ConfigKey.ExportMode exportMode) {
-        return new ConfigKey<>(name, ConfigKey.Type.INT, uiDefault, runtimeFallback,
-                exportDefault, min, max, ConfigKey.StorageMode.DP_TENTHS, exportMode);
+        return ConfigKey.register(REGISTRATION_AUTHORITY, name, ConfigKey.Type.INT,
+                uiDefault, runtimeFallback, exportDefault, min, max,
+                ConfigKey.StorageMode.DP_TENTHS, exportMode);
     }
 }
