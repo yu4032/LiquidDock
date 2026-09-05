@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>The decompiled HomeTransitionObserver already owns HOME classification. LiquidDock deliberately
  * does not parse TransitionInfo itself: it records notifyHomeVisibilityChanged(boolean) only while
  * the observer's own onTransitionReady(token, ...) is executing, then carries that classification
- * to the same token's onTransitionStarting/onTransitionFinished callbacks.</p>
+ * to the matching start/finish boundary. A ready source merged before its own START publishes that
+ * START at the merge boundary and finishes on the target token.</p>
  */
 final class SystemUiHomeTransitionSource {
     private static final String TAG = "[DC][SystemUiHomeTiming]";
@@ -90,9 +91,11 @@ final class SystemUiHomeTransitionSource {
                 Object source = args.length > 0 ? args[0] : null;
                 Object target = args.length > 1 ? args[1] : null;
                 try {
-                    tracker.onMerged(source, target);
+                    SystemUiHomeTransitionTracker.Event event = tracker.onMerged(source, target);
+                    if (event != null) publish(SystemUiHomeTransitionProtocol.PHASE_START,
+                            event, false);
                 } catch (Throwable error) {
-                    log("merge tracking failed", error);
+                    log("merge publish failed", error);
                 }
                 return result;
             });
