@@ -24,6 +24,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
+          # to the same PR reuse branch-specific Gradle/build-cache state.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - run: chmod +x ./gradlew
       - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
