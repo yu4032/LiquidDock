@@ -1,11 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import io.github.libxposed.api.XposedInterface;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,6 +24,13 @@ public class HookUtilArchitectureContractTest {
                     + "|[^(),\"]+"
                     + "|\\((?:[^()]|\\([^()]*\\))*\\)"
                     + ")*\\s*\\)",
+            Pattern.DOTALL);
+    private static final Pattern CLASS_ARRAY_FORWARDING_OVERLOAD = Pattern.compile(
+            "\\n\\s*static void hookMethod\\(ClassLoader cl, String className,\\s*"
+                    + "String methodName,\\s*XposedInterface\\.Hooker callback,\\s*"
+                    + "Class<\\?>\\[\\] paramTypeSpecs\\)\\s*\\{\\s*"
+                    + "hookMethod\\(cl, className, methodName, callback, "
+                    + "\\(Object\\[\\]\\) paramTypeSpecs\\);\\s*\\}",
             Pattern.DOTALL);
 
     @Test public void productionCallSitesDoNotUseLegacySilentInvocation() throws Exception {
@@ -77,22 +81,10 @@ public class HookUtilArchitectureContractTest {
     }
 
     @Test public void classArrayForwardingHasAnExactPackageBoundary() throws Exception {
-        Method overload = HookUtil.class.getDeclaredMethod(
-                "hookMethod",
-                ClassLoader.class,
-                String.class,
-                String.class,
-                XposedInterface.Hooker.class,
-                Class[].class);
-        assertNotNull(overload);
-        assertFalse("Class<?>[] forwarding overload should remain package-private rather than expand "
-                        + "the public HookUtil API",
-                java.lang.reflect.Modifier.isPublic(overload.getModifiers()));
-
         String source = Files.readString(MAIN.resolve("HookUtil.java"));
-        assertTrue("the exact Class<?>[] overload must explicitly forward each class as an Object "
-                        + "parameter spec into the existing resolver",
-                source.contains("(Object[]) paramTypeSpecs"));
+        assertTrue("Class<?>[] forwarding must use a package-private exact overload that explicitly "
+                        + "forwards the array as Object[] into the existing resolver",
+                CLASS_ARRAY_FORWARDING_OVERLOAD.matcher(source).find());
     }
 
     @Test public void legacyCompatibilityApiIsRemoved() throws Exception {
