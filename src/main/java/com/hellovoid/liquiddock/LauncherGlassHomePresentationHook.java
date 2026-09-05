@@ -38,20 +38,10 @@ final class LauncherGlassHomePresentationHook {
         try {
             HookUtil.hookMethod(classLoader, WINDOW_ELEMENT, "animTo", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                boolean closeToHome = containsHomeClose(args);
-                if (closeToHome) {
+                if (containsHomeClose(args)) {
                     applyHomeStartDecision(HOME_AUTHORITY.onLauncherHomeStarted());
                 }
-
-                Object result = chain.proceed(args);
-                if (closeToHome && HOME_AUTHORITY.shouldRevealFromLauncherFallback()) {
-                    // Fallback only: when SystemUI HOME START is unavailable, retain the proven
-                    // Launcher 4.50 WindowElement timing. The precise local presentation edge is
-                    // still the RectFSpringAnim onAnimationStart hook below.
-                    LauncherGlassSceneController.beginHomeReturnRevealForAll();
-                    MainHook.log(TAG + " APP HOME reveal armed by Launcher fallback");
-                }
-                return result;
+                return chain.proceed(args);
             }, Object.class);
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME presentation start unavailable: " + error);
