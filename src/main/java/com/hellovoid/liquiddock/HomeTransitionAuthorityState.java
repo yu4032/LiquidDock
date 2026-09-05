@@ -91,7 +91,7 @@ final class HomeTransitionAuthorityState {
 
         systemUiHomeArmed = true;
         activeSystemUiSerial = serial;
-        return Decision.freeze(true);
+        return Decision.freeze(false);
     }
 
     synchronized Decision onSystemUiFinished(
