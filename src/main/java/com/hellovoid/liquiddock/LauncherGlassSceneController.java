@@ -42,19 +42,20 @@ final class LauncherGlassSceneController {
         }
 
         void setCovered(boolean nextCovered) {
-            boolean isCovered = state == State.COVERED;
-            if (isCovered == nextCovered) return;
             if (nextCovered) {
                 state = State.COVERED;
                 fadeAfterFreshFrame = false;
                 fadeRevealReady = false;
                 revealBeforeFreshFrame = false;
-            } else {
-                generation++;
-                state = State.HOME_WAITING_FRESH_FRAME;
-                fadeAfterFreshFrame = true;
-                revealBeforeFreshFrame = false;
+                return;
             }
+            if (state != State.COVERED) return;
+
+            generation++;
+            state = State.HOME_WAITING_FRESH_FRAME;
+            // An early HOME reveal is presentation-only and survives the later vendor semantic
+            // uncover. Do not hide or schedule a second fade while waiting for the fresh frame.
+            fadeAfterFreshFrame = !revealBeforeFreshFrame;
         }
 
         void onGenerationInvalidated() {
@@ -66,14 +67,10 @@ final class LauncherGlassSceneController {
 
         void beginRevealBeforeFreshFrame() {
             if (revealBeforeFreshFrame) return;
-            // SystemUI HOME START is earlier than Launcher Recents semantic hide. It may therefore
-            // own presentation reveal while the semantic Recents state is still COVERED. Freshness
-            // was already invalidated by the HOME barrier, so this presentation-only transition
-            // must not invent another scene generation.
-            if (state == State.COVERED) {
-                state = State.HOME_WAITING_FRESH_FRAME;
-            }
-            if (state != State.HOME_WAITING_FRESH_FRAME) return;
+            // SystemUI HOME START is earlier than Launcher Recents semantic hide. It may own only
+            // presentation while the semantic Recents state remains COVERED. Freshness was already
+            // invalidated by the HOME barrier, so this must not change state or generation.
+            if (state != State.HOME_WAITING_FRESH_FRAME && state != State.COVERED) return;
             revealBeforeFreshFrame = true;
             fadeAfterFreshFrame = false;
             fadeRevealReady = true;
@@ -100,7 +97,8 @@ final class LauncherGlassSceneController {
         long generation() { return generation; }
         boolean isLayerVisible() {
             return state == State.HOME_VISIBLE
-                    || (state == State.HOME_WAITING_FRESH_FRAME && revealBeforeFreshFrame);
+                    || (revealBeforeFreshFrame
+                    && (state == State.HOME_WAITING_FRESH_FRAME || state == State.COVERED));
         }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
