@@ -86,7 +86,8 @@ final class LauncherGlassSessionRegistry {
         Handler main = new Handler(Looper.getMainLooper());
         AtomicInteger remaining = new AtomicInteger(sessions.size());
         AtomicBoolean failed = new AtomicBoolean(false);
-        Runnable completeOne = () -> {
+        RolloverCompletion completeOne = sessionSuccess -> {
+            if (!sessionSuccess) failed.set(true);
             if (remaining.decrementAndGet() != 0) return;
             boolean success = !failed.get();
             if (success) {
@@ -101,14 +102,12 @@ final class LauncherGlassSessionRegistry {
         for (LauncherGlassSession session : sessions) {
             try {
                 if (!session.rebindProducer(completeOne)) {
-                    failed.set(true);
                     MainHook.log("[DC][LauncherGlass] unlock endpoint rollover rejected by render queue");
-                    main.post(completeOne);
+                    main.post(() -> completeOne.onComplete(false));
                 }
             } catch (Throwable error) {
-                failed.set(true);
                 MainHook.log("[DC][LauncherGlass] unlock endpoint rollover failed: " + error);
-                main.post(completeOne);
+                main.post(() -> completeOne.onComplete(false));
             }
         }
     }
