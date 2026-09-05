@@ -54,12 +54,13 @@ public class HomeTransitionAuthorityStateTest {
         assertTrue(heldEnd.waitForSystemUi);
     }
 
-    @Test public void matchingSystemUiStartAndFinishOwnBarrier() {
+    @Test public void systemUiStartOwnsBarrierButNotVisualReveal() {
         HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
 
         HomeTransitionAuthorityState.Decision start = state.onSystemUiStarted(true, 11L, 100L);
         assertTrue(start.freezeBarrier);
-        assertTrue(start.beginReveal);
+        assertFalse("SystemUI transition tracking must not own Launcher cached-layer reveal timing",
+                start.beginReveal);
         assertFalse(start.releaseBarrier);
 
         HomeTransitionAuthorityState.Decision wrong =
