@@ -16,8 +16,8 @@ final class SystemUiKeyguardGoneRuntime {
     private SystemUiKeyguardGoneRuntime() {}
 
     static void install() {
-        HookUtil.InvocationResult<Object> applicationResult = HookUtil.tryInvokeStatic(
-                "android.app.ActivityThread", "currentApplication");
+        HookUtil.InvocationResult<Object> applicationResult =
+                HookUtil.tryInvokeActivityThreadCurrentApplication();
         Object application = applicationResult.succeeded() ? applicationResult.value() : null;
         if (application instanceof Context) {
             ensureRegistered((Context) application);

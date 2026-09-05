@@ -232,14 +232,19 @@ public final class HookUtil {
         return invokeResolved(clazz, null, methodName, true, args);
     }
 
-    public static InvocationResult<Object> tryInvokeStatic(
-            String className, String methodName, Object... args) {
+    /**
+     * Audited boot/framework exception. Vendor/private classes must never use HookUtil-owned
+     * class-name resolution; they are resolved by the target process ClassLoader before invocation.
+     */
+    static InvocationResult<Object> tryInvokeActivityThreadCurrentApplication() {
+        final String className = "android.app.ActivityThread";
+        final String methodName = "currentApplication";
         try {
-            return tryInvokeStatic(Class.forName(className), methodName, args);
+            return tryInvokeStatic(Class.forName(className), methodName);
         } catch (Throwable error) {
             return InvocationResult.failure(new Failure(
                     FailureKind.CLASS_NOT_FOUND, className, methodName, true,
-                    args, null, Collections.emptyList(), error));
+                    new Object[0], null, Collections.emptyList(), error));
         }
     }
 
@@ -250,11 +255,6 @@ public final class HookUtil {
     public static Object requireInvokeStatic(
             Class<?> clazz, String methodName, Object... args) {
         return require(tryInvokeStatic(clazz, methodName, args));
-    }
-
-    public static Object requireInvokeStatic(
-            String className, String methodName, Object... args) {
-        return require(tryInvokeStatic(className, methodName, args));
     }
 
     private static InvocationResult<Object> invokeResolved(

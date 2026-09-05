@@ -16,9 +16,9 @@ public final class ConfigKey<T> {
     private final StorageMode storageMode;
     private final ExportMode exportMode;
 
-    public ConfigKey(String name, Type type, T uiDefault, T runtimeFallback,
-                     T exportDefault, Integer minInt, Integer maxInt,
-                     StorageMode storageMode, ExportMode exportMode) {
+    private ConfigKey(String name, Type type, T uiDefault, T runtimeFallback,
+                      T exportDefault, Integer minInt, Integer maxInt,
+                      StorageMode storageMode, ExportMode exportMode) {
         this.name = name;
         this.type = type;
         this.uiDefault = uiDefault;
@@ -28,6 +28,24 @@ public final class ConfigKey<T> {
         this.maxInt = maxInt;
         this.storageMode = storageMode;
         this.exportMode = exportMode;
+    }
+
+    static <T> ConfigKey<T> register(
+            ConfigSchema.RegistrationAuthority authority,
+            String name,
+            Type type,
+            T uiDefault,
+            T runtimeFallback,
+            T exportDefault,
+            Integer minInt,
+            Integer maxInt,
+            StorageMode storageMode,
+            ExportMode exportMode) {
+        if (authority == null) {
+            throw new IllegalArgumentException("ConfigKey registration requires ConfigSchema authority");
+        }
+        return new ConfigKey<>(name, type, uiDefault, runtimeFallback, exportDefault,
+                minInt, maxInt, storageMode, exportMode);
     }
 
     public String name() { return name; }

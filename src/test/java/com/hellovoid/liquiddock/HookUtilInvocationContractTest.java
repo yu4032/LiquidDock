@@ -62,17 +62,17 @@ public class HookUtilInvocationContractTest {
         }
     }
 
-    @Test public void staticAndClassNameContractsAreExplicit() {
+    @Test public void staticClassContractsAreExplicit() {
         HookUtil.InvocationResult<Object> staticResult =
                 HookUtil.tryInvokeStatic(Fixture.class, "staticEcho", "ok");
         assertTrue(staticResult.succeeded());
         assertEquals("ok", staticResult.value());
         assertEquals("ok", HookUtil.requireInvokeStatic(Fixture.class, "staticEcho", "ok"));
 
-        HookUtil.InvocationResult<Object> missingClass =
-                HookUtil.tryInvokeStatic("missing.vendor.DoesNotExist", "x");
-        assertFalse(missingClass.succeeded());
-        assertEquals(HookUtil.FailureKind.CLASS_NOT_FOUND, missingClass.failure().kind());
+        HookUtil.InvocationResult<Object> nullClass =
+                HookUtil.tryInvokeStatic((Class<?>) null, "x");
+        assertFalse(nullClass.succeeded());
+        assertEquals(HookUtil.FailureKind.TARGET_NULL, nullClass.failure().kind());
     }
 
     @Test public void nullTargetIsStructuredFailure() {
