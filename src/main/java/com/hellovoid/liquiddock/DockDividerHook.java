@@ -30,7 +30,10 @@ final class DockDividerHook {
                     "bindView",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        View line = (View) HookUtil.invoke(chain.getThisObject(), "getContent");
+                        HookUtil.InvocationResult<Object> contentResult =
+                                HookUtil.tryInvoke(chain.getThisObject(), "getContent");
+                        View line = contentResult.succeeded() && contentResult.value() instanceof View
+                                ? (View) contentResult.value() : null;
                         if (line == null) return result;
 
                         LiquidDockConfig.Divider cfg = LiquidDockConfig.load().divider;

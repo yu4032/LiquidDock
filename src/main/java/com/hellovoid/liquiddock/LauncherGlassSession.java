@@ -1050,24 +1050,32 @@ final class LauncherGlassSession {
         if (root != null) root.postOnAnimation(() -> bindProducerWhenReady(attempt + 1));
     }
 
-    private void rebindProducer() {
-        if (shuttingDown) return;
+    boolean suspendProducerForUnlockCapture() {
+        if (shuttingDown) return false;
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (current == null) return false;
+        Miuix307PassBlurBridge.pauseUpdates(current);
+        return true;
+    }
+
+    boolean rebindProducer() {
+        return rebindProducer(null);
+    }
+
+    boolean rebindProducer(Runnable rolloverComplete) {
+        if (shuttingDown || !renderThread.isAlive()) return false;
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
         backdropPrepared = false;
-        rollInputProducerForRebind();
-    }
-
-    private void rollInputProducerForRebind() {
-        if (shuttingDown) return;
-        postRender(() -> {
+        return postRender(() -> {
             if (shuttingDown) return;
             makePbufferCurrent();
             releaseInputProducerEndpointOnRenderThread();
             if (shuttingDown) return;
             MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
             createInputProducer();
+            if (rolloverComplete != null) mainHandler.post(rolloverComplete);
         }, null);
     }
 

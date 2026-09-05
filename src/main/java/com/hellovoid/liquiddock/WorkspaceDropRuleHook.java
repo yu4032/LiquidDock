@@ -39,10 +39,12 @@ final class WorkspaceDropRuleHook {
                         int cellY = (Integer) yValue;
                         int spanX = (Integer) spanXValue;
                         int spanY = (Integer) spanYValue;
-                        Object columnsValue = HookUtil.invokeStatic(
-                                deviceConfig, "getCellCountX");
-                        Object rowsValue = HookUtil.invokeStatic(
-                                deviceConfig, "getCellCountY");
+                        HookUtil.InvocationResult<Object> columnsResult =
+                                HookUtil.tryInvokeStatic(deviceConfig, "getCellCountX");
+                        HookUtil.InvocationResult<Object> rowsResult =
+                                HookUtil.tryInvokeStatic(deviceConfig, "getCellCountY");
+                        Object columnsValue = columnsResult.succeeded() ? columnsResult.value() : null;
+                        Object rowsValue = rowsResult.succeeded() ? rowsResult.value() : null;
                         if (columnsValue instanceof Integer && rowsValue instanceof Integer) {
                             int columns = (Integer) columnsValue;
                             int rows = (Integer) rowsValue;

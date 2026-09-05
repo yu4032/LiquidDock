@@ -432,7 +432,8 @@ final class MiuixFolderGlassHook {
             releaseFolderCover(icon);
             return;
         }
-        Object value = HookUtil.invoke(icon, "getCover");
+        HookUtil.InvocationResult<Object> coverResult = HookUtil.tryInvoke(icon, "getCover");
+        Object value = coverResult.succeeded() ? coverResult.value() : null;
         if (!(value instanceof View)) return;
         View cover = (View) value;
         WeakReference<View> previousReference = CLAIMED_FOLDER_COVERS.put(
@@ -693,7 +694,8 @@ final class MiuixFolderGlassHook {
                 || !(material instanceof ImageView) || isSmallFolderMaterial(material)) return;
         Drawable drawable = ((ImageView) material).getDrawable();
         if (!isLargeFolderBackgroundDrawable(drawable)) return;
-        Object paintValue = HookUtil.invoke(drawable, "getPaint");
+        HookUtil.InvocationResult<Object> paintResult = HookUtil.tryInvoke(drawable, "getPaint");
+        Object paintValue = paintResult.succeeded() ? paintResult.value() : null;
         if (!(paintValue instanceof Paint)) return;
         Paint paint = (Paint) paintValue;
         synchronized (ORIGINAL_LARGE_FOLDER_PAINT_ALPHA) {
@@ -722,7 +724,8 @@ final class MiuixFolderGlassHook {
             Drawable drawable = entry.getKey();
             Integer alpha = entry.getValue();
             if (drawable == null || alpha == null) continue;
-            Object paintValue = HookUtil.invoke(drawable, "getPaint");
+            HookUtil.InvocationResult<Object> paintResult = HookUtil.tryInvoke(drawable, "getPaint");
+            Object paintValue = paintResult.succeeded() ? paintResult.value() : null;
             if (!(paintValue instanceof Paint)) continue;
             ((Paint) paintValue).setAlpha(alpha);
             drawable.invalidateSelf();

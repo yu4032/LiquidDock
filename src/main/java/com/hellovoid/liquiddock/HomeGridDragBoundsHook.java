@@ -53,13 +53,11 @@ final class HomeGridDragBoundsHook {
             }
         } catch (Throwable ignored) {}
 
-        try {
-            Object root = HookUtil.invoke(launcher, "getRootView");
-            if (root instanceof View) {
-                View view = (View) root;
-                if (view.getWidth() > 0 && view.getHeight() > 0) return view;
-            }
-        } catch (Throwable ignored) {}
+        HookUtil.InvocationResult<Object> rootResult = HookUtil.tryInvoke(launcher, "getRootView");
+        if (rootResult.succeeded() && rootResult.value() instanceof View) {
+            View view = (View) rootResult.value();
+            if (view.getWidth() > 0 && view.getHeight() > 0) return view;
+        }
         return null;
     }
 }

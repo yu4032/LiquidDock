@@ -59,7 +59,8 @@ public class DockVendorNativeShadowReuseContractTest {
     public void runtimeRefreshDelegatesBackToVendorShowViewShadow() throws Exception {
         String main = mainHook();
         assertTrue("runtime shadow changes must ask HotSeats to redraw its own shadow",
-                main.contains("HookUtil.invoke(hotSeats, \"showViewShadow\")"));
+                main.contains("HookUtil.InvocationResult<Object> refresh = HookUtil.tryInvoke(hotSeats, \"showViewShadow\")")
+                        && main.contains("if (!refresh.succeeded())"));
         assertFalse("runtime refresh must not manually replay MiShadow on a cached target",
                 main.contains("applyConfiguredNativeDockShadow("));
         assertFalse("runtime refresh must not keep a second native shadow target authority",

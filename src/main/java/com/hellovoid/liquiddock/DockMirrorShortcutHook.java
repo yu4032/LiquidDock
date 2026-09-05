@@ -72,11 +72,12 @@ final class DockMirrorShortcutHook {
         int refreshed = 0;
         for (Object hotSeats : snapshot) {
             if (hotSeats == null) continue;
-            try {
-                HookUtil.invoke(hotSeats, "onMirrorSeatUpdate");
+            HookUtil.InvocationResult<Object> refresh =
+                    HookUtil.tryInvoke(hotSeats, "onMirrorSeatUpdate");
+            if (refresh.succeeded()) {
                 refreshed++;
-            } catch (Throwable error) {
-                MainHook.log(TAG + " HotSeatsList refresh failed: " + error);
+            } else {
+                MainHook.log(TAG + " HotSeatsList refresh failed: " + refresh.failure());
             }
         }
         MainHook.log(TAG + " hide=" + VisualRuntimeState.isMirrorShortcutHidden()

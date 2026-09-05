@@ -146,7 +146,8 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(folder.contains("suppressLargeFolderDrawablePaint"));
         assertTrue(folder.contains("FolderIcon4x4NormalBackgroundDrawable"));
         assertTrue(folder.contains("FolderIcon4x4DefaultBackgroundDrawable"));
-        assertTrue(folder.contains("HookUtil.invoke(drawable, \"getPaint\")"));
+        assertTrue(folder.contains("HookUtil.tryInvoke(drawable, \"getPaint\")"));
+        assertTrue(folder.contains("paintResult.succeeded()"));
         assertTrue(folder.contains("paint.setAlpha(0)"));
         assertTrue(folder.contains("ORIGINAL_LARGE_FOLDER_PAINT_ALPHA"));
         assertTrue(folder.contains("restoreLargeFolderDrawablePaint"));

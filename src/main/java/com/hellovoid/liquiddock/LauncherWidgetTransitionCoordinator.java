@@ -224,7 +224,11 @@ final class LauncherWidgetTransitionCoordinator {
         // coherent, but cancel the fade immediately for return-to-widget: stale pixels must not be
         // exposed while HOME early-reveal is showing the previous StaticLayer generation.
         node.setSuppressedByDrag(true);
-        HookUtil.invoke(node, "hideImmediately");
+        HookUtil.InvocationResult<Object> immediateResult =
+                HookUtil.tryInvoke(node, "hideImmediately");
+        if (!immediateResult.succeeded()) {
+            MainHook.log(TAG + " immediate hide unavailable: " + immediateResult.failure());
+        }
         node.requestLifecycleRefresh();
     }
 
@@ -233,8 +237,13 @@ final class LauncherWidgetTransitionCoordinator {
             LauncherGlassSceneController controller = LauncherGlassSceneController.find(material);
             if (controller == null) return null;
             Object stateMachine = HookUtil.getField(controller, "state");
-            Object generationValue = HookUtil.invoke(stateMachine, "generation");
-            Object stateValue = HookUtil.invoke(stateMachine, "state");
+            HookUtil.InvocationResult<Object> generationResult =
+                    HookUtil.tryInvoke(stateMachine, "generation");
+            HookUtil.InvocationResult<Object> stateResult =
+                    HookUtil.tryInvoke(stateMachine, "state");
+            if (!generationResult.succeeded() || !stateResult.succeeded()) return null;
+            Object generationValue = generationResult.value();
+            Object stateValue = stateResult.value();
             long generation = generationValue instanceof Number
                     ? ((Number) generationValue).longValue() : -1L;
             boolean homePending = HookUtil.getBooleanField(controller, "homeTransitionPending");

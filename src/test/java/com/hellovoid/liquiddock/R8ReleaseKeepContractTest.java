@@ -34,9 +34,10 @@ public class R8ReleaseKeepContractTest {
 
         assertTrue("reflection keep file must exist", Files.exists(REFLECTION_KEEP));
         String reflectionRules = Files.readString(REFLECTION_KEEP);
-        assertTrue(reflectionRules.contains("android.os.Handler renderHandler;"));
-        assertTrue(reflectionRules.contains(
+        assertFalse(reflectionRules.contains("android.os.Handler renderHandler;"));
+        assertFalse(reflectionRules.contains(
                 "com.hellovoid.liquiddock.Miuix307PassBlurBridge$Binding binding;"));
-        assertTrue(reflectionRules.contains("void rebindProducer();"));
+        assertFalse(reflectionRules.contains("void rebindProducer();"));
+        assertFalse(reflectionRules.contains("LauncherGlassSession"));
     }
 }

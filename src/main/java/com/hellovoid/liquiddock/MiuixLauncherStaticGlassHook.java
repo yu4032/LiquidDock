@@ -123,7 +123,9 @@ final class MiuixLauncherStaticGlassHook {
             View workspace, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || workspace == null
                 || !workspace.isAttachedToWindow()) return;
-        Object current = HookUtil.invoke(workspace, "getCurrentCellLayout");
+        HookUtil.InvocationResult<Object> currentResult =
+                HookUtil.tryInvoke(workspace, "getCurrentCellLayout");
+        Object current = currentResult.succeeded() ? currentResult.value() : null;
         if (!(current instanceof View)) {
             MainHook.log(TAG + " current Workspace page reconcile skipped: CellLayout unavailable");
             return;
@@ -192,7 +194,9 @@ final class MiuixLauncherStaticGlassHook {
                                 && args[1] instanceof RectF && args[6] instanceof Boolean
                                 && !((Boolean) args[6])) {
                             Object owner = chain.getThisObject();
-                            Object target = HookUtil.invoke(owner, "getAnimTarget");
+                            HookUtil.InvocationResult<Object> targetResult =
+                                    HookUtil.tryInvoke(owner, "getAnimTarget");
+                            Object target = targetResult.succeeded() ? targetResult.value() : null;
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isWorkspace((View) target)) {
                                 LauncherGlassStaticNode node =
@@ -209,7 +213,9 @@ final class MiuixLauncherStaticGlassHook {
                                             drawIcon = false;
                                         }
                                     } else {
-                                        Object draw = HookUtil.invoke(owner, "isDrawIcon");
+                                        HookUtil.InvocationResult<Object> drawResult =
+                                                HookUtil.tryInvoke(owner, "isDrawIcon");
+                                        Object draw = drawResult.succeeded() ? drawResult.value() : null;
                                         drawIcon = draw instanceof Boolean && ((Boolean) draw);
                                     }
                                     boolean proxyVisible = useRotationRect
@@ -273,7 +279,9 @@ final class MiuixLauncherStaticGlassHook {
     private static void scheduleWorkspaceResumeReconcile(
             Object launcher, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || launcher == null) return;
-        Object value = HookUtil.invoke(launcher, "getWorkspace");
+        HookUtil.InvocationResult<Object> workspaceResult =
+                HookUtil.tryInvoke(launcher, "getWorkspace");
+        Object value = workspaceResult.succeeded() ? workspaceResult.value() : null;
         if (!(value instanceof View)) return;
         View workspace = (View) value;
         workspace.postOnAnimation(() -> {

@@ -26,7 +26,10 @@ public class WorkstationAllAppsHookContractTest {
         assertFalse("GridConfig does not own the All Apps grid type",
                 source.contains("HookUtil.getField(config, \"mGridType\")"));
         assertFalse("GridConfig has no getGridType() contract in this Launcher",
-                source.contains("HookUtil.invoke(config, \"getGridType\")"));
+                source.contains("HookUtil.tryInvoke(config, \"getGridType\")"));
+        assertTrue("CellLayout getGridType is an optional vendor probe",
+                source.contains("HookUtil.InvocationResult<Object> gridTypeResult = HookUtil.tryInvoke(cellLayout, \"getGridType\")")
+                        && source.contains("gridTypeResult.succeeded()"));
     }
 
     @Test

@@ -159,7 +159,8 @@ public class MainHook {
                                 if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
                                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                                 }
-                                int itemCount = (Integer) HookUtil.invoke(chain.getThisObject(), "getItemCount");
+                                int itemCount = (Integer) HookUtil.requireInvoke(
+                                        chain.getThisObject(), "getItemCount");
                                 if (itemCount > 0) {
                                     Object[] args = chain.getArgs().toArray(new Object[0]);
                                     args[1] = (Integer) args[1] + spacing * 2 * itemCount;
@@ -333,10 +334,9 @@ public class MainHook {
     private static void refreshVendorDockShadow() {
         Object hotSeats = hotSeatsShadowOwner();
         if (hotSeats == null) return;
-        try {
-            HookUtil.invoke(hotSeats, "showViewShadow");
-        } catch (Throwable e) {
-            log("[DC] HotSeats native shadow refresh failed: " + e);
+        HookUtil.InvocationResult<Object> refresh = HookUtil.tryInvoke(hotSeats, "showViewShadow");
+        if (!refresh.succeeded()) {
+            log("[DC] HotSeats native shadow refresh failed: " + refresh.failure());
         }
     }
 
@@ -367,10 +367,11 @@ public class MainHook {
     /** Prefer the active theme-aware background and keep BlurBackground2 as compatibility fallback. */
     private static View resolveActiveDockBackground(Object hotSeats) {
         if (hotSeats == null) return null;
-        try {
-            Object active = HookUtil.invoke(hotSeats, "getHotSeatsBackground");
-            if (active instanceof View) return (View) active;
-        } catch (Throwable ignored) {}
+        HookUtil.InvocationResult<Object> activeResult =
+                HookUtil.tryInvoke(hotSeats, "getHotSeatsBackground");
+        if (activeResult.succeeded() && activeResult.value() instanceof View) {
+            return (View) activeResult.value();
+        }
         try {
             Object compat = HookUtil.getField(hotSeats, "mBlurBackground2");
             return compat instanceof View ? (View) compat : null;
@@ -472,7 +473,11 @@ public class MainHook {
                     HookUtil.setIntField(view, "mWidth", Math.round(fromW + (targetW - fromW) * t));
                     HookUtil.setIntField(view, "mHeight", Math.round(fromH + (targetH - fromH) * t));
                     HookUtil.setField(view, "mCornerRadius", fromR + (targetR - fromR) * t);
-                    try { HookUtil.invoke(view, "triggerMeasure"); } catch (Throwable ignored) {}
+                    HookUtil.InvocationResult<Object> measureResult =
+                            HookUtil.tryInvoke(view, "triggerMeasure");
+                    if (!measureResult.succeeded()) {
+                        // Optional on some Launcher builds; requestLayout below is the fallback.
+                    }
                     view.requestLayout();
                     syncAll(view);
                 });
@@ -519,12 +524,15 @@ public class MainHook {
         boolean detected = false;
         try {
             Class<?> mc = Class.forName("com.miui.home.launcher.allapps.LauncherModeController", false, cl);
-            Object laptopResult = HookUtil.invokeStatic("com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+            HookUtil.InvocationResult<Object> laptopProbe = HookUtil.tryInvokeStatic(
+                    "com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+            Object laptopResult = laptopProbe.succeeded() ? laptopProbe.value() : null;
             if (laptopResult instanceof Boolean) {
                 workstationMode = (Boolean) laptopResult;
             } else {
-                Object dcResult = HookUtil.invokeStatic(
+                HookUtil.InvocationResult<Object> dcProbe = HookUtil.tryInvokeStatic(
                         "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
+                Object dcResult = dcProbe.succeeded() ? dcProbe.value() : null;
                 workstationMode = dcResult instanceof Boolean && (Boolean) dcResult;
             }
             Class<?> sm = Class.forName("com.miui.home.launcher.laptop.LaptopStateManager", false, cl);
@@ -546,15 +554,17 @@ public class MainHook {
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 if (workstationModeHookConfirmed) return; // hook already confirmed the state
                 try {
-                    Object recheck = HookUtil.invokeStatic(
+                    HookUtil.InvocationResult<Object> recheckResult = HookUtil.tryInvokeStatic(
                             "com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+                    Object recheck = recheckResult.succeeded() ? recheckResult.value() : null;
                     boolean actual = recheck instanceof Boolean && (Boolean) recheck;
-                    if (recheck == null) {
-                        try {
-                            Object dcResult = HookUtil.invokeStatic(
-                                    "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
-                            actual = dcResult instanceof Boolean && (Boolean) dcResult;
-                        } catch (Throwable ignored) {}
+                    if (!recheckResult.succeeded() || recheck == null) {
+                        HookUtil.InvocationResult<Object> dcResult = HookUtil.tryInvokeStatic(
+                                "com.miui.home.launcher.DeviceConfig",
+                                "isMingouLaptopPcModeEnabled");
+                        if (dcResult.succeeded()) {
+                            actual = dcResult.value() instanceof Boolean && (Boolean) dcResult.value();
+                        }
                     }
                     if (actual != workstationMode) setWorkstationMode(actual);
                 } catch (Throwable ignored) {}
@@ -564,7 +574,8 @@ public class MainHook {
         }
         if (!detected) try {
             Class<?> dc = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
-            workstationMode = (Boolean) HookUtil.invokeStatic("com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
+            workstationMode = (Boolean) HookUtil.requireInvokeStatic(
+                    "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
             HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled", new Class<?>[]{boolean.class},
                     chain -> {
                         setWorkstationMode((Boolean) chain.getArgs().get(0));
@@ -709,8 +720,8 @@ public class MainHook {
     }
 
     private static boolean animating(View v) {
-        try { return Boolean.TRUE.equals(HookUtil.invoke(v, "isAnimating")); }
-        catch (Throwable e) { return false; }
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(v, "isAnimating");
+        return result.succeeded() && Boolean.TRUE.equals(result.value());
     }
 
     // ── data ─────────────────────────────────────────────────────────

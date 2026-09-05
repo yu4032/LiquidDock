@@ -39,8 +39,11 @@ final class WorkstationDockGeometryHook {
         try {
             HookUtil.hookMethod(classLoader, LINE_HOLDER, "bindView", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                Object content = HookUtil.invoke(chain.getThisObject(), "getContent");
-                if (content instanceof View) bindFromAnchor((View) content);
+                HookUtil.InvocationResult<Object> contentResult =
+                        HookUtil.tryInvoke(chain.getThisObject(), "getContent");
+                if (contentResult.succeeded() && contentResult.value() instanceof View) {
+                    bindFromAnchor((View) contentResult.value());
+                }
                 return result;
             });
             MainHook.log("[DC] workstation visible Dock geometry hook installed widthOffset="

@@ -49,6 +49,8 @@ Debug 与 Release 都经过 AGP optimization / R8 路径。涉及反射入口时
 ## Hook / runtime ownership 规则
 
 - 系统私有类与反射兼容放在 `*Hook` / `HookUtil` 边界；
+- `HookUtil` 仅用于 vendor/system private 边界；LiquidDock 自有类之间禁止通过 `HookUtil` 反射访问，必须使用 typed Java / package-private API；
+- optional vendor 调用使用 `tryInvoke*` 并显式检查 `succeeded()`；feature invariant 依赖的调用使用 `requireInvoke*`，禁止重新引入 silent-null facade；
 - 纯策略尽量 Android/Xposed-free；
 - 不要继续扩大 `MainHook` 的全局 mutable state；
 - 不要让 `LiquidDockConfig.load()` 产生跨模块副作用；

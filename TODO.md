@@ -6,9 +6,8 @@
 
 ## 1. PR #65 后续硬化
 
-PR #65 已完成 runtime visual ownership 与 Workstation Recents shared-glass producer recovery，后续仍需收紧：
+PR #65 已完成 runtime visual ownership 与 Workstation Recents shared-glass producer recovery；本轮进一步完成 `LauncherGlassSessionRegistry → LauncherGlassSession` package-private typed lifecycle 收口，并移除对应内部反射与 R8 keep。剩余仍需收紧：
 
-- 将 `LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn()` 对 `rebindProducer()` 的 `HookUtil.invoke(...)` 反射调用改为明确的 package-private 内部 API，移除对应 R8 keep rule 与“反射失败但日志仍显示 rebound”的假阳性风险。
 - Workstation `onRecentViewHide` 只在 scene 确实处于 Recents covered 状态时 rollover shared producer；防止厂商重复派发 hide 时重复重建 BufferQueue endpoint。
 - 为 producer rollover 增加明确成功/失败诊断，不要只按 session 数量计数。
 - 真机回归：工作台进入 Recents → 返回 HOME，确认整个 shared glass layer 自动恢复，不依赖长按图标或其它交互触发。
