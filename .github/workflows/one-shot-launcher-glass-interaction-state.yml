@@ -1,0 +1,39 @@
+name: One-shot launcher glass interaction state applicator
+
+on:
+  push:
+    branches:
+      - refactor/pure-runtime-state-tests
+    paths:
+      - .github/scripts/apply_launcher_glass_interaction_state.py
+      - .github/workflows/one-shot-launcher-glass-interaction-state.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/pure-runtime-state-tests
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python .github/scripts/apply_launcher_glass_interaction_state.py
+      - run: git diff --check
+      - name: Commit generated interaction wiring and remove applicator
+        run: |
+          rm .github/scripts/apply_launcher_glass_interaction_state.py
+          rm .github/workflows/one-shot-launcher-glass-interaction-state.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/LauncherGlassSinkView.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassStaticNode.java \
+                  .github/scripts/apply_launcher_glass_interaction_state.py \
+                  .github/workflows/one-shot-launcher-glass-interaction-state.yml
+          git commit -m "refactor: centralize launcher glass suppression and press state"
+          git push origin HEAD:refactor/pure-runtime-state-tests
