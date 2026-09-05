@@ -31,6 +31,9 @@ final class HomeGridOrientationMemoryHook {
     private static volatile HomeGridProfile profile;
     private static volatile HomeGridOrientationRuntime runtime;
     private static volatile HomeGridOrientation lastOrientation;
+    // Every newly scheduled target resolution, workspace replacement, or Workstation edge
+    // invalidates callbacks from the previous orientation-memory generation.
+    private static volatile long resolutionGeneration;
     private static WeakReference<View> workspaceRef = new WeakReference<>(null);
 
     private HomeGridOrientationMemoryHook() {}
@@ -62,7 +65,11 @@ final class HomeGridOrientationMemoryHook {
                 HomeGridOrientation currentOrientation = orientationOf(
                         workspace.getResources().getConfiguration());
                 lastOrientation = currentOrientation;
-                scheduleTargetResolution(workspace, currentOrientation, active);
+                if (!MainHook.isWorkstationMode()) {
+                    scheduleTargetResolution(workspace, currentOrientation, active);
+                } else {
+                    resolutionGeneration++;
+                }
             } catch (Throwable error) {
                 MainHook.log("[DC] orientation layout setup resolve failed: " + error);
             }
@@ -84,7 +91,9 @@ final class HomeGridOrientationMemoryHook {
                     List<HomeGridItemPosition> sourcePositions = sourceWorkspace == null
                             ? null : collectPositions(sourceWorkspace);
                     boolean physicalRotation = sourceOrientation != targetOrientation;
-                    if (physicalRotation && active != null && sourcePositions != null) {
+                    boolean workstationMode = MainHook.isWorkstationMode();
+                    if (physicalRotation && !workstationMode
+                            && active != null && sourcePositions != null) {
                         active.captureCurrent(sourceOrientation, sourcePositions);
                     }
 
@@ -94,8 +103,11 @@ final class HomeGridOrientationMemoryHook {
                         View targetWorkspace = workspaceFrom(owner);
                         if (targetWorkspace != null) workspaceRef = new WeakReference<>(targetWorkspace);
                         lastOrientation = targetOrientation;
-                        if (physicalRotation && targetWorkspace != null && active != null) {
+                        if (physicalRotation && targetWorkspace != null && active != null
+                                && !MainHook.isWorkstationMode()) {
                             scheduleTargetResolution(targetWorkspace, targetOrientation, active);
+                        } else if (physicalRotation) {
+                            resolutionGeneration++;
                         }
                     } catch (Throwable error) {
                         MainHook.log("[DC] orientation layout rotation resolve failed: " + error);
@@ -139,17 +151,34 @@ final class HomeGridOrientationMemoryHook {
                                                  HomeGridOrientation targetOrientation,
                                                  HomeGridOrientationRuntime active) {
         if (workspace == null || targetOrientation == null || active == null) return;
-        workspace.post(() -> resolveTarget(workspace, targetOrientation, active, false));
+        long generation = ++resolutionGeneration;
+        workspace.post(() -> resolveTarget(
+                workspace, targetOrientation, active, false, generation));
         workspace.postDelayed(
-                () -> resolveTarget(workspace, targetOrientation, active, false), MID_DELAY_MS);
+                () -> resolveTarget(workspace, targetOrientation, active, false, generation),
+                MID_DELAY_MS);
         workspace.postDelayed(
-                () -> resolveTarget(workspace, targetOrientation, active, true), SETTLE_DELAY_MS);
+                () -> resolveTarget(workspace, targetOrientation, active, true, generation),
+                SETTLE_DELAY_MS);
     }
 
     private static void resolveTarget(View workspace,
                                       HomeGridOrientation targetOrientation,
                                       HomeGridOrientationRuntime active,
-                                      boolean finalAttempt) {
+                                      boolean finalAttempt,
+                                      long scheduledGeneration) {
+        View currentWorkspace = workspaceRef.get();
+        HomeGridOrientation currentOrientation = workspace == null
+                ? null : orientationOf(workspace.getResources().getConfiguration());
+        if (!HomeGridOrientationMemoryPolicy.shouldResolve(
+                MainHook.isWorkstationMode(),
+                workspace != null && workspace == currentWorkspace,
+                scheduledGeneration,
+                resolutionGeneration,
+                targetOrientation,
+                currentOrientation)) {
+            return;
+        }
         List<HomeGridItemPosition> current = collectPositions(workspace);
         if (current == null) return;
         HomeGridLayoutSnapshot remembered = active.rememberedTarget(targetOrientation, current);
@@ -217,28 +246,52 @@ final class HomeGridOrientationMemoryHook {
         HashMap<Long, Object> tags = new HashMap<>();
         if (!collectItemTags(workspace, tags) || tags.size() != snapshot.size()) return false;
 
+        ArrayList<HomeGridItemPosition> previous = new ArrayList<>(snapshot.size());
+        ArrayList<Object> orderedTags = new ArrayList<>(snapshot.size());
         for (HomeGridItemPosition target : snapshot.positions()) {
             Object tag = tags.get(target.itemId());
             if (tag == null) return false;
             try {
-                if (HookUtil.getLongField(tag, "screenId") != target.screenId()) return false;
+                long screenId = HookUtil.getLongField(tag, "screenId");
+                if (screenId != target.screenId()) return false;
+                previous.add(new HomeGridItemPosition(
+                        target.itemId(),
+                        screenId,
+                        HookUtil.getIntField(tag, "cellX"),
+                        HookUtil.getIntField(tag, "cellY"),
+                        HookUtil.getIntField(tag, "spanX"),
+                        HookUtil.getIntField(tag, "spanY")));
+                orderedTags.add(tag);
             } catch (Throwable error) {
                 return false;
             }
         }
 
-        try {
-            for (HomeGridItemPosition target : snapshot.positions()) {
-                Object tag = tags.get(target.itemId());
-                HookUtil.setLongField(tag, "screenId", target.screenId());
-                HookUtil.setIntField(tag, "cellX", target.cellX());
-                HookUtil.setIntField(tag, "cellY", target.cellY());
-                HookUtil.setIntField(tag, "spanX", target.spanX());
-                HookUtil.setIntField(tag, "spanY", target.spanY());
+        AtomicMutationClaimState mutation = new AtomicMutationClaimState(snapshot.size());
+        if (!mutation.beginIfFullyResolved(orderedTags.size())) return false;
+
+        List<HomeGridItemPosition> targets = new ArrayList<>(snapshot.positions());
+        for (int index = 0; index < targets.size(); index++) {
+            boolean succeeded = false;
+            Throwable failure = null;
+            try {
+                writePosition(orderedTags.get(index), targets.get(index));
+                succeeded = true;
+            } catch (Throwable error) {
+                failure = error;
             }
-        } catch (Throwable error) {
-            MainHook.log("[DC] orientation snapshot apply failed: " + error);
-            return false;
+
+            AtomicMutationClaimState.Decision decision = mutation.onMutationResult(succeeded);
+            if (!succeeded) {
+                rollbackPositions(orderedTags, previous, decision.rollbackCount);
+                MainHook.log("[DC] orientation snapshot apply failed: " + failure);
+                return false;
+            }
+            if (!decision.continueMutation && !decision.commitClaim) {
+                rollbackPositions(orderedTags, previous, index + 1);
+                MainHook.log("[DC] orientation snapshot apply aborted before commit");
+                return false;
+            }
         }
 
         requestLayoutRecursively(workspace);
@@ -246,6 +299,29 @@ final class HomeGridOrientationMemoryHook {
         MainHook.log("[DC] orientation layout restored target=" + snapshot.orientation()
                 + " items=" + snapshot.size());
         return true;
+    }
+
+    private static void writePosition(Object tag, HomeGridItemPosition position) {
+        HookUtil.setLongField(tag, "screenId", position.screenId());
+        HookUtil.setIntField(tag, "cellX", position.cellX());
+        HookUtil.setIntField(tag, "cellY", position.cellY());
+        HookUtil.setIntField(tag, "spanX", position.spanX());
+        HookUtil.setIntField(tag, "spanY", position.spanY());
+    }
+
+    private static void rollbackPositions(
+            List<Object> tags,
+            List<HomeGridItemPosition> previous,
+            int attemptedCount) {
+        int count = Math.min(attemptedCount, Math.min(tags.size(), previous.size()));
+        for (int index = count - 1; index >= 0; index--) {
+            try {
+                writePosition(tags.get(index), previous.get(index));
+            } catch (Throwable rollbackError) {
+                MainHook.log("[DC] orientation snapshot rollback failed item="
+                        + previous.get(index).itemId() + ": " + rollbackError);
+            }
+        }
     }
 
     private static boolean collectItemTags(View view, Map<Long, Object> out) {
