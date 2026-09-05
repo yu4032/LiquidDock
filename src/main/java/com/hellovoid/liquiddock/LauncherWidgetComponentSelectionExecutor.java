@@ -106,13 +106,13 @@ final class LauncherWidgetComponentSelectionExecutor {
                 if (targetName == null) targetName = "";
                 if (!selector.name.equals(targetName)) continue;
             } else {
-                target = HookUtil.invoke(root, "findElement", selector.name);
+                target = invokeOptional(root, "findElement", selector.name);
             }
             if (target == null || !selector.className.equals(target.getClass().getName())) continue;
             if (!claimed.add(target)) continue;
             boolean originalShow = readBooleanField(target, "mShow", true);
             claims.add(new MamlClaim(target, originalShow));
-            HookUtil.invoke(target, "show", false);
+            invokeOptional(target, "show", false);
         }
         if (!claims.isEmpty()) {
             CLAIMS.put(host, new Claim(List.of(), List.of(), List.of(), claims));
@@ -154,8 +154,17 @@ final class LauncherWidgetComponentSelectionExecutor {
             if (item.view != null) item.view.setVisibility(item.originalVisibility);
         }
         for (MamlClaim item : claim.maml) {
-            HookUtil.invoke(item.element, "show", item.originalShow);
+            invokeOptional(item.element, "show", item.originalShow);
         }
+    }
+
+    private static Object invokeOptional(Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log("[DC][WidgetComponent] " + methodName + " unavailable: " + result.failure());
+            return null;
+        }
+        return result.value();
     }
 
     private static List<WidgetComponentStore.Descriptor> selectors(
@@ -172,7 +181,7 @@ final class LauncherWidgetComponentSelectionExecutor {
     }
 
     private static WidgetBackgroundIdentity identity(View host) {
-        Object itemInfo = HookUtil.invoke(host, "getItemInfo");
+        Object itemInfo = invokeOptional(host, "getItemInfo");
         if (itemInfo == null) return null;
         return new WidgetBackgroundIdentity(
                 "maml",

@@ -94,7 +94,8 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static Object read(Object owner, String getter, String field) {
-        Object value = HookUtil.invoke(owner, getter);
+        HookUtil.InvocationResult<Object> getterResult = HookUtil.tryInvoke(owner, getter);
+        Object value = getterResult.succeeded() ? getterResult.value() : null;
         if (value != null) return value;
         try {
             return HookUtil.getField(owner, field);
@@ -108,8 +109,9 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static void publishFinished(String from) {
-        Object application = HookUtil.invokeStatic(
+        HookUtil.InvocationResult<Object> applicationResult = HookUtil.tryInvokeStatic(
                 "android.app.ActivityThread", "currentApplication");
+        Object application = applicationResult.succeeded() ? applicationResult.value() : null;
         if (!(application instanceof Context)) {
             GONE_FINISHED_SENT.set(false);
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED publish skipped: no application");

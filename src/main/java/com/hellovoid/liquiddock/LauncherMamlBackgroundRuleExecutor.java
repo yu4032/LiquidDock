@@ -31,7 +31,7 @@ final class LauncherMamlBackgroundRuleExecutor {
 
     static void claimLoadedRoot(View host, Object root) {
         if (host == null) return;
-        Object itemInfo = HookUtil.invoke(host, "getItemInfo");
+        Object itemInfo = invokeOptional(host, "getItemInfo");
         WidgetBackgroundIdentity identity = new WidgetBackgroundIdentity(
                 "maml",
                 readStringField(itemInfo, "productId"),
@@ -78,7 +78,7 @@ final class LauncherMamlBackgroundRuleExecutor {
         List<Object> resolved = new ArrayList<>(elementNames.size());
         String missingName = null;
         for (String elementName : elementNames) {
-            Object target = HookUtil.invoke(root, "findElement", elementName);
+            Object target = invokeOptional(root, "findElement", elementName);
             if (target == null) {
                 missingName = elementName;
                 break;
@@ -98,7 +98,7 @@ final class LauncherMamlBackgroundRuleExecutor {
 
         Claim previous = CLAIMS.get(host);
         if (previous != null && previous.matches(root, resolved)) {
-            for (Object target : resolved) HookUtil.invoke(target, "show", false);
+            for (Object target : resolved) invokeOptional(target, "show", false);
             MainHook.log(LOG_TAG + identityText
                     + " rule=" + rule.id()
                     + " targets=" + elementNames
@@ -116,7 +116,7 @@ final class LauncherMamlBackgroundRuleExecutor {
                     target, readBooleanField(target, "mShow", true)));
         }
         CLAIMS.put(host, new Claim(root, elementClaims));
-        for (Object target : resolved) HookUtil.invoke(target, "show", false);
+        for (Object target : resolved) invokeOptional(target, "show", false);
 
         MainHook.log(LOG_TAG + identityText
                 + " rule=" + rule.id()
@@ -130,6 +130,15 @@ final class LauncherMamlBackgroundRuleExecutor {
         if (claim != null) restore(claim);
     }
 
+    private static Object invokeOptional(Object target, String methodName, Object... args) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(target, methodName, args);
+        if (!result.succeeded()) {
+            MainHook.log(LOG_TAG + " " + methodName + " unavailable: " + result.failure());
+            return null;
+        }
+        return result.value();
+    }
+
     private static boolean allHidden(List<Object> elements) {
         for (Object element : elements) {
             if (readBooleanField(element, "mShow", true)) return false;
@@ -139,7 +148,7 @@ final class LauncherMamlBackgroundRuleExecutor {
 
     private static void restore(Claim claim) {
         for (ElementClaim element : claim.elements) {
-            HookUtil.invoke(element.element, "show", element.originalShow);
+            invokeOptional(element.element, "show", element.originalShow);
         }
     }
 

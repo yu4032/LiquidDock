@@ -151,7 +151,10 @@ final class LauncherWidgetComponentDiscovery {
                     renderOrdinal[0]++, depth, mamlAreaRatio(element, rootArea), Float.NaN);
             renderMetadata.put(element, metadata);
 
-            Object namedTarget = name.isEmpty() ? null : HookUtil.invoke(root, "findElement", name);
+            HookUtil.InvocationResult<Object> namedTargetResult = name.isEmpty()
+                    ? null : HookUtil.tryInvoke(root, "findElement", name);
+            Object namedTarget = namedTargetResult != null && namedTargetResult.succeeded()
+                    ? namedTargetResult.value() : null;
             if (namedTarget != element) {
                 MainHook.log(TAG
                         + " source=maml-render"
@@ -336,12 +339,10 @@ final class LauncherWidgetComponentDiscovery {
 
     private static Number invokeNumber(Object target, String methodName) {
         if (target == null) return null;
-        try {
-            Object value = HookUtil.invoke(target, methodName);
-            return value instanceof Number ? (Number) value : null;
-        } catch (Throwable ignored) {
-            return null;
-        }
+        HookUtil.InvocationResult<Object> valueResult = HookUtil.tryInvoke(target, methodName);
+        if (!valueResult.succeeded()) return null;
+        Object value = valueResult.value();
+        return value instanceof Number ? (Number) value : null;
     }
 
     private static float safeViewZ(View view) {

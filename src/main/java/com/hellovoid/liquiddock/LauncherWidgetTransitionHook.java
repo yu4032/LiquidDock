@@ -106,7 +106,9 @@ final class LauncherWidgetTransitionHook {
     }
 
     private static View resolveAnimTargetContainer(Object target) {
-        Object value = HookUtil.invoke(target, "getAnimTargetContainerView");
+        HookUtil.InvocationResult<Object> containerResult =
+                HookUtil.tryInvoke(target, "getAnimTargetContainerView");
+        Object value = containerResult.succeeded() ? containerResult.value() : null;
         return value instanceof View ? (View) value : null;
     }
 }
