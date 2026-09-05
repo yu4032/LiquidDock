@@ -58,6 +58,7 @@ public class LauncherUnlockCaptureBoundaryContractTest {
 
         assertTrue(session.contains("boolean suspendProducerForUnlockCapture()"));
         assertTrue(session.contains("boolean rebindProducer(Runnable rolloverComplete)"));
+        assertTrue(session.contains("if (shuttingDown || !renderThread.isAlive()) return false;"));
         assertTrue(registry.contains("session.suspendProducerForUnlockCapture()"));
         assertTrue(registry.contains("session.rebindProducer(completeOne)"));
         assertFalse(registry.contains("HookUtil.getField(session, \"binding\")"));
@@ -65,6 +66,15 @@ public class LauncherUnlockCaptureBoundaryContractTest {
         assertFalse(registry.contains("renderHandler"));
         assertTrue(registry.contains("failed.set(true)"));
         assertTrue(registry.contains("main.post(completeOne)"));
+
+        int typedRebind = session.indexOf("boolean rebindProducer(Runnable rolloverComplete)");
+        int enqueue = session.indexOf("return postRender(() ->", typedRebind);
+        int endpointRelease = session.indexOf("releaseInputProducerEndpointOnRenderThread();", enqueue);
+        int producerCreate = session.indexOf("createInputProducer();", endpointRelease);
+        int callback = session.indexOf("mainHandler.post(rolloverComplete)", producerCreate);
+        assertTrue("rollover callback must follow endpoint replacement on the render queue",
+                typedRebind >= 0 && enqueue > typedRebind && endpointRelease > enqueue
+                        && producerCreate > endpointRelease && callback > producerCreate);
     }
 
     @Test public void systemUiSourceUsesSemanticGoneFinishedBoundary() throws Exception {
