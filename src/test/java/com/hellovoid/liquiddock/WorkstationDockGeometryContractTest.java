@@ -27,12 +27,8 @@ public class WorkstationDockGeometryContractTest {
     @Test public void workstationWidthTargetsVisibleDockContainerInsteadOfHiddenNormalBackground()
             throws Exception {
         String main = source("MainHook.java");
-        int start = main.indexOf("private static void installWorkstationDockHooks");
-        int end = main.indexOf("private static void installWorkstationModeGuard", start);
-        assertTrue(start >= 0 && end > start);
-        String workstationHooks = main.substring(start, end);
         assertFalse("workstation width must not mutate the hidden normal HotSeats background",
-                workstationHooks.contains("widthOffset != 0) args[0]"));
+                main.contains("widthOffset != 0) args[0]"));
         assertTrue("MainHook must install the visible workstation Dock geometry hook",
                 main.contains("WorkstationDockGeometryHook.install(classLoader, config.workstation);"));
 
