@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.Test;
@@ -16,6 +17,13 @@ public class HookUtilArchitectureContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Pattern GENERIC_STATIC_CLASS_NAME_API = Pattern.compile(
             "\\b(?:tryInvokeStatic|requireInvokeStatic)\\s*\\(\\s*String\\b",
+            Pattern.DOTALL);
+    private static final Pattern DEFAULT_LOADER_CLASS_FOR_NAME = Pattern.compile(
+            "Class\\.forName\\s*\\(\\s*(?:"
+                    + "\"(?:\\\\.|[^\"])*\""
+                    + "|[^(),\"]+"
+                    + "|\\((?:[^()]|\\([^()]*\\))*\\)"
+                    + ")*\\s*\\)",
             Pattern.DOTALL);
 
     @Test public void productionCallSitesDoNotUseLegacySilentInvocation() throws Exception {
@@ -53,23 +61,10 @@ public class HookUtilArchitectureContractTest {
                             && !path.getFileName().toString().equals("HookUtil.java"))
                     ::iterator) {
                 String source = Files.readString(file);
-                int from = 0;
-                while (true) {
-                    int call = source.indexOf("Class.forName", from);
-                    if (call < 0) break;
-                    int open = source.indexOf('(', call + "Class.forName".length());
-                    if (open < 0) break;
-                    int close = matchingCloseParen(source, open);
-                    if (close < 0) {
-                        offenders.add(MAIN.relativize(file) + ": malformed Class.forName call");
-                        break;
-                    }
-                    String arguments = source.substring(open + 1, close);
-                    if (topLevelCommaCount(arguments) < 2) {
-                        offenders.add(MAIN.relativize(file) + ": "
-                                + compact(arguments));
-                    }
-                    from = close + 1;
+                Matcher matcher = DEFAULT_LOADER_CLASS_FOR_NAME.matcher(source);
+                while (matcher.find()) {
+                    offenders.add(MAIN.relativize(file) + ": "
+                            + matcher.group().replaceAll("\\s+", " ").trim());
                 }
             }
         }
@@ -84,54 +79,5 @@ public class HookUtilArchitectureContractTest {
         assertFalse(source.contains("public static Object invokeStatic("));
         assertFalse(source.contains("findMethodBestMatch("));
         assertFalse(source.contains("Temporary compatibility API"));
-    }
-
-    private static int matchingCloseParen(String source, int open) {
-        int nested = 0;
-        boolean quoted = false;
-        boolean escaped = false;
-        for (int i = open + 1; i < source.length(); i++) {
-            char c = source.charAt(i);
-            if (quoted) {
-                if (escaped) escaped = false;
-                else if (c == '\\') escaped = true;
-                else if (c == '"') quoted = false;
-                continue;
-            }
-            if (c == '"') {
-                quoted = true;
-            } else if (c == '(') {
-                nested++;
-            } else if (c == ')') {
-                if (nested == 0) return i;
-                nested--;
-            }
-        }
-        return -1;
-    }
-
-    private static int topLevelCommaCount(String arguments) {
-        int commas = 0;
-        int nested = 0;
-        boolean quoted = false;
-        boolean escaped = false;
-        for (int i = 0; i < arguments.length(); i++) {
-            char c = arguments.charAt(i);
-            if (quoted) {
-                if (escaped) escaped = false;
-                else if (c == '\\') escaped = true;
-                else if (c == '"') quoted = false;
-                continue;
-            }
-            if (c == '"') quoted = true;
-            else if (c == '(') nested++;
-            else if (c == ')') nested--;
-            else if (c == ',' && nested == 0) commas++;
-        }
-        return commas;
-    }
-
-    private static String compact(String value) {
-        return value.replaceAll("\\s+", " ").trim();
     }
 }
