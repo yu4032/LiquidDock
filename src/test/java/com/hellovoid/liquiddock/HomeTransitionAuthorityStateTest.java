@@ -5,30 +5,14 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Pure authority behavior for Launcher <-> SystemUI HOME presentation handoff. */
+/** Pure capture-authority behavior for Launcher <-> SystemUI HOME handoff. */
 public class HomeTransitionAuthorityStateTest {
-    @Test public void launcherHomeStartFreezesWithoutOwningVisualReveal() {
+    @Test public void launcherHomeStartFreezesCapture() {
         HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
 
         HomeTransitionAuthorityState.Decision start = state.onLauncherHomeStarted();
         assertTrue(start.freezeBarrier);
-        assertFalse("animTo may freeze freshness but must not reveal cached glass",
-                start.beginReveal);
         assertFalse(start.releaseBarrier);
-    }
-
-    @Test public void launcherAnimationStartRevealsEvenWithSystemUiAuthority() {
-        HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
-        state.onLauncherHomeStarted();
-        state.onSystemUiStarted(true, 8L, 100L);
-
-        HomeTransitionAuthorityState.Decision animationStart =
-                state.onLauncherHomeAnimationStarted();
-
-        assertTrue("the real Launcher HOME spring start must own visual reveal even while SystemUI is armed",
-                animationStart.beginReveal);
-        assertFalse("animation start must not release the freshness barrier",
-                animationStart.releaseBarrier);
     }
 
     @Test public void launcherEndReleasesFallbackButWaitsForActiveSystemUiAuthority() {
@@ -46,13 +30,11 @@ public class HomeTransitionAuthorityStateTest {
         assertTrue(heldEnd.waitForSystemUi);
     }
 
-    @Test public void systemUiStartOwnsBarrierButNotVisualReveal() {
+    @Test public void matchingSystemUiStartAndFinishOwnCaptureBarrier() {
         HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
 
         HomeTransitionAuthorityState.Decision start = state.onSystemUiStarted(true, 11L, 100L);
         assertTrue(start.freezeBarrier);
-        assertFalse("SystemUI transition tracking must not own Launcher cached-layer reveal timing",
-                start.beginReveal);
         assertFalse(start.releaseBarrier);
 
         HomeTransitionAuthorityState.Decision wrong =
@@ -73,7 +55,6 @@ public class HomeTransitionAuthorityStateTest {
         HomeTransitionAuthorityState.Decision stale =
                 state.onSystemUiStarted(true, 13L, 400L);
         assertFalse(stale.freezeBarrier);
-        assertFalse(stale.beginReveal);
         assertFalse(state.isSystemUiAuthorityActive());
     }
 
