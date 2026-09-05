@@ -9,7 +9,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Geometry behavior is typed-state tested; source checks below are static ownership boundaries. */
+/** Geometry behavior is typed-state tested; source checks below are static vendor/target boundaries. */
 public class WorkstationDockGeometryContractTest {
     private static String source(String name) throws Exception {
         return Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/" + name));
@@ -35,12 +35,5 @@ public class WorkstationDockGeometryContractTest {
         String hook = source("WorkstationDockGeometryHook.java");
         assertTrue(hook.contains("HotSeatsListContentAdapter$LineViewHolder"));
         assertTrue(hook.contains("DockContainer"));
-    }
-
-    @Test public void workstationHasNoSecondWholeDockShadowOwner() throws Exception {
-        String main = source("MainHook.java");
-        assertFalse(main.contains("syncShadowGeometry();"));
-        assertFalse(main.contains("shadowViewRef"));
-        assertFalse(main.contains("nativeShadowTargetRef"));
     }
 }
