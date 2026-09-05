@@ -48,7 +48,8 @@ final class LauncherGlassSceneController {
         void setCovered(boolean nextCovered) {
             if (nextCovered) {
                 state = State.COVERED;
-                fadeAfterFreshFrame = false;
+                // Capture-only coverage must not erase presentation recovery already owned by a
+                // hard cover (Folder) that may overlap Recents.
                 fadeRevealReady = false;
                 return;
             }
@@ -56,7 +57,8 @@ final class LauncherGlassSceneController {
 
             generation++;
             state = State.HOME_WAITING_FRESH_FRAME;
-            fadeAfterFreshFrame = false;
+            // Preserve fadeAfterFreshFrame: ordinary Recents enters with it false, while a hard
+            // cover that ended under Recents may legitimately leave it true.
         }
 
         /** Folder coverage is a real LiquidDock presentation gate and keeps the old fresh-return rule. */
@@ -457,8 +459,9 @@ final class LauncherGlassSceneController {
             return;
         }
         if (recentsCovered) {
-            // Recents remains a capture cover. Keep whatever presentation state the hard folder
-            // cover left behind until the next fresh HOME scene is available.
+            // Complete the hard-cover release semantics first, then keep Recents as capture-only
+            // coverage. This preserves the pending fresh reveal without exposing it under Recents.
+            state.setHardCovered(false);
             state.setCovered(true);
             applyLayerVisibility();
             return;
