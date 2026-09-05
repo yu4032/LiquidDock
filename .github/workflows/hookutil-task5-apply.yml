@@ -1,0 +1,55 @@
+name: One-shot HookUtil Task5 patch
+
+on:
+  push:
+    branches: [ refactor/hookutil-vendor-contract ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hookutil-task5-apply
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/hookutil-vendor-contract
+          fetch-depth: 0
+      - name: Apply exact replacements
+        run: python scripts/apply-hookutil-task5.py
+      - name: Verify patch
+        run: |
+          git diff --check
+          ! grep -R -n -E 'HookUtil\.invoke\(|HookUtil\.invokeStatic\(' \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetDarkContentAdapter.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherMamlBackgroundRuleExecutor.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetComponentSelectionExecutor.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetComponentDiscovery.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetTransitionCoordinator.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetTransitionHook.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiKeyguardGoneRuntime.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiKeyguardGoneSource.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiHomeTransitionRuntime.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiHomeTransitionSource.java
+      - name: Commit patch and remove applicator
+        run: |
+          git config user.name "yu4032"
+          git config user.email "4032542465@smail.lnu.edu.cn"
+          git rm .github/workflows/hookutil-task5-apply.yml scripts/apply-hookutil-task5.py
+          git add \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetDarkContentAdapter.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherMamlBackgroundRuleExecutor.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetComponentSelectionExecutor.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetComponentDiscovery.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetTransitionCoordinator.java \
+            src/main/java/com/hellovoid/liquiddock/LauncherWidgetTransitionHook.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiKeyguardGoneRuntime.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiKeyguardGoneSource.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiHomeTransitionRuntime.java \
+            src/main/java/com/hellovoid/liquiddock/SystemUiHomeTransitionSource.java
+          git commit -m "refactor: migrate widget and systemui vendor reflection"
+          git push origin HEAD:refactor/hookutil-vendor-contract
