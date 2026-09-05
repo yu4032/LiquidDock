@@ -23,11 +23,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew
-      - run: ./gradlew testDebugUnitTest --stacktrace
-      - run: ./gradlew assembleDebug --stacktrace
+      - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug
