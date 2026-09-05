@@ -7,8 +7,9 @@ import java.util.IdentityHashMap;
  *
  * <p>HOME visibility is classified by SystemUI's own HomeTransitionObserver during
  * onTransitionReady. LiquidDock only carries that already-computed classification forward to the
- * matching onTransitionStarting/onTransitionFinished callbacks; it does not duplicate
- * TransitionInfo parsing.</p>
+ * matching onTransitionStarting/onTransitionFinished callbacks. If WMShell merges a ready source
+ * before it can start, the merge itself becomes that source's single START boundary on the playing
+ * target token.</p>
  */
 final class SystemUiHomeTransitionTracker {
     static final class Event {
@@ -72,13 +73,19 @@ final class SystemUiHomeTransitionTracker {
         return new Event(entry.homeVisible, entry.serial);
     }
 
-    void onMerged(Object sourceToken, Object targetToken) {
-        if (sourceToken == null || targetToken == null || sourceToken == targetToken) return;
+    Event onMerged(Object sourceToken, Object targetToken) {
+        if (sourceToken == null || targetToken == null || sourceToken == targetToken) return null;
         Entry source = entries.remove(sourceToken);
-        if (source == null) return;
+        if (source == null) return null;
+
         Entry target = entries.get(targetToken);
-        if (target == null || source.serial < target.serial) {
-            entries.put(targetToken, source);
+        if (target != null && target.serial > source.serial) {
+            return null;
         }
+
+        entries.put(targetToken, source);
+        if (source.started) return null;
+        source.started = true;
+        return new Event(source.homeVisible, source.serial);
     }
 }
