@@ -123,6 +123,14 @@ public final class HookUtil {
         }
     }
 
+    /** Exact Class-array forwarding boundary for helpers that already resolved parameter types. */
+    static void hookMethod(ClassLoader cl, String className,
+                           String methodName,
+                           XposedInterface.Hooker callback,
+                           Class<?>[] paramTypeSpecs) {
+        hookMethod(cl, className, methodName, callback, (Object[]) paramTypeSpecs);
+    }
+
     /** Find + hook, walking the superclass chain. */
     public static void hookMethod(ClassLoader cl, String className,
                                   String methodName,
