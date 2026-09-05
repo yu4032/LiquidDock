@@ -193,6 +193,7 @@ final class LauncherGlassStaticNode {
 
     private void animateVisibilityTo(boolean visible) {
         if (disposed) return;
+        visible = visible && suppressionState.shouldShowOnAttach();
         if (visibilityAnimator != null) visibilityAnimator.cancel();
         LauncherGlassVisibilityTransition.Plan plan =
                 LauncherGlassVisibilityTransition.plan(visibilityAlpha, visible);

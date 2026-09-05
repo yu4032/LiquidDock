@@ -20,4 +20,7 @@ final class LauncherGlassSuppressionState {
     boolean isFolderOpenSuppressed() { return folderOpen; }
     boolean isDragSuppressed() { return drag; }
     boolean isSuppressed() { return folderOpen || drag; }
+
+    /** Reattach must preserve every still-active suppression owner instead of forcing visible. */
+    boolean shouldShowOnAttach() { return !isSuppressed(); }
 }
