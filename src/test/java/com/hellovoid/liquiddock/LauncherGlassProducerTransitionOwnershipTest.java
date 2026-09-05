@@ -18,4 +18,10 @@ public class LauncherGlassProducerTransitionOwnershipTest {
         assertTrue(LauncherGlassProducerTransitionPolicy.canCreateProducerEndpoint(false));
         assertFalse(LauncherGlassProducerTransitionPolicy.canCreateProducerEndpoint(true));
     }
+
+    @Test
+    public void delayedOldEndpointCallbackCannotCrossTransitionEpoch() {
+        assertTrue(LauncherGlassProducerTransitionPolicy.isEndpointCallbackCurrent(8L, 8L));
+        assertFalse(LauncherGlassProducerTransitionPolicy.isEndpointCallbackCurrent(7L, 8L));
+    }
 }
