@@ -30,4 +30,16 @@ public class WorkstationRecentsRecoveryPolicyTest {
         assertTrue(decision.requestRollover);
         assertTrue(decision.allowUncover);
     }
+
+    @Test
+    public void workstationRolloverOnlyRunsForAuthoritativeRecentsCoverage() {
+        assertTrue(WorkstationRecentsRecoveryPolicy.shouldRequestRollover(true, true));
+        assertFalse(WorkstationRecentsRecoveryPolicy.shouldRequestRollover(true, false));
+    }
+
+    @Test
+    public void normalModeNeverRequestsWorkstationRollover() {
+        assertFalse(WorkstationRecentsRecoveryPolicy.shouldRequestRollover(false, true));
+        assertFalse(WorkstationRecentsRecoveryPolicy.shouldRequestRollover(false, false));
+    }
 }

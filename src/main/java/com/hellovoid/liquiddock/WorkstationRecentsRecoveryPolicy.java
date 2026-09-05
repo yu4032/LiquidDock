@@ -14,6 +14,11 @@ final class WorkstationRecentsRecoveryPolicy {
 
     private WorkstationRecentsRecoveryPolicy() {}
 
+    /** Only a currently Recents-covered Workstation scene owns a producer rollover request. */
+    static boolean shouldRequestRollover(boolean workstationMode, boolean recentsCovered) {
+        return workstationMode && recentsCovered;
+    }
+
     static Decision onRecentsReturn(boolean workstationMode, boolean rolloverAccepted) {
         if (!workstationMode) return new Decision(false, true);
         return new Decision(true, rolloverAccepted);
