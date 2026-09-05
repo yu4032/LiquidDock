@@ -13,8 +13,8 @@ public class DockMirrorShortcutReflectionContractTest {
         String source = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/DockMirrorShortcutHook.java"));
 
-        String invocation =
-                "HookUtil.InvocationResult<Object> refresh = HookUtil.tryInvoke(hotSeats, \"onMirrorSeatUpdate\")";
+        String invocation = "HookUtil.tryInvoke(hotSeats, \"onMirrorSeatUpdate\")";
+        assertTrue(source.contains("HookUtil.InvocationResult<Object> refresh"));
         assertTrue(source.contains(invocation));
         assertTrue(source.contains("if (refresh.succeeded())"));
         assertTrue(source.contains("refresh.failure()"));
