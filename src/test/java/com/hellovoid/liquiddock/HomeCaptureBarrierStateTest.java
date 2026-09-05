@@ -50,4 +50,27 @@ public class HomeCaptureBarrierStateTest {
         assertTrue("hard presentation cover retains the existing fresh-frame fade-in rule",
                 state.consumeFadeReveal());
     }
+
+    @Test
+    public void recentsCaptureCoverPreservesPendingHardCoverReveal() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+
+        state.setHardCovered(true);
+        state.setHardCovered(false);
+        assertFalse(state.isLayerVisible());
+
+        // Recents may remain/arrive while the hard cover is waiting for a fresh HOME scene.
+        // Its capture-only coverage must not erase that pending hard-cover presentation recovery.
+        state.setCovered(true);
+        state.setCovered(false);
+        state.onFreshFrameReady(state.generation());
+
+        assertTrue(state.isLayerVisible());
+        assertTrue("Recents capture coverage must preserve the hard-cover fresh reveal intent",
+                state.consumeFadeReveal());
+    }
 }
