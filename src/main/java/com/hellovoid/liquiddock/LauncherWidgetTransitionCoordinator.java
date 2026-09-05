@@ -36,22 +36,6 @@ final class LauncherWidgetTransitionCoordinator {
         }
     }
 
-    private static final class SceneSnapshot {
-        final long generation;
-        final String state;
-        final boolean homePending;
-
-        SceneSnapshot(long generation, String state, boolean homePending) {
-            this.generation = generation;
-            this.state = state;
-            this.homePending = homePending;
-        }
-
-        boolean isFreshHomeVisible() {
-            return generation > 0L && "HOME_VISIBLE".equals(state);
-        }
-    }
-
     private LauncherWidgetTransitionCoordinator() {}
 
     /** Called immediately before Launcher 4.50 sets a widget anim target INVISIBLE. */
@@ -113,7 +97,7 @@ final class LauncherWidgetTransitionCoordinator {
 
         entry.launchSuppressionOwned = false;
         if (!entry.state.isReturnTransition()) {
-            SceneSnapshot scene = readScene(material);
+            LauncherGlassSceneController.Snapshot scene = readScene(material);
             long generation = scene != null && scene.homePending ? scene.generation : -1L;
             entry.state.beginReturnWaitingFresh(generation);
         }
@@ -128,7 +112,7 @@ final class LauncherWidgetTransitionCoordinator {
         for (Entry entry : snapshotEntries()) {
             View material = entry.materialRef.get();
             if (material == null || !entry.state.isReturnWaitingFresh()) continue;
-            SceneSnapshot scene = readScene(material);
+            LauncherGlassSceneController.Snapshot scene = readScene(material);
             if (scene == null || scene.generation <= 0L) continue;
             entry.state.beginReturnWaitingFresh(scene.generation);
             hideImmediately(entry);
@@ -159,7 +143,7 @@ final class LauncherWidgetTransitionCoordinator {
         Entry current = ENTRIES.get(material);
         if (current != entry || !entry.state.isReturnWaitingFresh()) return;
 
-        SceneSnapshot scene = readScene(material);
+        LauncherGlassSceneController.Snapshot scene = readScene(material);
         if (scene != null && scene.generation > 0L) {
             long expected = entry.state.expectedFreshGeneration();
             // Producer/ViewRoot rollover may invalidate the scene again while recovering the fresh
@@ -224,33 +208,13 @@ final class LauncherWidgetTransitionCoordinator {
         // coherent, but cancel the fade immediately for return-to-widget: stale pixels must not be
         // exposed while HOME early-reveal is showing the previous StaticLayer generation.
         node.setSuppressedByDrag(true);
-        HookUtil.InvocationResult<Object> immediateResult =
-                HookUtil.tryInvoke(node, "hideImmediately");
-        if (!immediateResult.succeeded()) {
-            MainHook.log(TAG + " immediate hide unavailable: " + immediateResult.failure());
-        }
+        node.hideImmediately();
         node.requestLifecycleRefresh();
     }
 
-    private static SceneSnapshot readScene(View material) {
-        try {
-            LauncherGlassSceneController controller = LauncherGlassSceneController.find(material);
-            if (controller == null) return null;
-            Object stateMachine = HookUtil.getField(controller, "state");
-            HookUtil.InvocationResult<Object> generationResult =
-                    HookUtil.tryInvoke(stateMachine, "generation");
-            HookUtil.InvocationResult<Object> stateResult =
-                    HookUtil.tryInvoke(stateMachine, "state");
-            if (!generationResult.succeeded() || !stateResult.succeeded()) return null;
-            Object generationValue = generationResult.value();
-            Object stateValue = stateResult.value();
-            long generation = generationValue instanceof Number
-                    ? ((Number) generationValue).longValue() : -1L;
-            boolean homePending = HookUtil.getBooleanField(controller, "homeTransitionPending");
-            return new SceneSnapshot(generation, String.valueOf(stateValue), homePending);
-        } catch (Throwable error) {
-            return null;
-        }
+    private static LauncherGlassSceneController.Snapshot readScene(View material) {
+        LauncherGlassSceneController controller = LauncherGlassSceneController.find(material);
+        return controller != null ? controller.snapshot() : null;
     }
 
     private static ArrayList<Entry> snapshotEntries() {
