@@ -526,15 +526,24 @@ public class MainHook {
         boolean detected = false;
         try {
             Class<?> mc = Class.forName("com.miui.home.launcher.allapps.LauncherModeController", false, cl);
+            Class<?> resolvedDeviceConfig;
+            try {
+                resolvedDeviceConfig = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
+            } catch (Throwable ignored) {
+                resolvedDeviceConfig = null;
+            }
+            final Class<?> currentDeviceConfig = resolvedDeviceConfig;
             HookUtil.InvocationResult<Object> laptopProbe = HookUtil.tryInvokeStatic(
-                    "com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+                    mc, "isLaptopMode");
             Object laptopResult = laptopProbe.succeeded() ? laptopProbe.value() : null;
             if (laptopResult instanceof Boolean) {
                 workstationMode = (Boolean) laptopResult;
             } else {
-                HookUtil.InvocationResult<Object> dcProbe = HookUtil.tryInvokeStatic(
-                        "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
-                Object dcResult = dcProbe.succeeded() ? dcProbe.value() : null;
+                HookUtil.InvocationResult<Object> dcProbe = currentDeviceConfig == null
+                        ? null
+                        : HookUtil.tryInvokeStatic(
+                                currentDeviceConfig, "isMingouLaptopPcModeEnabled");
+                Object dcResult = dcProbe != null && dcProbe.succeeded() ? dcProbe.value() : null;
                 workstationMode = dcResult instanceof Boolean && (Boolean) dcResult;
             }
             Class<?> sm = Class.forName("com.miui.home.launcher.laptop.LaptopStateManager", false, cl);
@@ -557,13 +566,13 @@ public class MainHook {
                 if (workstationModeHookConfirmed) return; // hook already confirmed the state
                 try {
                     HookUtil.InvocationResult<Object> recheckResult = HookUtil.tryInvokeStatic(
-                            "com.miui.home.launcher.allapps.LauncherModeController", "isLaptopMode");
+                            mc, "isLaptopMode");
                     Object recheck = recheckResult.succeeded() ? recheckResult.value() : null;
                     boolean actual = recheck instanceof Boolean && (Boolean) recheck;
-                    if (!recheckResult.succeeded() || recheck == null) {
+                    if ((!recheckResult.succeeded() || recheck == null)
+                            && currentDeviceConfig != null) {
                         HookUtil.InvocationResult<Object> dcResult = HookUtil.tryInvokeStatic(
-                                "com.miui.home.launcher.DeviceConfig",
-                                "isMingouLaptopPcModeEnabled");
+                                currentDeviceConfig, "isMingouLaptopPcModeEnabled");
                         if (dcResult.succeeded()) {
                             actual = dcResult.value() instanceof Boolean && (Boolean) dcResult.value();
                         }
@@ -577,7 +586,7 @@ public class MainHook {
         if (!detected) try {
             Class<?> dc = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
             workstationMode = (Boolean) HookUtil.requireInvokeStatic(
-                    "com.miui.home.launcher.DeviceConfig", "isMingouLaptopPcModeEnabled");
+                    dc, "isMingouLaptopPcModeEnabled");
             HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled", new Class<?>[]{boolean.class},
                     chain -> {
                         setWorkstationMode((Boolean) chain.getArgs().get(0));
