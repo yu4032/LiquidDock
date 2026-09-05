@@ -536,61 +536,85 @@ public class MainHook {
             HookUtil.InvocationResult<Object> laptopProbe = HookUtil.tryInvokeStatic(
                     mc, "isLaptopMode");
             Object laptopResult = laptopProbe.succeeded() ? laptopProbe.value() : null;
-            if (laptopResult instanceof Boolean) {
-                workstationMode = (Boolean) laptopResult;
-            } else {
-                HookUtil.InvocationResult<Object> dcProbe = currentDeviceConfig == null
-                        ? null
-                        : HookUtil.tryInvokeStatic(
-                                currentDeviceConfig, "isMingouLaptopPcModeEnabled");
-                Object dcResult = dcProbe != null && dcProbe.succeeded() ? dcProbe.value() : null;
-                workstationMode = dcResult instanceof Boolean && (Boolean) dcResult;
+            HookUtil.InvocationResult<Object> dcProbe = null;
+            if (!(laptopResult instanceof Boolean) && currentDeviceConfig != null) {
+                dcProbe = HookUtil.tryInvokeStatic(
+                        currentDeviceConfig, "isMingouLaptopPcModeEnabled");
             }
+            Object dcResult = dcProbe != null && dcProbe.succeeded() ? dcProbe.value() : null;
+            Boolean initialMode = WorkstationModeTransitionPolicy.resolveProbe(
+                    laptopProbe.succeeded(), laptopResult,
+                    dcProbe != null && dcProbe.succeeded(), dcResult);
+            if (initialMode != null) {
+                workstationMode = initialMode.booleanValue();
+            } else {
+                log("[DC] workstation initial mode unresolved; preserving current=" + workstationMode);
+            }
+
             Class<?> sm = Class.forName("com.miui.home.launcher.laptop.LaptopStateManager", false, cl);
             HookUtil.hookMethod(sm, "onLaptopModeChanged", new Class<?>[]{boolean.class},
                     chain -> {
                         boolean entering = (Boolean) chain.getArgs().get(0);
                         workstationModeHookConfirmed = true;
-                        if (entering) backupNormalHomeLayout();
-                        setWorkstationMode(entering);
+                        boolean changed = beginWorkstationModeTransition(Boolean.valueOf(entering));
                         Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (!entering) scheduleNormalLayoutRestore();
-                        HomeGridHook.scheduleAllPageRefresh();
+                        finishWorkstationModeTransition(entering, changed);
                         return r;
                     });
             detected = true;
             log("[DC] workstation guard uses LauncherModeController; active=" + workstationMode);
-            // Deferred re-check: isLaptopMode() may return null at early startup;
-            // re-query after the Launcher has finished initializing its mode state.
+            // Deferred re-check: isLaptopMode() may return null at early startup. UNKNOWN is not
+            // normal mode; only a later known value is allowed to own a transition transaction.
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 if (workstationModeHookConfirmed) return; // hook already confirmed the state
                 try {
                     HookUtil.InvocationResult<Object> recheckResult = HookUtil.tryInvokeStatic(
                             mc, "isLaptopMode");
                     Object recheck = recheckResult.succeeded() ? recheckResult.value() : null;
-                    boolean actual = recheck instanceof Boolean && (Boolean) recheck;
-                    if ((!recheckResult.succeeded() || recheck == null)
-                            && currentDeviceConfig != null) {
-                        HookUtil.InvocationResult<Object> dcResult = HookUtil.tryInvokeStatic(
+                    HookUtil.InvocationResult<Object> fallbackResult = null;
+                    if (!(recheck instanceof Boolean) && currentDeviceConfig != null) {
+                        fallbackResult = HookUtil.tryInvokeStatic(
                                 currentDeviceConfig, "isMingouLaptopPcModeEnabled");
-                        if (dcResult.succeeded()) {
-                            actual = dcResult.value() instanceof Boolean && (Boolean) dcResult.value();
-                        }
                     }
-                    if (actual != workstationMode) setWorkstationMode(actual);
-                } catch (Throwable ignored) {}
+                    Object fallback = fallbackResult != null && fallbackResult.succeeded()
+                            ? fallbackResult.value() : null;
+                    Boolean actual = WorkstationModeTransitionPolicy.resolveProbe(
+                            recheckResult.succeeded(), recheck,
+                            fallbackResult != null && fallbackResult.succeeded(), fallback);
+                    if (actual == null) {
+                        log("[DC] workstation deferred mode unresolved; preserving current="
+                                + workstationMode);
+                        return;
+                    }
+                    boolean changed = beginWorkstationModeTransition(actual);
+                    finishWorkstationModeTransition(actual.booleanValue(), changed);
+                } catch (Throwable error) {
+                    log("[DC] workstation deferred mode recheck failed: " + error);
+                }
             }, 2000L);
         } catch (Throwable currentApiError) {
             log("[DC] current workstation API unavailable: " + currentApiError);
         }
         if (!detected) try {
             Class<?> dc = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
-            workstationMode = (Boolean) HookUtil.requireInvokeStatic(
+            HookUtil.InvocationResult<Object> legacyProbe = HookUtil.tryInvokeStatic(
                     dc, "isMingouLaptopPcModeEnabled");
+            Object legacyValue = legacyProbe.succeeded() ? legacyProbe.value() : null;
+            Boolean initialMode = WorkstationModeTransitionPolicy.resolveProbe(
+                    false, null, legacyProbe.succeeded(), legacyValue);
+            if (initialMode != null) {
+                workstationMode = initialMode.booleanValue();
+            } else {
+                log("[DC] legacy workstation initial mode unresolved; preserving current="
+                        + workstationMode);
+            }
             HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled", new Class<?>[]{boolean.class},
                     chain -> {
-                        setWorkstationMode((Boolean) chain.getArgs().get(0));
-                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        boolean entering = (Boolean) chain.getArgs().get(0);
+                        boolean changed = beginWorkstationModeTransition(Boolean.valueOf(entering));
+                        Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        finishWorkstationModeTransition(entering, changed);
+                        return r;
                     });
             detected = true;
             log("[DC] workstation guard uses legacy DeviceConfig; active=" + workstationMode);
@@ -603,7 +627,23 @@ public class MainHook {
         }
     }
 
+    private static boolean beginWorkstationModeTransition(Boolean targetMode) {
+        if (!WorkstationModeTransitionPolicy.shouldTransition(workstationMode, targetMode)) {
+            return false;
+        }
+        boolean enabled = targetMode.booleanValue();
+        if (enabled) backupNormalHomeLayout();
+        setWorkstationMode(enabled);
+        return true;
+    }
+
+    private static void finishWorkstationModeTransition(boolean enabled, boolean changed) {
+        if (!changed) return;
+        if (!enabled) scheduleNormalLayoutRestore();
+    }
+
     private static void setWorkstationMode(boolean enabled) {
+        if (enabled == workstationMode) return;
         workstationMode = enabled;
         HomeGridHook.setWorkstationMode(enabled);
         WorkstationDockGeometryHook.onWorkstationModeChanged(enabled);
