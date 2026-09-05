@@ -28,9 +28,9 @@ final class MiuixFolderGlassHook {
     private static final int MAX_STARTUP_RECOVERY_FRAMES = 24;
     private static final Map<View, WeakReference<LauncherGlassStaticNode>> CLAIMED =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<View, Integer> ORIGINAL_IMAGE_ALPHA =
+    private static final Map<View, OwnedValueState<Integer>> IMAGE_ALPHA_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<View, Drawable> ORIGINAL_BACKGROUND =
+    private static final Map<View, OwnedValueState<Drawable>> BACKGROUND_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Integer> ORIGINAL_COVERED_VISIBILITY =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -674,11 +674,24 @@ final class MiuixFolderGlassHook {
         if (material == null) return;
         restoreLargeFolderDrawablePaint(material);
         if (material instanceof ImageView) {
-            Integer originalAlpha = ORIGINAL_IMAGE_ALPHA.remove(material);
-            if (originalAlpha != null) ((ImageView) material).setImageAlpha(originalAlpha);
+            ImageView image = (ImageView) material;
+            OwnedValueState<Integer> ownership = IMAGE_ALPHA_OWNERSHIP.remove(material);
+            if (ownership != null) {
+                OwnedValueState.ReleaseDecision<Integer> release =
+                        ownership.release(image.getImageAlpha() == 0);
+                if (release.restoreOriginal && release.originalValue != null) {
+                    image.setImageAlpha(release.originalValue);
+                }
+            }
         } else {
-            Drawable original = ORIGINAL_BACKGROUND.remove(material);
-            if (original != null) material.setBackground(original);
+            OwnedValueState<Drawable> ownership = BACKGROUND_OWNERSHIP.remove(material);
+            if (ownership != null) {
+                OwnedValueState.ReleaseDecision<Drawable> release =
+                        ownership.release(isTransparentColorDrawable(material.getBackground()));
+                if (release.restoreOriginal && release.originalValue != null) {
+                    material.setBackground(release.originalValue);
+                }
+            }
         }
     }
 
@@ -740,15 +753,16 @@ final class MiuixFolderGlassHook {
     private static void makeMaterialTransparent(View material) {
         if (material instanceof ImageView) {
             ImageView image = (ImageView) material;
-            if (!ORIGINAL_IMAGE_ALPHA.containsKey(material)) {
-                ORIGINAL_IMAGE_ALPHA.put(material, image.getImageAlpha());
-            }
+            OwnedValueState<Integer> ownership = IMAGE_ALPHA_OWNERSHIP
+                    .computeIfAbsent(material, ignored -> new OwnedValueState<>());
+            ownership.claim(image.getImageAlpha());
             image.setImageAlpha(0);
         } else {
             Drawable current = material.getBackground();
-            if (!ORIGINAL_BACKGROUND.containsKey(material) && current != null
-                    && !isTransparentColorDrawable(current)) {
-                ORIGINAL_BACKGROUND.put(material, current);
+            if (current != null && !isTransparentColorDrawable(current)) {
+                OwnedValueState<Drawable> ownership = BACKGROUND_OWNERSHIP
+                        .computeIfAbsent(material, ignored -> new OwnedValueState<>());
+                ownership.claim(current);
             }
             material.setBackground(new ColorDrawable(Color.TRANSPARENT));
         }
