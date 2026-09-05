@@ -125,6 +125,16 @@ final class VisualRuntimeState {
         return coreEnabled && hideMirrorShortcut;
     }
 
+    private static VisualRuntimeTransitionPolicy.Snapshot snapshot() {
+        return new VisualRuntimeTransitionPolicy.Snapshot(
+                isDockCustomizationEnabled(),
+                isDockStrokeEnabled(),
+                isDockShadowEnabled(),
+                isStrokeShadowEnabled(),
+                isDividerEnabled(),
+                isMirrorShortcutHidden());
+    }
+
     private static void apply(
             boolean nextCoreEnabled,
             boolean nextDockCustomizationEnabled,
@@ -141,12 +151,7 @@ final class VisualRuntimeState {
                 && dividerEnabled == nextDividerEnabled
                 && hideMirrorShortcut == nextHideMirrorShortcut) return;
 
-        boolean wasDockCustomizationEnabled = isDockCustomizationEnabled();
-        boolean wasDockStrokeEnabled = isDockStrokeEnabled();
-        boolean wasDockShadowEnabled = isDockShadowEnabled();
-        boolean wasStrokeShadowEnabled = isStrokeShadowEnabled();
-        boolean wasDividerEnabled = isDividerEnabled();
-        boolean wasMirrorShortcutHidden = isMirrorShortcutHidden();
+        VisualRuntimeTransitionPolicy.Snapshot before = snapshot();
 
         // Publish the new booleans before scheduling teardown/reapply. Any callback that was
         // queued before the preference change must observe the new effective value immediately.
@@ -158,46 +163,42 @@ final class VisualRuntimeState {
         dividerEnabled = nextDividerEnabled;
         hideMirrorShortcut = nextHideMirrorShortcut;
 
-        boolean nextLiveDockCustomizationEnabled = isDockCustomizationEnabled();
-        boolean nextLiveDockStrokeEnabled = isDockStrokeEnabled();
-        boolean nextLiveDockShadowEnabled = isDockShadowEnabled();
-        boolean nextLiveStrokeShadowEnabled = isStrokeShadowEnabled();
-        boolean nextLiveDividerEnabled = isDividerEnabled();
-        boolean nextMirrorShortcutHidden = isMirrorShortcutHidden();
+        VisualRuntimeTransitionPolicy.Transition transition =
+                VisualRuntimeTransitionPolicy.plan(before, snapshot());
         logState("updated");
 
-        if (wasDockCustomizationEnabled && !nextLiveDockCustomizationEnabled) {
+        if (transition.dockCustomizationDisabled) {
             runOnMain(() -> MainHook.onRuntimeDockCustomizationDisabled());
         }
-        if (wasDockStrokeEnabled && !nextLiveDockStrokeEnabled) {
+        if (transition.strokeDisabled) {
             runOnMain(() -> DockStrokeRenderer.onRuntimeStrokeDisabled());
         }
-        if (!wasDockStrokeEnabled && nextLiveDockStrokeEnabled) {
+        if (transition.strokeEnabled) {
             runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
         }
-        if (wasDockShadowEnabled && !nextLiveDockShadowEnabled) {
+        if (transition.dockShadowDisabled) {
             runOnMain(() -> {
                 DockNativeShadowBridge.refreshConfig();
                 MainHook.onRuntimeDockShadowDisabled();
             });
         }
-        if (!wasDockShadowEnabled && nextLiveDockShadowEnabled) {
+        if (transition.dockShadowEnabled) {
             runOnMain(() -> {
                 DockNativeShadowBridge.refreshConfig();
                 MainHook.onRuntimeDockShadowEnabled();
             });
         }
-        if (wasStrokeShadowEnabled != nextLiveStrokeShadowEnabled) {
+        if (transition.strokeShadowChanged) {
             runOnMain(() -> {
                 DockStrokeRenderer.refreshInstalledFromCurrentConfig();
                 DockNativeShadowBridge.refreshConfig();
                 MainHook.onRuntimeDockShadowEnabled();
             });
         }
-        if (wasDividerEnabled && !nextLiveDividerEnabled) {
+        if (transition.dividerDisabled) {
             runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());
         }
-        if (wasMirrorShortcutHidden != nextMirrorShortcutHidden) {
+        if (transition.mirrorVisibilityChanged) {
             runOnMain(() -> DockMirrorShortcutHook.onRuntimeVisibilityChanged());
         }
     }
