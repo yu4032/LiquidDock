@@ -148,6 +148,8 @@ final class LauncherGlassSession {
     private final FloatBuffer quadBuffer;
     private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    // Main-thread epoch invalidates finishBind callbacks queued before a Workstation rollover.
+    private volatile long workstationBindEpoch;
     private final float[] textureMatrix = new float[16];
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -234,6 +236,10 @@ final class LauncherGlassSession {
     }
 
     boolean isShutdown() { return shuttingDown; }
+
+    String diagnosticSessionId() {
+        return "session#" + sessionId;
+    }
 
     boolean ownsRoot(View root) {
         return root != null && rootRef.get() == root;
@@ -1010,15 +1016,18 @@ final class LauncherGlassSession {
             retryBind(attempt);
             return;
         }
+        long bindEpoch = workstationBindEpoch;
         postRender(() -> {
             if (shuttingDown || input != inputSurfaceTexture) return;
             input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-            mainHandler.post(() -> finishBind(root, producer, geometry, attempt));
+            mainHandler.post(() -> finishBind(root, producer, geometry, attempt, bindEpoch));
         }, null);
     }
 
-    private void finishBind(View root, Surface producer, ProducerGeometry geometry, int attempt) {
-        if (shuttingDown || binding != null || producer != inputProducerSurface) return;
+    private void finishBind(
+            View root, Surface producer, ProducerGeometry geometry, int attempt, long bindEpoch) {
+        if (shuttingDown || binding != null || producer != inputProducerSurface
+                || bindEpoch != workstationBindEpoch) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(root, producer, 1f);
         if (next == null) {
             retryBind(attempt);
@@ -1077,6 +1086,56 @@ final class LauncherGlassSession {
             createInputProducer();
             if (rolloverComplete != null) mainHandler.post(rolloverComplete);
         }, null);
+    }
+
+    boolean rebindWorkstationProducer(String reason, long generation) {
+        if (shuttingDown || !renderThread.isAlive()) {
+            logWorkstationProducerRollover(reason, generation, "REJECTED", "request", null);
+            return false;
+        }
+        // Invalidate old main-thread finishBind callbacks before yielding back to the Looper.
+        workstationBindEpoch++;
+        Miuix307PassBlurBridge.Binding old = binding;
+        binding = null;
+        Miuix307PassBlurBridge.unbind(old);
+        backdropPrepared = false;
+        boolean queued = postRender(() -> {
+            try {
+                if (shuttingDown) {
+                    logWorkstationProducerRollover(
+                            reason, generation, "FAILED", "shutdown", null);
+                    return;
+                }
+                makePbufferCurrent();
+                releaseInputProducerEndpointOnRenderThread();
+                if (shuttingDown) {
+                    logWorkstationProducerRollover(
+                            reason, generation, "FAILED", "shutdown", null);
+                    return;
+                }
+                MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
+                createInputProducer();
+                logWorkstationProducerRollover(
+                        reason, generation, "ACCEPTED", "endpoint-recreated", null);
+            } catch (Throwable error) {
+                logWorkstationProducerRollover(
+                        reason, generation, "FAILED", "endpoint-recreate", error);
+            }
+        }, null);
+        if (!queued) {
+            logWorkstationProducerRollover(
+                    reason, generation, "REJECTED", "request", null);
+        }
+        return queued;
+    }
+
+    private void logWorkstationProducerRollover(
+            String reason, long generation, String result, String stage, Throwable error) {
+        MainHook.log(TAG + "[ProducerRecovery] reason=" + reason
+                + " session=" + diagnosticSessionId()
+                + " generation=" + generation
+                + " result=" + result + " stage=" + stage
+                + (error != null ? " error=" + error : ""));
     }
 
     private void releaseInputProducerEndpointOnRenderThread() {
