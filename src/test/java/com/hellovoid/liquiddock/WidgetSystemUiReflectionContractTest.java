@@ -48,9 +48,11 @@ public class WidgetSystemUiReflectionContractTest {
         String homeRuntime = read("SystemUiHomeTransitionRuntime.java");
         String homeSource = read("SystemUiHomeTransitionSource.java");
         for (String source : new String[]{keyguardRuntime, keyguardSource, homeRuntime, homeSource}) {
-            assertTrue(source.contains("HookUtil.tryInvokeStatic("));
-            assertTrue(source.contains("\"android.app.ActivityThread\", \"currentApplication\""));
+            assertTrue(source.contains("HookUtil.tryInvokeActivityThreadCurrentApplication()"));
             assertTrue(source.contains("applicationResult.succeeded()"));
+            assertFalse("ActivityThread class-name resolution belongs only in HookUtil's audited "
+                            + "boot/framework helper",
+                    source.contains("android.app.ActivityThread"));
         }
 
         String discovery = read("LauncherWidgetComponentDiscovery.java");
