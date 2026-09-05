@@ -17,18 +17,10 @@ final class LauncherGlassHomePresentationHook {
 
     private static boolean installed;
 
-    // Launcher 4.50 markers stay installed as a fail-open fallback when the SystemUI handoff is
-    // unavailable. Once a matching SystemUI HOME START arrives, only SystemUI FINISH may release
-    // the HOME capture barrier for that transition.
-    private static boolean homeTransitionArmed;
-    private static boolean systemUiHomeTransitionArmed;
-    private static long activeSystemUiHomeSerial = -1L;
-    private static long lastSystemUiHomeEventElapsedNanos = -1L;
-    private static long lastLauncherHomeEndElapsedNanos = -1L;
-
-    private static volatile boolean unlockTransitionArmed;
-    private static long unlockTransitionSerial;
-    private static long unlockReleaseScheduledSerial = -1L;
+    private static final HomeTransitionAuthorityState HOME_AUTHORITY =
+            new HomeTransitionAuthorityState();
+    private static final UnlockCaptureRecoveryState UNLOCK_RECOVERY =
+            new UnlockCaptureRecoveryState();
 
     private LauncherGlassHomePresentationHook() {}
 
@@ -47,17 +39,11 @@ final class LauncherGlassHomePresentationHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 boolean closeToHome = containsHomeClose(args);
                 if (closeToHome) {
-                    synchronized (LauncherGlassHomePresentationHook.class) {
-                        homeTransitionArmed = true;
-                    }
-                    // This is the fallback freeze boundary. If SystemUI START was already received,
-                    // the flag is already set and this is intentionally idempotent.
-                    LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
-                    LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
+                    applyHomeStartDecision(HOME_AUTHORITY.onLauncherHomeStarted());
                 }
 
                 Object result = chain.proceed(args);
-                if (closeToHome && !isSystemUiHomeAuthorityActive()) {
+                if (closeToHome && HOME_AUTHORITY.shouldRevealFromLauncherFallback()) {
                     // Fallback only: SystemUI START normally reveals earlier, before WMShell starts
                     // its transition animation. If that cross-process signal is unavailable, retain
                     // the proven Launcher 4.50 WindowElement timing rather than leaving glass hidden.
@@ -75,25 +61,12 @@ final class LauncherGlassHomePresentationHook {
         try {
             HookUtil.hookMethod(classLoader, HOME_END_CALLBACK, "onAnimationEnd", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                boolean releaseFallback = false;
-                boolean heldForSystemUi = false;
-                long endElapsedNanos = SystemClock.elapsedRealtimeNanos();
-                synchronized (LauncherGlassHomePresentationHook.class) {
-                    if (homeTransitionArmed) {
-                        homeTransitionArmed = false;
-                        lastLauncherHomeEndElapsedNanos = endElapsedNanos;
-                        if (systemUiHomeTransitionArmed) {
-                            heldForSystemUi = true;
-                        } else {
-                            releaseFallback = true;
-                        }
-                    }
-                }
-                if (releaseFallback) {
-                    LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
-                    LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
+                HomeTransitionAuthorityState.Decision decision =
+                        HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
+                if (decision.releaseBarrier) {
+                    releaseHomeBarrier(decision.releaseWidgetBarrier);
                     MainHook.log(TAG + " APP HOME barrier released by Launcher fallback");
-                } else if (heldForSystemUi) {
+                } else if (decision.waitForSystemUi) {
                     MainHook.log(TAG + " APP HOME Launcher end observed; waiting for SystemUI FINISH");
                 }
                 return result;
@@ -111,44 +84,24 @@ final class LauncherGlassHomePresentationHook {
      */
     static void onSystemUiHomeTransitionStarted(
             boolean homeVisible, long serial, long eventTimeNanos) {
-        if (serial <= 0L || eventTimeNanos <= 0L) return;
+        HomeTransitionAuthorityState.Decision decision =
+                HOME_AUTHORITY.onSystemUiStarted(homeVisible, serial, eventTimeNanos);
 
-        boolean releaseSupersededHome = false;
-        synchronized (LauncherGlassHomePresentationHook.class) {
-            if (eventTimeNanos <= lastSystemUiHomeEventElapsedNanos) return;
-            // A delayed START that was generated before Launcher already completed its fallback
-            // animation must not re-arm a finished HOME barrier.
-            if (homeVisible && eventTimeNanos <= lastLauncherHomeEndElapsedNanos) return;
-
-            lastSystemUiHomeEventElapsedNanos = eventTimeNanos;
-            if (!homeVisible) {
-                if (systemUiHomeTransitionArmed) {
-                    systemUiHomeTransitionArmed = false;
-                    activeSystemUiHomeSerial = -1L;
-                    releaseSupersededHome = true;
-                }
-            } else {
-                systemUiHomeTransitionArmed = true;
-                activeSystemUiHomeSerial = serial;
-            }
+        if (decision.releaseBarrier) {
+            releaseHomeBarrier(decision.releaseWidgetBarrier);
+            MainHook.log(TAG + " SystemUI HOME opening superseded by HOME-hidden START"
+                    + " serial=" + serial);
         }
-
-        if (!homeVisible) {
-            if (releaseSupersededHome) {
-                LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
-                MainHook.log(TAG + " SystemUI HOME opening superseded by HOME-hidden START"
-                        + " serial=" + serial);
-            }
-            return;
-        }
+        if (!decision.freezeBarrier) return;
 
         // Freeze fresh capture first, then fade the already prepared static layer. The cached layer
         // may be presented during the WMShell animation, but requestFreshBackdrop remains blocked by
         // homeTransitionPending until the matching SystemUI FINISH arrives. A returning widget is
         // separately kept at alpha 0 until this new scene generation has actually rendered fresh.
-        LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
-        LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
-        LauncherGlassSceneController.beginHomeReturnRevealForAll();
+        applyHomeStartDecision(decision);
+        if (decision.beginReveal) {
+            LauncherGlassSceneController.beginHomeReturnRevealForAll();
+        }
         MainHook.log(TAG + " SystemUI HOME START authority serial=" + serial
                 + " t=" + eventTimeNanos);
     }
@@ -156,29 +109,26 @@ final class LauncherGlassHomePresentationHook {
     /** Matching WMShell onTransitionFinished boundary for the active HOME-opening serial. */
     static void onSystemUiHomeTransitionFinished(
             boolean homeVisible, long serial, long eventTimeNanos, boolean aborted) {
-        if (serial <= 0L || eventTimeNanos <= 0L) return;
+        HomeTransitionAuthorityState.Decision decision =
+                HOME_AUTHORITY.onSystemUiFinished(homeVisible, serial, eventTimeNanos);
+        if (!decision.releaseBarrier) return;
 
-        boolean release = false;
-        synchronized (LauncherGlassHomePresentationHook.class) {
-            if (eventTimeNanos <= lastSystemUiHomeEventElapsedNanos) return;
-            lastSystemUiHomeEventElapsedNanos = eventTimeNanos;
-            if (!homeVisible || !systemUiHomeTransitionArmed
-                    || serial != activeSystemUiHomeSerial) return;
-            systemUiHomeTransitionArmed = false;
-            activeSystemUiHomeSerial = -1L;
-            release = true;
-        }
-
-        if (release) {
-            LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
-            LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
-            MainHook.log(TAG + " SystemUI HOME FINISH authority serial=" + serial
-                    + " t=" + eventTimeNanos + " aborted=" + aborted);
-        }
+        releaseHomeBarrier(decision.releaseWidgetBarrier);
+        MainHook.log(TAG + " SystemUI HOME FINISH authority serial=" + serial
+                + " t=" + eventTimeNanos + " aborted=" + aborted);
     }
 
-    private static synchronized boolean isSystemUiHomeAuthorityActive() {
-        return systemUiHomeTransitionArmed;
+    private static void applyHomeStartDecision(HomeTransitionAuthorityState.Decision decision) {
+        if (decision == null || !decision.freezeBarrier) return;
+        LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
+        LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
+    }
+
+    private static void releaseHomeBarrier(boolean releaseWidgetBarrier) {
+        LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+        if (releaseWidgetBarrier) {
+            LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
+        }
     }
 
     private static boolean containsHomeClose(Object[] args) {
@@ -205,7 +155,7 @@ final class LauncherGlassHomePresentationHook {
                     if (launcher instanceof Context) {
                         SystemUiKeyguardGoneRuntime.ensureRegistered((Context) launcher);
                     }
-                    armUnlockCapture("Launcher/PREPARE");
+                    applyUnlockDecision(UNLOCK_RECOVERY.onPrepare(), "Launcher/PREPARE");
                 }
                 return chain.proceed(args);
             }, "com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE");
@@ -215,44 +165,50 @@ final class LauncherGlassHomePresentationHook {
         }
     }
 
-    private static void armUnlockCapture(String reason) {
-        unlockTransitionSerial++;
-        unlockReleaseScheduledSerial = -1L;
-        unlockTransitionArmed = true;
-        LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
-        LauncherGlassSessionRegistry.suspendForUnlockCapture();
-        MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
-                + " serial=" + unlockTransitionSerial);
-    }
-
     /** Sole unlock capture boundary: SystemUI LOCKSCREEN -> GONE FINISHED. */
     static void onSystemUiLockscreenGoneFinished() {
-        if (!unlockTransitionArmed) {
-            // PREPARE can be skipped on vendor edge paths. Fail closed before rebuilding so the
-            // old lockscreen-backed OES generation can never be reused.
-            armUnlockCapture("SystemUI/FINISHED-failsafe-arm");
-        }
-        final long serial = unlockTransitionSerial;
-        if (unlockReleaseScheduledSerial == serial) return;
-        unlockReleaseScheduledSerial = serial;
-
-        MainHook.log(TAG + " SystemUI LOCKSCREEN->GONE FINISHED; rebuilding wallpaper endpoint"
-                + " serial=" + serial);
-        LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(() -> {
-            if (!unlockTransitionArmed || serial != unlockTransitionSerial) return;
-            finishUnlockBarrierNow("SystemUI LOCKSCREEN->GONE FINISHED/endpoint-rolled");
-        });
+        UnlockCaptureRecoveryState.Decision decision = UNLOCK_RECOVERY.onSystemUiGoneFinished();
+        applyUnlockDecision(decision, decision.suspendProducers
+                ? "SystemUI/FINISHED-failsafe-arm"
+                : "SystemUI LOCKSCREEN->GONE FINISHED");
     }
 
     static boolean isUnlockCaptureBlocked() {
-        return unlockTransitionArmed;
+        return UNLOCK_RECOVERY.isBlocked();
     }
 
-    private static void finishUnlockBarrierNow(String reason) {
-        if (!unlockTransitionArmed) return;
-        unlockTransitionArmed = false;
-        unlockReleaseScheduledSerial = -1L;
-        MainHook.log(TAG + " unlock wallpaper capture released: " + reason);
+    private static void applyUnlockDecision(
+            UnlockCaptureRecoveryState.Decision decision, String reason) {
+        if (decision == null) return;
+        if (decision.suspendProducers) {
+            LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
+            LauncherGlassSessionRegistry.suspendForUnlockCapture();
+            MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
+                    + " serial=" + decision.serial);
+        }
+        if (!decision.requestRollover) return;
+
+        final long serial = decision.serial;
+        MainHook.log(TAG + " SystemUI LOCKSCREEN->GONE FINISHED; rebuilding wallpaper endpoint"
+                + " serial=" + serial);
+        LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(success -> {
+            UnlockCaptureRecoveryState.Decision finished =
+                    UNLOCK_RECOVERY.onRolloverFinished(serial, success);
+            if (!finished.releaseBarrier) {
+                if (!success) {
+                    MainHook.log(TAG + " unlock endpoint rollover failed; capture remains blocked"
+                            + " serial=" + serial);
+                }
+                return;
+            }
+            finishUnlockBarrierNow(
+                    "SystemUI LOCKSCREEN->GONE FINISHED/endpoint-rolled", finished.serial);
+        });
+    }
+
+    private static void finishUnlockBarrierNow(String reason, long serial) {
+        MainHook.log(TAG + " unlock wallpaper capture released: " + reason
+                + " serial=" + serial);
         // SceneController keeps the glass hidden until the first fresh producer generation lands.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
     }

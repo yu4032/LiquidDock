@@ -11,7 +11,7 @@ import java.util.WeakHashMap;
 
 /** Low-level Launcher material ownership; contains no widget-specific MAML rules. */
 final class LauncherGlassVendorMaterialSuppressor {
-    private static final Map<View, Drawable> ORIGINAL_WIDGET_BACKGROUNDS =
+    private static final Map<View, OwnedValueState<Drawable>> WIDGET_BACKGROUND_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherGlassVendorMaterialSuppressor() {}
@@ -30,7 +30,11 @@ final class LauncherGlassVendorMaterialSuppressor {
         View remoteViewsContent = resolveRemoteViewsContent(host);
         if (remoteViewsContent != null) {
             Drawable current = remoteViewsContent.getBackground();
-            if (current != null) ORIGINAL_WIDGET_BACKGROUNDS.put(remoteViewsContent, current);
+            if (current != null) {
+                OwnedValueState<Drawable> ownership = WIDGET_BACKGROUND_OWNERSHIP
+                        .computeIfAbsent(remoteViewsContent, ignored -> new OwnedValueState<>());
+                ownership.claim(current);
+            }
             remoteViewsContent.setBackground(null);
         }
 
@@ -42,9 +46,14 @@ final class LauncherGlassVendorMaterialSuppressor {
         if (host == null) return;
         View remoteViewsContent = resolveRemoteViewsContent(host);
         if (remoteViewsContent != null) {
-            Drawable original = ORIGINAL_WIDGET_BACKGROUNDS.remove(remoteViewsContent);
-            if (original != null && remoteViewsContent.getBackground() == null) {
-                remoteViewsContent.setBackground(original);
+            OwnedValueState<Drawable> ownership =
+                    WIDGET_BACKGROUND_OWNERSHIP.remove(remoteViewsContent);
+            if (ownership != null) {
+                OwnedValueState.ReleaseDecision<Drawable> release =
+                        ownership.release(remoteViewsContent.getBackground() == null);
+                if (release.restoreOriginal && release.originalValue != null) {
+                    remoteViewsContent.setBackground(release.originalValue);
+                }
             }
         }
         if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 0.0d);

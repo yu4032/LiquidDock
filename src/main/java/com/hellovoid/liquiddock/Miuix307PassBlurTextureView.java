@@ -174,13 +174,12 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final Handler renderHandler;
     private final Handler mainHandler;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    private final ZeroCopyProducerRecoveryState producerRecovery =
+            new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
 
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
-    private volatile boolean activationExhausted;
-    private volatile boolean hasConsumedFrame;
-    private volatile boolean producerRebindPending;
     private volatile boolean producerUpdatesEnabled = true;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
@@ -284,7 +283,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     boolean isActivationExhausted() {
-        return activationExhausted;
+        return producerRecovery.isActivationExhausted();
     }
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
@@ -299,7 +298,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         updateBackdropMapping();
-        if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
     }
 
     private float workstationDockIconCornerRadiusDp;
@@ -307,7 +306,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
         dockCompositor.setWorkstationIconCornerRadiusDp(workstationDockIconCornerRadiusDp);
-        if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
     }
 
     void requestDockSceneRefresh() {
@@ -316,7 +315,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown) return;
             dockCompositor.invalidateUiScene();
             updateBackdropMapping();
-            if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
+            if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
             postInvalidateOnAnimation();
         });
     }
@@ -339,15 +338,16 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     void rebindProducer(String reason) {
         if (shuttingDown) return;
-        if (producerRebindPending) return;
-        producerRebindPending = true;
-        Miuix307PassBlurBridge.Binding stale = binding;
-        binding = null;
-        Miuix307PassBlurBridge.unbind(stale);
+        ZeroCopyProducerRecoveryState.Decision recovery =
+                producerRecovery.onRebindRequested();
+        if (!recovery.accepted) return;
+        if (recovery.clearFrameworkBinding) {
+            Miuix307PassBlurBridge.Binding stale = binding;
+            binding = null;
+            Miuix307PassBlurBridge.unbind(stale);
+        }
         gpuBackdropActive = false;
-        activationExhausted = false;
-        hasConsumedFrame = false;
-        frameAvailable.set(false);
+        if (recovery.clearFrameAvailable) frameAvailable.set(false);
         firstFrameLogged = false;
         firstDrawLogged = false;
         firstMatrixLogged = false;
@@ -355,7 +355,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         prismalMappingLogged = false;
         resetBoundGeometry();
         MainHook.log(TAG + " producer rebind requested reason=" + reason);
-        renderHandler.post(() -> recreateInputProducer(reason));
+        if (recovery.recreateProducer) {
+            renderHandler.post(() -> recreateInputProducer(reason));
+        }
     }
 
     /**
@@ -385,9 +387,11 @@ final class Miuix307PassBlurTextureView extends TextureView
                 throw new IllegalStateException("PassBlur input producer was not replaced");
             }
             MainHook.log(TAG + " input producer recreated reason=" + reason);
-            post(() -> bindProducerWhenReady(0));
+            ZeroCopyProducerRecoveryState.Decision recovery =
+                    producerRecovery.onProducerRecreated();
+            if (recovery.requestBind) post(() -> bindProducerWhenReady(0));
         } catch (Throwable error) {
-            producerRebindPending = false;
+            producerRecovery.onRecreateFailed();
             fail("producer recreate", error);
         }
     }
@@ -395,7 +399,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
-        producerRebindPending = false;
+        producerRecovery.onShutdown();
         gpuBackdropActive = false;
         removeGeometryObserver();
 
@@ -673,9 +677,9 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (frameAvailable.getAndSet(false)) {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
-                hasConsumedFrame = true;
+                producerRecovery.onFreshFrameConsumed();
             }
-            if (!hasConsumedFrame) return;
+            if (!producerRecovery.hasFreshFrame()) return;
 
             BackdropSnapshot mapping = backdropSnapshot;
             if (mapping == null
@@ -978,14 +982,13 @@ final class Miuix307PassBlurTextureView extends TextureView
             // across a producer replacement instead of silently reviving full-rate rendering.
             Miuix307PassBlurBridge.pauseUpdates(next);
         }
-        producerRebindPending = false;
+        producerRecovery.onBindSucceeded();
         configRotation = current.configRotation;
         boundSurfaceWidth = current.surfaceWidth;
         boundSurfaceHeight = current.surfaceHeight;
         boundBufferWidth = current.bufferWidth;
         boundBufferHeight = current.bufferHeight;
         boundConfigRotation = current.configRotation;
-        activationExhausted = false;
         stageBDiagnosticsLogged = false;
         prismalMappingLogged = false;
         updateBackdropMapping();
@@ -999,8 +1002,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private void retryBind(int attempt, String reason) {
         if (shuttingDown || binding != null) return;
         if (attempt >= MAX_BIND_RETRY_FRAMES) {
-            activationExhausted = true;
-            producerRebindPending = false;
+            producerRecovery.onBindExhausted();
             MainHook.log(TAG + " PassBlur TextureView activation exhausted reason=" + reason);
             return;
         }
@@ -1066,8 +1068,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         boundBufferWidth = geometry.bufferWidth;
         boundBufferHeight = geometry.bufferHeight;
         boundConfigRotation = geometry.configRotation;
-        hasConsumedFrame = false;
-        frameAvailable.set(false);
+        ZeroCopyProducerRecoveryState.Decision invalidated =
+                producerRecovery.onGeometryInvalidated();
+        if (invalidated.clearFrameAvailable) frameAvailable.set(false);
         firstFrameLogged = false;
         firstDrawLogged = false;
         firstMatrixLogged = false;
@@ -1232,7 +1235,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 dock.coverage);
         stageBDiagnosticsLogged = false;
         prismalMappingLogged = false;
-        if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
     }
 
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
@@ -1540,7 +1543,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void fail(String stage, Throwable error) {
-        activationExhausted = true;
+        producerRecovery.onTerminalFailure();
         gpuBackdropActive = false;
         MainHook.log(TAG + " PassBlur TextureView " + stage + " failed: " + error);
         requestTerminalShutdown();

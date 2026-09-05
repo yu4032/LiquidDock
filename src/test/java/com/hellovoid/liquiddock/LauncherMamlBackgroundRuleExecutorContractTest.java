@@ -8,10 +8,11 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
+/** Static architecture/API bans for the declarative MAML background integration. */
 public class LauncherMamlBackgroundRuleExecutorContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void mamlOwnershipIsGenericAndDataDriven() throws Exception {
+    @Test public void mamlSuppressionRemainsGenericAndDataDriven() throws Exception {
         Path executorPath = MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java");
         assertTrue(Files.exists(executorPath));
         String executor = Files.readString(executorPath);
@@ -22,8 +23,6 @@ public class LauncherMamlBackgroundRuleExecutorContractTest {
         assertTrue(executor.contains("WidgetBackgroundRuleEngine.loadBundled()"));
         assertTrue(executor.contains("WidgetBackgroundIdentity"));
         assertTrue(executor.contains("rule.elementNames()"));
-        assertTrue(executor.contains("List<ElementClaim>"));
-        assertTrue(executor.contains("originalShow"));
         assertTrue(executor.contains("dumpNamedElementsOnce"));
 
         assertFalse(allJava.contains("b8006e83-c497-4642-9815-f674b82842b0"));
@@ -32,29 +31,10 @@ public class LauncherMamlBackgroundRuleExecutorContractTest {
         assertFalse(allJava.contains("com.miui.weather2"));
     }
 
-    @Test public void multiElementRuleResolvesAtomicallyBeforeFirstHide() throws Exception {
+    @Test public void diagnosticPathAvoidsDestructiveVendorApis() throws Exception {
         String executor = Files.readString(
                 MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
 
-        int names = executor.indexOf("List<String> elementNames = rule.elementNames()");
-        int resolved = executor.indexOf("List<Object> resolved = new ArrayList<>", names);
-        int missing = executor.indexOf("if (resolved.size() != elementNames.size())", resolved);
-        int firstHide = executor.indexOf("\"show\", false", missing);
-
-        assertTrue(names >= 0);
-        assertTrue(resolved > names);
-        assertTrue(missing > resolved);
-        assertTrue("no MAML element may be hidden before every configured target resolves",
-                firstHide > missing);
-    }
-
-    @Test public void diagnosticOnlyAndMissingTargetPathsAreNonDestructive() throws Exception {
-        String executor = Files.readString(
-                MAIN.resolve("LauncherMamlBackgroundRuleExecutor.java"));
-
-        assertTrue(executor.contains("elementNames.isEmpty()"));
-        assertTrue(executor.contains("targetFound=false"));
-        assertTrue(executor.contains("release(host)"));
         assertFalse(executor.contains("acceptVisitor("));
         assertFalse(executor.contains("removeElement"));
         assertFalse(executor.contains("setVisibility"));

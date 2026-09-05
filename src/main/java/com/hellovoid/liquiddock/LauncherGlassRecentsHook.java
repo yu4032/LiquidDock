@@ -31,10 +31,24 @@ final class LauncherGlassRecentsHook {
             });
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewHide", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                // Workstation can reuse an apparently-valid Launcher Surface while retiring the
-                // old PassBlur BufferQueue producer. Roll that endpoint before HOME asks for its
-                // freshness frame; the scene controller still owns the final reveal barrier.
-                LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();
+
+                boolean workstationMode = MainHook.isWorkstationMode();
+                boolean rolloverAccepted = true;
+                if (workstationMode) {
+                    // Workstation can reuse an apparently-valid Launcher Surface while retiring the
+                    // old PassBlur BufferQueue producer. Endpoint rollover acceptance is required
+                    // before HOME may uncover, but does not itself make the scene fresh or visible.
+                    rolloverAccepted = LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();
+                }
+                WorkstationRecentsRecoveryPolicy.Decision recovery =
+                        WorkstationRecentsRecoveryPolicy.onRecentsReturn(
+                                workstationMode, rolloverAccepted);
+                if (!recovery.allowUncover) {
+                    LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+                    MainHook.log(TAG
+                            + " Workstation Recents producer rollover rejected; HOME remains covered");
+                    return result;
+                }
 
                 // onRecentViewHide precedes MiuiWallpaperSurfaceAnimation.IDLE on the pure
                 // HOME -> Recents -> HOME path. Arm the capture barrier before uncovering HOME,

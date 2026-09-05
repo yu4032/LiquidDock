@@ -150,6 +150,29 @@ Workstation composite customization 当前保持 restart-bound。不要只恢复
 
 历史 stroke-shadow key 在最终方案确定前继续保留配置兼容。
 
+## Runtime behavior 测试规则
+
+涉及 ownership、freshness、animation、recovery、teardown、callback timing 或 lifecycle sequencing 的测试，必须驱动**生产代码实际使用的**纯 state / policy 对象，并对输入与输出做断言。
+
+禁止：
+
+- 读取 `src/main/java` 后通过 `contains()` / `indexOf()` / method slicing 推断 runtime 行为；
+- 用 production source 中某几行的相对顺序代替状态转换测试；
+- 为了访问同包 package-private state/policy 而使用 Java reflection。
+
+同包 package-private state/policy 应直接 typed 调用。新增的纯模型不能是 test-only 镜像，必须由 production runtime 真正消费。
+
+静态 source/config inspection 只保留给以下场景：
+
+- R8 / keep rules；
+- Gradle / build configuration；
+- Android Manifest / Xposed scope；
+- 明确的 architecture/API 禁令，例如“不得使用某 API / 不得跨自有模块反射”。
+
+`RuntimeBehaviorTestPolicyContractTest` 会扫描**全部 Java tests**。任何新的 production source/config reader 默认失败；合法静态 reader 必须进入显式审计的 static allowlist，并且不能通过 `indexOf()` / `substring()` 做调用顺序或方法体切片证明。
+
+本次迁移之外仍有少量历史 source-reader debt，由 gate 的 `LEGACY_SOURCE_DEBT` 精确列名。该清单只允许减少，不允许新增；尤其不得把 ownership、freshness、animation、recovery 的 runtime contract 放进 debt 清单绕过 typed-state 测试。
+
 ## 文档规则
 
 当前权威文档：
