@@ -37,6 +37,8 @@ final class DockStrokeRenderer {
     private static final long NATIVE_CONFIG_REFRESH_NS = 1_000_000_000L;
     private static final String NATIVE_BACKGROUND_CLASS =
             "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2";
+    private static final String MI_SHADOW_UTILS_CLASS =
+            "com.miui.home.launcher.common.MiShadowUtils";
 
     private static final WeakHashMap<View, StrokeDrawable> INSTALLED =
             new WeakHashMap<>();
@@ -45,6 +47,7 @@ final class DockStrokeRenderer {
             new WeakHashMap<>();
 
     private static boolean nativeHookInstalled;
+    private static volatile Class<?> miShadowUtilsClass;
     private static volatile LiquidDockConfig.Dock cachedNativeConfig;
     private static volatile long nativeConfigReadNanos;
 
@@ -60,6 +63,11 @@ final class DockStrokeRenderer {
         nativeHookInstalled = true;
         cachedNativeConfig = initialConfig;
         nativeConfigReadNanos = System.nanoTime();
+        try {
+            miShadowUtilsClass = Class.forName(MI_SHADOW_UTILS_CLASS, false, classLoader);
+        } catch (Throwable ignored) {
+            miShadowUtilsClass = null;
+        }
 
         try {
             HookUtil.hookMethod(classLoader,
@@ -324,9 +332,14 @@ final class DockStrokeRenderer {
                 ? Color.argb(Math.max(0, Math.min(255, style.shadowAlpha)), 0, 0, 0)
                 : Color.TRANSPARENT;
         float radius = enabled ? style.shadowRadiusPx : 0f;
+        Class<?> shadowUtils = miShadowUtilsClass;
+        if (shadowUtils == null) {
+            MainHook.log("[DC] native stroke outer shadow unavailable: "
+                    + MI_SHADOW_UTILS_CLASS + " unresolved");
+            return;
+        }
         HookUtil.InvocationResult<Object> shadowResult = HookUtil.tryInvokeStatic(
-                "com.miui.home.launcher.common.MiShadowUtils",
-                "applyViewShadow", host, color, 0f, 0f, radius, 1f);
+                shadowUtils, "applyViewShadow", host, color, 0f, 0f, radius, 1f);
         if (!shadowResult.succeeded()) {
             MainHook.log("[DC] native stroke outer shadow unavailable: "
                     + shadowResult.failure());
