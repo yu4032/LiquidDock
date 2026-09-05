@@ -11,12 +11,14 @@ replacements = [
         "    private final ZeroCopyProducerRecoveryState producerRecovery =\n"
         "            new ZeroCopyProducerRecoveryState();\n"
         "    private final float[] textureMatrix = new float[16];",
+        1,
     ),
     (
         "    private volatile boolean activationExhausted;\n"
         "    private volatile boolean hasConsumedFrame;\n"
         "    private volatile boolean producerRebindPending;\n",
         "",
+        1,
     ),
     (
         "    boolean isActivationExhausted() {\n"
@@ -25,14 +27,12 @@ replacements = [
         "    boolean isActivationExhausted() {\n"
         "        return producerRecovery.isActivationExhausted();\n"
         "    }",
+        1,
     ),
     (
         "        if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));",
         "        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));",
-    ),
-    (
-        "            if (hasConsumedFrame) renderHandler.post(() -> drawLatestFrame(false));",
-        "            if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));",
+        4,
     ),
     (
         "    void rebindProducer(String reason) {\n"
@@ -58,6 +58,7 @@ replacements = [
         "        }\n"
         "        gpuBackdropActive = false;\n"
         "        if (recovery.clearFrameAvailable) frameAvailable.set(false);",
+        1,
     ),
     (
         "        renderHandler.post(() -> recreateInputProducer(reason));\n"
@@ -66,6 +67,7 @@ replacements = [
         "            renderHandler.post(() -> recreateInputProducer(reason));\n"
         "        }\n"
         "    }",
+        1,
     ),
     (
         "            MainHook.log(TAG + \" input producer recreated reason=\" + reason);\n"
@@ -80,6 +82,7 @@ replacements = [
         "        } catch (Throwable error) {\n"
         "            producerRecovery.onRecreateFailed();\n"
         "            fail(\"producer recreate\", error);",
+        1,
     ),
     (
         "        shuttingDown = true;\n"
@@ -88,6 +91,7 @@ replacements = [
         "        shuttingDown = true;\n"
         "        producerRecovery.onShutdown();\n"
         "        gpuBackdropActive = false;",
+        1,
     ),
     (
         "                input.getTransformMatrix(textureMatrix);\n"
@@ -98,12 +102,14 @@ replacements = [
         "                producerRecovery.onFreshFrameConsumed();\n"
         "            }\n"
         "            if (!producerRecovery.hasFreshFrame()) return;",
+        1,
     ),
     (
         "        producerRebindPending = false;\n"
         "        configRotation = current.configRotation;",
         "        producerRecovery.onBindSucceeded();\n"
         "        configRotation = current.configRotation;",
+        1,
     ),
     (
         "        boundConfigRotation = current.configRotation;\n"
@@ -111,6 +117,7 @@ replacements = [
         "        stageBDiagnosticsLogged = false;",
         "        boundConfigRotation = current.configRotation;\n"
         "        stageBDiagnosticsLogged = false;",
+        1,
     ),
     (
         "        if (attempt >= MAX_BIND_RETRY_FRAMES) {\n"
@@ -118,6 +125,7 @@ replacements = [
         "            producerRebindPending = false;",
         "        if (attempt >= MAX_BIND_RETRY_FRAMES) {\n"
         "            producerRecovery.onBindExhausted();",
+        1,
     ),
     (
         "        boundConfigRotation = geometry.configRotation;\n"
@@ -127,6 +135,7 @@ replacements = [
         "        ZeroCopyProducerRecoveryState.Decision invalidated =\n"
         "                producerRecovery.onGeometryInvalidated();\n"
         "        if (invalidated.clearFrameAvailable) frameAvailable.set(false);",
+        1,
     ),
     (
         "    private void fail(String stage, Throwable error) {\n"
@@ -135,14 +144,16 @@ replacements = [
         "    private void fail(String stage, Throwable error) {\n"
         "        producerRecovery.onTerminalFailure();\n"
         "        gpuBackdropActive = false;",
+        1,
     ),
 ]
 
-for old, new in replacements:
+for old, new, expected in replacements:
     count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"expected exactly one match, got {count}: {old[:120]!r}")
-    text = text.replace(old, new, 1)
+    if count != expected:
+        raise SystemExit(
+            f"expected {expected} match(es), got {count}: {old[:120]!r}")
+    text = text.replace(old, new)
 
 if "hasConsumedFrame" in text or "producerRebindPending" in text or "activationExhausted" in text:
     raise SystemExit("raw producer recovery field references remain")
