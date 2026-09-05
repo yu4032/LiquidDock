@@ -59,9 +59,14 @@ public class LauncherGlassSceneControllerTest {
     }
 
     @Test
-    public void acceptedWorkstationRolloverStillWaitsForFreshSceneGeneration() {
-        WorkstationRecentsRecoveryPolicy.Decision recovery =
-                WorkstationRecentsRecoveryPolicy.onRecentsReturn(true, true);
+    public void acceptedWorkstationRecoveryStillWaitsForFreshSceneGeneration() {
+        WorkstationRecentsRecoveryPolicy policy = new WorkstationRecentsRecoveryPolicy();
+        policy.onRecentViewShow();
+        WorkstationRecentsRecoveryPolicy.Decision start =
+                policy.onRecentViewHide(true, true);
+        WorkstationRecentsRecoveryPolicy.TerminalDecision recovery =
+                policy.onRecoveryTerminal(
+                        start.episode, LauncherGlassProducerRecoveryState.Result.ACCEPTED);
         assertTrue(recovery.allowUncover);
 
         LauncherGlassSceneController.StateMachine state =
@@ -72,7 +77,8 @@ public class LauncherGlassSceneControllerTest {
 
         state.setCovered(true);
         if (recovery.allowUncover) state.setCovered(false);
-        assertFalse("endpoint rollover acceptance is not a fresh frame", state.isLayerVisible());
+        assertFalse("producer recovery terminal success is not a fresh scene frame",
+                state.isLayerVisible());
 
         state.onFreshFrameReady(state.generation());
         assertTrue(state.isLayerVisible());

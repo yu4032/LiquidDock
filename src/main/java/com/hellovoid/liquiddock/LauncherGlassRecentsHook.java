@@ -33,8 +33,15 @@ final class LauncherGlassRecentsHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
 
                 boolean workstationMode = MainHook.isWorkstationMode();
+                boolean recentsCovered = LauncherGlassSceneController.isRecentsCoveredByVendor();
+                if (!recentsCovered) {
+                    MainHook.log(TAG + " ignoring non-covered Recents hide");
+                    return result;
+                }
+
                 boolean rolloverAccepted = true;
-                if (workstationMode) {
+                if (WorkstationRecentsRecoveryPolicy.shouldRequestRollover(
+                        workstationMode, recentsCovered)) {
                     // Workstation can reuse an apparently-valid Launcher Surface while retiring the
                     // old PassBlur BufferQueue producer. Endpoint rollover acceptance is required
                     // before HOME may uncover, but does not itself make the scene fresh or visible.
