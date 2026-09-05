@@ -148,8 +148,11 @@ final class LauncherGlassSession {
     private final FloatBuffer quadBuffer;
     private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-    // Main-thread epoch invalidates finishBind callbacks queued before any endpoint rollover.
+    // producerBindEpoch is the required endpoint generation. inputProducerBindEpoch is stamped
+    // when the currently published endpoint is actually created, so delayed retries cannot borrow
+    // a newer generation while still pointing at a retired BufferQueue.
     private volatile long producerBindEpoch;
+    private volatile long inputProducerBindEpoch = -1L;
     private final float[] textureMatrix = new float[16];
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -995,6 +998,9 @@ final class LauncherGlassSession {
                 GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
         SurfaceTexture input = new SurfaceTexture(oesTexture);
         Surface producer = new Surface(input);
+        // Publish the endpoint stamp before the endpoint references. A delayed retry that still
+        // sees the previous producer keeps that previous stamp and cannot borrow the new epoch.
+        inputProducerBindEpoch = producerBindEpoch;
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
         backdropPrepared = false;
@@ -1011,6 +1017,10 @@ final class LauncherGlassSession {
         View root = rootRef.get();
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
+        long bindEpoch = inputProducerBindEpoch;
+        // Do not retry a retired endpoint. Its replacement owner will publish and schedule the
+        // current generation when the new BufferQueue is actually created.
+        if (bindEpoch != producerBindEpoch) return;
         if (root == null || !root.isAttachedToWindow() || producer == null || input == null) {
             retryBind(attempt);
             return;
@@ -1020,7 +1030,6 @@ final class LauncherGlassSession {
             retryBind(attempt);
             return;
         }
-        long bindEpoch = producerBindEpoch;
         postRender(() -> {
             if (shuttingDown || input != inputSurfaceTexture) return;
             input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
@@ -1031,7 +1040,7 @@ final class LauncherGlassSession {
     private void finishBind(
             View root, Surface producer, ProducerGeometry geometry, int attempt, long bindEpoch) {
         if (shuttingDown || binding != null || producer != inputProducerSurface
-                || bindEpoch != producerBindEpoch) return;
+                || bindEpoch != producerBindEpoch || bindEpoch != inputProducerBindEpoch) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(root, producer, 1f);
         if (next == null) {
             retryBind(attempt);
@@ -1167,6 +1176,7 @@ final class LauncherGlassSession {
     }
 
     private void releaseInputProducerEndpointOnRenderThread() {
+        inputProducerBindEpoch = -1L;
         Surface producer = inputProducerSurface;
         inputProducerSurface = null;
         SurfaceTexture input = inputSurfaceTexture;
