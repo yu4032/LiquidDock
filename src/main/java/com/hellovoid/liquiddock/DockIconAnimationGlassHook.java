@@ -264,6 +264,7 @@ final class DockIconAnimationGlassHook {
             DockAnimationTrace.sourceEvent("source-shown-awaiting-commit", source, View.VISIBLE);
             return true;
         } catch (Throwable error) {
+            pending.state.cancel();
             forgetPending(pending);
             MainHook.log(TAG + " frame-commit handoff unavailable: " + error);
             return false;
@@ -271,10 +272,7 @@ final class DockIconAnimationGlassHook {
     }
 
     private static void completeFrameCommitHandoff(PendingHandoff pending, String reason) {
-        synchronized (pending) {
-            if (pending.completed) return;
-            pending.completed = true;
-        }
+        if (!pending.state.completeIfPending()) return;
         forgetPending(pending);
         forgetCloseToHomeTarget(pending.proxy);
         DockAnimationTrace.sourceEvent("handoff-complete-" + reason, pending.source, View.VISIBLE);
@@ -357,7 +355,7 @@ final class DockIconAnimationGlassHook {
         final boolean recycleSynchronously;
         @SuppressWarnings("unused")
         final View root;
-        boolean completed;
+        final DockFrameCommitHandoffState state = new DockFrameCommitHandoffState();
 
         PendingHandoff(View proxy, View source, boolean recycleSynchronously, View root) {
             this.proxy = proxy;
