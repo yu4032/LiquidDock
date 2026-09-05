@@ -7,42 +7,45 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import org.junit.Test;
 
 /**
- * Testing-architecture gate: runtime behavior tests must exercise production-used pure state/policy
- * objects, not infer behavior from production source text or reflective access to package-private
- * test seams. Static architecture/config contract tests are intentionally outside this filename
- * scope.
+ * Testing-architecture gate: production source inspection is denied by default. Only explicitly
+ * audited static contracts may inspect production source/config text. Runtime behavior must be
+ * exercised through typed production state/policy APIs instead of source strings or reflection.
  */
 public class RuntimeBehaviorTestPolicyContractTest {
     private static final Path TEST_ROOT = Path.of("src/test/java");
 
+    /**
+     * Narrow structural exceptions. Adding a file here requires that every source assertion in the
+     * class is static R8/Gradle/Manifest/API/architecture validation, never runtime sequencing.
+     */
+    private static final Set<String> STATIC_SOURCE_ALLOWLIST = Set.of(
+            "DockShadowArchitectureTest.java",
+            "HookUtilArchitectureContractTest.java",
+            "LauncherGlassStaticBoundaryTest.java",
+            "PrismalModuleBoundaryContractTest.java",
+            "R8ReleaseKeepContractTest.java");
+
     @Test
-    public void runtimeBehaviorTestsDoNotReadProductionSourceOrReflectIntoState() throws Exception {
+    public void productionSourceInspectionIsStaticOnlyAndRuntimeTestsUseTypedApis() throws Exception {
         List<String> violations = new ArrayList<>();
         try (Stream<Path> paths = Files.walk(TEST_ROOT)) {
             paths.filter(Files::isRegularFile)
                     .filter(path -> path.toString().endsWith(".java"))
-                    .filter(RuntimeBehaviorTestPolicyContractTest::isRuntimeBehaviorTest)
+                    .filter(path -> !path.getFileName().toString()
+                            .equals("RuntimeBehaviorTestPolicyContractTest.java"))
                     .forEach(path -> inspect(path, violations));
         }
         if (!violations.isEmpty()) {
-            fail("Runtime behavior tests must use typed production state/policy APIs:\n  "
+            fail("Production source inspection is reserved for audited static contracts; "
+                    + "runtime behavior must use typed production state/policy APIs:\n  "
                     + String.join("\n  ", violations));
         }
-    }
-
-    private static boolean isRuntimeBehaviorTest(Path path) {
-        String name = path.getFileName().toString();
-        if (name.equals("RuntimeBehaviorTestPolicyContractTest.java")) return false;
-        return name.endsWith("StateTest.java")
-                || name.endsWith("PolicyTest.java")
-                || name.endsWith("RecoveryTest.java")
-                || name.endsWith("OwnershipTest.java")
-                || name.endsWith("AnimationTest.java");
     }
 
     private static void inspect(Path path, List<String> violations) {
@@ -54,9 +57,19 @@ public class RuntimeBehaviorTestPolicyContractTest {
             return;
         }
 
-        reject(path, source, violations, "Files.readString(", "reads source text");
-        reject(path, source, violations, "Files.readAllBytes(", "reads source bytes");
-        reject(path, source, violations, "src/main/java", "references production source path");
+        String name = path.getFileName().toString();
+        if (STATIC_SOURCE_ALLOWLIST.contains(name)) return;
+
+        boolean productionSourceReference = source.contains("src/main/java")
+                || source.contains("src/main/kotlin")
+                || source.contains("src/main/AndroidManifest.xml")
+                || source.contains("build.gradle")
+                || source.contains("settings.gradle");
+        if (productionSourceReference
+                && (source.contains("Files.readString(") || source.contains("Files.readAllBytes("))) {
+            violations.add(path + " (reads production source/config text without static allowlist)");
+        }
+
         reject(path, source, violations, "getDeclaredConstructor(", "reflects constructor");
         reject(path, source, violations, "getDeclaredMethod(", "reflects method");
         reject(path, source, violations, "getDeclaredField(", "reflects field");
