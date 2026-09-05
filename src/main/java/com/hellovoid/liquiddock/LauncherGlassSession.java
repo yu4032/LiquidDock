@@ -148,8 +148,8 @@ final class LauncherGlassSession {
     private final FloatBuffer quadBuffer;
     private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-    // Main-thread epoch invalidates finishBind callbacks queued before a Workstation rollover.
-    private volatile long workstationBindEpoch;
+    // Main-thread epoch invalidates finishBind callbacks queued before any endpoint rollover.
+    private volatile long producerBindEpoch;
     private final float[] textureMatrix = new float[16];
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -742,6 +742,10 @@ final class LauncherGlassSession {
         // before SetPassBlurSurface binds the new endpoint.
         if (endpointRollover) {
             if (rotationChanged) {
+                // Invalidate any queued bind before yielding to the delayed rotation settle path.
+                // Otherwise an old finishBind can resurrect the pre-rotation endpoint while Shell
+                // still owns the screenshot leash.
+                invalidateProducerBindCallbacks();
                 // Keep the pre-rotation endpoint suspended until Shell removes RotationLayer.
                 // Binding a new endpoint here would immediately publish a screenshot-animation
                 // frame because the vendor bridge is continuous-on-bind.
@@ -1016,7 +1020,7 @@ final class LauncherGlassSession {
             retryBind(attempt);
             return;
         }
-        long bindEpoch = workstationBindEpoch;
+        long bindEpoch = producerBindEpoch;
         postRender(() -> {
             if (shuttingDown || input != inputSurfaceTexture) return;
             input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
@@ -1027,7 +1031,7 @@ final class LauncherGlassSession {
     private void finishBind(
             View root, Surface producer, ProducerGeometry geometry, int attempt, long bindEpoch) {
         if (shuttingDown || binding != null || producer != inputProducerSurface
-                || bindEpoch != workstationBindEpoch) return;
+                || bindEpoch != producerBindEpoch) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(root, producer, 1f);
         if (next == null) {
             retryBind(attempt);
@@ -1068,23 +1072,43 @@ final class LauncherGlassSession {
     }
 
     boolean rebindProducer() {
-        return rebindProducer(null);
+        return rebindProducer((LauncherGlassSessionRegistry.RolloverCompletion) null);
     }
 
-    boolean rebindProducer(Runnable rolloverComplete) {
+    boolean rebindProducer(LauncherGlassSessionRegistry.RolloverCompletion rolloverComplete) {
         if (shuttingDown || !renderThread.isAlive()) return false;
+        invalidateProducerBindCallbacks();
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
         backdropPrepared = false;
         return postRender(() -> {
-            if (shuttingDown) return;
-            makePbufferCurrent();
-            releaseInputProducerEndpointOnRenderThread();
-            if (shuttingDown) return;
-            MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
-            createInputProducer();
-            if (rolloverComplete != null) mainHandler.post(rolloverComplete);
+            boolean success = false;
+            try {
+                if (shuttingDown) return;
+                makePbufferCurrent();
+                releaseInputProducerEndpointOnRenderThread();
+                if (shuttingDown) return;
+                MainHook.log(TAG + " rolling PassBlur producer endpoint " + debugLabel());
+                createInputProducer();
+                success = true;
+            } catch (Throwable error) {
+                MainHook.log(TAG + " producer endpoint rollover failed " + debugLabel()
+                        + ": " + error);
+            } finally {
+                if (rolloverComplete != null) {
+                    final boolean terminalSuccess = success;
+                    try {
+                        if (!mainHandler.post(() -> rolloverComplete.onComplete(terminalSuccess))) {
+                            MainHook.log(TAG + " producer rollover completion queue rejected "
+                                    + debugLabel());
+                        }
+                    } catch (Throwable error) {
+                        MainHook.log(TAG + " producer rollover completion unavailable "
+                                + debugLabel() + ": " + error);
+                    }
+                }
+            }
         }, null);
     }
 
@@ -1094,7 +1118,7 @@ final class LauncherGlassSession {
             return false;
         }
         // Invalidate old main-thread finishBind callbacks before yielding back to the Looper.
-        workstationBindEpoch++;
+        invalidateProducerBindCallbacks();
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
@@ -1127,6 +1151,10 @@ final class LauncherGlassSession {
                     reason, generation, "REJECTED", "request", null);
         }
         return queued;
+    }
+
+    private void invalidateProducerBindCallbacks() {
+        producerBindEpoch++;
     }
 
     private void logWorkstationProducerRollover(
