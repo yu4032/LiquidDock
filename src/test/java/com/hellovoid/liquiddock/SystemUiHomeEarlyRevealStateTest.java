@@ -30,4 +30,20 @@ public class SystemUiHomeEarlyRevealStateTest {
         assertFalse("fresh frame must not start a second fade after cached early reveal",
                 state.consumeFadeReveal());
     }
+
+    @Test
+    public void recentsWallpaperSettleDoesNotOwnCachedHomeRevealTiming() {
+        assertTrue("HOME START must reveal cached glass even while fresh capture is settling",
+                LauncherGlassSceneController.shouldBeginHomeReturnReveal(
+                        true, false, true, false, false));
+        assertFalse("without HOME/unlock authority no cached reveal may start",
+                LauncherGlassSceneController.shouldBeginHomeReturnReveal(
+                        false, false, true, false, false));
+        assertFalse("folder coverage remains a hard presentation gate",
+                LauncherGlassSceneController.shouldBeginHomeReturnReveal(
+                        true, false, true, true, false));
+        assertFalse("Recents coverage remains a hard presentation gate",
+                LauncherGlassSceneController.shouldBeginHomeReturnReveal(
+                        true, false, true, false, true));
+    }
 }
