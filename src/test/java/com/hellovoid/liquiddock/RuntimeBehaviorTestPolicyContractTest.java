@@ -4,6 +4,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
      * These files must not use source ordering or method slicing to prove runtime behavior.
      */
     private static final Set<String> STATIC_SOURCE_ALLOWLIST = Set.of(
+            "ConfigKeyOwnershipContractTest.java",
             "DockMirrorShortcutReflectionContractTest.java",
             "DockShadowArchitectureTest.java",
             "FolderDragOverlayContractTest.java",
@@ -130,24 +132,22 @@ public class RuntimeBehaviorTestPolicyContractTest {
         try {
             source = Files.readString(path);
         } catch (IOException error) {
-            violations.add(path + " (unreadable: " + error + ")");
-            return;
+            throw new UncheckedIOException(error);
         }
 
         if (!isProductionSourceReader(source)) return;
-
         String name = path.getFileName().toString();
         if (STATIC_SOURCE_ALLOWLIST.contains(name)) {
             seenStaticReaders.add(name);
-            rejectStaticRuntimeProof(path, source, violations);
+            rejectStaticRuntimeProof(name, source, violations);
             return;
         }
         if (LEGACY_SOURCE_DEBT.contains(name)) {
             seenDebtReaders.add(name);
             return;
         }
-
-        violations.add(path + " (new/unclassified production source reader)");
+        violations.add(name + " reads production source/config but is neither an audited static "
+                + "contract nor grandfathered debt");
     }
 
     private static boolean isProductionSourceReader(String source) {
@@ -160,12 +160,14 @@ public class RuntimeBehaviorTestPolicyContractTest {
     }
 
     private static void rejectStaticRuntimeProof(
-            Path path, String source, List<String> violations) {
-        if (source.contains("indexOf(")) {
-            violations.add(path + " (static allowlist may not prove runtime order with indexOf)");
-        }
-        if (source.contains("substring(")) {
-            violations.add(path + " (static allowlist may not prove runtime behavior by slicing)");
+            String name, String source, List<String> violations) {
+        if (source.contains("indexOf(")
+                || source.contains("substring(")
+                || source.contains("split(")
+                || source.contains("lastIndexOf(")) {
+            violations.add(name + " is allowlisted only for static architecture/API assertions; "
+                    + "source slicing/order checks are runtime-behavior proof and must move to "
+                    + "typed state/policy tests");
         }
     }
 }
