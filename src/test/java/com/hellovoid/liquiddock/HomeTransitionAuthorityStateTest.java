@@ -3,6 +3,8 @@ package com.hellovoid.liquiddock;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Method;
+
 import org.junit.Test;
 
 /** Pure authority/fallback behavior for Launcher <-> SystemUI HOME presentation handoff. */
@@ -16,6 +18,25 @@ public class HomeTransitionAuthorityStateTest {
 
         state.onSystemUiStarted(true, 7L, 100L);
         assertFalse(state.shouldRevealFromLauncherFallback());
+    }
+
+    @Test public void launcherAnimationStartRevealsEvenWithSystemUiAuthority() throws Exception {
+        HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
+        state.onLauncherHomeStarted();
+        state.onSystemUiStarted(true, 8L, 100L);
+
+        // Reflect so the regression test itself compiles in RED before the new authority entrypoint
+        // exists. Once implemented, this invokes the real Android-free production state machine.
+        Method method = HomeTransitionAuthorityState.class.getDeclaredMethod(
+                "onLauncherHomeAnimationStarted");
+        method.setAccessible(true);
+        HomeTransitionAuthorityState.Decision animationStart =
+                (HomeTransitionAuthorityState.Decision) method.invoke(state);
+
+        assertTrue("the real Launcher HOME spring start must own visual reveal even while SystemUI is armed",
+                animationStart.beginReveal);
+        assertFalse("animation start must not release the freshness barrier",
+                animationStart.releaseBarrier);
     }
 
     @Test public void launcherEndReleasesFallbackButWaitsForActiveSystemUiAuthority() {
