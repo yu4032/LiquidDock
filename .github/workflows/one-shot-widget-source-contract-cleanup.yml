@@ -1,0 +1,38 @@
+name: One-shot widget source contract cleanup
+
+on:
+  push:
+    branches:
+      - refactor/pure-runtime-state-tests
+    paths:
+      - .github/scripts/cleanup_widget_component_source_contract.py
+      - .github/workflows/one-shot-widget-source-contract-cleanup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/pure-runtime-state-tests
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python .github/scripts/cleanup_widget_component_source_contract.py
+      - run: git diff --check
+      - name: Commit cleanup and remove applicator
+        run: |
+          rm .github/scripts/cleanup_widget_component_source_contract.py
+          rm .github/workflows/one-shot-widget-source-contract-cleanup.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/test/java/com/hellovoid/liquiddock/WidgetComponentSelectionContractTest.java \
+                  .github/scripts/cleanup_widget_component_source_contract.py \
+                  .github/workflows/one-shot-widget-source-contract-cleanup.yml
+          git commit -m "test: remove widget ownership source-order assertions"
+          git push origin HEAD:refactor/pure-runtime-state-tests
