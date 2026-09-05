@@ -30,12 +30,9 @@ final class LauncherGlassStaticNode {
     private final LiquidDockConfig.Glass glassConfig;
     private volatile float nativeCornerRadiusPx;
     private volatile boolean disposed;
-    private volatile boolean suppressedByFolderOpen;
-    private volatile boolean suppressedByDrag;
-    private boolean pressTarget;
-    private float pressProgress;
-    private float glowCenterX = 0.5f;
-    private float glowCenterY = 0.5f;
+    private final LauncherGlassSuppressionState suppressionState =
+            new LauncherGlassSuppressionState();
+    private final LauncherGlassPressState pressState = new LauncherGlassPressState();
     private ValueAnimator pressAnimator;
     private ValueAnimator visibilityAnimator;
     private volatile float visibilityAlpha;
@@ -177,23 +174,21 @@ final class LauncherGlassStaticNode {
     }
 
     void setSuppressedByFolderOpen(boolean suppressed) {
-        if (disposed || suppressedByFolderOpen == suppressed) return;
+        if (disposed || !suppressionState.setFolderOpen(suppressed)) return;
         if (suppressed) resetPressInteraction(false);
-        suppressedByFolderOpen = suppressed;
-        animateVisibilityTo(!suppressedByFolderOpen && !suppressedByDrag);
+        animateVisibilityTo(!suppressionState.isSuppressed());
     }
 
     void setSuppressedByDrag(boolean suppressed) {
-        if (disposed || suppressedByDrag == suppressed) return;
+        if (disposed || !suppressionState.setDrag(suppressed)) return;
         if (suppressed) resetPressInteraction(false);
-        suppressedByDrag = suppressed;
-        animateVisibilityTo(!suppressedByFolderOpen && !suppressedByDrag);
+        animateVisibilityTo(!suppressionState.isSuppressed());
     }
 
     float visibilityAlpha() { return visibilityAlpha; }
 
     boolean retainLastGeometryDuringFade() {
-        return visibilityAlpha > 0.001f && (suppressedByFolderOpen || suppressedByDrag);
+        return visibilityAlpha > 0.001f && suppressionState.isSuppressed();
     }
 
     private void animateVisibilityTo(boolean visible) {
@@ -274,41 +269,34 @@ final class LauncherGlassStaticNode {
 
     void setPressInteraction(boolean pressed, float normalizedX, float normalizedY) {
         if (disposed) return;
-        float nextX = clamp01(normalizedX);
-        float nextY = clamp01(normalizedY);
-        boolean centerChanged = glowCenterX != nextX || glowCenterY != nextY;
-        glowCenterX = nextX;
-        glowCenterY = nextY;
-        if (pressTarget != pressed) {
-            pressTarget = pressed;
-            animatePressTo(pressed ? 1f : 0f);
-        } else if (centerChanged) {
+        LauncherGlassPressState.Decision decision =
+                pressState.setPressed(pressed, normalizedX, normalizedY);
+        if (decision.animate) {
+            animatePressTo(decision.targetProgress);
+        } else if (decision.publishImmediately) {
             publishInteraction();
         }
     }
 
     void resetPressInteraction(boolean animated) {
         if (disposed) return;
-        pressTarget = false;
-        if (animated && pressProgress > 0f) {
-            animatePressTo(0f);
+        LauncherGlassPressState.Decision decision = pressState.reset(animated);
+        if (decision.animate) {
+            animatePressTo(decision.targetProgress);
             return;
         }
         if (pressAnimator != null) {
             pressAnimator.cancel();
             pressAnimator = null;
         }
-        pressProgress = 0f;
-        glowCenterX = 0.5f;
-        glowCenterY = 0.5f;
-        publishInteraction();
+        if (decision.publishImmediately) publishInteraction();
     }
 
     private void animatePressTo(float target) {
         if (pressAnimator != null) pressAnimator.cancel();
-        float start = pressProgress;
+        float start = pressState.progress();
         if (Math.abs(start - target) < 0.001f) {
-            pressProgress = target;
+            pressState.setProgress(target);
             publishInteraction();
             return;
         }
@@ -319,7 +307,7 @@ final class LauncherGlassStaticNode {
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(valueAnimator -> {
             if (pressAnimator != valueAnimator || disposed) return;
-            pressProgress = (Float) valueAnimator.getAnimatedValue();
+            pressState.setProgress((Float) valueAnimator.getAnimatedValue());
             publishInteraction();
         });
         animator.start();
@@ -329,7 +317,8 @@ final class LauncherGlassStaticNode {
         LauncherGlassSession live = ensureLiveSession();
         if (disposed || live == null) return;
         live.updateStaticInteraction(this,
-                new PrismalInteractionState(pressProgress, glowCenterX, glowCenterY));
+                new PrismalInteractionState(
+                        pressState.progress(), pressState.glowCenterX(), pressState.glowCenterY()));
     }
 
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
