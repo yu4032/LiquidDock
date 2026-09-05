@@ -38,6 +38,8 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "DockShadowArchitectureTest.java",
             "FolderDragOverlayContractTest.java",
             "FolderPressInteractionContractTest.java",
+            "GlassConfigGenerationContractTest.java",
+            "HomeGridProfileOverlayContractTest.java",
             "HookUtilArchitectureContractTest.java",
             "LauncherGlassStaticBoundaryTest.java",
             "LauncherGlassVendorMaterialSuppressionContractTest.java",
@@ -45,32 +47,30 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherWallpaperFreshnessHookContractTest.java",
             "LauncherWidgetBackgroundControllerContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",
-            "R8ReleaseKeepContractTest.java",
-            "SystemUiHomeTransitionWiringContractTest.java",
-            "UserFacingPreferenceSchemaTest.java",
-            "WidgetRemoteViewsRootBackgroundContractTest.java",
-            "WidgetSystemUiReflectionContractTest.java",
-            "WorkstationDockGeometryContractTest.java");
-
-    /**
-     * Grandfathered source readers outside ownership/freshness/animation/recovery migration.
-     * This exact list is intentionally visible and must only shrink; new files are never added to
-     * make the gate green. When one of these tests is migrated, remove its entry in the same change.
-     */
-    private static final Set<String> LEGACY_SOURCE_DEBT = Set.of(
-            "GlassConfigGenerationContractTest.java",
-            "HomeGridOrientationMemoryHookContractTest.java",
-            "HomeGridProfileOverlayContractTest.java",
             "Miuix307EdgeOverscanContractTest.java",
             "PrismalModuleBoundaryContractTest.java",
             "PrismalOfficialParityV3Test.java",
-            "RestartBoundSettingsContractTest.java",
+            "R8ReleaseKeepContractTest.java",
+            "SystemUiHomeTransitionWiringContractTest.java",
+            "UserFacingPreferenceSchemaTest.java",
             "WidgetBackgroundRankingUiContractTest.java",
             "WidgetComponentDiscoveryContractTest.java",
-            "WidgetComponentSelectionContractTest.java",
             "WidgetMamlRenderTreeDiscoveryContractTest.java",
+            "WidgetRemoteViewsRootBackgroundContractTest.java",
+            "WidgetSystemUiReflectionContractTest.java",
             "WorkspaceDropRuleHookContractTest.java",
-            "WorkstationAllAppsHookContractTest.java");
+            "WorkstationAllAppsHookContractTest.java",
+            "WorkstationDockGeometryContractTest.java");
+
+    /**
+     * Grandfathered readers that still prove runtime ordering/placement via production-source
+     * slicing. Keep this list honest and shrink-only; do not invent a pure state model merely to
+     * make the count reach zero.
+     */
+    private static final Set<String> LEGACY_SOURCE_DEBT = Set.of(
+            "HomeGridOrientationMemoryHookContractTest.java",
+            "RestartBoundSettingsContractTest.java",
+            "WidgetComponentSelectionContractTest.java");
 
     @Test
     public void productionSourceInspectionIsExplicitAndRuntimeBehaviorUsesTypedApis()
