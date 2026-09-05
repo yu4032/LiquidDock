@@ -67,6 +67,8 @@ public final class HookUtil {
             if (cause != null) out.append(" cause=").append(cause);
             return out.toString();
         }
+
+        @Override public String toString() { return describe(); }
     }
 
     public static final class InvocationResult<T> {
