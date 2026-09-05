@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -19,5 +20,17 @@ public class LauncherWidgetTransitionWiringContractTest {
         assertTrue(hook.contains("com.miui.home.recents.GestureModeApp"));
         assertTrue(hook.contains("com.miui.home.recents.NavStubView"));
         assertTrue(hook.contains("\"findClosingWidgetView\""));
+    }
+
+    @Test public void coordinatorUsesTypedLiquidDockRuntimeContracts() throws Exception {
+        String coordinator = Files.readString(
+                MAIN.resolve("LauncherWidgetTransitionCoordinator.java"));
+        assertFalse("Widget coordinator must not reflect LiquidDock-owned private state; R8 may "
+                        + "rename or inline those members",
+                coordinator.contains("HookUtil."));
+        assertTrue("scene freshness must come from the typed SceneController snapshot",
+                coordinator.contains("controller.snapshot()"));
+        assertTrue("static-node immediate hide must use the typed package boundary",
+                coordinator.contains("node.hideImmediately()"));
     }
 }

@@ -19,6 +19,23 @@ final class LauncherGlassSceneController {
 
     enum State { DETACHED, BOOTSTRAPPING, HOME_WAITING_FRESH_FRAME, HOME_VISIBLE, COVERED }
 
+    /** Typed read-only observation boundary for other LiquidDock runtime owners. */
+    static final class Snapshot {
+        final long generation;
+        final State state;
+        final boolean homePending;
+
+        Snapshot(long generation, State state, boolean homePending) {
+            this.generation = generation;
+            this.state = state;
+            this.homePending = homePending;
+        }
+
+        boolean isFreshHomeVisible() {
+            return generation > 0L && state == State.HOME_VISIBLE;
+        }
+    }
+
     /** Pure state machine kept Android-free for deterministic lifecycle tests. */
     static final class StateMachine {
         private State state = State.DETACHED;
@@ -293,6 +310,10 @@ final class LauncherGlassSceneController {
     static void requestFreshForRoot(View root) {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
+    }
+
+    Snapshot snapshot() {
+        return new Snapshot(state.generation(), state.state(), homeTransitionPending);
     }
 
     void onRootReady() {

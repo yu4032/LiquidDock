@@ -215,7 +215,7 @@ final class LauncherGlassStaticNode {
         animator.start();
     }
 
-    private void hideImmediately() {
+    void hideImmediately() {
         if (visibilityAnimator != null) {
             visibilityAnimator.cancel();
             visibilityAnimator = null;
