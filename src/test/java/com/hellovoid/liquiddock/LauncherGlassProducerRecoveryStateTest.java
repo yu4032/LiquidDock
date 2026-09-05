@@ -62,6 +62,22 @@ public class LauncherGlassProducerRecoveryStateTest {
     }
 
     @Test
+    public void newerEndpointGenerationReplacesOlderMilestonesWithinSameRecovery() {
+        LauncherGlassProducerRecoveryState state = new LauncherGlassProducerRecoveryState();
+        state.onRequest(25L);
+        state.onEndpointRecreated(25L, 10L);
+        state.onBindSucceeded(25L, 10L);
+
+        assertTrue(state.onEndpointRecreated(25L, 11L));
+        assertNull(state.onFreshFrame(25L, 10L));
+        assertNull(state.onFreshFrame(25L, 11L));
+        assertTrue(state.onBindSucceeded(25L, 11L));
+        assertEquals(
+                LauncherGlassProducerRecoveryState.Result.ACCEPTED,
+                state.onFreshFrame(25L, 11L));
+    }
+
+    @Test
     public void failedRecoveryIsTerminalAndNextEpisodeCanRetry() {
         LauncherGlassProducerRecoveryState state = new LauncherGlassProducerRecoveryState();
         state.onRequest(30L);
