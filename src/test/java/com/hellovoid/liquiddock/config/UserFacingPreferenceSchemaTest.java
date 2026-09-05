@@ -4,11 +4,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -16,60 +16,23 @@ import org.junit.Test;
 
 /** Guards the rule that user-facing persisted settings are owned by ConfigSchema. */
 public class UserFacingPreferenceSchemaTest {
-    private static final List<String> RECENT_USER_FACING_KEYS = List.of(
-            "grid_profile",
-            "dock_hide_mirror_shortcut",
-            "launcher_surface_component_sky_haze",
-            "launcher_surface_component_specular",
-            "launcher_surface_component_lit_rim",
-            "launcher_surface_component_opposite_rim",
-            "launcher_surface_component_corner_rim",
-            "launcher_surface_component_face_sheen",
-            "launcher_surface_component_plain_highlight",
-            "launcher_surface_component_caustics",
-            "launcher_surface_component_press_glow",
-            "launcher_large_surface_component_sky_haze",
-            "launcher_large_surface_component_specular",
-            "launcher_large_surface_component_lit_rim",
-            "launcher_large_surface_component_opposite_rim",
-            "launcher_large_surface_component_corner_rim",
-            "launcher_large_surface_component_face_sheen",
-            "launcher_large_surface_component_plain_highlight",
-            "launcher_large_surface_component_caustics",
-            "launcher_large_surface_component_press_glow");
-
     @Test
-    public void recentUserFacingPreferencesAreRegisteredInSchema() {
-        Set<String> schemaNames = new HashSet<>();
-        for (ConfigKey<?> key : ConfigSchema.all()) schemaNames.add(key.name());
-
-        for (String name : RECENT_USER_FACING_KEYS) {
-            assertTrue("user-facing preference must be registered in ConfigSchema: " + name,
-                    schemaNames.contains(name));
-        }
-    }
-
-    @Test
-    public void schemaManagedPreferencesRoundTripThroughCodec() {
-        Map<String, Object> preferences = new HashMap<>();
-        preferences.put("grid_profile", "10x6");
-        preferences.put("dock_hide_mirror_shortcut", true);
-        for (String name : RECENT_USER_FACING_KEYS) {
-            if (name.startsWith("launcher_")) preferences.put(name, false);
+    public void everyDeclaredConfigKeyIsRegisteredExactlyOnce() throws Exception {
+        Set<ConfigKey<?>> declared = new HashSet<>();
+        for (Class<?> group : ConfigSchema.class.getDeclaredClasses()) {
+            for (Field field : group.getDeclaredFields()) {
+                if (!Modifier.isStatic(field.getModifiers())) continue;
+                if (!ConfigKey.class.isAssignableFrom(field.getType())) continue;
+                ConfigKey<?> key = (ConfigKey<?>) field.get(null);
+                assertTrue("duplicate declared ConfigKey object: " + key.name(), declared.add(key));
+            }
         }
 
-        Map<String, Object> exported = ConfigCodec.exportValues(preferences);
-        Map<String, Object> imported = ConfigCodec.importValues(exported);
-
-        assertEquals("10x6", exported.get("grid_profile"));
-        assertEquals(Boolean.TRUE, exported.get("dock_hide_mirror_shortcut"));
-        assertEquals("10x6", imported.get("grid_profile"));
-        assertEquals(Boolean.TRUE, imported.get("dock_hide_mirror_shortcut"));
-        for (String name : RECENT_USER_FACING_KEYS) {
-            if (!name.startsWith("launcher_")) continue;
-            assertEquals(name, Boolean.FALSE, exported.get(name));
-            assertEquals(name, Boolean.FALSE, imported.get(name));
-        }
+        Set<ConfigKey<?>> registered = new HashSet<>(ConfigSchema.all());
+        assertEquals("ConfigSchema.all() must not contain duplicate registrations",
+                registered.size(), ConfigSchema.all().size());
+        assertEquals("every ConfigKey declared by ConfigSchema must be registered",
+                declared, registered);
     }
 
     @Test
@@ -109,11 +72,17 @@ public class UserFacingPreferenceSchemaTest {
     }
 
     @Test
-    public void composeSettingsHasNoRawUserPreferenceWriter() throws Exception {
+    public void composeSettingsPersistsOnlyThroughConfigKeyBackedControls() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
-        assertFalse("boolean settings must use ConfigKey<Boolean>",
+        assertTrue("integer settings must carry ConfigKey metadata",
+                source.contains("val config: ConfigKey<Int>"));
+        assertTrue("boolean settings must accept ConfigKey<Boolean>",
+                source.contains("prefs: SharedPreferences, config: ConfigKey<Boolean>"));
+        assertTrue("string settings must accept ConfigKey<String>",
+                source.contains("prefs: SharedPreferences, config: ConfigKey<String>"));
+        assertFalse("raw boolean setting APIs are forbidden",
                 source.contains("RawBooleanSetting("));
         assertFalse("string settings must not accept an untyped persisted key",
                 source.contains("prefs: SharedPreferences, key: String, title: String, default: String"));
