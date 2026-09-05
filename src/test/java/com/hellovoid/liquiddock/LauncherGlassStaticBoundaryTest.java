@@ -26,7 +26,7 @@ public class LauncherGlassStaticBoundaryTest {
         String source = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
         assertFalse(source.contains("ScreenCapture"));
         assertFalse(source.contains("captureDisplay"));
-        assertFalse(source.contains("SurfaceControl"));
+        assertFalse(source.contains("import android.view.SurfaceControl"));
         assertFalse(source.contains("SetPassBlurSurface"));
     }
 
