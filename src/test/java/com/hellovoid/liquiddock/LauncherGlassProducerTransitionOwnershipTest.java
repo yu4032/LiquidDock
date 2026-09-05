@@ -12,4 +12,10 @@ public class LauncherGlassProducerTransitionOwnershipTest {
         assertTrue(LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(false));
         assertFalse(LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(true));
     }
+
+    @Test
+    public void genericEndpointCreationIsBlockedWhileRotationOwnsTransition() {
+        assertTrue(LauncherGlassProducerTransitionPolicy.canCreateProducerEndpoint(false));
+        assertFalse(LauncherGlassProducerTransitionPolicy.canCreateProducerEndpoint(true));
+    }
 }
