@@ -109,8 +109,8 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static void publishFinished(String from) {
-        HookUtil.InvocationResult<Object> applicationResult = HookUtil.tryInvokeStatic(
-                "android.app.ActivityThread", "currentApplication");
+        HookUtil.InvocationResult<Object> applicationResult =
+                HookUtil.tryInvokeActivityThreadCurrentApplication();
         Object application = applicationResult.succeeded() ? applicationResult.value() : null;
         if (!(application instanceof Context)) {
             GONE_FINISHED_SENT.set(false);
