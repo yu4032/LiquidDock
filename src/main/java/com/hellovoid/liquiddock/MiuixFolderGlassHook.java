@@ -688,7 +688,7 @@ final class MiuixFolderGlassHook {
             if (ownership != null) {
                 OwnedValueState.ReleaseDecision<Drawable> release =
                         ownership.release(isTransparentColorDrawable(material.getBackground()));
-                if (release.restoreOriginal && release.originalValue != null) {
+                if (release.restoreOriginal) {
                     material.setBackground(release.originalValue);
                 }
             }
@@ -759,11 +759,9 @@ final class MiuixFolderGlassHook {
             image.setImageAlpha(0);
         } else {
             Drawable current = material.getBackground();
-            if (current != null && !isTransparentColorDrawable(current)) {
-                OwnedValueState<Drawable> ownership = BACKGROUND_OWNERSHIP
-                        .computeIfAbsent(material, ignored -> new OwnedValueState<>());
-                ownership.claim(current);
-            }
+            OwnedValueState<Drawable> ownership = BACKGROUND_OWNERSHIP
+                    .computeIfAbsent(material, ignored -> new OwnedValueState<>());
+            ownership.claim(current);
             material.setBackground(new ColorDrawable(Color.TRANSPARENT));
         }
     }
