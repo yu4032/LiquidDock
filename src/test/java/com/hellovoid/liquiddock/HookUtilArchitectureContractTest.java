@@ -73,6 +73,13 @@ public class HookUtilArchitectureContractTest {
                 offenders.isEmpty());
     }
 
+    @Test public void forwardedClassArrayUsesExplicitObjectVarargsSemantics() throws Exception {
+        String source = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        assertTrue("Class<?>[] forwarding into HookUtil Object... must be explicitly cast to Object[] "
+                        + "so javac and the hook resolver agree that each Class<?> is one parameter spec",
+                source.contains("}, (Object[]) parameterTypes);"));
+    }
+
     @Test public void legacyCompatibilityApiIsRemoved() throws Exception {
         String source = Files.readString(MAIN.resolve("HookUtil.java"));
         assertFalse(source.contains("public static Object invoke("));
