@@ -24,4 +24,10 @@ public class LauncherGlassProducerTransitionOwnershipTest {
         assertTrue(LauncherGlassProducerTransitionPolicy.isEndpointCallbackCurrent(8L, 8L));
         assertFalse(LauncherGlassProducerTransitionPolicy.isEndpointCallbackCurrent(7L, 8L));
     }
+
+    @Test
+    public void queuedProducerFrameCannotBeConsumedWhileRotationOwnsTransition() {
+        assertTrue(LauncherGlassProducerTransitionPolicy.canConsumeProducerFrame(false));
+        assertFalse(LauncherGlassProducerTransitionPolicy.canConsumeProducerFrame(true));
+    }
 }
