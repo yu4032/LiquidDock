@@ -7,7 +7,7 @@ import android.os.SystemClock;
 final class LauncherGlassHomePresentationHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String WINDOW_ELEMENT = "com.miui.home.recents.anim.WindowElement";
-    private static final String HOME_ANIMATION_CALLBACK =
+    private static final String HOME_END_CALLBACK =
             "com.miui.home.recents.anim.WindowElement$mRectFSpringAnimListener$1";
     private static final String CLOSE_TO_HOME = "CLOSE_TO_HOME";
     private static final String CLOSE_TO_HOME_CENTER = "CLOSE_TO_HOME_CENTER";
@@ -27,7 +27,6 @@ final class LauncherGlassHomePresentationHook {
     static void install(ClassLoader classLoader) {
         if (installed) return;
         hookHomeStart(classLoader);
-        hookHomeAnimationStart(classLoader);
         hookHomeEnd(classLoader);
         hookUnlockState(classLoader);
         LauncherWidgetTransitionHook.install(classLoader);
@@ -44,33 +43,13 @@ final class LauncherGlassHomePresentationHook {
                 return chain.proceed(args);
             }, Object.class);
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME presentation start unavailable: " + error);
-        }
-    }
-
-    private static void hookHomeAnimationStart(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader, HOME_ANIMATION_CALLBACK, "onAnimationStart", chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object animation = args.length > 0 ? args[0] : null;
-                if (isHomeCloseAnimation(animation)) {
-                    HomeTransitionAuthorityState.Decision decision =
-                            HOME_AUTHORITY.onLauncherHomeAnimationStarted();
-                    if (decision.beginReveal) {
-                        LauncherGlassSceneController.beginHomeReturnRevealForAll();
-                        MainHook.log(TAG + " APP HOME reveal started by Launcher spring");
-                    }
-                }
-                return chain.proceed(args);
-            }, "com.miui.home.recents.util.RectFSpringAnim");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " HOME spring start unavailable: " + error);
+            MainHook.log(TAG + " HOME capture start unavailable: " + error);
         }
     }
 
     private static void hookHomeEnd(ClassLoader classLoader) {
         try {
-            HookUtil.hookMethod(classLoader, HOME_ANIMATION_CALLBACK, "onAnimationEnd", chain -> {
+            HookUtil.hookMethod(classLoader, HOME_END_CALLBACK, "onAnimationEnd", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 HomeTransitionAuthorityState.Decision decision =
                         HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
@@ -83,7 +62,7 @@ final class LauncherGlassHomePresentationHook {
                 return result;
             }, "com.miui.home.recents.util.RectFSpringAnim");
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME presentation end unavailable: " + error);
+            MainHook.log(TAG + " HOME capture end unavailable: " + error);
         }
     }
 
@@ -105,15 +84,10 @@ final class LauncherGlassHomePresentationHook {
         }
         if (!decision.freezeBarrier) return;
 
-        // Freeze fresh capture first, then fade the already prepared static layer. The cached layer
-        // may be presented during the WMShell animation, but requestFreshBackdrop remains blocked by
-        // homeTransitionPending until the matching SystemUI FINISH arrives. A returning widget is
-        // separately kept at alpha 0 until this new scene generation has actually rendered fresh.
+        // HOME transition tracking owns capture/freshness only. Cached Workspace glass stays in the
+        // Launcher root and is exposed by the same native surfaces that expose icons and widgets.
         applyHomeStartDecision(decision);
-        if (decision.beginReveal) {
-            LauncherGlassSceneController.beginHomeReturnRevealForAll();
-        }
-        MainHook.log(TAG + " SystemUI HOME START authority serial=" + serial
+        MainHook.log(TAG + " SystemUI HOME START capture authority serial=" + serial
                 + " t=" + eventTimeNanos);
     }
 
@@ -149,15 +123,6 @@ final class LauncherGlassHomePresentationHook {
             if (token.contains(CLOSE_TO_HOME_CENTER) || token.contains(CLOSE_TO_HOME)) return true;
         }
         return false;
-    }
-
-    private static boolean isHomeCloseAnimation(Object animation) {
-        if (animation == null) return false;
-        HookUtil.InvocationResult<Object> typeResult =
-                HookUtil.tryInvoke(animation, "getCancelAnimType");
-        if (!typeResult.succeeded()) return false;
-        String token = String.valueOf(typeResult.value());
-        return token.contains(CLOSE_TO_HOME_CENTER) || token.contains(CLOSE_TO_HOME);
     }
 
     /**
