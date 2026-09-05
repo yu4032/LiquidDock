@@ -65,7 +65,15 @@ final class LauncherGlassSceneController {
         }
 
         void beginRevealBeforeFreshFrame() {
-            if (state != State.HOME_WAITING_FRESH_FRAME || revealBeforeFreshFrame) return;
+            if (revealBeforeFreshFrame) return;
+            // SystemUI HOME START is earlier than Launcher Recents semantic hide. It may therefore
+            // own presentation reveal while the semantic Recents state is still COVERED. Freshness
+            // was already invalidated by the HOME barrier, so this presentation-only transition
+            // must not invent another scene generation.
+            if (state == State.COVERED) {
+                state = State.HOME_WAITING_FRESH_FRAME;
+            }
+            if (state != State.HOME_WAITING_FRESH_FRAME) return;
             revealBeforeFreshFrame = true;
             fadeAfterFreshFrame = false;
             fadeRevealReady = true;
@@ -171,6 +179,20 @@ final class LauncherGlassSceneController {
 
     static synchronized boolean isRecentsCoveredByVendor() {
         return vendorRecentsCovered;
+    }
+
+    /**
+     * HOME START owns cached-layer presentation timing. Recents semantic coverage and wallpaper
+     * settle still own producer/capture correctness, but neither may postpone the visual reveal to
+     * onRecentViewHide, which HyperOS emits at the animation tail.
+     */
+    static boolean shouldBeginHomeReturnReveal(
+            boolean homeTransitionPending,
+            boolean unlockTransitionPending,
+            boolean recentsWallpaperSettlePending,
+            boolean folderCovered,
+            boolean recentsCovered) {
+        return homeTransitionPending && !unlockTransitionPending && !folderCovered;
     }
 
     static void setWorkspaceCovered(View anyView, boolean covered) {
@@ -417,12 +439,21 @@ final class LauncherGlassSceneController {
     private void setHomeTransitionPending(boolean pending) {
         boolean wasPending = isPresentationPending();
         homeTransitionPending = pending;
+        // If HOME presentation ends before vendor Recents hide (abort/out-of-order completion),
+        // restore the still-authoritative semantic cover before capture can be released.
+        if (!pending && (folderCovered || recentsCovered)) {
+            setEffectiveCovered(true);
+        }
         onPresentationPendingChanged(wasPending, isPresentationPending(), "home");
     }
 
     private void beginHomeReturnReveal() {
-        if (!homeTransitionPending || unlockTransitionPending || recentsWallpaperSettlePending
-                || folderCovered || recentsCovered) return;
+        if (!shouldBeginHomeReturnReveal(
+                homeTransitionPending,
+                unlockTransitionPending,
+                recentsWallpaperSettlePending,
+                folderCovered,
+                recentsCovered)) return;
         state.beginRevealBeforeFreshFrame();
         applyLayerVisibility();
     }
