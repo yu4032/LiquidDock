@@ -11,6 +11,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** One shared GPU glass session and one scene controller per stable Launcher ViewRoot. */
 final class LauncherGlassSessionRegistry {
+    interface RolloverCompletion {
+        void onComplete(boolean success);
+    }
+
     private static final WeakHashMap<View, LauncherGlassSession> SESSIONS = new WeakHashMap<>();
 
     private LauncherGlassSessionRegistry() {}
@@ -62,18 +66,19 @@ final class LauncherGlassSessionRegistry {
     }
 
     /**
-     * Roll all live OES/SurfaceTexture endpoints after the vendor unlock animation. The callback
-     * runs only after each session's render queue has executed the rollover task queued by
-     * rebindProducer(), so the old lockscreen buffer queue cannot survive into HOME capture.
+     * Roll all live OES/SurfaceTexture endpoints after the vendor unlock animation. Completion is
+     * delivered exactly once after every live session either finishes endpoint replacement or
+     * rejects/fails. A successful callback means endpoint rollover only; scene freshness remains
+     * owned by LauncherGlassSceneController.
      */
-    static void prepareUnlockCaptureReturn(Runnable ready) {
+    static void prepareUnlockCaptureReturn(RolloverCompletion completion) {
         ArrayList<LauncherGlassSession> sessions;
         synchronized (LauncherGlassSessionRegistry.class) {
             sessions = new ArrayList<>(SESSIONS.values());
         }
         sessions.removeIf(session -> session == null || session.isShutdown());
         if (sessions.isEmpty()) {
-            if (ready != null) ready.run();
+            if (completion != null) completion.onComplete(true);
             return;
         }
 
@@ -82,12 +87,14 @@ final class LauncherGlassSessionRegistry {
         AtomicBoolean failed = new AtomicBoolean(false);
         Runnable completeOne = () -> {
             if (remaining.decrementAndGet() != 0) return;
-            if (failed.get()) {
+            boolean success = !failed.get();
+            if (success) {
+                MainHook.log("[DC][LauncherGlass] unlock endpoint rollover complete sessions="
+                        + sessions.size());
+            } else {
                 MainHook.log("[DC][LauncherGlass] unlock endpoint rollover incomplete; capture remains blocked");
-                return;
             }
-            MainHook.log("[DC][LauncherGlass] unlock endpoint rollover complete sessions=" + sessions.size());
-            if (ready != null) ready.run();
+            if (completion != null) completion.onComplete(success);
         };
 
         for (LauncherGlassSession session : sessions) {
