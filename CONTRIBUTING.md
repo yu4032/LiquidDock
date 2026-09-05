@@ -150,6 +150,27 @@ Workstation composite customization 当前保持 restart-bound。不要只恢复
 
 历史 stroke-shadow key 在最终方案确定前继续保留配置兼容。
 
+## Runtime behavior 测试规则
+
+涉及 ownership、freshness、animation、recovery、teardown、callback timing 或 lifecycle sequencing 的测试，必须驱动**生产代码实际使用的**纯 state / policy 对象，并对输入与输出做断言。
+
+禁止：
+
+- 读取 `src/main/java` 后通过 `contains()` / `indexOf()` / method slicing 推断 runtime 行为；
+- 用 production source 中某几行的相对顺序代替状态转换测试；
+- 为了访问同包 package-private state/policy 而使用 Java reflection。
+
+同包 package-private state/policy 应直接 typed 调用。新增的纯模型不能是 test-only 镜像，必须由 production runtime 真正消费。
+
+静态 source/config inspection 只保留给以下场景：
+
+- R8 / keep rules；
+- Gradle / build configuration；
+- Android Manifest / Xposed scope；
+- 明确的 architecture/API 禁令，例如“不得使用某 API / 不得跨自有模块反射”。
+
+`RuntimeBehaviorTestPolicyContractTest` 会对 runtime-category tests 执行这一结构性 gate，防止后续重新退化为 source-string runtime contract。
+
 ## 文档规则
 
 当前权威文档：
