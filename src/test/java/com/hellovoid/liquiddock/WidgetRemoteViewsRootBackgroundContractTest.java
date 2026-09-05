@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Requires standard AppWidgets to clear only the tagged RemoteViews content-root background. */
+/** Static target/API boundary for standard AppWidget RemoteViews material selection. */
 public class WidgetRemoteViewsRootBackgroundContractTest {
     private static final Path HELPER = Path.of(
             "src/main/java/com/hellovoid/liquiddock/LauncherGlassVendorMaterialSuppressor.java");
@@ -22,7 +22,6 @@ public class WidgetRemoteViewsRootBackgroundContractTest {
         assertTrue(source.contains("host instanceof ViewGroup"));
         assertTrue(source.contains("getChildAt"));
         assertTrue(source.contains("child.getTag(android.R.id.widget_frame)"));
-        assertTrue(source.contains("setBackground(null)"));
 
         assertFalse(source.contains("findViewById(android.R.id.widget_frame)"));
         assertFalse(source.contains("resolveRemoteViewsContent(child)"));

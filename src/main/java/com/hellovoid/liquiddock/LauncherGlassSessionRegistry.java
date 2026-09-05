@@ -11,6 +11,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** One shared GPU glass session and one scene controller per stable Launcher ViewRoot. */
 final class LauncherGlassSessionRegistry {
+    interface RolloverCompletion {
+        void onComplete(boolean success);
+    }
+
     private static final WeakHashMap<View, LauncherGlassSession> SESSIONS = new WeakHashMap<>();
 
     private LauncherGlassSessionRegistry() {}
@@ -62,18 +66,19 @@ final class LauncherGlassSessionRegistry {
     }
 
     /**
-     * Roll all live OES/SurfaceTexture endpoints after the vendor unlock animation. The callback
-     * runs only after each session's render queue has executed the rollover task queued by
-     * rebindProducer(), so the old lockscreen buffer queue cannot survive into HOME capture.
+     * Roll all live OES/SurfaceTexture endpoints after the vendor unlock animation. Completion is
+     * delivered exactly once after every live session either finishes endpoint replacement or
+     * rejects/fails. A successful callback means endpoint rollover only; scene freshness remains
+     * owned by LauncherGlassSceneController.
      */
-    static void prepareUnlockCaptureReturn(Runnable ready) {
+    static void prepareUnlockCaptureReturn(RolloverCompletion completion) {
         ArrayList<LauncherGlassSession> sessions;
         synchronized (LauncherGlassSessionRegistry.class) {
             sessions = new ArrayList<>(SESSIONS.values());
         }
         sessions.removeIf(session -> session == null || session.isShutdown());
         if (sessions.isEmpty()) {
-            if (ready != null) ready.run();
+            if (completion != null) completion.onComplete(true);
             return;
         }
 
@@ -82,12 +87,14 @@ final class LauncherGlassSessionRegistry {
         AtomicBoolean failed = new AtomicBoolean(false);
         Runnable completeOne = () -> {
             if (remaining.decrementAndGet() != 0) return;
-            if (failed.get()) {
+            boolean success = !failed.get();
+            if (success) {
+                MainHook.log("[DC][LauncherGlass] unlock endpoint rollover complete sessions="
+                        + sessions.size());
+            } else {
                 MainHook.log("[DC][LauncherGlass] unlock endpoint rollover incomplete; capture remains blocked");
-                return;
             }
-            MainHook.log("[DC][LauncherGlass] unlock endpoint rollover complete sessions=" + sessions.size());
-            if (ready != null) ready.run();
+            if (completion != null) completion.onComplete(success);
         };
 
         for (LauncherGlassSession session : sessions) {
@@ -107,18 +114,28 @@ final class LauncherGlassSessionRegistry {
 
     /**
      * HyperOS Workstation can keep the same valid root Surface across Recents while silently
-     * retiring the PassBlur BufferQueue producer. The normal fresh-frame recovery therefore cannot
-     * detect a Surface generation change. Roll every live shared producer before Recents uncovers
-     * the scene; the controller will still keep the StaticLayer hidden until the new OES frame lands.
+     * retiring the PassBlur BufferQueue producer. Return true only when every live Workstation
+     * session accepted its endpoint rollover; scene freshness is still decided elsewhere.
      */
-    static synchronized void prepareWorkstationRecentsReturn() {
-        if (!MainHook.isWorkstationMode()) return;
+    static synchronized boolean prepareWorkstationRecentsReturn() {
+        if (!MainHook.isWorkstationMode()) return true;
+        int live = 0;
         int rebound = 0;
+        boolean accepted = true;
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session == null || session.isShutdown()) continue;
-            if (session.rebindProducer()) rebound++;
+            live++;
+            try {
+                if (session.rebindProducer()) rebound++;
+                else accepted = false;
+            } catch (Throwable error) {
+                accepted = false;
+                MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover failed: " + error);
+            }
         }
-        MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover sessions=" + rebound);
+        MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover sessions="
+                + rebound + "/" + live + " accepted=" + accepted);
+        return accepted;
     }
 
     static synchronized void shutdownAll() {

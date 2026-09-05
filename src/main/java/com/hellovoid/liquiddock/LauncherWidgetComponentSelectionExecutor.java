@@ -111,7 +111,11 @@ final class LauncherWidgetComponentSelectionExecutor {
             if (target == null || !selector.className.equals(target.getClass().getName())) continue;
             if (!claimed.add(target)) continue;
             boolean originalShow = readBooleanField(target, "mShow", true);
-            if (invokeOptionalMutation(target, "show", false)) {
+            AtomicMutationClaimState mutation = new AtomicMutationClaimState(1);
+            if (!mutation.beginIfFullyResolved(1)) continue;
+            AtomicMutationClaimState.Decision decision = mutation.onMutationResult(
+                    invokeOptionalMutation(target, "show", false));
+            if (decision.commitClaim) {
                 claims.add(new MamlClaim(target, originalShow));
             }
         }
