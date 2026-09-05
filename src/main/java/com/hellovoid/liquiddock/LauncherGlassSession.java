@@ -1228,7 +1228,8 @@ final class LauncherGlassSession {
         invalidateBackdropFrameState();
         clearWallpaperRequest();
 
-        if (rotationSettlePending) {
+        if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
+                rotationSettlePending)) {
             // Rotation already owns the endpoint transition. Its settle completion will create the
             // one replacement endpoint and the common generation/bind/fresh milestones finish us.
             return LauncherGlassProducerRecoveryState.Result.ACCEPTED;
@@ -1241,7 +1242,8 @@ final class LauncherGlassSession {
             String reason, long recoverySerial, boolean requestBoundary, String owner) {
         boolean queued = postRender(() -> {
             if (!workstationProducerRecovery.isActive(recoverySerial)) return;
-            if (rotationSettlePending) {
+            if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
+                    rotationSettlePending)) {
                 logWorkstationProducerRecovery(
                         reason, recoverySerial,
                         LauncherGlassProducerRecoveryState.Result.ACCEPTED,
@@ -1255,7 +1257,8 @@ final class LauncherGlassSession {
                 }
                 makePbufferCurrent();
                 releaseInputProducerEndpointOnRenderThread();
-                if (rotationSettlePending) {
+                if (!LauncherGlassProducerTransitionPolicy.workstationCanOwnEndpointTransition(
+                        rotationSettlePending)) {
                     logWorkstationProducerRecovery(
                             reason, recoverySerial,
                             LauncherGlassProducerRecoveryState.Result.ACCEPTED,
