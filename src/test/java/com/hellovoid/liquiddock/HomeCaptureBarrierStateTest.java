@@ -15,6 +15,7 @@ public class HomeCaptureBarrierStateTest {
         state.onRootReady();
         state.onFreshFrameReady(state.generation());
         assertTrue(state.isLayerVisible());
+        state.consumeFadeReveal(); // settle the initial bootstrap presentation before this scenario.
 
         state.onGenerationInvalidated();
 
