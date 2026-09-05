@@ -37,23 +37,13 @@ final class LauncherGlassHomePresentationHook {
         try {
             HookUtil.hookMethod(classLoader, WINDOW_ELEMENT, "animTo", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                boolean closeToHome = containsHomeClose(args);
-                if (closeToHome) {
+                if (containsHomeClose(args)) {
                     applyHomeStartDecision(HOME_AUTHORITY.onLauncherHomeStarted());
                 }
-
-                Object result = chain.proceed(args);
-                if (closeToHome && HOME_AUTHORITY.shouldRevealFromLauncherFallback()) {
-                    // Fallback only: SystemUI START normally reveals earlier, before WMShell starts
-                    // its transition animation. If that cross-process signal is unavailable, retain
-                    // the proven Launcher 4.50 WindowElement timing rather than leaving glass hidden.
-                    LauncherGlassSceneController.beginHomeReturnRevealForAll();
-                    MainHook.log(TAG + " APP HOME reveal started by Launcher fallback");
-                }
-                return result;
+                return chain.proceed(args);
             }, Object.class);
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME presentation start unavailable: " + error);
+            MainHook.log(TAG + " HOME capture start unavailable: " + error);
         }
     }
 
@@ -72,7 +62,7 @@ final class LauncherGlassHomePresentationHook {
                 return result;
             }, "com.miui.home.recents.util.RectFSpringAnim");
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME presentation end unavailable: " + error);
+            MainHook.log(TAG + " HOME capture end unavailable: " + error);
         }
     }
 
@@ -94,15 +84,10 @@ final class LauncherGlassHomePresentationHook {
         }
         if (!decision.freezeBarrier) return;
 
-        // Freeze fresh capture first, then fade the already prepared static layer. The cached layer
-        // may be presented during the WMShell animation, but requestFreshBackdrop remains blocked by
-        // homeTransitionPending until the matching SystemUI FINISH arrives. A returning widget is
-        // separately kept at alpha 0 until this new scene generation has actually rendered fresh.
+        // HOME transition tracking owns capture/freshness only. Cached Workspace glass stays in the
+        // Launcher root and is exposed by the same native surfaces that expose icons and widgets.
         applyHomeStartDecision(decision);
-        if (decision.beginReveal) {
-            LauncherGlassSceneController.beginHomeReturnRevealForAll();
-        }
-        MainHook.log(TAG + " SystemUI HOME START authority serial=" + serial
+        MainHook.log(TAG + " SystemUI HOME START capture authority serial=" + serial
                 + " t=" + eventTimeNanos);
     }
 

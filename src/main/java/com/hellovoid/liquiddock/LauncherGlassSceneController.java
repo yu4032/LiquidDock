@@ -25,7 +25,7 @@ final class LauncherGlassSceneController {
         private long generation = 1L;
         private boolean fadeAfterFreshFrame;
         private boolean fadeRevealReady;
-        private boolean revealBeforeFreshFrame;
+        private boolean cachedLayerVisible;
 
         void onRootReady() {
             if (state == State.DETACHED) {
@@ -41,20 +41,41 @@ final class LauncherGlassSceneController {
             }
         }
 
+        /**
+         * Semantic Recents coverage blocks capture only. The cached layer stays exactly where the
+         * Workspace is in the Launcher root so MIUI's own Recents background owns presentation.
+         */
         void setCovered(boolean nextCovered) {
-            boolean isCovered = state == State.COVERED;
-            if (isCovered == nextCovered) return;
             if (nextCovered) {
                 state = State.COVERED;
+                // Capture-only coverage must not erase presentation recovery already owned by a
+                // hard cover (Folder) that may overlap Recents.
+                fadeRevealReady = false;
+                return;
+            }
+            if (state != State.COVERED) return;
+
+            generation++;
+            state = State.HOME_WAITING_FRESH_FRAME;
+            // Preserve fadeAfterFreshFrame: ordinary Recents enters with it false, while a hard
+            // cover that ended under Recents may legitimately leave it true.
+        }
+
+        /** Folder coverage is a real LiquidDock presentation gate and keeps the old fresh-return rule. */
+        void setHardCovered(boolean nextCovered) {
+            if (nextCovered) {
+                state = State.COVERED;
+                cachedLayerVisible = false;
                 fadeAfterFreshFrame = false;
                 fadeRevealReady = false;
-                revealBeforeFreshFrame = false;
-            } else {
-                generation++;
-                state = State.HOME_WAITING_FRESH_FRAME;
-                fadeAfterFreshFrame = true;
-                revealBeforeFreshFrame = false;
+                return;
             }
+            if (state != State.COVERED) return;
+
+            generation++;
+            state = State.HOME_WAITING_FRESH_FRAME;
+            cachedLayerVisible = false;
+            fadeAfterFreshFrame = true;
         }
 
         void onGenerationInvalidated() {
@@ -64,36 +85,26 @@ final class LauncherGlassSceneController {
             }
         }
 
-        void beginRevealBeforeFreshFrame() {
-            if (state != State.HOME_WAITING_FRESH_FRAME || revealBeforeFreshFrame) return;
-            revealBeforeFreshFrame = true;
-            fadeAfterFreshFrame = false;
-            fadeRevealReady = true;
-        }
-
         void onFreshFrameReady(long frameGeneration) {
             if (frameGeneration != generation || state == State.COVERED || state == State.DETACHED) {
                 return;
             }
-            boolean revealedEarly = revealBeforeFreshFrame;
+            boolean wasVisible = cachedLayerVisible;
             state = State.HOME_VISIBLE;
-            fadeRevealReady = !revealedEarly && fadeAfterFreshFrame;
+            cachedLayerVisible = true;
+            fadeRevealReady = !wasVisible && fadeAfterFreshFrame;
             fadeAfterFreshFrame = false;
-            revealBeforeFreshFrame = false;
         }
 
         void detach() {
             state = State.DETACHED;
+            cachedLayerVisible = false;
             fadeAfterFreshFrame = false;
             fadeRevealReady = false;
-            revealBeforeFreshFrame = false;
         }
 
         long generation() { return generation; }
-        boolean isLayerVisible() {
-            return state == State.HOME_VISIBLE
-                    || (state == State.HOME_WAITING_FRESH_FRAME && revealBeforeFreshFrame);
-        }
+        boolean isLayerVisible() { return cachedLayerVisible && state != State.DETACHED; }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
             fadeRevealReady = false;
@@ -148,7 +159,9 @@ final class LauncherGlassSceneController {
         created.homeTransitionPending = vendorHomeTransitionPending;
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
-        if (created.recentsCovered || created.folderCovered) {
+        if (created.folderCovered) {
+            created.state.setHardCovered(true);
+        } else if (created.recentsCovered) {
             created.state.setCovered(true);
         }
         BY_ROOT.put(root, created);
@@ -222,16 +235,6 @@ final class LauncherGlassSceneController {
         }
     }
 
-    static void beginHomeReturnRevealForAll() {
-        ArrayList<LauncherGlassSceneController> snapshot;
-        synchronized (LauncherGlassSceneController.class) {
-            snapshot = new ArrayList<>(BY_ROOT.values());
-        }
-        for (LauncherGlassSceneController controller : snapshot) {
-            if (controller != null) controller.beginHomeReturnReveal();
-        }
-    }
-
     static void setUnlockTransitionPendingForAll(boolean pending) {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
@@ -302,7 +305,9 @@ final class LauncherGlassSceneController {
         state.onRootReady();
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
-        if (isPresentationPending()) session.suspendWorkspaceProducer();
+        if (state.state() == State.COVERED || isPresentationPending()) {
+            session.suspendWorkspaceProducer();
+        }
         if (bootstrapPosted) return;
         bootstrapPosted = true;
         root.postOnAnimation(() -> {
@@ -420,13 +425,6 @@ final class LauncherGlassSceneController {
         onPresentationPendingChanged(wasPending, isPresentationPending(), "home");
     }
 
-    private void beginHomeReturnReveal() {
-        if (!homeTransitionPending || unlockTransitionPending || recentsWallpaperSettlePending
-                || folderCovered || recentsCovered) return;
-        state.beginRevealBeforeFreshFrame();
-        applyLayerVisibility();
-    }
-
     private void setUnlockTransitionPending(boolean pending) {
         boolean wasPending = isPresentationPending();
         unlockTransitionPending = pending;
@@ -452,25 +450,51 @@ final class LauncherGlassSceneController {
     }
 
     private void setFolderCovered(boolean covered) {
+        if (folderCovered == covered) return;
         folderCovered = covered;
-        setEffectiveCovered(folderCovered || recentsCovered);
+        if (covered) {
+            state.setHardCovered(true);
+            applyLayerVisibility();
+            session.suspendWorkspaceProducer();
+            return;
+        }
+        if (recentsCovered) {
+            // Complete the hard-cover release semantics first, then keep Recents as capture-only
+            // coverage. This preserves the pending fresh reveal without exposing it under Recents.
+            state.setHardCovered(false);
+            state.setCovered(true);
+            applyLayerVisibility();
+            return;
+        }
+
+        boolean wasCovered = state.state() == State.COVERED;
+        state.setHardCovered(false);
+        applyLayerVisibility();
+        if (wasCovered) requestFreshBackdrop(state.generation());
     }
 
     private void setRecentsCovered(boolean covered) {
         if (recentsCovered == covered) return;
         recentsCovered = covered;
-        setEffectiveCovered(folderCovered || recentsCovered);
-    }
-
-    private void setEffectiveCovered(boolean covered) {
-        boolean wasCovered = state.state() == State.COVERED;
-        state.setCovered(covered);
-        applyLayerVisibility();
         if (covered) {
+            if (folderCovered) state.setHardCovered(true);
+            else state.setCovered(true);
+            applyLayerVisibility();
             session.suspendWorkspaceProducer();
-        } else if (wasCovered) {
-            // Scene recovery wins. Any wallpaper pulse that was in flight is deferred by
-            // requestFreshBackdrop() and is released only after this generic fresh frame lands.
+            return;
+        }
+        if (folderCovered) {
+            state.setHardCovered(true);
+            applyLayerVisibility();
+            return;
+        }
+
+        boolean wasCovered = state.state() == State.COVERED;
+        state.setCovered(false);
+        applyLayerVisibility();
+        if (wasCovered) {
+            // Scene recovery still owns capture freshness, but the cached layer remains visible
+            // under/through MIUI's native Recents fade until the replacement frame arrives.
             requestFreshBackdrop(state.generation());
         }
     }
@@ -504,9 +528,11 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            boolean immediateHide = folderCovered || recentsCovered || homeTransitionPending
-                    || unlockTransitionPending || recentsWallpaperSettlePending;
-            current.setSceneVisible(state.isLayerVisible(), state.consumeFadeReveal(), immediateHide);
+            // Recents, HOME and wallpaper-settle are capture/freshness barriers only. The cached
+            // layer stays in the Launcher root beneath MIUI's own Recents UI, exactly like Workspace.
+            boolean hardPresentationCover = folderCovered || unlockTransitionPending;
+            boolean visible = state.isLayerVisible() && !hardPresentationCover;
+            current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }
     }
 
