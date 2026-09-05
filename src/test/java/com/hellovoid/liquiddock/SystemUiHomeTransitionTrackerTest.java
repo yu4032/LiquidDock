@@ -52,12 +52,13 @@ public class SystemUiHomeTransitionTrackerTest {
         tracker.beginReady(source);
         tracker.recordCurrentReadyVisibility(true);
         tracker.endReady();
-        tracker.onMerged(source, target);
 
-        SystemUiHomeTransitionTracker.Event start = tracker.onStarting(target);
+        SystemUiHomeTransitionTracker.Event start = tracker.onMerged(source, target);
         assertNotNull(start);
         long serial = start.serial();
         assertTrue(serial > 0L);
+        assertEquals(null, tracker.onStarting(target));
+
         SystemUiHomeTransitionTracker.Event finish = tracker.onFinished(target);
         assertNotNull(finish);
         assertEquals(serial, finish.serial());
