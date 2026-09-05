@@ -33,7 +33,7 @@ public class SystemUiHomeEarlyRevealStateTest {
     }
 
     @Test
-    public void recentsHomeStartCanRevealBeforeVendorHide() {
+    public void recentsHomeStartCanRevealBeforeVendorHideWithoutEndingSemanticCover() {
         LauncherGlassSceneController.StateMachine state =
                 new LauncherGlassSceneController.StateMachine();
         state.onRootReady();
@@ -50,9 +50,18 @@ public class SystemUiHomeEarlyRevealStateTest {
         state.beginRevealBeforeFreshFrame();
         assertTrue("HOME START must reveal the cached layer while Recents is still semantically shown",
                 state.isLayerVisible());
+        assertEquals("presentation override must not claim that Recents semantic coverage ended",
+                LauncherGlassSceneController.State.COVERED, state.state());
         assertTrue(state.consumeFadeReveal());
         assertEquals("presentation override must not invent another scene generation",
                 homeGeneration, state.generation());
+
+        state.setCovered(false);
+        assertEquals(LauncherGlassSceneController.State.HOME_WAITING_FRESH_FRAME, state.state());
+        assertTrue("vendor hide must preserve the already-running early reveal",
+                state.isLayerVisible());
+        assertEquals("vendor hide must own the semantic uncover generation",
+                homeGeneration + 1L, state.generation());
     }
 
     @Test
