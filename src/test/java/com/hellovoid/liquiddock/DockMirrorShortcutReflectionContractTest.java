@@ -13,11 +13,18 @@ public class DockMirrorShortcutReflectionContractTest {
         String source = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/DockMirrorShortcutHook.java"));
 
-        assertTrue(source.contains(
-                "HookUtil.InvocationResult<Object> refresh = HookUtil.tryInvoke(hotSeats, \"onMirrorSeatUpdate\")"));
+        String invocation =
+                "HookUtil.InvocationResult<Object> refresh = HookUtil.tryInvoke(hotSeats, \"onMirrorSeatUpdate\")";
+        assertTrue(source.contains(invocation));
         assertTrue(source.contains("if (refresh.succeeded())"));
-        assertTrue(source.contains("refreshed++;"));
         assertTrue(source.contains("refresh.failure()"));
         assertFalse(source.contains("HookUtil.invoke(hotSeats, \"onMirrorSeatUpdate\")"));
+
+        int invokeAt = source.indexOf(invocation);
+        int successAt = source.indexOf("if (refresh.succeeded())", invokeAt);
+        int countAt = source.indexOf("refreshed++;", successAt);
+        int failureAt = source.indexOf("refresh.failure()", countAt);
+        assertTrue("refresh accounting must be inside the success branch",
+                invokeAt >= 0 && successAt > invokeAt && countAt > successAt && failureAt > countAt);
     }
 }
