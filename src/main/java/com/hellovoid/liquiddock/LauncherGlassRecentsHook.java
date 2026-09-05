@@ -9,8 +9,10 @@ final class LauncherGlassRecentsHook {
     private static final String RECENTS_DISPATCHER =
             "com.miui.home.recents.RecentsServiceDispatcher";
     // Live Launcher 4.50 logs show wallpaper scale can still be returning to 1.0 for ~500 ms
-    // after onRecentViewHide. Keep one extra frame-budget margin before accepting a fresh scene.
+    // after onRecentViewHide. This is an existing wallpaper-content barrier, not producer recovery.
     private static final long RECENTS_WALLPAPER_SETTLE_MS = 600L;
+    private static final WorkstationRecentsRecoveryPolicy RECOVERY_POLICY =
+            new WorkstationRecentsRecoveryPolicy();
     private static boolean installed;
     private static Handler mainHandler;
     private static long recentsReturnToken;
@@ -22,9 +24,9 @@ final class LauncherGlassRecentsHook {
         mainHandler = new Handler(Looper.getMainLooper());
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
-                // Cancel any delayed HOME release before covering the scene again. Clearing the
-                // settle flag while COVERED cannot schedule a capture.
+                // A new authoritative covered episode cancels any previous delayed HOME release.
                 recentsReturnToken++;
+                RECOVERY_POLICY.onRecentViewShow();
                 LauncherGlassSceneController.setRecentsCoveredForAll(true);
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -34,45 +36,30 @@ final class LauncherGlassRecentsHook {
 
                 boolean workstationMode = MainHook.isWorkstationMode();
                 boolean recentsCovered = LauncherGlassSceneController.isRecentsCoveredByVendor();
-                if (!recentsCovered) {
-                    MainHook.log(TAG + " ignoring non-covered Recents hide");
+                WorkstationRecentsRecoveryPolicy.Decision decision =
+                        RECOVERY_POLICY.onRecentViewHide(workstationMode, recentsCovered);
+                if (!decision.authoritative) {
+                    MainHook.log(TAG + " ignoring non-authoritative Recents hide"
+                            + " covered=" + recentsCovered
+                            + " phase=" + RECOVERY_POLICY.phase()
+                            + " episode=" + RECOVERY_POLICY.activeEpisode());
                     return result;
                 }
 
-                boolean rolloverAccepted = true;
-                if (WorkstationRecentsRecoveryPolicy.shouldRequestRollover(
-                        workstationMode, recentsCovered)) {
-                    // Workstation can reuse an apparently-valid Launcher Surface while retiring the
-                    // old PassBlur BufferQueue producer. Endpoint rollover acceptance is required
-                    // before HOME may uncover, but does not itself make the scene fresh or visible.
-                    rolloverAccepted = LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn();
-                }
-                WorkstationRecentsRecoveryPolicy.Decision recovery =
-                        WorkstationRecentsRecoveryPolicy.onRecentsReturn(
-                                workstationMode, rolloverAccepted);
-                if (!recovery.allowUncover) {
-                    LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
-                    MainHook.log(TAG
-                            + " Workstation Recents producer rollover rejected; HOME remains covered");
+                // Keep the pre-existing HyperOS wallpaper-scale barrier anchored to the real vendor
+                // hide callback. Workstation producer recovery does not add or extend a fixed delay.
+                armRecentsWallpaperSettle();
+
+                if (!decision.requestRollover) {
+                    if (decision.allowUncover) {
+                        LauncherGlassSceneController.setRecentsCoveredForAll(false);
+                    }
                     return result;
                 }
 
-                // onRecentViewHide precedes MiuiWallpaperSurfaceAnimation.IDLE on the pure
-                // HOME -> Recents -> HOME path. Arm the capture barrier before uncovering HOME,
-                // then release it after the observed wallpaper scale-to-1.0 tail has settled.
-                long token = ++recentsReturnToken;
-                LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(true);
-                LauncherGlassSceneController.setRecentsCoveredForAll(false);
-                Handler handler = mainHandler;
-                if (handler != null) {
-                    handler.postDelayed(() -> {
-                        if (token != recentsReturnToken) return;
-                        LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
-                        MainHook.log(TAG + " Recents wallpaper settle released token=" + token);
-                    }, RECENTS_WALLPAPER_SETTLE_MS);
-                } else {
-                    LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
-                }
+                LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn(
+                        decision.episode,
+                        terminal -> dispatchRecoveryTerminal(decision.episode, terminal));
                 return result;
             });
             installed = true;
@@ -80,5 +67,54 @@ final class LauncherGlassRecentsHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " semantic Recents dispatcher unavailable: " + error);
         }
+    }
+
+    private static void dispatchRecoveryTerminal(
+            long episode, LauncherGlassProducerRecoveryState.Result result) {
+        Handler handler = mainHandler;
+        if (handler != null && Looper.myLooper() != Looper.getMainLooper()) {
+            handler.post(() -> dispatchRecoveryTerminal(episode, result));
+            return;
+        }
+
+        WorkstationRecentsRecoveryPolicy.TerminalDecision terminal =
+                RECOVERY_POLICY.onRecoveryTerminal(episode, result);
+        if (!terminal.matched) {
+            MainHook.log(TAG + " ignoring stale Workstation recovery terminal"
+                    + " episode=" + episode + " result=" + result
+                    + " active=" + RECOVERY_POLICY.activeEpisode()
+                    + " phase=" + RECOVERY_POLICY.phase());
+            return;
+        }
+        if (!terminal.allowUncover) {
+            // Failure owns no future retry side effect. Keep Recents authoritative/covered until a
+            // real subsequent onRecentViewShow establishes a new episode.
+            recentsReturnToken++;
+            LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+            MainHook.log(TAG + " Workstation producer recovery " + result
+                    + "; HOME remains fail-closed episode=" + episode);
+            return;
+        }
+
+        // Producer terminal success authorizes only the coverage transition. Scene visibility still
+        // belongs to LauncherGlassSceneController's matching scene-generation/fresh-OES barrier.
+        LauncherGlassSceneController.setRecentsCoveredForAll(false);
+        MainHook.log(TAG + " Workstation producer recovery terminal ACCEPTED"
+                + " episode=" + episode + "; scene freshness still required");
+    }
+
+    private static void armRecentsWallpaperSettle() {
+        long token = ++recentsReturnToken;
+        LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(true);
+        Handler handler = mainHandler;
+        if (handler == null) {
+            LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+            return;
+        }
+        handler.postDelayed(() -> {
+            if (token != recentsReturnToken) return;
+            LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+            MainHook.log(TAG + " Recents wallpaper settle released token=" + token);
+        }, RECENTS_WALLPAPER_SETTLE_MS);
     }
 }
