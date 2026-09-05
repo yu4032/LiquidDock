@@ -63,6 +63,25 @@ public class WidgetSystemUiReflectionContractTest {
         assertTrue(transition.contains("containerResult.succeeded()"));
     }
 
+    @Test public void mamlMutationsAreSuccessGatedAndRollbackPartialClaims() throws Exception {
+        String rules = read("LauncherMamlBackgroundRuleExecutor.java");
+        assertTrue(rules.contains("private static boolean invokeOptionalMutation("));
+        assertTrue(rules.contains("if (!invokeOptionalMutation(target, \"show\", false))"));
+        assertTrue(rules.contains("restoreElements(elementClaims, appliedCount);"));
+        int hide = rules.indexOf("if (!invokeOptionalMutation(target, \"show\", false))");
+        int claim = rules.indexOf("CLAIMS.put(host, new Claim(root, elementClaims));");
+        assertTrue("MAML claim must be stored only after all hide mutations succeed",
+                hide >= 0 && claim > hide);
+
+        String selections = read("LauncherWidgetComponentSelectionExecutor.java");
+        assertTrue(selections.contains("private static boolean invokeOptionalMutation("));
+        assertTrue(selections.contains("if (invokeOptionalMutation(target, \"show\", false))"));
+        int mutation = selections.indexOf("if (invokeOptionalMutation(target, \"show\", false))");
+        int addClaim = selections.indexOf("claims.add(new MamlClaim(target, originalShow));", mutation);
+        assertTrue("failed component hide must not create a false MAML claim",
+                mutation >= 0 && addClaim > mutation);
+    }
+
     private static String read(String name) throws Exception {
         return Files.readString(MAIN.resolve(name));
     }
