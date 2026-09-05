@@ -114,18 +114,28 @@ final class LauncherGlassSessionRegistry {
 
     /**
      * HyperOS Workstation can keep the same valid root Surface across Recents while silently
-     * retiring the PassBlur BufferQueue producer. The normal fresh-frame recovery therefore cannot
-     * detect a Surface generation change. Roll every live shared producer before Recents uncovers
-     * the scene; the controller will still keep the StaticLayer hidden until the new OES frame lands.
+     * retiring the PassBlur BufferQueue producer. Return true only when every live Workstation
+     * session accepted its endpoint rollover; scene freshness is still decided elsewhere.
      */
-    static synchronized void prepareWorkstationRecentsReturn() {
-        if (!MainHook.isWorkstationMode()) return;
+    static synchronized boolean prepareWorkstationRecentsReturn() {
+        if (!MainHook.isWorkstationMode()) return true;
+        int live = 0;
         int rebound = 0;
+        boolean accepted = true;
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session == null || session.isShutdown()) continue;
-            if (session.rebindProducer()) rebound++;
+            live++;
+            try {
+                if (session.rebindProducer()) rebound++;
+                else accepted = false;
+            } catch (Throwable error) {
+                accepted = false;
+                MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover failed: " + error);
+            }
         }
-        MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover sessions=" + rebound);
+        MainHook.log("[DC][LauncherGlass] workstation Recents producer rollover sessions="
+                + rebound + "/" + live + " accepted=" + accepted);
+        return accepted;
     }
 
     static synchronized void shutdownAll() {
