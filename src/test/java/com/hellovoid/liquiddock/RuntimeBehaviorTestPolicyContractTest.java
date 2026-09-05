@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -94,6 +95,18 @@ public class RuntimeBehaviorTestPolicyContractTest {
                     + "inspection requires explicit audit and legacy debt may only shrink:\n  "
                     + String.join("\n  ", violations));
         }
+    }
+
+    @Test
+    public void alternateSourceReaderApisCannotBypassClassification() {
+        assertTrue(isProductionSourceReader(
+                "Files.readAllLines(Path.of(\"src/main/java/Foo.java\"));"));
+        assertTrue(isProductionSourceReader(
+                "Files.lines(Path.of(\"src/main/java/Foo.java\"));"));
+        assertTrue(isProductionSourceReader(
+                "Files.newBufferedReader(Path.of(\"src/main/java/Foo.java\"));"));
+        assertTrue(isProductionSourceReader(
+                "File(\"src/main/kotlin/Foo.kt\").readText()"));
     }
 
     private static void inspect(
