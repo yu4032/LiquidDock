@@ -16,9 +16,9 @@ public final class ConfigKey<T> {
     private final StorageMode storageMode;
     private final ExportMode exportMode;
 
-    public ConfigKey(String name, Type type, T uiDefault, T runtimeFallback,
-                     T exportDefault, Integer minInt, Integer maxInt,
-                     StorageMode storageMode, ExportMode exportMode) {
+    ConfigKey(String name, Type type, T uiDefault, T runtimeFallback,
+              T exportDefault, Integer minInt, Integer maxInt,
+              StorageMode storageMode, ExportMode exportMode) {
         this.name = name;
         this.type = type;
         this.uiDefault = uiDefault;
