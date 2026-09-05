@@ -30,6 +30,10 @@ final class HomeTransitionAuthorityState {
             return new Decision(true, beginReveal, false, false, false);
         }
 
+        static Decision reveal() {
+            return new Decision(false, true, false, false, false);
+        }
+
         static Decision release(boolean releaseWidgetBarrier) {
             return new Decision(false, false, true, releaseWidgetBarrier, false);
         }
@@ -52,6 +56,10 @@ final class HomeTransitionAuthorityState {
 
     synchronized boolean shouldRevealFromLauncherFallback() {
         return launcherHomeArmed && !systemUiHomeArmed;
+    }
+
+    synchronized Decision onLauncherHomeAnimationStarted() {
+        return launcherHomeArmed ? Decision.reveal() : Decision.none();
     }
 
     synchronized Decision onLauncherHomeEnded(long eventTimeNanos) {
