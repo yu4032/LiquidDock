@@ -46,6 +46,13 @@ public class HookUtilInvocationContractTest {
         assertEquals("boom", result.failure().cause().getMessage());
     }
 
+    @Test public void optionalFailureStringIsDiagnostic() {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(new Fixture(), "missing");
+        String text = String.valueOf(result.failure());
+        assertTrue(text.contains("METHOD_NOT_FOUND"));
+        assertTrue(text.contains("#missing"));
+    }
+
     @Test public void requiredInvocationFailsAtBoundary() {
         try {
             HookUtil.requireInvoke(new Fixture(), "missing");
