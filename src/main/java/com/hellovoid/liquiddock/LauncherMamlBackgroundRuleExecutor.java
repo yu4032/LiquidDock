@@ -98,8 +98,13 @@ final class LauncherMamlBackgroundRuleExecutor {
 
         Claim previous = CLAIMS.get(host);
         if (previous != null && previous.matches(root, resolved)) {
+            AtomicMutationClaimState mutation =
+                    new AtomicMutationClaimState(resolved.size());
+            if (!mutation.beginIfFullyResolved(resolved.size())) return;
             for (Object target : resolved) {
-                if (!invokeOptionalMutation(target, "show", false)) {
+                AtomicMutationClaimState.Decision decision = mutation.onMutationResult(
+                        invokeOptionalMutation(target, "show", false));
+                if (decision.rollbackCount > 0) {
                     restore(previous);
                     CLAIMS.remove(host);
                     MainHook.log(LOG_TAG + identityText
@@ -126,19 +131,23 @@ final class LauncherMamlBackgroundRuleExecutor {
                     target, readBooleanField(target, "mShow", true)));
         }
 
-        int appliedCount = 0;
+        AtomicMutationClaimState mutation = new AtomicMutationClaimState(resolved.size());
+        if (!mutation.beginIfFullyResolved(resolved.size())) return;
         for (Object target : resolved) {
-            appliedCount++;
-            if (!invokeOptionalMutation(target, "show", false)) {
-                restoreElements(elementClaims, appliedCount);
+            AtomicMutationClaimState.Decision decision = mutation.onMutationResult(
+                    invokeOptionalMutation(target, "show", false));
+            if (decision.rollbackCount > 0) {
+                restoreElements(elementClaims, decision.rollbackCount);
                 MainHook.log(LOG_TAG + identityText
                         + " rule=" + rule.id()
                         + " targets=" + elementNames
                         + " targetFound=true mutationFailed=true suppressed=false");
                 return;
             }
+            if (decision.commitClaim) {
+                CLAIMS.put(host, new Claim(root, elementClaims));
+            }
         }
-        CLAIMS.put(host, new Claim(root, elementClaims));
 
         MainHook.log(LOG_TAG + identityText
                 + " rule=" + rule.id()
