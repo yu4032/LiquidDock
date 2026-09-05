@@ -5,8 +5,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import org.junit.Test;
 
 public class DockIconAnimationStateTest {
@@ -22,9 +20,7 @@ public class DockIconAnimationStateTest {
     public void launchAnimationHidesGlassUntilFadeBegins() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
-
         state.begin(icon);
-
         assertEquals(0f, state.opacity(icon, 5_000L), 0f);
     }
 
@@ -34,7 +30,6 @@ public class DockIconAnimationStateTest {
         Object icon = new Object();
         state.begin(icon);
         state.end(icon, 1_000L);
-
         assertEquals(0f, state.opacity(icon, 1_000L), 0f);
         assertEquals(0.75f, state.opacity(icon, 1_090L), 0.0001f);
         assertEquals(1f, state.opacity(icon, 1_180L), 0f);
@@ -48,9 +43,7 @@ public class DockIconAnimationStateTest {
         state.begin(icon);
         state.end(icon, 1_000L);
         assertEquals(0.75f, state.opacity(icon, 1_090L), 0.0001f);
-
         state.begin(icon);
-
         assertEquals(0f, state.opacity(icon, 1_100L), 0f);
     }
 
@@ -58,9 +51,7 @@ public class DockIconAnimationStateTest {
     public void unmatchedEndDoesNotFadeAStableIcon() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
-
         state.end(icon, 1_000L);
-
         assertEquals(1f, state.opacity(icon, 1_000L), 0f);
     }
 
@@ -70,10 +61,8 @@ public class DockIconAnimationStateTest {
         Object icon = new Object();
         state.begin(icon);
         assertFalse(state.isFading(icon));
-
         state.end(icon, 1_000L);
         assertTrue(state.isFading(icon));
-
         state.opacity(icon, 1_180L);
         assertFalse(state.isFading(icon));
     }
@@ -82,43 +71,39 @@ public class DockIconAnimationStateTest {
     public void curveTailStartsRestoreAtNinetyPercentProgress() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
-
         state.observeProxyFrame(icon, 0.89f, 1_000L);
         assertEquals(0f, state.opacity(icon, 1_050L), 0f);
-
         state.observeProxyFrame(icon, 0.90f, 1_100L);
-
         assertTrue(state.isFading(icon));
         assertEquals(0.75f, state.opacity(icon, 1_190L), 0.0001f);
     }
 
     @Test
-    public void proxyFrameReportsOnlyRealAnimationStateChanges() throws Exception {
+    public void proxyFrameReportsOnlyRealAnimationStateChanges() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
-
-        assertFalse(observeChanged(state, icon, 0.20f, 1_000L));
-        assertFalse(observeChanged(state, icon, 0.89f, 1_050L));
-        assertTrue(observeChanged(state, icon, 0.90f, 1_100L));
-        assertFalse(observeChanged(state, icon, 0.95f, 1_120L));
+        assertFalse(state.observeProxyFrame(icon, 0.20f, 1_000L));
+        assertFalse(state.observeProxyFrame(icon, 0.89f, 1_050L));
+        assertTrue(state.observeProxyFrame(icon, 0.90f, 1_100L));
+        assertFalse(state.observeProxyFrame(icon, 0.95f, 1_120L));
     }
 
     @Test
-    public void oneAnimationSampleCarriesOpacityAndFadeState() throws Exception {
+    public void oneAnimationSampleCarriesOpacityAndFadeState() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
         state.begin(icon);
         state.end(icon, 1_000L);
 
-        Object sample = sample(state, icon, 1_090L);
+        DockIconAnimationState.Sample sample = state.sample(icon, 1_090L);
         assertNotNull(sample);
-        assertEquals(0.75f, readFloat(sample, "opacity"), 0.0001f);
-        assertTrue(readBoolean(sample, "fading"));
+        assertEquals(0.75f, sample.opacity, 0.0001f);
+        assertTrue(sample.fading);
 
-        sample = sample(state, icon, 1_180L);
+        sample = state.sample(icon, 1_180L);
         assertNotNull(sample);
-        assertEquals(1f, readFloat(sample, "opacity"), 0f);
-        assertFalse(readBoolean(sample, "fading"));
+        assertEquals(1f, sample.opacity, 0f);
+        assertFalse(sample.fading);
     }
 
     @Test
@@ -128,9 +113,7 @@ public class DockIconAnimationStateTest {
         state.observeProxyFrame(icon, 0.89f, 1_000L);
         state.observeProxyFrame(icon, 0.90f, 1_020L);
         assertEquals(0.75f, state.opacity(icon, 1_110L), 0.0001f);
-
         state.end(icon, 1_110L);
-
         assertEquals(0.75f, state.opacity(icon, 1_110L), 0.0001f);
     }
 
@@ -141,9 +124,7 @@ public class DockIconAnimationStateTest {
         state.observeProxyFrame(icon, 0.89f, 1_000L);
         state.observeProxyFrame(icon, 0.90f, 1_020L);
         assertEquals(1f, state.opacity(icon, 1_200L), 0f);
-
         state.observeProxyFrame(icon, 0.95f, 1_210L);
-
         assertEquals(1f, state.opacity(icon, 1_210L), 0f);
         state.end(icon, 1_220L);
         assertEquals(1f, state.opacity(icon, 1_220L), 0f);
@@ -153,43 +134,9 @@ public class DockIconAnimationStateTest {
     public void progressReversalBeforeTailDoesNotStartRestore() {
         DockIconAnimationState state = new DockIconAnimationState(180L);
         Object icon = new Object();
-
         state.observeProxyFrame(icon, 0.6f, 1_000L);
         state.observeProxyFrame(icon, 0.4f, 1_020L);
-
         assertFalse(state.isFading(icon));
         assertEquals(0f, state.opacity(icon, 1_020L), 0f);
-    }
-
-    private static boolean observeChanged(
-            DockIconAnimationState state, Object icon, float progress, long nowMs) throws Exception {
-        Method method = DockIconAnimationState.class.getDeclaredMethod(
-                "observeProxyFrame", Object.class, float.class, long.class);
-        method.setAccessible(true);
-        return Boolean.TRUE.equals(method.invoke(state, icon, progress, nowMs));
-    }
-
-    private static Object sample(
-            DockIconAnimationState state, Object icon, long nowMs) throws Exception {
-        try {
-            Method method = DockIconAnimationState.class.getDeclaredMethod(
-                    "sample", Object.class, long.class);
-            method.setAccessible(true);
-            return method.invoke(state, icon, nowMs);
-        } catch (NoSuchMethodException missing) {
-            return null;
-        }
-    }
-
-    private static float readFloat(Object target, String fieldName) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return field.getFloat(target);
-    }
-
-    private static boolean readBoolean(Object target, String fieldName) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return field.getBoolean(target);
     }
 }
