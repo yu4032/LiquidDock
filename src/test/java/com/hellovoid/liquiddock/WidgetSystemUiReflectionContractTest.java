@@ -32,6 +32,17 @@ public class WidgetSystemUiReflectionContractTest {
                     source.contains("HookUtil.invokeStatic("));
         }
 
+        for (String name : new String[]{
+                "LauncherWidgetDarkContentAdapter.java",
+                "LauncherMamlBackgroundRuleExecutor.java",
+                "LauncherWidgetComponentSelectionExecutor.java"}) {
+            String source = read(name);
+            assertTrue(name + " helper must call tryInvoke",
+                    source.contains("HookUtil.tryInvoke(target, methodName, args)"));
+            assertTrue(name + " helper must inspect success",
+                    source.contains("if (!result.succeeded())"));
+        }
+
         String keyguardRuntime = read("SystemUiKeyguardGoneRuntime.java");
         String keyguardSource = read("SystemUiKeyguardGoneSource.java");
         String homeRuntime = read("SystemUiHomeTransitionRuntime.java");
