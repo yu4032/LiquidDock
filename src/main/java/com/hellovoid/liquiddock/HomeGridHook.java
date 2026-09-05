@@ -269,7 +269,8 @@ final class HomeGridHook {
         try {
             if (!grid8x4Enabled || info == null || layoutParams == null) return;
 
-            boolean widget = Boolean.TRUE.equals(HookUtil.invoke(info, "isWidget"));
+            HookUtil.InvocationResult<Object> widgetResult = HookUtil.tryInvoke(info, "isWidget");
+            boolean widget = widgetResult.succeeded() && Boolean.TRUE.equals(widgetResult.value());
             if (!widget) {
                 int itemType = HookUtil.getIntField(info, "itemType");
                 widget = itemType == 4 || itemType == 5 || itemType == 19;
@@ -327,7 +328,8 @@ final class HomeGridHook {
                 Object info = child.getTag();
                 if (info == null) continue;
 
-                boolean widget = Boolean.TRUE.equals(HookUtil.invoke(info, "isWidget"));
+                HookUtil.InvocationResult<Object> widgetResult = HookUtil.tryInvoke(info, "isWidget");
+                boolean widget = widgetResult.succeeded() && Boolean.TRUE.equals(widgetResult.value());
                 if (!widget) {
                     try {
                         int itemType = HookUtil.getIntField(info, "itemType");
@@ -400,8 +402,8 @@ final class HomeGridHook {
             android.view.View layout = (android.view.View) cellLayout;
             boolean portrait = layout.getResources().getConfiguration().orientation
                 == Configuration.ORIENTATION_PORTRAIT;
-            int countX = (Integer) HookUtil.invoke(config, "getCountX");
-            int countY = (Integer) HookUtil.invoke(config, "getCountY");
+            int countX = (Integer) HookUtil.requireInvoke(config, "getCountX");
+            int countY = (Integer) HookUtil.requireInvoke(config, "getCountY");
             if (countX <= 0 || countY <= 0) return;
             Object gridCells = HookUtil.getField(cellLayout, "mGridCell");
             if (gridCells != null) {
@@ -424,9 +426,9 @@ final class HomeGridHook {
                 HookUtil.setField(cellLayout, "mYs", new int[countY]);
             HookUtil.setIntField(cellLayout, "mHCells", countX);
             HookUtil.setIntField(cellLayout, "mVCells", countY);
-            int baseCell = (Integer) HookUtil.invoke(config, "getCellSize");
-            int configLeft = (Integer) HookUtil.invoke(config, "getLeft");
-            int baseTop = (Integer) HookUtil.invoke(config, "getTop");
+            int baseCell = (Integer) HookUtil.requireInvoke(config, "getCellSize");
+            int configLeft = (Integer) HookUtil.requireInvoke(config, "getLeft");
+            int baseTop = (Integer) HookUtil.requireInvoke(config, "getTop");
             int baseWidthGap = HookUtil.getIntField(cellLayout, "mWidthGap");
             int baseLeft = configLeft
                 - Math.max(0, countX - 1) * (baseWidthGap / 2);
@@ -463,10 +465,12 @@ final class HomeGridHook {
                 // GridConfig after rotation. Use the established Pad defaults as the
                 // orientation-specific baseline for normal Workspace pages.
                 int dockBarHeight = 0;
-                try {
-                    dockBarHeight = Math.max(0, (Integer) HookUtil.invoke(
-                            config, "getDockBarHeight"));
-                } catch (Throwable ignored) {}
+                HookUtil.InvocationResult<Object> dockBarHeightResult =
+                        HookUtil.tryInvoke(config, "getDockBarHeight");
+                if (dockBarHeightResult.succeeded()
+                        && dockBarHeightResult.value() instanceof Integer) {
+                    dockBarHeight = Math.max(0, (Integer) dockBarHeightResult.value());
+                }
                 int contentHeight = Math.max(baseCell * countY,
                         height - Math.min(height, dockBarHeight));
                 baseWidthGap = 0;
@@ -566,17 +570,19 @@ final class HomeGridHook {
             if (value != null) gridType = String.valueOf(value);
         } catch (Throwable ignored) {}
         if (gridType.isEmpty()) {
-            try {
-                Object value = HookUtil.invoke(cellLayout, "getGridType");
-                if (value != null) gridType = String.valueOf(value);
-            } catch (Throwable ignored) {}
+            HookUtil.InvocationResult<Object> gridTypeResult = HookUtil.tryInvoke(cellLayout, "getGridType");
+            if (gridTypeResult.succeeded() && gridTypeResult.value() != null) {
+                gridType = String.valueOf(gridTypeResult.value());
+            }
         }
 
         // Keep the visibility-dependent method only as a secondary compatibility signal.
         boolean exact = false;
-        try {
-            exact = Boolean.TRUE.equals(HookUtil.invoke(cellLayout, "isInLapTopAllApps"));
-        } catch (Throwable ignored) {}
+        HookUtil.InvocationResult<Object> exactResult =
+                HookUtil.tryInvoke(cellLayout, "isInLapTopAllApps");
+        if (exactResult.succeeded()) {
+            exact = Boolean.TRUE.equals(exactResult.value());
+        }
 
         StringBuilder ancestry = new StringBuilder();
         if (cellLayout instanceof android.view.View) {
@@ -713,7 +719,12 @@ final class HomeGridHook {
             }
             for (android.view.View page : pages) {
                 if (!sizeMatchesOrientation(page, page.getWidth(), page.getHeight())) continue;
-                HookUtil.invoke(page, "calculateXsAndYs");
+                HookUtil.InvocationResult<Object> refreshResult =
+                        HookUtil.tryInvoke(page, "calculateXsAndYs");
+                if (!refreshResult.succeeded()) {
+                    MainHook.log("[DC] rotation grid page refresh unavailable: "
+                            + refreshResult.failure());
+                }
                 page.forceLayout();
                 page.requestLayout();
                 page.invalidate();
@@ -759,22 +770,21 @@ final class HomeGridHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object thisObj = chain.getThisObject();
                 if (wsClass.isInstance(thisObj)) {
-                    try {
-                        Object indicator = HookUtil.invoke(thisObj, "getScreenIndicator");
-                        if (indicator instanceof android.view.View)
-                            restoreIndicatorTranslation((android.view.View) indicator);
-                    } catch (Throwable e) {
-                        MainHook.log("[DC] indicator offset failed: " + e);
+                    HookUtil.InvocationResult<Object> indicatorResult =
+                            HookUtil.tryInvoke(thisObj, "getScreenIndicator");
+                    if (indicatorResult.succeeded()
+                            && indicatorResult.value() instanceof android.view.View) {
+                        restoreIndicatorTranslation((android.view.View) indicatorResult.value());
                     }
                 }
                 Object result = chain.proceed(args);
                 if (wsClass.isInstance(thisObj)) {
-                    try {
-                        Object indicator = HookUtil.invoke(thisObj, "getScreenIndicator");
-                        if (indicator instanceof android.view.View)
-                            captureAndApplyIndicatorTranslation((android.view.View) indicator);
-                    } catch (Throwable e) {
-                        MainHook.log("[DC] indicator offset failed: " + e);
+                    HookUtil.InvocationResult<Object> indicatorResult =
+                            HookUtil.tryInvoke(thisObj, "getScreenIndicator");
+                    if (indicatorResult.succeeded()
+                            && indicatorResult.value() instanceof android.view.View) {
+                        captureAndApplyIndicatorTranslation(
+                                (android.view.View) indicatorResult.value());
                     }
                 }
                 return result;
@@ -900,8 +910,8 @@ final class HomeGridHook {
         HookUtil.hookMethod(rule, "checkCellCount", new Class[]{},
             chain -> {
                 Object thisObj = chain.getThisObject();
-                int h = (Integer) HookUtil.invoke(thisObj, "getMHCells");
-                int v = (Integer) HookUtil.invoke(thisObj, "getMVCells");
+                int h = (Integer) HookUtil.requireInvoke(thisObj, "getMHCells");
+                int v = (Integer) HookUtil.requireInvoke(thisObj, "getMVCells");
                 if (isEightByFourGrid(h, v)) return null;
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });

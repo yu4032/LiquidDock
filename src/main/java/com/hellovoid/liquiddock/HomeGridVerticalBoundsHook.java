@@ -61,10 +61,11 @@ final class HomeGridVerticalBoundsHook {
             Object gridConfig = HookUtil.getField(target, "mGridConfig");
             if (gridConfig == null) return;
             int sourceCell = 0;
-            try {
-                Object value = HookUtil.invoke(gridConfig, "getCellSize");
-                if (value instanceof Integer) sourceCell = (Integer) value;
-            } catch (Throwable ignored) {}
+            HookUtil.InvocationResult<Object> cellSizeResult =
+                    HookUtil.tryInvoke(gridConfig, "getCellSize");
+            if (cellSizeResult.succeeded() && cellSizeResult.value() instanceof Integer) {
+                sourceCell = (Integer) cellSizeResult.value();
+            }
             if (sourceCell <= 0) {
                 try { sourceCell = HookUtil.getIntField(gridConfig, "cellSize"); }
                 catch (Throwable ignored) {}
@@ -72,10 +73,12 @@ final class HomeGridVerticalBoundsHook {
             if (sourceCell <= 0) return;
 
             int dockBarHeight = 0;
-            try {
-                Object value = HookUtil.invoke(gridConfig, "getDockBarHeight");
-                if (value instanceof Integer) dockBarHeight = Math.max(0, (Integer) value);
-            } catch (Throwable ignored) {}
+            HookUtil.InvocationResult<Object> dockBarHeightResult =
+                    HookUtil.tryInvoke(gridConfig, "getDockBarHeight");
+            if (dockBarHeightResult.succeeded()
+                    && dockBarHeightResult.value() instanceof Integer) {
+                dockBarHeight = Math.max(0, (Integer) dockBarHeightResult.value());
+            }
 
             float density = view.getResources().getDisplayMetrics().density;
             float scale = grid.dp ? density : 1f;
