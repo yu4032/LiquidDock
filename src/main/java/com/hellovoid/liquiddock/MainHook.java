@@ -283,8 +283,8 @@ public class MainHook {
 
     private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(Object hotSeats) {
         LiquidDockConfig.Dock dock = currentNativeShadowConfig();
-        if (hotSeats == null || dock == null || workstationMode
-                || !VisualRuntimeState.isDockCustomizationEnabled()) {
+        if (hotSeats == null || !DockShadowRuntimePolicy.shouldApplyTemporaryOverrides(
+                workstationMode, VisualRuntimeState.isDockCustomizationEnabled(), dock != null)) {
             return HotSeatsShadowScope.noop();
         }
 
@@ -389,12 +389,14 @@ public class MainHook {
     static void onRuntimeDockShadowDisabled() {
         // The parent customization callback runs first when the parent itself is disabled. In that
         // case the current effective state already tells the HotSeats hook to pass vendor values.
-        if (!VisualRuntimeState.isDockCustomizationEnabled() || workstationMode) return;
+        if (!DockShadowRuntimePolicy.shouldRefreshVendorShadow(
+                workstationMode, VisualRuntimeState.isDockCustomizationEnabled())) return;
         refreshVendorDockShadow();
     }
 
     static void onRuntimeDockShadowEnabled() {
-        if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) return;
+        if (!DockShadowRuntimePolicy.shouldRefreshVendorShadow(
+                workstationMode, VisualRuntimeState.isDockCustomizationEnabled())) return;
         try {
             nativeShadowConfig = LiquidDockConfig.load().dock;
         } catch (Throwable ignored) {
@@ -690,7 +692,9 @@ public class MainHook {
     private static void syncAll(View bg) {
         if (bg == null) return;
         setOldBg(bg);
-        if (workstationMode || animating(bg)) return;
+        DockShadowRuntimePolicy.GeometrySync sync =
+                DockShadowRuntimePolicy.geometrySync(workstationMode, animating(bg));
+        if (sync == DockShadowRuntimePolicy.GeometrySync.REMEMBER_ONLY) return;
         try {
             syncDockShadow(bg, LiquidDockConfig.load().dock);
         } catch (Throwable e) {
