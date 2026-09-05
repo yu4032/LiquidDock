@@ -1,14 +1,15 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Pure behavior coverage for the Workspace scene visibility/freshness state machine. */
+/** Pure behavior coverage for Workspace presentation/freshness ownership. */
 public class LauncherGlassSceneControllerTest {
     @Test
-    public void coveredSceneRequiresFreshFrameBeforeReveal() {
+    public void hardCoveredSceneRequiresFreshFrameBeforeReveal() {
         LauncherGlassSceneController.StateMachine state =
                 new LauncherGlassSceneController.StateMachine();
         state.onRootReady();
@@ -17,9 +18,9 @@ public class LauncherGlassSceneControllerTest {
         state.onFreshFrameReady(first);
         assertTrue(state.isLayerVisible());
 
-        state.setCovered(true);
+        state.setHardCovered(true);
         assertFalse(state.isLayerVisible());
-        state.setCovered(false);
+        state.setHardCovered(false);
         assertFalse(state.isLayerVisible());
         state.onFreshFrameReady(state.generation());
         assertTrue(state.isLayerVisible());
@@ -40,15 +41,15 @@ public class LauncherGlassSceneControllerTest {
     }
 
     @Test
-    public void onlyFirstFreshFrameAfterCoverageRequestsFadeReveal() {
+    public void onlyFirstFreshFrameAfterHardCoverageRequestsFadeReveal() {
         LauncherGlassSceneController.StateMachine state =
                 new LauncherGlassSceneController.StateMachine();
         state.onRootReady();
         state.onFreshFrameReady(state.generation());
         assertTrue(state.consumeFadeReveal());
 
-        state.setCovered(true);
-        state.setCovered(false);
+        state.setHardCovered(true);
+        state.setHardCovered(false);
         state.onFreshFrameReady(state.generation());
         assertTrue(state.consumeFadeReveal());
         assertFalse(state.consumeFadeReveal());
@@ -59,7 +60,7 @@ public class LauncherGlassSceneControllerTest {
     }
 
     @Test
-    public void acceptedWorkstationRolloverStillWaitsForFreshSceneGeneration() {
+    public void acceptedWorkstationRolloverStillWaitsForFreshSceneWithoutHidingCache() {
         WorkstationRecentsRecoveryPolicy.Decision recovery =
                 WorkstationRecentsRecoveryPolicy.onRecentsReturn(true, true);
         assertTrue(recovery.allowUncover);
@@ -69,12 +70,23 @@ public class LauncherGlassSceneControllerTest {
         state.onRootReady();
         state.onFreshFrameReady(state.generation());
         assertTrue(state.isLayerVisible());
+        state.consumeFadeReveal();
 
         state.setCovered(true);
+        assertEquals(LauncherGlassSceneController.State.COVERED, state.state());
+        assertTrue("Recents capture cover leaves cached glass under MIUI's native layer",
+                state.isLayerVisible());
+
         if (recovery.allowUncover) state.setCovered(false);
-        assertFalse("endpoint rollover acceptance is not a fresh frame", state.isLayerVisible());
+        assertEquals(LauncherGlassSceneController.State.HOME_WAITING_FRESH_FRAME, state.state());
+        assertTrue("endpoint rollover acceptance is not a fresh frame, but must not hide the cache",
+                state.isLayerVisible());
+        assertFalse(state.consumeFadeReveal());
 
         state.onFreshFrameReady(state.generation());
+        assertEquals(LauncherGlassSceneController.State.HOME_VISIBLE, state.state());
         assertTrue(state.isLayerVisible());
+        assertFalse("fresh Workstation recovery replaces content without a second visual reveal",
+                state.consumeFadeReveal());
     }
 }
