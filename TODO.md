@@ -1,48 +1,66 @@
 # LiquidDock TODO
 
-当前主线为 **v2.1.1 / HyperOS 3.0.307+ / MiuiX 307 PassBlur + OES/GLES zero-copy**。旧 ScreenCapture / bitmap readback 架构仅保留在 `archive/1.x`，不再作为当前 TODO。
+当前主线为 **v2.2.1 / HyperOS 3.0.307+ / MiuiX 307 PassBlur + OES/GLES zero-copy**。旧 ScreenCapture / bitmap readback 架构仅保留在 `archive/1.x`，不再作为当前 TODO。
 
-以下事项按优先级推进。
+本文件只记录当前 `main` 尚未完成、仍需结构收口或仍需真机验收的事项。已经进入 production 且有代码/测试依据的工作不继续以“待实现”形式保留；已完成的重要边界记录在文末，避免后续审计重复打开已经关闭的问题。
 
-## 1. PR #65 后续硬化
+## 1. Workstation / Laptop：剩余 ownership 与真机验收
 
-PR #65 已完成 runtime visual ownership 与 Workstation Recents shared-glass producer recovery；本轮进一步完成 `LauncherGlassSessionRegistry → LauncherGlassSession` package-private typed lifecycle 收口，并移除对应内部反射与 R8 keep。剩余仍需收紧：
+**状态：Recents shared producer correctness 的最小修复已经落地；完整 Workstation 适配仍未完成。**
 
-- Workstation `onRecentViewHide` 只在 scene 确实处于 Recents covered 状态时 rollover shared producer；防止厂商重复派发 hide 时重复重建 BufferQueue endpoint。
-- 为 producer rollover 增加明确成功/失败诊断，不要只按 session 数量计数。
-- 真机回归：工作台进入 Recents → 返回 HOME，确认整个 shared glass layer 自动恢复，不依赖长按图标或其它交互触发。
-- 消除 `MiuixLauncherStaticGlassHook.installMamlBackgroundOwnershipHook(...)` 的 javac varargs warning，明确 `Class<?>[]` 展开语义。
+当前 production 已经具备：
 
-## 2. 工作台 / Laptop 完整适配
+- `LauncherGlassSceneController.vendorRecentsCovered` 作为 Recents covered authority；
+- duplicate / non-covered `onRecentViewHide` 不再触发 Workstation producer rollover；
+- `LauncherGlassSession.workstationBindEpoch` 拒绝 rollover 前排队的 stale `finishBind()`；
+- Workstation-only `rebindWorkstationProducer(...)`，不改 unlock / rotation / generic rebind 路径；
+- request 与 endpoint recreation 的 structured diagnostics；
+- endpoint recreation 不直接授权 reveal，仍由现有 scene generation / fresh OES frame barrier 决定何时显示。
 
-**当前仍未视为完整支持。** v2.1.1 已修复 Workstation 从 Recents 返回时 shared PassBlur producer 丢失，但工作台仍横跨 Dock、Grid、All Apps、Divider 与 Launcher glass lifecycle。
+除非出现新的、可复现的现实失败路径，**不要重新引入**单独的 producer recovery episode state machine、terminal multi-session aggregate 或另一套 fresh-frame authority。
 
-真机完成标准至少包括：
+剩余工作：
 
-- 进入/退出工作台；
-- 普通桌面位置 backup/restore；
-- Dock 宽度、图标 spacing/offset；
-- All Apps 横竖屏；
-- Recents 打开/关闭与连续往返；
-- 旋转；
-- PassBlur/OES producer suspend/rebind/fresh-frame recovery；
-- wallpaper freshness generation；
-- Liquid Glass suspension/recovery；
-- 普通模式无回归。
+- 拆出单一 `WorkstationModeController`，接管 mode probe、vendor callback、normal layout backup/restore、transition generation/cancellation；
+- `MainHook` 不再直接持有 Workstation mutable state；
+- 审计并约束现有 delayed restore/recheck callback，使 stale callback 具备 generation/cancellation 保护；
+- 真机完成以下矩阵：
+  - 进入/退出工作台；
+  - 普通桌面位置 backup/restore；
+  - Dock 宽度、图标 spacing/offset；
+  - All Apps 横竖屏；
+  - Recents 连续往返；
+  - Recents 附近旋转；
+  - PassBlur/OES producer suspend/rebind/fresh-frame；
+  - wallpaper freshness；
+  - Liquid Glass suspension/recovery；
+  - 普通模式无回归。
 
-架构上继续拆出 `WorkstationModeController` 与独立 Workstation module。结构性 Workstation 配置保持 restart-bound，除非未来建立完整、可逆的 runtime restore 路径。
+结构性 Workstation 配置保持 restart-bound，除非未来建立完整、可逆的 runtime restore 路径。
 
-## 3. Widget detection / span extensibility
+## 2. Widget classification / span extensibility
 
-- 移除 `WidgetGridSizing` 的 static `widgetAdaptationEnabled` 全局状态；由安装模块持有 immutable config。
-- 引入 `WidgetClassifier`：集中处理 `ItemInfo.isWidget()`、item type fallback 和未来 HyperOS 变体。
-- 引入 `WidgetSpecRegistry`：当前先只登记 1×1、2×1、2×2、4×2，后续新增 span 不修改核心 Hook。
-- 删除未接入活动路径的 legacy `HomeGridHook.adaptTwoByOneWidget(...)` 和对应日志缓存。
-- Widget adaptation 只修改像素 allocation/frame，不接管 MIUI placement/occupancy。
+**状态：部分完成。legacy `HomeGridHook.adaptTwoByOneWidget(...)` 已不在 production；统一 classifier/registry 仍未落地。**
 
-## 4. `HomeGridHook` 拆分
+剩余工作：
 
-按低风险到高风险逐步拆出：
+- 移除 `WidgetGridSizing` 的 static `widgetAdaptationEnabled` 全局状态，由安装模块持有 immutable config；
+- 引入 `WidgetClassifier`，集中现有 `ItemInfo.isWidget()` 主路径、`itemType` fallback 与未来 HyperOS 变体；
+- 从 `HomeGridHook` 删除散落的 `itemType == 4 || itemType == 5 || itemType == 19` 判断；
+- 引入 `WidgetSpecRegistry`，当前登记 1×1、2×1、2×2、4×2，使新增 span 不再修改核心 Hook control flow；
+- `WidgetGridSizing` 只保留纯 geometry / allocation 计算。
+
+必须保持：
+
+- Widget adaptation 只修改 pixel allocation/frame；
+- 不 Hook `addOccupied()` / `transformToHVArray()`；
+- 不接管 MIUI occupied matrix / placement authority。
+
+## 3. `HomeGridHook` ownership 拆分
+
+**状态：已有 orientation memory、profile overlay、drag/bounds 等辅助 Hook/policy，但 `HomeGridHook` 本体仍同时承担多个 runtime owner。**
+
+当前 `HomeGridHook` 仍覆盖 cell count、orientation-specific geometry、Widget frame adaptation、page indicator、folder alignment、rotation/refresh 与 lazy/off-screen page preparation。后续按低风险到高风险继续收口：
 
 1. Widget adaptation；
 2. Page indicator；
@@ -50,107 +68,107 @@ PR #65 已完成 runtime visual ownership 与 Workstation Recents shared-glass p
 4. Cell geometry；
 5. Grid rotation / refresh（最后拆）。
 
+不要重复抽已经存在的 pure policy/helper；目标是迁移真实 runtime ownership，而不是机械增加类数量。
+
 必须保持：
 
 - 当前横竖屏布局行为与 orientation-specific memory；
 - lazy/off-screen page 几何准备；
 - `LayoutTransformRuleGridChanged` metadata；
-- 不 Hook `addOccupied()` / `transformToHVArray()`；
-- 不改变 MIUI occupied matrix / placement 所有权。
+- MIUI native rotation/occupancy transform authority；
+- Workspace drop 行为。
 
-## 5. `MainHook` 收缩为 composition root
+## 4. `MainHook` 收缩为 composition root
 
-- 把 Dock/Grid/Glass/Workstation 安装拆成独立模块。
-- 把 mutable static 状态移到对应 controller/view 生命周期所有者。
-- 顶层只负责读取 immutable config、安装模块与进程级 wiring。
-- 重新审计 master-switch 边界：主开关完整启停仍是 restart-bound，不允许出现“视觉 owner 已释放但结构 Hook 仍活动”的误导语义。
+**状态：未完成。已有部分独立 Hook/controller，但 `MainHook` 仍直接拥有 feature-level mutable state 与大量安装/恢复逻辑。**
 
-## 6. Launcher-wide zero-copy glass session 收敛
+剩余工作：
 
-当前共享 glass 已集中到 `LauncherGlassSession` / `LauncherGlassSceneController`，后续优先拆纯职责，不改变现有视觉与 freshness 语义：
+- 把 Dock/Grid/Glass/Workstation 的剩余 runtime ownership 迁到对应 installer/controller/session/view；
+- 移走 `workstationMode`、`workstationModeHookConfirmed`、normal layout backup、Dock resize animator 等 feature-level mutable state；
+- 顶层只负责读取 immutable config、构造/安装模块、process-level wiring 与真正全局的 capability/logging；
+- 不把 `MainHook` 变成 service locator，不增加 setter bag 或无语义的 `Manager`/`Util`；
+- 重新审计 master-switch 边界：完整卸载结构 Hook 仍是 restart-bound，不允许用“视觉 owner 已释放”冒充完整 runtime uninstall。
 
-- PassBlur producer endpoint lifecycle / rebind policy；
-- wallpaper / scene generation 与 fresh-frame barrier；
-- EGL/OES input ownership；
-- static output 与 drag output registry；
-- rotation settle / producer generation transition policy；
-- renderer / Prismal scene composition。
+## 5. Launcher-wide glass / GPU ownership 收敛
+
+**状态：部分完成。`LauncherGlassSession` / `LauncherGlassSessionRegistry` / `LauncherGlassSceneController` 与若干纯 transition/freshness policy 已经形成边界，但底层 producer/EGL/OES/renderer ownership 仍需审计。**
+
+后续先审计 owner graph，再决定是否抽公共 primitive；不要预设需要“大一统 GlassEngine”。重点检查：
+
+- PassBlur producer endpoint lifecycle / bind / release；
+- EGLDisplay / EGLContext / EGLSurface ownership；
+- OES texture / `SurfaceTexture` ownership；
+- producer generation 与 scene/wallpaper generation 的边界；
+- static output / drag output registry；
+- rotation settle / producer generation transition；
+- shader/program/FBO/release helper 是否存在真正相同的低层生命周期；
+- `LauncherGlassSession`、`Miuix307PassBlurTextureView`、`PrismalRenderer` 之间哪些重复应共享，哪些因 Dock/Launcher 生命周期不同必须保留。
 
 必须保持：
 
-- zero-copy only，不恢复 ScreenCapture fallback；
+- zero-copy only，不恢复 ScreenCapture / PixelCopy / bitmap readback；
 - Recents / HOME 不显示 stale frame；
-- Workstation producer 单帧 pulse / pause 语义；
+- Workstation producer pulse/pause 与现有最小 recovery semantics；
 - rotation settle 后才允许新 producer 发布；
-- wallpaper freshness generation 仍是内容权威。
+- wallpaper/scene freshness generation 继续作为内容权威；
+- SystemUI unlock authority 不因 GPU 重构被替换。
 
-## 7. 描边阴影后续决定
+## 6. CI / build / engineering hygiene
 
-foreground `DockStrokeRenderer` 已替代旧描边 overlay。后续二选一：
+### CI / build
 
-- 设计适配 foreground renderer 的新描边阴影实现；或
-- 正式标记该视觉能力 deprecated，但继续保留历史配置 key 的读入/导入兼容。
+仍需：
 
-在决定前不要删除旧 key，也不要把 1.x overlay 实现重新接回去。
+- `actions/setup-java@v4` 升级到 `v5`；
+- 检查 `checkout` / `upload-artifact` / `gradle/actions` 的 Node 24 兼容版本并清掉 Node 20 deprecation warning；
+- workflow 中 APK `retention-days: 7`、source `retention-days: 3` 与仓库实际 2 天上限统一，避免服务端自动降级 warning；
+- 修复 `MiuixLauncherStaticGlassHook.installMamlBackgroundOwnershipHook(...)` 的 javac inexact-varargs warning，明确 `Class<?>[]` 的展开语义，不能只 suppress warning。
 
-## 8. CI / 构建清理
+Debug 与 Release 当前都已经启用 Android optimization/R8，不再作为待实现项；后续只需保持这一 gate。
 
-- `actions/setup-java@v4` 升级到 `v5`。
-- 检查 `checkout` / `upload-artifact` / `gradle/actions` 的 Node 24 兼容版本，清掉 Node 20 deprecation warning。
-- workflow artifact retention 与仓库实际最大值统一为 2 天，避免每次构建产生自动降级 warning。
-- 继续让 Debug 与 Release 都经过 R8/optimization 路径，避免只在 release 出现反射/keep-rule 回归。
+### 测试架构债务
 
-## 9. 清理与架构 gate
+`RuntimeBehaviorTestPolicyContractTest` 已经建立 default-deny source-reader gate，但 `LEGACY_SOURCE_DEBT` 仍有 13 个历史测试。后续逐项分类为：
 
-- 去除过时 compatibility facade / dead helper。
-- 尽量让 pure policy 不依赖 Android/Xposed。
-- 增加 schema/codec/architecture/runtime-ownership regression tests。
-- 每个阶段运行 `testDebugUnitTest` + `assembleDebug`。
-- Grid / Workstation / PassBlur producer lifecycle 等高风险改动必须追加真机回归。
+- 合法 static architecture/API contract；
+- 可迁移到 production-used typed state/policy 的 runtime behavior；
+- obsolete test。
 
-## 10. Widget background hide rules 用户自定义化（后期）
+该 debt list 只能缩小，禁止为了 CI green 新增例外。
 
-当前 `widget_background_rules.xml` 只承载内置、进程启动时读取的保守规则。后续增加用户自定义隐藏规则层，但不能把它变成任意反射/脚本入口：
+### Diagnostics
 
-- 设置页支持逐条启用/禁用规则，并明确内置规则与用户规则的覆盖/优先级策略；
-- 支持导入/导出带版本号的规则配置，导入前完成 schema/version/字段白名单校验；
-- 自定义 action 仅允许声明式 identity match + `hide-element`，拒绝任意方法调用、字段写入、表达式或脚本；
-- 支持 `productId`、`appPackage`、`spanX/spanY`、`configSpanX/configSpanY` 等现有 identity 条件，后续扩展字段必须保持向后兼容；
-- 提供安全 preview/restore：所有目标解析成功后才允许提交隐藏，失败或目标缺失不得产生 partial mutation；
-- 明确规则冲突、优先级和诊断输出，使用户能知道最终命中了哪条规则；
-- 未知小组件默认保持 diagnostic-only，不通过视觉启发式或递归遍历猜测背景元素；
-- runtime hot reload 只在 claim/release 完整可逆并通过真机回归后再开放，否则保持进程启动时加载。
+`WidgetBackgroundRuleEngine.loadBundled()` / `parse()` 当前仍会在 bundled resource 缺失或解析异常时静默退化为 `EMPTY`。需要区分 optional parser hardening 与 required bundled-rule failure，并为真实 silent degradation 增加 one-shot structured diagnostic；不要制造 log spam。
 
-## 11. 解锁后 Workspace 玻璃壁纸 freshness 完全修复
+### i18n
 
-**已知未完全解决。** PR #68 已明显缓解锁屏进入桌面时的错误背景，但真机仍观察到少量场景会在解锁后使用到锁屏壁纸帧。因此当前实现只能视为 mitigation，不能标记为 fully fixed。
+Compose/settings 仍存在用户可见硬编码中文/英文字符串。迁移到 Android resources，不改变 preference key、schema 或行为。
 
-当前已有保护：
+## 已完成的重要边界（不再作为 active TODO）
 
-- `PREPARE` 后立即隐藏 Workspace StaticLayer，并阻止 Launcher Workspace PassBlur 新的 bind / pulse / resume；
-- Pad 的 `UserPresentAnimationCompatV12Spring` 与 Fold/Folme 路径都等待厂商最后一个动画对象完成；
-- 动画完成后跨一个 Choreographer frame，再 rollover Launcher Workspace 的 PassBlur / OES / `SurfaceTexture` endpoint；
-- rollover 完成前保持 unlock capture gate，不允许旧 BufferQueue 被重新显示；
-- 新 scene generation 的 fresh frame 真正到达前，StaticLayer 继续保持隐藏；
-- unlock gate 仅作用于 Launcher Workspace binding，不能阻断 Floating Dock 的独立持久 producer。
+### Workstation Recents producer 最小 correctness
 
-后续完整修复必须建立**内容权威边界**，不能只依赖“动画已经结束”：
+已完成 covered authority gate、duplicate/non-covered hide rejection、stale `finishBind()` epoch invalidation、Workstation-only rebind 与 request/endpoint diagnostics。现有 scene-generation / fresh-frame barrier 保持唯一 reveal authority。
 
-- 引入独立的 unlock backdrop epoch/state machine，例如 `LOCKED/PRESENTING -> WAIT_HOME_WALLPAPER -> WAIT_FRESH_FRAME -> VISIBLE`；所有 OES frame 必须携带或对应当前 epoch，旧 epoch 帧一律丢弃；
-- 找到 HyperOS 4.50 中桌面壁纸真正恢复为 HOME 内容的 authoritative signal，优先使用 Wallpaper/Shell/Launcher 已提交的状态或 transaction-complete 边界，而不是增加固定毫秒延迟；
-- 对比并记录 `UnlockAnimationStateMachine`、`UserPresentAnimationCompat`、`MiuiWallpaperSurfaceAnimation`/wallpaper zoom、Launcher HOME resume、PassBlur `setUpdateTextureFlag`、`SurfaceTexture` frame timestamp 的实际时序；
-- 如果厂商没有可 Hook 的单一 authoritative callback，则组合“解锁动画结束 + HOME wallpaper 状态稳定 + 下一合成帧”三重 gate；
-- 在 producer rollover 后记录一个 post-unlock capture timestamp/fence，只接受严格晚于该边界的新 OES buffer，防止旧 BufferQueue 或延迟 SurfaceFlinger transaction 把锁屏内容重新送入；
-- wallpaper candidate/authoritative pulse 在 unlock epoch 内必须 defer，只有 HOME wallpaper 已确认后才能 flush；不能让普通 wallpaper pulse 绕过 unlock gate；
-- capture 失败或无法确认 HOME wallpaper 权威状态时必须 fail closed：继续隐藏玻璃，而不是显示可能来自锁屏的旧背景；
-- 完整修复不能破坏 Recents settle、rotation settle、Workstation shared producer、Floating Dock persistent producer 和普通 App -> HOME fresh-frame recovery。
+### Unlock -> HOME wallpaper / capture authority
 
-真机验收必须重复覆盖：
+已通过 SystemUI authority 收口：Launcher `PREPARE` 只负责提前 freeze；释放 authority 是 SystemUI `LOCKSCREEN -> GONE FINISHED TransitionStep`。之后经过 serial-protected producer rollover，失败 fail closed；Workspace glass 仍等待匹配的新 scene generation / fresh frame 才显示。该问题不再标记为“已知未完全解决”，后续重构只需防止回归。
 
-- 锁屏壁纸与桌面壁纸明显不同的场景；
-- 指纹/密码/滑动等不同解锁路径；
-- 连续锁屏→解锁多次，确认零次出现锁屏壁纸玻璃；
-- 解锁动画过程中玻璃始终隐藏；
-- 只有 HOME 桌面壁纸的新帧到达后才显示玻璃，且不需要手动刷新；
-- 解锁后立即进入 Recents、启动应用、旋转或进入 Workstation 时无 stale-frame 回归；
-- Floating Dock 在整个 unlock gate 生命周期中不被误暂停。
+### Dock stroke shadow
+
+foreground `DockStrokeRenderer` 已经是当前描边 owner；stroke shadow 已在现有 renderer/native MiShadow ownership 下实现，不再需要“实现或 deprecated”二选一。保留历史配置 key 的兼容读取。
+
+### Widget 组件隐藏自定义
+
+旧的“未来增加用户可编辑 widget rule DSL”已经由更窄、更安全的 component-selection 方案替代并进入 production：
+
+- 用户手动触发一次性 widget component discovery；
+- RemoteViews / MAML 组件按精确 owner/path/class/name 选择；
+- 设置页逐组件启用/禁用隐藏；
+- mutation 可 release 并恢复原状态；
+- bundled compatibility rules 与 user selection 有明确 claim/release 顺序；
+- 独立备份使用 format/version，并在导入时只读取已知字段、校验 selector 后原子覆盖当前选择；
+- 默认仍要求重启 Launcher 应用选择，不开放任意脚本、方法调用或通用表达式入口。
+
+除非未来出现明确产品需求，不新增自由规则脚本/DSL，也不把 runtime hot reload 作为当前 correctness 目标。
