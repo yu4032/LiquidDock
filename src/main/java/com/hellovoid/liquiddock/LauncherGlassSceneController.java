@@ -142,6 +142,7 @@ final class LauncherGlassSceneController {
     private boolean homeTransitionPending;
     private boolean unlockTransitionPending;
     private boolean recentsWallpaperSettlePending;
+    private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
 
@@ -159,6 +160,7 @@ final class LauncherGlassSceneController {
         rootRef = new WeakReference<>(root);
         this.session = session;
         this.glassConfig = glassConfig;
+        displayRotation = readDisplayRotation(root);
     }
 
     static synchronized LauncherGlassSceneController acquire(
@@ -304,21 +306,22 @@ final class LauncherGlassSceneController {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller == null) return -1L;
         controller.deferInFlightWallpaperPulse();
-        controller.state.onGenerationInvalidated();
+        int nextDisplayRotation = readDisplayRotation(root);
+        boolean rotationChanged = nextDisplayRotation >= 0
+                && controller.displayRotation >= 0
+                && nextDisplayRotation != controller.displayRotation;
+        if (nextDisplayRotation >= 0) controller.displayRotation = nextDisplayRotation;
+        if (rotationChanged) {
+            controller.state.onRotationStarted();
+        } else {
+            controller.state.onGenerationInvalidated();
+        }
         controller.applyLayerVisibility();
         long generation = controller.state.generation();
-        if (root != null) root.postOnAnimation(() -> controller.requestFreshBackdrop(generation));
-        return generation;
-    }
-
-    static long invalidateForRotationChange(View root) {
-        LauncherGlassSceneController controller = findRoot(root);
-        if (controller == null) return -1L;
-        controller.deferInFlightWallpaperPulse();
-        controller.state.onRotationStarted();
-        controller.applyLayerVisibility();
-        long generation = controller.state.generation();
-        MainHook.log(TAG + " rotation presentation gated generation=" + generation);
+        if (rotationChanged) {
+            MainHook.log(TAG + " rotation presentation gated displayRotation="
+                    + nextDisplayRotation + " generation=" + generation);
+        }
         if (root != null) root.postOnAnimation(() -> controller.requestFreshBackdrop(generation));
         return generation;
     }
@@ -568,6 +571,15 @@ final class LauncherGlassSceneController {
                     || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
+        }
+    }
+
+    private static int readDisplayRotation(View root) {
+        if (root == null || root.getDisplay() == null) return -1;
+        try {
+            return root.getDisplay().getRotation();
+        } catch (Throwable ignored) {
+            return -1;
         }
     }
 
