@@ -26,6 +26,7 @@ final class LauncherGlassSceneController {
         private boolean fadeAfterFreshFrame;
         private boolean fadeRevealReady;
         private boolean cachedLayerVisible;
+        private boolean rotationPresentationPending;
 
         void onRootReady() {
             if (state == State.DETACHED) {
@@ -85,6 +86,18 @@ final class LauncherGlassSceneController {
             }
         }
 
+        /**
+         * Rotation is a real presentation discontinuity: once target-orientation geometry is
+         * observed, old cached pixels must disappear before the resized TextureView is composed.
+         * The cache itself is retained so the matching fresh frame can restore without a second
+         * synthetic reveal animation.
+         */
+        void onRotationStarted() {
+            rotationPresentationPending = true;
+            fadeRevealReady = false;
+            onGenerationInvalidated();
+        }
+
         void onFreshFrameReady(long frameGeneration) {
             if (frameGeneration != generation || state == State.COVERED || state == State.DETACHED) {
                 return;
@@ -92,6 +105,7 @@ final class LauncherGlassSceneController {
             boolean wasVisible = cachedLayerVisible;
             state = State.HOME_VISIBLE;
             cachedLayerVisible = true;
+            rotationPresentationPending = false;
             fadeRevealReady = !wasVisible && fadeAfterFreshFrame;
             fadeAfterFreshFrame = false;
         }
@@ -99,12 +113,16 @@ final class LauncherGlassSceneController {
         void detach() {
             state = State.DETACHED;
             cachedLayerVisible = false;
+            rotationPresentationPending = false;
             fadeAfterFreshFrame = false;
             fadeRevealReady = false;
         }
 
         long generation() { return generation; }
-        boolean isLayerVisible() { return cachedLayerVisible && state != State.DETACHED; }
+        boolean isLayerVisible() {
+            return cachedLayerVisible && !rotationPresentationPending && state != State.DETACHED;
+        }
+        boolean isRotationPresentationPending() { return rotationPresentationPending; }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
             fadeRevealReady = false;
@@ -293,6 +311,18 @@ final class LauncherGlassSceneController {
         return generation;
     }
 
+    static long invalidateForRotationChange(View root) {
+        LauncherGlassSceneController controller = findRoot(root);
+        if (controller == null) return -1L;
+        controller.deferInFlightWallpaperPulse();
+        controller.state.onRotationStarted();
+        controller.applyLayerVisibility();
+        long generation = controller.state.generation();
+        MainHook.log(TAG + " rotation presentation gated generation=" + generation);
+        if (root != null) root.postOnAnimation(() -> controller.requestFreshBackdrop(generation));
+        return generation;
+    }
+
     static void requestFreshForRoot(View root) {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
@@ -329,8 +359,12 @@ final class LauncherGlassSceneController {
     }
 
     private void onFreshFrameReady(long generation) {
+        boolean rotationWasPending = state.isRotationPresentationPending();
         state.onFreshFrameReady(generation);
         applyLayerVisibility();
+        if (rotationWasPending && !state.isRotationPresentationPending()) {
+            MainHook.log(TAG + " rotation presentation released generation=" + generation);
+        }
         flushDeferredWallpaperPulse();
     }
 
@@ -528,9 +562,10 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Recents, HOME and wallpaper-settle are capture/freshness barriers only. The cached
-            // layer stays in the Launcher root beneath MIUI's own Recents UI, exactly like Workspace.
-            boolean hardPresentationCover = folderCovered || unlockTransitionPending;
+            // Recents, HOME and wallpaper-settle are capture/freshness barriers only. Rotation is
+            // different: resized output cannot safely present pixels from the previous orientation.
+            boolean hardPresentationCover = folderCovered || unlockTransitionPending
+                    || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }
