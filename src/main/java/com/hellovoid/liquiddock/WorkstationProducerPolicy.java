@@ -9,8 +9,14 @@ final class WorkstationProducerPolicy {
         return workspaceCovered && !workstationMode;
     }
 
+    /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */
     static boolean shouldUseSingleFramePulse(boolean workstationMode) {
-        return !workstationMode;
+        return false;
+    }
+
+    /** Consuming a live OES frame is not a reason to suspend the continuous Workspace producer. */
+    static boolean shouldPauseAfterFrameConsumed(boolean workstationMode) {
+        return false;
     }
 
     /**
