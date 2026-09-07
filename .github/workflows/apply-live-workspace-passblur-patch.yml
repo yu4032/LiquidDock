@@ -1,0 +1,62 @@
+name: Apply live Workspace PassBlur patch
+
+on:
+  push:
+    branches: [ fix/live-workspace-passblur ]
+    paths:
+      - .github/workflows/apply-live-workspace-passblur-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/live-workspace-passblur
+      - name: Apply exact LauncherGlassSession patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java')
+          source = path.read_text()
+
+          replacements = [
+              (
+                  '''    // Semantic content token for the one-shot producer pulse that requested a new wallpaper.\n    // It is independent from scene generation and is consumed only by the matching OES frame.''',
+                  '''    // Semantic content token for a requested wallpaper refresh.\n    // It is independent from scene generation and is consumed by the first matching live OES frame.'''
+              ),
+              (
+                  '''        // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced\n        // during App -> HOME. Revalidate on the UI thread before pulsing PassBlur so a fresh\n        // request can never target a dead producer binding.''',
+                  '''        // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced\n        // during App -> HOME. Revalidate on the UI thread before resuming PassBlur so a fresh\n        // request can never target a dead producer binding.'''
+              ),
+              (
+                  '''                if (WorkstationProducerPolicy.shouldPauseSharedProducer(\n                        true, MainHook.isWorkstationMode())) {\n                    Miuix307PassBlurBridge.pauseUpdates(binding);\n                }''',
+                  '''                if (WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(\n                        MainHook.isWorkstationMode())) {\n                    Miuix307PassBlurBridge.pauseUpdates(binding);\n                }'''
+              ),
+              (
+                  '''        // Rotation changes SurfaceFlinger's orientation/crop generation. A Workspace producer is\n        // one-shot, so never let the first post-rotation buffer come through an endpoint that was\n        // registered under the previous orientation. Rollover establishes default buffer size\n        // before SetPassBlurSurface binds the new endpoint.''',
+                  '''        // Rotation changes SurfaceFlinger's orientation/crop generation. Continuous HOME capture\n        // must never let the first post-rotation buffer come through an endpoint registered under\n        // the previous orientation. Rollover establishes default buffer size before\n        // SetPassBlurSurface binds the new endpoint.'''
+              ),
+          ]
+
+          for old, new in replacements:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, got {count}: {old[:80]!r}')
+              source = source.replace(old, new, 1)
+
+          path.write_text(source)
+          PY
+      - name: Commit source patch and remove helper workflow
+        run: |
+          rm .github/workflows/apply-live-workspace-passblur-patch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java .github/workflows/apply-live-workspace-passblur-patch.yml
+          git commit -m "fix: wire continuous Workspace PassBlur consumption"
+          git push origin HEAD:fix/live-workspace-passblur
