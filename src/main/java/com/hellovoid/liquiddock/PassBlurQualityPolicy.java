@@ -14,8 +14,16 @@ final class PassBlurQualityPolicy {
         return safePercent / 100f;
     }
 
+    static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {
+        return launcherWorkspace ? captureScale(workspacePercent) : 1.0f;
+    }
+
     static int renderFps(int requestedFps) {
         if (requestedFps <= 0) return 0;
         return Math.min(MAX_RENDER_FPS, requestedFps);
+    }
+
+    static boolean requiresFreshConsumerFrame(long consumedGeneration, long sceneGeneration) {
+        return consumedGeneration != sceneGeneration;
     }
 }
