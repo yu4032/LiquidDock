@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Workstation Dock and workspace share a root-level PassBlur capture state. */
+/** Workspace PassBlur capture policy: HOME stays live while explicit coverage may suspend it. */
 final class WorkstationProducerPolicy {
     private WorkstationProducerPolicy() {}
 
