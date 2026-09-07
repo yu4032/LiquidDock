@@ -15,6 +15,19 @@ public class PassBlurQualityPolicyTest {
     }
 
     @Test
+    public void workspaceMayUseExperimentalScaleButDockStaysAtValidatedFullScale() {
+        assertEquals(0.75f, PassBlurQualityPolicy.bridgeScale(true, 75), 0.0001f);
+        assertEquals(1.00f, PassBlurQualityPolicy.bridgeScale(false, 50), 0.0001f);
+    }
+
+    @Test
+    public void sourceFreshnessBypassesConsumerRateLimit() {
+        assertTrue(PassBlurQualityPolicy.requiresFreshConsumerFrame(-1L, 2L));
+        assertTrue(PassBlurQualityPolicy.requiresFreshConsumerFrame(1L, 2L));
+        assertFalse(PassBlurQualityPolicy.requiresFreshConsumerFrame(2L, 2L));
+    }
+
+    @Test
     public void renderFpsZeroMeansSourceDrivenAuto() {
         PassBlurFrameRateLimiter limiter = new PassBlurFrameRateLimiter(0);
         assertTrue(limiter.shouldSchedule(0L, false));
