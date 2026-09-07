@@ -24,6 +24,12 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
+    public void consumingWorkspaceFrameKeepsLiveProducerRunningInAllModes() {
+        assertFalse(WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(true));
+        assertFalse(WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(false));
+    }
+
+    @Test
     public void workstationGeometryChangeRebindsSharedProducer() {
         assertTrue(WorkstationProducerPolicy.shouldRebindForGeometryChange(true, true));
         assertFalse(WorkstationProducerPolicy.shouldRebindForGeometryChange(true, false));
