@@ -15,8 +15,8 @@ public class PassBlurQualityPolicyTest {
     }
 
     @Test
-    public void workspaceMayUseExperimentalScaleButDockStaysAtValidatedFullScale() {
-        assertEquals(0.75f, PassBlurQualityPolicy.bridgeScale(true, 75), 0.0001f);
+    public void workspaceNativePassBlurStaysFullScaleAndDockStaysValidatedFullScale() {
+        assertEquals(1.00f, PassBlurQualityPolicy.bridgeScale(true, 75), 0.0001f);
         assertEquals(1.00f, PassBlurQualityPolicy.bridgeScale(false, 50), 0.0001f);
     }
 
