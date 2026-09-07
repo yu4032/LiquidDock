@@ -5,7 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-// Probe builds keep these producer-policy contracts unchanged while logging live frame cadence.
+// Probe v2 keeps producer-policy contracts unchanged while contrasting root pre-draw vs OES frames.
 public class WorkstationProducerPolicyTest {
     @Test
     public void coveredWorkspaceCannotPauseSharedProducerInWorkstationMode() {
