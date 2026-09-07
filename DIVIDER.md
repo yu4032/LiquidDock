@@ -1,8 +1,10 @@
 # LiquidDock Workstation Divider
 
-本文档描述当前 `main` / **v2.1.1** 的 `DockDividerHook` 行为。
+本文档描述当前 `main` / **v2.2.1**（含 `main` 上未单独提升版本号的已合入变更）的 `DockDividerHook` 行为。
 
 Divider 属于 Workstation/Laptop Dock 的实验性适配部分；参数可以使用，但工作台整体仍未视为完全支持。
+
+Divider ownership 与 Workspace PassBlur 的渲染分辨率/FPS 控制彼此独立：质量控制不会改变 Divider 的 View geometry、snapshot 或 restore 语义；Workstation 场景切换仍由各自的 producer/coverage 生命周期负责。
 
 ## 1. 参数语义
 

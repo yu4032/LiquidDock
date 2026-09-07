@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向当前 `main` / **v2.1.1**。当前 Liquid Glass 主线为 HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES zero-copy；1.x ScreenCapture 代码只存在于 `archive/1.x`，不要把旧 capture 架构重新接回当前实现。
+本文档面向当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）。当前 Liquid Glass 主线为 HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES zero-copy；1.x ScreenCapture 代码只存在于 `archive/1.x`，不要把旧 capture 架构重新接回当前实现。
 
 ## 构建
 
@@ -74,6 +74,15 @@ MiuiX PassBlur -> SurfaceTexture/OES -> GLES -> Prismal renderer
 - 在 Recents/HOME 返回时直接显示 stale static layer；
 - 把 geometry generation 当作 wallpaper content generation。
 
+
+Workspace PassBlur 质量/功耗修改还必须保持：
+
+- HOME 默认是 continuous update permission / source-driven，而不是消费一帧后自动 pause；不要重新引入 single-frame pulse 作为普通 HOME 策略；
+- native PassBlur scale 固定 `1.0`，不要把 vendor scale 当作通用 resolution knob；
+- 分辨率优化只能在 authoritative OES normalization 之后降低本地 physical FBO，logical root / Prismal geometry 仍使用完整 Launcher 坐标；
+- FPS cap 只能限 Prismal/output render，不能阻止 `SurfaceTexture.updateTexImage()` drain，也不能额外创建 timer/vsync producer work；
+- fresh scene generation 必须绕过 render cap；rebind success 仍不等于 fresh content。
+
 涉及 producer lifecycle 的修改必须覆盖：
 
 - HOME / APP；
@@ -83,6 +92,9 @@ MiuiX PassBlur -> SurfaceTexture/OES -> GLES -> Prismal renderer
 - Workstation；
 - producer suspend/rebind；
 - fresh OES frame 后才 reveal。
+
+
+涉及 Workspace quality controls 时，真机至少比较 100% / 75% / 50% 的同位置背景特征，确认只有清晰度变化而没有缩放、漂移或偏移；同时覆盖静态壁纸 idle 与动态壁纸 live source。
 
 ## Launcher-wide glass 规则
 

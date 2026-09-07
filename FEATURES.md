@@ -1,6 +1,6 @@
 # LiquidDock 功能手册
 
-本文档按当前 `main` / **v2.1.1** 的实际实现整理。当前 Liquid Glass 主线仅支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**。
+本文档按当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）的实际实现整理。当前 Liquid Glass 主线仅支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**。
 
 旧的 ScreenCapture / bitmap readback / `DockLiquidGlassView` 捕获链只保留在 `archive/1.x`，不属于当前功能。
 
@@ -127,6 +127,24 @@ Launcher / Dock output surface
 - PassBlur producer / OES / EGL / Prismal 全部保持 GPU 路径；
 - vendor 私有接口不可用时 glass fail-closed，不退回 1.x 截图方案。
 
+
+## Workspace 实时采样与性能
+
+Launcher Workspace 的 shared PassBlur 在 HOME 激活时保持 continuous update permission。它不是 LiquidDock 主动驱动的固定 FPS 捕获循环，而是由 HyperOS backdrop 内容驱动：
+
+- 静态壁纸且桌面内容不变时，producer 可以保持 bound / updates-enabled，但不持续产生新的 OES frame；
+- 动态壁纸或真实 backdrop 更新时，新的 PassBlur buffer 会实时进入 OES / Prismal 路径；
+- Recents、folder、presentation、rotation 等显式生命周期仍由 scene controller / producer policy suspend、rebind 或等待 fresh frame。
+
+设置页 `液态玻璃 -> 工作区实时捕获性能` 提供：
+
+| 参数 | 范围 | 当前语义 |
+|---|---:|---|
+| 工作区渲染分辨率 | 50%–100% | 只降低 OES normalization 之后的本地 normalized/Prismal physical FBO 像素密度；native PassBlur 始终为 `1.0`，logical root 不变 |
+| Prismal 实时渲染上限 | 0–60 FPS | `0 = Auto`，跟随真实 source frame；非 0 时只限昂贵合成，不阻塞 OES drain |
+
+因此 50% / 75% / 100% 的差异应只体现在采样/渲染清晰度与 GPU 成本，glass 在屏幕上的每个位置仍对应相同的后方内容。新的 scene generation 会无条件越过 FPS cap，避免性能设置破坏 freshness barrier。
+
 ---
 
 ## 支持的 Glass 对象
@@ -192,7 +210,7 @@ Launcher glass 支持按对象类型选择 highlight profile，使 Dock、普通
 - 固定 overscan 用于保证强折射时仍能访问 Dock / glass 边缘外的 backdrop 像素；
 - 上 / 下 / 左 / 右额外 overscan 可独立配置；
 - sample validity 与最终可见 coverage/scissor 分开计算；
-- 不再存在 ScreenCapture resolution / capture FPS / black-frame threshold / capture cadence 等 1.x 参数的活动实现。
+- 1.x 的 ScreenCapture resolution / capture FPS / black-frame threshold / capture cadence 已无活动实现；当前 `工作区渲染分辨率` 与 `Prismal 实时渲染上限` 是独立的 zero-copy 本地 FBO / render gate，不是旧截图参数的复活。
 
 这样强折射靠近 Dock 边缘时，不会因为输出裁剪边界而提前截断输入采样。
 

@@ -1,6 +1,6 @@
-# LiquidDock 2.1 Hook 点总览
+# LiquidDock 2.2 Hook 点总览
 
-本文档记录当前 `main` / **v2.1.1** 安装的主要 libxposed Hook、Android listener、反射边界和 GPU 生命周期。
+本文档记录当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）安装的主要 libxposed Hook、Android listener、反射边界和 GPU 生命周期。
 
 当前注入范围：
 
@@ -53,6 +53,19 @@ MiuiX PassBlur
   -> Prismal renderer
   -> Dock / Launcher output
 ```
+
+### Workspace source cadence / quality gate
+
+`LauncherGlassSession` 的 Workspace 路径把 producer、source drain 和昂贵 render 明确分开：
+
+- `WorkstationProducerPolicy` 规定普通 HOME 不使用 single-frame pulse，消费 OES frame 后也不自动 pause；显式 coverage/presentation suspension 单独处理；
+- `Miuix307PassBlurBridge.bind(...)` 对 Workspace 使用 native scale `1.0`，保持 SurfaceTexture geometry / behind-content mapping 的权威性；
+- `PassBlurRenderDomain` 只计算本地 logical root 与 physical FBO 的 50%–100% 尺寸分离；
+- `PassBlurSourceFrameGate` 只对真实 `OnFrameAvailable` 决定是否触发 Prismal/output render，不创建 timer 或 Choreographer work；
+- 被 FPS gate 拒绝的 source frame 会走 source-only `updateTexImage()` drain，避免 BufferQueue 堵塞；
+- `consumedGeneration != sceneGeneration` 时 freshness 优先，当前 frame 绕过 render cap。
+
+分辨率变化只请求 backdrop rebuild，不因质量调整重建 native producer endpoint。
 
 ## 3. Launcher-wide static glass
 

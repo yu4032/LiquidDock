@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased / main (2026-09-07)
+
+### Workspace continuous PassBlur
+
+- Workspace HOME shared PassBlur 从消费后一帧暂停改为持续 update permission；显式 Recents/folder/presentation coverage 仍由既有生命周期决定是否 suspend
+- 真机验证 native PassBlur 为 source-driven：动态壁纸可持续产生实时 OES frame，静态壁纸即使保持 bound / updates-enabled 也会在内容静止时自然降到 0 个新 OES frame；未引入 Choreographer、vsync pump 或固定延迟轮询
+
+### Workspace quality controls and spatial correctness
+
+- 新增持久化 `liquid_passblur_capture_scale`（50%–100%，默认 100%）与 `liquid_passblur_render_fps`（0–60 FPS，默认 0 / Auto）
+- 修正首版分辨率控制的空间映射错误：HyperOS native PassBlur scale 固定为 `1.0`，不再把 vendor `setUpdateTextureFlag(..., scale)` 当作纯分辨率旋钮
+- 将降采样移动到 OES normalization 之后的本地 physical FBO；Prismal logical framebuffer 始终保持完整 Launcher root，使 50% / 75% / 100% 只改变像素密度，不改变 glass 对应的后方内容位置
+- `PrismalRenderer` 分离 logical `width/height` 与 physical `renderWidth/renderHeight`，并按 physical scale 换算 blur sigma
+- FPS 限流只跳过昂贵的 Prismal/output render；所有真实 OES source frame 仍被 drain，新的 scene generation 会越过限流以保持 freshness contract
+- 分辨率修改只 rebuild backdrop，不再为了质量设置重建 native PassBlur BufferQueue endpoint
+
+### Verification
+
+- 质量控制的空间映射修复已通过目标设备 50% / 75% / 100% 对位验证
+- 合并前正常 PR CI #4276 / run `34142764054` 通过 `testDebugUnitTest assembleDebug` 与 artifact upload
+
 ## v2.2.1 (2026-09-01)
 
 ### Workspace glass
