@@ -18,9 +18,15 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
-    public void workstationRefreshUsesContinuousCaptureInsteadOfDelayedPausePulse() {
+    public void workspaceRefreshUsesContinuousCaptureInAllModes() {
         assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(true));
-        assertTrue(WorkstationProducerPolicy.shouldUseSingleFramePulse(false));
+        assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(false));
+    }
+
+    @Test
+    public void consumingWorkspaceFrameKeepsLiveProducerRunningInAllModes() {
+        assertFalse(WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(true));
+        assertFalse(WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(false));
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Workstation Dock and workspace share a root-level PassBlur capture state. */
+/** Workspace PassBlur capture policy: HOME stays live while explicit coverage may suspend it. */
 final class WorkstationProducerPolicy {
     private WorkstationProducerPolicy() {}
 
@@ -9,8 +9,14 @@ final class WorkstationProducerPolicy {
         return workspaceCovered && !workstationMode;
     }
 
+    /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */
     static boolean shouldUseSingleFramePulse(boolean workstationMode) {
-        return !workstationMode;
+        return false;
+    }
+
+    /** Consuming a live OES frame is not a reason to suspend the continuous Workspace producer. */
+    static boolean shouldPauseAfterFrameConsumed(boolean workstationMode) {
+        return false;
     }
 
     /**
