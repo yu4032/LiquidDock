@@ -177,18 +177,6 @@ final class LauncherGlassSession {
     private volatile Surface inputProducerSurface;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
-    // Temporary device probe: aggregate live PassBlur delivery without flooding logcat.
-    private static final long PASS_BLUR_PROBE_WINDOW_NS = 2_000_000_000L;
-    private long passBlurProbeWindowStartNs;
-    private long passBlurProbeLastFrameNs;
-    private int passBlurProbeWindowCallbacks;
-    private int passBlurProbeWindowConsumed;
-    private int passBlurProbeWindowPreDraws;
-    private long passBlurProbeTotalCallbacks;
-    private long passBlurProbeTotalConsumed;
-    private long passBlurProbeTotalPreDraws;
-    private boolean passBlurProbeFirstCallbackLogged;
-    private boolean passBlurProbeFirstPreDrawLogged;
     // Semantic content token for a requested wallpaper refresh.
     // It is independent from scene generation and is consumed by the first matching live OES frame.
     private long wallpaperRequestedGeneration = -1L;
@@ -618,7 +606,6 @@ final class LauncherGlassSession {
         removeRootObserver();
         if (!observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            recordPassBlurProbePreDraw();
             syncSceneOnUiThread();
             return true;
         };
@@ -885,7 +872,6 @@ final class LauncherGlassSession {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 consumedGeneration = sceneGeneration;
-                recordPassBlurProbeConsumed();
                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
                 if (WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(
@@ -1014,96 +1000,10 @@ final class LauncherGlassSession {
         backdropPrepared = false;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
-            recordPassBlurProbeFrame();
             frameAvailable.set(true);
             requestFrame(false);
         }, renderHandler);
-        probeLog("armed " + diagnosticSessionId()
-                + " listener=renderHandler source=LauncherViewRoot-PassBlur");
         mainHandler.post(() -> bindProducerWhenReady(0));
-    }
-
-    private synchronized void recordPassBlurProbeFrame() {
-        long nowNs = System.nanoTime();
-        long previousFrameNs = passBlurProbeLastFrameNs;
-        passBlurProbeLastFrameNs = nowNs;
-        passBlurProbeWindowCallbacks++;
-        passBlurProbeTotalCallbacks++;
-        if (!passBlurProbeFirstCallbackLogged) {
-            passBlurProbeFirstCallbackLogged = true;
-            probeLog("first-callback " + diagnosticSessionId()
-                    + " totalCallbacks=" + passBlurProbeTotalCallbacks
-                    + " updatesEnabled=" + isPassBlurProbeUpdatesEnabled());
-        }
-        maybeLogPassBlurProbe(nowNs, previousFrameNs, "oes");
-    }
-
-    private synchronized void recordPassBlurProbePreDraw() {
-        long nowNs = System.nanoTime();
-        passBlurProbeWindowPreDraws++;
-        passBlurProbeTotalPreDraws++;
-        if (!passBlurProbeFirstPreDrawLogged) {
-            passBlurProbeFirstPreDrawLogged = true;
-            probeLog("first-predraw " + diagnosticSessionId()
-                    + " totalPreDraws=" + passBlurProbeTotalPreDraws
-                    + " updatesEnabled=" + isPassBlurProbeUpdatesEnabled());
-        }
-        maybeLogPassBlurProbe(nowNs, passBlurProbeLastFrameNs, "predraw");
-    }
-
-    private synchronized void recordPassBlurProbeConsumed() {
-        passBlurProbeWindowConsumed++;
-        passBlurProbeTotalConsumed++;
-    }
-
-    private void maybeLogPassBlurProbe(long nowNs, long previousFrameNs, String trigger) {
-        if (passBlurProbeWindowStartNs == 0L) {
-            passBlurProbeWindowStartNs = nowNs;
-            return;
-        }
-        long elapsedNs = nowNs - passBlurProbeWindowStartNs;
-        if (elapsedNs < PASS_BLUR_PROBE_WINDOW_NS) return;
-
-        double callbackFps = passBlurProbeWindowCallbacks * 1_000_000_000d / elapsedNs;
-        double consumedFps = passBlurProbeWindowConsumed * 1_000_000_000d / elapsedNs;
-        double preDrawFps = passBlurProbeWindowPreDraws * 1_000_000_000d / elapsedNs;
-        long lastGapMs = previousFrameNs > 0L
-                ? Math.max(0L, (nowNs - previousFrameNs) / 1_000_000L) : -1L;
-        Miuix307PassBlurBridge.Binding current = binding;
-        probeLog("window " + diagnosticSessionId()
-                + " trigger=" + trigger
-                + " callbacks=" + passBlurProbeWindowCallbacks
-                + " callbackFps=" + callbackFps
-                + " consumed=" + passBlurProbeWindowConsumed
-                + " consumedFps=" + consumedFps
-                + " preDraws=" + passBlurProbeWindowPreDraws
-                + " preDrawFps=" + preDrawFps
-                + " totalCallbacks=" + passBlurProbeTotalCallbacks
-                + " totalConsumed=" + passBlurProbeTotalConsumed
-                + " totalPreDraws=" + passBlurProbeTotalPreDraws
-                + " lastOesGapMs=" + lastGapMs
-                + " updatesEnabled=" + (current != null && current.updatesEnabled)
-                + " bound=" + (current != null && current.bound)
-                + " sceneGeneration=" + sceneGeneration
-                + " consumedGeneration=" + consumedGeneration);
-        passBlurProbeWindowStartNs = nowNs;
-        passBlurProbeWindowCallbacks = 0;
-        passBlurProbeWindowConsumed = 0;
-        passBlurProbeWindowPreDraws = 0;
-    }
-
-    private boolean isPassBlurProbeUpdatesEnabled() {
-        Miuix307PassBlurBridge.Binding current = binding;
-        return current != null && current.bound && current.updatesEnabled;
-    }
-
-    private static void probeLog(String message) {
-        String value = "[DC][PBProbe] " + message;
-        try {
-            Api101Bridge.log(value);
-        } catch (Throwable ignored) {
-            android.util.Log.i("LiquidDock", value);
-        }
     }
 
     private void bindProducerWhenReady(int attempt) {
