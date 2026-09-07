@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock.config;
 
-/** Persisted metadata constants for zero-copy Workspace PassBlur quality controls. */
+/** Persisted Workspace PassBlur render-quality controls; native producer scale stays at 1.0. */
 public final class PassBlurQualityKeys {
     public static final String CAPTURE_SCALE = "liquid_passblur_capture_scale";
     public static final int CAPTURE_SCALE_DEFAULT = 100;
