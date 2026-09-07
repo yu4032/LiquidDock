@@ -1,6 +1,6 @@
 # LiquidDock Architecture
 
-本文档描述当前 `main` / **v2.1.1** 的实际实现，而不是历史 1.x 捕获架构或未来目标设计。
+本文档描述当前 `main` / **v2.2.1** 的实际实现，以及 `main` 上尚未发布到新版本号的已合入变更；不是历史 1.x 捕获架构或未来目标设计。
 
 当前兼容边界：
 
@@ -90,6 +90,20 @@ Dock / Launcher output surface
 - sample validity 与最终 output coverage/scissor 分离；
 - overscan 用来保证强折射时仍能访问可见区域外的 backdrop 像素。
 
+### Workspace PassBlur 的 cadence 与质量域
+
+Workspace shared glass 的 HOME 路径现在保持 PassBlur update permission 持续开启；消费一帧 OES 不是暂停 producer 的理由。该路径仍然是 **source-driven**，LiquidDock 不创建 Choreographer/vsync pump：静态壁纸在内容不变时可以保持 bound / updates-enabled 但没有新的 OES buffer，动态壁纸或真实 backdrop 更新才会持续产生 source frame。
+
+质量控制严格分成两个域：
+
+- HyperOS native PassBlur / SurfaceTexture geometry 始终使用 `1.0` scale，作为屏幕位置到 backdrop 内容的空间权威；
+- `liquid_passblur_capture_scale`（设置页“工作区渲染分辨率”）只把 OES normalization 之后的本地 physical FBO 降到 50%–100%；
+- Prismal 的 logical framebuffer 仍是完整 Launcher root，`PrismalRenderer.width/height` 保持逻辑像素语义，`renderWidth/renderHeight` 才是物理纹理/FBO 尺寸；
+- blur sigma 会换算到 physical pixel domain，因此降低渲染分辨率只降低像素密度，不改变 glass 与后方内容的空间对应；
+- `liquid_passblur_render_fps` 只限制昂贵的 Prismal/output render。被限流的 OES frame 仍通过 `updateTexImage()` drain，避免 BufferQueue backpressure；新的 scene generation 无条件越过限流以维持 fresh-frame barrier。
+
+改变本地渲染分辨率只触发 backdrop rebuild，不重建 native PassBlur BufferQueue endpoint。
+
 ## 4. Dock glass
 
 Dock glass 使用 MiuiX Dock background 作为几何和 material owner 来源。主要职责拆分为：
@@ -160,7 +174,7 @@ Whole-Dock shadow 是独立能力。关闭后移除 LiquidDock 自己创建的 s
 
 HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid 的 Launcher Surface，但已经退役旧 PassBlur BufferQueue producer。
 
-v2.1.1 在 `onRecentViewHide` 返回 HOME 时先 rollover shared Launcher producer，再解除 Recents covered；scene controller 仍保持 fresh-OES-frame barrier，因此不会提前显示旧帧。
+当前 `main` 在有效的 `onRecentViewHide` 返回 HOME 时执行受 coverage authority 约束的 Workstation shared-producer recovery，再解除 Recents covered；scene controller 仍保持 fresh-OES-frame barrier，因此 endpoint recreation 本身不会提前授权显示旧帧。
 
 这修复了“从多任务返回后整个 Launcher glass layer 消失，必须长按图标才能恢复”的共享 producer 生命周期问题。
 
