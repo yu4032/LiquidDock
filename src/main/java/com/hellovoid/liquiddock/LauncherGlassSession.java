@@ -177,6 +177,14 @@ final class LauncherGlassSession {
     private volatile Surface inputProducerSurface;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
+    // Temporary device probe: aggregate live PassBlur delivery without flooding logcat.
+    private static final long PASS_BLUR_PROBE_WINDOW_NS = 2_000_000_000L;
+    private long passBlurProbeWindowStartNs;
+    private long passBlurProbeLastFrameNs;
+    private int passBlurProbeWindowCallbacks;
+    private int passBlurProbeWindowConsumed;
+    private long passBlurProbeTotalCallbacks;
+    private long passBlurProbeTotalConsumed;
     // Semantic content token for a requested wallpaper refresh.
     // It is independent from scene generation and is consumed by the first matching live OES frame.
     private long wallpaperRequestedGeneration = -1L;
@@ -872,6 +880,8 @@ final class LauncherGlassSession {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 consumedGeneration = sceneGeneration;
+                passBlurProbeWindowConsumed++;
+                passBlurProbeTotalConsumed++;
                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
                 if (WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(
@@ -1000,10 +1010,46 @@ final class LauncherGlassSession {
         backdropPrepared = false;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
+            recordPassBlurProbeFrame();
             frameAvailable.set(true);
             requestFrame(false);
         }, renderHandler);
         mainHandler.post(() -> bindProducerWhenReady(0));
+    }
+
+    private void recordPassBlurProbeFrame() {
+        long nowNs = System.nanoTime();
+        long previousFrameNs = passBlurProbeLastFrameNs;
+        passBlurProbeLastFrameNs = nowNs;
+        passBlurProbeWindowCallbacks++;
+        passBlurProbeTotalCallbacks++;
+        if (passBlurProbeWindowStartNs == 0L) {
+            passBlurProbeWindowStartNs = nowNs;
+            return;
+        }
+        long elapsedNs = nowNs - passBlurProbeWindowStartNs;
+        if (elapsedNs < PASS_BLUR_PROBE_WINDOW_NS) return;
+
+        double callbackFps = passBlurProbeWindowCallbacks * 1_000_000_000d / elapsedNs;
+        double consumedFps = passBlurProbeWindowConsumed * 1_000_000_000d / elapsedNs;
+        long lastGapMs = previousFrameNs > 0L
+                ? Math.max(0L, (nowNs - previousFrameNs) / 1_000_000L) : -1L;
+        Miuix307PassBlurBridge.Binding current = binding;
+        MainHook.log("[DC][PBProbe] " + diagnosticSessionId()
+                + " callbacks=" + passBlurProbeWindowCallbacks
+                + " callbackFps=" + callbackFps
+                + " consumed=" + passBlurProbeWindowConsumed
+                + " consumedFps=" + consumedFps
+                + " totalCallbacks=" + passBlurProbeTotalCallbacks
+                + " totalConsumed=" + passBlurProbeTotalConsumed
+                + " lastGapMs=" + lastGapMs
+                + " updatesEnabled=" + (current != null && current.updatesEnabled)
+                + " bound=" + (current != null && current.bound)
+                + " sceneGeneration=" + sceneGeneration
+                + " consumedGeneration=" + consumedGeneration);
+        passBlurProbeWindowStartNs = nowNs;
+        passBlurProbeWindowCallbacks = 0;
+        passBlurProbeWindowConsumed = 0;
     }
 
     private void bindProducerWhenReady(int attempt) {
