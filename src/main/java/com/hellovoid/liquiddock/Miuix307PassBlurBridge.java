@@ -18,7 +18,6 @@ import java.util.Arrays;
  */
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
-    private static final float DEMO_SCALE = 1.0f;
     private static final int INITIAL_UPDATE_FRAMES = 4;
 
     static final class Binding {
@@ -110,7 +109,9 @@ final class Miuix307PassBlurBridge {
                     "DockAssistantView"
             };
 
-            float scale = DEMO_SCALE;
+            int workspaceScalePercent = Math.round(requestedScale * 100f);
+            float scale = PassBlurQualityPolicy.bridgeScale(
+                    launcherWorkspace, workspaceScalePercent);
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
