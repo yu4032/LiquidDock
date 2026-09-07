@@ -269,7 +269,6 @@ final class LauncherGlassSession {
         int nextRenderFps = glassConfig != null
                 ? glassConfig.passBlurRenderFps
                 : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
-        boolean captureScaleChanged = nextCaptureScalePercent != passBlurCaptureScalePercent;
         boolean renderFpsChanged = nextRenderFps != passBlurRenderFps;
         passBlurCaptureScalePercent = nextCaptureScalePercent;
         if (renderFpsChanged) {
@@ -288,13 +287,6 @@ final class LauncherGlassSession {
                 : PrismalHighlightProfile.ALL_ENABLED;
         mainHandler.post(this::syncSceneOnUiThread);
         requestBackdropRebuild();
-        if (captureScaleChanged && binding != null) {
-            mainHandler.post(() -> {
-                if (!shuttingDown && binding != null && !rotationSettlePending) {
-                    rebindProducer();
-                }
-            });
-        }
     }
 
     void registerSink(LauncherGlassSinkView sink) {
@@ -1077,8 +1069,7 @@ final class LauncherGlassSession {
         if (shuttingDown || binding != null || producer != inputProducerSurface
                 || bindEpoch != producerBindEpoch) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(
-                root, producer,
-                PassBlurQualityPolicy.captureScale(passBlurCaptureScalePercent));
+                root, producer, 1.0f);
         if (next == null) {
             retryBind(attempt);
             return;
@@ -1250,12 +1241,17 @@ final class LauncherGlassSession {
         if (params == null || rootWidth <= 0 || rootHeight <= 0
                 || (staticOutput == null && outputs.isEmpty())) return;
         makePbufferCurrent();
+        PassBlurRenderDomain renderDomain = PassBlurRenderDomain.resolve(
+                rootWidth, rootHeight, passBlurCaptureScalePercent);
         boolean rawTargetChanged = rawFramebuffer == 0
-                || rawWidth != rootWidth || rawHeight != rootHeight;
-        ensureRawTarget(rootWidth, rootHeight);
+                || rawWidth != renderDomain.renderWidth
+                || rawHeight != renderDomain.renderHeight;
+        ensureRawTarget(renderDomain.renderWidth, renderDomain.renderHeight);
         if (rebuildBackdrop || rawTargetChanged || !backdropPrepared) {
             renderNormalizationRoot();
-            prismalRenderer.prepareBackdrop(rawTexture, rootWidth, rootHeight, params);
+            prismalRenderer.prepareBackdrop(
+                    rawTexture, renderDomain.renderWidth, renderDomain.renderHeight,
+                    renderDomain.logicalWidth, renderDomain.logicalHeight, params);
             backdropPrepared = true;
         }
         if (renderStatic) renderStaticScene(params);
@@ -1309,7 +1305,9 @@ final class LauncherGlassSession {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, rawFramebuffer);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glViewport(0, 0, rootWidth, rootHeight);
+        // Only physical pixel density changes here. OES/root UV remains normalized
+        // against the full logical root, preserving strict behind-content correspondence.
+        GLES20.glViewport(0, 0, rawWidth, rawHeight);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);

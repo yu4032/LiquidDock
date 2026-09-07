@@ -292,9 +292,9 @@ private val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_
 private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
 private val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
-    "PassBlur 捕获分辨率",
+    "工作区渲染分辨率",
     "%",
-    summary = "工作区原生 PassBlur 生产者缩放；100% 保持当前质量，降低可减少 GPU 与内存带宽；重启桌面生效",
+    summary = "原生 PassBlur 始终保持 1.0 与完整空间映射；这里只降低 normalized/Prismal FBO 像素密度，100% 为原始质量；重启桌面生效",
 )
 private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,

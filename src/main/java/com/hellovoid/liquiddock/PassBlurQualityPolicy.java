@@ -19,7 +19,10 @@ final class PassBlurQualityPolicy {
     }
 
     static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {
-        return launcherWorkspace ? captureScale(workspacePercent) : 1.0f;
+        // HyperOS PassBlur scale participates in producer geometry/SurfaceTexture semantics;
+        // it is not a safe pure-resolution control for strict behind-content correspondence.
+        // Native PassBlur therefore remains at 1.0; local FBOs carry the quality reduction.
+        return 1.0f;
     }
 
     static int renderFps(int requestedFps) {
