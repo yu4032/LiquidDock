@@ -33,7 +33,9 @@ final class PassBlurQualityRuntime {
 
     private static int readIntProperty(String name, int fallback) {
         try {
-            Class<?> systemProperties = Class.forName("android.os.SystemProperties");
+            ClassLoader loader = PassBlurQualityRuntime.class.getClassLoader();
+            Class<?> systemProperties = Class.forName(
+                    "android.os.SystemProperties", false, loader);
             Method getInt = systemProperties.getDeclaredMethod(
                     "getInt", String.class, Integer.TYPE);
             getInt.setAccessible(true);
