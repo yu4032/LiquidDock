@@ -1,0 +1,198 @@
+name: PassBlur spatial GREEN
+
+on:
+  push:
+    paths:
+      - '.github/workflows/passblur-spatial-green.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/passblur-quality-controls
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: never
+      - name: Move downsample behind authoritative PassBlur mapping
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f'{path}: expected {count} matches, got {actual}')
+              p.write_text(text.replace(old, new, count))
+
+          # Vendor PassBlur scale is not a pure pixel-density knob. Keep the native endpoint
+          # authoritative at 1.0 and use the percentage only for our own physical render targets.
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/PassBlurQualityPolicy.java',
+              '''    static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {\n        return launcherWorkspace ? captureScale(workspacePercent) : 1.0f;\n    }''',
+              '''    static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {\n        // HyperOS PassBlur scale participates in producer geometry/SurfaceTexture semantics;\n        // it is not a safe pure-resolution control for strict behind-content correspondence.\n        // Keep every native endpoint at the validated full scale and downsample only after OES\n        // normalization, where logical root coordinates remain authoritative.\n        return 1.0f;\n    }''')
+
+          # Changing local render resolution must not rebuild the BufferQueue/native producer.
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java',
+              '''        boolean captureScaleChanged = nextCaptureScalePercent != passBlurCaptureScalePercent;\n        boolean renderFpsChanged = nextRenderFps != passBlurRenderFps;''',
+              '''        boolean renderFpsChanged = nextRenderFps != passBlurRenderFps;''')
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java',
+              '''        requestBackdropRebuild();\n        if (captureScaleChanged && binding != null) {\n            mainHandler.post(() -> {\n                if (!shuttingDown && binding != null && !rotationSettlePending) {\n                    rebindProducer();\n                }\n            });\n        }''',
+              '''        requestBackdropRebuild();''')
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java',
+              '''        Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(\n                root, producer,\n                PassBlurQualityPolicy.captureScale(passBlurCaptureScalePercent));''',
+              '''        Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(\n                root, producer, 1.0f);''')
+
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java',
+              '''        makePbufferCurrent();\n        boolean rawTargetChanged = rawFramebuffer == 0\n                || rawWidth != rootWidth || rawHeight != rootHeight;\n        ensureRawTarget(rootWidth, rootHeight);\n        if (rebuildBackdrop || rawTargetChanged || !backdropPrepared) {\n            renderNormalizationRoot();\n            prismalRenderer.prepareBackdrop(rawTexture, rootWidth, rootHeight, params);\n            backdropPrepared = true;\n        }''',
+              '''        makePbufferCurrent();\n        PassBlurRenderDomain renderDomain = PassBlurRenderDomain.resolve(\n                rootWidth, rootHeight, passBlurCaptureScalePercent);\n        boolean rawTargetChanged = rawFramebuffer == 0\n                || rawWidth != renderDomain.renderWidth\n                || rawHeight != renderDomain.renderHeight;\n        ensureRawTarget(renderDomain.renderWidth, renderDomain.renderHeight);\n        if (rebuildBackdrop || rawTargetChanged || !backdropPrepared) {\n            renderNormalizationRoot();\n            prismalRenderer.prepareBackdrop(\n                    rawTexture, renderDomain.renderWidth, renderDomain.renderHeight,\n                    renderDomain.logicalWidth, renderDomain.logicalHeight, params);\n            backdropPrepared = true;\n        }''')
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java',
+              '''        GLES20.glViewport(0, 0, rootWidth, rootHeight);''',
+              '''        // Physical normalization target may be downsampled. UV/root mapping remains\n        // normalized against the full logical root, so lowering pixel density cannot move content.\n        GLES20.glViewport(0, 0, rawWidth, rawHeight);''')
+
+          # Prismal keeps logical geometry in full-root pixels while rasterizing into a smaller
+          # physical target. Existing callers retain physical == logical behavior.
+          renderer = Path('prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java')
+          text = renderer.read_text()
+          old = '''    private int width;\n    private int height;\n    private int blurWidth;\n    private int blurHeight;'''
+          new = '''    // width/height are physical render-target pixels. logicalWidth/logicalHeight are\n    // the coordinate space consumed by Prismal geometry/uniforms. Keeping these separate lets\n    // callers reduce raster work without changing screen-to-backdrop correspondence.\n    private int width;\n    private int height;\n    private int logicalWidth;\n    private int logicalHeight;\n    private int blurWidth;\n    private int blurHeight;'''
+          if text.count(old) != 1: raise SystemExit('PrismalRenderer fields mismatch')
+          text = text.replace(old, new, 1)
+
+          old = '''    /** Prepare one normalized/blurred backdrop for one or more glass nodes. */\n    public void prepareBackdrop(int backgroundTexture2D, int framebufferWidth, int framebufferHeight,\n                                PrismalParams params) {\n        if (backgroundTexture2D <= 0) throw new IllegalArgumentException("background texture <= 0");\n        if (framebufferWidth <= 0 || framebufferHeight <= 0) {\n            throw new IllegalArgumentException("framebuffer dimensions <= 0");\n        }\n        if (params == null) params = PrismalParams.builder().build();\n        ensurePrograms();\n        ensureTargets(framebufferWidth, framebufferHeight);\n        renderSourceAdapter(backgroundTexture2D);\n        renderBlur(params);\n        backdropPrepared = true;\n        glassFrameBegun = false;\n        glassDrawCount = 0;\n    }'''
+          new = '''    /** Prepare one normalized/blurred backdrop for one or more glass nodes. */\n    public void prepareBackdrop(int backgroundTexture2D, int framebufferWidth, int framebufferHeight,\n                                PrismalParams params) {\n        prepareBackdrop(backgroundTexture2D, framebufferWidth, framebufferHeight,\n                framebufferWidth, framebufferHeight, params);\n    }\n\n    /**\n     * Prepare a backdrop whose physical raster size may be lower than its logical coordinate size.\n     * Geometry and all pixel-valued Prismal optics remain expressed in logical pixels; only the\n     * backing textures/FBOs use renderWidth/renderHeight. Normalized screen UV therefore remains\n     * identical to a full-resolution render.\n     */\n    public void prepareBackdrop(int backgroundTexture2D,\n                                int renderWidth, int renderHeight,\n                                int logicalFramebufferWidth, int logicalFramebufferHeight,\n                                PrismalParams params) {\n        if (backgroundTexture2D <= 0) throw new IllegalArgumentException("background texture <= 0");\n        if (renderWidth <= 0 || renderHeight <= 0\n                || logicalFramebufferWidth <= 0 || logicalFramebufferHeight <= 0) {\n            throw new IllegalArgumentException("framebuffer dimensions <= 0");\n        }\n        if (params == null) params = PrismalParams.builder().build();\n        ensurePrograms();\n        ensureTargets(renderWidth, renderHeight);\n        logicalWidth = logicalFramebufferWidth;\n        logicalHeight = logicalFramebufferHeight;\n        renderSourceAdapter(backgroundTexture2D);\n        renderBlur(params);\n        backdropPrepared = true;\n        glassFrameBegun = false;\n        glassDrawCount = 0;\n    }'''
+          if text.count(old) != 1: raise SystemExit('PrismalRenderer prepareBackdrop mismatch')
+          text = text.replace(old, new, 1)
+
+          old = '''        if (geometry.framebufferWidth != width || geometry.framebufferHeight != height) {\n            throw new IllegalArgumentException("geometry framebuffer does not match prepared backdrop");\n        }'''
+          if text.count(old) != 2: raise SystemExit(f'PrismalRenderer geometry checks={text.count(old)}')
+          text = text.replace(old, '''        if (geometry.framebufferWidth != logicalWidth\n                || geometry.framebufferHeight != logicalHeight) {\n            throw new IllegalArgumentException("geometry framebuffer does not match logical backdrop");\n        }''')
+
+          old = '''    private void renderBlur(PrismalParams p) {\n        float sigma = Math.max(p.blurRadiusPx * BLUR_FBO_SCALE, 0.5f);\n        renderBlurPass(blurHProgram, sourceTexture, blurFramebufferH, sigma);\n        renderBlurPass(blurVProgram, blurTextureH, blurFramebufferV, sigma);\n    }'''
+          new = '''    private void renderBlur(PrismalParams p) {\n        float scaleX = width / (float) Math.max(1, logicalWidth);\n        float scaleY = height / (float) Math.max(1, logicalHeight);\n        float physicalScale = Math.max(0.0001f, Math.min(scaleX, scaleY));\n        float sigma = Math.max(p.blurRadiusPx * physicalScale * BLUR_FBO_SCALE, 0.5f);\n        renderBlurPass(blurHProgram, sourceTexture, blurFramebufferH, sigma);\n        renderBlurPass(blurVProgram, blurTextureH, blurFramebufferV, sigma);\n    }'''
+          if text.count(old) != 1: raise SystemExit('PrismalRenderer renderBlur mismatch')
+          text = text.replace(old, new, 1)
+
+          old = '''        uniform2f("u_resolution", width, height);\n        uniform2f("u_mousePos", g.centerX, height - g.centerY);'''
+          new = '''        uniform2f("u_resolution", logicalWidth, logicalHeight);\n        uniform2f("u_mousePos", g.centerX, logicalHeight - g.centerY);'''
+          if text.count(old) != 1: raise SystemExit('PrismalRenderer logical uniform mismatch')
+          text = text.replace(old, new, 1)
+
+          old = '''        width = height = blurWidth = blurHeight = 0;'''
+          new = '''        width = height = logicalWidth = logicalHeight = blurWidth = blurHeight = 0;'''
+          if text.count(old) != 1: raise SystemExit('PrismalRenderer release mismatch')
+          text = text.replace(old, new, 1)
+          renderer.write_text(text)
+
+          # GUI wording now describes the real control boundary.
+          replace(
+              'src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt',
+              '''    "PassBlur 捕获分辨率",\n    "%",\n    summary = "工作区原生 PassBlur 生产者缩放；100% 保持当前质量，降低可减少 GPU 与内存带宽；重启桌面生效",''',
+              '''    "工作区渲染分辨率",\n    "%",\n    summary = "原生 PassBlur 始终保持 1.0 与完整空间映射；这里只降低 normalized/Prismal FBO 像素密度，100% 为原始质量；重启桌面生效",''')
+          PY
+
+          cat > src/main/java/com/hellovoid/liquiddock/PassBlurRenderDomain.java <<'EOF'
+          package com.hellovoid.liquiddock;
+
+          /** Separates authoritative logical root coordinates from local physical render pixels. */
+          final class PassBlurRenderDomain {
+              final int logicalWidth;
+              final int logicalHeight;
+              final int renderWidth;
+              final int renderHeight;
+
+              private PassBlurRenderDomain(
+                      int logicalWidth, int logicalHeight, int renderWidth, int renderHeight) {
+                  this.logicalWidth = logicalWidth;
+                  this.logicalHeight = logicalHeight;
+                  this.renderWidth = renderWidth;
+                  this.renderHeight = renderHeight;
+              }
+
+              static PassBlurRenderDomain resolve(
+                      int logicalWidth, int logicalHeight, int requestedScalePercent) {
+                  int safeLogicalWidth = Math.max(1, logicalWidth);
+                  int safeLogicalHeight = Math.max(1, logicalHeight);
+                  float scale = PassBlurQualityPolicy.captureScale(requestedScalePercent);
+                  int renderWidth = Math.max(1, Math.round(safeLogicalWidth * scale));
+                  int renderHeight = Math.max(1, Math.round(safeLogicalHeight * scale));
+                  return new PassBlurRenderDomain(
+                          safeLogicalWidth, safeLogicalHeight, renderWidth, renderHeight);
+              }
+          }
+          EOF
+
+          cat > src/test/java/com/hellovoid/liquiddock/PassBlurRenderDomainTest.java <<'EOF'
+          package com.hellovoid.liquiddock;
+
+          import org.junit.Test;
+
+          import static org.junit.Assert.assertEquals;
+
+          public class PassBlurRenderDomainTest {
+              @Test
+              public void fullScaleKeepsPhysicalAndLogicalExtentEqual() {
+                  PassBlurRenderDomain domain = PassBlurRenderDomain.resolve(2400, 1080, 100);
+                  assertEquals(2400, domain.logicalWidth);
+                  assertEquals(1080, domain.logicalHeight);
+                  assertEquals(2400, domain.renderWidth);
+                  assertEquals(1080, domain.renderHeight);
+              }
+
+              @Test
+              public void downsampleChangesOnlyPhysicalPixelDensity() {
+                  PassBlurRenderDomain domain = PassBlurRenderDomain.resolve(2400, 1080, 50);
+                  assertEquals(2400, domain.logicalWidth);
+                  assertEquals(1080, domain.logicalHeight);
+                  assertEquals(1200, domain.renderWidth);
+                  assertEquals(540, domain.renderHeight);
+              }
+
+              @Test
+              public void normalizedAnchorIsInvariantAcrossDownsample() {
+                  PassBlurRenderDomain domain = PassBlurRenderDomain.resolve(2400, 1080, 75);
+                  float logicalX = 1560f;
+                  float logicalY = 270f;
+                  float physicalX = logicalX * domain.renderWidth / domain.logicalWidth;
+                  float physicalY = logicalY * domain.renderHeight / domain.logicalHeight;
+                  assertEquals(logicalX / domain.logicalWidth,
+                          physicalX / domain.renderWidth, 0.000001f);
+                  assertEquals(logicalY / domain.logicalHeight,
+                          physicalY / domain.renderHeight, 0.000001f);
+              }
+          }
+          EOF
+      - name: Verify full unit suite and debug APK
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Commit verified spatial fix
+        shell: bash
+        run: |
+          git rm .github/workflows/passblur-spatial-green.yml
+          git add src/main/java/com/hellovoid/liquiddock/PassBlurQualityPolicy.java \
+                  src/main/java/com/hellovoid/liquiddock/PassBlurRenderDomain.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java \
+                  src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt \
+                  src/test/java/com/hellovoid/liquiddock/PassBlurRenderDomainTest.java \
+                  prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java \
+                  src/test/java/com/hellovoid/liquiddock/PassBlurQualityPolicyTest.java
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: preserve Workspace mapping when downsampling PassBlur'
+          git push origin HEAD:experiment/passblur-quality-controls
