@@ -30,7 +30,7 @@ public class LauncherContinuousPassBlurContractTest {
         String suspendBlock = between(
                 source,
                 "void suspendWorkspaceProducer() {",
-                "void resumeWorkspaceProducer() {");
+                "private boolean refreshProducerGeometryOnUi(View root) {");
 
         assertTrue(suspendBlock.contains("shouldPauseSharedProducer("));
         assertTrue(suspendBlock.contains("Miuix307PassBlurBridge.pauseUpdates(binding);"));
