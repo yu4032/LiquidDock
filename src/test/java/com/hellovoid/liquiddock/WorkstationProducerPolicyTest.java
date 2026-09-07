@@ -5,7 +5,6 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-// Probe v2 keeps producer-policy contracts unchanged while contrasting root pre-draw vs OES frames.
 public class WorkstationProducerPolicyTest {
     @Test
     public void coveredWorkspaceCannotPauseSharedProducerInWorkstationMode() {
