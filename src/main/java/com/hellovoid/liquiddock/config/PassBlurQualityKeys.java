@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock.config;
 
-/** Metadata constants for zero-copy Workspace PassBlur quality controls. */
+/** Persisted metadata constants for zero-copy Workspace PassBlur quality controls. */
 public final class PassBlurQualityKeys {
     public static final String CAPTURE_SCALE = "liquid_passblur_capture_scale";
     public static final int CAPTURE_SCALE_DEFAULT = 100;
