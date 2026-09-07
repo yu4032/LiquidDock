@@ -1,0 +1,59 @@
+name: Sync root docs once v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sync-root-docs-once-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/sync-root-md-2026-09-07
+          fetch-depth: 0
+      - name: Reuse verified patch script
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/sync-root-docs-once.yml').read_text()
+          start_marker = "          from pathlib import Path\n"
+          end_marker = "          PY\n"
+          start = workflow.index(start_marker)
+          end = workflow.index(end_marker, start)
+          lines = workflow[start:end].splitlines()
+          script = "\n".join(line[10:] if line.startswith("          ") else line for line in lines) + "\n"
+          Path('/tmp/sync_root_docs.py').write_text(script)
+          PY
+          python3 /tmp/sync_root_docs.py
+          rm -f .github/workflows/sync-root-docs-once-v2.yml
+      - name: Verify root-doc scope and invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check origin/main
+          actual="$(git diff --name-only origin/main | sort | tr '\n' ' ')"
+          expected="ARCHITECTURE.md CHANGELOG.md CONTRIBUTING.md DIVIDER.md FEATURES.md HOOKS.md THIRD_PARTY_NOTICES.md TODO.md "
+          printf 'changed: %s\n' "$actual"
+          test "$actual" = "$expected"
+          git diff --quiet origin/main -- README.md
+          ! grep -q '当前 `main` / \*\*v2\.1\.1\*\*' ARCHITECTURE.md CONTRIBUTING.md DIVIDER.md FEATURES.md HOOKS.md
+          grep -q '^## Unreleased / main (2026-09-07)$' CHANGELOG.md
+          grep -q 'native PassBlur.*`1.0`' ARCHITECTURE.md
+          grep -q 'Workspace 实时采样与性能' FEATURES.md
+          grep -q 'source-only `updateTexImage()` drain' HOOKS.md
+          grep -q 'Workspace continuous / source-driven PassBlur' TODO.md
+          grep -q 'AndroidX Activity Compose 1.13.0' THIRD_PARTY_NOTICES.md
+      - name: Commit documentation sync
+        shell: bash
+        run: |
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: synchronize root documentation with current main'
+          git push origin HEAD:docs/sync-root-md-2026-09-07
