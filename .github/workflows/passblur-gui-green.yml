@@ -1,0 +1,116 @@
+name: PassBlur GUI GREEN
+
+on:
+  push:
+    branches:
+      - experiment/passblur-quality-controls
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/passblur-quality-controls
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: never
+      - name: Wire persisted PassBlur quality controls into runtime and GUI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'{label}: anchor missing in {path}')
+              if s.count(old) != 1:
+                  raise SystemExit(f'{label}: expected one anchor in {path}, found {s.count(old)}')
+              p.write_text(s.replace(old, new, 1))
+
+          # Typed runtime configuration.
+          path = 'src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java'
+          old = '''        final int tintAlpha, tintR, tintG, tintB, specularSharp,\n                prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;\n'''
+          new = '''        final int tintAlpha, tintR, tintG, tintB, specularSharp,\n                prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;\n        final int passBlurCaptureScalePercent, passBlurRenderFps;\n'''
+          replace_once(path, old, new, 'typed config fields')
+
+          old = '''            blur = c.f(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.runtimeFallback());\n'''
+          new = old + '''            passBlurCaptureScalePercent = clamp(c.i(\n                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name(),\n                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.runtimeFallback()),\n                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.minInt(),\n                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.maxInt());\n            passBlurRenderFps = clamp(c.i(\n                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.name(),\n                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.runtimeFallback()),\n                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.minInt(),\n                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.maxInt());\n'''
+          replace_once(path, old, new, 'typed config loading')
+
+          # Centralize range/default metadata in the persisted key contract.
+          Path('src/main/java/com/hellovoid/liquiddock/PassBlurQualityPolicy.java').write_text('''package com.hellovoid.liquiddock;\n\nimport com.hellovoid.liquiddock.config.PassBlurQualityKeys;\n\n/** Pure policy for Workspace PassBlur quality controls. */\nfinal class PassBlurQualityPolicy {\n    static final int DEFAULT_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT;\n    static final int MIN_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_MIN;\n    static final int MAX_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_MAX;\n    static final int DEFAULT_RENDER_FPS = PassBlurQualityKeys.RENDER_FPS_DEFAULT;\n    static final int MAX_RENDER_FPS = PassBlurQualityKeys.RENDER_FPS_MAX;\n\n    private PassBlurQualityPolicy() {}\n\n    static float captureScale(int requestedPercent) {\n        int safePercent = Math.max(MIN_CAPTURE_SCALE_PERCENT,\n                Math.min(MAX_CAPTURE_SCALE_PERCENT, requestedPercent));\n        return safePercent / 100f;\n    }\n\n    static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {\n        return launcherWorkspace ? captureScale(workspacePercent) : 1.0f;\n    }\n\n    static int renderFps(int requestedFps) {\n        if (requestedFps <= 0) return DEFAULT_RENDER_FPS;\n        return Math.min(MAX_RENDER_FPS, requestedFps);\n    }\n\n    static boolean requiresFreshConsumerFrame(long consumedGeneration, long sceneGeneration) {\n        return consumedGeneration != sceneGeneration;\n    }\n}\n''')
+
+          Path('src/main/java/com/hellovoid/liquiddock/PassBlurSourceFrameGate.java').write_text('''package com.hellovoid.liquiddock;\n\n/**\n * Endpoint-local render gate for real Workspace PassBlur source frames.\n *\n * <p>This class never creates work on its own. It only decides whether an observed OES source\n * frame should trigger the expensive Prismal/output render. Callers must still drain rejected\n * SurfaceTexture frames so BufferQueue backpressure cannot deadlock a low FPS configuration.\n * Fresh scene generations always bypass the configured render cap.</p>\n */\nfinal class PassBlurSourceFrameGate {\n    private final PassBlurFrameRateLimiter limiter;\n\n    PassBlurSourceFrameGate(int renderFps) {\n        limiter = new PassBlurFrameRateLimiter(renderFps);\n    }\n\n    boolean shouldSchedule(long nowNanos, long consumedGeneration, long sceneGeneration) {\n        return limiter.shouldSchedule(\n                nowNanos,\n                PassBlurQualityPolicy.requiresFreshConsumerFrame(\n                        consumedGeneration, sceneGeneration));\n    }\n}\n''')
+
+          # The bridge receives scale from the typed session instead of Android debug properties.
+          path = 'src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java'
+          old = '''            int workspaceScalePercent = Math.round(\n                    PassBlurQualityRuntime.workspaceCaptureScale() * 100f);\n            float scale = PassBlurQualityPolicy.bridgeScale(\n                    launcherWorkspace, workspaceScalePercent);\n'''
+          new = '''            int workspaceScalePercent = Math.round(requestedScale * 100f);\n            float scale = PassBlurQualityPolicy.bridgeScale(\n                    launcherWorkspace, workspaceScalePercent);\n'''
+          replace_once(path, old, new, 'bridge typed scale')
+
+          # Session owns the two persisted quality values and the endpoint-local source gate.
+          path = 'src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java'
+          old = '''    private volatile long sceneGeneration = 1L;\n    private volatile long consumedGeneration = -1L;\n'''
+          new = '''    private volatile long sceneGeneration = 1L;\n    private volatile long consumedGeneration = -1L;\n    private volatile int passBlurCaptureScalePercent =\n            PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;\n    private volatile int passBlurRenderFps = PassBlurQualityPolicy.DEFAULT_RENDER_FPS;\n    private volatile PassBlurSourceFrameGate passBlurSourceFrameGate =\n            new PassBlurSourceFrameGate(PassBlurQualityPolicy.DEFAULT_RENDER_FPS);\n'''
+          replace_once(path, old, new, 'session quality fields')
+
+          old = '''        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;\n        Miuix307PrismalMaterial.Params optical = glassConfig != null\n'''
+          new = '''        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;\n        int nextCaptureScalePercent = glassConfig != null\n                ? glassConfig.passBlurCaptureScalePercent\n                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;\n        int nextRenderFps = glassConfig != null\n                ? glassConfig.passBlurRenderFps\n                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;\n        boolean captureScaleChanged = nextCaptureScalePercent != passBlurCaptureScalePercent;\n        boolean renderFpsChanged = nextRenderFps != passBlurRenderFps;\n        passBlurCaptureScalePercent = nextCaptureScalePercent;\n        if (renderFpsChanged) {\n            passBlurRenderFps = nextRenderFps;\n            passBlurSourceFrameGate = new PassBlurSourceFrameGate(nextRenderFps);\n        }\n        Miuix307PrismalMaterial.Params optical = glassConfig != null\n'''
+          replace_once(path, old, new, 'session config apply')
+
+          old = '''        mainHandler.post(this::syncSceneOnUiThread);\n        requestBackdropRebuild();\n    }\n'''
+          new = '''        mainHandler.post(this::syncSceneOnUiThread);\n        requestBackdropRebuild();\n        if (captureScaleChanged && binding != null) {\n            mainHandler.post(() -> {\n                if (!shuttingDown && binding != null && !rotationSettlePending) {\n                    rebindProducer();\n                }\n            });\n        }\n    }\n'''
+          replace_once(path, old, new, 'session scale rollover')
+
+          old = '''        input.setOnFrameAvailableListener(texture -> {\n            if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;\n            frameAvailable.set(true);\n            requestFrame(false);\n        }, renderHandler);\n        mainHandler.post(() -> bindProducerWhenReady(0));\n    }\n\n    private void bindProducerWhenReady(int attempt) {\n'''
+          new = '''        input.setOnFrameAvailableListener(texture -> {\n            if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;\n            PassBlurSourceFrameGate gate = passBlurSourceFrameGate;\n            boolean shouldRender = gate == null || gate.shouldSchedule(\n                    System.nanoTime(), consumedGeneration, sceneGeneration);\n            if (shouldRender || frameAvailable.get()) {\n                frameAvailable.set(true);\n                if (shouldRender) requestFrame(false);\n                return;\n            }\n            drainSourceFrameWithoutRender(texture);\n        }, renderHandler);\n        mainHandler.post(() -> bindProducerWhenReady(0));\n    }\n\n    private void drainSourceFrameWithoutRender(SurfaceTexture input) {\n        if (shuttingDown || input == null || input != inputSurfaceTexture) return;\n        try {\n            makePbufferCurrent();\n            input.updateTexImage();\n            input.getTransformMatrix(textureMatrix);\n            consumedGeneration = sceneGeneration;\n        } catch (Throwable error) {\n            MainHook.log(TAG + " source-only PassBlur drain failed " + debugLabel() + ": " + error);\n        }\n    }\n\n    private void bindProducerWhenReady(int attempt) {\n'''
+          replace_once(path, old, new, 'source-driven render gate')
+
+          old = '''        Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(root, producer, 1f);\n'''
+          new = '''        Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(\n                root, producer,\n                PassBlurQualityPolicy.captureScale(passBlurCaptureScalePercent));\n'''
+          replace_once(path, old, new, 'session bridge scale')
+
+          # Compose GUI: two independent controls, explicitly separate from retired Bitmap keys.
+          path = 'src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt'
+          old = '''private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")\nprivate val liquidSpecs = listOf(\n'''
+          new = '''private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")\nprivate val passBlurCaptureScaleSpec = IntSpec(\n    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,\n    "PassBlur 捕获分辨率",\n    "%",\n    summary = "工作区原生 PassBlur 生产者缩放；100% 保持当前质量，降低可减少 GPU 与内存带宽；重启桌面生效",\n)\nprivate val passBlurRenderFpsSpec = IntSpec(\n    ConfigSchema.Glass.PASSBLUR_RENDER_FPS,\n    "Prismal 实时渲染上限（0 = Auto）",\n    "fps",\n    summary = "0 = 跟随真实 PassBlur 源帧；限速只跳过合成并持续释放 OES BufferQueue，不会创建定时器；重启桌面生效",\n)\nprivate val liquidSpecs = listOf(\n'''
+          replace_once(path, old, new, 'Compose quality specs')
+
+          old = '''        ArrowPreference(\n            stringResource(R.string.launcher_highlights_entry),\n            summary = stringResource(R.string.launcher_highlights_entry_summary),\n            enabled = masterEnabled && liquidGlass,\n            onClick = openLauncherHighlights,\n        )\n        BooleanSetting(\n'''
+          new = '''        ArrowPreference(\n            stringResource(R.string.launcher_highlights_entry),\n            summary = stringResource(R.string.launcher_highlights_entry_summary),\n            enabled = masterEnabled && liquidGlass,\n            onClick = openLauncherHighlights,\n        )\n        SmallTitle("工作区实时捕获性能")\n        IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)\n        IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)\n        BooleanSetting(\n'''
+          replace_once(path, old, new, 'Compose quality controls')
+
+          # Retire the debug-property configuration source and its tests completely.
+          for dead in [
+              'src/main/java/com/hellovoid/liquiddock/PassBlurQualityRuntime.java',
+              'src/test/java/com/hellovoid/liquiddock/PassBlurQualityRuntimeTest.java',
+          ]:
+              p = Path(dead)
+              if p.exists():
+                  p.unlink()
+          PY
+      - name: Verify full unit suite and debug APK
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Commit verified GREEN
+        shell: bash
+        run: |
+          git rm .github/workflows/passblur-gui-green.yml
+          git add -A
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "feat: expose Workspace PassBlur quality controls"
+          git push origin HEAD:experiment/passblur-quality-controls
