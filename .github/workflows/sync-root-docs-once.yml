@@ -1,0 +1,153 @@
+name: Sync root docs once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sync-root-docs-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/sync-root-md-2026-09-07
+          fetch-depth: 0
+      - name: Update root Markdown from current main
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} matches, got {actual} for {old[:80]!r}")
+              p.write_text(text.replace(old, new, count))
+
+          def insert_after(path, marker, addition):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(marker) != 1:
+                  raise SystemExit(f"{path}: marker count={text.count(marker)} for {marker[:80]!r}")
+              p.write_text(text.replace(marker, marker + addition, 1))
+
+          # ARCHITECTURE.md
+          replace(
+              'ARCHITECTURE.md',
+              '本文档描述当前 `main` / **v2.1.1** 的实际实现，而不是历史 1.x 捕获架构或未来目标设计。',
+              '本文档描述当前 `main` / **v2.2.1** 的实际实现，以及 `main` 上尚未发布到新版本号的已合入变更；不是历史 1.x 捕获架构或未来目标设计。')
+          arch_marker = '- overscan 用来保证强折射时仍能访问可见区域外的 backdrop 像素。\n'
+          arch_add = '''\n### Workspace PassBlur 的 cadence 与质量域\n\nWorkspace shared glass 的 HOME 路径现在保持 PassBlur update permission 持续开启；消费一帧 OES 不是暂停 producer 的理由。该路径仍然是 **source-driven**，LiquidDock 不创建 Choreographer/vsync pump：静态壁纸在内容不变时可以保持 bound / updates-enabled 但没有新的 OES buffer，动态壁纸或真实 backdrop 更新才会持续产生 source frame。\n\n质量控制严格分成两个域：\n\n- HyperOS native PassBlur / SurfaceTexture geometry 始终使用 `1.0` scale，作为屏幕位置到 backdrop 内容的空间权威；\n- `liquid_passblur_capture_scale`（设置页“工作区渲染分辨率”）只把 OES normalization 之后的本地 physical FBO 降到 50%–100%；\n- Prismal 的 logical framebuffer 仍是完整 Launcher root，`PrismalRenderer.width/height` 保持逻辑像素语义，`renderWidth/renderHeight` 才是物理纹理/FBO 尺寸；\n- blur sigma 会换算到 physical pixel domain，因此降低渲染分辨率只降低像素密度，不改变 glass 与后方内容的空间对应；\n- `liquid_passblur_render_fps` 只限制昂贵的 Prismal/output render。被限流的 OES frame 仍通过 `updateTexImage()` drain，避免 BufferQueue backpressure；新的 scene generation 无条件越过限流以维持 fresh-frame barrier。\n\n改变本地渲染分辨率只触发 backdrop rebuild，不重建 native PassBlur BufferQueue endpoint。\n'''
+          insert_after('ARCHITECTURE.md', arch_marker, arch_add)
+          replace(
+              'ARCHITECTURE.md',
+              'v2.1.1 在 `onRecentViewHide` 返回 HOME 时先 rollover shared Launcher producer，再解除 Recents covered；scene controller 仍保持 fresh-OES-frame barrier，因此不会提前显示旧帧。',
+              '当前 `main` 在有效的 `onRecentViewHide` 返回 HOME 时执行受 coverage authority 约束的 Workstation shared-producer recovery，再解除 Recents covered；scene controller 仍保持 fresh-OES-frame barrier，因此 endpoint recreation 本身不会提前授权显示旧帧。')
+
+          # CHANGELOG.md — post-2.2.1 changes are unreleased because versionName is still 2.2.1.
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text()
+          prefix = '# Changelog\n\n'
+          if not text.startswith(prefix):
+              raise SystemExit('CHANGELOG.md: unexpected header')
+          unreleased = '''## Unreleased / main (2026-09-07)\n\n### Workspace continuous PassBlur\n\n- Workspace HOME shared PassBlur 从消费后一帧暂停改为持续 update permission；显式 Recents/folder/presentation coverage 仍由既有生命周期决定是否 suspend\n- 真机验证 native PassBlur 为 source-driven：动态壁纸可持续产生实时 OES frame，静态壁纸即使保持 bound / updates-enabled 也会在内容静止时自然降到 0 个新 OES frame；未引入 Choreographer、vsync pump 或固定延迟轮询\n\n### Workspace quality controls and spatial correctness\n\n- 新增持久化 `liquid_passblur_capture_scale`（50%–100%，默认 100%）与 `liquid_passblur_render_fps`（0–60 FPS，默认 0 / Auto）\n- 修正首版分辨率控制的空间映射错误：HyperOS native PassBlur scale 固定为 `1.0`，不再把 vendor `setUpdateTextureFlag(..., scale)` 当作纯分辨率旋钮\n- 将降采样移动到 OES normalization 之后的本地 physical FBO；Prismal logical framebuffer 始终保持完整 Launcher root，使 50% / 75% / 100% 只改变像素密度，不改变 glass 对应的后方内容位置\n- `PrismalRenderer` 分离 logical `width/height` 与 physical `renderWidth/renderHeight`，并按 physical scale 换算 blur sigma\n- FPS 限流只跳过昂贵的 Prismal/output render；所有真实 OES source frame 仍被 drain，新的 scene generation 会越过限流以保持 freshness contract\n- 分辨率修改只 rebuild backdrop，不再为了质量设置重建 native PassBlur BufferQueue endpoint\n\n### Verification\n\n- 质量控制的空间映射修复已通过目标设备 50% / 75% / 100% 对位验证\n- 合并前正常 PR CI #4276 / run `34142764054` 通过 `testDebugUnitTest assembleDebug` 与 artifact upload\n\n'''
+          changelog.write_text(prefix + unreleased + text[len(prefix):])
+
+          # CONTRIBUTING.md
+          replace(
+              'CONTRIBUTING.md',
+              '本文档面向当前 `main` / **v2.1.1**。当前 Liquid Glass 主线为 HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES zero-copy；1.x ScreenCapture 代码只存在于 `archive/1.x`，不要把旧 capture 架构重新接回当前实现。',
+              '本文档面向当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）。当前 Liquid Glass 主线为 HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES zero-copy；1.x ScreenCapture 代码只存在于 `archive/1.x`，不要把旧 capture 架构重新接回当前实现。')
+          contrib_marker = '- 把 geometry generation 当作 wallpaper content generation。\n'
+          contrib_add = '''\n\nWorkspace PassBlur 质量/功耗修改还必须保持：\n\n- HOME 默认是 continuous update permission / source-driven，而不是消费一帧后自动 pause；不要重新引入 single-frame pulse 作为普通 HOME 策略；\n- native PassBlur scale 固定 `1.0`，不要把 vendor scale 当作通用 resolution knob；\n- 分辨率优化只能在 authoritative OES normalization 之后降低本地 physical FBO，logical root / Prismal geometry 仍使用完整 Launcher 坐标；\n- FPS cap 只能限 Prismal/output render，不能阻止 `SurfaceTexture.updateTexImage()` drain，也不能额外创建 timer/vsync producer work；\n- fresh scene generation 必须绕过 render cap；rebind success 仍不等于 fresh content。\n'''
+          insert_after('CONTRIBUTING.md', contrib_marker, contrib_add)
+          contrib_validation = '- fresh OES frame 后才 reveal。\n'
+          contrib_validation_add = '''\n\n涉及 Workspace quality controls 时，真机至少比较 100% / 75% / 50% 的同位置背景特征，确认只有清晰度变化而没有缩放、漂移或偏移；同时覆盖静态壁纸 idle 与动态壁纸 live source。\n'''
+          insert_after('CONTRIBUTING.md', contrib_validation, contrib_validation_add)
+
+          # DIVIDER.md — behavior is unchanged; synchronize its current-main baseline and cross-boundary note.
+          replace(
+              'DIVIDER.md',
+              '本文档描述当前 `main` / **v2.1.1** 的 `DockDividerHook` 行为。',
+              '本文档描述当前 `main` / **v2.2.1**（含 `main` 上未单独提升版本号的已合入变更）的 `DockDividerHook` 行为。')
+          divider_marker = 'Divider 属于 Workstation/Laptop Dock 的实验性适配部分；参数可以使用，但工作台整体仍未视为完全支持。\n'
+          divider_add = '''\nDivider ownership 与 Workspace PassBlur 的渲染分辨率/FPS 控制彼此独立：质量控制不会改变 Divider 的 View geometry、snapshot 或 restore 语义；Workstation 场景切换仍由各自的 producer/coverage 生命周期负责。\n'''
+          insert_after('DIVIDER.md', divider_marker, divider_add)
+
+          # FEATURES.md
+          replace(
+              'FEATURES.md',
+              '本文档按当前 `main` / **v2.1.1** 的实际实现整理。当前 Liquid Glass 主线仅支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**。',
+              '本文档按当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）的实际实现整理。当前 Liquid Glass 主线仅支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**。')
+          features_marker = '- vendor 私有接口不可用时 glass fail-closed，不退回 1.x 截图方案。\n'
+          features_add = '''\n\n## Workspace 实时采样与性能\n\nLauncher Workspace 的 shared PassBlur 在 HOME 激活时保持 continuous update permission。它不是 LiquidDock 主动驱动的固定 FPS 捕获循环，而是由 HyperOS backdrop 内容驱动：\n\n- 静态壁纸且桌面内容不变时，producer 可以保持 bound / updates-enabled，但不持续产生新的 OES frame；\n- 动态壁纸或真实 backdrop 更新时，新的 PassBlur buffer 会实时进入 OES / Prismal 路径；\n- Recents、folder、presentation、rotation 等显式生命周期仍由 scene controller / producer policy suspend、rebind 或等待 fresh frame。\n\n设置页 `液态玻璃 -> 工作区实时捕获性能` 提供：\n\n| 参数 | 范围 | 当前语义 |\n|---|---:|---|\n| 工作区渲染分辨率 | 50%–100% | 只降低 OES normalization 之后的本地 normalized/Prismal physical FBO 像素密度；native PassBlur 始终为 `1.0`，logical root 不变 |\n| Prismal 实时渲染上限 | 0–60 FPS | `0 = Auto`，跟随真实 source frame；非 0 时只限昂贵合成，不阻塞 OES drain |\n\n因此 50% / 75% / 100% 的差异应只体现在采样/渲染清晰度与 GPU 成本，glass 在屏幕上的每个位置仍对应相同的后方内容。新的 scene generation 会无条件越过 FPS cap，避免性能设置破坏 freshness barrier。\n'''
+          insert_after('FEATURES.md', features_marker, features_add)
+          replace(
+              'FEATURES.md',
+              '- 不再存在 ScreenCapture resolution / capture FPS / black-frame threshold / capture cadence 等 1.x 参数的活动实现。',
+              '- 1.x 的 ScreenCapture resolution / capture FPS / black-frame threshold / capture cadence 已无活动实现；当前 `工作区渲染分辨率` 与 `Prismal 实时渲染上限` 是独立的 zero-copy 本地 FBO / render gate，不是旧截图参数的复活。')
+
+          # HOOKS.md
+          replace('HOOKS.md', '# LiquidDock 2.1 Hook 点总览', '# LiquidDock 2.2 Hook 点总览')
+          replace(
+              'HOOKS.md',
+              '本文档记录当前 `main` / **v2.1.1** 安装的主要 libxposed Hook、Android listener、反射边界和 GPU 生命周期。',
+              '本文档记录当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）安装的主要 libxposed Hook、Android listener、反射边界和 GPU 生命周期。')
+          hooks_marker = '''MiuiX PassBlur\n  -> Surface\n  -> SurfaceTexture / GL_TEXTURE_EXTERNAL_OES\n  -> normalization / overscan\n  -> Prismal renderer\n  -> Dock / Launcher output\n```\n'''
+          hooks_add = '''\n### Workspace source cadence / quality gate\n\n`LauncherGlassSession` 的 Workspace 路径把 producer、source drain 和昂贵 render 明确分开：\n\n- `WorkstationProducerPolicy` 规定普通 HOME 不使用 single-frame pulse，消费 OES frame 后也不自动 pause；显式 coverage/presentation suspension 单独处理；\n- `Miuix307PassBlurBridge.bind(...)` 对 Workspace 使用 native scale `1.0`，保持 SurfaceTexture geometry / behind-content mapping 的权威性；\n- `PassBlurRenderDomain` 只计算本地 logical root 与 physical FBO 的 50%–100% 尺寸分离；\n- `PassBlurSourceFrameGate` 只对真实 `OnFrameAvailable` 决定是否触发 Prismal/output render，不创建 timer 或 Choreographer work；\n- 被 FPS gate 拒绝的 source frame 会走 source-only `updateTexImage()` drain，避免 BufferQueue 堵塞；\n- `consumedGeneration != sceneGeneration` 时 freshness 优先，当前 frame 绕过 render cap。\n\n分辨率变化只请求 backdrop rebuild，不因质量调整重建 native producer endpoint。\n'''
+          insert_after('HOOKS.md', hooks_marker, hooks_add)
+
+          # THIRD_PARTY_NOTICES.md
+          old_deps = '''- **Compose Miuix 0.9.3** (`miuix-ui-android`, `miuix-preference-android`) — Apache License 2.0 — <https://github.com/compose-miuix-ui/miuix>\n- **AndroidX Activity Compose / Preference / AppCompat** — Apache License 2.0 — <https://source.android.com/docs/setup/about/licenses>\n- **LSPosed / libxposed API 101** — GPL-3.0 — <https://github.com/LSPosed/LSPosed>'''
+          new_deps = '''- **Compose Miuix 0.9.3** (`miuix-ui-android`, `miuix-preference-android`) — Apache License 2.0 — <https://github.com/compose-miuix-ui/miuix>\n- **AndroidX Activity Compose 1.13.0 / Preference 1.2.1 / AppCompat 1.7.0** — Apache License 2.0 — <https://source.android.com/docs/setup/about/licenses>\n- **LSPosed / libxposed API 101.0.1 + service 101.0.0** — GPL-3.0 — <https://github.com/LSPosed/LSPosed>'''
+          replace('THIRD_PARTY_NOTICES.md', old_deps, new_deps)
+          replace(
+              'THIRD_PARTY_NOTICES.md',
+              '- **Prismal** — Liquid Glass optical model, shader structure and parameter-design reference — MIT License — <https://github.com/styropyr0/Prismal>',
+              '- **Prismal** — bundled/adapted standalone optical-renderer module plus shader/parameter-design reference — MIT License — <https://github.com/styropyr0/Prismal>')
+          notices_marker = 'LiquidDock also reflects and calls private HyperOS/MIUI framework APIs at runtime for compatibility with the target ROM. Those platform APIs are not bundled third-party source code.\n'
+          notices_add = '\nThe current Workspace quality controls do not bundle a replacement PassBlur implementation: LiquidDock owns the bridge, OES consumer and local Prismal/FBO pipeline while HyperOS/MIUI remains the native PassBlur producer.\n'
+          insert_after('THIRD_PARTY_NOTICES.md', notices_marker, notices_add)
+
+          # TODO.md
+          replace(
+              'TODO.md',
+              '- Workstation producer pulse/pause 与现有最小 recovery semantics；',
+              '- HOME continuous/source-driven PassBlur、显式 covered-state suspend/resume 与现有最小 recovery semantics；')
+          done_marker = '## 已完成的重要边界（不再作为 active TODO）\n'
+          done_add = '''\n### Workspace continuous / source-driven PassBlur\n\nHOME shared producer 已移除“消费一帧后 pause”的 one-shot 策略：普通 HOME 保持 update permission，显式 Recents/folder/presentation coverage 仍使用独立 suspend/recovery。真机已经确认 native producer 是 source-driven——静态壁纸内容静止时可以在 bound / updates-enabled 状态下保持 0 个新 OES frame，动态壁纸则持续提供实时 source frame；没有引入 Choreographer/vsync pump 或固定延迟轮询。\n\n### Workspace render-quality / spatial mapping\n\n`liquid_passblur_capture_scale` 与 `liquid_passblur_render_fps` 已进入 production。首版直接降低 vendor PassBlur scale 会破坏严格 behind-content 对位，现已修正为：native PassBlur 固定 `1.0`；OES normalization 后再降低 local physical FBO；Prismal logical root 始终保持完整尺寸。目标设备已通过 50% / 75% / 100% 空间对应验证。FPS gate 只限制昂贵 render，所有 source frame 仍 drain，fresh generation 绕过限流。除非出现新的可复现错误，不要重新把 vendor scale 当作普通 resolution knob。\n\n'''
+          insert_after('TODO.md', done_marker, done_add)
+
+          # Remove the one-shot workflow before the resulting commit so main will see only docs.
+          Path('.github/workflows/sync-root-docs-once.yml').unlink()
+          PY
+
+      - name: Verify root-doc scope and invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check origin/main...
+          test "$(git diff --name-only origin/main... | sort | tr '\n' ' ')" = "ARCHITECTURE.md CHANGELOG.md CONTRIBUTING.md DIVIDER.md FEATURES.md HOOKS.md THIRD_PARTY_NOTICES.md TODO.md "
+          git diff --quiet origin/main... -- README.md
+          ! grep -q '当前 `main` / \*\*v2\.1\.1\*\*' ARCHITECTURE.md CONTRIBUTING.md DIVIDER.md FEATURES.md HOOKS.md
+          grep -q '^## Unreleased / main (2026-09-07)$' CHANGELOG.md
+          grep -q 'native PassBlur.*`1.0`' ARCHITECTURE.md
+          grep -q 'Workspace 实时采样与性能' FEATURES.md
+          grep -q 'source-only `updateTexImage()` drain' HOOKS.md
+          grep -q 'Workspace continuous / source-driven PassBlur' TODO.md
+          grep -q 'AndroidX Activity Compose 1.13.0' THIRD_PARTY_NOTICES.md
+
+      - name: Commit documentation sync
+        shell: bash
+        run: |
+          git add ARCHITECTURE.md CHANGELOG.md CONTRIBUTING.md DIVIDER.md FEATURES.md HOOKS.md THIRD_PARTY_NOTICES.md TODO.md .github/workflows/sync-root-docs-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: synchronize root documentation with current main'
+          git push origin HEAD:docs/sync-root-md-2026-09-07
