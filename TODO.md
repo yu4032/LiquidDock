@@ -109,7 +109,7 @@
 
 - zero-copy only，不恢复 ScreenCapture / PixelCopy / bitmap readback；
 - Recents / HOME 不显示 stale frame；
-- Workstation producer pulse/pause 与现有最小 recovery semantics；
+- HOME continuous/source-driven PassBlur、显式 covered-state suspend/resume 与现有最小 recovery semantics；
 - rotation settle 后才允许新 producer 发布；
 - wallpaper/scene freshness generation 继续作为内容权威；
 - SystemUI unlock authority 不因 GPU 重构被替换。
@@ -146,6 +146,15 @@ Debug 与 Release 当前都已经启用 Android optimization/R8，不再作为�
 Compose/settings 仍存在用户可见硬编码中文/英文字符串。迁移到 Android resources，不改变 preference key、schema 或行为。
 
 ## 已完成的重要边界（不再作为 active TODO）
+
+### Workspace continuous / source-driven PassBlur
+
+HOME shared producer 已移除“消费一帧后 pause”的 one-shot 策略：普通 HOME 保持 update permission，显式 Recents/folder/presentation coverage 仍使用独立 suspend/recovery。真机已经确认 native producer 是 source-driven——静态壁纸内容静止时可以在 bound / updates-enabled 状态下保持 0 个新 OES frame，动态壁纸则持续提供实时 source frame；没有引入 Choreographer/vsync pump 或固定延迟轮询。
+
+### Workspace render-quality / spatial mapping
+
+`liquid_passblur_capture_scale` 与 `liquid_passblur_render_fps` 已进入 production。首版直接降低 vendor PassBlur scale 会破坏严格 behind-content 对位，现已修正为：native PassBlur 固定 `1.0`；OES normalization 后再降低 local physical FBO；Prismal logical root 始终保持完整尺寸。目标设备已通过 50% / 75% / 100% 空间对应验证。FPS gate 只限制昂贵 render，所有 source frame 仍 drain，fresh generation 绕过限流。除非出现新的可复现错误，不要重新把 vendor scale 当作普通 resolution knob。
+
 
 ### Workstation Recents producer 最小 correctness
 
