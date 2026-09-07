@@ -177,8 +177,8 @@ final class LauncherGlassSession {
     private volatile Surface inputProducerSurface;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
-    // Semantic content token for the one-shot producer pulse that requested a new wallpaper.
-    // It is independent from scene generation and is consumed only by the matching OES frame.
+    // Semantic content token for a requested wallpaper refresh.
+    // It is independent from scene generation and is consumed by the first matching live OES frame.
     private long wallpaperRequestedGeneration = -1L;
     private long wallpaperRequestedSceneGeneration = -1L;
     private boolean wallpaperRequestedAuthoritative;
@@ -345,7 +345,7 @@ final class LauncherGlassSession {
         clearWallpaperRequest();
         invalidateGeneration(generation);
         // A stable Launcher DecorView can survive while its ViewRoot/SurfaceControl is replaced
-        // during App -> HOME. Revalidate on the UI thread before pulsing PassBlur so a fresh
+        // during App -> HOME. Revalidate on the UI thread before resuming PassBlur so a fresh
         // request can never target a dead producer binding.
         mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
     }
@@ -736,10 +736,10 @@ final class LauncherGlassSession {
                     + "," + geometry.insetRight + "," + geometry.insetBottom);
         }
 
-        // Rotation changes SurfaceFlinger's orientation/crop generation. A Workspace producer is
-        // one-shot, so never let the first post-rotation buffer come through an endpoint that was
-        // registered under the previous orientation. Rollover establishes default buffer size
-        // before SetPassBlurSurface binds the new endpoint.
+        // Rotation changes SurfaceFlinger's orientation/crop generation. Continuous HOME capture
+        // must never let the first post-rotation buffer come through an endpoint registered under
+        // the previous orientation. Rollover establishes default buffer size before
+        // SetPassBlurSurface binds the new endpoint.
         if (endpointRollover) {
             if (rotationChanged) {
                 // Invalidate any queued bind before yielding to the delayed rotation settle path.
@@ -874,8 +874,8 @@ final class LauncherGlassSession {
                 consumedGeneration = sceneGeneration;
                 wallpaperFrame = takeWallpaperFrameToken(consumedGeneration);
                 sourceChanged = true;
-                if (WorkstationProducerPolicy.shouldPauseSharedProducer(
-                        true, MainHook.isWorkstationMode())) {
+                if (WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(
+                        MainHook.isWorkstationMode())) {
                     Miuix307PassBlurBridge.pauseUpdates(binding);
                 }
             }
