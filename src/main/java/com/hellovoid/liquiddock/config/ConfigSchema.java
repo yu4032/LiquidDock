@@ -307,6 +307,20 @@ public final class ConfigSchema {
                 "liquid_lens_refraction", 1, 1, 12, 0, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_SCALE = integer(
                 "liquid_capture_scale", 50, 50, 50, 10, 100, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> PASSBLUR_CAPTURE_SCALE = integer(
+                PassBlurQualityKeys.CAPTURE_SCALE,
+                PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT,
+                PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT,
+                PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT,
+                PassBlurQualityKeys.CAPTURE_SCALE_MIN, PassBlurQualityKeys.CAPTURE_SCALE_MAX,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> PASSBLUR_RENDER_FPS = integer(
+                PassBlurQualityKeys.RENDER_FPS,
+                PassBlurQualityKeys.RENDER_FPS_DEFAULT,
+                PassBlurQualityKeys.RENDER_FPS_DEFAULT,
+                PassBlurQualityKeys.RENDER_FPS_DEFAULT,
+                PassBlurQualityKeys.RENDER_FPS_MIN, PassBlurQualityKeys.RENDER_FPS_MAX,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DYNAMIC_APP_CAPTURE = bool(
                 "liquid_dynamic_app_capture", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FULLSCREEN_CAPTURE = bool(
@@ -551,7 +565,8 @@ public final class ConfigSchema {
                 Glass.SAMPLING_EXTRA_TOP, Glass.SAMPLING_EXTRA_BOTTOM,
                 Glass.SAMPLING_EXTRA_LEFT, Glass.SAMPLING_EXTRA_RIGHT, Glass.THICKNESS,
                 Glass.IOR, Glass.NORMAL_STRENGTH, Glass.DOME, Glass.LENS_REFRACTION,
-                Glass.CAPTURE_SCALE, Glass.DYNAMIC_APP_CAPTURE, Glass.FULLSCREEN_CAPTURE,
+                Glass.CAPTURE_SCALE, Glass.PASSBLUR_CAPTURE_SCALE,
+                Glass.PASSBLUR_RENDER_FPS, Glass.DYNAMIC_APP_CAPTURE, Glass.FULLSCREEN_CAPTURE,
                 Glass.DYNAMIC_APP_PROBE_FPS, Glass.DYNAMIC_MOTION_THRESHOLD,
                 Glass.DYNAMIC_BIT_THRESHOLD, Glass.DYNAMIC_HOLD_MS, Glass.BLACK_THRESHOLD,
                 Glass.HOME_SETTLE_DELAY_MS, Glass.HIGHLIGHT_WIDTH, Glass.TINT_RED,

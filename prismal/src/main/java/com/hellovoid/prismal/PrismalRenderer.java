@@ -86,8 +86,12 @@ public final class PrismalRenderer implements AutoCloseable {
     private int blurFramebufferV;
     private int outputTexture;
     private int outputFramebuffer;
+    // width/height remain Prismal's public logical framebuffer domain. The backing
+    // FBOs may use fewer physical pixels without changing any geometry or screen UV.
     private int width;
     private int height;
+    private int renderWidth;
+    private int renderHeight;
     private int blurWidth;
     private int blurHeight;
     private boolean backdropPrepared;
@@ -144,13 +148,29 @@ public final class PrismalRenderer implements AutoCloseable {
     /** Prepare one normalized/blurred backdrop for one or more glass nodes. */
     public void prepareBackdrop(int backgroundTexture2D, int framebufferWidth, int framebufferHeight,
                                 PrismalParams params) {
+        prepareBackdrop(backgroundTexture2D, framebufferWidth, framebufferHeight,
+                framebufferWidth, framebufferHeight, params);
+    }
+
+    /**
+     * Prepare a lower-density physical backdrop while retaining full logical Prismal coordinates.
+     * Geometry, u_resolution and pixel-valued optics stay in logical framebuffer pixels; only
+     * raster targets are reduced. Existing callers keep physical == logical behavior.
+     */
+    public void prepareBackdrop(int backgroundTexture2D,
+                                int physicalWidth, int physicalHeight,
+                                int logicalFramebufferWidth, int logicalFramebufferHeight,
+                                PrismalParams params) {
         if (backgroundTexture2D <= 0) throw new IllegalArgumentException("background texture <= 0");
-        if (framebufferWidth <= 0 || framebufferHeight <= 0) {
+        if (physicalWidth <= 0 || physicalHeight <= 0
+                || logicalFramebufferWidth <= 0 || logicalFramebufferHeight <= 0) {
             throw new IllegalArgumentException("framebuffer dimensions <= 0");
         }
         if (params == null) params = PrismalParams.builder().build();
         ensurePrograms();
-        ensureTargets(framebufferWidth, framebufferHeight);
+        ensureTargets(physicalWidth, physicalHeight);
+        width = logicalFramebufferWidth;
+        height = logicalFramebufferHeight;
         renderSourceAdapter(backgroundTexture2D);
         renderBlur(params);
         backdropPrepared = true;
@@ -164,7 +184,7 @@ public final class PrismalRenderer implements AutoCloseable {
             throw new IllegalStateException("prepareBackdrop must be called before beginGlassFrame");
         }
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
-        GLES20.glViewport(0, 0, width, height);
+        GLES20.glViewport(0, 0, renderWidth, renderHeight);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
@@ -256,20 +276,20 @@ public final class PrismalRenderer implements AutoCloseable {
     }
 
     private void ensureTargets(int nextWidth, int nextHeight) {
-        if (width == nextWidth && height == nextHeight && outputTexture != 0) return;
+        if (renderWidth == nextWidth && renderHeight == nextHeight && outputTexture != 0) return;
         releaseTargets();
-        width = Math.max(1, nextWidth);
-        height = Math.max(1, nextHeight);
-        blurWidth = Math.max(1, (int) (width * BLUR_FBO_SCALE));
-        blurHeight = Math.max(1, (int) (height * BLUR_FBO_SCALE));
+        renderWidth = Math.max(1, nextWidth);
+        renderHeight = Math.max(1, nextHeight);
+        blurWidth = Math.max(1, (int) (renderWidth * BLUR_FBO_SCALE));
+        blurHeight = Math.max(1, (int) (renderHeight * BLUR_FBO_SCALE));
 
-        sourceTexture = createTexture(width, height);
+        sourceTexture = createTexture(renderWidth, renderHeight);
         sourceFramebuffer = createFramebuffer(sourceTexture);
         blurTextureH = createTexture(blurWidth, blurHeight);
         blurFramebufferH = createFramebuffer(blurTextureH);
         blurTextureV = createTexture(blurWidth, blurHeight);
         blurFramebufferV = createFramebuffer(blurTextureV);
-        outputTexture = createTexture(width, height);
+        outputTexture = createTexture(renderWidth, renderHeight);
         outputFramebuffer = createFramebuffer(outputTexture);
     }
 
@@ -277,7 +297,7 @@ public final class PrismalRenderer implements AutoCloseable {
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, sourceFramebuffer);
-        GLES20.glViewport(0, 0, width, height);
+        GLES20.glViewport(0, 0, renderWidth, renderHeight);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(sourceProgram);
@@ -290,7 +310,10 @@ public final class PrismalRenderer implements AutoCloseable {
     }
 
     private void renderBlur(PrismalParams p) {
-        float sigma = Math.max(p.blurRadiusPx * BLUR_FBO_SCALE, 0.5f);
+        float scaleX = renderWidth / (float) Math.max(1, width);
+        float scaleY = renderHeight / (float) Math.max(1, height);
+        float physicalScale = Math.max(0.0001f, Math.min(scaleX, scaleY));
+        float sigma = Math.max(p.blurRadiusPx * physicalScale * BLUR_FBO_SCALE, 0.5f);
         renderBlurPass(blurHProgram, sourceTexture, blurFramebufferH, sigma);
         renderBlurPass(blurVProgram, blurTextureH, blurFramebufferV, sigma);
     }
@@ -321,7 +344,7 @@ public final class PrismalRenderer implements AutoCloseable {
                                  PrismalInteractionState interactionState,
                                  boolean composite, float opacity) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
-        GLES20.glViewport(0, 0, width, height);
+        GLES20.glViewport(0, 0, renderWidth, renderHeight);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         if (composite) {
             GLES20.glEnable(GLES20.GL_BLEND);
@@ -544,7 +567,7 @@ public final class PrismalRenderer implements AutoCloseable {
         if (outputTexture != 0) GLES20.glDeleteTextures(1, new int[]{outputTexture}, 0);
         sourceFramebuffer = blurFramebufferH = blurFramebufferV = outputFramebuffer = 0;
         sourceTexture = blurTextureH = blurTextureV = outputTexture = 0;
-        width = height = blurWidth = blurHeight = 0;
+        width = height = renderWidth = renderHeight = blurWidth = blurHeight = 0;
         backdropPrepared = false;
         glassFrameBegun = false;
         glassDrawCount = 0;

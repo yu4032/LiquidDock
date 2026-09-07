@@ -290,6 +290,18 @@ private val smallFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER_
 private val smallFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS, "小文件夹圆角", "dp")
 private val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET, "大文件夹尺寸偏移", "dp/边")
 private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
+private val passBlurCaptureScaleSpec = IntSpec(
+    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
+    "工作区渲染分辨率",
+    "%",
+    summary = "原生 PassBlur 始终保持 1.0 与完整空间映射；这里只降低 normalized/Prismal FBO 像素密度，100% 为原始质量；重启桌面生效",
+)
+private val passBlurRenderFpsSpec = IntSpec(
+    ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
+    "Prismal 实时渲染上限（0 = Auto）",
+    "fps",
+    summary = "0 = 跟随真实 PassBlur 源帧；限速只跳过合成并持续释放 OES BufferQueue，不会创建定时器；重启桌面生效",
+)
 private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.BLUR, "玻璃模糊", "px"),
     IntSpec(ConfigSchema.Glass.THICKNESS, "玻璃厚度"),
@@ -607,6 +619,9 @@ private fun LiquidPage(
             enabled = masterEnabled && liquidGlass,
             onClick = openLauncherHighlights,
         )
+        SmallTitle("工作区实时捕获性能")
+        IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
+        IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,

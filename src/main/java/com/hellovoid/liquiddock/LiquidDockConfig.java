@@ -247,6 +247,7 @@ final class LiquidDockConfig {
                 samplingExtraLeftPx, samplingExtraRightPx;
         final int tintAlpha, tintR, tintG, tintB, specularSharp,
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
+        final int passBlurCaptureScalePercent, passBlurRenderFps;
 
         Glass(ConfigReader c) {
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
@@ -290,6 +291,16 @@ final class LiquidDockConfig {
             launcherHighlightProfile = LauncherHighlightPreferences.read(c);
             largeSurfaceHighlightProfile = LauncherHighlightPreferences.readLargeSurfaces(c);
             blur = c.f(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.runtimeFallback());
+            passBlurCaptureScalePercent = clamp(c.i(
+                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name(),
+                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.runtimeFallback()),
+                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.minInt(),
+                    ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.maxInt());
+            passBlurRenderFps = clamp(c.i(
+                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.name(),
+                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.runtimeFallback()),
+                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.minInt(),
+                    ConfigSchema.Glass.PASSBLUR_RENDER_FPS.maxInt());
             // Upstream Prismal uses the human-facing chromatic magnitude directly (for example 8).
             chromatic = c.i(ConfigSchema.Glass.CHROMATIC.name(),
                     ConfigSchema.Glass.CHROMATIC.runtimeFallback());
