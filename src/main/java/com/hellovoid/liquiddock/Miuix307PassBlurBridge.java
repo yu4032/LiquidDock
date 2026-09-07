@@ -109,8 +109,7 @@ final class Miuix307PassBlurBridge {
                     "DockAssistantView"
             };
 
-            int workspaceScalePercent = Math.round(
-                    PassBlurQualityRuntime.workspaceCaptureScale() * 100f);
+            int workspaceScalePercent = Math.round(requestedScale * 100f);
             float scale = PassBlurQualityPolicy.bridgeScale(
                     launcherWorkspace, workspaceScalePercent);
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {

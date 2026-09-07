@@ -177,6 +177,11 @@ final class LauncherGlassSession {
     private volatile Surface inputProducerSurface;
     private volatile long sceneGeneration = 1L;
     private volatile long consumedGeneration = -1L;
+    private volatile int passBlurCaptureScalePercent =
+            PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
+    private volatile int passBlurRenderFps = PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+    private volatile PassBlurSourceFrameGate passBlurSourceFrameGate =
+            new PassBlurSourceFrameGate(PassBlurQualityPolicy.DEFAULT_RENDER_FPS);
     // Semantic content token for a requested wallpaper refresh.
     // It is independent from scene generation and is consumed by the first matching live OES frame.
     private long wallpaperRequestedGeneration = -1L;
@@ -258,6 +263,19 @@ final class LauncherGlassSession {
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        int nextCaptureScalePercent = glassConfig != null
+                ? glassConfig.passBlurCaptureScalePercent
+                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
+        int nextRenderFps = glassConfig != null
+                ? glassConfig.passBlurRenderFps
+                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        boolean captureScaleChanged = nextCaptureScalePercent != passBlurCaptureScalePercent;
+        boolean renderFpsChanged = nextRenderFps != passBlurRenderFps;
+        passBlurCaptureScalePercent = nextCaptureScalePercent;
+        if (renderFpsChanged) {
+            passBlurRenderFps = nextRenderFps;
+            passBlurSourceFrameGate = new PassBlurSourceFrameGate(nextRenderFps);
+        }
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
@@ -270,6 +288,13 @@ final class LauncherGlassSession {
                 : PrismalHighlightProfile.ALL_ENABLED;
         mainHandler.post(this::syncSceneOnUiThread);
         requestBackdropRebuild();
+        if (captureScaleChanged && binding != null) {
+            mainHandler.post(() -> {
+                if (!shuttingDown && binding != null && !rotationSettlePending) {
+                    rebindProducer();
+                }
+            });
+        }
     }
 
     void registerSink(LauncherGlassSinkView sink) {
@@ -1000,10 +1025,29 @@ final class LauncherGlassSession {
         backdropPrepared = false;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
-            frameAvailable.set(true);
-            requestFrame(false);
+            PassBlurSourceFrameGate gate = passBlurSourceFrameGate;
+            boolean shouldRender = gate == null || gate.shouldSchedule(
+                    System.nanoTime(), consumedGeneration, sceneGeneration);
+            if (shouldRender || frameAvailable.get()) {
+                frameAvailable.set(true);
+                if (shouldRender) requestFrame(false);
+                return;
+            }
+            drainSourceFrameWithoutRender(texture);
         }, renderHandler);
         mainHandler.post(() -> bindProducerWhenReady(0));
+    }
+
+    private void drainSourceFrameWithoutRender(SurfaceTexture input) {
+        if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        try {
+            makePbufferCurrent();
+            input.updateTexImage();
+            input.getTransformMatrix(textureMatrix);
+            consumedGeneration = sceneGeneration;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " source-only PassBlur drain failed " + debugLabel() + ": " + error);
+        }
     }
 
     private void bindProducerWhenReady(int attempt) {
@@ -1032,7 +1076,9 @@ final class LauncherGlassSession {
             View root, Surface producer, ProducerGeometry geometry, int attempt, long bindEpoch) {
         if (shuttingDown || binding != null || producer != inputProducerSurface
                 || bindEpoch != producerBindEpoch) return;
-        Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(root, producer, 1f);
+        Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(
+                root, producer,
+                PassBlurQualityPolicy.captureScale(passBlurCaptureScalePercent));
         if (next == null) {
             retryBind(attempt);
             return;

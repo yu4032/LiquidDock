@@ -1,10 +1,14 @@
 package com.hellovoid.liquiddock;
 
-/** Pure policy for experimental Workspace PassBlur quality controls. */
+import com.hellovoid.liquiddock.config.PassBlurQualityKeys;
+
+/** Pure policy for Workspace PassBlur quality controls. */
 final class PassBlurQualityPolicy {
-    static final int MIN_CAPTURE_SCALE_PERCENT = 50;
-    static final int MAX_CAPTURE_SCALE_PERCENT = 100;
-    static final int MAX_RENDER_FPS = 60;
+    static final int DEFAULT_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT;
+    static final int MIN_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_MIN;
+    static final int MAX_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_MAX;
+    static final int DEFAULT_RENDER_FPS = PassBlurQualityKeys.RENDER_FPS_DEFAULT;
+    static final int MAX_RENDER_FPS = PassBlurQualityKeys.RENDER_FPS_MAX;
 
     private PassBlurQualityPolicy() {}
 
@@ -19,7 +23,7 @@ final class PassBlurQualityPolicy {
     }
 
     static int renderFps(int requestedFps) {
-        if (requestedFps <= 0) return 0;
+        if (requestedFps <= 0) return DEFAULT_RENDER_FPS;
         return Math.min(MAX_RENDER_FPS, requestedFps);
     }
 

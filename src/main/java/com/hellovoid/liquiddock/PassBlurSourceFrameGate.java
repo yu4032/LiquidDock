@@ -1,11 +1,12 @@
 package com.hellovoid.liquiddock;
 
 /**
- * Endpoint-local scheduling state for real Workspace PassBlur source frames.
+ * Endpoint-local render gate for real Workspace PassBlur source frames.
  *
- * <p>This class never creates work on its own. It only gates callbacks that SurfaceTexture has
- * already delivered, preserving source-driven idle behavior and allowing fresh scene generations
- * to bypass the configured consumer frame cap.</p>
+ * <p>This class never creates work on its own. It only decides whether an observed OES source
+ * frame should trigger the expensive Prismal/output render. Callers must still drain rejected
+ * SurfaceTexture frames so BufferQueue backpressure cannot deadlock a low FPS configuration.
+ * Fresh scene generations always bypass the configured render cap.</p>
  */
 final class PassBlurSourceFrameGate {
     private final PassBlurFrameRateLimiter limiter;
