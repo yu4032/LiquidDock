@@ -43,7 +43,9 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y)"));
         assertTrue(patched.contains("vec2 sdfEdgeGradient = 0.5 * vec2("));
         assertTrue(patched.contains("vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));"));
-        assertTrue(patched.contains("float sdfNormalBlend = os4EdgeBand(edgeDist"));
+        assertFalse(patched.contains("sdfNormalBlend"));
+        assertFalse(patched.contains("sdfEdgeNormal"));
+        assertFalse(patched.contains("opticalEdgeNormal"));
     }
 
     @Test
@@ -86,11 +88,12 @@ public class PrismalOpticalEdgeShaderTest {
         String patched = patched();
 
         assertTrue(patched.contains("float os4ReflectOffsetPx ="));
-        assertTrue(patched.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
+        assertTrue(patched.contains("vec2 os4ReflectUvOffset = os4EdgeNormal3.xy"));
         assertTrue(patched.contains("(2.0 * os4EdgeNormal3.z)"));
         assertTrue(patched.contains("os4ReflectOffsetPx * os4EdgeRemain"));
         assertTrue(patched.contains("texture2D(u_blurredTexture, os4ReflectUv)"));
         assertTrue(patched.contains("texture2D(u_backgroundTexture, os4ReflectUv)"));
+        assertFalse(patched.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
     }
 
     @Test
