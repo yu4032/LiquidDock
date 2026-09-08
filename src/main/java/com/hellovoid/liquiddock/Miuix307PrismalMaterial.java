@@ -331,19 +331,15 @@ final float chromaticAberration;
                 * Math.abs(p.parallaxScale) * 1.12f;
         float snell = Math.abs(p.thicknessPx) * 0.85f * Math.abs(p.displacementScale)
                 * 1.18f * pxNorm;
-        float os4EffectiveThickness = Math.max(
-                Math.abs(p.thicknessPx), Math.max(0f, p.os4EdgeWidthPx) + 6f);
-        float os4Volume = os4EffectiveThickness * 2f * Math.abs(p.displacementScale)
-                * 1.18f * pxNorm;
         float modernBulge = axis * (0.014f + 0.01f * clamp(p.liquidDome, 0f, 2f)) * pxNorm;
-        float modernBase = lens + parallax + snell + os4Volume + modernBulge;
+        float modernBase = lens + parallax + snell + modernBulge;
 
         float baseReach = modernBase;
 
         float dispersion = Math.max(Math.abs(p.dispersionR), Math.abs(p.dispersionB));
         float chromatic = Math.abs(p.chromaticAberration) * 0.0018f
                 * dispersion * pxNorm * axis;
-        float reflection = Math.max(56f * pxNorm, Math.abs(p.os4ReflectOffsetPx) * 2f);
+        float reflection = 56f * pxNorm;
         return Math.max(0, (int) Math.ceil(
                 scaleExpansion + baseReach + chromatic + reflection + 2f));
     }
