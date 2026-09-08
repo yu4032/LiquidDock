@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.os.Handler;
 import android.view.Surface;
@@ -17,10 +18,17 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
 
     private final WeakReference<View> rootRef;
+    private WeakReference<View> workspaceRef = new WeakReference<>(null);
     private final LauncherGlassSession session;
     private final Handler mainHandler;
+    private final LauncherGlassScrollCompensationState scrollCompensation =
+            new LauncherGlassScrollCompensationState();
+    private final Matrix scrollTransform = new Matrix();
+    private final Object staticFrameAnchorLock = new Object();
     private Surface outputSurface;
     private boolean disposed;
+    private boolean staticFrameAnchorPending;
+    private int staticFrameAnchorX;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -65,8 +73,72 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return layer;
     }
 
+    private static synchronized LauncherGlassStaticLayer find(View root) {
+        LauncherGlassStaticLayer layer = root != null ? BY_ROOT.get(root) : null;
+        return layer != null && !layer.disposed ? layer : null;
+    }
+
     private static synchronized void forget(View root, LauncherGlassStaticLayer layer) {
         if (root != null && BY_ROOT.get(root) == layer) BY_ROOT.remove(root);
+    }
+
+    static void onWorkspaceScrollMutation(View workspace, int beforeScrollX, int afterScrollX) {
+        if (workspace == null || beforeScrollX == afterScrollX) return;
+        View root = workspace.getRootView();
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return;
+        layer.workspaceRef = new WeakReference<>(workspace);
+        layer.applyScrollCompensation(
+                layer.scrollCompensation.onScrollMutation(beforeScrollX, afterScrollX));
+    }
+
+    static Integer captureWorkspaceScrollAnchor(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return null;
+        View workspace = layer.workspaceRef.get();
+        if (workspace == null || !workspace.isAttachedToWindow()
+                || workspace.getRootView() != root) return null;
+        return workspace.getScrollX();
+    }
+
+    static void onStaticFrameAnchorQueued(View root, int scrollX) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer != null) layer.onStaticFrameAnchorQueued(scrollX);
+    }
+
+    void onStaticFrameAnchorQueued(int scrollX) {
+        synchronized (staticFrameAnchorLock) {
+            // Only the newest queued static frame matters. BufferQueue may coalesce older buffers
+            // before TextureView reports its next update, so a FIFO would retain obsolete anchors.
+            staticFrameAnchorX = scrollX;
+            staticFrameAnchorPending = true;
+        }
+    }
+
+    private Integer takeStaticFrameAnchor() {
+        synchronized (staticFrameAnchorLock) {
+            if (!staticFrameAnchorPending) return null;
+            staticFrameAnchorPending = false;
+            return staticFrameAnchorX;
+        }
+    }
+
+    private void applyScrollCompensation(float translationX) {
+        if (disposed) return;
+        scrollTransform.reset();
+        if (Float.isFinite(translationX) && Math.abs(translationX) > 0.001f) {
+            scrollTransform.setTranslate(translationX, 0f);
+        }
+        setTransform(scrollTransform);
+    }
+
+    private void resetScrollCompensation() {
+        scrollCompensation.reset();
+        synchronized (staticFrameAnchorLock) {
+            staticFrameAnchorPending = false;
+            staticFrameAnchorX = 0;
+        }
+        applyScrollCompensation(0f);
     }
 
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
@@ -95,6 +167,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     void dispose() {
         if (disposed) return;
+        resetScrollCompensation();
         disposed = true;
         View root = rootRef.get();
         if (root != null) {
@@ -114,15 +187,24 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
-        if (!disposed) session.resizeStaticOutput(Math.max(1, width), Math.max(1, height));
+        if (disposed) return;
+        resetScrollCompensation();
+        session.resizeStaticOutput(Math.max(1, width), Math.max(1, height));
     }
 
     @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
+        resetScrollCompensation();
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachStaticOutput(current);
         return true;
     }
 
-    @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
+    @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {
+        if (disposed) return;
+        Integer frameScrollX = takeStaticFrameAnchor();
+        if (frameScrollX != null) {
+            applyScrollCompensation(scrollCompensation.onFramePresented(frameScrollX));
+        }
+    }
 }
