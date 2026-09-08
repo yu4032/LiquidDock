@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
@@ -87,6 +88,7 @@ final class MiuixLauncherStaticGlassHook {
         installMamlBackgroundOwnershipHooks(classLoader, glassConfig);
         installed = any;
         if (any) {
+            installWorkspaceScrollCompensationHook(classLoader);
             installWorkspacePageReconcileHook(classLoader, glassConfig);
             installWorkspaceResumeReconcileHook(classLoader, glassConfig);
             installShortcutIconVisualOwnerHook(classLoader, glassConfig);
@@ -540,5 +542,38 @@ final class MiuixLauncherStaticGlassHook {
             catch (NoSuchFieldException ignored) { current = current.getSuperclass(); }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    private static void installWorkspaceScrollCompensationHook(ClassLoader classLoader) {
+        try {
+            Class<?> workspaceClass = Class.forName(
+                    "com.miui.home.launcher.Workspace", false, classLoader);
+            Class<?> screenViewClass = Class.forName(
+                    "com.miui.home.launcher.ScreenView", false, classLoader);
+            Method scrollTo = screenViewClass.getDeclaredMethod("scrollTo", int.class, int.class);
+            scrollTo.setAccessible(true);
+            HookUtil.hook(scrollTo, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object owner = chain.getThisObject();
+                if (!(owner instanceof View) || !workspaceClass.isInstance(owner)) {
+                    return chain.proceed(args);
+                }
+                View workspace = (View) owner;
+                int beforeScrollX = workspace.getScrollX();
+                Object result = chain.proceed(args);
+                if (!GlassRuntimeState.isEnabled()) return result;
+                int afterScrollX = workspace.getScrollX();
+                if (beforeScrollX != afterScrollX) {
+                    LauncherGlassStaticLayer.onWorkspaceScrollMutation(
+                            workspace, beforeScrollX, afterScrollX);
+                }
+                return result;
+            });
+            MainHook.log(TAG + " Workspace ScreenView scroll compensation hook installed");
+        } catch (Throwable error) {
+            // Fail closed: never fall back to View.scrollTo, which would widen the hook globally.
+            MainHook.log(TAG + " Workspace ScreenView scroll compensation hook unavailable: "
+                    + error);
+        }
     }
 }
