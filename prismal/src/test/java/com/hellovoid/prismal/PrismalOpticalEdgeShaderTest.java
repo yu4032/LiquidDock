@@ -69,4 +69,55 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("plusHL = os4EdgeBand(edgeDist"));
         assertFalse(patched.contains("smoothstep(bandR, bandR * 0.06, edgeDist)"));
     }
+
+    @Test
+    public void modelsVolumetricEdgeThicknessSeparatelyFromHighlightWidth() {
+        String patched = patched();
+
+        assertTrue(patched.contains("float os4ThicknessPx ="));
+        assertTrue(patched.contains("float os4EdgePx ="));
+        assertTrue(patched.contains("float os4EdgeDepth ="));
+        assertTrue(patched.contains("mix((os4ThicknessPx - os4EdgePx) * 2.0,"));
+        assertTrue(patched.contains("os4ThicknessPx * 2.0, os4EdgeDepth)"));
+    }
+
+    @Test
+    public void offsetsEdgeReflectionAlongStabilizedSdfNormal() {
+        String patched = patched();
+
+        assertTrue(patched.contains("float os4ReflectOffsetPx ="));
+        assertTrue(patched.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
+        assertTrue(patched.contains("os4ReflectOffsetPx * (1.0 - os4EdgeDepth)"));
+        assertTrue(patched.contains("vec3 os4EdgeReflection = texture2D("));
+    }
+
+    @Test
+    public void buildsFiniteWidthBloomRingFromOuterAndInnerCoverage() {
+        String patched = patched();
+
+        assertTrue(patched.contains("float os4BloomOuter ="));
+        assertTrue(patched.contains("float os4BloomInner ="));
+        assertTrue(patched.contains("float os4BloomRing = clamp(os4BloomOuter * (1.0 - os4BloomInner)"));
+        assertTrue(patched.contains("float os4BloomEdgePx ="));
+        assertFalse(patched.contains("float os4BloomEdgePx = u_highlightWidth"));
+    }
+
+    @Test
+    public void lightsBloomRingWithMainOppositeAndAmbientResponses() {
+        String patched = patched();
+
+        assertTrue(patched.contains("float os4BloomMain ="));
+        assertTrue(patched.contains("float os4BloomOpposite ="));
+        assertTrue(patched.contains("float os4BloomAmbient ="));
+        assertTrue(patched.contains("float os4BloomLight = max(os4BloomAmbient,"));
+    }
+
+    @Test
+    public void compositesBloomAsOpticalContributionNotSilhouetteExpansion() {
+        String patched = patched();
+
+        assertTrue(patched.contains("vec3 os4BloomColor ="));
+        assertTrue(patched.contains("color += os4BloomColor * os4BloomRing"));
+        assertFalse(patched.contains("opacity += os4BloomRing"));
+    }
 }
