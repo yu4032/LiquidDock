@@ -15,8 +15,7 @@ final class LauncherMamlBackgroundRuleExecutor {
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
     private static final int DUMP_CHUNK_SIZE = 16;
     private static final WidgetBackgroundRuleEngine.LoadResult RULE_LOAD =
-            WidgetBackgroundRuleEngine.loadBundled(
-                    WidgetBackgroundRuleEngine.class.getClassLoader());
+            WidgetBackgroundRuleEngine.loadBundled();
     private static final WidgetBackgroundRuleEngine RULES = RULE_LOAD.engine();
     private static final OneShotDiagnostic DIAGNOSTIC =
             new OneShotDiagnostic(MainHook::log);
