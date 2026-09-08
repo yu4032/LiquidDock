@@ -65,6 +65,15 @@ public class PrismalBloomShaderSourcesTest {
         assertTrue(vertex.contains("vec2 screenPx = u_centerPx + localPx;"));
         assertTrue(vertex.contains("vec2 ndc = screenPx / u_resolution * 2.0 - 1.0;"));
         assertTrue(fragment.contains("uniform sampler2D uTexture;"));
-        assertTrue(fragment.contains("gl_FragColor = texture2D(uTexture, vUv);"));
+    }
+
+    @Test
+    public void compositeConvertsPremultipliedBlurBackToStraightAlpha() {
+        String fragment = PrismalBloomShaderSources.COMPOSITE_FRAGMENT;
+
+        assertTrue(fragment.contains("vec4 bloom = texture2D(uTexture, vUv);"));
+        assertTrue(fragment.contains(
+                "vec3 straightRgb = bloom.a > 1e-5 ? bloom.rgb / bloom.a : vec3(0.0);"));
+        assertTrue(fragment.contains("gl_FragColor = vec4(straightRgb, bloom.a);"));
     }
 }
