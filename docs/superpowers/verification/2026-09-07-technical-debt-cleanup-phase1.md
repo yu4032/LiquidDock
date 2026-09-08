@@ -2,9 +2,9 @@
 
 ## Status
 
-**PHASE_1_DEVICE_GATE_PENDING**
+**PHASE_1_PASS_USER_ACCEPTED**
 
-Tasks 1–5 have code/CI evidence. Phase 1 is not complete until the final-head true-device matrix below is recorded. No EGL/OES/producer lifecycle extraction may begin while this gate is pending.
+Tasks 1–5 have code/CI evidence. On 2026-09-08 the user explicitly accepted all remaining true-device cases as PASS. Phase 1 is therefore closed at 11/11 device cases. Evidence strength remains explicit below: CASE01/02/03/05/06/10 have smoke/marker-log support, while CASE04/07/08/09/11 are user manual-acceptance PASS without per-case marker/log proof. Subsequent EGL/OES/producer lifecycle work may begin as a new phase without retroactively upgrading those manual acceptances into log-backed evidence.
 
 ## Tested revision
 
@@ -86,10 +86,10 @@ They must not be silently removed from `TODO.md` by Phase 1 closure.
 
 Record before closing the phase:
 
-- Device: **PENDING**
-- ROM / HyperOS build: **PENDING**
-- MIUI Home / Launcher version: **PENDING**
-- LSPosed version: **PENDING**
+- Device: **NOT_RECORDED (user-accepted closure)**
+- ROM / HyperOS build: **NOT_RECORDED (user-accepted closure)**
+- MIUI Home / Launcher version: **NOT_RECORDED (user-accepted closure)**
+- LSPosed version: **NOT_RECORDED (user-accepted closure)**
 - Installed APK SHA-256: must equal `1e89cd194e4a3521643ec56ee2b86828bf1bcba8bedc314dcf1c6ed192953e9a`
 
 ## Device smoke evidence — 2026-09-08
@@ -123,10 +123,10 @@ The user reported no visible abnormality while exercising the Workstation/Recent
 - CASE02 quick Workstation re-entry: **PASS**. The published mode sequence is `true -> false -> true`; the final `true` remains authoritative through the case end without a later stale reversal.
 - CASE03 vendor-before-fallback stability: **PASS**. In the final marked interval, Workstation publishes `true` and remains in that state for more than the 2-second fallback window until case end. The later `false` occurs after CASE03 ended, during the subsequent transition.
 - CASE06 HOME -> Recents -> HOME x5: **PASS**. The log contains exactly five `recents-wallpaper` pending generations `5/7/9/11/13` and five matching settled generations `6/8/10/12/14`. No producer bind/unbind churn is present inside that interval, and the user observed no stale/frozen glass.
-- CASE04 stale delayed fallback: **PENDING**. The final `Mingou workstation mode changed=true` is only about 1.5 seconds before the CASE04 END marker, so this capture does not observe past the required 2-second stale-fallback deadline after the final re-entry.
-- CASE07 Recents-adjacent rotation: **PENDING**. No CASE07 marker or identifiable rotation sequence is present in the supplied file.
+- CASE04 stale delayed fallback: **PASS (user manual acceptance)**. The available marker log only observes about 1.5 seconds after the final `true`, so this row is not log-proven across the full 2-second deadline; the user explicitly accepted it as PASS.
+- CASE07 Recents-adjacent rotation: **PASS (user manual acceptance)**. No CASE07 marker or identifiable rotation sequence is present in the supplied file; the user explicitly accepted it as PASS.
 
-The device gate therefore advances from 3/11 to **6/11**. Remaining cases are 4, 7, 8, 9, and 11.
+The marker-backed review advanced the device gate from 3/11 to 6/11. The user then explicitly accepted CASE04, CASE07, CASE08, CASE09, and CASE11 as PASS, closing the device matrix at **11/11**. Those five rows remain labeled manual acceptance rather than log-backed proof.
 
 ## True-device matrix
 
@@ -137,14 +137,14 @@ All results below must be taken on final production head `9ec9f357` (or a later 
 | 1 | Normal Launcher startup | **PASS (manual smoke + log)** | HOME usable; hierarchy rebind completes; first OES/EGL frame arrives; zero-copy active; no visible issue reported |
 | 2 | Workstation enter → exit → quick re-enter | **PASS (manual + marker log)** | published sequence `true -> false -> true`; final `true` persists through case end with no stale reversal |
 | 3 | Vendor Workstation callback before delayed fallback | **PASS (manual + marker log)** | final Workstation `true` remains stable beyond the 2 s fallback window until case end; no later reversal occurs inside the case |
-| 4 | Stale delayed fallback after a newer transition | **PENDING** | no later stale mode flip/restore after the newer transition |
+| 4 | Stale delayed fallback after a newer transition | **PASS (user manual acceptance)** | accepted by user; available marker log did not extend beyond the full 2 s post-final-reentry window |
 | 5 | Normal-layout backup / restore | **PASS (manual smoke + log)** | leaving Workstation restores the saved normal layout; the existing immediate / +250 ms / +700 ms reassert schedule may log the same `items=N` restore three times |
 | 6 | HOME → Recents → HOME ×5 | **PASS (manual + marker log)** | five pending/settled generation pairs complete; no producer bind/unbind churn in the case; no stale/frozen glass reported |
-| 7 | Recents-adjacent rotation | **PENDING** | correct orientation geometry and fresh glass after settle |
-| 8 | 1×1 / 2×1 / 2×2 / 4×2 Widgets, portrait + landscape | **PENDING** | all supported spans tile/size correctly; no placement/occupancy regression |
-| 9 | Widget adaptation disabled | **PENDING** | MIUI native Widget frame/layout remains untouched |
+| 7 | Recents-adjacent rotation | **PASS (user manual acceptance)** | accepted by user; no dedicated CASE07 marker/rotation sequence was captured |
+| 8 | 1×1 / 2×1 / 2×2 / 4×2 Widgets, portrait + landscape | **PASS (user manual acceptance)** | accepted by user; no per-span marker/log evidence was supplied |
+| 9 | Widget adaptation disabled | **PASS (user manual acceptance)** | accepted by user; no dedicated disabled-mode marker/log evidence was supplied |
 | 10 | Normal mode without Workstation | **PASS (manual smoke + log)** | final published mode is non-Workstation; Dock/Grid/Glass recovered and no visible issue was reported |
-| 11 | Normal bundled Widget-rule load | **PENDING** | no `[DC][WidgetRules] bundled_rules_unavailable` warning |
+| 11 | Normal bundled Widget-rule load | **PASS (user manual acceptance)** | accepted by user; this is not upgraded to a log-proven absence claim |
 | 12 | Missing/malformed bundled-rule test paths | **PASS (unit test only)** | `MISSING_RESOURCE` / `PARSE_FAILED`, one-shot diagnostic primitive, EMPTY fail-safe covered by unit tests; production APK is not intentionally corrupted on-device |
 
 ### Additional regression evidence already collected
@@ -233,6 +233,6 @@ Phase 1 intentionally does **not** change the following authorities:
 - Widget adaptation changes allocation/frame only;
 - Task 5 changes rule-load observability only; rule matching and MAML mutation semantics remain fail-safe.
 
-## Closure rule
+## Closure
 
-Do not change this document to `PASS`, mark Phase 1 complete in `TODO.md`, or begin Phase 2/3 GPU ownership extraction until cases 1–11 are recorded on the final production head and all failures are either fixed and reverified or explicitly block the phase.
+**Phase 1 closed on 2026-09-08 by explicit user acceptance of the full 11/11 device matrix.** Tasks 1–5 retain their code/CI evidence. Device evidence is mixed-strength and must remain described accurately: CASE01/02/03/05/06/10 have smoke/marker-log support; CASE04/07/08/09/11 are user manual-acceptance PASS without equivalent per-case log proof. Phase 2/3 work may begin, but later documentation must not rewrite manual acceptance as if it were captured diagnostic evidence.

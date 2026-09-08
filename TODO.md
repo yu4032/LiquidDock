@@ -11,7 +11,7 @@
 
 ## 1. Phase 1：确定性 ownership 清理
 
-**状态：Tasks 1–5 已完成代码实现并通过 CI；最终真机矩阵待完成。**
+**状态：Phase 1 已完成；Tasks 1–5 已通过代码/CI 验证，最终真机矩阵按用户验收记为 11/11 PASS。**
 
 当前代码事实：
 
@@ -27,20 +27,9 @@
 
 - [Phase 1 Verification](docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md)
 
-Phase 1 当前唯一关闭门是最终 production head 的真机矩阵。必须完成并记录：
+Phase 1 的 11 项设备矩阵已关闭：CASE01/02/03/05/06/10 有 smoke/marker-log 支持；CASE04/07/08/09/11 由用户明确手工验收为 PASS，但没有同等级的逐项 marker/log 证据。该证据强度差异保留在 verification record 中，不在后续文档中改写为“全部日志证明”。
 
-- normal Launcher startup；
-- Workstation enter / exit / quick re-enter；
-- vendor callback 先于 delayed fallback，以及 stale delayed fallback；
-- normal-layout backup/restore；
-- HOME -> Recents -> HOME 连续 5 次；
-- Recents-adjacent rotation；
-- 1×1 / 2×1 / 2×2 / 4×2 Widget 横竖屏；
-- Widget adaptation disabled；
-- normal mode 无回归；
-- normal bundled Widget-rule load 不出现 degradation warning。
-
-在该矩阵完成前，不把 Phase 1 标记为完成，也不开始 EGL/OES/producer lifecycle extraction。
+Phase 1 现已完成。后续可以进入 `MainHook` 继续收缩以及 Launcher-wide glass / GPU ownership 审计，但仍必须遵守既有 zero-copy、fresh-frame、Recents authority 与 MIUI placement/occupancy 边界。
 
 ## 2. `MainHook` 收缩为 composition root
 
