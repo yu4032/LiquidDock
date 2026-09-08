@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Owns only the Widget allocation and final-frame hooks for the custom Home grid. */
+/** Owns only the existing Widget allocation and post-layout frame hooks for the custom Home grid. */
 final class HomeGridWidgetAdaptationHook {
     private static final String TAG = "[DC][WidgetGrid]";
     private final boolean adaptationEnabled;
