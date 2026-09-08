@@ -116,6 +116,18 @@ This is sufficient to record:
 
 Cases 2–4, 6–9, and 11 remain **PENDING**. This capture does not identify quick re-entry / 2-second stale-fallback timing, Recents, rotation, Widget span/disabled behavior, or bundled-rule normal-load diagnostics.
 
+## Workstation / Recents evidence — 2026-09-08
+
+The user reported no visible abnormality while exercising the Workstation/Recents batch. The attached marker-based log supports the following bounded conclusions:
+
+- CASE02 quick Workstation re-entry: **PASS**. The published mode sequence is `true -> false -> true`; the final `true` remains authoritative through the case end without a later stale reversal.
+- CASE03 vendor-before-fallback stability: **PASS**. In the final marked interval, Workstation publishes `true` and remains in that state for more than the 2-second fallback window until case end. The later `false` occurs after CASE03 ended, during the subsequent transition.
+- CASE06 HOME -> Recents -> HOME x5: **PASS**. The log contains exactly five `recents-wallpaper` pending generations `5/7/9/11/13` and five matching settled generations `6/8/10/12/14`. No producer bind/unbind churn is present inside that interval, and the user observed no stale/frozen glass.
+- CASE04 stale delayed fallback: **PENDING**. The final `Mingou workstation mode changed=true` is only about 1.5 seconds before the CASE04 END marker, so this capture does not observe past the required 2-second stale-fallback deadline after the final re-entry.
+- CASE07 Recents-adjacent rotation: **PENDING**. No CASE07 marker or identifiable rotation sequence is present in the supplied file.
+
+The device gate therefore advances from 3/11 to **6/11**. Remaining cases are 4, 7, 8, 9, and 11.
+
 ## True-device matrix
 
 All results below must be taken on final production head `9ec9f357` (or a later documentation-only descendant with identical production bytecode).
@@ -123,11 +135,11 @@ All results below must be taken on final production head `9ec9f357` (or a later 
 | # | Case | Status | Required evidence |
 |---|---|---|---|
 | 1 | Normal Launcher startup | **PASS (manual smoke + log)** | HOME usable; hierarchy rebind completes; first OES/EGL frame arrives; zero-copy active; no visible issue reported |
-| 2 | Workstation enter → exit → quick re-enter | **PENDING** | final mode matches UI; no stale restore or duplicate transition |
-| 3 | Vendor Workstation callback before delayed fallback | **PENDING** | vendor-confirmed state remains authoritative after the 2 s window |
+| 2 | Workstation enter → exit → quick re-enter | **PASS (manual + marker log)** | published sequence `true -> false -> true`; final `true` persists through case end with no stale reversal |
+| 3 | Vendor Workstation callback before delayed fallback | **PASS (manual + marker log)** | final Workstation `true` remains stable beyond the 2 s fallback window until case end; no later reversal occurs inside the case |
 | 4 | Stale delayed fallback after a newer transition | **PENDING** | no later stale mode flip/restore after the newer transition |
 | 5 | Normal-layout backup / restore | **PASS (manual smoke + log)** | leaving Workstation restores the saved normal layout; the existing immediate / +250 ms / +700 ms reassert schedule may log the same `items=N` restore three times |
-| 6 | HOME → Recents → HOME ×5 | **PENDING** | no stale glass, producer loss, repeated endpoint rebuild, or frozen source |
+| 6 | HOME → Recents → HOME ×5 | **PASS (manual + marker log)** | five pending/settled generation pairs complete; no producer bind/unbind churn in the case; no stale/frozen glass reported |
 | 7 | Recents-adjacent rotation | **PENDING** | correct orientation geometry and fresh glass after settle |
 | 8 | 1×1 / 2×1 / 2×2 / 4×2 Widgets, portrait + landscape | **PENDING** | all supported spans tile/size correctly; no placement/occupancy regression |
 | 9 | Widget adaptation disabled | **PENDING** | MIUI native Widget frame/layout remains untouched |
