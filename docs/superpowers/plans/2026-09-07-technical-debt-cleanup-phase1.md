@@ -2,43 +2,44 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove the highest-confidence ownership and compatibility debt from Workstation and Widget/Grid paths without changing zero-copy glass correctness or visual behavior.
+**Goal:** Remove the highest-confidence Workstation and Widget/Grid ownership debt without changing zero-copy glass correctness or visual behavior.
 
-**Architecture:** Move Workstation mode/timing ownership into one controller; centralize Widget classification and supported span policy; make Widget sizing pure; add one-shot diagnostics for required bundled Widget rules. Keep current producer/EGL/OES/fresh-frame ownership unchanged in this phase.
+**Architecture:** Move Workstation mode/timing/layout-snapshot state into one controller; centralize Widget classification and supported spans; make Widget sizing pure; extract the real Widget adaptation Hook owner; make bundled Widget-rule failure visible through one-shot structured diagnostics. Producer/EGL/OES/fresh-frame ownership is frozen during Phase 1.
 
-**Tech Stack:** Java 17, Android/libxposed API 101, JUnit 4, Gradle 9.6.1, HyperOS Launcher 4.50 vendor reflection through existing `HookUtil` boundaries.
+**Tech Stack:** Java 17, Android/libxposed API 101, JUnit 4, Gradle 9.6.1, HyperOS Launcher 4.50 vendor reflection through the existing `HookUtil` boundary.
 
 **Spec:** `docs/superpowers/specs/2026-09-07-technical-debt-cleanup-design.md`
 
 ## Global Constraints
 
-- Baseline is HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / libxposed API 101.
+- Baseline: HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / libxposed API 101.
 - Zero-copy only; do not restore ScreenCapture, PixelCopy, bitmap readback, or screenshot fallback.
-- Existing scene/wallpaper generation plus fresh OES frame remains the only reveal authority.
-- Workstation Recents recovery stays coverage-gated, Workstation-only, epoch-protected, and fail-closed.
+- Scene/wallpaper generation plus fresh OES frame remains the only reveal authority.
+- Workstation Recents recovery remains coverage-gated, Workstation-only, `workstationBindEpoch`-protected, and fail-closed.
 - Widget adaptation changes allocation/frame only; MIUI retains placement/occupancy authority.
-- Supported Widget specs remain exactly `1×1`, `2×1`, `2×2`, `4×2` in this phase.
-- Structural Workstation/Grid Hook selection remains restart-bound.
-- No new entries may be added to `RuntimeBehaviorTestPolicyContractTest.LEGACY_SOURCE_DEBT`.
+- Supported Widget spans remain exactly `1×1`, `2×1`, `2×2`, `4×2`.
+- Workstation/Grid structural Hook selection remains restart-bound.
+- No new entry may be added to `RuntimeBehaviorTestPolicyContractTest.LEGACY_SOURCE_DEBT`.
 
 ---
 
-## File map
+## File Map
 
 ### New production files
 
-- `src/main/java/com/hellovoid/liquiddock/WorkstationModeController.java` — Workstation mode, vendor confirmation, generation/cancellation, and Workstation-owned normal-layout backup/restore coordination.
-- `src/main/java/com/hellovoid/liquiddock/WidgetClassifier.java` — single Widget classification boundary.
-- `src/main/java/com/hellovoid/liquiddock/WidgetSpecRegistry.java` — immutable supported span registry.
-- `src/main/java/com/hellovoid/liquiddock/OneShotDiagnostic.java` — minimal process-local one-shot diagnostic gate if an equivalent reusable primitive does not already exist after repository inspection.
+- `src/main/java/com/hellovoid/liquiddock/WorkstationModeController.java`
+- `src/main/java/com/hellovoid/liquiddock/WidgetClassifier.java`
+- `src/main/java/com/hellovoid/liquiddock/WidgetSpecRegistry.java`
+- `src/main/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationHook.java`
+- `src/main/java/com/hellovoid/liquiddock/OneShotDiagnostic.java`
 
 ### Modified production files
 
-- `src/main/java/com/hellovoid/liquiddock/MainHook.java` — composition/wiring only for new Workstation controller; remove direct Workstation confirmation and naked delayed recheck ownership.
-- `src/main/java/com/hellovoid/liquiddock/HomeGridHook.java` — consume `WidgetClassifier` / `WidgetSpecRegistry`; stop embedding Widget magic-number classification.
-- `src/main/java/com/hellovoid/liquiddock/WidgetGridSizing.java` — remove static mutable enable flag; become pure geometry.
-- `src/main/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngine.java` — return/load status that distinguishes required bundled-resource failure from an intentionally empty/valid ruleset.
-- `src/main/java/com/hellovoid/liquiddock/LauncherMamlBackgroundRuleExecutor.java` — emit one structured diagnostic for bundled-rule load failure.
+- `src/main/java/com/hellovoid/liquiddock/MainHook.java`
+- `src/main/java/com/hellovoid/liquiddock/HomeGridHook.java`
+- `src/main/java/com/hellovoid/liquiddock/WidgetGridSizing.java`
+- `src/main/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngine.java`
+- `src/main/java/com/hellovoid/liquiddock/LauncherMamlBackgroundRuleExecutor.java`
 
 ### New/modified tests
 
@@ -46,80 +47,138 @@
 - `src/test/java/com/hellovoid/liquiddock/WidgetClassifierTest.java`
 - `src/test/java/com/hellovoid/liquiddock/WidgetSpecRegistryTest.java`
 - `src/test/java/com/hellovoid/liquiddock/WidgetGridSizingTest.java`
+- `src/test/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationHookTest.java`
 - `src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngineTest.java`
 - `src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleDiagnosticsTest.java`
-- `src/test/java/com/hellovoid/liquiddock/RuntimeBehaviorTestPolicyContractTest.java` only if a migrated source-reader debt entry can be removed in the same task; never add an exception.
+- `src/test/java/com/hellovoid/liquiddock/ConfigLoadPolicyTest.java`
 
 ---
 
-### Task 1: Establish deterministic Workstation mode-generation ownership
+### Task 1: Centralize Workstation mode, generation, and layout-snapshot ownership
 
 **Files:**
 - Create: `src/main/java/com/hellovoid/liquiddock/WorkstationModeController.java`
 - Create: `src/test/java/com/hellovoid/liquiddock/WorkstationModeControllerTest.java`
-- Modify: `src/main/java/com/hellovoid/liquiddock/MainHook.java` only after the pure controller tests are green.
+- Modify: `src/main/java/com/hellovoid/liquiddock/MainHook.java`
 
 **Interfaces:**
-- Consumes: existing vendor mode probe/callback code currently installed by `MainHook`.
-- Produces:
-  - `boolean isWorkstationMode()`
-  - `void onVendorModeChanged(boolean workstationMode)`
-  - `long beginUnconfirmedProbe()`
-  - `boolean acceptFallbackProbe(long expectedGeneration, boolean probedMode)`
-  - `long generation()`
-  - controller-owned normal-layout backup/restore methods used by existing MainHook call sites.
+
+`WorkstationModeController` must expose exactly these package-private operations:
+
+```java
+boolean isWorkstationMode();
+long generation();
+long beginUnconfirmedProbe();
+boolean acceptFallbackProbe(long expectedGeneration, boolean probedMode);
+void onVendorModeChanged(boolean workstationMode);
+void clearNormalLayoutBackup();
+void rememberNormalItem(long itemId, long screenId,
+                        int cellX, int cellY, int spanX, int spanY);
+HomeItemPosition normalItem(long itemId);
+boolean hasNormalLayoutBackup();
+```
+
+`HomeItemPosition` moves from `MainHook` into `WorkstationModeController` with the existing fields: `screenId`, `cellX`, `cellY`, `spanX`, `spanY`.
 
 - [ ] **Step 1: Write failing generation tests**
 
-Create tests that prove an old fallback callback cannot win after a newer vendor transition:
-
 ```java
 @Test
-public void staleFallbackProbeCannotOverrideNewerVendorCallback() {
+public void staleFallbackCannotOverrideNewerVendorCallback() {
     WorkstationModeController controller = new WorkstationModeController();
-    long generation = controller.beginUnconfirmedProbe();
+    long pending = controller.beginUnconfirmedProbe();
 
     controller.onVendorModeChanged(true);
 
-    assertFalse(controller.acceptFallbackProbe(generation, false));
+    assertFalse(controller.acceptFallbackProbe(pending, false));
     assertTrue(controller.isWorkstationMode());
 }
 
 @Test
-public void fallbackProbeIsAcceptedOnlyForCurrentUnconfirmedGeneration() {
+public void currentUnconfirmedFallbackIsAcceptedOnce() {
     WorkstationModeController controller = new WorkstationModeController();
-    long generation = controller.beginUnconfirmedProbe();
+    long pending = controller.beginUnconfirmedProbe();
 
-    assertTrue(controller.acceptFallbackProbe(generation, true));
+    assertTrue(controller.acceptFallbackProbe(pending, true));
     assertTrue(controller.isWorkstationMode());
-    assertFalse(controller.acceptFallbackProbe(generation, false));
+    assertFalse(controller.acceptFallbackProbe(pending, false));
+}
+
+@Test
+public void newProbeInvalidatesOlderProbe() {
+    WorkstationModeController controller = new WorkstationModeController();
+    long first = controller.beginUnconfirmedProbe();
+    long second = controller.beginUnconfirmedProbe();
+
+    assertFalse(controller.acceptFallbackProbe(first, true));
+    assertTrue(controller.acceptFallbackProbe(second, false));
 }
 ```
 
-Also add tests for duplicate vendor callbacks and generation monotonicity.
+- [ ] **Step 2: Write failing layout-snapshot tests**
 
-- [ ] **Step 2: Run the focused test and verify it fails**
+```java
+@Test
+public void normalLayoutSnapshotRoundTripsExactStoredFields() {
+    WorkstationModeController controller = new WorkstationModeController();
+    controller.rememberNormalItem(42L, 3L, 4, 5, 2, 1);
 
-Run:
+    WorkstationModeController.HomeItemPosition item = controller.normalItem(42L);
+    assertNotNull(item);
+    assertEquals(3L, item.screenId);
+    assertEquals(4, item.cellX);
+    assertEquals(5, item.cellY);
+    assertEquals(2, item.spanX);
+    assertEquals(1, item.spanY);
+}
+
+@Test
+public void clearingNormalLayoutRemovesAllStoredItems() {
+    WorkstationModeController controller = new WorkstationModeController();
+    controller.rememberNormalItem(42L, 3L, 4, 5, 2, 1);
+    controller.clearNormalLayoutBackup();
+
+    assertFalse(controller.hasNormalLayoutBackup());
+    assertNull(controller.normalItem(42L));
+}
+```
+
+- [ ] **Step 3: Run focused tests and verify failure**
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*WorkstationModeControllerTest' --stacktrace
 ```
 
-Expected: compilation/test failure because `WorkstationModeController` does not exist.
+Expected: FAIL because `WorkstationModeController` does not exist.
 
-- [ ] **Step 3: Implement the minimal controller state machine**
+- [ ] **Step 4: Implement the minimal controller**
 
-The controller must use a monotonic `long generation`, distinguish vendor-confirmed state from a pending fallback generation, and reject stale/duplicate fallback application. Keep Android `Handler` out of the pure transition logic.
-
-A valid minimal shape is:
+Use a monotonic generation and a single pending fallback generation. Keep Android `Handler` out of the controller state machine.
 
 ```java
 final class WorkstationModeController {
+    static final class HomeItemPosition {
+        final long screenId;
+        final int cellX;
+        final int cellY;
+        final int spanX;
+        final int spanY;
+
+        HomeItemPosition(long screenId, int cellX, int cellY, int spanX, int spanY) {
+            this.screenId = screenId;
+            this.cellX = cellX;
+            this.cellY = cellY;
+            this.spanX = spanX;
+            this.spanY = spanY;
+        }
+    }
+
     private long generation;
     private long pendingFallbackGeneration = -1L;
     private boolean workstationMode;
     private boolean vendorConfirmed;
+    private final java.util.Map<Long, HomeItemPosition> normalLayoutBackup =
+            new java.util.HashMap<>();
 
     boolean isWorkstationMode() { return workstationMode; }
     long generation() { return generation; }
@@ -130,6 +189,14 @@ final class WorkstationModeController {
         return pendingFallbackGeneration;
     }
 
+    boolean acceptFallbackProbe(long expectedGeneration, boolean probedMode) {
+        if (vendorConfirmed || pendingFallbackGeneration != expectedGeneration) return false;
+        workstationMode = probedMode;
+        pendingFallbackGeneration = -1L;
+        generation++;
+        return true;
+    }
+
     void onVendorModeChanged(boolean mode) {
         workstationMode = mode;
         vendorConfirmed = true;
@@ -137,51 +204,54 @@ final class WorkstationModeController {
         generation++;
     }
 
-    boolean acceptFallbackProbe(long expectedGeneration, boolean mode) {
-        if (vendorConfirmed || pendingFallbackGeneration != expectedGeneration) return false;
-        workstationMode = mode;
-        pendingFallbackGeneration = -1L;
-        generation++;
-        return true;
+    void clearNormalLayoutBackup() { normalLayoutBackup.clear(); }
+
+    void rememberNormalItem(long itemId, long screenId,
+                            int cellX, int cellY, int spanX, int spanY) {
+        normalLayoutBackup.put(itemId,
+                new HomeItemPosition(screenId, cellX, cellY, spanX, spanY));
     }
+
+    HomeItemPosition normalItem(long itemId) { return normalLayoutBackup.get(itemId); }
+    boolean hasNormalLayoutBackup() { return !normalLayoutBackup.isEmpty(); }
 }
 ```
 
-If MainHook requires richer transition side effects, keep those in explicit controller methods; do not expose mutable fields or setter bags.
+- [ ] **Step 5: Run focused tests and verify PASS**
 
-- [ ] **Step 4: Run the focused tests and verify they pass**
+```bash
+./gradlew testDebugUnitTest --tests '*WorkstationModeControllerTest' --stacktrace
+```
 
-Run the same focused Gradle command. Expected: PASS.
-
-- [ ] **Step 5: Wire existing vendor callback and delayed fallback through the controller**
+- [ ] **Step 6: Wire the existing delayed mode fallback through generation ownership**
 
 In `MainHook`:
 
-1. replace direct `workstationMode` / `workstationModeHookConfirmed` mutation with controller calls;
-2. when scheduling the existing delayed fallback probe, capture the generation returned by `beginUnconfirmedProbe()`;
-3. when the delayed runnable executes, read the vendor mode, then call `acceptFallbackProbe(expectedGeneration, probedMode)`;
-4. perform Workstation transition side effects only if the controller accepts the change/current generation;
-5. ensure a vendor callback arriving first invalidates the delayed fallback;
-6. do not add another fixed-delay retry chain.
+1. replace direct `workstationMode` / `workstationModeHookConfirmed` mutation with the controller;
+2. before the existing 2-second `postDelayed`, call `long expected = controller.beginUnconfirmedProbe()`;
+3. inside the delayed runnable, probe the existing vendor API and call `controller.acceptFallbackProbe(expected, probedMode)`;
+4. run Workstation transition side effects only when the fallback returns `true`;
+5. vendor callback paths call `controller.onVendorModeChanged(mode)` before side effects;
+6. do not add a second retry or another delay value.
 
-The existing 2-second fallback may remain temporarily, but it must no longer be a naked authority.
+The 2-second fallback remains only as a boot-time vendor-state probe; generation decides whether it is still authoritative when it executes.
 
-- [ ] **Step 6: Move Workstation-only normal-layout backup/restore ownership behind the controller**
+- [ ] **Step 7: Move normal-layout mutable state out of `MainHook`**
 
-Move the `normalLayoutBackup` map and its Workstation transition entry points out of `MainHook`. Preserve the current stored value shape and exact restore behavior; do not redesign MIUI placement.
+Replace the current `normalLayoutBackup.put(id, new HomeItemPosition(...))` with `controller.rememberNormalItem(...)`, and replace restore lookups with `controller.normalItem(id)`. Delete `MainHook.normalLayoutBackup` and its nested `HomeItemPosition` after all call sites compile.
 
-If view-specific animation state is not strictly Workstation-owned, leave that animator with its actual Dock owner rather than forcing it into the controller.
+Keep the existing View-tree collection and field writes semantically unchanged. This task moves state ownership; it does not redesign placement.
 
-- [ ] **Step 7: Run Workstation and global unit tests**
+- [ ] **Step 8: Run Workstation/global tests**
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*Workstation*' --stacktrace
 ./gradlew testDebugUnitTest --stacktrace
 ```
 
-Expected: PASS; `RuntimeBehaviorTestPolicyContractTest` adds no new debt exceptions.
+Expected: PASS and no new source-reader debt exception.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add src/main/java/com/hellovoid/liquiddock/WorkstationModeController.java \
@@ -192,7 +262,7 @@ git commit -m "refactor: centralize workstation mode ownership"
 
 ---
 
-### Task 2: Centralize Widget classification
+### Task 2: Centralize Widget classification on the real HookUtil API
 
 **Files:**
 - Create: `src/main/java/com/hellovoid/liquiddock/WidgetClassifier.java`
@@ -200,42 +270,60 @@ git commit -m "refactor: centralize workstation mode ownership"
 - Modify: `src/main/java/com/hellovoid/liquiddock/HomeGridHook.java`
 
 **Interfaces:**
-- Consumes: vendor `ItemInfo.isWidget()` through the existing `HookUtil.tryInvoke*` boundary; `itemType` field fallback.
-- Produces: `static boolean isWidget(Object itemInfo)`.
-
-- [ ] **Step 1: Write classification tests**
-
-The pure classification decision should be testable independently of real Launcher classes. Separate the fallback decision from vendor invocation so tests can cover it without reflection:
 
 ```java
-@Test
-public void knownFallbackItemTypesAreWidgets() {
-    assertTrue(WidgetClassifier.isWidgetFallbackType(4));
-    assertTrue(WidgetClassifier.isWidgetFallbackType(5));
-    assertTrue(WidgetClassifier.isWidgetFallbackType(19));
+static boolean isWidget(Object itemInfo);
+static boolean isWidgetFallbackType(int itemType);
+```
+
+- [ ] **Step 1: Write tests covering vendor-primary and fallback behavior**
+
+```java
+public static final class FakeItemInfo {
+    public int itemType;
+    private final boolean widget;
+
+    FakeItemInfo(boolean widget, int itemType) {
+        this.widget = widget;
+        this.itemType = itemType;
+    }
+
+    public boolean isWidget() { return widget; }
+}
+
+public static final class FallbackOnlyItemInfo {
+    public int itemType;
+    FallbackOnlyItemInfo(int itemType) { this.itemType = itemType; }
 }
 
 @Test
-public void unrelatedItemTypesAreNotWidgets() {
-    assertFalse(WidgetClassifier.isWidgetFallbackType(0));
-    assertFalse(WidgetClassifier.isWidgetFallbackType(1));
-    assertFalse(WidgetClassifier.isWidgetFallbackType(6));
+public void vendorIsWidgetTrueWins() {
+    assertTrue(WidgetClassifier.isWidget(new FakeItemInfo(true, 0)));
+}
+
+@Test
+public void knownItemTypeFallbackIsAcceptedWhenVendorMethodIsFalse() {
+    assertTrue(WidgetClassifier.isWidget(new FakeItemInfo(false, 4)));
+}
+
+@Test
+public void knownItemTypeFallbackIsAcceptedWhenVendorMethodIsUnavailable() {
+    assertTrue(WidgetClassifier.isWidget(new FallbackOnlyItemInfo(19)));
+}
+
+@Test
+public void unrelatedTypeIsRejected() {
+    assertFalse(WidgetClassifier.isWidget(new FakeItemInfo(false, 1)));
 }
 ```
 
-Add one static architecture contract only if needed to assert the vendor `isWidget()` path stays primary; do not use source order/slicing to prove runtime behavior.
-
-- [ ] **Step 2: Verify tests fail**
+- [ ] **Step 2: Verify focused failure**
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*WidgetClassifierTest' --stacktrace
 ```
 
-Expected: FAIL because the classifier does not exist.
-
-- [ ] **Step 3: Implement `WidgetClassifier`**
-
-Use the current semantics exactly:
+- [ ] **Step 3: Implement using the existing `HookUtil.tryInvoke` signature**
 
 ```java
 final class WidgetClassifier {
@@ -247,28 +335,24 @@ final class WidgetClassifier {
 
     static boolean isWidget(Object itemInfo) {
         if (itemInfo == null) return false;
-        HookUtil.InvocationResult<Boolean> result = HookUtil.tryInvokeBoolean(itemInfo, "isWidget");
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(itemInfo, "isWidget");
         if (result.succeeded() && Boolean.TRUE.equals(result.value())) return true;
         return isWidgetFallbackType(HookUtil.getIntField(itemInfo, "itemType"));
     }
 }
 ```
 
-Use the actual existing `HookUtil` result type/method names from the repository rather than inventing a parallel reflection wrapper if the signature differs.
+- [ ] **Step 4: Replace direct Widget classification in `HomeGridHook`**
 
-- [ ] **Step 4: Replace direct classification in `HomeGridHook`**
+Every Widget adaptation path must call `WidgetClassifier.isWidget(info)`. Remove the direct `itemType == 4 || itemType == 5 || itemType == 19` branch from `HomeGridHook`.
 
-Every Widget-adaptation path in `HomeGridHook` must call `WidgetClassifier.isWidget(info)`. Remove direct `itemType == 4 || itemType == 5 || itemType == 19` control flow from `HomeGridHook`.
-
-- [ ] **Step 5: Run focused and global tests**
+- [ ] **Step 5: Run focused/global tests**
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*WidgetClassifierTest' --stacktrace
 ./gradlew testDebugUnitTest --tests '*WidgetGridSizingTest' --stacktrace
 ./gradlew testDebugUnitTest --stacktrace
 ```
-
-Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -281,7 +365,7 @@ git commit -m "refactor: centralize widget classification"
 
 ---
 
-### Task 3: Move supported Widget spans into an immutable registry and make sizing stateless
+### Task 3: Make Widget span policy immutable and Widget sizing stateless
 
 **Files:**
 - Create: `src/main/java/com/hellovoid/liquiddock/WidgetSpecRegistry.java`
@@ -290,17 +374,24 @@ git commit -m "refactor: centralize widget classification"
 - Modify: `src/main/java/com/hellovoid/liquiddock/HomeGridHook.java`
 - Modify: `src/main/java/com/hellovoid/liquiddock/MainHook.java`
 - Modify: `src/test/java/com/hellovoid/liquiddock/WidgetGridSizingTest.java`
-- Modify: `src/test/java/com/hellovoid/liquiddock/ConfigLoadPolicyTest.java` if it still resets the static sizing flag.
+- Modify: `src/test/java/com/hellovoid/liquiddock/ConfigLoadPolicyTest.java`
 
 **Interfaces:**
-- `WidgetSpecRegistry.DEFAULT.supports(int spanX, int spanY)`.
-- `WidgetGridSizing.gridRect(boolean adaptationEnabled, int cellX, int cellY, int spanX, int spanY, int[] xs, int[] ys, int cellWidth, int cellHeight, int widthGap, int heightGap)`.
+
+```java
+WidgetSpecRegistry.DEFAULT.supports(int spanX, int spanY);
+WidgetGridSizing.gridRect(boolean adaptationEnabled,
+                          int cellX, int cellY, int spanX, int spanY,
+                          int[] xs, int[] ys,
+                          int cellWidth, int cellHeight,
+                          int widthGap, int heightGap);
+```
 
 - [ ] **Step 1: Write registry tests**
 
 ```java
 @Test
-public void defaultRegistryContainsOnlyCurrentSupportedSpans() {
+public void defaultRegistryContainsExactlyCurrentSpecs() {
     WidgetSpecRegistry registry = WidgetSpecRegistry.DEFAULT;
     assertTrue(registry.supports(1, 1));
     assertTrue(registry.supports(2, 1));
@@ -308,12 +399,39 @@ public void defaultRegistryContainsOnlyCurrentSupportedSpans() {
     assertTrue(registry.supports(4, 2));
     assertFalse(registry.supports(3, 2));
     assertFalse(registry.supports(4, 1));
+    assertFalse(registry.supports(1, 2));
 }
 ```
 
-- [ ] **Step 2: Rewrite sizing tests to pass enable state explicitly**
+- [ ] **Step 2: Implement the immutable registry with a complete lookup**
 
-Remove `@Before/@After` calls to `WidgetGridSizing.setWidgetAdaptationEnabled(...)`. Add explicit disabled-path coverage:
+```java
+final class WidgetSpecRegistry {
+    static final WidgetSpecRegistry DEFAULT = new WidgetSpecRegistry(
+            new int[][]{{1, 1}, {2, 1}, {2, 2}, {4, 2}});
+
+    private final int[][] specs;
+
+    private WidgetSpecRegistry(int[][] specs) {
+        this.specs = new int[specs.length][2];
+        for (int i = 0; i < specs.length; i++) {
+            this.specs[i][0] = specs[i][0];
+            this.specs[i][1] = specs[i][1];
+        }
+    }
+
+    boolean supports(int spanX, int spanY) {
+        for (int[] spec : specs) {
+            if (spec[0] == spanX && spec[1] == spanY) return true;
+        }
+        return false;
+    }
+}
+```
+
+- [ ] **Step 3: Rewrite sizing tests to pass enable state explicitly**
+
+Remove all calls to `WidgetGridSizing.setWidgetAdaptationEnabled(...)`. Add:
 
 ```java
 @Test
@@ -327,32 +445,16 @@ public void disabledAdaptationReturnsEmptyRect() {
 }
 ```
 
-Preserve all existing geometry cases with the first argument set to `true`.
+Pass `true` as the first argument in existing geometry tests.
 
-- [ ] **Step 3: Run tests and verify failure**
+- [ ] **Step 4: Verify focused failure**
 
 ```bash
-./gradlew testDebugUnitTest --tests '*WidgetSpecRegistryTest' --tests '*WidgetGridSizingTest' --stacktrace
+./gradlew testDebugUnitTest --tests '*WidgetSpecRegistryTest' \
+        --tests '*WidgetGridSizingTest' --stacktrace
 ```
 
-Expected: FAIL until signatures/registry exist.
-
-- [ ] **Step 4: Implement immutable registry**
-
-Use a small value representation with no runtime mutation. Do not add dynamic registration in Phase 1.
-
-A sufficient API is:
-
-```java
-final class WidgetSpecRegistry {
-    static final WidgetSpecRegistry DEFAULT = new WidgetSpecRegistry(
-            new int[][]{{1, 1}, {2, 1}, {2, 2}, {4, 2}});
-
-    boolean supports(int spanX, int spanY) { /* exact pair lookup */ }
-}
-```
-
-- [ ] **Step 5: Remove static config from `WidgetGridSizing`**
+- [ ] **Step 5: Remove process-global config from `WidgetGridSizing`**
 
 Delete:
 
@@ -361,26 +463,31 @@ private static volatile boolean widgetAdaptationEnabled;
 static void setWidgetAdaptationEnabled(boolean enabled)
 ```
 
-Make `gridRect(...)` depend only on its arguments. Keep `shouldAdaptWidgets(gridEnabled, adaptationEnabled)` only if production call sites still benefit from the pure boolean helper; otherwise inline the explicit immutable config decision at installation.
+Change `gridRect(...)` to return the empty rectangle when its explicit `adaptationEnabled` argument is false. Keep all existing bounds/axis math otherwise unchanged.
 
-- [ ] **Step 6: Remove `MainHook` global sizing setter**
+- [ ] **Step 6: Remove the setter call from `MainHook.install()`**
 
-Delete the `WidgetGridSizing.setWidgetAdaptationEnabled(...)` call from `MainHook.install()`. Pass the immutable `config.grid.enabled && config.grid.widgetAdaptation` decision into the Widget adaptation installer/Hook instance instead.
+Delete `WidgetGridSizing.setWidgetAdaptationEnabled(...)`. Compute the immutable install decision once from:
 
-Do not make `WidgetGridSizing` read `LiquidDockConfig` directly.
+```java
+boolean widgetAdaptationEnabled =
+        WidgetGridSizing.shouldAdaptWidgets(config.grid.enabled, config.grid.widgetAdaptation);
+```
 
-- [ ] **Step 7: Make `HomeGridHook` consult the registry**
+Pass that value into the Grid/Widget Hook owner; do not store it back in `WidgetGridSizing`.
 
-Before adapting a Widget frame:
+- [ ] **Step 7: Route supported-span decisions through the registry**
 
-1. classify via `WidgetClassifier`;
-2. read spanX/spanY through existing vendor-field access;
-3. skip adaptation when `WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)` is false;
-4. call `WidgetGridSizing.gridRect(adaptationEnabled, ...)`.
+Before adapting a Widget frame, require both:
 
-Do not modify placement/occupancy paths.
+```java
+WidgetClassifier.isWidget(info)
+WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)
+```
 
-- [ ] **Step 8: Run Widget/Grid and config-load tests**
+Do not change placement/occupancy code.
+
+- [ ] **Step 8: Run Widget/Grid/config tests**
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*Widget*' --stacktrace
@@ -389,7 +496,7 @@ Do not modify placement/occupancy paths.
 ./gradlew testDebugUnitTest --stacktrace
 ```
 
-Expected: PASS and no test needs to reset process-global Widget sizing state.
+Expected: PASS and no test resets a process-global Widget sizing flag.
 
 - [ ] **Step 9: Commit**
 
@@ -406,175 +513,261 @@ git commit -m "refactor: make widget sizing ownership explicit"
 
 ---
 
-### Task 4: Move actual Widget adaptation Hook ownership out of `HomeGridHook`
+### Task 4: Extract the real Widget layout Hook owner from `HomeGridHook`
 
 **Files:**
 - Create: `src/main/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationHook.java`
-- Create: `src/test/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationContractTest.java`
+- Create: `src/test/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationHookTest.java`
 - Modify: `src/main/java/com/hellovoid/liquiddock/HomeGridHook.java`
 
 **Interfaces:**
-- Consumes: immutable adaptation-enabled flag, `WidgetClassifier`, `WidgetSpecRegistry`, `WidgetGridSizing`, and the existing CellLayout/ItemInfo vendor classes.
-- Produces: `void install(ClassLoader classLoader)` that installs only Widget allocation/frame adaptation hooks.
 
-- [ ] **Step 1: Identify the exact Widget-only Hook entry points currently inside `HomeGridHook`**
+```java
+HomeGridWidgetAdaptationHook(boolean adaptationEnabled);
+void install(ClassLoader classLoader);
+boolean shouldAdapt(Object itemInfo, int spanX, int spanY);
+```
 
-Before editing, enumerate only the methods that mutate Widget layout/allocation/frame. Exclude:
+The extracted owner installs only the existing Widget frame hooks around `CellLayout.setupLayoutParam()` and post-layout enforcement after `CellLayout.onLayout()`.
 
-- cell-count hooks;
-- page indicator;
-- folder alignment;
-- orientation memory;
-- rotation/refresh;
-- occupancy/placement.
+- [ ] **Step 1: Write a production-used decision test**
 
-Record these symbols in the commit/PR description so review can confirm the extraction is ownership migration rather than helper proliferation.
+```java
+@Test
+public void disabledOwnerNeverAdapts() {
+    HomeGridWidgetAdaptationHook hook = new HomeGridWidgetAdaptationHook(false);
+    WidgetClassifierTest.FakeItemInfo info =
+            new WidgetClassifierTest.FakeItemInfo(true, 4);
+    assertFalse(hook.shouldAdapt(info, 2, 1));
+}
 
-- [ ] **Step 2: Add a contract test for installation boundary**
+@Test
+public void enabledOwnerRequiresWidgetAndSupportedSpan() {
+    HomeGridWidgetAdaptationHook hook = new HomeGridWidgetAdaptationHook(true);
+    WidgetClassifierTest.FakeItemInfo info =
+            new WidgetClassifierTest.FakeItemInfo(true, 4);
+    assertTrue(hook.shouldAdapt(info, 2, 1));
+    assertFalse(hook.shouldAdapt(info, 3, 2));
+}
+```
 
-The contract test may use audited static inspection only to assert architecture boundaries, not runtime sequencing. It should assert that direct Widget layout hook targets are installed from `HomeGridWidgetAdaptationHook` and no longer duplicated in `HomeGridHook`.
+If sharing the test fake across classes is awkward, define the same minimal fake inside this test; do not add reflection solely for test access.
 
-If this becomes a production-source reader, add it to the existing audited static allowlist only if it satisfies the static-contract rules; never put it in `LEGACY_SOURCE_DEBT`.
+- [ ] **Step 2: Implement the decision used by the callbacks**
 
-- [ ] **Step 3: Extract Widget Hook installation and callbacks**
+```java
+boolean shouldAdapt(Object itemInfo, int spanX, int spanY) {
+    return adaptationEnabled
+            && WidgetClassifier.isWidget(itemInfo)
+            && WidgetSpecRegistry.DEFAULT.supports(spanX, spanY);
+}
+```
 
-Move the real Widget-specific installation/callback code into `HomeGridWidgetAdaptationHook`. Pass explicit immutable dependencies through its constructor or install method. Do not expose MainHook globals.
+- [ ] **Step 3: Move the existing Widget hook installation/callback code**
 
-- [ ] **Step 4: Keep `HomeGridHook` as coordinator for the remaining Grid owners**
+Move only the code that:
 
-`HomeGridHook` may instantiate/install `HomeGridWidgetAdaptationHook`, but must not retain duplicate Widget frame logic.
+- intercepts/adjusts `CellLayout.setupLayoutParam()` for Widget allocation;
+- reasserts the final Widget frame after `CellLayout.onLayout()`.
 
-- [ ] **Step 5: Run Grid/Widget tests**
+Do not move cell count, page indicator, folder alignment, orientation memory, rotation/refresh, or occupancy/placement logic.
+
+The new class receives `adaptationEnabled` in its constructor and calls the same `WidgetGridSizing.gridRect(true, ...)` geometry path only after `shouldAdapt(...)` returns true.
+
+- [ ] **Step 4: Remove duplicate Widget frame ownership from `HomeGridHook`**
+
+`HomeGridHook` installs `HomeGridWidgetAdaptationHook` but no longer contains the two Widget frame callbacks themselves.
+
+- [ ] **Step 5: Run focused/global tests**
 
 ```bash
+./gradlew testDebugUnitTest --tests '*HomeGridWidgetAdaptationHookTest' --stacktrace
 ./gradlew testDebugUnitTest --tests '*HomeGrid*' --tests '*Widget*' --stacktrace
 ./gradlew testDebugUnitTest --stacktrace
 ```
-
-Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add src/main/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationHook.java \
         src/main/java/com/hellovoid/liquiddock/HomeGridHook.java \
-        src/test/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationContractTest.java \
-        src/test/java/com/hellovoid/liquiddock/RuntimeBehaviorTestPolicyContractTest.java
+        src/test/java/com/hellovoid/liquiddock/HomeGridWidgetAdaptationHookTest.java
 git commit -m "refactor: extract widget grid adaptation owner"
 ```
 
-Only include `RuntimeBehaviorTestPolicyContractTest.java` if its audited static allowlist genuinely needs updating.
-
 ---
 
-### Task 5: Make bundled Widget-rule degradation observable once
+### Task 5: Replace silent bundled Widget-rule degradation with one-shot structured diagnostics
 
 **Files:**
+- Create: `src/main/java/com/hellovoid/liquiddock/OneShotDiagnostic.java`
+- Create: `src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleDiagnosticsTest.java`
 - Modify: `src/main/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngine.java`
 - Modify: `src/main/java/com/hellovoid/liquiddock/LauncherMamlBackgroundRuleExecutor.java`
-- Create: `src/main/java/com/hellovoid/liquiddock/OneShotDiagnostic.java` only if no equivalent process-local one-shot primitive already exists.
 - Modify: `src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngineTest.java`
-- Create: `src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleDiagnosticsTest.java`
 
 **Interfaces:**
-- `WidgetBackgroundRuleEngine.LoadResult` or equivalent immutable result containing:
-  - parsed engine;
-  - status enum such as `LOADED`, `MISSING_RESOURCE`, `PARSE_FAILED`;
-  - optional short reason for diagnostics.
-- Runtime matcher behavior remains unchanged: failure still behaves like an empty ruleset.
-
-- [ ] **Step 1: Write load-result tests**
-
-Add tests that separately prove:
 
 ```java
-assertEquals(Status.LOADED, validResult.status());
-assertEquals(Status.PARSE_FAILED, malformedResult.status());
-assertEquals(Status.MISSING_RESOURCE, missingResult.status());
-```
-
-For parser-only `parse(InputStream)` tests, preserve the existing fail-safe semantics; the load API is where required bundled-resource status becomes observable.
-
-- [ ] **Step 2: Write one-shot diagnostic test**
-
-Use an injected sink or minimal package-private primitive:
-
-```java
-@Test
-public void sameDiagnosticKeyEmitsOnlyOnce() {
-    List<String> messages = new ArrayList<>();
-    OneShotDiagnostic diagnostics = new OneShotDiagnostic(messages::add);
-
-    diagnostics.emit("widget_rules_load_failed", "first");
-    diagnostics.emit("widget_rules_load_failed", "second");
-
-    assertEquals(List.of("first"), messages);
+final class OneShotDiagnostic {
+    OneShotDiagnostic(java.util.function.Consumer<String> sink);
+    void emit(String key, String message);
 }
 ```
 
-- [ ] **Step 3: Run focused tests and verify they fail**
+`WidgetBackgroundRuleEngine` adds:
 
-```bash
-./gradlew testDebugUnitTest --tests '*WidgetBackgroundRule*' --stacktrace
+```java
+enum LoadStatus { LOADED, MISSING_RESOURCE, PARSE_FAILED }
+static final class LoadResult {
+    WidgetBackgroundRuleEngine engine();
+    LoadStatus status();
+}
+static LoadResult loadBundled();
+static LoadResult loadBundled(ClassLoader loader);
 ```
 
-Expected: FAIL until the load result/diagnostic primitive exists.
+`parse(InputStream)` remains available and continues to fail-safe to `EMPTY` for parser unit tests/callers.
 
-- [ ] **Step 4: Implement structured load status**
+- [ ] **Step 1: Write the one-shot diagnostic test**
 
-Do not throw from normal Launcher startup. `loadBundled()` should still yield an engine that safely matches nothing on failure, but callers must be able to distinguish missing/parse failure from a successfully loaded empty ruleset.
+```java
+@Test
+public void diagnosticKeyEmitsOnlyOnce() {
+    java.util.List<String> messages = new java.util.ArrayList<>();
+    OneShotDiagnostic diagnostic = new OneShotDiagnostic(messages::add);
 
-Do not log every `match()` call.
+    diagnostic.emit("widget_rules_load_failed", "first");
+    diagnostic.emit("widget_rules_load_failed", "second");
 
-- [ ] **Step 5: Emit one structured warning at executor initialization/first use**
-
-The diagnostic must include at least:
-
-```text
-[DC][WidgetRules] bundled_rules_unavailable status=<MISSING_RESOURCE|PARSE_FAILED>
+    assertEquals(java.util.List.of("first"), messages);
+}
 ```
 
-Use the project’s existing logging facility where possible. Emission must be one-shot per process/status key.
+- [ ] **Step 2: Implement `OneShotDiagnostic`**
 
-- [ ] **Step 6: Run focused and global tests**
+```java
+final class OneShotDiagnostic {
+    private final java.util.function.Consumer<String> sink;
+    private final java.util.Set<String> emitted =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    OneShotDiagnostic(java.util.function.Consumer<String> sink) {
+        this.sink = java.util.Objects.requireNonNull(sink);
+    }
+
+    void emit(String key, String message) {
+        if (emitted.add(key)) sink.accept(message);
+    }
+}
+```
+
+- [ ] **Step 3: Add load-status tests**
+
+Use a test `ClassLoader` whose `getResourceAsStream(...)` returns `null` for missing-resource coverage and a malformed XML stream for parse-failure coverage.
+
+```java
+@Test
+public void missingBundledResourceIsDistinguishable() {
+    ClassLoader loader = new ClassLoader(null) {
+        @Override
+        public java.io.InputStream getResourceAsStream(String name) {
+            return null;
+        }
+    };
+    assertEquals(
+            WidgetBackgroundRuleEngine.LoadStatus.MISSING_RESOURCE,
+            WidgetBackgroundRuleEngine.loadBundled(loader).status());
+}
+
+@Test
+public void malformedBundledResourceIsDistinguishable() {
+    ClassLoader loader = new ClassLoader(null) {
+        @Override
+        public java.io.InputStream getResourceAsStream(String name) {
+            return new java.io.ByteArrayInputStream("<broken".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    };
+    assertEquals(
+            WidgetBackgroundRuleEngine.LoadStatus.PARSE_FAILED,
+            WidgetBackgroundRuleEngine.loadBundled(loader).status());
+}
+```
+
+Also assert both failure results return a non-null engine whose `match(...)` behaves like the existing empty engine.
+
+- [ ] **Step 4: Implement strict internal parse plus fail-safe public parse**
+
+Refactor XML construction into a private `parseStrict(InputStream)` that throws on malformed XML. Keep:
+
+```java
+static WidgetBackgroundRuleEngine parse(InputStream input) {
+    if (input == null) return EMPTY;
+    try {
+        return parseStrict(input);
+    } catch (Throwable ignored) {
+        return EMPTY;
+    }
+}
+```
+
+Implement `loadBundled(ClassLoader)` so `null` loader/input returns `MISSING_RESOURCE`, successful `parseStrict` returns `LOADED`, and thrown parse errors return `PARSE_FAILED`; both failure statuses carry `EMPTY` as the engine.
+
+- [ ] **Step 5: Wire one-shot logging in `LauncherMamlBackgroundRuleExecutor`**
+
+Replace the current direct `RULES = WidgetBackgroundRuleEngine.loadBundled()` initialization with:
+
+```java
+private static final WidgetBackgroundRuleEngine.LoadResult RULE_LOAD =
+        WidgetBackgroundRuleEngine.loadBundled();
+private static final WidgetBackgroundRuleEngine RULES = RULE_LOAD.engine();
+private static final OneShotDiagnostic DIAGNOSTIC =
+        new OneShotDiagnostic(MainHook::log);
+
+static {
+    if (RULE_LOAD.status() != WidgetBackgroundRuleEngine.LoadStatus.LOADED) {
+        DIAGNOSTIC.emit(
+                "widget_rules_" + RULE_LOAD.status().name(),
+                "[DC][WidgetRules] bundled_rules_unavailable status=" + RULE_LOAD.status());
+    }
+}
+```
+
+Do not log from `match()`.
+
+- [ ] **Step 6: Run focused/global tests**
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*WidgetBackgroundRule*' --stacktrace
 ./gradlew testDebugUnitTest --stacktrace
 ```
 
-Expected: PASS.
+Expected: PASS; normal valid bundled rules produce no warning.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/main/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngine.java \
+git add src/main/java/com/hellovoid/liquiddock/OneShotDiagnostic.java \
+        src/main/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngine.java \
         src/main/java/com/hellovoid/liquiddock/LauncherMamlBackgroundRuleExecutor.java \
-        src/main/java/com/hellovoid/liquiddock/OneShotDiagnostic.java \
         src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleEngineTest.java \
         src/test/java/com/hellovoid/liquiddock/WidgetBackgroundRuleDiagnosticsTest.java
 git commit -m "fix: report bundled widget rule degradation"
 ```
 
-Omit `OneShotDiagnostic.java` from the commit if an existing equivalent primitive is reused.
-
 ---
 
-### Task 6: Phase 1 verification and documentation closure
+### Task 6: Full Phase 1 verification and documentation closure
 
 **Files:**
+- Create: `docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md`
 - Modify: `TODO.md`
 - Modify: `ARCHITECTURE.md`
 - Modify: `HOOKS.md`
 - Modify: `CONTRIBUTING.md`
-- Modify: `FEATURES.md` only if user-visible behavior wording changed.
-- Create: `docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md`
+- Modify: `FEATURES.md` only when the implementation changes a user-visible description.
 
-**Interfaces:**
-- Consumes: all Task 1–5 implementation commits.
-- Produces: a recorded CI/device verification result and a reduced active-debt ledger.
-
-- [ ] **Step 1: Run full unit tests**
+- [ ] **Step 1: Run the full unit suite**
 
 ```bash
 ./gradlew testDebugUnitTest --stacktrace
@@ -590,70 +783,71 @@ Expected: PASS.
 
 Expected: PASS.
 
-- [ ] **Step 3: Run the device smoke matrix**
+- [ ] **Step 3: Confirm the source-reader debt gate did not grow**
+
+Run the full tests and verify `RuntimeBehaviorTestPolicyContractTest` passes with the existing-or-smaller `LEGACY_SOURCE_DEBT` set. Do not add any new debt entry to make Phase 1 green.
+
+- [ ] **Step 4: Run the device matrix**
 
 Record PASS/FAIL plus relevant log excerpts for:
 
 1. normal Launcher startup;
 2. Workstation enter -> exit -> quick re-enter;
-3. vendor Workstation callback arriving before delayed fallback;
+3. vendor Workstation callback before delayed fallback;
 4. stale delayed fallback after a newer transition;
 5. normal-layout backup/restore;
-6. HOME -> Recents -> HOME repeated at least five times;
+6. HOME -> Recents -> HOME at least five consecutive times;
 7. Recents-adjacent rotation;
 8. 1×1 / 2×1 / 2×2 / 4×2 Widgets in portrait and landscape;
 9. Widget adaptation disabled;
 10. normal mode without Workstation;
-11. bundled Widget rules loaded normally;
-12. test-only malformed/missing bundled rule path emits one diagnostic and fails safe.
+11. normal bundled Widget-rule load with no warning;
+12. test-only missing/malformed bundled-rule paths producing one warning and empty-rule fail-safe behavior.
 
-- [ ] **Step 4: Write verification record**
+- [ ] **Step 5: Write the verification record**
 
-The verification document must include:
+The verification file must contain:
 
 - tested commit SHA;
-- device/ROM/Launcher version;
-- Gradle test/build commands and exit status;
-- each matrix result;
-- unresolved failures, if any, with exact reproduction steps;
-- confirmation that no producer/EGL/OES/freshness semantics changed in Phase 1.
+- device / ROM / Launcher version;
+- exact Gradle commands and exit status;
+- each device-matrix result;
+- exact reproduction/log excerpt for every failure;
+- explicit statement that Phase 1 did not alter producer/EGL/OES/fresh-frame authority.
 
-Do not mark the phase complete if required device cases remain untested.
+Do not mark the phase complete while a required device case is untested.
 
-- [ ] **Step 5: Update active debt ledger**
+- [ ] **Step 6: Update current-state docs after implementation**
 
-In `TODO.md`, mark only genuinely completed Phase 1 items as completed. Keep Phase 2–4 ownership/audit work active. Do not delete historical constraints that prevent reopening already-closed ScreenCapture, Recents-recovery, or unlock-authority work.
+Only after code is verified:
 
-- [ ] **Step 6: Update architecture/hook docs to the implemented state**
-
-Documentation must describe what production now does, not this plan’s target state. In particular:
-
-- `MainHook` composition-root wording must match actual ownership after Task 1/4;
-- Workstation delayed fallback must be described as generation-protected if implemented;
-- Widget classifier/spec registry must be described as active only after code is merged;
-- `HomeGridHook` responsibility list must shrink only for code that actually moved.
+- mark completed Phase 1 debt in `TODO.md`;
+- describe `WorkstationModeController` as current production ownership in `ARCHITECTURE.md` / `HOOKS.md`;
+- remove current-state descriptions of the static Widget flag and direct magic-number branch after they are actually gone;
+- shrink the `HomeGridHook` responsibility list only for ownership that actually moved;
+- keep producer/Recents/unlock correctness boundaries unchanged.
 
 - [ ] **Step 7: Commit verification/docs**
 
 ```bash
-git add TODO.md ARCHITECTURE.md HOOKS.md CONTRIBUTING.md FEATURES.md \
+git add TODO.md ARCHITECTURE.md HOOKS.md CONTRIBUTING.md \
         docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md
 git commit -m "docs: close phase 1 debt cleanup verification"
 ```
 
-If `FEATURES.md` has no user-visible change, omit it from the commit.
+Add `FEATURES.md` to that commit only if user-visible wording changed.
 
 ---
 
-## Phase 1 stop gate
+## Phase 1 Stop Gate
 
-Do not begin EGL/OES/producer lifecycle extraction immediately after this plan merely because the classes remain large.
+Do not begin EGL/OES/producer lifecycle extraction merely because `LauncherGlassSession` and `Miuix307PassBlurTextureView` remain large.
 
-Phase 2/3 work starts only after:
+Phase 2/3 starts only after:
 
 1. all Phase 1 CI gates pass;
 2. the Workstation/Grid device matrix is recorded;
 3. no regression requires changing the existing fresh-frame authority;
-4. an explicit resource-owner graph exists for `LauncherGlassSession`, `Miuix307PassBlurTextureView`, and Prismal.
+4. a resource-owner graph explicitly records creator, thread/context, generation, bind/rebind owner, and release trigger for `LauncherGlassSession`, `Miuix307PassBlurTextureView`, and Prismal resources.
 
-The next implementation plan must argue from that owner graph and identify exact common lifecycle primitives before any shared resource abstraction is introduced.
+The next glass implementation plan must identify exact lifecycle primitives proven common by that owner graph before introducing any shared resource abstraction.
