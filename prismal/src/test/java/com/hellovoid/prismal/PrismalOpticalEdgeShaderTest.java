@@ -1,6 +1,7 @@
 package com.hellovoid.prismal;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 import org.junit.Test;
 
@@ -16,5 +17,14 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("bandFracR * opticalEdgeScale"));
         assertTrue(patched.contains("0.09 * opticalEdgeScale"));
         assertTrue(patched.contains("tw * 0.42 * opticalEdgeScale"));
+    }
+
+    @Test
+    public void os4EdgeWidthStaysConstantAcrossGlassNodeSizes() {
+        String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+
+        assertTrue(patched.contains(
+                "float os4EdgeWidthPx = clamp(6.0 * opticalEdgeScale, 3.0, 18.0);"));
+        assertFalse(patched.contains("os4EdgeWidthPx = clamp(minDim"));
     }
 }
