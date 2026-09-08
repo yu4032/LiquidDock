@@ -86,6 +86,15 @@ final class LauncherGlassSceneController {
             }
         }
 
+        /** HOME presentation is a consumer fence, not a source-content discontinuity. */
+        void onPresentationStarted() {
+            fadeRevealReady = false;
+        }
+
+        boolean shouldRequestFreshAfterPresentation() {
+            return state == State.HOME_WAITING_FRESH_FRAME;
+        }
+
         /**
          * Rotation is a real presentation discontinuity: once target-orientation geometry is
          * observed, old cached pixels must disappear before the resized TextureView is composed.
@@ -338,7 +347,8 @@ final class LauncherGlassSceneController {
         state.onRootReady();
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
-        if (state.state() == State.COVERED || isPresentationPending()) {
+        if (state.state() == State.COVERED
+                || unlockTransitionPending || recentsWallpaperSettlePending) {
             session.suspendWorkspaceProducer();
         }
         if (bootstrapPosted) return;
@@ -451,24 +461,48 @@ final class LauncherGlassSceneController {
     }
 
     private void setRecentsWallpaperSettlePending(boolean pending) {
-        boolean wasPending = isPresentationPending();
+        boolean wasPending = recentsWallpaperSettlePending;
         recentsWallpaperSettlePending = pending;
-        onPresentationPendingChanged(wasPending, isPresentationPending(), "recents-wallpaper");
+        onSourceBlockingPresentationPendingChanged(
+                wasPending, pending, "recents-wallpaper");
     }
 
     private void setHomeTransitionPending(boolean pending) {
-        boolean wasPending = isPresentationPending();
+        boolean wasPending = homeTransitionPending;
         homeTransitionPending = pending;
-        onPresentationPendingChanged(wasPending, isPresentationPending(), "home");
+        onHomePresentationPendingChanged(wasPending, pending);
     }
 
     private void setUnlockTransitionPending(boolean pending) {
-        boolean wasPending = isPresentationPending();
+        boolean wasPending = unlockTransitionPending;
         unlockTransitionPending = pending;
-        onPresentationPendingChanged(wasPending, isPresentationPending(), "unlock");
+        onSourceBlockingPresentationPendingChanged(wasPending, pending, "unlock");
     }
 
-    private void onPresentationPendingChanged(boolean wasPending, boolean pending, String reason) {
+    private void onHomePresentationPendingChanged(boolean wasPending, boolean pending) {
+        if (wasPending == pending) return;
+        if (pending) {
+            deferInFlightWallpaperPulse();
+            state.onPresentationStarted();
+            applyLayerVisibility();
+            MainHook.log(TAG + " presentation pending reason=home source=preserved"
+                    + " generation=" + state.generation());
+            return;
+        }
+        if (isPresentationPending()) return;
+        if (state.state() != State.COVERED && state.state() != State.DETACHED) {
+            MainHook.log(TAG + " presentation settled reason=home"
+                    + " generation=" + state.generation());
+            if (state.shouldRequestFreshAfterPresentation()) {
+                requestFreshBackdrop(state.generation());
+            } else {
+                flushDeferredWallpaperPulse();
+            }
+        }
+    }
+
+    private void onSourceBlockingPresentationPendingChanged(
+            boolean wasPending, boolean pending, String reason) {
         if (wasPending == pending) return;
         if (pending) {
             deferInFlightWallpaperPulse();
@@ -479,6 +513,7 @@ final class LauncherGlassSceneController {
                     + " generation=" + state.generation());
             return;
         }
+        if (isPresentationPending()) return;
         if (state.state() != State.COVERED && state.state() != State.DETACHED) {
             MainHook.log(TAG + " presentation settled reason=" + reason
                     + " generation=" + state.generation());
