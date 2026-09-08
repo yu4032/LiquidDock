@@ -57,11 +57,13 @@ public class PrismalOs4OriginalEdgeContractTest {
         String shader = patchedShader();
 
         assertTrue(shader.contains("float os4EdgeRemain = 1.0 - os4EdgeT;"));
-        assertTrue(shader.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
+        assertTrue(shader.contains("vec2 os4ReflectUvOffset = os4EdgeNormal3.xy"));
+        assertTrue(shader.contains("* (2.0 * os4EdgeNormal3.z)"));
         assertTrue(shader.contains("vec2 os4ReflectUv = clamp("));
         assertTrue(shader.contains("texture2D(u_blurredTexture, os4ReflectUv)"));
         assertTrue(shader.contains("texture2D(u_backgroundTexture, os4ReflectUv)"));
         assertTrue(shader.contains("u_os4ReflectionStrength"));
+        assertFalse(shader.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
     }
 
     @Test
