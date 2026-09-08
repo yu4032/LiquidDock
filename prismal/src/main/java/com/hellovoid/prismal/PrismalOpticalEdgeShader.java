@@ -24,7 +24,9 @@ public final class PrismalOpticalEdgeShader {
             "float silW = clamp(minDim * 0.12, 2.5, 34.0);";
     private static final String SILHOUETTE_BAND =
             "float edgeSil = smoothstep(silW, 0.0, edgeDist) * smoothstep(-4.5, 0.0, distMask);";
-    private static final String BASE_OFFSET = "vec2 baseOffset = edgeRefractionUv;";
+    private static final String SINGLE_EDGE_BASE_OFFSET = "vec2 baseOffset = edgeRefractionUv;";
+    private static final String UPSTREAM_BASE_OFFSET =
+            "vec2 baseOffset = lensDeltaUv + snellOff + bulgeUv;";
     private static final String REFLECTION_MIX = "color = mix(color, reflSample, reflW);";
     private static final String RIM_BAND_RADIUS =
             "float bandR = clamp(minDim * bandFracR * rimBandTight, mix(0.28, 0.65, 1.0 - smallGlass), min(12.0, minDim * 0.1));";
@@ -75,7 +77,7 @@ public final class PrismalOpticalEdgeShader {
         requireSingle(source, MENISCUS_BLEND);
         requireSingle(source, SILHOUETTE_WIDTH);
         requireSingle(source, SILHOUETTE_BAND);
-        requireSingle(source, BASE_OFFSET);
+        String baseOffsetAnchor = resolveBaseOffsetAnchor(source);
         requireSingle(source, REFLECTION_MIX);
         requireSingle(source, RIM_BAND_RADIUS);
         requireSingle(source, RIM_BAND);
@@ -84,6 +86,8 @@ public final class PrismalOpticalEdgeShader {
         requireSingle(source, FACE_SHEEN);
         requireSingle(source, PLAIN_HIGHLIGHT);
         requireSingle(source, PLAIN_HIGHLIGHT_ADD);
+
+        String baseOffsetReplacement = volumetricBaseOffset(baseOffsetAnchor);
 
         return source
                 .replace(PRECISION,
@@ -136,16 +140,7 @@ public final class PrismalOpticalEdgeShader {
                 .replace(SILHOUETTE_BAND,
                         "float edgeSil = os4EdgeBand(edgeDist, silW, edgeAa) "
                                 + "* smoothstep(-4.5, 0.0, distMask);")
-                .replace(BASE_OFFSET,
-                        "float os4VolumeMask = os4EdgeBand(edgeDist, os4EdgePx, edgeAa);\n"
-                                + "    float os4ThicknessDisplacementPx = mix((os4ThicknessPx - os4EdgePx) * 2.0,\n"
-                                + "            os4ThicknessPx * 2.0, os4EdgeDepth);\n"
-                                + "    vec3 os4RefIn = refract(-V, N, 1.0 / u_ior);\n"
-                                + "    vec3 os4RefOut = (dot(os4RefIn, os4RefIn) < 0.001)\n"
-                                + "            ? vec3(0.0) : refract(os4RefIn, -N, u_ior);\n"
-                                + "    vec2 os4ThicknessUv = (os4RefOut.xy * os4ThicknessDisplacementPx / u_resolution)\n"
-                                + "            * u_displacementScale;\n"
-                                + "    vec2 baseOffset = edgeRefractionUv + os4ThicknessUv * os4VolumeMask;")
+                .replace(baseOffsetAnchor, baseOffsetReplacement)
                 .replace(REFLECTION_DIRECTION, "vec2 gDir = opticalEdgeNormal;")
                 .replace(REFLECTION_MIX, REFLECTION_MIX + "\n"
                         + "    vec2 os4ReflectUvOffset = opticalEdgeNormal\n"
@@ -193,9 +188,46 @@ public final class PrismalOpticalEdgeShader {
                         + "    color += os4BloomColor * os4BloomRing;");
     }
 
+    private static String resolveBaseOffsetAnchor(String source) {
+        int singleEdgeCount = countOccurrences(source, SINGLE_EDGE_BASE_OFFSET);
+        int upstreamCount = countOccurrences(source, UPSTREAM_BASE_OFFSET);
+        if (singleEdgeCount + upstreamCount != 1) {
+            throw new IllegalArgumentException(
+                    "Expected exactly one Prismal base-offset stage anchor; singleEdge="
+                            + singleEdgeCount + " upstream=" + upstreamCount);
+        }
+        return singleEdgeCount == 1 ? SINGLE_EDGE_BASE_OFFSET : UPSTREAM_BASE_OFFSET;
+    }
+
+    private static String volumetricBaseOffset(String anchor) {
+        String originalExpression = anchor.equals(SINGLE_EDGE_BASE_OFFSET)
+                ? "edgeRefractionUv"
+                : "lensDeltaUv + snellOff + bulgeUv";
+        return "float os4VolumeMask = os4EdgeBand(edgeDist, os4EdgePx, edgeAa);\n"
+                + "    float os4ThicknessDisplacementPx = mix((os4ThicknessPx - os4EdgePx) * 2.0,\n"
+                + "            os4ThicknessPx * 2.0, os4EdgeDepth);\n"
+                + "    vec3 os4RefIn = refract(-V, N, 1.0 / u_ior);\n"
+                + "    vec3 os4RefOut = (dot(os4RefIn, os4RefIn) < 0.001)\n"
+                + "            ? vec3(0.0) : refract(os4RefIn, -N, u_ior);\n"
+                + "    vec2 os4ThicknessUv = (os4RefOut.xy * os4ThicknessDisplacementPx / u_resolution)\n"
+                + "            * u_displacementScale;\n"
+                + "    vec2 baseOffset = " + originalExpression
+                + " + os4ThicknessUv * os4VolumeMask;";
+    }
+
+    private static int countOccurrences(String source, String anchor) {
+        int count = 0;
+        int from = 0;
+        while (true) {
+            int at = source.indexOf(anchor, from);
+            if (at < 0) return count;
+            count++;
+            from = at + anchor.length();
+        }
+    }
+
     private static void requireSingle(String source, String anchor) {
-        int first = source.indexOf(anchor);
-        if (first < 0 || source.indexOf(anchor, first + anchor.length()) >= 0) {
+        if (countOccurrences(source, anchor) != 1) {
             throw new IllegalArgumentException(
                     "Expected exactly one Prismal optical-edge anchor: " + anchor);
         }
