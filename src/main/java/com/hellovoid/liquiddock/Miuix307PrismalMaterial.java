@@ -30,6 +30,7 @@ final float chromaticAberration;
         final float plainHighlight;
         final float brightness;
         final float highlightWidth;
+        final boolean os4SoftEdgeEnabled;
         final float os4EdgeWidthPx;
         final float os4ReflectOffsetPx;
         final float os4ReflectionStrength;
@@ -79,6 +80,7 @@ final float chromaticAberration;
                 float plainHighlight,
                 float brightness,
                 float highlightWidth,
+                boolean os4SoftEdgeEnabled,
                 float os4EdgeWidthPx,
                 float os4ReflectOffsetPx,
                 float os4ReflectionStrength,
@@ -126,6 +128,7 @@ final float chromaticAberration;
             this.plainHighlight = plainHighlight;
             this.brightness = brightness;
             this.highlightWidth = highlightWidth;
+            this.os4SoftEdgeEnabled = os4SoftEdgeEnabled;
             this.os4EdgeWidthPx = os4EdgeWidthPx;
             this.os4ReflectOffsetPx = os4ReflectOffsetPx;
             this.os4ReflectionStrength = os4ReflectionStrength;
@@ -184,6 +187,7 @@ final float chromaticAberration;
                 0.08f,
                 1.08f,
                 1f,
+                true,
                 20f,
                 10f,
                 0.28f,
@@ -245,6 +249,7 @@ final float chromaticAberration;
                 glass.prismalPlainHighlight,
                 glass.brightness,
                 glass.highlightWidth,
+                glass.os4SoftEdgeEnabled,
                 glass.os4EdgeWidthPx,
                 glass.os4ReflectOffsetPx,
                 glass.os4ReflectionStrength,

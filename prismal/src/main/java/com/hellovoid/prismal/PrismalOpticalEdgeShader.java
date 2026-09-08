@@ -44,6 +44,7 @@ public final class PrismalOpticalEdgeShader {
             "color += plusHL * vec3(0.99, 0.995, 1.0);";
 
     private static final String OS4_EDGE_UNIFORMS = """
+            uniform float u_os4SoftEdgeEnabled;
             uniform float u_os4EdgeWidthPx;
             uniform float u_os4ReflectOffsetPx;
             uniform float u_os4ReflectionStrength;
@@ -112,6 +113,8 @@ public final class PrismalOpticalEdgeShader {
                         + "    float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);\n"
                         + "    float edgeAa = max(fwidth(distMask), 0.75);\n"
                         + "    edgeAa = max(edgeAa, edgePixelFootprint * 0.55);\n"
+                        + "    // OS4 mode is independent from all nine legacy highlight component gates.\n"
+                        + "    float os4Mode = step(0.5, u_os4SoftEdgeEnabled);\n"
                         + "    // OS4 edge width controls the internal optical band, never output alpha.\n"
                         + "    float os4EdgePx = u_os4EdgeWidthPx > 0.0\n"
                         + "            ? u_os4EdgeWidthPx : clamp(minDim * 0.060, 6.0, 18.0);\n"
@@ -130,7 +133,7 @@ public final class PrismalOpticalEdgeShader {
                 .replace(OUTWARD, OUTWARD + "\n"
                         + "    float sdfNormalBlend = os4EdgeBand(edgeDist, "
                         + "max(edgePixelFootprint * 2.0, "
-                        + "clamp(minDim * 0.055 * opticalEdgeScale, 2.0, 12.0)), edgeAa);\n"
+                        + "clamp(minDim * 0.055 * opticalEdgeScale, 2.0, 12.0)), edgeAa) * os4Mode;\n"
                         + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
                         + "halfSz, crMask, u_sminSmoothing);\n"
                         + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
@@ -231,7 +234,7 @@ public final class PrismalOpticalEdgeShader {
         String originalExpression = anchor.equals(SINGLE_EDGE_BASE_OFFSET)
                 ? "edgeRefractionUv"
                 : "lensDeltaUv + snellOff + bulgeUv";
-        return "float os4VolumeMask = os4EdgeBand(edgeDist, os4EdgePx, edgeAa);\n"
+        return "float os4VolumeMask = os4EdgeBand(edgeDist, os4EdgePx, edgeAa) * os4Mode;\n"
                 + "    float os4ThicknessDisplacementPx = mix((os4ThicknessPx - os4EdgePx) * 2.0,\n"
                 + "            os4ThicknessPx * 2.0, os4EdgeDepth);\n"
                 + "    vec3 os4RefIn = refract(-V, N, 1.0 / u_ior);\n"

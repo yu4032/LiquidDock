@@ -409,6 +409,7 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_brightness", p.brightness);
         uniform4f("u_glassColor", p.tintR, p.tintG, p.tintB, p.tintA);
         uniform1f("u_highlightWidth", p.highlightWidth);
+        uniform1f("u_os4SoftEdgeEnabled", p.os4SoftEdgeEnabled ? 1f : 0f);
         uniform1f("u_os4EdgeWidthPx", p.os4EdgeWidthPx);
         uniform1f("u_os4ReflectOffsetPx", p.os4ReflectOffsetPx);
         uniform1f("u_os4ReflectionStrength", p.os4ReflectionStrength);

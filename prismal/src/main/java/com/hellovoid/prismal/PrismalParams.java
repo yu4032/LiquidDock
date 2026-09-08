@@ -21,6 +21,7 @@ public final class PrismalParams {
     public final float plainHighlight;
     public final float brightness;
     public final float highlightWidth;
+    public final boolean os4SoftEdgeEnabled;
     public final float os4EdgeWidthPx;
     public final float os4ReflectOffsetPx;
     public final float os4ReflectionStrength;
@@ -75,6 +76,7 @@ public final class PrismalParams {
         plainHighlight = b.plainHighlight;
         brightness = b.brightness;
         highlightWidth = b.highlightWidth;
+        os4SoftEdgeEnabled = b.os4SoftEdgeEnabled;
         os4EdgeWidthPx = b.os4EdgeWidthPx;
         os4ReflectOffsetPx = b.os4ReflectOffsetPx;
         os4ReflectionStrength = b.os4ReflectionStrength;
@@ -132,6 +134,7 @@ public final class PrismalParams {
         public float plainHighlight = 0f;
         public float brightness = 1.15f;
         public float highlightWidth = 4f;
+        public boolean os4SoftEdgeEnabled = true;
         // OS4 runtime values were not recovered; these are bounded implementation defaults.
         public float os4EdgeWidthPx = 20f;
         public float os4ReflectOffsetPx = 10f;

@@ -51,14 +51,6 @@ final class PrismalComponentGateShader {
         corrected = gateExactlyOnce(corrected,
                 "color += vec3(1.0) * pressGlow * (0.08 + spot * 0.15);",
                 "u_componentPressGlow", "press glow");
-        corrected = replaceExactlyOnce(corrected,
-                "* max(u_os4DirectionalIntensity, 0.0) * os4MainFalloff;",
-                "* max(u_os4DirectionalIntensity, 0.0) * u_componentLitRim * os4MainFalloff;",
-                "OS4 main directional component");
-        corrected = replaceExactlyOnce(corrected,
-                "* max(u_os4DirectionalOppositeIntensity, 0.0) * os4OppositeFalloff;",
-                "* max(u_os4DirectionalOppositeIntensity, 0.0) * u_componentOppositeRim * os4OppositeFalloff;",
-                "OS4 opposite directional component");
         return corrected;
     }
 

@@ -28,6 +28,7 @@ final class Miuix307PrismalAdapter {
         b.plainHighlight = p.plainHighlight;
         b.brightness = p.brightness;
         b.highlightWidth = p.highlightWidth;
+        b.os4SoftEdgeEnabled = p.os4SoftEdgeEnabled;
         b.os4EdgeWidthPx = p.os4EdgeWidthPx;
         b.os4ReflectOffsetPx = p.os4ReflectOffsetPx;
         b.os4ReflectionStrength = p.os4ReflectionStrength;
