@@ -15,6 +15,13 @@ public final class PrismalOpticalEdgeShader {
 
     private static final String OS4_EDGE_UNIFORMS = """
             uniform float u_os4EdgeEnabled;
+            uniform float u_os4EdgeWidthPx;
+            uniform float u_os4ReflectOffsetPx;
+            uniform float u_os4ReflectionStrength;
+            uniform float u_os4ReflectionLighten;
+            uniform float u_os4DirectionalAngleRange;
+            uniform float u_os4DirectionalIntensity;
+            uniform float u_os4DirectionalOppositeIntensity;
             """;
 
     private static final String OS4_EDGE_HELPERS = """
@@ -61,7 +68,9 @@ public final class PrismalOpticalEdgeShader {
                 .replace(EDGE_DISTANCE, EDGE_DISTANCE + "\n"
                         + "    float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);\n"
                         + "    float edgeAa = max(fwidth(distMask), 0.75);\n"
-                        + "    float os4EdgeWidthPx = clamp(6.0 * opticalEdgeScale, 3.0, 18.0);\n"
+                        + "    float os4DefaultEdgeWidthPx = clamp(6.0 * opticalEdgeScale, 3.0, 18.0);\n"
+                        + "    float os4EdgeWidthPx = u_os4EdgeWidthPx > 0.0\n"
+                        + "            ? u_os4EdgeWidthPx : os4DefaultEdgeWidthPx;\n"
                         + "    float os4EdgeT = clamp(edgeDist / max(os4EdgeWidthPx, 1.0), 0.0, 1.0);\n"
                         + "    float os4EdgeMask = os4EdgeBand(edgeDist, os4EdgeWidthPx, edgeAa)\n"
                         + "            * step(0.5, u_os4EdgeEnabled);")
@@ -82,7 +91,9 @@ public final class PrismalOpticalEdgeShader {
                         + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\n"
                         + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));")
                 .replace(REFLECTION_MIX, REFLECTION_MIX + "\n"
-                        + "    float os4ReflectOffsetPx = clamp(u_glassThickness * 0.38, 4.0, 14.0);\n"
+                        + "    float os4DefaultReflectOffsetPx = clamp(u_glassThickness * 0.38, 4.0, 14.0);\n"
+                        + "    float os4ReflectOffsetPx = u_os4ReflectOffsetPx > 0.0\n"
+                        + "            ? u_os4ReflectOffsetPx : os4DefaultReflectOffsetPx;\n"
                         + "    vec2 os4ReflectUvOffset = os4EdgeNormal3.xy\n"
                         + "            * (2.0 * os4EdgeNormal3.z)\n"
                         + "            * os4ReflectOffsetPx * (1.0 - os4EdgeT) / u_resolution\n"
@@ -93,7 +104,8 @@ public final class PrismalOpticalEdgeShader {
                         + "    if (u_useBlurredTexture != 1) {\n"
                         + "        os4EdgeReflection = texture2D(u_backgroundTexture, os4ReflectUv).rgb;\n"
                         + "    }\n"
-                        + "    float os4ReflectionWeight = clamp(os4EdgeMask * 0.28, 0.0, 1.0);\n"
+                        + "    float os4ReflectionWeight = clamp(os4EdgeMask\n"
+                        + "            * max(u_os4ReflectionStrength, 0.0), 0.0, 1.0);\n"
                         + "    color = mix(color, os4EdgeReflection, os4ReflectionWeight);")
                 .replace(PLAIN_HIGHLIGHT_ADD, PLAIN_HIGHLIGHT_ADD + "\n"
                         + "    vec3 os4LightDir3 = normalize(vec3(Lxy, 1.0));\n"
@@ -101,12 +113,23 @@ public final class PrismalOpticalEdgeShader {
                         + "    float os4OppositeFacing = max(\n"
                         + "            dot(vec3(-os4EdgeNormal3.xy, os4EdgeNormal3.z),\n"
                         + "                    os4LightDir3), 0.0);\n"
-                        + "    float os4Directional = os4MainFacing * 0.42\n"
-                        + "            + os4OppositeFacing * 0.14;\n"
+                        + "    float os4AngleRange = max(u_os4DirectionalAngleRange, 0.05);\n"
+                        + "    float os4MainAngle = acos(clamp(os4MainFacing, 0.0, 1.0));\n"
+                        + "    float os4OppositeAngle = acos(clamp(os4OppositeFacing, 0.0, 1.0));\n"
+                        + "    float os4MainFalloff = max(1.0\n"
+                        + "            - os4MainAngle / (3.14159265 * os4AngleRange), 0.0);\n"
+                        + "    float os4OppositeFalloff = max(1.0\n"
+                        + "            - os4OppositeAngle / (3.14159265 * os4AngleRange), 0.0);\n"
+                        + "    float os4Directional = os4MainFacing\n"
+                        + "            * max(u_os4DirectionalIntensity, 0.0) * os4MainFalloff\n"
+                        + "            + os4OppositeFacing\n"
+                        + "            * max(u_os4DirectionalOppositeIntensity, 0.0)\n"
+                        + "            * os4OppositeFalloff;\n"
                         + "    float os4SoftLight = clamp(os4Directional * os4EdgeMask, 0.0, 1.0);\n"
                         + "    float os4Luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n"
                         + "    float os4DarkResponse = 1.0 - smoothstep(0.35, 0.92, os4Luma);\n"
-                        + "    color += vec3(os4SoftLight * (0.42 + 0.16 * os4DarkResponse));")
+                        + "    color += vec3(os4SoftLight\n"
+                        + "            * (0.42 + max(u_os4ReflectionLighten, 0.0) * os4DarkResponse));")
                 .replace("minDim * 0.09", "minDim * 0.09 * opticalEdgeScale")
                 .replace("tw * 0.42", "tw * 0.42 * opticalEdgeScale")
                 .replace("minDim * 0.12", "minDim * 0.12 * opticalEdgeScale")
