@@ -22,6 +22,7 @@ import android.view.View;
 import android.view.ViewTreeObserver;
 
 import com.hellovoid.prismal.PrismalGeometry;
+import com.hellovoid.prismal.PrismalHighlightProfile;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
 import com.hellovoid.prismal.PrismalSampling;
@@ -189,6 +190,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile Miuix307PassBlurBridge.Binding binding;
     private volatile Miuix307PrismalMaterial.Params opticalParams;
     private volatile PrismalParams portablePrismalParams;
+    private volatile PrismalHighlightProfile dockBodyHighlightProfile =
+            PrismalHighlightProfile.ALL_ENABLED;
     private volatile BackdropSnapshot backdropSnapshot;
     private volatile int outputWidth;
     private volatile int outputHeight;
@@ -291,6 +294,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         opticalParams = Miuix307PrismalMaterial.fromConfig(
                 glassConfig, getResources().getDisplayMetrics().density);
         portablePrismalParams = Miuix307PrismalAdapter.toPortable(opticalParams);
+        dockBodyHighlightProfile = glassConfig.largeSurfaceHighlightProfile;
         dockCompositor.setIconStyle(
                 glassConfig.iconStyle, glassConfig.launcherHighlightProfile);
         topSamplingExtraPx = glassConfig.samplingExtraTopPx;
@@ -705,7 +709,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                     rawTexture, mapping.sampleWidth, mapping.sampleHeight, mapping.prismalParams);
             DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
             dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
-                    dockScene, mapping.sampleWidth, mapping.sampleHeight);
+                    dockBodyHighlightProfile, dockScene,
+                    mapping.sampleWidth, mapping.sampleHeight);
             int prismalTexture = prismalRenderer.outputTexture();
             renderCompositePass(prismalTexture, mapping);
 
