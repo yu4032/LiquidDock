@@ -61,7 +61,7 @@ public final class PrismalOpticalEdgeShader {
                 .replace(EDGE_DISTANCE, EDGE_DISTANCE + "\n"
                         + "    float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);\n"
                         + "    float edgeAa = max(fwidth(distMask), 0.75);\n"
-                        + "    float os4EdgeWidthPx = clamp(minDim * 0.060, 6.0, 18.0);\n"
+                        + "    float os4EdgeWidthPx = clamp(6.0 * opticalEdgeScale, 3.0, 18.0);\n"
                         + "    float os4EdgeT = clamp(edgeDist / max(os4EdgeWidthPx, 1.0), 0.0, 1.0);\n"
                         + "    float os4EdgeMask = os4EdgeBand(edgeDist, os4EdgeWidthPx, edgeAa)\n"
                         + "            * step(0.5, u_os4EdgeEnabled);")
