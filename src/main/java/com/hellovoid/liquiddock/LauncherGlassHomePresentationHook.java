@@ -116,6 +116,10 @@ final class LauncherGlassHomePresentationHook {
         }
     }
 
+    static boolean isHomeCaptureBlocked() {
+        return HOME_AUTHORITY.isBarrierFrozen();
+    }
+
     private static boolean containsHomeClose(Object[] args) {
         if (args == null) return false;
         for (Object arg : args) {
