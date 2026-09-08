@@ -1,0 +1,120 @@
+name: Task3 explicit widget ownership one-shot
+
+on:
+  push:
+    branches:
+      - refactor/technical-debt-cleanup-phase1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/technical-debt-cleanup-phase1
+          fetch-depth: 0
+
+      - name: Apply exact Task 3 ownership patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(text, old, new, expected=1):
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"expected {expected} occurrences, found {count}: {old!r}")
+              return text.replace(old, new)
+
+          home = Path("src/main/java/com/hellovoid/liquiddock/HomeGridHook.java")
+          text = home.read_text()
+          text = replace_exact(
+              text,
+              "    private static boolean grid8x4Enabled;\n",
+              "    private static boolean grid8x4Enabled;\n"
+              "    private static boolean widgetAdaptationEnabled;\n")
+          text = replace_exact(
+              text,
+              "    static void install(ClassLoader classLoader, boolean enableGrid8x4,\n"
+              "                        int landLeft, int landRight, int landTop, int landBottom,\n",
+              "    static void install(ClassLoader classLoader, boolean enableGrid8x4,\n"
+              "                        boolean enableWidgetAdaptation,\n"
+              "                        int landLeft, int landRight, int landTop, int landBottom,\n")
+          text = replace_exact(
+              text,
+              "        grid8x4Enabled = enableGrid8x4;\n",
+              "        grid8x4Enabled = enableGrid8x4;\n"
+              "        widgetAdaptationEnabled = enableWidgetAdaptation;\n")
+          text = replace_exact(
+              text,
+              "            if (!grid8x4Enabled || info == null || layoutParams == null) return;\n",
+              "            if (!grid8x4Enabled || !widgetAdaptationEnabled\n"
+              "                    || info == null || layoutParams == null) return;\n")
+          text = replace_exact(
+              text,
+              "            if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)) return;\n",
+              "            if (!WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)) return;\n")
+          text = replace_exact(
+              text,
+              "            int[] rect = WidgetGridSizing.gridRect(cellX, cellY, spanX, spanY,\n"
+              "                    xs, ys, cellWidth, cellHeight, widthGap, heightGap);\n",
+              "            int[] rect = WidgetGridSizing.gridRect(\n"
+              "                    widgetAdaptationEnabled, cellX, cellY, spanX, spanY,\n"
+              "                    xs, ys, cellWidth, cellHeight, widthGap, heightGap);\n")
+          text = replace_exact(
+              text,
+              "        if (!grid8x4Enabled || cellLayout == null) return;\n",
+              "        if (!grid8x4Enabled || !widgetAdaptationEnabled || cellLayout == null) return;\n")
+          text = replace_exact(
+              text,
+              "                if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)) continue;\n",
+              "                if (!WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)) continue;\n")
+          text = replace_exact(
+              text,
+              "                int[] rect = WidgetGridSizing.gridRect(cellX, cellY, spanX, spanY,\n"
+              "                        xs, ys, cellWidth, cellHeight, widthGap, heightGap);\n",
+              "                int[] rect = WidgetGridSizing.gridRect(\n"
+              "                        widgetAdaptationEnabled, cellX, cellY, spanX, spanY,\n"
+              "                        xs, ys, cellWidth, cellHeight, widthGap, heightGap);\n")
+          home.write_text(text)
+
+          main = Path("src/main/java/com/hellovoid/liquiddock/MainHook.java")
+          text = main.read_text()
+          text = replace_exact(
+              text,
+              "        WidgetGridSizing.setWidgetAdaptationEnabled(\n"
+              "                WidgetGridSizing.shouldAdaptWidgets(config.grid.enabled, config.grid.widgetAdaptation));\n",
+              "")
+          text = replace_exact(
+              text,
+              "        LiquidDockConfig.Grid grid = config.grid;\n"
+              "        boolean grid8x4 = grid.enabled, dp = grid.dp, offsets = grid.offsets;\n",
+              "        LiquidDockConfig.Grid grid = config.grid;\n"
+              "        boolean widgetAdaptationEnabled = WidgetGridSizing.shouldAdaptWidgets(\n"
+              "                grid.enabled, grid.widgetAdaptation);\n"
+              "        boolean grid8x4 = grid.enabled, dp = grid.dp, offsets = grid.offsets;\n")
+          text = replace_exact(
+              text,
+              "        HomeGridHook.install(classLoader, grid8x4,\n",
+              "        HomeGridHook.install(classLoader, grid8x4, widgetAdaptationEnabled,\n")
+          main.write_text(text)
+
+          workflow = Path(".github/workflows/task3-explicit-widget-ownership-one-shot.yml")
+          workflow.unlink()
+          PY
+
+      - name: Commit exact patch and self-delete
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/com/hellovoid/liquiddock/HomeGridHook.java \
+                  src/main/java/com/hellovoid/liquiddock/MainHook.java \
+                  .github/workflows/task3-explicit-widget-ownership-one-shot.yml
+          git diff --cached --check
+          git commit -m "refactor: wire explicit widget adaptation ownership"
+          git push origin HEAD:refactor/technical-debt-cleanup-phase1
