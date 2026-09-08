@@ -116,10 +116,24 @@ final class LauncherGlassSession {
         }
     }
 
+    private static final class StaticGeometryFrame {
+        final LauncherGlassGeometry.Snapshot geometry;
+        final int workspaceScrollX;
+        final boolean workspaceScrollValid;
+
+        StaticGeometryFrame(
+                LauncherGlassGeometry.Snapshot geometry,
+                int workspaceScrollX,
+                boolean workspaceScrollValid) {
+            this.geometry = geometry;
+            this.workspaceScrollX = workspaceScrollX;
+            this.workspaceScrollValid = workspaceScrollValid;
+        }
+    }
 
     private static final class StaticNodeState {
         final WeakReference<LauncherGlassStaticNode> nodeRef;
-        volatile LauncherGlassGeometry.Snapshot geometry;
+        volatile StaticGeometryFrame frame;
         volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
 
         StaticNodeState(LauncherGlassStaticNode node) {
@@ -314,7 +328,6 @@ final class LauncherGlassSession {
         // Interaction redraws reuse the last consumed wallpaper texture and prepared blur.
         requestDragRedraw();
     }
-
 
     void registerStaticNode(LauncherGlassStaticNode node) {
         if (node == null || shuttingDown) return;
@@ -556,7 +569,6 @@ final class LauncherGlassSession {
         }, () -> { if (surface != null) surface.release(); });
     }
 
-
     void attachStaticOutput(Surface surface, int width, int height) {
         if (surface == null) return;
         if (shuttingDown || !renderThread.isAlive()) {
@@ -672,17 +684,24 @@ final class LauncherGlassSession {
             }
         }
 
+        Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
         List<StaticNodeState> staticSnapshot;
         synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
             LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
-            LauncherGlassGeometry.Snapshot old = state.geometry;
+            StaticGeometryFrame oldFrame = state.frame;
+            LauncherGlassGeometry.Snapshot old = oldFrame != null ? oldFrame.geometry : null;
             if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
             if ((old == null) != (observed == null)
                     || (old != null && !old.sameAs(observed))) {
-                state.geometry = observed;
+                int anchor = workspaceScrollX != null
+                        ? workspaceScrollX
+                        : oldFrame != null ? oldFrame.workspaceScrollX : 0;
+                boolean anchorValid = workspaceScrollX != null
+                        || (oldFrame != null && oldFrame.workspaceScrollValid);
+                state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
                 staticChanged = true;
             }
         }
@@ -1265,10 +1284,17 @@ final class LauncherGlassSession {
         prismalRenderer.beginGlassFrame();
         List<StaticNodeState> snapshot;
         synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
+        Integer frameScrollX = null;
+        boolean frameAnchorConsistent = true;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
-            LauncherGlassGeometry.Snapshot geometry = state.geometry;
+            StaticGeometryFrame frame = state.frame;
+            LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
             if (node == null || geometry == null) continue;
+            if (frame.workspaceScrollValid) {
+                if (frameScrollX == null) frameScrollX = frame.workspaceScrollX;
+                else if (frameScrollX != frame.workspaceScrollX) frameAnchorConsistent = false;
+            }
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
@@ -1277,7 +1303,13 @@ final class LauncherGlassSession {
             prismalRenderer.drawGlass(prismalGeometry, params, highlights,
                     state.interaction, node.visibilityAlpha());
         }
+        if (frameScrollX != null && frameAnchorConsistent) queueStaticFrameAnchor(frameScrollX);
         presentFull(prismalRenderer.outputTexture(), output);
+    }
+
+    private void queueStaticFrameAnchor(int scrollX) {
+        View root = rootRef.get();
+        if (root != null) LauncherGlassStaticLayer.onStaticFrameAnchorQueued(root, scrollX);
     }
 
     private void renderDragOutputs(PrismalParams params) {
