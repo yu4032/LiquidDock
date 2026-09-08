@@ -59,4 +59,14 @@ public class WidgetBackgroundRuleDiagnosticsTest {
         assertNull(result.engine().match(new WidgetBackgroundIdentity(
                 "maml", "broken", "pkg", 1, 1, 2, 2)));
     }
+
+    @Test
+    public void defaultBundledLoadExposesStatusToProductionCaller() {
+        WidgetBackgroundRuleEngine.LoadResult result =
+                WidgetBackgroundRuleEngine.loadBundled();
+
+        assertNotNull(result);
+        assertNotNull(result.engine());
+        assertNotNull(result.status());
+    }
 }
