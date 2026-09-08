@@ -13,6 +13,7 @@ public class HomeTransitionAuthorityStateTest {
         HomeTransitionAuthorityState.Decision start = state.onLauncherHomeStarted();
         assertTrue(start.freezeBarrier);
         assertFalse(start.releaseBarrier);
+        assertTrue(state.isBarrierFrozen());
     }
 
     @Test public void launcherEndReleasesFallbackButWaitsForActiveSystemUiAuthority() {
@@ -22,12 +23,14 @@ public class HomeTransitionAuthorityStateTest {
         HomeTransitionAuthorityState.Decision fallbackEnd = state.onLauncherHomeEnded(100L);
         assertTrue(fallbackEnd.releaseBarrier);
         assertFalse(fallbackEnd.waitForSystemUi);
+        assertFalse(state.isBarrierFrozen());
 
         state.onLauncherHomeStarted();
         state.onSystemUiStarted(true, 9L, 200L);
         HomeTransitionAuthorityState.Decision heldEnd = state.onLauncherHomeEnded(250L);
         assertFalse(heldEnd.releaseBarrier);
         assertTrue(heldEnd.waitForSystemUi);
+        assertTrue(state.isBarrierFrozen());
     }
 
     @Test public void matchingSystemUiStartAndFinishOwnCaptureBarrier() {
@@ -36,15 +39,18 @@ public class HomeTransitionAuthorityStateTest {
         HomeTransitionAuthorityState.Decision start = state.onSystemUiStarted(true, 11L, 100L);
         assertTrue(start.freezeBarrier);
         assertFalse(start.releaseBarrier);
+        assertTrue(state.isBarrierFrozen());
 
         HomeTransitionAuthorityState.Decision wrong =
                 state.onSystemUiFinished(true, 12L, 150L);
         assertFalse(wrong.releaseBarrier);
+        assertTrue(state.isBarrierFrozen());
 
         HomeTransitionAuthorityState.Decision finish =
                 state.onSystemUiFinished(true, 11L, 200L);
         assertTrue(finish.releaseBarrier);
         assertFalse(state.isSystemUiAuthorityActive());
+        assertFalse(state.isBarrierFrozen());
     }
 
     @Test public void staleSystemUiStartCannotRearmAfterLauncherFinished() {
@@ -56,6 +62,7 @@ public class HomeTransitionAuthorityStateTest {
                 state.onSystemUiStarted(true, 13L, 400L);
         assertFalse(stale.freezeBarrier);
         assertFalse(state.isSystemUiAuthorityActive());
+        assertFalse(state.isBarrierFrozen());
     }
 
     @Test public void newerHomeHiddenStartSupersedesActiveAuthorityAndReleases() {
@@ -67,6 +74,7 @@ public class HomeTransitionAuthorityStateTest {
         assertTrue(hidden.releaseBarrier);
         assertFalse(hidden.freezeBarrier);
         assertFalse(state.isSystemUiAuthorityActive());
+        assertFalse(state.isBarrierFrozen());
     }
 
     @Test public void staleTimestampAndInvalidFinishAreIgnored() {
@@ -77,5 +85,6 @@ public class HomeTransitionAuthorityStateTest {
         assertFalse(state.onSystemUiFinished(false, 30L, 110L).releaseBarrier);
         assertFalse(state.onSystemUiFinished(true, 31L, 120L).releaseBarrier);
         assertTrue(state.isSystemUiAuthorityActive());
+        assertTrue(state.isBarrierFrozen());
     }
 }
