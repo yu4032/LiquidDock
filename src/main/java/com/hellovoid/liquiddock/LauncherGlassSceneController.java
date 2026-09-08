@@ -460,11 +460,15 @@ final class LauncherGlassSceneController {
         return homeTransitionPending || unlockTransitionPending || recentsWallpaperSettlePending;
     }
 
+    private boolean isSourceBlockingPresentationPending() {
+        return unlockTransitionPending || recentsWallpaperSettlePending;
+    }
+
     private void setRecentsWallpaperSettlePending(boolean pending) {
-        boolean wasPending = recentsWallpaperSettlePending;
+        boolean wasPending = isSourceBlockingPresentationPending();
         recentsWallpaperSettlePending = pending;
         onSourceBlockingPresentationPendingChanged(
-                wasPending, pending, "recents-wallpaper");
+                wasPending, isSourceBlockingPresentationPending(), "recents-wallpaper");
     }
 
     private void setHomeTransitionPending(boolean pending) {
@@ -474,9 +478,10 @@ final class LauncherGlassSceneController {
     }
 
     private void setUnlockTransitionPending(boolean pending) {
-        boolean wasPending = unlockTransitionPending;
+        boolean wasPending = isSourceBlockingPresentationPending();
         unlockTransitionPending = pending;
-        onSourceBlockingPresentationPendingChanged(wasPending, pending, "unlock");
+        onSourceBlockingPresentationPendingChanged(
+                wasPending, isSourceBlockingPresentationPending(), "unlock");
     }
 
     private void onHomePresentationPendingChanged(boolean wasPending, boolean pending) {
