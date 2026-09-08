@@ -41,7 +41,7 @@ public class DockGlassShapeOwnershipContractTest {
     }
 
     @Test
-    public void dockBodyReplacesLegacySpecularAndRimWithOs4Edge() throws Exception {
+    public void allGlassNodesReplaceLegacySpecularAndRimWithOs4Edge() throws Exception {
         String compositor = Files.readString(DOCK_COMPOSITOR);
         String profile = Files.readString(PRISMAL_HIGHLIGHT_PROFILE);
         String opticalEdge = Files.readString(PRISMAL_OPTICAL_EDGE);
@@ -49,8 +49,9 @@ public class DockGlassShapeOwnershipContractTest {
 
         assertTrue(profile.contains("withOs4EdgeReplacingLegacyEdge"));
         assertTrue(profile.contains("public final boolean os4Edge;"));
-        assertTrue(compositor.contains(
-                "bodyHighlightProfile = bodyHighlightProfile.withOs4EdgeReplacingLegacyEdge();"));
+        assertTrue(renderer.contains(
+                "highlights = highlights.withOs4EdgeReplacingLegacyEdge();"));
+        assertFalse(compositor.contains("withOs4EdgeReplacingLegacyEdge"));
         assertTrue(opticalEdge.contains("uniform float u_os4EdgeEnabled;"));
         assertTrue(opticalEdge.contains("vec3 os4EdgeNormal3"));
         assertTrue(opticalEdge.contains("os4EdgeReflection"));
