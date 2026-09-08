@@ -32,31 +32,13 @@ jobs:
           p = Path('prismal/src/main/java/com/hellovoid/prismal/PrismalOpticalEdgeShader.java')
           s = p.read_text()
 
-          old = '''                .replace(OUTWARD, OUTWARD + "\\n"
-                        + "    float sdfNormalBlend = os4EdgeBand(edgeDist, "
-                        + "max(edgePixelFootprint * 2.0, "
-                        + "clamp(minDim * 0.055 * opticalEdgeScale, 2.0, 12.0)), edgeAa) * os4Mode;\\n"
-                        + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
-                        + "halfSz, crMask, u_sminSmoothing);\\n"
-                        + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
-                        + "halfSz, crMask, u_sminSmoothing);\\n"
-                        + "    float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y), "
-                        + "halfSz, crMask, u_sminSmoothing);\\n"
-                        + "    float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y), "
-                        + "halfSz, crMask, u_sminSmoothing);\\n"
-                        + "    vec2 sdfEdgeGradient = 0.5 * vec2(\\n"
-                        + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\\n"
-                        + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\\n"
-                        + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\\n"
-                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));\\n"
-                        + "    vec2 sdfEdgeNormal = normalize(os4EdgeNormal3.xy + vec2(1e-5));\\n"
-                        + "    if (sdfNormalBlend > 0.001) {\\n"
-                        + "        outward = normalize(mix(outward, sdfEdgeNormal, sdfNormalBlend));\\n"
-                        + "    }\\n"
-                        + "    vec2 opticalEdgeNormal = outward;\\n"
-                        + "    os4EdgeNormal3 = normalize(vec3(opticalEdgeNormal, "
-                        + "max(os4EdgeNormal3.z, 0.15)));")'''
-          new = '''                .replace(OUTWARD, OUTWARD + "\\n"
+          start = '                .replace(OUTWARD, OUTWARD + "\\n"'
+          end = '                .replace(MENISCUS_BLEND,'
+          if s.count(start) != 1 or s.count(end) != 1:
+              raise SystemExit(f'range anchors start={s.count(start)} end={s.count(end)}')
+          i = s.index(start)
+          j = s.index(end, i)
+          replacement = '''                .replace(OUTWARD, OUTWARD + "\\n"
                         + "    // OS4 owns one continuous rounded-rect SDF normal; legacy outward stays independent.\\n"
                         + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
                         + "halfSz, crMask, u_sminSmoothing);\\n"
@@ -70,10 +52,9 @@ jobs:
                         + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\\n"
                         + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\\n"
                         + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\\n"
-                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));")'''
-          if s.count(old) != 1:
-              raise SystemExit(f'OUTWARD block anchor count={s.count(old)}')
-          s = s.replace(old, new)
+                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));")
+'''
+          s = s[:i] + replacement + s[j:]
 
           replacements = {
               '.replace(REFLECTION_DIRECTION, "vec2 gDir = opticalEdgeNormal;")':
@@ -88,6 +69,10 @@ jobs:
                   raise SystemExit(f'anchor count={s.count(a)} for {a}')
               s = s.replace(a, b)
 
+          forbidden = ['sdfNormalBlend', 'sdfEdgeNormal', 'opticalEdgeNormal']
+          for token in forbidden:
+              if token in s:
+                  raise SystemExit(f'forbidden legacy/OS4 normal coupling remains: {token}')
           p.write_text(s)
           PY
           git diff --check
