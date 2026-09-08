@@ -31,12 +31,8 @@ public class Os4GlassEdgeOwnershipContractTest {
     @Test
     public void zeroCopySuppressesBothSupportedVendorMaterialBodies() throws Exception {
         String source = Files.readString(MIUIX_GLASS_HOOK);
-        String expectedPolicy = """
-                return dockBg != null
-                        && (NATIVE_BACKGROUND_CLASS.equals(dockBg.getClass().getName())
-                        || COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName()));
-                """;
 
-        assertTrue(source.contains(expectedPolicy));
+        assertTrue(source.contains(
+                "return dockBg != null && isNativeVisualOwner(dockBg);"));
     }
 }
