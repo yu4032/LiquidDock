@@ -420,6 +420,7 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_componentPlainHighlight", highlights.plainHighlight ? 1f : 0f);
         uniform1f("u_componentCaustics", highlights.caustics ? 1f : 0f);
         uniform1f("u_componentPressGlow", highlights.pressGlow ? 1f : 0f);
+        uniform1f("u_os4EdgeEnabled", highlights.os4Edge ? 1f : 0f);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sourceTexture);
