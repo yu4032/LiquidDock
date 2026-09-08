@@ -12,9 +12,8 @@ import java.util.Arrays;
  * producer Surface. Pixel ownership remains in GPU buffers; this class never captures or maps the
  * backdrop on the CPU.
  *
- * A bind is always continuous. The independent Dock relies on that historical behavior. Workspace
- * sessions may explicitly pulse or pause their own binding after bind; those calls must never be
- * inferred from the material-host hierarchy because Floating Dock window topology is vendor-specific.
+ * Dock binds remain continuous. Workspace binds may inherit an already-active HOME presentation
+ * suspension so an asynchronous bind cannot resurrect capture before the freshness barrier settles.
  */
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
@@ -32,7 +31,7 @@ final class Miuix307PassBlurBridge {
         final int rootLayerId;
         final boolean launcherWorkspace;
         boolean bound = true;
-        boolean updatesEnabled = true;
+        boolean updatesEnabled;
 
         Binding(
                 SurfaceControl rootSurface,
@@ -44,7 +43,8 @@ final class Miuix307PassBlurBridge {
                 int viewRootIdentity,
                 int surfaceSequenceId,
                 int rootLayerId,
-                boolean launcherWorkspace) {
+                boolean launcherWorkspace,
+                boolean updatesEnabled) {
             this.rootSurface = rootSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
@@ -55,6 +55,7 @@ final class Miuix307PassBlurBridge {
             this.surfaceSequenceId = surfaceSequenceId;
             this.rootLayerId = rootLayerId;
             this.launcherWorkspace = launcherWorkspace;
+            this.updatesEnabled = updatesEnabled;
         }
     }
 
@@ -112,11 +113,19 @@ final class Miuix307PassBlurBridge {
             int workspaceScalePercent = Math.round(requestedScale * 100f);
             float scale = PassBlurQualityPolicy.bridgeScale(
                     launcherWorkspace, workspaceScalePercent);
+            boolean presentationPending = launcherWorkspace
+                    && LauncherGlassHomePresentationHook.isHomeCaptureBlocked();
+            boolean updatesEnabled = !launcherWorkspace
+                    || !WorkstationProducerPolicy.shouldPauseNewWorkspaceBinding(
+                            false, presentationPending, MainHook.isWorkstationMode());
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
                 setUpdateTextureFlag.invoke(
-                        transaction, rootSurface, Boolean.TRUE, Float.valueOf(scale));
+                        transaction,
+                        rootSurface,
+                        Boolean.valueOf(updatesEnabled),
+                        Float.valueOf(scale));
                 transaction.apply();
             }
 
@@ -130,7 +139,8 @@ final class Miuix307PassBlurBridge {
                     viewRootIdentity,
                     surfaceSequenceId,
                     rootLayerId,
-                    launcherWorkspace);
+                    launcherWorkspace,
+                    updatesEnabled);
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + requestedScale
@@ -139,8 +149,9 @@ final class Miuix307PassBlurBridge {
                     + " surfaceSeq=" + surfaceSequenceId
                     + " viewRootId=" + viewRootIdentity
                     + " launcherWorkspace=" + launcherWorkspace
+                    + " updates=" + updatesEnabled
                     + " output=TextureView-in-root"
-                    + " mode=continuous-on-bind"
+                    + " mode=" + (updatesEnabled ? "continuous-on-bind" : "suspended-on-bind")
                     + " exclusions=" + Arrays.toString(exclusions));
             return binding;
         } catch (Throwable error) {
@@ -156,6 +167,10 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
             return;
         }
+        if (shouldBlockWorkspaceHomeUpdates(binding)) {
+            MainHook.log(TAG + " PassBlur Workspace single update blocked by HOME presentation");
+            return;
+        }
         setUpdatesEnabled(binding, true);
         host.postInvalidateOnAnimation();
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
@@ -168,6 +183,10 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
+        if (shouldBlockWorkspaceHomeUpdates(binding)) {
+            MainHook.log(TAG + " PassBlur Workspace resume blocked by HOME presentation");
+            return;
+        }
         setUpdatesEnabled(binding, true);
     }
 
@@ -175,6 +194,15 @@ final class Miuix307PassBlurBridge {
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;
         setUpdatesEnabled(binding, false);
+    }
+
+    private static boolean shouldBlockWorkspaceHomeUpdates(Binding binding) {
+        return binding != null
+                && binding.launcherWorkspace
+                && WorkstationProducerPolicy.shouldPauseNewWorkspaceBinding(
+                        false,
+                        LauncherGlassHomePresentationHook.isHomeCaptureBlocked(),
+                        MainHook.isWorkstationMode());
     }
 
     private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
@@ -256,7 +284,7 @@ final class Miuix307PassBlurBridge {
                 Method method = type.getDeclaredMethod("getSurfaceSequenceId");
                 method.setAccessible(true);
                 Object value = method.invoke(viewRoot);
-                if (value instanceof Number) return ((Number) value).intValue();
+                if (value instanceof Number) return ((Number) value).intValue() : -1;
             } catch (NoSuchMethodException ignored) {
                 type = type.getSuperclass();
                 continue;
