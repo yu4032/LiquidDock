@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -9,38 +8,31 @@ import java.nio.file.Path;
 import org.junit.Test;
 
 /**
- * OS4 soft edge is the sole visual edge owner on the zero-copy GlassHost.
- * The configurable Dock foreground stroke may remain saved, but must not be layered above it.
+ * Static edge-ownership contract: OS4 soft edge is the only bright foreground edge on the
+ * zero-copy GlassHost. The saved configurable Dock stroke may remain installed, but the host must
+ * not paint it while OS4 owns the edge.
  */
 public class Os4GlassEdgeOwnershipContractTest {
-    private static final Path GLASS_HOOK =
-            Path.of("src/main/java/com/hellovoid/liquiddock/MiuixGlassHook.java");
-    private static final Path STROKE_RENDERER =
-            Path.of("src/main/java/com/hellovoid/liquiddock/DockStrokeRenderer.java");
+    private static final Path GLASS_HOST =
+            Path.of("src/main/java/com/hellovoid/liquiddock/DockLiquidGlassHostView.java");
+    private static final Path GLASS_RUNTIME =
+            Path.of("src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java");
 
     @Test
-    public void glassHostPassesOs4EdgeOwnershipIntoForegroundStrokeRenderer() throws Exception {
-        String source = Files.readString(GLASS_HOOK);
-        String call = "DockStrokeRenderer.configureReplacingForeground(";
-        int count = source.split("DockStrokeRenderer\\.configureReplacingForeground\\(", -1).length - 1;
+    public void glassHostSuppressesForegroundPaintingWhileOs4OwnsTheEdge() throws Exception {
+        String source = Files.readString(GLASS_HOST);
 
-        assertEquals(2, count);
-
-        int from = 0;
-        for (int i = 0; i < count; i++) {
-            int start = source.indexOf(call, from);
-            int end = Math.min(source.length(), start + 260);
-            String window = source.substring(start, end);
-            assertTrue(window.contains("config.glass.os4SoftEdgeEnabled"));
-            from = start + call.length();
-        }
+        assertTrue(source.contains("public void onDrawForeground(Canvas canvas)"));
+        assertTrue(source.contains("if (GlassRuntimeState.isOs4SoftEdgeEnabled()) return;"));
+        assertTrue(source.contains("super.onDrawForeground(canvas);"));
     }
 
     @Test
-    public void foregroundStrokeRendererReleasesItsOwnerWhenShaderOwnsEdge() throws Exception {
-        String source = Files.readString(STROKE_RENDERER);
-        assertTrue(source.contains("boolean shaderOwnsEdge"));
-        assertTrue(source.contains("if (shaderOwnsEdge)"));
-        assertTrue(source.contains("releaseInstalledStroke(host);"));
+    public void glassRuntimeTracksOs4EdgeOwnershipAndRefreshesStrokeOwners() throws Exception {
+        String source = Files.readString(GLASS_RUNTIME);
+
+        assertTrue(source.contains("ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name()"));
+        assertTrue(source.contains("static boolean isOs4SoftEdgeEnabled()"));
+        assertTrue(source.contains("DockStrokeRenderer.refreshInstalledFromCurrentConfig()"));
     }
 }
