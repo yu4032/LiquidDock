@@ -343,6 +343,7 @@ public final class PrismalRenderer implements AutoCloseable {
                                  PrismalHighlightProfile highlights,
                                  PrismalInteractionState interactionState,
                                  boolean composite, float opacity) {
+        highlights = highlights.withOs4EdgeReplacingLegacyEdge();
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
         GLES20.glViewport(0, 0, renderWidth, renderHeight);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
