@@ -388,6 +388,8 @@ public final class ConfigSchema {
                 "liquid_prismal_vibrancy", 128, 128, 128, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_PLAIN_HIGHLIGHT = integer(
                 "liquid_prismal_plain_highlight", 8, 8, 8, 0, 100, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OS4_SOFT_EDGE_ENABLED = bool(
+                "liquid_os4_soft_edge", true, true, true, ConfigKey.ExportMode.ALWAYS);
         // OS4 background-driven edge controls. Pixel distances are direct logical output pixels;
         // strength/range values use x100 storage like the surrounding Prismal controls.
         public static final ConfigKey<Integer> OS4_EDGE_WIDTH_PX = integer(
@@ -595,6 +597,7 @@ public final class ConfigSchema {
                 Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, Glass.PRISMAL_FRESNEL_REFLECT,
                 Glass.PRISMAL_DISPERSION_R, Glass.PRISMAL_DISPERSION_B,
                 Glass.PRISMAL_VIBRANCY, Glass.PRISMAL_PLAIN_HIGHLIGHT,
+                Glass.OS4_SOFT_EDGE_ENABLED,
                 Glass.OS4_EDGE_WIDTH_PX, Glass.OS4_REFLECT_OFFSET_PX,
                 Glass.OS4_REFLECTION_STRENGTH, Glass.OS4_REFLECTION_LIGHTEN,
                 Glass.OS4_DIRECTIONAL_ANGLE_RANGE, Glass.OS4_DIRECTIONAL_INTENSITY,

@@ -309,6 +309,15 @@ private val passBlurRenderFpsSpec = IntSpec(
     "fps",
     summary = "0 = 跟随真实 PassBlur 源帧；限速只跳过合成并持续释放 OES BufferQueue，不会创建定时器；重启桌面生效",
 )
+private val os4EdgeSpecs = listOf(
+    IntSpec(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, "OS4 边缘带宽度", "px"),
+    IntSpec(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, "OS4 反射偏移", "px"),
+    IntSpec(ConfigSchema.Glass.OS4_REFLECTION_STRENGTH, "OS4 反射强度", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN, "OS4 暗部补光", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE, "OS4 方向光角度范围", "%π"),
+    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY, "OS4 主方向光强度", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY, "OS4 反向补光强度", "%"),
+)
 private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.BLUR, "玻璃模糊", "px"),
     IntSpec(ConfigSchema.Glass.THICKNESS, "玻璃厚度"),
@@ -342,13 +351,6 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, "蓝色散倍率", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "鲜艳度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, "基础高光", "%"),
-    IntSpec(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, "OS4 边缘带宽度", "px"),
-    IntSpec(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, "OS4 反射偏移", "px"),
-    IntSpec(ConfigSchema.Glass.OS4_REFLECTION_STRENGTH, "OS4 反射强度", "%"),
-    IntSpec(ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN, "OS4 暗部补光", "%"),
-    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE, "OS4 方向光角度范围", "%π"),
-    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY, "OS4 主方向光强度", "%"),
-    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY, "OS4 反向补光强度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X, "光源 X", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y, "光源 Y", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_RED, "内阴影红", ""),
@@ -596,6 +598,7 @@ private fun LiquidPage(
     var widgetGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())) }
     var smallFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault())) }
     var largeFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault())) }
+    var os4SoftEdge by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name(), ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.uiDefault())) }
     SettingsList(
         padding,
         stringResource(R.string.page_liquid),
@@ -627,10 +630,22 @@ private fun LiquidPage(
         BooleanSetting(prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS, "大文件夹玻璃", "独立控制大文件夹材质", masterEnabled && liquidGlass) { largeFolderGlass = it }
         IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
         IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED,
+            "OS4 柔光边缘",
+            "开启后使用背景驱动的 OS4 柔光边缘，并在运行时关闭旧九层高光；关闭后恢复原高光配置",
+            masterEnabled && liquidGlass,
+        ) { os4SoftEdge = it }
+        if (Os4EdgeModePolicy.showOs4Controls(os4SoftEdge)) {
+            SmallTitle("OS4 柔光边缘参数")
+            os4EdgeSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidGlass) }
+        }
         ArrowPreference(
             stringResource(R.string.launcher_highlights_entry),
-            summary = stringResource(R.string.launcher_highlights_entry_summary),
-            enabled = masterEnabled && liquidGlass,
+            summary = if (os4SoftEdge) "OS4 柔光边缘开启时旧高光组件由运行时统一关闭；关闭 OS4 后恢复这里保存的配置"
+                    else stringResource(R.string.launcher_highlights_entry_summary),
+            enabled = masterEnabled && liquidGlass && Os4EdgeModePolicy.legacyHighlightsEnabled(os4SoftEdge),
             onClick = openLauncherHighlights,
         )
         SmallTitle("工作区实时捕获性能")
@@ -654,6 +669,8 @@ private fun LauncherHighlightsPage(
     masterEnabled: Boolean,
 ) {
     val liquidEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
+    val os4SoftEdge = prefs.getBoolean(ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name(), ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.uiDefault())
+    val legacyHighlightsEnabled = Os4EdgeModePolicy.legacyHighlightsEnabled(os4SoftEdge)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             PageHeader(
@@ -668,7 +685,7 @@ private fun LauncherHighlightsPage(
                     BooleanSetting(
                         prefs, spec.compactConfig,
                         stringResource(spec.titleRes), stringResource(spec.summaryRes),
-                        masterEnabled && liquidEnabled,
+                        masterEnabled && liquidEnabled && legacyHighlightsEnabled,
                     )
                 }
             }
@@ -680,7 +697,7 @@ private fun LauncherHighlightsPage(
                     BooleanSetting(
                         prefs, spec.largeConfig,
                         stringResource(spec.titleRes), stringResource(spec.summaryRes),
-                        masterEnabled && liquidEnabled,
+                        masterEnabled && liquidEnabled && legacyHighlightsEnabled,
                     )
                 }
             }

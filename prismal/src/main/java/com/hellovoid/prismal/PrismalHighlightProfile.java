@@ -4,6 +4,8 @@ package com.hellovoid.prismal;
 public final class PrismalHighlightProfile {
     public static final PrismalHighlightProfile ALL_ENABLED =
             new PrismalHighlightProfile(true, true, true, true, true, true, true, true, true);
+    public static final PrismalHighlightProfile NONE_ENABLED =
+            new PrismalHighlightProfile(false, false, false, false, false, false, false, false, false);
 
     public final boolean skyHaze;
     public final boolean specular;

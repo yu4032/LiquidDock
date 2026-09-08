@@ -233,7 +233,7 @@ final class LiquidDockConfig {
         final GlassComponentStyle widgetStyle;
         final GlassComponentStyle smallFolderStyle;
         final GlassComponentStyle largeFolderStyle;
-        final boolean prismalShowNormals;
+        final boolean prismalShowNormals, os4SoftEdgeEnabled;
         final PrismalHighlightProfile launcherHighlightProfile, largeSurfaceHighlightProfile;
         final float blur, chromatic, thickness, ior, normalStrength, dome,
         lensRefraction, depthEffect, highlightWidth, brightness,
@@ -291,8 +291,14 @@ final class LiquidDockConfig {
             widgetEnabled = widgetStyle.enabled;
             folderEnabled = smallFolderStyle.enabled || largeFolderStyle.enabled;
             folderCornerRadiusDp = legacyFolderRadius;
-            launcherHighlightProfile = LauncherHighlightPreferences.read(c);
-            largeSurfaceHighlightProfile = LauncherHighlightPreferences.readLargeSurfaces(c);
+            os4SoftEdgeEnabled = c.b(ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name(),
+                    ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.runtimeFallback());
+            PrismalHighlightProfile configuredCompact = LauncherHighlightPreferences.read(c);
+            PrismalHighlightProfile configuredLarge = LauncherHighlightPreferences.readLargeSurfaces(c);
+            launcherHighlightProfile = Os4EdgeModePolicy.effectiveHighlights(
+                    os4SoftEdgeEnabled, configuredCompact);
+            largeSurfaceHighlightProfile = Os4EdgeModePolicy.effectiveHighlights(
+                    os4SoftEdgeEnabled, configuredLarge);
             blur = c.f(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.runtimeFallback());
             passBlurCaptureScalePercent = clamp(c.i(
                     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name(),
