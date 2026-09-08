@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.prismal.PrismalHighlightProfile;
+import com.hellovoid.prismal.PrismalParams;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,10 +26,8 @@ public class Os4EdgeModePolicyTest {
     public void os4ModeSuppressesAllLegacyHighlightComponentsAtRuntime() {
         PrismalHighlightProfile configured = new PrismalHighlightProfile(
                 true, false, true, false, true, false, true, false, true);
-
         PrismalHighlightProfile effective =
                 Os4EdgeModePolicy.effectiveHighlights(true, configured);
-
         assertFalse(effective.skyHaze);
         assertFalse(effective.specular);
         assertFalse(effective.litRim);
@@ -44,7 +43,6 @@ public class Os4EdgeModePolicyTest {
     public void legacyModeRestoresConfiguredHighlightProfileWithoutMutation() {
         PrismalHighlightProfile configured = new PrismalHighlightProfile(
                 false, true, false, true, false, true, false, true, false);
-
         assertSame(configured, Os4EdgeModePolicy.effectiveHighlights(false, configured));
     }
 
@@ -62,7 +60,6 @@ public class Os4EdgeModePolicyTest {
         values.put("liquid_os4_soft_edge", true);
         values.put("launcher_surface_component_specular", true);
         values.put("launcher_large_surface_component_specular", true);
-
         LiquidDockConfig os4 = LiquidDockConfig.from(new ConfigReader(values));
         assertTrue(os4.glass.os4SoftEdgeEnabled);
         assertFalse(os4.glass.launcherHighlightProfile.specular);
@@ -73,5 +70,21 @@ public class Os4EdgeModePolicyTest {
         assertFalse(legacy.glass.os4SoftEdgeEnabled);
         assertTrue(legacy.glass.launcherHighlightProfile.specular);
         assertTrue(legacy.glass.largeSurfaceHighlightProfile.specular);
+    }
+
+    @Test
+    public void modeFlagReachesPortablePrismalParams() {
+        Map<String, Object> values = new HashMap<>();
+        values.put("liquid_os4_soft_edge", false);
+        LiquidDockConfig legacy = LiquidDockConfig.from(new ConfigReader(values));
+        PrismalParams legacyParams = Miuix307PrismalAdapter.toPortable(
+                Miuix307PrismalMaterial.fromConfig(legacy.glass, 1f));
+        assertFalse(legacyParams.os4SoftEdgeEnabled);
+
+        values.put("liquid_os4_soft_edge", true);
+        LiquidDockConfig os4 = LiquidDockConfig.from(new ConfigReader(values));
+        PrismalParams os4Params = Miuix307PrismalAdapter.toPortable(
+                Miuix307PrismalMaterial.fromConfig(os4.glass, 1f));
+        assertTrue(os4Params.os4SoftEdgeEnabled);
     }
 }
