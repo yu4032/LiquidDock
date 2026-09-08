@@ -16,6 +16,10 @@ public class DockGlassShapeOwnershipContractTest {
             Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java");
     private static final Path PRISMAL_RENDERER =
             Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java");
+    private static final Path PRISMAL_HIGHLIGHT_PROFILE =
+            Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalHighlightProfile.java");
+    private static final Path PRISMAL_OPTICAL_EDGE =
+            Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalOpticalEdgeShader.java");
     private static final Path PRISMAL_RASTER_GUARD =
             Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalRasterGuardShader.java");
 
@@ -34,6 +38,24 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(compositor.contains(
                 "renderer.drawGlass(dockBody, params, bodyHighlightProfile);"));
         assertFalse(compositor.contains("renderer.drawGlass(dockBody, params);"));
+    }
+
+    @Test
+    public void dockBodyReplacesLegacySpecularAndRimWithOs4Edge() throws Exception {
+        String compositor = Files.readString(DOCK_COMPOSITOR);
+        String profile = Files.readString(PRISMAL_HIGHLIGHT_PROFILE);
+        String opticalEdge = Files.readString(PRISMAL_OPTICAL_EDGE);
+        String renderer = Files.readString(PRISMAL_RENDERER);
+
+        assertTrue(profile.contains("withOs4EdgeReplacingLegacyEdge"));
+        assertTrue(profile.contains("public final boolean os4Edge;"));
+        assertTrue(compositor.contains(
+                "bodyHighlightProfile = bodyHighlightProfile.withOs4EdgeReplacingLegacyEdge();"));
+        assertTrue(opticalEdge.contains("uniform float u_os4EdgeEnabled;"));
+        assertTrue(opticalEdge.contains("vec3 os4EdgeNormal3"));
+        assertTrue(opticalEdge.contains("os4EdgeReflection"));
+        assertTrue(renderer.contains(
+                "uniform1f(\"u_os4EdgeEnabled\", highlights.os4Edge ? 1f : 0f);"));
     }
 
     @Test
