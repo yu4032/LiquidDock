@@ -30,6 +30,13 @@ final float chromaticAberration;
         final float plainHighlight;
         final float brightness;
         final float highlightWidth;
+        final float os4EdgeWidthPx;
+        final float os4ReflectOffsetPx;
+        final float os4ReflectionStrength;
+        final float os4ReflectionLighten;
+        final float os4DirectionalAngleRange;
+        final float os4DirectionalIntensity;
+        final float os4DirectionalOppositeIntensity;
         final float lightDirX;
         final float lightDirY;
         final float specularStrength;
@@ -72,6 +79,13 @@ final float chromaticAberration;
                 float plainHighlight,
                 float brightness,
                 float highlightWidth,
+                float os4EdgeWidthPx,
+                float os4ReflectOffsetPx,
+                float os4ReflectionStrength,
+                float os4ReflectionLighten,
+                float os4DirectionalAngleRange,
+                float os4DirectionalIntensity,
+                float os4DirectionalOppositeIntensity,
                 float lightDirX,
                 float lightDirY,
                 float specularStrength,
@@ -112,6 +126,13 @@ final float chromaticAberration;
             this.plainHighlight = plainHighlight;
             this.brightness = brightness;
             this.highlightWidth = highlightWidth;
+            this.os4EdgeWidthPx = os4EdgeWidthPx;
+            this.os4ReflectOffsetPx = os4ReflectOffsetPx;
+            this.os4ReflectionStrength = os4ReflectionStrength;
+            this.os4ReflectionLighten = os4ReflectionLighten;
+            this.os4DirectionalAngleRange = os4DirectionalAngleRange;
+            this.os4DirectionalIntensity = os4DirectionalIntensity;
+            this.os4DirectionalOppositeIntensity = os4DirectionalOppositeIntensity;
             this.lightDirX = lightDirX;
             this.lightDirY = lightDirY;
             this.specularStrength = specularStrength;
@@ -163,6 +184,13 @@ final float chromaticAberration;
                 0.08f,
                 1.08f,
                 1f,
+                20f,
+                10f,
+                0.28f,
+                0.16f,
+                0.52f,
+                0.42f,
+                0.14f,
                 -0.5f,
                 -0.8f,
                 1.52f,
@@ -217,6 +245,13 @@ final float chromaticAberration;
                 glass.prismalPlainHighlight,
                 glass.brightness,
                 glass.highlightWidth,
+                glass.os4EdgeWidthPx,
+                glass.os4ReflectOffsetPx,
+                glass.os4ReflectionStrength,
+                glass.os4ReflectionLighten,
+                glass.os4DirectionalAngleRange,
+                glass.os4DirectionalIntensity,
+                glass.os4DirectionalOppositeIntensity,
                 glass.prismalLightDirX,
                 glass.prismalLightDirY,
                 glass.specularStrength,
@@ -296,15 +331,19 @@ final float chromaticAberration;
                 * Math.abs(p.parallaxScale) * 1.12f;
         float snell = Math.abs(p.thicknessPx) * 0.85f * Math.abs(p.displacementScale)
                 * 1.18f * pxNorm;
+        float os4EffectiveThickness = Math.max(
+                Math.abs(p.thicknessPx), Math.max(0f, p.os4EdgeWidthPx) + 6f);
+        float os4Volume = os4EffectiveThickness * 2f * Math.abs(p.displacementScale)
+                * 1.18f * pxNorm;
         float modernBulge = axis * (0.014f + 0.01f * clamp(p.liquidDome, 0f, 2f)) * pxNorm;
-        float modernBase = lens + parallax + snell + modernBulge;
+        float modernBase = lens + parallax + snell + os4Volume + modernBulge;
 
         float baseReach = modernBase;
 
         float dispersion = Math.max(Math.abs(p.dispersionR), Math.abs(p.dispersionB));
         float chromatic = Math.abs(p.chromaticAberration) * 0.0018f
                 * dispersion * pxNorm * axis;
-        float reflection = 56f * pxNorm;
+        float reflection = Math.max(56f * pxNorm, Math.abs(p.os4ReflectOffsetPx) * 2f);
         return Math.max(0, (int) Math.ceil(
                 scaleExpansion + baseReach + chromatic + reflection + 2f));
     }

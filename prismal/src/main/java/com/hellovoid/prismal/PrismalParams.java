@@ -133,8 +133,8 @@ public final class PrismalParams {
         public float brightness = 1.15f;
         public float highlightWidth = 4f;
         // OS4 runtime values were not recovered; these are bounded implementation defaults.
-        public float os4EdgeWidthPx = 0f;
-        public float os4ReflectOffsetPx = 0f;
+        public float os4EdgeWidthPx = 20f;
+        public float os4ReflectOffsetPx = 10f;
         public float os4ReflectionStrength = 0.28f;
         public float os4ReflectionLighten = 0.16f;
         public float os4DirectionalAngleRange = 0.52f;

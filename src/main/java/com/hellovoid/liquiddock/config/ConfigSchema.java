@@ -388,6 +388,22 @@ public final class ConfigSchema {
                 "liquid_prismal_vibrancy", 128, 128, 128, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_PLAIN_HIGHLIGHT = integer(
                 "liquid_prismal_plain_highlight", 8, 8, 8, 0, 100, ConfigKey.ExportMode.ALWAYS);
+        // OS4 background-driven edge controls. Pixel distances are direct logical output pixels;
+        // strength/range values use x100 storage like the surrounding Prismal controls.
+        public static final ConfigKey<Integer> OS4_EDGE_WIDTH_PX = integer(
+                "liquid_os4_edge_width_px", 20, 20, 20, 4, 64, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_REFLECT_OFFSET_PX = integer(
+                "liquid_os4_reflect_offset_px", 10, 10, 10, 0, 40, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_REFLECTION_STRENGTH = integer(
+                "liquid_os4_reflection_strength", 28, 28, 28, 0, 200, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_REFLECTION_LIGHTEN = integer(
+                "liquid_os4_reflection_lighten", 16, 16, 16, 0, 100, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_DIRECTIONAL_ANGLE_RANGE = integer(
+                "liquid_os4_directional_angle_range", 52, 52, 52, 5, 150, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_DIRECTIONAL_INTENSITY = integer(
+                "liquid_os4_directional_intensity", 42, 42, 42, 0, 200, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_DIRECTIONAL_OPPOSITE_INTENSITY = integer(
+                "liquid_os4_directional_opposite_intensity", 14, 14, 14, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_X = integer(
                 "liquid_prismal_light_dir_x", -50, -50, 100, -200, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_Y = integer(
@@ -579,6 +595,10 @@ public final class ConfigSchema {
                 Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, Glass.PRISMAL_FRESNEL_REFLECT,
                 Glass.PRISMAL_DISPERSION_R, Glass.PRISMAL_DISPERSION_B,
                 Glass.PRISMAL_VIBRANCY, Glass.PRISMAL_PLAIN_HIGHLIGHT,
+                Glass.OS4_EDGE_WIDTH_PX, Glass.OS4_REFLECT_OFFSET_PX,
+                Glass.OS4_REFLECTION_STRENGTH, Glass.OS4_REFLECTION_LIGHTEN,
+                Glass.OS4_DIRECTIONAL_ANGLE_RANGE, Glass.OS4_DIRECTIONAL_INTENSITY,
+                Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
                 Glass.PRISMAL_LIGHT_DIR_X, Glass.PRISMAL_LIGHT_DIR_Y,
                 Glass.PRISMAL_SHADOW_RED, Glass.PRISMAL_SHADOW_GREEN,
                 Glass.PRISMAL_SHADOW_BLUE, Glass.PRISMAL_SHADOW_ALPHA,

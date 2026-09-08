@@ -185,6 +185,13 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_dispersion_b" -> "蓝色通道相对色散倍率"
     "liquid_prismal_vibrancy" -> "折射背景的色彩鲜艳度"
     "liquid_prismal_plain_highlight" -> "基础边缘高光"
+    "liquid_os4_edge_width_px" -> "OS4 背景驱动边缘带宽度；越大，参与反射与柔光的玻璃边缘越厚"
+    "liquid_os4_reflect_offset_px" -> "OS4 沿边缘伪法线采样背景的反射偏移距离"
+    "liquid_os4_reflection_strength" -> "OS4 背景反射与当前玻璃颜色的混合强度"
+    "liquid_os4_reflection_lighten" -> "OS4 方向光对暗色背景的灰白补光强度"
+    "liquid_os4_directional_angle_range" -> "OS4 方向光角度软衰减范围，相对 π 的百分比"
+    "liquid_os4_directional_intensity" -> "OS4 主方向光强度；受现有“受光侧边缘”开关控制"
+    "liquid_os4_directional_opposite_intensity" -> "OS4 反向补光强度；受现有“背光侧边缘”开关控制"
     "liquid_prismal_light_dir_x" -> "光源水平方向"
     "liquid_prismal_light_dir_y" -> "光源垂直方向"
     "liquid_prismal_shadow_r" -> "内阴影 · 红"
@@ -335,6 +342,13 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, "蓝色散倍率", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "鲜艳度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, "基础高光", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, "OS4 边缘带宽度", "px"),
+    IntSpec(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, "OS4 反射偏移", "px"),
+    IntSpec(ConfigSchema.Glass.OS4_REFLECTION_STRENGTH, "OS4 反射强度", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN, "OS4 暗部补光", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE, "OS4 方向光角度范围", "%π"),
+    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY, "OS4 主方向光强度", "%"),
+    IntSpec(ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY, "OS4 反向补光强度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X, "光源 X", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y, "光源 Y", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_RED, "内阴影红", ""),

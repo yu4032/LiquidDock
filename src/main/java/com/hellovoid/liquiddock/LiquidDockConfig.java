@@ -241,6 +241,9 @@ final class LiquidDockConfig {
         final float prismalRefractionInset, prismalDisplacementScale, prismalHeightTransitionWidth,
                 prismalSminSmoothing, prismalEdgeRefractionFalloff, prismalFresnelReflect,
                 prismalDispersionR, prismalDispersionB, prismalVibrancy, prismalPlainHighlight,
+                os4EdgeWidthPx, os4ReflectOffsetPx, os4ReflectionStrength, os4ReflectionLighten,
+                os4DirectionalAngleRange, os4DirectionalIntensity,
+                os4DirectionalOppositeIntensity,
                 prismalLightDirX, prismalLightDirY, prismalShadowSoftness, prismalTransmittance,
                 prismalBackdropScaleX, prismalBackdropScaleY, prismalParallaxScale;
         final int samplingExtraTopPx, samplingExtraBottomPx,
@@ -361,6 +364,35 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.PRISMAL_VIBRANCY.runtimeFallback()) / 100f;
             prismalPlainHighlight = c.i(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT.name(),
                     ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT.runtimeFallback()) / 100f;
+            os4EdgeWidthPx = clamp(c.i(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.name(),
+                    ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.minInt(),
+                    ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.maxInt());
+            os4ReflectOffsetPx = clamp(c.i(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.name(),
+                    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.minInt(),
+                    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.maxInt());
+            os4ReflectionStrength = clamp(c.i(ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.name(),
+                    ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.minInt(),
+                    ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.maxInt()) / 100f;
+            os4ReflectionLighten = clamp(c.i(ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN.name(),
+                    ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN.minInt(),
+                    ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN.maxInt()) / 100f;
+            os4DirectionalAngleRange = clamp(c.i(ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE.name(),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE.minInt(),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE.maxInt()) / 100f;
+            os4DirectionalIntensity = clamp(c.i(ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY.name(),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY.minInt(),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY.maxInt()) / 100f;
+            os4DirectionalOppositeIntensity = clamp(c.i(
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY.name(),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY.runtimeFallback()),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY.minInt(),
+                    ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY.maxInt()) / 100f;
             prismalLightDirX = c.i(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X.name(),
                     ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X.runtimeFallback()) / 100f;
             prismalLightDirY = c.i(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y.name(),
