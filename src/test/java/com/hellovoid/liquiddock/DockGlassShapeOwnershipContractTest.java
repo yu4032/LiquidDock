@@ -13,7 +13,7 @@ import org.junit.Test;
  *
  * <p>The Workspace path already uses a transparent TextureView whose glass boundary is produced by
  * Prismal geometry. Dock must follow the same single-shape-owner rule: the Android host may keep an
- * outline for native shadow geometry, but it must not clip the TextureView a second time or install
+ * outline for native shadow geometry, but it must not clip the TextureView a second time or render
  * the legacy foreground stroke over the Prismal edge. Native/non-glass Dock stroke support remains
  * available through DockStrokeRenderer's vendor hook.
  */
@@ -24,8 +24,6 @@ public class DockGlassShapeOwnershipContractTest {
             Path.of("src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java");
     private static final Path DOCK_COMPOSITOR =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java");
-    private static final Path MIUIX_GLASS_HOOK =
-            Path.of("src/main/java/com/hellovoid/liquiddock/MiuixGlassHook.java");
     private static final Path DOCK_STROKE_RENDERER =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockStrokeRenderer.java");
 
@@ -42,12 +40,12 @@ public class DockGlassShapeOwnershipContractTest {
     }
 
     @Test
-    public void zeroCopyGlassDoesNotInstallLegacyForegroundStroke() throws Exception {
+    public void zeroCopyGlassHostRejectsLegacyForegroundStroke() throws Exception {
         String host = Files.readString(DOCK_HOST);
-        String hook = Files.readString(MIUIX_GLASS_HOOK);
         String strokeRenderer = Files.readString(DOCK_STROKE_RENDERER);
 
-        assertFalse(hook.contains("DockStrokeRenderer.configureReplacingForeground("));
+        assertTrue(host.contains("public void setForeground(Drawable foreground)"));
+        assertTrue(host.contains("super.setForeground(null);"));
         assertFalse(host.contains("DockStrokeRenderer.updateRadius("));
         assertTrue(strokeRenderer.contains("static void installNativeHook("));
         assertTrue(strokeRenderer.contains("NATIVE_BACKGROUND_CLASS"));
