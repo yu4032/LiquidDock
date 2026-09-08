@@ -43,6 +43,16 @@ public final class PrismalOpticalEdgeShader {
     private static final String PLAIN_HIGHLIGHT_ADD =
             "color += plusHL * vec3(0.99, 0.995, 1.0);";
 
+    private static final String OS4_EDGE_UNIFORMS = """
+            uniform float u_os4EdgeWidthPx;
+            uniform float u_os4ReflectOffsetPx;
+            uniform float u_os4ReflectionStrength;
+            uniform float u_os4ReflectionLighten;
+            uniform float u_os4DirectionalAngleRange;
+            uniform float u_os4DirectionalIntensity;
+            uniform float u_os4DirectionalOppositeIntensity;
+            """;
+
     private static final String OS4_EDGE_HELPERS = """
             float os4EdgeCurve(float t) {
                 t = clamp(t, 0.0, 1.0);
@@ -92,7 +102,7 @@ public final class PrismalOpticalEdgeShader {
         return source
                 .replace(PRECISION,
                         "#extension GL_OES_standard_derivatives : enable\n\n"
-                                + PRECISION + "\n\n" + OS4_EDGE_HELPERS)
+                                + PRECISION + "\n\n" + OS4_EDGE_UNIFORMS + "\n" + OS4_EDGE_HELPERS)
                 .replace(SHAPE_POSITION, SHAPE_POSITION + "\n"
                         + "    vec2 edgePixelStep = vec2(\n"
                         + "            max(length(dFdx(pPx)), 0.5),\n"
@@ -102,11 +112,15 @@ public final class PrismalOpticalEdgeShader {
                         + "    float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);\n"
                         + "    float edgeAa = max(fwidth(distMask), 0.75);\n"
                         + "    edgeAa = max(edgeAa, edgePixelFootprint * 0.55);\n"
-                        + "    // OS4 keeps material thickness separate from the visible Bloom width.\n"
-                        + "    float os4EdgePx = clamp(minDim * 0.060, 6.0, 18.0);\n"
+                        + "    // OS4 edge width controls the internal optical band, never output alpha.\n"
+                        + "    float os4EdgePx = u_os4EdgeWidthPx > 0.0\n"
+                        + "            ? u_os4EdgeWidthPx : clamp(minDim * 0.060, 6.0, 18.0);\n"
                         + "    float os4ThicknessPx = max(u_glassThickness, os4EdgePx + 6.0);\n"
-                        + "    float os4ReflectOffsetPx = clamp(os4ThicknessPx * 0.38, 4.0, 14.0);\n"
-                        + "    float os4EdgeDepth = clamp(edgeDist / max(os4EdgePx, 1.0), 0.0, 1.0);")
+                        + "    float os4ReflectOffsetPx = u_os4ReflectOffsetPx > 0.0\n"
+                        + "            ? u_os4ReflectOffsetPx : clamp(os4ThicknessPx * 0.38, 4.0, 14.0);\n"
+                        + "    float os4EdgeT = clamp(edgeDist / max(os4EdgePx, 1.0), 0.0, 1.0);\n"
+                        + "    float os4EdgeRemain = 1.0 - os4EdgeT;\n"
+                        + "    float os4EdgeDepth = os4EdgeT;")
                 .replace(REFLECTION_SHELL,
                         "float reflShell = os4EdgeBand(edgeDist, "
                                 + "clamp(minDim * 0.09 * opticalEdgeScale, 1.8, 18.0), edgeAa) "
@@ -117,20 +131,26 @@ public final class PrismalOpticalEdgeShader {
                         + "    float sdfNormalBlend = os4EdgeBand(edgeDist, "
                         + "max(edgePixelFootprint * 2.0, "
                         + "clamp(minDim * 0.055 * opticalEdgeScale, 2.0, 12.0)), edgeAa);\n"
+                        + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
+                        + "halfSz, crMask, u_sminSmoothing);\n"
+                        + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
+                        + "halfSz, crMask, u_sminSmoothing);\n"
+                        + "    float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y), "
+                        + "halfSz, crMask, u_sminSmoothing);\n"
+                        + "    float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y), "
+                        + "halfSz, crMask, u_sminSmoothing);\n"
+                        + "    vec2 sdfEdgeGradient = 0.5 * vec2(\n"
+                        + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\n"
+                        + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\n"
+                        + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\n"
+                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));\n"
+                        + "    vec2 sdfEdgeNormal = normalize(os4EdgeNormal3.xy + vec2(1e-5));\n"
                         + "    if (sdfNormalBlend > 0.001) {\n"
-                        + "        float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
-                        + "halfSz, crMask, u_sminSmoothing);\n"
-                        + "        float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
-                        + "halfSz, crMask, u_sminSmoothing);\n"
-                        + "        float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y), "
-                        + "halfSz, crMask, u_sminSmoothing);\n"
-                        + "        float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y), "
-                        + "halfSz, crMask, u_sminSmoothing);\n"
-                        + "        vec2 sdfEdgeNormal = normalize(vec2(sdfXp - sdfXn, sdfYp - sdfYn));\n"
-                        + "        sdfEdgeNormal.y = -sdfEdgeNormal.y;\n"
                         + "        outward = normalize(mix(outward, sdfEdgeNormal, sdfNormalBlend));\n"
                         + "    }\n"
-                        + "    vec2 opticalEdgeNormal = outward;")
+                        + "    vec2 opticalEdgeNormal = outward;\n"
+                        + "    os4EdgeNormal3 = normalize(vec3(opticalEdgeNormal, "
+                        + "max(os4EdgeNormal3.z, 0.15)));")
                 .replace(MENISCUS_BLEND,
                         "float menBlend = os4EdgeBand(edgeDist, "
                                 + "tw * 0.42 * opticalEdgeScale, edgeAa) "
@@ -144,14 +164,18 @@ public final class PrismalOpticalEdgeShader {
                 .replace(REFLECTION_DIRECTION, "vec2 gDir = opticalEdgeNormal;")
                 .replace(REFLECTION_MIX, REFLECTION_MIX + "\n"
                         + "    vec2 os4ReflectUvOffset = opticalEdgeNormal\n"
-                        + "            * (os4ReflectOffsetPx * (1.0 - os4EdgeDepth)) / u_resolution\n"
+                        + "            * (2.0 * os4EdgeNormal3.z)\n"
+                        + "            * os4ReflectOffsetPx * os4EdgeRemain / u_resolution\n"
                         + "            * os4VolumeMask;\n"
-                        + "    vec2 os4ReflectUv = clamp(uvCenter + os4ReflectUvOffset, vec2(0.0), vec2(1.0));\n"
+                        + "    vec2 os4ReflectUv = clamp(uvCenter + os4ReflectUvOffset, "
+                        + "vec2(0.0), vec2(1.0));\n"
                         + "    vec3 os4EdgeReflection = texture2D(u_blurredTexture, os4ReflectUv).rgb;\n"
                         + "    if (u_useBlurredTexture != 1) {\n"
                         + "        os4EdgeReflection = texture2D(u_backgroundTexture, os4ReflectUv).rgb;\n"
                         + "    }\n"
-                        + "    float os4EdgeReflectionWeight = os4VolumeMask * reflShell * 0.24;\n"
+                        + "    float os4ReflectMask = (1.0 - os4EdgeCurve(os4EdgeT)) * os4VolumeMask;\n"
+                        + "    float os4EdgeReflectionWeight = clamp(os4ReflectMask "
+                        + "* max(u_os4ReflectionStrength, 0.0), 0.0, 1.0);\n"
                         + "    color = mix(color, os4EdgeReflection, os4EdgeReflectionWeight);")
                 .replace(RIM_BAND_RADIUS,
                         "float bandR = clamp(minDim * bandFracR * opticalEdgeScale * rimBandTight, "
@@ -168,24 +192,28 @@ public final class PrismalOpticalEdgeShader {
                                 + "* u_plainHighlight * u_rimStrength")
                 .replace(PLAIN_HIGHLIGHT_ADD, PLAIN_HIGHLIGHT_ADD + "\n"
                         + "\n"
-                        + "    // OS4-style finite-width Bloom stroke: real ring area, not a hairline.\n"
-                        + "    float os4BloomEdgePx = clamp(minDim * 0.090, 9.0, 28.0);\n"
-                        + "    float os4BloomOuter = smoothstep(-edgeAa, edgeAa, edgeDist);\n"
-                        + "    float os4BloomInner = smoothstep(os4BloomEdgePx - edgeAa,\n"
-                        + "            os4BloomEdgePx + edgeAa, edgeDist);\n"
-                        + "    float os4BloomRing = clamp(os4BloomOuter * (1.0 - os4BloomInner), 0.0, 1.0);\n"
-                        + "    float os4BloomCross = os4EdgeCurve(clamp(1.0 - edgeDist / max(os4BloomEdgePx, 1.0),\n"
-                        + "            0.0, 1.0));\n"
-                        + "    os4BloomRing *= mix(0.52, 1.0, os4BloomCross);\n"
-                        + "    float os4BloomFacing = dot(opticalEdgeNormal, Lxy);\n"
-                        + "    float os4BloomMain = pow(max(os4BloomFacing, 0.0), 1.45) * 0.95;\n"
-                        + "    float os4BloomOpposite = pow(max(-os4BloomFacing, 0.0), 1.10) * 0.34;\n"
-                        + "    float os4BloomAmbient = 0.16;\n"
-                        + "    float os4BloomLight = max(os4BloomAmbient, os4BloomMain + os4BloomOpposite);\n"
-                        + "    vec3 os4BloomTint = mix(vec3(0.91, 0.955, 1.035), vec3(1.0),\n"
-                        + "            clamp(os4BloomMain, 0.0, 1.0));\n"
-                        + "    vec3 os4BloomColor = os4BloomTint * os4BloomLight * u_rimStrength * 0.62;\n"
-                        + "    color += os4BloomColor * os4BloomRing;");
+                        + "    // Extracted OS4 model: directional light modulates the current backdrop-driven glass.\n"
+                        + "    vec3 os4LightDir3 = normalize(vec3(Lxy, 1.0));\n"
+                        + "    float os4A = clamp(dot(os4EdgeNormal3, os4LightDir3), -1.0, 1.0);\n"
+                        + "    float os4B = clamp(2.0 * os4EdgeNormal3.z * os4LightDir3.z - os4A, -1.0, 1.0);\n"
+                        + "    float os4AngleRange = max(u_os4DirectionalAngleRange, 0.05);\n"
+                        + "    float os4MainAngle = acos(clamp(os4A, 0.0, 1.0));\n"
+                        + "    float os4OppositeAngle = acos(clamp(os4B, 0.0, 1.0));\n"
+                        + "    float os4MainFalloff = max(1.0 - os4MainAngle / (3.14159265 * os4AngleRange), 0.0);\n"
+                        + "    float os4OppositeFalloff = max(1.0 - os4OppositeAngle / (3.14159265 * os4AngleRange), 0.0);\n"
+                        + "    float os4DirectionalMain = max(os4A, 0.0) "
+                        + "* max(u_os4DirectionalIntensity, 0.0) * os4MainFalloff;\n"
+                        + "    float os4DirectionalOpposite = max(os4B, 0.0) "
+                        + "* max(u_os4DirectionalOppositeIntensity, 0.0) * os4OppositeFalloff;\n"
+                        + "    float os4EdgeMask = (1.0 - os4EdgeCurve(os4EdgeT)) * os4VolumeMask;\n"
+                        + "    float os4SoftLight = clamp((os4DirectionalMain + os4DirectionalOpposite) "
+                        + "* os4EdgeMask, 0.0, 1.0);\n"
+                        + "    float os4DirectionalGain = 1.0 + smoothstep(0.0, 1.0, os4SoftLight);\n"
+                        + "    color *= os4DirectionalGain;\n"
+                        + "    float os4Luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n"
+                        + "    float os4DarkResponse = 1.0 - smoothstep(0.35, 0.92, os4Luma);\n"
+                        + "    color += vec3(u_os4ReflectionLighten * os4DarkResponse\n"
+                        + "            * max(os4DirectionalGain - 1.0, 0.0));");
     }
 
     private static String resolveBaseOffsetAnchor(String source) {
