@@ -189,7 +189,6 @@ final class DockGlassCompositor {
             DockGlassSceneSnapshot scene, int framebufferWidth, int framebufferHeight) {
         PrismalHighlightProfile bodyHighlightProfile = dockBodyHighlightProfile != null
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
-        bodyHighlightProfile = bodyHighlightProfile.withOs4EdgeReplacingLegacyEdge();
         renderer.beginGlassFrame();
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
