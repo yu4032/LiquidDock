@@ -1,0 +1,363 @@
+name: Task6 current-state docs one-shot
+
+on:
+  push:
+    branches:
+      - refactor/technical-debt-cleanup-phase1
+    paths:
+      - '.github/workflows/task6-current-state-docs-one-shot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/technical-debt-cleanup-phase1
+          fetch-depth: 0
+
+      - name: Update current-state docs exactly
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}\n--- OLD ---\n{old}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'TODO.md',
+              '''## 1. Phase 1：确定性 ownership 清理
+
+**状态：计划完成，代码尚未实施。**
+
+优先完成以下四组高置信债务，不同时触碰 producer/EGL/OES/fresh-frame 架构：
+
+### Workstation mode ownership
+
+当前 `MainHook` 仍直接持有 `workstationMode`、`workstationModeHookConfirmed`、normal-layout backup 等 feature-level mutable state，并保留一次固定 2 秒的初始化 re-query fallback。
+
+目标：
+
+- 引入单一 `WorkstationModeController`；
+- controller 持有 mode、vendor-confirmed state 与 monotonic generation；
+- delayed fallback 必须捕获 generation，stale callback 不得修改状态；
+- normal-layout backup/restore 的 Workstation ownership 从 `MainHook` 迁出；
+- 不新增 retry chain，不以另一套延迟替代当前时序假设。
+
+必须保持：
+
+- 现有 Workstation Recents covered authority；
+- duplicate / non-covered `onRecentViewHide` rejection；
+- `workstationBindEpoch` stale `finishBind()` rejection；
+- Workstation-only producer rebind；
+- fresh-frame barrier 仍是唯一 reveal authority。
+
+### Widget classification / span ownership
+
+当前仍存在：
+
+- `WidgetGridSizing` static `widgetAdaptationEnabled`；
+- `HomeGridHook` 中 `itemType == 4 || itemType == 5 || itemType == 19` fallback；
+- 1×1、2×1、2×2、4×2 支持集合直接影响核心 Hook control flow。
+
+目标：
+
+- `WidgetClassifier` 集中 `ItemInfo.isWidget()` 主路径与 itemType fallback；
+- `WidgetSpecRegistry` 持有当前四种支持 span；
+- `WidgetGridSizing` 变为纯 geometry/allocation helper；
+- `MainHook` 不再设置 process-global Widget sizing flag；
+- 第一轮把真实 Widget adaptation Hook ownership 从 `HomeGridHook` 迁出。
+
+必须保持：
+
+- Widget adaptation 只修改 allocation/frame；
+- 不 Hook `addOccupied()` / `transformToHVArray()`；
+- 不接管 MIUI placement/occupancy authority；
+- 本阶段不扩展新的 Widget span。
+
+### Widget bundled-rule diagnostics
+
+`WidgetBackgroundRuleEngine.loadBundled()` / `parse()` 当前在 bundled resource 缺失或解析异常时静默退化为 `EMPTY`。
+
+目标：
+
+- 缺失资源与解析失败可区分；
+- runtime 继续 fail-safe 到空规则集；
+- required bundled-rule degradation 只发一次 structured diagnostic；
+- 不在 `match()` 热路径制造日志噪声。
+
+### Phase 1 verification
+
+代码完成后必须记录：
+
+- `testDebugUnitTest`；
+- `assembleDebug`；
+- Workstation enter/exit/quick re-enter；
+- stale delayed fallback；
+- HOME -> Recents -> HOME 连续往返；
+- Recents 附近 rotation；
+- normal-layout backup/restore；
+- 1×1 / 2×1 / 2×2 / 4×2 Widget 横竖屏；
+- Widget adaptation disabled；
+- normal mode 无回归。
+''',
+              '''## 1. Phase 1：确定性 ownership 清理
+
+**状态：Tasks 1–5 已完成代码实现并通过 CI；最终真机矩阵待完成。**
+
+当前代码事实：
+
+- `WorkstationModeController` 已接管 mode、vendor-confirmed state、monotonic generation 与 normal-layout backup；初始化 2 秒 fallback 捕获 generation，vendor callback 或更新 transition 会使旧 callback 失效；
+- `WidgetClassifier` 已集中 `ItemInfo.isWidget()` 主路径与 itemType 4/5/19 compatibility fallback；
+- `WidgetSpecRegistry.DEFAULT` 是当前 1×1、2×1、2×2、4×2 span 白名单；
+- `WidgetGridSizing` 已变为 stateless geometry/allocation helper，不再持有 process-global adaptation flag；
+- `HomeGridWidgetAdaptationHook` 已接管 `setupLayoutParam()` Widget allocation 与 `onLayout()` 后 final-frame enforcement；
+- `WidgetBackgroundRuleEngine` 已区分 `LOADED` / `MISSING_RESOURCE` / `PARSE_FAILED`，失败仍 fail-safe 到空规则集；`LauncherMamlBackgroundRuleExecutor` 只在 bundled load degradation 时发一次 `[DC][WidgetRules]` structured diagnostic；
+- 本阶段没有修改 producer/EGL/OES/fresh-frame authority，也没有接管 MIUI placement/occupancy。
+
+代码/CI 证据与最终设备矩阵统一记录在：
+
+- [Phase 1 Verification](docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md)
+
+Phase 1 当前唯一关闭门是最终 production head 的真机矩阵。必须完成并记录：
+
+- normal Launcher startup；
+- Workstation enter / exit / quick re-enter；
+- vendor callback 先于 delayed fallback，以及 stale delayed fallback；
+- normal-layout backup/restore；
+- HOME -> Recents -> HOME 连续 5 次；
+- Recents-adjacent rotation；
+- 1×1 / 2×1 / 2×2 / 4×2 Widget 横竖屏；
+- Widget adaptation disabled；
+- normal mode 无回归；
+- normal bundled Widget-rule load 不出现 degradation warning。
+
+在该矩阵完成前，不把 Phase 1 标记为完成，也不开始 EGL/OES/producer lifecycle extraction。
+''')
+
+          replace_once(
+              'TODO.md',
+              '**状态：未完成；Phase 1 先迁出 Workstation ownership。**',
+              '**状态：未完成；Phase 1 已迁出 Workstation ownership，后续继续收缩其它 feature owner。**')
+
+          replace_once(
+              'TODO.md',
+              '''## 3. `HomeGridHook` ownership 拆分
+
+**状态：已有 orientation memory、profile overlay、drag/bounds 等辅助 Hook/policy，但本体仍拥有多个 runtime owner。**
+
+当前仍覆盖：
+
+- cell count；
+- orientation-specific geometry；
+- Widget frame adaptation；
+- page indicator；
+- folder alignment；
+- rotation/refresh；
+- lazy/off-screen page preparation。
+
+安全拆分顺序：
+
+1. Widget adaptation（Phase 1）；
+2. Page indicator；
+3. Folder alignment；
+4. Cell geometry；
+5. Grid rotation / refresh（最后）。
+
+目标是迁移真实 Hook 安装和 runtime ownership，不是继续增加只被 `HomeGridHook` 调用的薄 helper。
+''',
+              '''## 3. `HomeGridHook` ownership 拆分
+
+**状态：Widget frame adaptation 的真实 Hook ownership 已在 Phase 1 迁出；本体仍拥有其余 Grid runtime owner。**
+
+`HomeGridWidgetAdaptationHook` 当前独立拥有：
+
+- `CellLayout.setupLayoutParam()` 的 Widget allocation/frame 调整；
+- `CellLayout.onLayout()` 之后的 Widget final-frame enforcement。
+
+`HomeGridHook` 当前仍覆盖：
+
+- cell count；
+- orientation-specific geometry；
+- page indicator；
+- folder alignment；
+- rotation/refresh；
+- lazy/off-screen page preparation。
+
+后续安全拆分顺序：
+
+1. Page indicator；
+2. Folder alignment；
+3. Cell geometry；
+4. Grid rotation / refresh（最后）。
+
+目标仍是迁移真实 Hook 安装和 runtime ownership，不是继续增加只被 `HomeGridHook` 调用的薄 helper。
+''')
+
+          replace_once(
+              'ARCHITECTURE.md',
+              '''### 当前 Workstation ownership 债务
+
+Workstation mode 探测、vendor confirmation、普通布局 backup/restore 等 feature-level mutable state 仍部分直接位于 `MainHook`。初始化路径还保留一次固定 2 秒的 mode re-query fallback；当前仅由 `workstationModeHookConfirmed` 避免已确认路径重复覆盖，尚未拥有完整的 transition generation/cancellation 保护。
+
+这属于当前重构目标，不应被误写为新的 producer-recovery 问题。
+
+工作台结构配置仍 restart-bound，直到未来建立完整、可逆的 runtime restore。
+''',
+              '''### 当前 Workstation mode ownership
+
+`WorkstationModeController` 已成为 mode / vendor confirmation / delayed fallback generation / normal-layout backup 的单一 state owner。`MainHook` 只保留 vendor Hook 安装与 side-effect wiring：
+
+- 初始化 probe 通过 `beginUnconfirmedProbe()` 获取 monotonic generation；
+- 2 秒 fallback 只能在 generation 仍匹配且尚无 vendor confirmation 时由 `acceptFallbackProbe(...)` 发布；
+- vendor callback 通过 `onVendorModeChanged(...)` 使旧 pending fallback 失效；
+- normal-layout item snapshot/restore 数据由 controller 持有，不再由 `MainHook` 的独立 map 持有。
+
+这次 ownership 迁移没有改变 Workstation Recents producer recovery、bind epoch 或 fresh-frame authority。最终 Workstation enter/exit/quick-reenter 与 stale fallback 仍需按 Phase 1 verification matrix 真机验收。
+
+工作台结构配置仍 restart-bound，直到未来建立完整、可逆的 runtime restore。
+''')
+
+          replace_once(
+              'ARCHITECTURE.md',
+              '''当前 Widget classification 优先调用 `ItemInfo.isWidget()`，失败时仍在 `HomeGridHook` 使用 item type `4` / `5` / `19` fallback；支持 span 仍固定为 1×1、2×1、2×2、4×2。`WidgetGridSizing` 仍持有 static adaptation flag。这些是 active ownership debt，不是新的功能语义。
+''',
+              '''当前 Widget classification 由 `WidgetClassifier` 集中处理：优先调用 `ItemInfo.isWidget()`，失败时使用 item type `4` / `5` / `19` compatibility fallback。`WidgetSpecRegistry.DEFAULT` 持有固定的 1×1、2×1、2×2、4×2 支持集合；`WidgetGridSizing` 是 stateless geometry/allocation helper。
+
+真实 Widget frame Hook ownership 已迁到 `HomeGridWidgetAdaptationHook`。它只在 classifier 与 registry 都接受后修改 allocation/frame；`HomeGridHook` 继续拥有 cell geometry、lazy/off-screen preparation、page indicator、folder alignment 与 rotation/refresh，MIUI placement/occupancy authority 不变。
+''')
+
+          replace_once(
+              'ARCHITECTURE.md',
+              '''当前顺序：
+
+1. 将 Workstation mode / delayed recheck / normal-layout ownership 从 `MainHook` 迁到单一 controller，并给 delayed callback 加 generation/cancellation 保护；
+2. 引入 `WidgetClassifier` / `WidgetSpecRegistry`，移除 `WidgetGridSizing` static mutable config；
+3. 先迁出 `HomeGridHook` 的真实 Widget adaptation ownership，再按 page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序继续拆；
+4. 为 bundled Widget rule silent degradation 增加 one-shot structured diagnostic；
+5. 对 `LauncherGlassSession` / `Miuix307PassBlurTextureView` / Prismal 先画 resource owner graph，再决定最小公共 EGL/OES primitive；
+6. 继续缩小 `LEGACY_SOURCE_DEBT` 与 CI/i18n hygiene debt。
+''',
+              '''当前顺序：
+
+1. Phase 1 Tasks 1–5 的 ownership/diagnostic 代码已完成并通过 CI；当前停止在最终 Workstation/Grid 真机 verification gate；
+2. device gate 关闭后，`HomeGridHook` 再按 page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序继续拆；
+3. 对 `LauncherGlassSession` / `Miuix307PassBlurTextureView` / Prismal 先画 resource owner graph，再决定最小公共 EGL/OES primitive；
+4. 继续缩小 `LEGACY_SOURCE_DEBT` 与 CI/i18n hygiene debt。
+''')
+
+          replace_once(
+              'HOOKS.md',
+              '''`MainHook` 当前仍直接持有部分 Workstation mutable state 与初始化 re-query fallback，因此它还不是纯 composition root；这一点是 active debt，而不是当前 Hook contract。
+''',
+              '''`WorkstationModeController` 已接管 Workstation mode、vendor-confirmed state、delayed fallback generation 与 normal-layout backup；`MainHook` 仍不是纯 composition root，因为 Dock/Grid/Glass 等其它 feature ownership 仍待继续收缩。
+''')
+
+          replace_once(
+              'HOOKS.md',
+              '''当前 `MainHook` 仍直接持有部分 Workstation mode state，并在 Launcher 初始化后安排一次固定 2 秒的 mode re-query fallback；vendor callback 已确认时会跳过该 fallback，但该 delayed runnable 尚未拥有完整 generation/cancellation guard。后续计划迁移到单一 `WorkstationModeController`，不改变现有 producer recovery 语义。
+
+整体仍属于实验性适配，结构配置保持 restart-bound。
+''',
+              '''当前 `WorkstationModeController` 持有 mode、vendor confirmation、monotonic generation 与 normal-layout backup。Launcher 初始化后的 2 秒 re-query 仍存在，但 callback 捕获 controller generation；vendor callback 或更新 transition 会使旧 fallback 失效。`MainHook` 只负责 vendor Hook wiring 与已存在的模式切换 side effects，不再拥有第二份 Workstation mode/map state。
+
+这次迁移不改变现有 producer recovery 语义。整体仍属于实验性适配，结构配置保持 restart-bound，最终设备矩阵仍需验收。
+''')
+
+          replace_once(
+              'HOOKS.md',
+              '''## 12. Grid / Widget
+
+`HomeGridHook` 当前仍覆盖：
+
+- cell count；
+- orientation-specific geometry；
+- Widget frame adaptation；
+- page indicator；
+- folder alignment；
+- rotation / refresh；
+- lazy/off-screen page preparation。
+
+当前 Widget adaptation：
+
+- 优先通过 `ItemInfo.isWidget()`；
+- 失败时在 `HomeGridHook` 使用 item type `4` / `5` / `19` fallback；
+- span 只显式支持 1×1、2×1、2×2、4×2；
+- `WidgetGridSizing` 仍持有 process-global static adaptation flag。
+
+这些分类/span/config ownership 是 active debt；后续迁移到 `WidgetClassifier` / `WidgetSpecRegistry` / stateless `WidgetGridSizing`。在迁移完成前，以上仍是当前 production 事实。
+''',
+              '''## 12. Grid / Widget
+
+`HomeGridHook` 当前覆盖：
+
+- cell count；
+- orientation-specific geometry；
+- page indicator；
+- folder alignment；
+- rotation / refresh；
+- lazy/off-screen page preparation。
+
+Widget frame ownership 已迁到 `HomeGridWidgetAdaptationHook`：
+
+- `CellLayout.setupLayoutParam()` 负责现有 Widget allocation/frame 调整；
+- `CellLayout.onLayout()` 后 reassert final Widget frame；
+- `shouldAdapt(...)` 必须同时满足 install-time adaptation gate、`WidgetClassifier.isWidget(...)` 与 `WidgetSpecRegistry.DEFAULT.supports(...)`；
+- `WidgetClassifier` 优先使用 `ItemInfo.isWidget()`，item type `4` / `5` / `19` 只作为 compatibility fallback；
+- `WidgetSpecRegistry.DEFAULT` 当前只允许 1×1、2×1、2×2、4×2；
+- `WidgetGridSizing` 不再持有 process-global mutable config。
+
+`HomeGridHook` 自己的 `onLayout()` Hook 只保留 lazy/off-screen CellLayout first-valid-bounds geometry preparation，不再执行 Widget final-frame enforcement。
+''')
+
+          replace_once(
+              'CONTRIBUTING.md',
+              '''- 当前 production 仍存在 `ItemInfo.isWidget()` + item type 4/5/19 fallback 和 `WidgetGridSizing` static config；迁移完成前文档必须如实描述它们；
+- Widget 泛化应走 `WidgetClassifier` / `WidgetSpecRegistry`，不要继续新增散落 `itemType == ...` 分支；
+- `HomeGridHook` 拆分按 Widget adaptation -> page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序；rotation/refresh 最后处理。
+''',
+              '''- 当前 production 由 `WidgetClassifier` 集中 `ItemInfo.isWidget()` + item type 4/5/19 compatibility fallback，不要重新新增散落 `itemType == ...` 分支；
+- 支持 span 只能通过 `WidgetSpecRegistry` 管理；`WidgetGridSizing` 保持 stateless，不得重新引入 process-global adaptation flag；
+- `HomeGridWidgetAdaptationHook` 是 Widget allocation/final-frame Hook owner；`HomeGridHook` 后续拆分顺序为 page indicator -> folder alignment -> cell geometry -> rotation/refresh，rotation/refresh 最后处理。
+''')
+
+          replace_once(
+              'CONTRIBUTING.md',
+              '''Phase 1 **禁止**顺手重构 producer/EGL/OES/fresh-frame authority。Glass resource cleanup 必须先画 owner graph，再证明哪些生命周期真正可共享。
+''',
+              '''Phase 1 Tasks 1–5 已完成代码/CI 收口；最终 Workstation/Grid device matrix 仍是关闭门。Phase 1 **禁止**顺手重构 producer/EGL/OES/fresh-frame authority；Glass resource cleanup 必须等 device gate 关闭后先画 owner graph，再证明哪些生命周期真正可共享。
+''')
+
+          replace_once(
+              'CONTRIBUTING.md',
+              '''工作台仍是**实验性、未完整支持**路径。
+
+修改工作台代码时至少考虑：
+''',
+              '''工作台仍是**实验性、未完整支持**路径。当前 `WorkstationModeController` 是 mode、vendor confirmation、delayed fallback generation 与 normal-layout backup 的 state owner；不要在 `MainHook` 或其它 Hook 中重新建立第二份 mode/map state。
+
+修改工作台代码时至少考虑：
+''')
+          PY
+
+          git diff --check
+          git diff -- TODO.md ARCHITECTURE.md HOOKS.md CONTRIBUTING.md
+
+      - name: Commit docs and self-delete
+        shell: bash
+        run: |
+          rm .github/workflows/task6-current-state-docs-one-shot.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add TODO.md ARCHITECTURE.md HOOKS.md CONTRIBUTING.md .github/workflows/task6-current-state-docs-one-shot.yml
+          git commit -m 'docs: align phase 1 current state'
+          git push origin HEAD:refactor/technical-debt-cleanup-phase1
