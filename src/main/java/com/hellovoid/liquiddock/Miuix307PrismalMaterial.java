@@ -30,6 +30,13 @@ final float chromaticAberration;
         final float plainHighlight;
         final float brightness;
         final float highlightWidth;
+        final float os4EdgeWidthPx;
+        final float os4ReflectOffsetPx;
+        final float os4ReflectionStrength;
+        final float os4ReflectionLighten;
+        final float os4DirectionalAngleRange;
+        final float os4DirectionalIntensity;
+        final float os4DirectionalOppositeIntensity;
         final float lightDirX;
         final float lightDirY;
         final float specularStrength;
@@ -72,6 +79,13 @@ final float chromaticAberration;
                 float plainHighlight,
                 float brightness,
                 float highlightWidth,
+                float os4EdgeWidthPx,
+                float os4ReflectOffsetPx,
+                float os4ReflectionStrength,
+                float os4ReflectionLighten,
+                float os4DirectionalAngleRange,
+                float os4DirectionalIntensity,
+                float os4DirectionalOppositeIntensity,
                 float lightDirX,
                 float lightDirY,
                 float specularStrength,
@@ -112,6 +126,13 @@ final float chromaticAberration;
             this.plainHighlight = plainHighlight;
             this.brightness = brightness;
             this.highlightWidth = highlightWidth;
+            this.os4EdgeWidthPx = os4EdgeWidthPx;
+            this.os4ReflectOffsetPx = os4ReflectOffsetPx;
+            this.os4ReflectionStrength = os4ReflectionStrength;
+            this.os4ReflectionLighten = os4ReflectionLighten;
+            this.os4DirectionalAngleRange = os4DirectionalAngleRange;
+            this.os4DirectionalIntensity = os4DirectionalIntensity;
+            this.os4DirectionalOppositeIntensity = os4DirectionalOppositeIntensity;
             this.lightDirX = lightDirX;
             this.lightDirY = lightDirY;
             this.specularStrength = specularStrength;
@@ -163,6 +184,13 @@ final float chromaticAberration;
                 0.08f,
                 1.08f,
                 1f,
+                6f,
+                0f,
+                0.28f,
+                0.16f,
+                0.52f,
+                0.42f,
+                0.14f,
                 -0.5f,
                 -0.8f,
                 1.52f,
@@ -217,6 +245,13 @@ final float chromaticAberration;
                 glass.prismalPlainHighlight,
                 glass.brightness,
                 glass.highlightWidth,
+                glass.os4EdgeWidthPx,
+                glass.os4ReflectOffsetPx,
+                glass.os4ReflectionStrength,
+                glass.os4ReflectionLighten,
+                glass.os4DirectionalAngleRange,
+                glass.os4DirectionalIntensity,
+                glass.os4DirectionalOppositeIntensity,
                 glass.prismalLightDirX,
                 glass.prismalLightDirY,
                 glass.specularStrength,
