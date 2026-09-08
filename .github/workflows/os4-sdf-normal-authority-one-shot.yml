@@ -1,0 +1,106 @@
+name: OS4 SDF normal authority one-shot
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.head_ref == 'port/os4-original-background-edge'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: port/os4-original-background-edge
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: never
+      - name: Apply exact single-SDF-normal patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('prismal/src/main/java/com/hellovoid/prismal/PrismalOpticalEdgeShader.java')
+          s = p.read_text()
+
+          old = '''                .replace(OUTWARD, OUTWARD + "\\n"
+                        + "    float sdfNormalBlend = os4EdgeBand(edgeDist, "
+                        + "max(edgePixelFootprint * 2.0, "
+                        + "clamp(minDim * 0.055 * opticalEdgeScale, 2.0, 12.0)), edgeAa) * os4Mode;\\n"
+                        + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    vec2 sdfEdgeGradient = 0.5 * vec2(\\n"
+                        + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\\n"
+                        + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\\n"
+                        + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\\n"
+                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));\\n"
+                        + "    vec2 sdfEdgeNormal = normalize(os4EdgeNormal3.xy + vec2(1e-5));\\n"
+                        + "    if (sdfNormalBlend > 0.001) {\\n"
+                        + "        outward = normalize(mix(outward, sdfEdgeNormal, sdfNormalBlend));\\n"
+                        + "    }\\n"
+                        + "    vec2 opticalEdgeNormal = outward;\\n"
+                        + "    os4EdgeNormal3 = normalize(vec3(opticalEdgeNormal, "
+                        + "max(os4EdgeNormal3.z, 0.15)));")'''
+          new = '''                .replace(OUTWARD, OUTWARD + "\\n"
+                        + "    // OS4 owns one continuous rounded-rect SDF normal; legacy outward stays independent.\\n"
+                        + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y), "
+                        + "halfSz, crMask, u_sminSmoothing);\\n"
+                        + "    vec2 sdfEdgeGradient = 0.5 * vec2(\\n"
+                        + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\\n"
+                        + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\\n"
+                        + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\\n"
+                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));")'''
+          if s.count(old) != 1:
+              raise SystemExit(f'OUTWARD block anchor count={s.count(old)}')
+          s = s.replace(old, new)
+
+          replacements = {
+              '.replace(REFLECTION_DIRECTION, "vec2 gDir = opticalEdgeNormal;")':
+                  '.replace(REFLECTION_DIRECTION, "vec2 gDir = outward;")',
+              '+ "    vec2 os4ReflectUvOffset = opticalEdgeNormal\\n"':
+                  '+ "    vec2 os4ReflectUvOffset = os4EdgeNormal3.xy\\n"',
+              '.replace(LIGHTING_NORMAL, "vec2 gN = opticalEdgeNormal;")':
+                  '.replace(LIGHTING_NORMAL, "vec2 gN = outward;")',
+          }
+          for a, b in replacements.items():
+              if s.count(a) != 1:
+                  raise SystemExit(f'anchor count={s.count(a)} for {a}')
+              s = s.replace(a, b)
+
+          p.write_text(s)
+          PY
+          git diff --check
+      - name: Focused SDF-normal continuity contracts
+        run: ./gradlew :prismal:testDebugUnitTest --tests com.hellovoid.prismal.PrismalOs4SdfNormalContinuityContractTest --stacktrace
+      - name: Full verification before commit
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Commit verified production patch and self-delete
+        shell: bash
+        run: |
+          git config user.name yu4032
+          git config user.email 4032542465@smail.lnu.edu.cn
+          git rm .github/workflows/os4-sdf-normal-authority-one-shot.yml
+          git add prismal/src/main/java/com/hellovoid/prismal/PrismalOpticalEdgeShader.java
+          git commit -m "fix: use single SDF normal for OS4 rounded edges"
+          git push origin HEAD:port/os4-original-background-edge
