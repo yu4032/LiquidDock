@@ -18,6 +18,18 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
+    public void bindingCompletedDuringPendingHomePresentationStartsSuspendedInNormalMode() {
+        assertTrue(WorkstationProducerPolicy.shouldPauseNewWorkspaceBinding(
+                false, true, false));
+    }
+
+    @Test
+    public void pendingPresentationPreservesWorkstationContinuousProducerPolicy() {
+        assertFalse(WorkstationProducerPolicy.shouldPauseNewWorkspaceBinding(
+                false, true, true));
+    }
+
+    @Test
     public void workspaceRefreshUsesContinuousCaptureInAllModes() {
         assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(true));
         assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(false));
