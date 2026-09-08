@@ -29,7 +29,7 @@ jobs:
       - name: Check patch whitespace
         run: git diff --check
       - name: Focused OS4 runtime config tests
-        run: ./gradlew testDebugUnitTest --tests com.hellovoid.liquiddock.Os4EdgeConfigRuntimeTest --stacktrace
+        run: ./gradlew :testDebugUnitTest --tests com.hellovoid.liquiddock.Os4EdgeConfigRuntimeTest --stacktrace
       - name: Focused OS4 highlight gate tests
         run: ./gradlew :prismal:testDebugUnitTest --tests com.hellovoid.prismal.PrismalOs4HighlightGateContractTest --stacktrace
       - name: Full verification
