@@ -12,10 +12,11 @@ public class LauncherGlassWorkspaceScrollSyncContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void staticGlassHooksVendorScreenViewScrollMutation() throws Exception {
+    public void staticGlassHooksDeclaredVendorScreenViewScrollMutation() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
 
-        assertTrue(hook.contains("\"com.miui.home.launcher.ScreenView\", \"scrollTo\""));
+        assertTrue(hook.contains("\"com.miui.home.launcher.ScreenView\""));
+        assertTrue(hook.contains("getDeclaredMethod(\"scrollTo\", int.class, int.class)"));
         assertTrue(hook.contains("LauncherGlassStaticLayer.onWorkspaceScrollMutation"));
         assertFalse(hook.contains("WorkspaceScrollMotionTracker"));
     }
