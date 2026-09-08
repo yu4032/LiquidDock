@@ -131,9 +131,7 @@ public final class PrismalOpticalEdgeShader {
                 .replace(OPACITY,
                         "float opacity = 1.0 - smoothstep(-edgeAa, edgeAa, distMask);")
                 .replace(OUTWARD, OUTWARD + "\n"
-                        + "    float sdfNormalBlend = os4EdgeBand(edgeDist, "
-                        + "max(edgePixelFootprint * 2.0, "
-                        + "clamp(minDim * 0.055 * opticalEdgeScale, 2.0, 12.0)), edgeAa) * os4Mode;\n"
+                        + "    // OS4 owns one continuous rounded-rect SDF normal; legacy outward stays independent.\n"
                         + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0), "
                         + "halfSz, crMask, u_sminSmoothing);\n"
                         + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0), "
@@ -146,14 +144,7 @@ public final class PrismalOpticalEdgeShader {
                         + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\n"
                         + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\n"
                         + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\n"
-                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));\n"
-                        + "    vec2 sdfEdgeNormal = normalize(os4EdgeNormal3.xy + vec2(1e-5));\n"
-                        + "    if (sdfNormalBlend > 0.001) {\n"
-                        + "        outward = normalize(mix(outward, sdfEdgeNormal, sdfNormalBlend));\n"
-                        + "    }\n"
-                        + "    vec2 opticalEdgeNormal = outward;\n"
-                        + "    os4EdgeNormal3 = normalize(vec3(opticalEdgeNormal, "
-                        + "max(os4EdgeNormal3.z, 0.15)));")
+                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));")
                 .replace(MENISCUS_BLEND,
                         "float menBlend = os4EdgeBand(edgeDist, "
                                 + "tw * 0.42 * opticalEdgeScale, edgeAa) "
@@ -164,9 +155,9 @@ public final class PrismalOpticalEdgeShader {
                         "float edgeSil = os4EdgeBand(edgeDist, silW, edgeAa) "
                                 + "* smoothstep(-4.5, 0.0, distMask);")
                 .replace(baseOffsetAnchor, baseOffsetReplacement)
-                .replace(REFLECTION_DIRECTION, "vec2 gDir = opticalEdgeNormal;")
+                .replace(REFLECTION_DIRECTION, "vec2 gDir = outward;")
                 .replace(REFLECTION_MIX, REFLECTION_MIX + "\n"
-                        + "    vec2 os4ReflectUvOffset = opticalEdgeNormal\n"
+                        + "    vec2 os4ReflectUvOffset = os4EdgeNormal3.xy\n"
                         + "            * (2.0 * os4EdgeNormal3.z)\n"
                         + "            * os4ReflectOffsetPx * os4EdgeRemain / u_resolution\n"
                         + "            * os4VolumeMask;\n"
@@ -186,7 +177,7 @@ public final class PrismalOpticalEdgeShader {
                 .replace(RIM_BAND,
                         "float shellRim = os4EdgeBand(edgeDist, bandR, edgeAa) "
                                 + "* smoothstep(-2.2, 0.0, distMask);")
-                .replace(LIGHTING_NORMAL, "vec2 gN = opticalEdgeNormal;")
+                .replace(LIGHTING_NORMAL, "vec2 gN = outward;")
                 .replace(FACE_SHEEN,
                         "float faceSheenSoft = os4EdgeBand(edgeDist, bandR * 1.8, edgeAa) "
                                 + "* smoothstep(-2.0, 0.0, distMask)")
