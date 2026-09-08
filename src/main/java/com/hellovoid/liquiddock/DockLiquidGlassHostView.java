@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.Path;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
@@ -17,9 +18,11 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        // Keep the normal View.draw() path so a configured foreground/shadow can still render,
-        // but do not clip the TextureView here. Prismal geometry is the sole visible Dock shape
-        // authority, matching the Workspace glass path and avoiding a second AA boundary.
+        // Workspace glass has no legacy foreground border layered over Prismal. Keep the same
+        // ownership rule here: the zero-copy GlassHost never accepts a Drawable foreground, so
+        // DockStrokeRenderer may continue serving native/non-glass Dock owners without creating a
+        // second white ring over this glass output.
+        super.setForeground(null);
         setWillNotDraw(false);
         setClipChildren(false);
         setClipToPadding(false);
@@ -40,6 +43,11 @@ final class DockLiquidGlassHostView extends FrameLayout {
         });
     }
 
+    @Override
+    public void setForeground(Drawable foreground) {
+        super.setForeground(null);
+    }
+
     void setGeometry(float radius, boolean squircle, float cp) {
         float nextRadius = Math.max(0f, radius);
         float nextCp = Math.max(.05f, Math.min(.95f, cp));
@@ -50,7 +58,6 @@ final class DockLiquidGlassHostView extends FrameLayout {
         this.squircleCp = nextCp;
         if (changed) {
             shapeDirty = true;
-            DockStrokeRenderer.updateRadius(this, this.radius);
             invalidateOutline();
             invalidate();
         }
