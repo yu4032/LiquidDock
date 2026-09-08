@@ -51,9 +51,8 @@ final class WidgetBackgroundRuleEngine {
         this.rules = List.copyOf(rules);
     }
 
-    /** Compatibility entry point until the production executor consumes LoadResult directly. */
-    static WidgetBackgroundRuleEngine loadBundled() {
-        return loadBundled(WidgetBackgroundRuleEngine.class.getClassLoader()).engine();
+    static LoadResult loadBundled() {
+        return loadBundled(WidgetBackgroundRuleEngine.class.getClassLoader());
     }
 
     static LoadResult loadBundled(ClassLoader loader) {
