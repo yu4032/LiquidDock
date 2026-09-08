@@ -35,4 +35,22 @@ public class LauncherGlassStaticBoundaryTest {
         String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
         assertFalse(registry.contains("HookUtil"));
     }
+
+    @Test
+    public void workspaceScrollLateLatchKeepsOneRootLayerAndDeclaredVendorHook() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(hook.contains("\"com.miui.home.launcher.ScreenView\""));
+        assertTrue(hook.contains("getDeclaredMethod(\"scrollTo\", int.class, int.class)"));
+        assertTrue(hook.contains("LauncherGlassStaticLayer.onWorkspaceScrollMutation"));
+        assertTrue(layer.contains("LauncherGlassScrollCompensationState"));
+        assertTrue(layer.contains("onSurfaceTextureUpdated"));
+        assertTrue(layer.contains("onStaticFrameAnchorQueued"));
+        assertTrue(session.contains("StaticGeometryFrame"));
+        assertTrue(session.contains("queueStaticFrameAnchor"));
+        assertFalse(hook.contains("WorkspaceScrollMotionTracker"));
+        assertFalse(layer.contains("WorkspaceScrollMotionTracker"));
+    }
 }
