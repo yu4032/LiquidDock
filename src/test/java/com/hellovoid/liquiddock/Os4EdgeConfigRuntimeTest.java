@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import com.hellovoid.liquiddock.config.ConfigKey;
 import com.hellovoid.liquiddock.config.ConfigSchema;
@@ -69,6 +70,23 @@ public class Os4EdgeConfigRuntimeTest {
         assertEquals(0.52f, portable.os4DirectionalAngleRange, 0.0001f);
         assertEquals(0.42f, portable.os4DirectionalIntensity, 0.0001f);
         assertEquals(0.14f, portable.os4DirectionalOppositeIntensity, 0.0001f);
+    }
+
+    @Test
+    public void widerOs4EdgeAndReflectionExpandSamplingGuard() {
+        LiquidDockConfig baseConfig = LiquidDockConfig.from(new ConfigReader(Map.of()));
+        Miuix307PrismalMaterial.Params base =
+                Miuix307PrismalMaterial.fromConfig(baseConfig.glass, 2f);
+
+        Map<String, Object> values = new HashMap<>();
+        values.put("liquid_os4_edge_width_px", 64);
+        values.put("liquid_os4_reflect_offset_px", 40);
+        LiquidDockConfig wideConfig = LiquidDockConfig.from(new ConfigReader(values));
+        Miuix307PrismalMaterial.Params wide =
+                Miuix307PrismalMaterial.fromConfig(wideConfig.glass, 2f);
+
+        assertTrue(Miuix307PrismalMaterial.requiredSampleGuardPx(wide, 900, 220, true)
+                > Miuix307PrismalMaterial.requiredSampleGuardPx(base, 900, 220, true));
     }
 
     private static void assertKey(
