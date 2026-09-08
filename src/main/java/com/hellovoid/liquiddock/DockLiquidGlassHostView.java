@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Outline;
 import android.graphics.Path;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
@@ -18,18 +19,18 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        // Keep the normal View.draw() path for the saved configurable foreground stroke. OS4 soft
-        // edge suppresses only its painting in onDrawForeground(), so disabling OS4 restores it
-        // without rebuilding or discarding the user's stroke configuration.
-        setWillNotDraw(false);
+        // The zero-copy GlassHost has no Android foreground edge owner. Prismal/OS4 owns the
+        // rendered glass edge; any foreground supplied by DockStrokeRenderer or vendor code is
+        // discarded at the View boundary instead of merely being hidden during drawing.
+        super.setForeground(null);
         setClipChildren(false);
         setClipToPadding(false);
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         // Mi Shadow / RenderNode shadow geometry comes from the View outline. Keep this outline on
-        // the exact same shape as the manual child clip so the outer stroke shadow cannot drift
-        // away from the visible zero-copy glass edge.
+        // the exact same shape as the manual child clip so the outer shadow cannot drift away from
+        // the visible zero-copy glass edge.
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
                 ensureClipPath();
@@ -40,6 +41,13 @@ final class DockLiquidGlassHostView extends FrameLayout {
                 }
             }
         });
+    }
+
+    @Override
+    public void setForeground(Drawable foreground) {
+        // Deliberately reject the entire foreground layer. This is stronger than suppressing
+        // onDrawForeground(): no StrokeDrawable is ever attached to the GlassHost at all.
+        super.setForeground(null);
     }
 
     void setGeometry(float radius, boolean squircle, float cp) {
@@ -99,14 +107,5 @@ final class DockLiquidGlassHostView extends FrameLayout {
         canvas.clipPath(clipPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);
-    }
-
-    @Override
-    public void onDrawForeground(Canvas canvas) {
-        // The OS4 SDF/reflection/directional pass already owns the visible glass edge. Painting the
-        // legacy Dock foreground ring here creates the crisp white line seen on top of the soft
-        // edge and reintroduces a second, differently-shaped corner authority.
-        if (GlassRuntimeState.isOs4SoftEdgeEnabled()) return;
-        super.onDrawForeground(canvas);
     }
 }
