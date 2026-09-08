@@ -43,11 +43,13 @@ public class PrismalBloomShaderSourcesTest {
     public void maskKeepsPerCornerRoundedRectangleGeometry() {
         String shader = PrismalBloomShaderSources.MASK_FRAGMENT;
 
+        assertTrue(shader.contains("uniform vec4 u_cornerRadii;"));
         assertTrue(shader.contains("float radiusAtCentered(vec2 c, vec4 radii)"));
-        assertTrue(shader.contains("u_cornerRadii.x"));
-        assertTrue(shader.contains("u_cornerRadii.y"));
-        assertTrue(shader.contains("u_cornerRadii.z"));
-        assertTrue(shader.contains("u_cornerRadii.w"));
+        assertTrue(shader.contains("return radii.x;"));
+        assertTrue(shader.contains("return radii.y;"));
+        assertTrue(shader.contains("return radii.z;"));
+        assertTrue(shader.contains("return radii.w;"));
+        assertTrue(shader.contains("bloomSd(pPx, halfSize, u_cornerRadii)"));
         assertTrue(shader.contains("float sdRoundedRectRealistic("));
     }
 
