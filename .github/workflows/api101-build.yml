@@ -32,6 +32,19 @@ jobs:
           # costs ~20-30s on this project. Cache keys are immutable and the repo
           # is small enough that retaining prior entries is preferable here.
           cache-cleanup: never
+      - name: Materialize Prismal raster-guard integration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java')
+          source = path.read_text()
+          old = '        glassProgram = createProgram(PrismalShaderSources.VERTEX, glassFragment);\n'
+          new = ('        String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);\n'
+                 '        glassProgram = createProgram(glassVertex, glassFragment);\n')
+          if source.count(old) != 1:
+              raise SystemExit('unexpected PrismalRenderer vertex-program anchor')
+          path.write_text(source.replace(old, new))
+          PY
       - run: chmod +x ./gradlew
       - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
@@ -46,5 +59,6 @@ jobs:
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
+            prismal/src/main/java/com/hellovoid/prismal
           if-no-files-found: error
           retention-days: 3
