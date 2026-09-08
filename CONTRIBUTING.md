@@ -28,7 +28,7 @@ Debug 与 Release 都经过 AGP optimization / R8 路径。涉及反射入口时
 
 ## 分支规则
 
-`main` 是当前开发主线。功能和修复从 `main` 创建独立分支；不要再从旧 `api101-migration` 文档假定当前架构边界。
+`main` 是当前开发主线。功能、修复和重构从 `main` 创建独立分支；不要再从旧 `api101-migration` 文档假定当前架构边界。
 
 `archive/1.x` 仅用于保存旧 ScreenCapture/bitmap-readback 实现，不作为新功能开发基线。
 
@@ -52,11 +52,29 @@ Debug 与 Release 都经过 AGP optimization / R8 路径。涉及反射入口时
 - `HookUtil` 仅用于 vendor/system private 边界；LiquidDock 自有类之间禁止通过 `HookUtil` 反射访问，必须使用 typed Java / package-private API；
 - optional vendor 调用使用 `tryInvoke*` 并显式检查 `succeeded()`；feature invariant 依赖的调用使用 `requireInvoke*`，禁止重新引入 silent-null facade；
 - 纯策略尽量 Android/Xposed-free；
-- 不要继续扩大 `MainHook` 的全局 mutable state；
+- 不要继续扩大 `MainHook` 的 feature-level mutable state；
 - 不要让 `LiquidDockConfig.load()` 产生跨模块副作用；
 - runtime disable 必须遵循“先 publish false，再 teardown ownership”；
 - 已排队 callback 在执行前必须再次检查 live state；
-- 只有保存过的 vendor state 才能被恢复；未知原生状态不要猜测或伪造。
+- 跨 transition 的 delayed callback 还必须校验 generation/cancellation token，不能仅依赖固定 delay 后的当前值；
+- 只有保存过的 vendor state 才能被恢复；未知原生状态不要猜测或伪造；
+- 抽类时必须迁移真实 Hook/runtime ownership，不要只增加由原 God class 调用的薄 `Manager` / `Util`。
+
+## 技术债务清理规则
+
+当前 active cleanup 以以下两份文档为执行依据：
+
+- [Technical-Debt Cleanup Design](docs/superpowers/specs/2026-09-07-technical-debt-cleanup-design.md)
+- [Technical-Debt Cleanup Phase 1 Implementation Plan](docs/superpowers/plans/2026-09-07-technical-debt-cleanup-phase1.md)
+
+Phase 1 只处理高置信 ownership debt：
+
+- Workstation mode / delayed recheck / normal-layout ownership；
+- Widget classifier / span registry / stateless sizing；
+- 第一轮 Widget adaptation Hook ownership 迁移；
+- bundled Widget rule one-shot diagnostic。
+
+Phase 1 **禁止**顺手重构 producer/EGL/OES/fresh-frame authority。Glass resource cleanup 必须先画 owner graph，再证明哪些生命周期真正可共享。
 
 ## Zero-copy glass 规则
 
@@ -69,11 +87,11 @@ MiuiX PassBlur -> SurfaceTexture/OES -> GLES -> Prismal renderer
 禁止：
 
 - 恢复 `ScreenCapture` fallback；
-- 新增 bitmap readback；
+- 新增 PixelCopy / bitmap readback；
 - 用普通 redraw 代替 fresh-frame barrier；
 - 在 Recents/HOME 返回时直接显示 stale static layer；
-- 把 geometry generation 当作 wallpaper content generation。
-
+- 把 geometry generation 当作 wallpaper content generation；
+- 为已经收口的 Workstation Recents recovery 新增第二套 episode/aggregate/freshness authority。
 
 Workspace PassBlur 质量/功耗修改还必须保持：
 
@@ -92,7 +110,6 @@ Workspace PassBlur 质量/功耗修改还必须保持：
 - Workstation；
 - producer suspend/rebind；
 - fresh OES frame 后才 reveal。
-
 
 涉及 Workspace quality controls 时，真机至少比较 100% / 75% / 50% 的同位置背景特征，确认只有清晰度变化而没有缩放、漂移或偏移；同时覆盖静态壁纸 idle 与动态壁纸 live source。
 
@@ -117,8 +134,9 @@ RemoteViews、MAML、folder recovery、drag/launch proxy 等异步路径必须�
 - 不 Hook `addOccupied()` / `transformToHVArray()` 猜 matrix 方向；
 - Widget adaptation 只修改 allocation/frame；
 - 当前显式适配 1×1、2×1、2×2、4×2；
-- Widget 泛化应走 `WidgetClassifier` / `WidgetSpecRegistry`，不要继续散落 `itemType == ...` 分支；
-- `HomeGridHook` 拆分时 rotation / refresh 最后处理。
+- 当前 production 仍存在 `ItemInfo.isWidget()` + item type 4/5/19 fallback 和 `WidgetGridSizing` static config；迁移完成前文档必须如实描述它们；
+- Widget 泛化应走 `WidgetClassifier` / `WidgetSpecRegistry`，不要继续新增散落 `itemType == ...` 分支；
+- `HomeGridHook` 拆分按 Widget adaptation -> page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序；rotation/refresh 最后处理。
 
 ## Workstation / Laptop 规则
 
@@ -127,6 +145,8 @@ RemoteViews、MAML、folder recovery、drag/launch proxy 等异步路径必须�
 修改工作台代码时至少考虑：
 
 - 进入/退出；
+- 快速 enter -> exit -> re-enter；
+- delayed callback 是否可能跨 generation 变 stale；
 - Dock geometry / icon offset；
 - Grid / All Apps；
 - Divider；
@@ -134,7 +154,10 @@ RemoteViews、MAML、folder recovery、drag/launch proxy 等异步路径必须�
 - rotation；
 - wallpaper freshness；
 - PassBlur producer suspend/rebind；
+- 普通布局 backup/restore；
 - 普通模式无回归。
+
+当前 Workstation Recents correctness 已依赖 covered authority、duplicate/non-covered hide rejection、`workstationBindEpoch` 与 fresh-frame barrier。除非有新的现实失败，不绕过或复制这些 authority。
 
 Workstation composite customization 当前保持 restart-bound。不要只恢复其中一个子模块而留下混合状态。
 
@@ -157,10 +180,11 @@ Workstation composite customization 当前保持 restart-bound。不要只恢复
 - 禁止恢复 1.x overlay 作为默认路径；
 - disable stroke 时恢复原 foreground；
 - Squircle / Fill-Diff 运行时切换要刷新已安装 renderer；
-- whole-Dock shadow 与历史 stroke-shadow 是不同功能；
+- stroke-shadow renderer 状态已归入当前 foreground/native MiShadow ownership；
+- whole-Dock shadow 与 stroke-shadow 是不同能力；
 - 不要伪造未知 MIUI shadow 参数。
 
-历史 stroke-shadow key 在最终方案确定前继续保留配置兼容。
+历史 stroke-shadow key 继续保留配置兼容，但不再把该功能描述为“未来实现或 deprecated”待决项。
 
 ## Runtime behavior 测试规则
 
@@ -181,9 +205,9 @@ Workstation composite customization 当前保持 restart-bound。不要只恢复
 - Android Manifest / Xposed scope；
 - 明确的 architecture/API 禁令，例如“不得使用某 API / 不得跨自有模块反射”。
 
-`RuntimeBehaviorTestPolicyContractTest` 会扫描**全部 Java tests**。任何新的 production source/config reader 默认失败；合法静态 reader 必须进入显式审计的 static allowlist，并且不能通过 `indexOf()` / `substring()` 做调用顺序或方法体切片证明。
+`RuntimeBehaviorTestPolicyContractTest` 会扫描**全部 Java/Kotlin tests**。任何新的 production source/config reader 默认失败；合法静态 reader 必须进入显式审计的 static allowlist，并且不能通过 `indexOf()` / `substring()` 做调用顺序或方法体切片证明。
 
-本次迁移之外仍有少量历史 source-reader debt，由 gate 的 `LEGACY_SOURCE_DEBT` 精确列名。该清单只允许减少，不允许新增；尤其不得把 ownership、freshness、animation、recovery 的 runtime contract 放进 debt 清单绕过 typed-state 测试。
+历史 source-reader debt 由 `LEGACY_SOURCE_DEBT` 精确列名。该清单只允许减少，不允许新增；尤其不得把 ownership、freshness、animation、recovery 的 runtime contract 放进 debt 清单绕过 typed-state 测试。
 
 ## 文档规则
 
@@ -194,10 +218,10 @@ Workstation composite customization 当前保持 restart-bound。不要只恢复
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 当前 runtime 架构；
 - [HOOKS.md](HOOKS.md) — 主要 Hook 与 listener；
 - [DIVIDER.md](DIVIDER.md) — Divider ownership；
-- [TODO.md](TODO.md) — 后续开发优先级；
+- [TODO.md](TODO.md) — active debt / 后续开发优先级；
 - [CHANGELOG.md](CHANGELOG.md) — release 历史。
 
-`docs/superpowers/plans` / `specs` 是历史设计记录，不要求跟随每个 release 重写。
+`docs/superpowers/plans` / `specs` 通常是历史设计记录，不要求跟随每个 release 重写；但 `2026-09-07-technical-debt-cleanup-*` 在本轮清债关闭前属于 active execution reference。生产现状仍以根目录权威文档为准，计划不能冒充已经实现的架构。
 
 ## 提交前
 

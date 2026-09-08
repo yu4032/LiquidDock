@@ -22,6 +22,8 @@ API 101 入口为 `ModuleMain`。Launcher 进程启动时主要完成：
 
 完整 master-switch 启停仍属于 restart-bound：运行中关闭可以释放已接管的视觉 ownership，但不能安全撤销所有安装期结构 Hook。
 
+`MainHook` 当前仍直接持有部分 Workstation mutable state 与初始化 re-query fallback，因此它还不是纯 composition root；这一点是 active debt，而不是当前 Hook contract。
+
 ## 2. Dock 与 MiuiX zero-copy glass
 
 ### Material owner
@@ -118,7 +120,7 @@ Dock / Workspace app launch 的 floating icon proxy geometry 也会用于隐藏�
 | 目标 | 方法 | 作用 |
 |---|---|---|
 | `RecentsServiceDispatcher` | `onRecentViewShow()` | 将共享 Workspace static layer 标记为 Recents covered |
-| 同上 | `onRecentViewHide()` | 返回 HOME 前执行 Workstation producer recovery，再解除 covered |
+| 同上 | `onRecentViewHide()` | 仅在 covered authority 接受时执行 Workstation producer recovery，再解除 covered |
 
 ### Workstation recovery
 
@@ -128,20 +130,26 @@ Dock / Workspace app launch 的 floating icon proxy geometry 也会用于隐藏�
 
 ```text
 onRecentViewHide
-  -> LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn()
-  -> shared producer rollover/rebind
+  -> 检查 LauncherGlassSceneController.vendorRecentsCovered
+  -> duplicate/non-covered hide: reject, 不 rollover
+  -> valid Workstation return:
+       LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn()
+  -> Workstation-only producer endpoint recreation / rebind
+  -> workstationBindEpoch 拒绝旧 finishBind()
   -> LauncherGlassSceneController.setRecentsCoveredForAll(false)
-  -> 等待 fresh OES frame
+  -> 等待 matching scene generation 的 fresh OES frame
   -> static layer reveal
 ```
 
-不会直接强制显示旧 frame。
+endpoint recreation 本身不授权 reveal，也不会直接强制显示旧 frame。除非出现新的现实失败，不在该路径叠加另一套 recovery episode/aggregate/freshness state machine。
 
-## 7. Wallpaper freshness
+## 7. Wallpaper / unlock freshness
 
 `LauncherWallpaperFreshnessHook` 使用 Launcher wallpaper lifecycle 维护 wallpaper generation。其作用不是简单 invalidate，而是给 shared glass backdrop 一个内容新鲜度权威。
 
 常见边界包括 wallpaper changed、first-frame、draw completion 等 vendor callback。
+
+Unlock -> HOME 的释放 authority 来自 SystemUI `LOCKSCREEN -> GONE FINISHED TransitionStep`。Launcher PREPARE 只提前 freeze；之后 producer rollover 失败会 fail-closed，最终仍等待匹配 scene generation / fresh OES frame。
 
 ## 8. Runtime visual ownership
 
@@ -176,6 +184,8 @@ true -> false 时先发布 flag，再 dispatch teardown；已排队 callback 因
 - `DockStrokeRenderer.refreshInstalledFromCurrentConfig()`；
 - `DockDividerHook.onRuntimeDividerDisabled()`。
 
+`DockStrokeRenderer` 是当前 foreground stroke owner；历史 stroke-shadow 配置继续兼容，但不再依赖旧 overlay 作为正式实现。
+
 ## 9. Divider
 
 `DockDividerHook` 主要从 Workstation Dock line holder/bind 生命周期取得 divider View。
@@ -203,6 +213,7 @@ disable 时：
 
 - stroke disable -> 恢复原 foreground；
 - Squircle / Fill-Diff -> 主动 refresh 已安装 renderer；
+- stroke-shadow renderer 状态由现有 foreground/native MiShadow ownership 处理；
 - whole-Dock shadow 是独立 owner；
 - Dock customization 关闭后未来 vendor shadow 调用不再被继续抑制；
 - 未保存的 MIUI 原生 shadow 参数不会被构造。
@@ -222,11 +233,13 @@ disable 时：
 - Recents recovery；
 - 普通布局 backup/restore。
 
+当前 `MainHook` 仍直接持有部分 Workstation mode state，并在 Launcher 初始化后安排一次固定 2 秒的 mode re-query fallback；vendor callback 已确认时会跳过该 fallback，但该 delayed runnable 尚未拥有完整 generation/cancellation guard。后续计划迁移到单一 `WorkstationModeController`，不改变现有 producer recovery 语义。
+
 整体仍属于实验性适配，结构配置保持 restart-bound。
 
-## 12. Grid
+## 12. Grid / Widget
 
-`HomeGridHook` 仍覆盖：
+`HomeGridHook` 当前仍覆盖：
 
 - cell count；
 - orientation-specific geometry；
@@ -236,6 +249,15 @@ disable 时：
 - rotation / refresh；
 - lazy/off-screen page preparation。
 
+当前 Widget adaptation：
+
+- 优先通过 `ItemInfo.isWidget()`；
+- 失败时在 `HomeGridHook` 使用 item type `4` / `5` / `19` fallback；
+- span 只显式支持 1×1、2×1、2×2、4×2；
+- `WidgetGridSizing` 仍持有 process-global static adaptation flag。
+
+这些分类/span/config ownership 是 active debt；后续迁移到 `WidgetClassifier` / `WidgetSpecRegistry` / stateless `WidgetGridSizing`。在迁移完成前，以上仍是当前 production 事实。
+
 `WorkspaceDropRuleHook` 只扩展 custom-grid 的合法坐标判定，不接管 MIUI occupancy matrix / placement。
 
 ## 13. 多任务背景模糊
@@ -244,10 +266,17 @@ disable 时：
 
 ## 14. 维护原则
 
-新增 Hook 时优先保持：
+新增或修改 Hook 时优先保持：
 
 - vendor state ownership 明确；
 - runtime callback 可撤销；
-- stale async callback 必须重新检查 live state；
+- stale async/delayed callback 必须重新检查 live state 或 generation/cancellation token；
 - producer/content freshness 不依赖普通 redraw；
-- 不恢复 1.x ScreenCapture 或 bitmap pipeline。
+- Workstation Recents recovery 不绕过 covered authority / bind epoch / fresh-frame barrier；
+- 不恢复 1.x ScreenCapture 或 bitmap pipeline；
+- 不为缩小大类而机械增加没有真实 ownership 的 `Manager` / `Util`。
+
+当前技术债务目标与顺序见 [TODO.md](TODO.md)；设计与第一阶段计划见：
+
+- [Technical-Debt Cleanup Design](docs/superpowers/specs/2026-09-07-technical-debt-cleanup-design.md)
+- [Technical-Debt Cleanup Phase 1 Implementation Plan](docs/superpowers/plans/2026-09-07-technical-debt-cleanup-phase1.md)

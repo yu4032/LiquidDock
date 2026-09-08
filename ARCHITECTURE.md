@@ -116,7 +116,7 @@ Dock glass 使用 MiuiX Dock background 作为几何和 material owner 来源。
 - foreground stroke renderer；
 - resize / animation ownership。
 
-`DockStrokeRenderer` 持有描边 foreground ownership。关闭 stroke 后恢复安装前 foreground；Squircle / Fill-Diff 切换会刷新已安装 renderer。
+`DockStrokeRenderer` 持有描边 foreground ownership。关闭 stroke 后恢复安装前 foreground；Squircle / Fill-Diff 切换会刷新已安装 renderer。历史 stroke-shadow 配置继续兼容，其当前实现已归入现有 foreground renderer / native MiShadow ownership，不再作为独立 overlay 待实现项。
 
 Whole-Dock shadow 是独立能力。关闭后移除 LiquidDock 自己创建的 shadow，并停止继续抑制后续 vendor shadow 调用；没有保存的 MIUI 原始 shadow 参数不会被猜测或伪造。
 
@@ -174,9 +174,15 @@ Whole-Dock shadow 是独立能力。关闭后移除 LiquidDock 自己创建的 s
 
 HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid 的 Launcher Surface，但已经退役旧 PassBlur BufferQueue producer。
 
-当前 `main` 在有效的 `onRecentViewHide` 返回 HOME 时执行受 coverage authority 约束的 Workstation shared-producer recovery，再解除 Recents covered；scene controller 仍保持 fresh-OES-frame barrier，因此 endpoint recreation 本身不会提前授权显示旧帧。
+当前 `main` 使用 `LauncherGlassSceneController.vendorRecentsCovered` 作为 covered authority。duplicate / non-covered `onRecentViewHide()` 不触发 Workstation producer rollover；有效返回 HOME 时仅走 Workstation-specific rebind。`LauncherGlassSession.workstationBindEpoch` 会拒绝 rollover 前排队的 stale `finishBind()`。endpoint recreation 只表示新 producer endpoint 建立，scene/wallpaper generation 与 fresh OES frame 仍是唯一 reveal authority。
 
-这修复了“从多任务返回后整个 Launcher glass layer 消失，必须长按图标才能恢复”的共享 producer 生命周期问题。
+除非出现新的、可复现的现实失败路径，不再为该问题增加 producer recovery episode state machine、terminal multi-session aggregate 或第二套 freshness authority。
+
+### 当前 Workstation ownership 债务
+
+Workstation mode 探测、vendor confirmation、普通布局 backup/restore 等 feature-level mutable state 仍部分直接位于 `MainHook`。初始化路径还保留一次固定 2 秒的 mode re-query fallback；当前仅由 `workstationModeHookConfirmed` 避免已确认路径重复覆盖，尚未拥有完整的 transition generation/cancellation 保护。
+
+这属于当前重构目标，不应被误写为新的 producer-recovery 问题。
 
 工作台结构配置仍 restart-bound，直到未来建立完整、可逆的 runtime restore。
 
@@ -191,6 +197,8 @@ HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid �
 - 不通过 `addOccupied()` / `transformToHVArray()` 猜 occupied matrix；
 - lazy/off-screen page 必须在显示前准备正确方向的 geometry；
 - `HomeGridHook` 仍是大型模块，后续拆分必须保持这些行为不变。
+
+当前 Widget classification 优先调用 `ItemInfo.isWidget()`，失败时仍在 `HomeGridHook` 使用 item type `4` / `5` / `19` fallback；支持 span 仍固定为 1×1、2×1、2×2、4×2。`WidgetGridSizing` 仍持有 static adaptation flag。这些是 active ownership debt，不是新的功能语义。
 
 ## 9. Divider ownership
 
@@ -212,6 +220,7 @@ HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid �
 - Dock customization 的可逆视觉 ownership；
 - Dock stroke；
 - Dock shadow；
+- stroke-shadow renderer 状态；
 - Divider；
 - Squircle / Fill-Diff renderer refresh。
 
@@ -228,13 +237,17 @@ UI 文案必须区分“立即释放视觉 ownership”和“完整结构变更�
 
 ## 11. 当前重构方向
 
-后续优先级见 [TODO.md](TODO.md)。核心方向：
+当前 active debt 与优先级以 [TODO.md](TODO.md) 为准；目标设计见 [Technical-Debt Cleanup Design](docs/superpowers/specs/2026-09-07-technical-debt-cleanup-design.md)，第一阶段执行步骤见 [Phase 1 Implementation Plan](docs/superpowers/plans/2026-09-07-technical-debt-cleanup-phase1.md)。
 
-1. 收紧 Workstation shared producer recovery API；
-2. 拆分 `WorkstationModeController`；
-3. 引入 `WidgetClassifier` / `WidgetSpecRegistry`；
-4. 按职责拆分 `HomeGridHook`；
-5. 将 `MainHook` 收缩为 composition root；
-6. 将 `LauncherGlassSession` 的 producer、freshness、EGL/OES 和 renderer 生命周期进一步分层。
+当前顺序：
+
+1. 将 Workstation mode / delayed recheck / normal-layout ownership 从 `MainHook` 迁到单一 controller，并给 delayed callback 加 generation/cancellation 保护；
+2. 引入 `WidgetClassifier` / `WidgetSpecRegistry`，移除 `WidgetGridSizing` static mutable config；
+3. 先迁出 `HomeGridHook` 的真实 Widget adaptation ownership，再按 page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序继续拆；
+4. 为 bundled Widget rule silent degradation 增加 one-shot structured diagnostic；
+5. 对 `LauncherGlassSession` / `Miuix307PassBlurTextureView` / Prismal 先画 resource owner graph，再决定最小公共 EGL/OES primitive；
+6. 继续缩小 `LEGACY_SOURCE_DEBT` 与 CI/i18n hygiene debt。
+
+Workstation Recents shared-producer correctness 与 unlock->HOME authority 已经有现有最小 correctness 方案；除非出现新的现实失败，不把它们重新设计为更大的状态机。
 
 任何重构都不得恢复 1.x ScreenCapture backend。
