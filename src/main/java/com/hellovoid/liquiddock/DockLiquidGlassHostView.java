@@ -1,14 +1,13 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
-import android.graphics.Canvas;
 import android.graphics.Outline;
 import android.graphics.Path;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
-/** Lightweight clip/geometry host for the zero-copy Prismal TextureView. */
+/** Lightweight geometry host for the zero-copy Prismal TextureView. */
 final class DockLiquidGlassHostView extends FrameLayout {
     private final Path clipPath = new Path();
     private float radius;
@@ -18,17 +17,17 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        // Keep the normal View.draw() path so a foreground StrokeDrawable is actually rendered.
-        // This host still has no onDraw() body; the only local drawing is the foreground edge.
+        // Keep the normal View.draw() path so a configured foreground/shadow can still render,
+        // but do not clip the TextureView here. Prismal geometry is the sole visible Dock shape
+        // authority, matching the Workspace glass path and avoiding a second AA boundary.
         setWillNotDraw(false);
         setClipChildren(false);
         setClipToPadding(false);
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Mi Shadow / RenderNode shadow geometry comes from the View outline. Keep this outline on
-        // the exact same shape as the manual child clip so the outer stroke shadow cannot drift
-        // away from the visible zero-copy glass edge.
+        // Mi Shadow / RenderNode shadow geometry may still use the View outline. The outline is not
+        // used to clip children; it only supplies native shadow geometry outside the Prismal body.
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
                 ensureClipPath();
@@ -89,14 +88,5 @@ final class DockLiquidGlassHostView extends FrameLayout {
         } finally {
             super.onDetachedFromWindow();
         }
-    }
-
-    @Override protected void dispatchDraw(Canvas canvas) {
-        ensureClipPath();
-        if (clipPath.isEmpty()) return;
-        int save = canvas.save();
-        canvas.clipPath(clipPath);
-        super.dispatchDraw(canvas);
-        canvas.restoreToCount(save);
     }
 }
