@@ -45,6 +45,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherWallpaperFreshnessHookContractTest.java",
             "LauncherWidgetBackgroundControllerContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",
+            "Os4GlassEdgeOwnershipContractTest.java",
             "R8ReleaseKeepContractTest.java",
             "SystemUiHomeTransitionWiringContractTest.java",
             "UserFacingPreferenceSchemaTest.java",
