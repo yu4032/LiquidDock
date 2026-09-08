@@ -8,7 +8,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.Test;
 
-/** Keeps the folder atlas API additive: Dock retains the same single-edge renderer/model. */
+/**
+ * Keeps the folder atlas API additive and preserves one key render-domain invariant: backdrop
+ * sampling may be reduced, but procedural glass/SDF/highlight rasterization stays logical-pixel
+ * resolution so capture quality cannot quantize the optical edge.
+ */
 public class PrismalBatchRendererContractTest {
     private static String source() throws Exception {
         Path moduleRelative = Path.of(
