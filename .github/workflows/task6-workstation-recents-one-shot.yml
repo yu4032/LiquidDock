@@ -1,0 +1,35 @@
+name: Task6 workstation recents one-shot
+
+on:
+  push:
+    branches:
+      - refactor/technical-debt-cleanup-phase1
+    paths:
+      - '.github/workflows/task6-workstation-recents-one-shot.yml'
+      - 'scripts/task6_workstation_recents_patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/technical-debt-cleanup-phase1
+          fetch-depth: 0
+
+      - name: Apply verification update
+        run: |
+          python3 scripts/task6_workstation_recents_patch.py
+          git diff --check
+
+      - name: Commit record and self-delete
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/task6-workstation-recents-one-shot.yml scripts/task6_workstation_recents_patch.py
+          git add docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md
+          git commit -m 'docs: record workstation recents device evidence'
+          git push origin HEAD:refactor/technical-debt-cleanup-phase1
