@@ -1,6 +1,6 @@
 # OS4 Bloom Overlay Milestone 2 Verification
 
-Status: `TASK4_ONE_SHOT_GREEN_FORMAL_CI_PENDING`
+Status: `MILESTONE_2_CI_GREEN_DEVICE_GATE_PENDING`
 
 Branch: `port/os4-volumetric-edge-model`
 PR: `#139`
@@ -52,7 +52,7 @@ GREEN.
 
 ### Task 4 — renderer-local FBO / blur / composite
 
-One-shot production verification GREEN; formal branch-head CI pending.
+GREEN by one-shot implementation verification and formal API101 branch-head verification.
 
 RED evidence:
 
@@ -84,7 +84,33 @@ Net production change in the one-shot commit is limited to:
 - `prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java`
 - `prismal/src/main/java/com/hellovoid/prismal/PrismalBloomShaderSources.java`
 
-The temporary one-shot workflow/script are absent from the resulting branch head.
+The temporary one-shot workflow/script are absent from the resulting branch.
+
+Formal branch-head verification:
+
+```text
+API101 CI #4381
+run 34207417403
+job 102000099491
+./gradlew testDebugUnitTest assembleDebug --stacktrace — PASS
+BUILD SUCCESSFUL in 1m 40s
+73 actionable tasks: 45 executed, 28 from cache
+```
+
+Both artifact uploads succeeded.
+
+## CI #4381 artifacts
+
+### LiquidDock-api101-debug
+
+- artifact ID: `10048393249`
+- ZIP SHA-256: `c001716c65e9889f2b84a84b85be87f17c10d923f38b7a9ebbd2ad1a842c5f09`
+- extracted `LiquidDock-debug.apk` SHA-256: `e9aa0d9fe476e0b312aff6b340de8f419ef3227fbfc620b120e7b3fe072ffa5a`
+
+### LiquidDock-build-source
+
+- artifact ID: `10048393891`
+- ZIP SHA-256: `bbdce4fcec9c01c3f125ee49b9b72c0092c03efdd288091f9345e33b29371fdf`
 
 ## Alpha convention
 
@@ -105,14 +131,18 @@ This keeps the new Bloom path compatible with the existing Prismal-output/Textur
 - `os4BloomEnabled=true`: compatibility Bloom is disabled in the main glass pass and the local Bloom path runs.
 - `os4BloomEnabled=false`: local Bloom is bypassed and the existing analytic in-main Bloom fallback remains available.
 - `os4BloomWidthPx=0`: not disabled; Java resolves the same Milestone 1 adaptive default `clamp(minGlassDim * 0.090, 9, 28)` before planning the local target.
-- Bloom scratch allocations are renderer-owned and grow/reuse across sequential glass nodes; they are not full-output Bloom targets unless the bounded planner itself is clamped by an unusually large glass/halo.
+- Bloom scratch allocations are renderer-owned and grow/reuse across sequential glass nodes; they are not a new capture/backdrop authority.
 - `releaseTargets()` releases Bloom textures/FBOs; `close()` also deletes Bloom programs.
 
-## Remaining gates
+## Remaining gate — true device
 
-1. Formal `API101 migration build` must pass on a normal user-authored descendant of production commit `8ab3f78b`.
-2. Record final debug artifact and exact APK SHA-256 from that run.
-3. True-device visual/GPU gate on that exact APK. CI does not prove target-GPU GLSL compilation or visual quality.
+CI proves source contracts, Android compilation, unit tests, and APK assembly. It does not prove target-GPU GLSL program creation or visual correctness.
+
+Device test must use the exact CI #4381 APK:
+
+```text
+SHA-256 e9aa0d9fe476e0b312aff6b340de8f419ef3227fbfc620b120e7b3fe072ffa5a
+```
 
 Device checks should specifically cover:
 
