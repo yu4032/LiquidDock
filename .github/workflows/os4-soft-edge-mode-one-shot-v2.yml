@@ -1,0 +1,71 @@
+name: OS4 soft edge mode one-shot v2
+
+on:
+  push:
+    branches:
+      - port/os4-original-background-edge
+    paths:
+      - .github/workflows/os4-soft-edge-mode-one-shot-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: port/os4-original-background-edge
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Fix exact-two Compose anchor in patch script
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply_os4_soft_edge_mode_policy.py')
+          text = p.read_text()
+          old = '''replace_once(
+              "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt",
+              ''' + "'''                        masterEnabled && liquidEnabled,\\n                    )\\n'''" + ''',
+              ''' + "'''                        masterEnabled && liquidEnabled && legacyHighlightsEnabled,\\n                    )\\n'''" + ''')
+          # The same exact toggle block appears a second time for large surfaces.
+          replace_once(
+              "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt",
+              ''' + "'''                        masterEnabled && liquidEnabled,\\n                    )\\n'''" + ''',
+              ''' + "'''                        masterEnabled && liquidEnabled && legacyHighlightsEnabled,\\n                    )\\n'''" + ''')'''
+          new = '''compose = Path("src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt")
+          compose_text = compose.read_text()
+          legacy_toggle_anchor = "                        masterEnabled && liquidEnabled,\\n                    )\\n"
+          gated_toggle_anchor = "                        masterEnabled && liquidEnabled && legacyHighlightsEnabled,\\n                    )\\n"
+          legacy_toggle_count = compose_text.count(legacy_toggle_anchor)
+          if legacy_toggle_count != 2:
+              raise SystemExit(f"ComposeSettingsActivity.kt: expected two legacy highlight enable anchors, found {legacy_toggle_count}")
+          compose.write_text(compose_text.replace(legacy_toggle_anchor, gated_toggle_anchor, 2))'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'patch-script target block count={count}')
+          p.write_text(text.replace(old, new, 1))
+          PY
+      - name: Apply exact OS4 soft-edge mode patch
+        run: python3 scripts/apply_os4_soft_edge_mode_policy.py
+      - name: Check patch whitespace
+        run: git diff --check
+      - name: Focused mutual-exclusion tests
+        run: ./gradlew :testDebugUnitTest --tests com.hellovoid.liquiddock.Os4EdgeModePolicyTest --stacktrace
+      - name: Full verification before commit
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Commit verified production patch and self-delete
+        run: |
+          rm -f scripts/apply_os4_soft_edge_mode_policy.py \
+            .github/workflows/os4-soft-edge-mode-one-shot.yml \
+            .github/workflows/os4-soft-edge-mode-one-shot-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add OS4 soft edge mutual-exclusion mode"
+          git push origin HEAD:port/os4-original-background-edge
