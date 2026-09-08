@@ -41,9 +41,9 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0)"));
         assertTrue(patched.contains("float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y)"));
         assertTrue(patched.contains("float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y)"));
-        assertTrue(patched.contains("vec2 sdfEdgeNormal = normalize(vec2(sdfXp - sdfXn, sdfYp - sdfYn));"));
+        assertTrue(patched.contains("vec2 sdfEdgeGradient = 0.5 * vec2("));
+        assertTrue(patched.contains("vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));"));
         assertTrue(patched.contains("float sdfNormalBlend = os4EdgeBand(edgeDist"));
-        assertTrue(patched.contains("outward = normalize(mix(outward, sdfEdgeNormal, sdfNormalBlend));"));
     }
 
     @Test
@@ -82,42 +82,38 @@ public class PrismalOpticalEdgeShaderTest {
     }
 
     @Test
-    public void offsetsEdgeReflectionAlongStabilizedSdfNormal() {
+    public void offsetsBackgroundReflectionAlongPseudoNormal() {
         String patched = patched();
 
         assertTrue(patched.contains("float os4ReflectOffsetPx ="));
         assertTrue(patched.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
-        assertTrue(patched.contains("os4ReflectOffsetPx * (1.0 - os4EdgeDepth)"));
-        assertTrue(patched.contains("vec3 os4EdgeReflection = texture2D("));
+        assertTrue(patched.contains("(2.0 * os4EdgeNormal3.z)"));
+        assertTrue(patched.contains("os4ReflectOffsetPx * os4EdgeRemain"));
+        assertTrue(patched.contains("texture2D(u_blurredTexture, os4ReflectUv)"));
+        assertTrue(patched.contains("texture2D(u_backgroundTexture, os4ReflectUv)"));
     }
 
     @Test
-    public void buildsFiniteWidthBloomRingFromOuterAndInnerCoverage() {
+    public void directionalEdgeLightUsesMainOppositeAndAngleFalloff() {
         String patched = patched();
 
-        assertTrue(patched.contains("float os4BloomOuter ="));
-        assertTrue(patched.contains("float os4BloomInner ="));
-        assertTrue(patched.contains("float os4BloomRing = clamp(os4BloomOuter * (1.0 - os4BloomInner)"));
-        assertTrue(patched.contains("float os4BloomEdgePx ="));
-        assertFalse(patched.contains("float os4BloomEdgePx = u_highlightWidth"));
+        assertTrue(patched.contains("float os4DirectionalMain ="));
+        assertTrue(patched.contains("float os4DirectionalOpposite ="));
+        assertTrue(patched.contains("u_os4DirectionalAngleRange"));
+        assertTrue(patched.contains("u_os4DirectionalIntensity"));
+        assertTrue(patched.contains("u_os4DirectionalOppositeIntensity"));
     }
 
     @Test
-    public void lightsBloomRingWithMainOppositeAndAmbientResponses() {
+    public void softHighlightModulatesBackdropColorWithoutGrowingSilhouette() {
         String patched = patched();
 
-        assertTrue(patched.contains("float os4BloomMain ="));
-        assertTrue(patched.contains("float os4BloomOpposite ="));
-        assertTrue(patched.contains("float os4BloomAmbient ="));
-        assertTrue(patched.contains("float os4BloomLight = max(os4BloomAmbient,"));
-    }
-
-    @Test
-    public void compositesBloomAsOpticalContributionNotSilhouetteExpansion() {
-        String patched = patched();
-
-        assertTrue(patched.contains("vec3 os4BloomColor ="));
-        assertTrue(patched.contains("color += os4BloomColor * os4BloomRing"));
-        assertFalse(patched.contains("opacity += os4BloomRing"));
+        assertTrue(patched.contains("float os4DirectionalGain ="));
+        assertTrue(patched.contains("color *= os4DirectionalGain;"));
+        assertTrue(patched.contains("float os4DarkResponse ="));
+        assertTrue(patched.contains("u_os4ReflectionLighten * os4DarkResponse"));
+        assertFalse(patched.contains("os4BloomRing"));
+        assertFalse(patched.contains("os4BloomColor"));
+        assertFalse(patched.contains("opacity +="));
     }
 }
