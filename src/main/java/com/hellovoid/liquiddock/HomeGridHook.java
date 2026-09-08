@@ -15,6 +15,7 @@ final class HomeGridHook {
     private static int portraitLeft, portraitRight, portraitTop, portraitBottom;
     private static int landscapeRowGap, portraitRowGap;
     private static boolean grid8x4Enabled;
+    private static boolean widgetAdaptationEnabled;
     private static volatile boolean workstationMode;
     private static int workstationHorizontalOffset;
     private static int workstationAllAppsLandscapeHorizontalOffset;
@@ -58,6 +59,7 @@ final class HomeGridHook {
     }
 
     static void install(ClassLoader classLoader, boolean enableGrid8x4,
+                        boolean enableWidgetAdaptation,
                         int landLeft, int landRight, int landTop, int landBottom,
                         int portLeft, int portRight, int portTop, int portBottom,
                         int landRowGap, int portRowGap,
@@ -75,6 +77,7 @@ final class HomeGridHook {
         landscapeIndicatorY = landIndicatorY;
         portraitIndicatorY = portIndicatorY;
         grid8x4Enabled = enableGrid8x4;
+        widgetAdaptationEnabled = enableWidgetAdaptation;
         density = android.content.res.Resources.getSystem().getDisplayMetrics().density;
         // Layout customization is intentionally all-or-nothing. When 8x4 is disabled,
         // leave MIUI's native 6x4 CellLayout, indicator and folder measurement untouched.
@@ -267,12 +270,13 @@ final class HomeGridHook {
     private static void applyWidgetGridSize(Object cellLayout, int cellX, int cellY,
                                             Object info, Object layoutParams) {
         try {
-            if (!grid8x4Enabled || info == null || layoutParams == null) return;
+            if (!grid8x4Enabled || !widgetAdaptationEnabled
+                    || info == null || layoutParams == null) return;
             if (!WidgetClassifier.isWidget(info)) return;
 
             int spanX = HookUtil.getIntField(info, "spanX");
             int spanY = HookUtil.getIntField(info, "spanY");
-            if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)) return;
+            if (!WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)) return;
             if (!(layoutParams instanceof android.view.ViewGroup.MarginLayoutParams)) return;
 
             int cellWidth = HookUtil.getIntField(cellLayout, "mCellWidth");
@@ -283,7 +287,8 @@ final class HomeGridHook {
             int[] ys = (int[]) HookUtil.getField(cellLayout, "mYs");
             if (cellWidth <= 0 || cellHeight <= 0 || xs == null || ys == null) return;
 
-            int[] rect = WidgetGridSizing.gridRect(cellX, cellY, spanX, spanY,
+            int[] rect = WidgetGridSizing.gridRect(
+                    widgetAdaptationEnabled, cellX, cellY, spanX, spanY,
                     xs, ys, cellWidth, cellHeight, widthGap, heightGap);
             if (rect[2] <= 0 || rect[3] <= 0) return;
 
@@ -305,7 +310,7 @@ final class HomeGridHook {
      * The widget's own content padding remains untouched.
      */
     private static void enforceWidgetGridFrames(android.view.ViewGroup cellLayout) {
-        if (!grid8x4Enabled || cellLayout == null) return;
+        if (!grid8x4Enabled || !widgetAdaptationEnabled || cellLayout == null) return;
         try {
             int cellWidth = HookUtil.getIntField(cellLayout, "mCellWidth");
             int cellHeight = HookUtil.getIntField(cellLayout, "mCellHeight");
@@ -340,9 +345,10 @@ final class HomeGridHook {
                 } catch (Throwable ignored) {
                     continue;
                 }
-                if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)) continue;
+                if (!WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)) continue;
 
-                int[] rect = WidgetGridSizing.gridRect(cellX, cellY, spanX, spanY,
+                int[] rect = WidgetGridSizing.gridRect(
+                        widgetAdaptationEnabled, cellX, cellY, spanX, spanY,
                         xs, ys, cellWidth, cellHeight, widthGap, heightGap);
                 int targetWidth = rect[2];
                 int targetHeight = rect[3];

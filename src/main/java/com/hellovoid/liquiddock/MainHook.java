@@ -34,8 +34,6 @@ public class MainHook {
     public void install(ClassLoader classLoader) {
         installWorkstationModeGuard(classLoader);
         LiquidDockConfig config = LiquidDockConfig.load();
-        WidgetGridSizing.setWidgetAdaptationEnabled(
-                WidgetGridSizing.shouldAdaptWidgets(config.grid.enabled, config.grid.widgetAdaptation));
         debugLogging = config.debugLog;
         log("[DC] LiquidDock " + (debugLogging ? "debug logging ON" : "loaded"));
         if (!config.enabled) {
@@ -52,6 +50,8 @@ public class MainHook {
             log("[DC] workstation active; using isolated workstation parameters");
 
         LiquidDockConfig.Grid grid = config.grid;
+        boolean widgetAdaptationEnabled = WidgetGridSizing.shouldAdaptWidgets(
+                grid.enabled, grid.widgetAdaptation);
         boolean grid8x4 = grid.enabled, dp = grid.dp, offsets = grid.offsets;
         float gridScale = dp ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
         int landXBase = dp ? 57 : 160, landYBase = dp ? 28 : 80;
@@ -73,7 +73,7 @@ public class MainHook {
             landGap -= dp ? 1 : 3; portGap -= dp ? 1 : 3;
         }
         DockDividerHook.install(classLoader);
-        HomeGridHook.install(classLoader, grid8x4,
+        HomeGridHook.install(classLoader, grid8x4, widgetAdaptationEnabled,
             Math.round(landLeft * gridScale), Math.round(landRight * gridScale),
             Math.round(landTop * gridScale), Math.round(landBottom * gridScale),
             Math.round(portLeft * gridScale), Math.round(portRight * gridScale),
