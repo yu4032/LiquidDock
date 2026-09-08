@@ -21,6 +21,13 @@ public final class PrismalParams {
     public final float plainHighlight;
     public final float brightness;
     public final float highlightWidth;
+    public final float os4EdgeWidthPx;
+    public final float os4ReflectOffsetPx;
+    public final float os4ReflectionStrength;
+    public final float os4ReflectionLighten;
+    public final float os4DirectionalAngleRange;
+    public final float os4DirectionalIntensity;
+    public final float os4DirectionalOppositeIntensity;
     public final float lightDirX;
     public final float lightDirY;
     public final float specular;
@@ -68,6 +75,13 @@ public final class PrismalParams {
         plainHighlight = b.plainHighlight;
         brightness = b.brightness;
         highlightWidth = b.highlightWidth;
+        os4EdgeWidthPx = b.os4EdgeWidthPx;
+        os4ReflectOffsetPx = b.os4ReflectOffsetPx;
+        os4ReflectionStrength = b.os4ReflectionStrength;
+        os4ReflectionLighten = b.os4ReflectionLighten;
+        os4DirectionalAngleRange = b.os4DirectionalAngleRange;
+        os4DirectionalIntensity = b.os4DirectionalIntensity;
+        os4DirectionalOppositeIntensity = b.os4DirectionalOppositeIntensity;
         lightDirX = b.lightDirX;
         lightDirY = b.lightDirY;
         specular = b.specular;
@@ -118,6 +132,14 @@ public final class PrismalParams {
         public float plainHighlight = 0f;
         public float brightness = 1.15f;
         public float highlightWidth = 4f;
+        // OS4 runtime values were not recovered; these are bounded implementation defaults.
+        public float os4EdgeWidthPx = 0f;
+        public float os4ReflectOffsetPx = 0f;
+        public float os4ReflectionStrength = 0.28f;
+        public float os4ReflectionLighten = 0.16f;
+        public float os4DirectionalAngleRange = 0.52f;
+        public float os4DirectionalIntensity = 0.42f;
+        public float os4DirectionalOppositeIntensity = 0.14f;
         public float lightDirX = -0.5f;
         public float lightDirY = -0.8f;
         public float specular = 0.8f;
