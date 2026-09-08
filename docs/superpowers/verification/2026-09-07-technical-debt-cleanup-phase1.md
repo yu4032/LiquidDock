@@ -14,6 +14,8 @@ Tasks 1–5 have code/CI evidence. Phase 1 is not complete until the final-head 
 - PR merge ref used by CI #4327: `81dbecf98a49afef7809ce09479615ee5792a8e3`
 - Baseline main: `be1b4ba77955fe0ebebec67362a09643b69634bd`
 
+After CI #4327, the branch received documentation-only commits that align `TODO.md`, `ARCHITECTURE.md`, `HOOKS.md`, `CONTRIBUTING.md`, and this verification record with the verified implementation. Those commits do not modify production or test source; the APK used for the device matrix remains the CI #4327 artifact built from production head `9ec9f357`.
+
 ## Automated verification
 
 ### Full unit suite + Debug build
@@ -92,7 +94,7 @@ Record before closing the phase:
 
 ## True-device matrix
 
-All results below must be taken on final head `9ec9f357` (or a later documentation-only descendant with identical production bytecode).
+All results below must be taken on final production head `9ec9f357` (or a later documentation-only descendant with identical production bytecode).
 
 | # | Case | Status | Required evidence |
 |---|---|---|---|
