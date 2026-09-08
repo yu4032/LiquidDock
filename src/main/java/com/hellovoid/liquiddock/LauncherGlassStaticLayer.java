@@ -194,8 +194,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
         resetScrollCompensation();
-        outputSurface = null;
         Surface current = outputSurface;
+        outputSurface = null;
         if (current != null) session.detachStaticOutput(current);
         return true;
     }
