@@ -284,7 +284,7 @@ final class Miuix307PassBlurBridge {
                 Method method = type.getDeclaredMethod("getSurfaceSequenceId");
                 method.setAccessible(true);
                 Object value = method.invoke(viewRoot);
-                if (value instanceof Number) return ((Number) value).intValue() : -1;
+                if (value instanceof Number) return ((Number) value).intValue();
             } catch (NoSuchMethodException ignored) {
                 type = type.getSuperclass();
                 continue;
