@@ -97,4 +97,8 @@ final class HomeTransitionAuthorityState {
     synchronized boolean isSystemUiAuthorityActive() {
         return systemUiHomeArmed;
     }
+
+    synchronized boolean isBarrierFrozen() {
+        return launcherHomeArmed || systemUiHomeArmed;
+    }
 }
