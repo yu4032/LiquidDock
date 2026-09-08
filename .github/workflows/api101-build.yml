@@ -46,8 +46,6 @@ jobs:
           path.write_text(source.replace(old, new))
           PY
       - run: chmod +x ./gradlew
-      - name: Verify OS4 runtime control RED
-        run: ./gradlew testDebugUnitTest --tests com.hellovoid.liquiddock.Os4EdgeConfigRuntimeTest --stacktrace
       - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:

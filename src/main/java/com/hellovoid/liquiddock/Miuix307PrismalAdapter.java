@@ -28,6 +28,13 @@ final class Miuix307PrismalAdapter {
         b.plainHighlight = p.plainHighlight;
         b.brightness = p.brightness;
         b.highlightWidth = p.highlightWidth;
+        b.os4EdgeWidthPx = p.os4EdgeWidthPx;
+        b.os4ReflectOffsetPx = p.os4ReflectOffsetPx;
+        b.os4ReflectionStrength = p.os4ReflectionStrength;
+        b.os4ReflectionLighten = p.os4ReflectionLighten;
+        b.os4DirectionalAngleRange = p.os4DirectionalAngleRange;
+        b.os4DirectionalIntensity = p.os4DirectionalIntensity;
+        b.os4DirectionalOppositeIntensity = p.os4DirectionalOppositeIntensity;
         b.lightDirX = p.lightDirX;
         b.lightDirY = p.lightDirY;
         b.specular = p.specularStrength;
