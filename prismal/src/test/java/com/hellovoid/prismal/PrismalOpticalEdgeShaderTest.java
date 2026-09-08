@@ -71,24 +71,39 @@ public class PrismalOpticalEdgeShaderTest {
     }
 
     @Test
+    public void declaresExplicitOs4ControlsAsUniforms() {
+        String patched = patched();
+
+        assertTrue(patched.contains("uniform float u_os4EdgeWidthPx;"));
+        assertTrue(patched.contains("uniform float u_os4ThicknessPx;"));
+        assertTrue(patched.contains("uniform float u_os4ReflectOffsetPx;"));
+        assertTrue(patched.contains("uniform float u_os4BloomWidthPx;"));
+        assertTrue(patched.contains("uniform float u_os4BloomIntensity;"));
+        assertTrue(patched.contains("uniform float u_os4BloomInMainPass;"));
+    }
+
+    @Test
     public void modelsVolumetricEdgeThicknessSeparatelyFromHighlightWidth() {
         String patched = patched();
 
-        assertTrue(patched.contains("float os4ThicknessPx ="));
-        assertTrue(patched.contains("float os4EdgePx ="));
+        assertTrue(patched.contains("float os4EdgePx = u_os4EdgeWidthPx > 0.0"));
+        assertTrue(patched.contains("float os4ThicknessPx = u_os4ThicknessPx > 0.0"));
         assertTrue(patched.contains("float os4EdgeDepth ="));
         assertTrue(patched.contains("mix((os4ThicknessPx - os4EdgePx) * 2.0,"));
         assertTrue(patched.contains("os4ThicknessPx * 2.0, os4EdgeDepth)"));
+        assertFalse(patched.contains("float os4EdgePx = clamp(minDim * 0.060"));
+        assertFalse(patched.contains("float os4ThicknessPx = max(u_glassThickness"));
     }
 
     @Test
     public void offsetsEdgeReflectionAlongStabilizedSdfNormal() {
         String patched = patched();
 
-        assertTrue(patched.contains("float os4ReflectOffsetPx ="));
+        assertTrue(patched.contains("float os4ReflectOffsetPx = u_os4ReflectOffsetPx > 0.0"));
         assertTrue(patched.contains("vec2 os4ReflectUvOffset = opticalEdgeNormal"));
         assertTrue(patched.contains("os4ReflectOffsetPx * (1.0 - os4EdgeDepth)"));
         assertTrue(patched.contains("vec3 os4EdgeReflection = texture2D("));
+        assertFalse(patched.contains("float os4ReflectOffsetPx = clamp(os4ThicknessPx * 0.38"));
     }
 
     @Test
@@ -98,8 +113,9 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("float os4BloomOuter ="));
         assertTrue(patched.contains("float os4BloomInner ="));
         assertTrue(patched.contains("float os4BloomRing = clamp(os4BloomOuter * (1.0 - os4BloomInner)"));
-        assertTrue(patched.contains("float os4BloomEdgePx ="));
+        assertTrue(patched.contains("float os4BloomEdgePx = u_os4BloomWidthPx > 0.0"));
         assertFalse(patched.contains("float os4BloomEdgePx = u_highlightWidth"));
+        assertFalse(patched.contains("float os4BloomEdgePx = clamp(minDim * 0.090"));
     }
 
     @Test
@@ -117,7 +133,9 @@ public class PrismalOpticalEdgeShaderTest {
         String patched = patched();
 
         assertTrue(patched.contains("vec3 os4BloomColor ="));
-        assertTrue(patched.contains("color += os4BloomColor * os4BloomRing"));
+        assertTrue(patched.contains(
+                "color += os4BloomColor * os4BloomRing * u_os4BloomInMainPass"));
+        assertTrue(patched.contains("u_os4BloomIntensity"));
         assertFalse(patched.contains("opacity += os4BloomRing"));
     }
 }
