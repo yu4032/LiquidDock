@@ -4,6 +4,7 @@ import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
@@ -12,9 +13,10 @@ import java.util.Arrays;
  * producer Surface. Pixel ownership remains in GPU buffers; this class never captures or maps the
  * backdrop on the CPU.
  *
- * A bind is always continuous. The independent Dock relies on that historical behavior. Workspace
- * sessions may explicitly pulse or pause their own binding after bind; those calls must never be
- * inferred from the material-host hierarchy because Floating Dock window topology is vendor-specific.
+ * A bind is always continuous unless the owning Launcher root is inside an unsafe external drag.
+ * The independent Dock otherwise relies on continuous-on-bind behavior. Workspace sessions may
+ * explicitly pulse or pause their own binding after bind; those calls must never be inferred from
+ * material-host hierarchy because Floating Dock window topology is vendor-specific.
  */
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
@@ -31,6 +33,7 @@ final class Miuix307PassBlurBridge {
         final int surfaceSequenceId;
         final int rootLayerId;
         final boolean launcherWorkspace;
+        final WeakReference<View> launcherRootRef;
         boolean bound = true;
         boolean updatesEnabled = true;
 
@@ -44,7 +47,8 @@ final class Miuix307PassBlurBridge {
                 int viewRootIdentity,
                 int surfaceSequenceId,
                 int rootLayerId,
-                boolean launcherWorkspace) {
+                boolean launcherWorkspace,
+                View launcherRoot) {
             this.rootSurface = rootSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
@@ -55,6 +59,7 @@ final class Miuix307PassBlurBridge {
             this.surfaceSequenceId = surfaceSequenceId;
             this.rootLayerId = rootLayerId;
             this.launcherWorkspace = launcherWorkspace;
+            this.launcherRootRef = new WeakReference<>(launcherRoot);
         }
     }
 
@@ -63,10 +68,13 @@ final class Miuix307PassBlurBridge {
     static Binding bind(View materialHost, Surface producerSurface, float requestedScale) {
         if (materialHost == null || producerSurface == null) return null;
         boolean launcherWorkspace = LauncherGlassSceneController.findRoot(materialHost) != null;
+        View launcherRoot = materialHost.getRootView();
         if (launcherWorkspace && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
             MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock presentation");
             return null;
         }
+        boolean unsafeDragBlocked = launcherWorkspace
+                && LauncherGlassSessionRegistry.isUnsafeDragCaptureBlockedForRoot(launcherRoot);
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -112,11 +120,12 @@ final class Miuix307PassBlurBridge {
             int workspaceScalePercent = Math.round(requestedScale * 100f);
             float scale = PassBlurQualityPolicy.bridgeScale(
                     launcherWorkspace, workspaceScalePercent);
+            boolean updatesEnabled = !unsafeDragBlocked;
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
                 setUpdateTextureFlag.invoke(
-                        transaction, rootSurface, Boolean.TRUE, Float.valueOf(scale));
+                        transaction, rootSurface, Boolean.valueOf(updatesEnabled), Float.valueOf(scale));
                 transaction.apply();
             }
 
@@ -130,7 +139,9 @@ final class Miuix307PassBlurBridge {
                     viewRootIdentity,
                     surfaceSequenceId,
                     rootLayerId,
-                    launcherWorkspace);
+                    launcherWorkspace,
+                    launcherRoot);
+            binding.updatesEnabled = updatesEnabled;
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + requestedScale
@@ -140,7 +151,7 @@ final class Miuix307PassBlurBridge {
                     + " viewRootId=" + viewRootIdentity
                     + " launcherWorkspace=" + launcherWorkspace
                     + " output=TextureView-in-root"
-                    + " mode=continuous-on-bind"
+                    + " mode=" + (updatesEnabled ? "continuous-on-bind" : "paused-unsafe-drag")
                     + " exclusions=" + Arrays.toString(exclusions));
             return binding;
         } catch (Throwable error) {
@@ -156,6 +167,10 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
             return;
         }
+        if (isUnsafeDragBlocked(binding)) {
+            MainHook.log(TAG + " PassBlur Workspace single update blocked by unsafe drag");
+            return;
+        }
         setUpdatesEnabled(binding, true);
         host.postInvalidateOnAnimation();
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
@@ -168,6 +183,10 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
+        if (isUnsafeDragBlocked(binding)) {
+            MainHook.log(TAG + " PassBlur Workspace resume blocked by unsafe drag");
+            return;
+        }
         setUpdatesEnabled(binding, true);
     }
 
@@ -175,6 +194,13 @@ final class Miuix307PassBlurBridge {
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;
         setUpdatesEnabled(binding, false);
+    }
+
+    private static boolean isUnsafeDragBlocked(Binding binding) {
+        if (binding == null || !binding.launcherWorkspace) return false;
+        View root = binding.launcherRootRef.get();
+        return root != null
+                && LauncherGlassSessionRegistry.isUnsafeDragCaptureBlockedForRoot(root);
     }
 
     private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
