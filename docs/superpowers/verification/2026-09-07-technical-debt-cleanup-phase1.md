@@ -92,22 +92,46 @@ Record before closing the phase:
 - LSPosed version: **PENDING**
 - Installed APK SHA-256: must equal `1e89cd194e4a3521643ec56ee2b86828bf1bcba8bedc314dcf1c6ed192953e9a`
 
+## Device smoke evidence — 2026-09-08
+
+The user reported no obvious visible issue during this smoke run. The attached filtered LiquidDock log covers approximately `14:06:35.985` through `14:06:37.371` and contains no `DC-MATRIX` markers, so it is treated as a bounded smoke sample rather than evidence for every matrix case.
+
+Observed sequence:
+
+- Workstation mode published `false`;
+- HotSeats hierarchy recovery/rebind completed;
+- normal 8×4 layout restoration ran with `items=4`;
+- the restoration was intentionally reasserted by the existing `post()` / `+250 ms` / `+700 ms` schedule rather than representing three distinct Workstation transitions;
+- Workspace/static-glass reconciliation reached generation 2;
+- PassBlur producer bound at native scale `1.0`;
+- a first OES frame and first EGL material draw were received;
+- zero-copy became active;
+- no LiquidDock error/exception/failure line was present in the supplied filtered capture.
+
+This is sufficient to record:
+
+- CASE01 normal startup: **PASS (manual smoke + log)**;
+- CASE05 normal-layout restore after leaving Workstation: **PASS (manual smoke + log)**;
+- CASE10 normal non-Workstation mode: **PASS (manual smoke + log)**.
+
+Cases 2–4, 6–9, and 11 remain **PENDING**. This capture does not identify quick re-entry / 2-second stale-fallback timing, Recents, rotation, Widget span/disabled behavior, or bundled-rule normal-load diagnostics.
+
 ## True-device matrix
 
 All results below must be taken on final production head `9ec9f357` (or a later documentation-only descendant with identical production bytecode).
 
 | # | Case | Status | Required evidence |
 |---|---|---|---|
-| 1 | Normal Launcher startup | **PENDING** | HOME usable; no LiquidDock fatal/init error; glass/grid/dock normal |
+| 1 | Normal Launcher startup | **PASS (manual smoke + log)** | HOME usable; hierarchy rebind completes; first OES/EGL frame arrives; zero-copy active; no visible issue reported |
 | 2 | Workstation enter → exit → quick re-enter | **PENDING** | final mode matches UI; no stale restore or duplicate transition |
 | 3 | Vendor Workstation callback before delayed fallback | **PENDING** | vendor-confirmed state remains authoritative after the 2 s window |
 | 4 | Stale delayed fallback after a newer transition | **PENDING** | no later stale mode flip/restore after the newer transition |
-| 5 | Normal-layout backup / restore | **PENDING** | leaving Workstation restores normal item positions/spans once |
+| 5 | Normal-layout backup / restore | **PASS (manual smoke + log)** | leaving Workstation restores the saved normal layout; the existing immediate / +250 ms / +700 ms reassert schedule may log the same `items=N` restore three times |
 | 6 | HOME → Recents → HOME ×5 | **PENDING** | no stale glass, producer loss, repeated endpoint rebuild, or frozen source |
 | 7 | Recents-adjacent rotation | **PENDING** | correct orientation geometry and fresh glass after settle |
 | 8 | 1×1 / 2×1 / 2×2 / 4×2 Widgets, portrait + landscape | **PENDING** | all supported spans tile/size correctly; no placement/occupancy regression |
 | 9 | Widget adaptation disabled | **PENDING** | MIUI native Widget frame/layout remains untouched |
-| 10 | Normal mode without Workstation | **PENDING** | normal Dock/Grid/Glass behavior unchanged |
+| 10 | Normal mode without Workstation | **PASS (manual smoke + log)** | final published mode is non-Workstation; Dock/Grid/Glass recovered and no visible issue was reported |
 | 11 | Normal bundled Widget-rule load | **PENDING** | no `[DC][WidgetRules] bundled_rules_unavailable` warning |
 | 12 | Missing/malformed bundled-rule test paths | **PASS (unit test only)** | `MISSING_RESOURCE` / `PARSE_FAILED`, one-shot diagnostic primitive, EMPTY fail-safe covered by unit tests; production APK is not intentionally corrupted on-device |
 
