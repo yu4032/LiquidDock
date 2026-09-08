@@ -77,6 +77,8 @@ public final class PrismalRenderer implements AutoCloseable {
     private int blurHProgram;
     private int blurVProgram;
     private int glassProgram;
+    private int bloomMaskProgram;
+    private int bloomCompositeProgram;
 
     private int sourceTexture;
     private int sourceFramebuffer;
@@ -86,6 +88,14 @@ public final class PrismalRenderer implements AutoCloseable {
     private int blurFramebufferV;
     private int outputTexture;
     private int outputFramebuffer;
+    private int bloomMaskTexture;
+    private int bloomMaskFramebuffer;
+    private int bloomBlurTextureH;
+    private int bloomBlurFramebufferH;
+    private int bloomBlurTextureV;
+    private int bloomBlurFramebufferV;
+    private int bloomTargetWidth;
+    private int bloomTargetHeight;
     // width/height remain Prismal's public logical framebuffer domain. The backing
     // FBOs may use fewer physical pixels without changing any geometry or screen UV.
     private int width;
@@ -265,7 +275,8 @@ public final class PrismalRenderer implements AutoCloseable {
     public int framebufferHeight() { return height; }
 
     private void ensurePrograms() {
-        if (sourceProgram != 0 && blurHProgram != 0 && blurVProgram != 0 && glassProgram != 0) {
+        if (sourceProgram != 0 && blurHProgram != 0 && blurVProgram != 0 && glassProgram != 0
+                && bloomMaskProgram != 0 && bloomCompositeProgram != 0) {
             return;
         }
         sourceProgram = createProgram(SOURCE_VERTEX, SOURCE_FRAGMENT);
@@ -275,8 +286,13 @@ public final class PrismalRenderer implements AutoCloseable {
                 PrismalOpticalEdgeShader.apply(
                         PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
         glassProgram = createProgram(PrismalShaderSources.VERTEX, glassFragment);
+        bloomMaskProgram = createProgram(PrismalBloomShaderSources.MASK_VERTEX,
+                PrismalBloomShaderSources.MASK_FRAGMENT);
+        bloomCompositeProgram = createProgram(PrismalBloomShaderSources.COMPOSITE_VERTEX,
+                PrismalBloomShaderSources.COMPOSITE_FRAGMENT);
         glassUniformLocations.clear();
-        if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0) {
+        if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0
+                || bloomMaskProgram == 0 || bloomCompositeProgram == 0) {
             throw new IllegalStateException("Prismal shader program creation failed");
         }
     }
@@ -308,6 +324,27 @@ public final class PrismalRenderer implements AutoCloseable {
         blurFramebufferV = createFramebuffer(blurTextureV);
         outputTexture = createTexture(outputWidth, outputHeight);
         outputFramebuffer = createFramebuffer(outputTexture);
+    }
+
+    private void ensureBloomTargets(int requestedWidth, int requestedHeight) {
+        int safeWidth = Math.max(1, requestedWidth);
+        int safeHeight = Math.max(1, requestedHeight);
+        if (bloomMaskTexture != 0
+                && bloomTargetWidth >= safeWidth && bloomTargetHeight >= safeHeight) {
+            return;
+        }
+
+        int nextWidth = Math.max(bloomTargetWidth, safeWidth);
+        int nextHeight = Math.max(bloomTargetHeight, safeHeight);
+        releaseBloomTargets();
+        bloomTargetWidth = nextWidth;
+        bloomTargetHeight = nextHeight;
+        bloomMaskTexture = createTexture(bloomTargetWidth, bloomTargetHeight);
+        bloomMaskFramebuffer = createFramebuffer(bloomMaskTexture);
+        bloomBlurTextureH = createTexture(bloomTargetWidth, bloomTargetHeight);
+        bloomBlurFramebufferH = createFramebuffer(bloomBlurTextureH);
+        bloomBlurTextureV = createTexture(bloomTargetWidth, bloomTargetHeight);
+        bloomBlurFramebufferV = createFramebuffer(bloomBlurTextureV);
     }
 
     private void renderSourceAdapter(int inputTexture) {
@@ -454,7 +491,117 @@ public final class PrismalRenderer implements AutoCloseable {
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
         GLES20.glDisableVertexAttribArray(position);
+
+        if (p.os4BloomEnabled && p.os4BloomIntensity > 0f && opacity > 0f) {
+            renderBloomOverlay(g, p, opacity);
+        }
         GLES20.glDisable(GLES20.GL_BLEND);
+    }
+
+    private void renderBloomOverlay(PrismalGeometry g, PrismalParams p, float opacity) {
+        float bloomWidthPx = effectiveOs4BloomWidthPx(g, p);
+        float bloomBlurRadiusPx = effectiveOs4BloomBlurRadiusPx(p);
+        PrismalBloomTarget.Spec spec = PrismalBloomTarget.plan(
+                g.glassWidth, g.glassHeight,
+                bloomWidthPx, bloomBlurRadiusPx,
+                outputWidth, outputHeight);
+        ensureBloomTargets(spec.width, spec.height);
+
+        renderBloomMask(g, p, bloomWidthPx, opacity);
+        renderBloomBlurPass(blurHProgram, bloomMaskTexture, bloomBlurFramebufferH,
+                bloomBlurRadiusPx);
+        renderBloomBlurPass(blurVProgram, bloomBlurTextureH, bloomBlurFramebufferV,
+                bloomBlurRadiusPx);
+        renderBloomComposite(g);
+    }
+
+    private float effectiveOs4BloomWidthPx(PrismalGeometry g, PrismalParams p) {
+        if (Float.isFinite(p.os4BloomWidthPx) && p.os4BloomWidthPx > 0f) {
+            return p.os4BloomWidthPx;
+        }
+        float minDim = Math.max(1f, Math.min(g.glassWidth, g.glassHeight));
+        return clamp(minDim * 0.090f, 9f, 28f);
+    }
+
+    private float effectiveOs4BloomBlurRadiusPx(PrismalParams p) {
+        if (!Float.isFinite(p.os4BloomBlurRadiusPx) || p.os4BloomBlurRadiusPx <= 0f) {
+            return 0.5f;
+        }
+        return Math.max(0.5f, p.os4BloomBlurRadiusPx);
+    }
+
+    private void renderBloomMask(PrismalGeometry g, PrismalParams p,
+                                 float bloomWidthPx, float opacity) {
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, bloomMaskFramebuffer);
+        GLES20.glViewport(0, 0, bloomTargetWidth, bloomTargetHeight);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUseProgram(bloomMaskProgram);
+        bindInterleavedQuad(bloomMaskProgram);
+
+        GLES20.glUniform2f(requireUniform(bloomMaskProgram, "u_targetSize"),
+                bloomTargetWidth, bloomTargetHeight);
+        GLES20.glUniform2f(requireUniform(bloomMaskProgram, "u_glassSize"),
+                g.glassWidth, g.glassHeight);
+        GLES20.glUniform4f(requireUniform(bloomMaskProgram, "u_cornerRadii"),
+                g.topLeftRadius, g.topRightRadius, g.bottomRightRadius, g.bottomLeftRadius);
+        GLES20.glUniform1f(requireUniform(bloomMaskProgram, "u_bloomWidthPx"), bloomWidthPx);
+        float bloomIntensity = Float.isFinite(p.os4BloomIntensity)
+                ? Math.max(0f, p.os4BloomIntensity) : 0f;
+        float rimStrength = Float.isFinite(p.rimStrength) ? Math.max(0f, p.rimStrength) : 0f;
+        GLES20.glUniform1f(requireUniform(bloomMaskProgram, "u_bloomIntensity"),
+                bloomIntensity * rimStrength * opacity);
+        GLES20.glUniform2f(requireUniform(bloomMaskProgram, "u_lightDir"),
+                p.lightDirX, p.lightDirY);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindInterleavedQuad(bloomMaskProgram);
+    }
+
+    private void renderBloomBlurPass(int program, int inputTexture, int framebuffer,
+                                     float sigma) {
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
+        GLES20.glViewport(0, 0, bloomTargetWidth, bloomTargetHeight);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUseProgram(program);
+        int position = requireAttrib(program, "a_position");
+        blurQuad.position(0);
+        GLES20.glEnableVertexAttribArray(position);
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, blurQuad);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexture);
+        GLES20.glUniform1i(requireUniform(program, "u_texture"), 0);
+        GLES20.glUniform2f(requireUniform(program, "u_texelSize"),
+                1f / Math.max(1, bloomTargetWidth), 1f / Math.max(1, bloomTargetHeight));
+        GLES20.glUniform1f(requireUniform(program, "u_sigma"), Math.max(0.5f, sigma));
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
+        GLES20.glDisableVertexAttribArray(position);
+    }
+
+    private void renderBloomComposite(PrismalGeometry g) {
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
+        GLES20.glViewport(0, 0, outputWidth, outputHeight);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFuncSeparate(
+                GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA,
+                GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+        GLES20.glUseProgram(bloomCompositeProgram);
+        bindInterleavedQuad(bloomCompositeProgram);
+        GLES20.glUniform2f(requireUniform(bloomCompositeProgram, "u_resolution"), width, height);
+        GLES20.glUniform2f(requireUniform(bloomCompositeProgram, "u_centerPx"),
+                g.centerX, height - g.centerY);
+        GLES20.glUniform2f(requireUniform(bloomCompositeProgram, "u_targetSize"),
+                bloomTargetWidth, bloomTargetHeight);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, bloomBlurTextureV);
+        GLES20.glUniform1i(requireUniform(bloomCompositeProgram, "uTexture"), 0);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindInterleavedQuad(bloomCompositeProgram);
     }
 
     private void bindInterleavedQuad(int program) {
@@ -579,7 +726,20 @@ public final class PrismalRenderer implements AutoCloseable {
         return buffer;
     }
 
+    private void releaseBloomTargets() {
+        if (bloomMaskFramebuffer != 0) GLES20.glDeleteFramebuffers(1, new int[]{bloomMaskFramebuffer}, 0);
+        if (bloomBlurFramebufferH != 0) GLES20.glDeleteFramebuffers(1, new int[]{bloomBlurFramebufferH}, 0);
+        if (bloomBlurFramebufferV != 0) GLES20.glDeleteFramebuffers(1, new int[]{bloomBlurFramebufferV}, 0);
+        if (bloomMaskTexture != 0) GLES20.glDeleteTextures(1, new int[]{bloomMaskTexture}, 0);
+        if (bloomBlurTextureH != 0) GLES20.glDeleteTextures(1, new int[]{bloomBlurTextureH}, 0);
+        if (bloomBlurTextureV != 0) GLES20.glDeleteTextures(1, new int[]{bloomBlurTextureV}, 0);
+        bloomMaskFramebuffer = bloomBlurFramebufferH = bloomBlurFramebufferV = 0;
+        bloomMaskTexture = bloomBlurTextureH = bloomBlurTextureV = 0;
+        bloomTargetWidth = bloomTargetHeight = 0;
+    }
+
     private void releaseTargets() {
+        releaseBloomTargets();
         if (sourceFramebuffer != 0) GLES20.glDeleteFramebuffers(1, new int[]{sourceFramebuffer}, 0);
         if (blurFramebufferH != 0) GLES20.glDeleteFramebuffers(1, new int[]{blurFramebufferH}, 0);
         if (blurFramebufferV != 0) GLES20.glDeleteFramebuffers(1, new int[]{blurFramebufferV}, 0);
@@ -605,7 +765,10 @@ public final class PrismalRenderer implements AutoCloseable {
         if (blurHProgram != 0) GLES20.glDeleteProgram(blurHProgram);
         if (blurVProgram != 0) GLES20.glDeleteProgram(blurVProgram);
         if (glassProgram != 0) GLES20.glDeleteProgram(glassProgram);
+        if (bloomMaskProgram != 0) GLES20.glDeleteProgram(bloomMaskProgram);
+        if (bloomCompositeProgram != 0) GLES20.glDeleteProgram(bloomCompositeProgram);
         sourceProgram = blurHProgram = blurVProgram = glassProgram = 0;
+        bloomMaskProgram = bloomCompositeProgram = 0;
         glassUniformLocations.clear();
     }
 }

@@ -117,7 +117,9 @@ final class PrismalBloomShaderSources {
             varying vec2 vUv;
 
             void main() {
-                gl_FragColor = texture2D(uTexture, vUv);
+                vec4 bloom = texture2D(uTexture, vUv);
+                vec3 straightRgb = bloom.a > 1e-5 ? bloom.rgb / bloom.a : vec3(0.0);
+                gl_FragColor = vec4(straightRgb, bloom.a);
             }
             """;
 
