@@ -47,6 +47,16 @@ public class PrismalOpticalEdgeShaderTest {
     }
 
     @Test
+    public void usesOs4InspiredNonlinearBandShaping() {
+        String patched = patched();
+
+        assertTrue(patched.contains("float os4EdgeCurve(float t)"));
+        assertTrue(patched.contains("if (t >= 0.85) return 1.0;"));
+        assertTrue(patched.contains("sqrt(clamp(t, 0.0, 1.0))"));
+        assertTrue(patched.contains("1.0 - pow(1.0 - shaped, 1.35)"));
+    }
+
+    @Test
     public void sharesAntialiasedCoverageAcrossBrightEdgeBands() {
         String patched = patched();
 
