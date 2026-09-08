@@ -14,10 +14,9 @@ import java.lang.reflect.Field;
  * MiuiX-specific zero-copy glass installer for HyperOS 3.0.307+ docks.
  *
  * The vendor background remains the authoritative Dock geometry shell. Parent compositor blur is
- * suppressed for both supported HotSeats owners. The themed BlurBackground2 material body is made
- * transparent because Prismal fully replaces it; the default MiuiX material body remains visible
- * as failure protection while LiquidDock renders PassBlur -> OES -> Prismal in a child TextureView.
- * There is deliberately no screen-capture fallback.
+ * suppressed for both supported HotSeats owners. Both supported vendor material bodies are made
+ * transparent because Prismal fully replaces them while LiquidDock renders PassBlur -> OES ->
+ * Prismal in a child TextureView. There is deliberately no screen-capture fallback.
  */
 final class MiuixGlassHook {
     private static final String TAG = "[DC][MG]";
@@ -335,8 +334,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     }
 
     private static boolean shouldSuppressVendorMaterialBody(View dockBg) {
-        return dockBg != null
-                && COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName());
+        return dockBg != null && isNativeVisualOwner(dockBg);
     }
 
     static void suppressVendorGpuBlur(View dockBg) {
@@ -412,7 +410,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (dockBg.getBackground() != transparentMaterialBody) dockBg.setBackground(transparentMaterialBody);
         if (materialBodyLoggedFor.get() != dockBg) {
             materialBodyLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " themed vendor material body transparent; native optics radius="
+            MainHook.log(TAG + " vendor material body transparent; native optics radius="
                     + radius + " class=" + dockBg.getClass().getSimpleName());
         }
     }
