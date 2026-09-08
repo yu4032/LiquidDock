@@ -16,6 +16,8 @@ final class LauncherGlassSessionRegistry {
     }
 
     private static final WeakHashMap<View, LauncherGlassSession> SESSIONS = new WeakHashMap<>();
+    private static final WeakHashMap<View, LauncherGlassDragSourceState> UNSAFE_DRAG_SOURCES =
+            new WeakHashMap<>();
     private static long workstationRolloverGeneration;
 
     private LauncherGlassSessionRegistry() {}
@@ -31,6 +33,9 @@ final class LauncherGlassSessionRegistry {
             LauncherGlassSceneController controller =
                     LauncherGlassSceneController.acquire(root, current, glassConfig);
             if (controller != null) controller.onRootReady();
+            if (isUnsafeDragCaptureBlockedForRoot(root)) {
+                current.suspendProducerForUnlockCapture();
+            }
             return current;
         }
         LauncherGlassSession created = new LauncherGlassSession(root, glassConfig);
@@ -38,6 +43,9 @@ final class LauncherGlassSessionRegistry {
         LauncherGlassSceneController controller =
                 LauncherGlassSceneController.acquire(root, created, glassConfig);
         if (controller != null) controller.onRootReady();
+        if (isUnsafeDragCaptureBlockedForRoot(root)) {
+            created.suspendProducerForUnlockCapture();
+        }
         return created;
     }
 
@@ -50,6 +58,60 @@ final class LauncherGlassSessionRegistry {
             return null;
         }
         return root;
+    }
+
+    /**
+     * External Launcher DragView surfaces are not part of the PassBlur exclusion set. Keep the
+     * last clean source frame while any such drag is active for this root.
+     */
+    static synchronized boolean beginUnsafeDragCaptureForRoot(View root) {
+        if (root == null) return false;
+        LauncherGlassDragSourceState state = UNSAFE_DRAG_SOURCES.get(root);
+        if (state == null) {
+            state = new LauncherGlassDragSourceState();
+            UNSAFE_DRAG_SOURCES.put(root, state);
+        }
+        boolean first = state.begin();
+        if (first) {
+            LauncherGlassSession session = SESSIONS.get(root);
+            boolean paused = session != null && !session.isShutdown()
+                    && session.suspendProducerForUnlockCapture();
+            MainHook.log("[DC][LauncherGlass][DragSource] root="
+                    + Integer.toHexString(System.identityHashCode(root))
+                    + " action=pause result=" + (paused ? "PAUSED" : "PENDING_BIND"));
+        }
+        return true;
+    }
+
+    /**
+     * Release only the final drag owner. Fresh recovery stays with SceneController rather than
+     * directly resuming the bridge, preserving the existing generation/fresh-frame barrier.
+     */
+    static synchronized boolean endUnsafeDragCaptureForRoot(View root) {
+        if (root == null) return false;
+        LauncherGlassDragSourceState state = UNSAFE_DRAG_SOURCES.get(root);
+        if (state == null) return false;
+        boolean finalEnd = state.end();
+        if (!state.isBlocked()) UNSAFE_DRAG_SOURCES.remove(root);
+        if (finalEnd) {
+            MainHook.log("[DC][LauncherGlass][DragSource] root="
+                    + Integer.toHexString(System.identityHashCode(root))
+                    + " action=request-fresh");
+            root.postOnAnimation(() -> LauncherGlassSceneController.requestFreshForRoot(root));
+        }
+        return finalEnd;
+    }
+
+    static synchronized void cancelUnsafeDragCaptureForRoot(View root) {
+        if (root == null) return;
+        LauncherGlassDragSourceState state = UNSAFE_DRAG_SOURCES.remove(root);
+        if (state != null) state.cancel();
+    }
+
+    static synchronized boolean isUnsafeDragCaptureBlockedForRoot(View root) {
+        if (root == null) return false;
+        LauncherGlassDragSourceState state = UNSAFE_DRAG_SOURCES.get(root);
+        return state != null && state.isBlocked();
     }
 
     /** Stop every existing Launcher PassBlur producer as soon as unlock presentation starts. */
@@ -159,6 +221,7 @@ final class LauncherGlassSessionRegistry {
             if (session != null) session.shutdown();
         }
         SESSIONS.clear();
+        UNSAFE_DRAG_SOURCES.clear();
     }
 
     static synchronized void forget(View root, LauncherGlassSession session) {
