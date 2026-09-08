@@ -74,7 +74,7 @@ Phase 1 只处理高置信 ownership debt：
 - 第一轮 Widget adaptation Hook ownership 迁移；
 - bundled Widget rule one-shot diagnostic。
 
-Phase 1 **禁止**顺手重构 producer/EGL/OES/fresh-frame authority。Glass resource cleanup 必须先画 owner graph，再证明哪些生命周期真正可共享。
+Phase 1 Tasks 1–5 已完成代码/CI 收口；最终 Workstation/Grid device matrix 仍是关闭门。Phase 1 **禁止**顺手重构 producer/EGL/OES/fresh-frame authority；Glass resource cleanup 必须等 device gate 关闭后先画 owner graph，再证明哪些生命周期真正可共享。
 
 ## Zero-copy glass 规则
 
@@ -134,13 +134,13 @@ RemoteViews、MAML、folder recovery、drag/launch proxy 等异步路径必须�
 - 不 Hook `addOccupied()` / `transformToHVArray()` 猜 matrix 方向；
 - Widget adaptation 只修改 allocation/frame；
 - 当前显式适配 1×1、2×1、2×2、4×2；
-- 当前 production 仍存在 `ItemInfo.isWidget()` + item type 4/5/19 fallback 和 `WidgetGridSizing` static config；迁移完成前文档必须如实描述它们；
-- Widget 泛化应走 `WidgetClassifier` / `WidgetSpecRegistry`，不要继续新增散落 `itemType == ...` 分支；
-- `HomeGridHook` 拆分按 Widget adaptation -> page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序；rotation/refresh 最后处理。
+- 当前 production 由 `WidgetClassifier` 集中 `ItemInfo.isWidget()` + item type 4/5/19 compatibility fallback，不要重新新增散落 `itemType == ...` 分支；
+- 支持 span 只能通过 `WidgetSpecRegistry` 管理；`WidgetGridSizing` 保持 stateless，不得重新引入 process-global adaptation flag；
+- `HomeGridWidgetAdaptationHook` 是 Widget allocation/final-frame Hook owner；`HomeGridHook` 后续拆分顺序为 page indicator -> folder alignment -> cell geometry -> rotation/refresh，rotation/refresh 最后处理。
 
 ## Workstation / Laptop 规则
 
-工作台仍是**实验性、未完整支持**路径。
+工作台仍是**实验性、未完整支持**路径。当前 `WorkstationModeController` 是 mode、vendor confirmation、delayed fallback generation 与 normal-layout backup 的 state owner；不要在 `MainHook` 或其它 Hook 中重新建立第二份 mode/map state。
 
 修改工作台代码时至少考虑：
 

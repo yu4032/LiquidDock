@@ -11,82 +11,40 @@
 
 ## 1. Phase 1：确定性 ownership 清理
 
-**状态：计划完成，代码尚未实施。**
+**状态：Tasks 1–5 已完成代码实现并通过 CI；最终真机矩阵待完成。**
 
-优先完成以下四组高置信债务，不同时触碰 producer/EGL/OES/fresh-frame 架构：
+当前代码事实：
 
-### Workstation mode ownership
+- `WorkstationModeController` 已接管 mode、vendor-confirmed state、monotonic generation 与 normal-layout backup；初始化 2 秒 fallback 捕获 generation，vendor callback 或更新 transition 会使旧 callback 失效；
+- `WidgetClassifier` 已集中 `ItemInfo.isWidget()` 主路径与 itemType 4/5/19 compatibility fallback；
+- `WidgetSpecRegistry.DEFAULT` 是当前 1×1、2×1、2×2、4×2 span 白名单；
+- `WidgetGridSizing` 已变为 stateless geometry/allocation helper，不再持有 process-global adaptation flag；
+- `HomeGridWidgetAdaptationHook` 已接管 `setupLayoutParam()` Widget allocation 与 `onLayout()` 后 final-frame enforcement；
+- `WidgetBackgroundRuleEngine` 已区分 `LOADED` / `MISSING_RESOURCE` / `PARSE_FAILED`，失败仍 fail-safe 到空规则集；`LauncherMamlBackgroundRuleExecutor` 只在 bundled load degradation 时发一次 `[DC][WidgetRules]` structured diagnostic；
+- 本阶段没有修改 producer/EGL/OES/fresh-frame authority，也没有接管 MIUI placement/occupancy。
 
-当前 `MainHook` 仍直接持有 `workstationMode`、`workstationModeHookConfirmed`、normal-layout backup 等 feature-level mutable state，并保留一次固定 2 秒的初始化 re-query fallback。
+代码/CI 证据与最终设备矩阵统一记录在：
 
-目标：
+- [Phase 1 Verification](docs/superpowers/verification/2026-09-07-technical-debt-cleanup-phase1.md)
 
-- 引入单一 `WorkstationModeController`；
-- controller 持有 mode、vendor-confirmed state 与 monotonic generation；
-- delayed fallback 必须捕获 generation，stale callback 不得修改状态；
-- normal-layout backup/restore 的 Workstation ownership 从 `MainHook` 迁出；
-- 不新增 retry chain，不以另一套延迟替代当前时序假设。
+Phase 1 当前唯一关闭门是最终 production head 的真机矩阵。必须完成并记录：
 
-必须保持：
-
-- 现有 Workstation Recents covered authority；
-- duplicate / non-covered `onRecentViewHide` rejection；
-- `workstationBindEpoch` stale `finishBind()` rejection；
-- Workstation-only producer rebind；
-- fresh-frame barrier 仍是唯一 reveal authority。
-
-### Widget classification / span ownership
-
-当前仍存在：
-
-- `WidgetGridSizing` static `widgetAdaptationEnabled`；
-- `HomeGridHook` 中 `itemType == 4 || itemType == 5 || itemType == 19` fallback；
-- 1×1、2×1、2×2、4×2 支持集合直接影响核心 Hook control flow。
-
-目标：
-
-- `WidgetClassifier` 集中 `ItemInfo.isWidget()` 主路径与 itemType fallback；
-- `WidgetSpecRegistry` 持有当前四种支持 span；
-- `WidgetGridSizing` 变为纯 geometry/allocation helper；
-- `MainHook` 不再设置 process-global Widget sizing flag；
-- 第一轮把真实 Widget adaptation Hook ownership 从 `HomeGridHook` 迁出。
-
-必须保持：
-
-- Widget adaptation 只修改 allocation/frame；
-- 不 Hook `addOccupied()` / `transformToHVArray()`；
-- 不接管 MIUI placement/occupancy authority；
-- 本阶段不扩展新的 Widget span。
-
-### Widget bundled-rule diagnostics
-
-`WidgetBackgroundRuleEngine.loadBundled()` / `parse()` 当前在 bundled resource 缺失或解析异常时静默退化为 `EMPTY`。
-
-目标：
-
-- 缺失资源与解析失败可区分；
-- runtime 继续 fail-safe 到空规则集；
-- required bundled-rule degradation 只发一次 structured diagnostic；
-- 不在 `match()` 热路径制造日志噪声。
-
-### Phase 1 verification
-
-代码完成后必须记录：
-
-- `testDebugUnitTest`；
-- `assembleDebug`；
-- Workstation enter/exit/quick re-enter；
-- stale delayed fallback；
-- HOME -> Recents -> HOME 连续往返；
-- Recents 附近 rotation；
+- normal Launcher startup；
+- Workstation enter / exit / quick re-enter；
+- vendor callback 先于 delayed fallback，以及 stale delayed fallback；
 - normal-layout backup/restore；
+- HOME -> Recents -> HOME 连续 5 次；
+- Recents-adjacent rotation；
 - 1×1 / 2×1 / 2×2 / 4×2 Widget 横竖屏；
 - Widget adaptation disabled；
-- normal mode 无回归。
+- normal mode 无回归；
+- normal bundled Widget-rule load 不出现 degradation warning。
+
+在该矩阵完成前，不把 Phase 1 标记为完成，也不开始 EGL/OES/producer lifecycle extraction。
 
 ## 2. `MainHook` 收缩为 composition root
 
-**状态：未完成；Phase 1 先迁出 Workstation ownership。**
+**状态：未完成；Phase 1 已迁出 Workstation ownership，后续继续收缩其它 feature owner。**
 
 后续继续把 Dock/Grid/Glass/Workstation 的 feature-level runtime ownership 迁到已有 installer/controller/session/view。
 
@@ -101,27 +59,30 @@ Dock resize animator 等 state 只有在确认其真实 owner 后再迁移，不
 
 ## 3. `HomeGridHook` ownership 拆分
 
-**状态：已有 orientation memory、profile overlay、drag/bounds 等辅助 Hook/policy，但本体仍拥有多个 runtime owner。**
+**状态：Widget frame adaptation 的真实 Hook ownership 已在 Phase 1 迁出；本体仍拥有其余 Grid runtime owner。**
 
-当前仍覆盖：
+`HomeGridWidgetAdaptationHook` 当前独立拥有：
+
+- `CellLayout.setupLayoutParam()` 的 Widget allocation/frame 调整；
+- `CellLayout.onLayout()` 之后的 Widget final-frame enforcement。
+
+`HomeGridHook` 当前仍覆盖：
 
 - cell count；
 - orientation-specific geometry；
-- Widget frame adaptation；
 - page indicator；
 - folder alignment；
 - rotation/refresh；
 - lazy/off-screen page preparation。
 
-安全拆分顺序：
+后续安全拆分顺序：
 
-1. Widget adaptation（Phase 1）；
-2. Page indicator；
-3. Folder alignment；
-4. Cell geometry；
-5. Grid rotation / refresh（最后）。
+1. Page indicator；
+2. Folder alignment；
+3. Cell geometry；
+4. Grid rotation / refresh（最后）。
 
-目标是迁移真实 Hook 安装和 runtime ownership，不是继续增加只被 `HomeGridHook` 调用的薄 helper。
+目标仍是迁移真实 Hook 安装和 runtime ownership，不是继续增加只被 `HomeGridHook` 调用的薄 helper。
 
 ## 4. Launcher-wide glass / GPU ownership 审计
 

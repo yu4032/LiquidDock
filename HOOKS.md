@@ -22,7 +22,7 @@ API 101 入口为 `ModuleMain`。Launcher 进程启动时主要完成：
 
 完整 master-switch 启停仍属于 restart-bound：运行中关闭可以释放已接管的视觉 ownership，但不能安全撤销所有安装期结构 Hook。
 
-`MainHook` 当前仍直接持有部分 Workstation mutable state 与初始化 re-query fallback，因此它还不是纯 composition root；这一点是 active debt，而不是当前 Hook contract。
+`WorkstationModeController` 已接管 Workstation mode、vendor-confirmed state、delayed fallback generation 与 normal-layout backup；`MainHook` 仍不是纯 composition root，因为 Dock/Grid/Glass 等其它 feature ownership 仍待继续收缩。
 
 ## 2. Dock 与 MiuiX zero-copy glass
 
@@ -233,30 +233,31 @@ disable 时：
 - Recents recovery；
 - 普通布局 backup/restore。
 
-当前 `MainHook` 仍直接持有部分 Workstation mode state，并在 Launcher 初始化后安排一次固定 2 秒的 mode re-query fallback；vendor callback 已确认时会跳过该 fallback，但该 delayed runnable 尚未拥有完整 generation/cancellation guard。后续计划迁移到单一 `WorkstationModeController`，不改变现有 producer recovery 语义。
+当前 `WorkstationModeController` 持有 mode、vendor confirmation、monotonic generation 与 normal-layout backup。Launcher 初始化后的 2 秒 re-query 仍存在，但 callback 捕获 controller generation；vendor callback 或更新 transition 会使旧 fallback 失效。`MainHook` 只负责 vendor Hook wiring 与已存在的模式切换 side effects，不再拥有第二份 Workstation mode/map state。
 
-整体仍属于实验性适配，结构配置保持 restart-bound。
+这次迁移不改变现有 producer recovery 语义。整体仍属于实验性适配，结构配置保持 restart-bound，最终设备矩阵仍需验收。
 
 ## 12. Grid / Widget
 
-`HomeGridHook` 当前仍覆盖：
+`HomeGridHook` 当前覆盖：
 
 - cell count；
 - orientation-specific geometry；
-- Widget frame adaptation；
 - page indicator；
 - folder alignment；
 - rotation / refresh；
 - lazy/off-screen page preparation。
 
-当前 Widget adaptation：
+Widget frame ownership 已迁到 `HomeGridWidgetAdaptationHook`：
 
-- 优先通过 `ItemInfo.isWidget()`；
-- 失败时在 `HomeGridHook` 使用 item type `4` / `5` / `19` fallback；
-- span 只显式支持 1×1、2×1、2×2、4×2；
-- `WidgetGridSizing` 仍持有 process-global static adaptation flag。
+- `CellLayout.setupLayoutParam()` 负责现有 Widget allocation/frame 调整；
+- `CellLayout.onLayout()` 后 reassert final Widget frame；
+- `shouldAdapt(...)` 必须同时满足 install-time adaptation gate、`WidgetClassifier.isWidget(...)` 与 `WidgetSpecRegistry.DEFAULT.supports(...)`；
+- `WidgetClassifier` 优先使用 `ItemInfo.isWidget()`，item type `4` / `5` / `19` 只作为 compatibility fallback；
+- `WidgetSpecRegistry.DEFAULT` 当前只允许 1×1、2×1、2×2、4×2；
+- `WidgetGridSizing` 不再持有 process-global mutable config。
 
-这些分类/span/config ownership 是 active debt；后续迁移到 `WidgetClassifier` / `WidgetSpecRegistry` / stateless `WidgetGridSizing`。在迁移完成前，以上仍是当前 production 事实。
+`HomeGridHook` 自己的 `onLayout()` Hook 只保留 lazy/off-screen CellLayout first-valid-bounds geometry preparation，不再执行 Widget final-frame enforcement。
 
 `WorkspaceDropRuleHook` 只扩展 custom-grid 的合法坐标判定，不接管 MIUI occupancy matrix / placement。
 

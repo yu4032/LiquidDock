@@ -178,11 +178,16 @@ HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid �
 
 除非出现新的、可复现的现实失败路径，不再为该问题增加 producer recovery episode state machine、terminal multi-session aggregate 或第二套 freshness authority。
 
-### 当前 Workstation ownership 债务
+### 当前 Workstation mode ownership
 
-Workstation mode 探测、vendor confirmation、普通布局 backup/restore 等 feature-level mutable state 仍部分直接位于 `MainHook`。初始化路径还保留一次固定 2 秒的 mode re-query fallback；当前仅由 `workstationModeHookConfirmed` 避免已确认路径重复覆盖，尚未拥有完整的 transition generation/cancellation 保护。
+`WorkstationModeController` 已成为 mode / vendor confirmation / delayed fallback generation / normal-layout backup 的单一 state owner。`MainHook` 只保留 vendor Hook 安装与 side-effect wiring：
 
-这属于当前重构目标，不应被误写为新的 producer-recovery 问题。
+- 初始化 probe 通过 `beginUnconfirmedProbe()` 获取 monotonic generation；
+- 2 秒 fallback 只能在 generation 仍匹配且尚无 vendor confirmation 时由 `acceptFallbackProbe(...)` 发布；
+- vendor callback 通过 `onVendorModeChanged(...)` 使旧 pending fallback 失效［
+- normal-layout item snapshot/restore 数据由 controller 持有，不再由 `MainHook` 的独立 map 持有。
+
+这次 ownership 迁移没有改变 Workstation Recents producer recovery、bind epoch 或 fresh-frame authority。最终 Workstation enter/exit/quick-reenter 与 stale fallback 仍需按 Phase 1 verification matrix 真机验收。
 
 工作台结构配置仍 restart-bound，直到未来建立完整、可逆的 runtime restore。
 
@@ -198,7 +203,9 @@ Workstation mode 探测、vendor confirmation、普通布局 backup/restore 等 
 - lazy/off-screen page 必须在显示前准备正确方向的 geometry；
 - `HomeGridHook` 仍是大型模块，后续拆分必须保持这些行为不变。
 
-当前 Widget classification 优先调用 `ItemInfo.isWidget()`，失败时仍在 `HomeGridHook` 使用 item type `4` / `5` / `19` fallback；支持 span 仍固定为 1×1、2×1、2×2、4×2。`WidgetGridSizing` 仍持有 static adaptation flag。这些是 active ownership debt，不是新的功能语义。
+当前 Widget classification 由 `WidgetClassifier` 集中处理：优先调用 `ItemInfo.isWidget()`，失败时使用 item type `4` / `5` / `19` compatibility fallback。`WidgetSpecRegistry.DEFAULT` 持有固定的 1×1、2×1、2×2、4×2 支持集合；`WidgetGridSizing` 是 stateless geometry/allocation helper。
+
+真实 Widget frame Hook ownership 已迁到 `HomeGridWidgetAdaptationHook`。它只在 classifier 与 registry 都接受后修改 allocation/frame；`HomeGridHook` 继续拥有 cell geometry、lazy/off-screen preparation、page indicator、folder alignment 与 rotation/refresh，MIUI placement/occupancy authority 不变。
 
 ## 9. Divider ownership
 
@@ -241,12 +248,10 @@ UI 文案必须区分“立即释放视觉 ownership”和“完整结构变更�
 
 当前顺序：
 
-1. 将 Workstation mode / delayed recheck / normal-layout ownership 从 `MainHook` 迁到单一 controller，并给 delayed callback 加 generation/cancellation 保护；
-2. 引入 `WidgetClassifier` / `WidgetSpecRegistry`，移除 `WidgetGridSizing` static mutable config；
-3. 先迁出 `HomeGridHook` 的真实 Widget adaptation ownership，再按 page indicator -> folder alignment -> cell geometry -> rotation/refresh 顺序继续拆；
-4. 为 bundled Widget rule silent degradation 增加 one-shot structured diagnostic；
-5. 对 `LauncherGlassSession` / `Miuix307PassBlurTextureView` / Prismal 先画 resource owner graph，再决定最小公共 EGL/OES primitive；
-6. 继续缩小 `LEGACY_SOURCE_DEBT` 与 CI/i18n hygiene debt。
+1. Phase 1 Tasks 1–5 的 ownership/diagnostic 代码已完成并通过 CI；当前停止在最终 Workstation/Grid 真机 verification gate；
+2. device gate 关闭后，`HomeGridHook` 再按 page indicator -> folder alignment -> cell geometry -> rotation/refresh 项废继续拆；
+3. 对 `LauncherGlassSession` / `Miuix307PassBlurTextureView` / Prismal 先画 resource owner graph，再决定最小公共 EGL/OES primitive；
+4. 继续缩小 `LEGACY_SOURCE_DEBT` 与 CI/i18n hygiene debt。
 
 Workstation Recents shared-producer correctness 与 unlock->HOME authority 已经有现有最小 correctness 方案；除非出现新的现实失败，不把它们重新设计为更大的状态机。
 
