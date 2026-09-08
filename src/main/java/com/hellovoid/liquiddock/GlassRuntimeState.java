@@ -13,6 +13,7 @@ final class GlassRuntimeState {
     private static volatile boolean widgetDarkContentEnabled;
     private static volatile boolean smallFolderEnabled;
     private static volatile boolean largeFolderEnabled;
+    private static volatile boolean os4SoftEdgeEnabled;
     private static SharedPreferences prefs;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
     private GlassRuntimeState() {}
@@ -35,15 +36,35 @@ final class GlassRuntimeState {
         widgetDarkContentEnabled = initialWidgetDarkContentEnabled;
         smallFolderEnabled = initialSmallFolderEnabled;
         largeFolderEnabled = initialLargeFolderEnabled;
+        os4SoftEdgeEnabled = nextPrefs != null
+                ? nextPrefs.getBoolean(
+                        ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name(),
+                        ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.runtimeFallback())
+                : ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.runtimeFallback();
         if (nextPrefs == null) return;
         listener = (sharedPreferences, key) -> {
+            boolean os4SoftEdgeChanged =
+                    ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name().equals(key);
             if (!ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ICON_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.WIDGET_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.WIDGET_DARK_CONTENT.name().equals(key)
                     && !ConfigSchema.Glass.SMALL_FOLDER_GLASS.name().equals(key)
-                    && !ConfigSchema.Glass.LARGE_FOLDER_GLASS.name().equals(key)) return;
+                    && !ConfigSchema.Glass.LARGE_FOLDER_GLASS.name().equals(key)
+                    && !os4SoftEdgeChanged) return;
+
+            if (os4SoftEdgeChanged) {
+                boolean nextOs4SoftEdgeEnabled = sharedPreferences.getBoolean(
+                        ConfigSchema.Glass.OS4_SOFT_EDGE_ENABLED.name(), os4SoftEdgeEnabled);
+                if (os4SoftEdgeEnabled != nextOs4SoftEdgeEnabled) {
+                    os4SoftEdgeEnabled = nextOs4SoftEdgeEnabled;
+                    // The GlassHost keeps the saved foreground stroke installed. Repaint it now so
+                    // OS4 ON hides that second edge owner and OS4 OFF reveals it again immediately.
+                    runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
+                }
+            }
+
             boolean nextEnabled = sharedPreferences.getBoolean(ConfigSchema.Core.ENABLED.name(),
                     ConfigSchema.Core.ENABLED.runtimeFallback())
                     && sharedPreferences.getBoolean(ConfigSchema.Glass.ENABLED.name(),
@@ -72,7 +93,8 @@ final class GlassRuntimeState {
                 + " widgetEnabled=" + isWidgetEnabled()
                 + " widgetDarkContentEnabled=" + isWidgetDarkContentEnabled()
                 + " smallFolderEnabled=" + isSmallFolderEnabled()
-                + " largeFolderEnabled=" + isLargeFolderEnabled());
+                + " largeFolderEnabled=" + isLargeFolderEnabled()
+                + " os4SoftEdge=" + isOs4SoftEdgeEnabled());
     }
 
     static boolean isEnabled() { return enabled; }
@@ -83,6 +105,7 @@ final class GlassRuntimeState {
     }
     static boolean isSmallFolderEnabled() { return enabled && smallFolderEnabled; }
     static boolean isLargeFolderEnabled() { return enabled && largeFolderEnabled; }
+    static boolean isOs4SoftEdgeEnabled() { return enabled && os4SoftEdgeEnabled; }
 
     private static GlassRuntimeTransitionPolicy.Snapshot snapshot() {
         return new GlassRuntimeTransitionPolicy.Snapshot(
@@ -120,7 +143,8 @@ final class GlassRuntimeState {
                 + " widgetEnabled=" + isWidgetEnabled()
                 + " widgetDarkContentEnabled=" + isWidgetDarkContentEnabled()
                 + " smallFolderEnabled=" + isSmallFolderEnabled()
-                + " largeFolderEnabled=" + isLargeFolderEnabled());
+                + " largeFolderEnabled=" + isLargeFolderEnabled()
+                + " os4SoftEdge=" + isOs4SoftEdgeEnabled());
 
         if (transition.fullTeardown) {
             runOnMain(() -> {
