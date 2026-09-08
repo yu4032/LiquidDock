@@ -1,0 +1,89 @@
+name: Task4 widget owner extraction one-shot
+
+on:
+  push:
+    branches:
+      - refactor/technical-debt-cleanup-phase1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/technical-debt-cleanup-phase1
+          fetch-depth: 0
+
+      - name: Extract Widget frame ownership exactly
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/main/java/com/hellovoid/liquiddock/HomeGridHook.java")
+          text = path.read_text()
+
+          def replace_exact(old, new, expected=1):
+              global text
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"expected {expected} occurrences, found {count}: {old!r}")
+              text = text.replace(old, new)
+
+          replace_exact("    private static boolean widgetAdaptationEnabled;\n", "")
+          replace_exact("        widgetAdaptationEnabled = enableWidgetAdaptation;\n", "")
+          replace_exact(
+              "            installCellLayoutMargins(classLoader);\n",
+              "            installCellLayoutMargins(classLoader);\n"
+              "            new HomeGridWidgetAdaptationHook(enableWidgetAdaptation).install(classLoader);\n")
+
+          setup_start = "        try {\n            Class<?> itemInfo = Class.forName(\n"
+          setup_end = "        HookUtil.hookMethod(cellLayout, \"onLayout\",\n"
+          if text.count(setup_start) != 1 or text.count(setup_end) != 1:
+              raise SystemExit("Widget setup/onLayout extraction anchors are not unique")
+          start = text.index(setup_start)
+          end = text.index(setup_end, start)
+          text = text[:start] + text[end:]
+
+          replace_exact(
+              "                Object result = chain.proceed(args);\n"
+              "                enforceWidgetGridFrames(layout);\n"
+              "                return result;\n",
+              "                return chain.proceed(args);\n")
+
+          methods_start = "    private static void applyWidgetGridSize(Object cellLayout, int cellX, int cellY,\n"
+          methods_end = "    private static void applyCellLayoutOffsets(Object cellLayout) {\n"
+          if text.count(methods_start) != 1 or text.count(methods_end) != 1:
+              raise SystemExit("Widget method extraction anchors are not unique")
+          start = text.index(methods_start)
+          end = text.index(methods_end, start)
+          text = text[:start] + text[end:]
+
+          forbidden = [
+              "applyWidgetGridSize(",
+              "enforceWidgetGridFrames(",
+              "WidgetSpecRegistry.DEFAULT.supports(spanX, spanY)",
+              "WidgetGridSizing.gridRect(\n                    widgetAdaptationEnabled",
+          ]
+          for needle in forbidden:
+              if needle in text:
+                  raise SystemExit(f"stale Widget frame ownership remains in HomeGridHook: {needle}")
+
+          path.write_text(text)
+          Path(".github/workflows/task4-widget-owner-extract-one-shot.yml").unlink()
+          PY
+
+      - name: Commit extraction and self-delete
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/com/hellovoid/liquiddock/HomeGridHook.java \
+                  .github/workflows/task4-widget-owner-extract-one-shot.yml
+          git diff --cached --check
+          git commit -m "refactor: extract widget grid adaptation owner"
+          git push origin HEAD:refactor/technical-debt-cleanup-phase1
