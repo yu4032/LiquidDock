@@ -18,8 +18,9 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        // Keep the normal View.draw() path so a foreground StrokeDrawable is actually rendered.
-        // This host still has no onDraw() body; the only local drawing is the foreground edge.
+        // Keep the normal View.draw() path for the saved configurable foreground stroke. OS4 soft
+        // edge suppresses only its painting in onDrawForeground(), so disabling OS4 restores it
+        // without rebuilding or discarding the user's stroke configuration.
         setWillNotDraw(false);
         setClipChildren(false);
         setClipToPadding(false);
@@ -98,5 +99,14 @@ final class DockLiquidGlassHostView extends FrameLayout {
         canvas.clipPath(clipPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);
+    }
+
+    @Override
+    public void onDrawForeground(Canvas canvas) {
+        // The OS4 SDF/reflection/directional pass already owns the visible glass edge. Painting the
+        // legacy Dock foreground ring here creates the crisp white line seen on top of the soft
+        // edge and reintroduces a second, differently-shaped corner authority.
+        if (GlassRuntimeState.isOs4SoftEdgeEnabled()) return;
+        super.onDrawForeground(canvas);
     }
 }
