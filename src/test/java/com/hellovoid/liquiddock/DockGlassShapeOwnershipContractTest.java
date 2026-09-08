@@ -13,8 +13,9 @@ import org.junit.Test;
  *
  * <p>The Workspace path already uses a transparent TextureView whose glass boundary is produced by
  * Prismal geometry. Dock must follow the same single-shape-owner rule: the Android host may keep an
- * outline for native shadow geometry, but it must not clip the TextureView a second time with a
- * Canvas path. A second anti-aliased boundary can expose a one-pixel seam around the Dock only.
+ * outline for native shadow geometry, but it must not clip the TextureView a second time or install
+ * the legacy foreground stroke over the Prismal edge. Native/non-glass Dock stroke support remains
+ * available through DockStrokeRenderer's vendor hook.
  */
 public class DockGlassShapeOwnershipContractTest {
     private static final Path DOCK_HOST =
@@ -23,6 +24,10 @@ public class DockGlassShapeOwnershipContractTest {
             Path.of("src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java");
     private static final Path DOCK_COMPOSITOR =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java");
+    private static final Path MIUIX_GLASS_HOOK =
+            Path.of("src/main/java/com/hellovoid/liquiddock/MiuixGlassHook.java");
+    private static final Path DOCK_STROKE_RENDERER =
+            Path.of("src/main/java/com/hellovoid/liquiddock/DockStrokeRenderer.java");
 
     @Test
     public void prismalOwnsDockBodyShapeWithoutAndroidCanvasClip() throws Exception {
@@ -34,5 +39,17 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(compositor.contains("renderer.drawGlass(dockBody, params);"));
         assertFalse(host.contains("canvas.clipPath(clipPath);"));
         assertFalse(host.contains("dispatchDraw(Canvas canvas)"));
+    }
+
+    @Test
+    public void zeroCopyGlassDoesNotInstallLegacyForegroundStroke() throws Exception {
+        String host = Files.readString(DOCK_HOST);
+        String hook = Files.readString(MIUIX_GLASS_HOOK);
+        String strokeRenderer = Files.readString(DOCK_STROKE_RENDERER);
+
+        assertFalse(hook.contains("DockStrokeRenderer.configureReplacingForeground("));
+        assertFalse(host.contains("DockStrokeRenderer.updateRadius("));
+        assertTrue(strokeRenderer.contains("static void installNativeHook("));
+        assertTrue(strokeRenderer.contains("NATIVE_BACKGROUND_CLASS"));
     }
 }
