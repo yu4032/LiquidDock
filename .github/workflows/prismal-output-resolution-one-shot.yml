@@ -1,0 +1,42 @@
+name: Prismal output resolution one-shot
+
+on:
+  push:
+    branches:
+      - improve/os4-edge-highlight-aa
+    paths:
+      - scripts/decouple_prismal_output_resolution.py
+      - .github/workflows/prismal-output-resolution-one-shot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: improve/os4-edge-highlight-aa
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exact patch
+        run: python scripts/decouple_prismal_output_resolution.py
+      - name: Verify patch shape
+        run: |
+          git diff --check
+          grep -F 'private int outputWidth;' prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java
+          grep -F 'outputTexture = createTexture(outputWidth, outputHeight);' prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java
+          grep -F 'GLES20.glViewport(0, 0, outputWidth, outputHeight);' prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java
+      - name: Self-delete staging files
+        run: rm scripts/decouple_prismal_output_resolution.py .github/workflows/prismal-output-resolution-one-shot.yml
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java scripts/decouple_prismal_output_resolution.py .github/workflows/prismal-output-resolution-one-shot.yml
+          git commit -m 'fix: keep Prismal glass raster at full resolution'
+          git push origin HEAD:improve/os4-edge-highlight-aa
