@@ -1,14 +1,14 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Outline;
 import android.graphics.Path;
-import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
-/** Lightweight geometry host for the zero-copy Prismal TextureView. */
+/** Lightweight clip/geometry host for the zero-copy Prismal TextureView. */
 final class DockLiquidGlassHostView extends FrameLayout {
     private final Path clipPath = new Path();
     private float radius;
@@ -18,19 +18,17 @@ final class DockLiquidGlassHostView extends FrameLayout {
 
     DockLiquidGlassHostView(Context context) {
         super(context);
-        // Workspace glass has no legacy foreground border layered over Prismal. Keep the same
-        // ownership rule here: the zero-copy GlassHost never accepts a Drawable foreground, so
-        // DockStrokeRenderer may continue serving native/non-glass Dock owners without creating a
-        // second white ring over this glass output.
-        super.setForeground(null);
+        // Keep the normal View.draw() path so a foreground StrokeDrawable is actually rendered.
+        // This host still has no onDraw() body; the only local drawing is the foreground edge.
         setWillNotDraw(false);
         setClipChildren(false);
         setClipToPadding(false);
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Mi Shadow / RenderNode shadow geometry may still use the View outline. The outline is not
-        // used to clip children; it only supplies native shadow geometry outside the Prismal body.
+        // Mi Shadow / RenderNode shadow geometry comes from the View outline. Keep this outline on
+        // the exact same shape as the manual child clip so the outer stroke shadow cannot drift
+        // away from the visible zero-copy glass edge.
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
                 ensureClipPath();
@@ -43,11 +41,6 @@ final class DockLiquidGlassHostView extends FrameLayout {
         });
     }
 
-    @Override
-    public void setForeground(Drawable foreground) {
-        super.setForeground(null);
-    }
-
     void setGeometry(float radius, boolean squircle, float cp) {
         float nextRadius = Math.max(0f, radius);
         float nextCp = Math.max(.05f, Math.min(.95f, cp));
@@ -58,6 +51,7 @@ final class DockLiquidGlassHostView extends FrameLayout {
         this.squircleCp = nextCp;
         if (changed) {
             shapeDirty = true;
+            DockStrokeRenderer.updateRadius(this, this.radius);
             invalidateOutline();
             invalidate();
         }
@@ -95,5 +89,14 @@ final class DockLiquidGlassHostView extends FrameLayout {
         } finally {
             super.onDetachedFromWindow();
         }
+    }
+
+    @Override protected void dispatchDraw(Canvas canvas) {
+        ensureClipPath();
+        if (clipPath.isEmpty()) return;
+        int save = canvas.save();
+        canvas.clipPath(clipPath);
+        super.dispatchDraw(canvas);
+        canvas.restoreToCount(save);
     }
 }
