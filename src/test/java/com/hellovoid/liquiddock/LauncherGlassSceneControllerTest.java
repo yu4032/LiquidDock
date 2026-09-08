@@ -60,6 +60,27 @@ public class LauncherGlassSceneControllerTest {
     }
 
     @Test
+    public void homePresentationFencePreservesCurrentSourceUntilRealInvalidation() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+
+        long current = state.generation();
+        state.onPresentationStarted();
+        assertEquals("HOME presentation alone is not a source discontinuity",
+                current, state.generation());
+        assertTrue("cached/current-generation glass remains presentation-safe",
+                state.isLayerVisible());
+        assertFalse("settle must not demand a new static-wallpaper OES frame",
+                state.shouldRequestFreshAfterPresentation());
+
+        state.onGenerationInvalidated();
+        assertTrue(state.shouldRequestFreshAfterPresentation());
+    }
+
+    @Test
     public void acceptedWorkstationRolloverStillWaitsForFreshSceneWithoutHidingCache() {
         WorkstationRecentsRecoveryPolicy.Decision recovery =
                 WorkstationRecentsRecoveryPolicy.onRecentsReturn(true, true);
