@@ -21,56 +21,88 @@ final class WidgetBackgroundRuleEngine {
     private static final WidgetBackgroundRuleEngine EMPTY =
             new WidgetBackgroundRuleEngine(List.of());
 
+    enum LoadStatus {
+        LOADED,
+        MISSING_RESOURCE,
+        PARSE_FAILED
+    }
+
+    static final class LoadResult {
+        private final WidgetBackgroundRuleEngine engine;
+        private final LoadStatus status;
+
+        private LoadResult(WidgetBackgroundRuleEngine engine, LoadStatus status) {
+            this.engine = engine;
+            this.status = status;
+        }
+
+        WidgetBackgroundRuleEngine engine() {
+            return engine;
+        }
+
+        LoadStatus status() {
+            return status;
+        }
+    }
+
     private final List<WidgetBackgroundRule> rules;
 
     private WidgetBackgroundRuleEngine(List<WidgetBackgroundRule> rules) {
         this.rules = List.copyOf(rules);
     }
 
+    /** Compatibility entry point until the production executor consumes LoadResult directly. */
     static WidgetBackgroundRuleEngine loadBundled() {
-        ClassLoader loader = WidgetBackgroundRuleEngine.class.getClassLoader();
-        if (loader == null) return EMPTY;
+        return loadBundled(WidgetBackgroundRuleEngine.class.getClassLoader()).engine();
+    }
+
+    static LoadResult loadBundled(ClassLoader loader) {
+        if (loader == null) return new LoadResult(EMPTY, LoadStatus.MISSING_RESOURCE);
         try (InputStream input = loader.getResourceAsStream(BUNDLED_RESOURCE)) {
-            if (input == null) return EMPTY;
-            return parse(input);
+            if (input == null) return new LoadResult(EMPTY, LoadStatus.MISSING_RESOURCE);
+            return new LoadResult(parseStrict(input), LoadStatus.LOADED);
         } catch (Throwable ignored) {
-            return EMPTY;
+            return new LoadResult(EMPTY, LoadStatus.PARSE_FAILED);
         }
     }
 
     static WidgetBackgroundRuleEngine parse(InputStream input) {
         if (input == null) return EMPTY;
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(false);
-            factory.setExpandEntityReferences(false);
-            try { factory.setXIncludeAware(false); } catch (Throwable ignored) {}
-            safeFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
-            safeFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
-            safeFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false);
-            try { factory.setAttribute(ACCESS_EXTERNAL_DTD, ""); }
-            catch (Throwable ignored) {}
-            try { factory.setAttribute(ACCESS_EXTERNAL_SCHEMA, ""); }
-            catch (Throwable ignored) {}
-
-            Document document = factory.newDocumentBuilder().parse(input);
-            Element root = document.getDocumentElement();
-            if (root == null || !"widget-background-rules".equals(root.getTagName())) return EMPTY;
-
-            List<WidgetBackgroundRule> parsed = new ArrayList<>();
-            NodeList children = root.getChildNodes();
-            for (int i = 0; i < children.getLength(); i++) {
-                Node node = children.item(i);
-                if (!(node instanceof Element)) continue;
-                Element element = (Element) node;
-                if (!"rule".equals(element.getTagName())) continue;
-                WidgetBackgroundRule rule = parseRule(element);
-                if (rule != null) parsed.add(rule);
-            }
-            return new WidgetBackgroundRuleEngine(parsed);
+            return parseStrict(input);
         } catch (Throwable ignored) {
             return EMPTY;
         }
+    }
+
+    private static WidgetBackgroundRuleEngine parseStrict(InputStream input) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        factory.setExpandEntityReferences(false);
+        try { factory.setXIncludeAware(false); } catch (Throwable ignored) {}
+        safeFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
+        safeFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
+        safeFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false);
+        try { factory.setAttribute(ACCESS_EXTERNAL_DTD, ""); }
+        catch (Throwable ignored) {}
+        try { factory.setAttribute(ACCESS_EXTERNAL_SCHEMA, ""); }
+        catch (Throwable ignored) {}
+
+        Document document = factory.newDocumentBuilder().parse(input);
+        Element root = document.getDocumentElement();
+        if (root == null || !"widget-background-rules".equals(root.getTagName())) return EMPTY;
+
+        List<WidgetBackgroundRule> parsed = new ArrayList<>();
+        NodeList children = root.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node node = children.item(i);
+            if (!(node instanceof Element)) continue;
+            Element element = (Element) node;
+            if (!"rule".equals(element.getTagName())) continue;
+            WidgetBackgroundRule rule = parseRule(element);
+            if (rule != null) parsed.add(rule);
+        }
+        return new WidgetBackgroundRuleEngine(parsed);
     }
 
     WidgetBackgroundRule match(WidgetBackgroundIdentity identity) {
