@@ -184,7 +184,7 @@ HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid �
 
 - 初始化 probe 通过 `beginUnconfirmedProbe()` 获取 monotonic generation；
 - 2 秒 fallback 只能在 generation 仍匹配且尚无 vendor confirmation 时由 `acceptFallbackProbe(...)` 发布；
-- vendor callback 通过 `onVendorModeChanged(...)` 使旧 pending fallback 失效［
+- vendor callback 通过 `onVendorModeChanged(...)` 使旧 pending fallback 失效；
 - normal-layout item snapshot/restore 数据由 controller 持有，不再由 `MainHook` 的独立 map 持有。
 
 这次 ownership 迁移没有改变 Workstation Recents producer recovery、bind epoch 或 fresh-frame authority。最终 Workstation enter/exit/quick-reenter 与 stale fallback 仍需按 Phase 1 verification matrix 真机验收。
