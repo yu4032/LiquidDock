@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Immutable registry of Widget spans supported by the custom grid adaptation path. */
+/** Immutable HyperOS 4.50 Widget-span policy for the custom grid adaptation path. */
 final class WidgetSpecRegistry {
     static final WidgetSpecRegistry DEFAULT = new WidgetSpecRegistry(
             new int[][]{{1, 1}, {2, 1}, {2, 2}, {4, 2}});
