@@ -8,7 +8,8 @@ import java.util.Map;
  *
  * <p>The Android/vendor callback wiring stays outside this pure state holder. A delayed fallback
  * may update mode only while its generation is still current and no vendor callback has confirmed
- * a newer state.
+ * a newer state. The published mode remains volatile because renderer/hook readers are not all
+ * guaranteed to share the callback thread.
  */
 final class WorkstationModeController {
     static final class HomeItemPosition {
@@ -29,7 +30,7 @@ final class WorkstationModeController {
 
     private long generation;
     private long pendingFallbackGeneration = -1L;
-    private boolean workstationMode;
+    private volatile boolean workstationMode;
     private boolean vendorConfirmed;
     private final Map<Long, HomeItemPosition> normalLayoutBackup = new HashMap<>();
 
