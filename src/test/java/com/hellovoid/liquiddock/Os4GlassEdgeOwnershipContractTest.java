@@ -9,13 +9,15 @@ import java.nio.file.Path;
 import org.junit.Test;
 
 /**
- * Static edge-ownership contract: the zero-copy GlassHost must not own any Android foreground
- * drawable edge. OS4/Prismal is the only visual edge path; attempts to attach a foreground are
- * physically discarded instead of conditionally skipping its draw callback.
+ * Static edge-ownership contract for the zero-copy Dock material. Android/vendor edge owners must
+ * not remain visible around Prismal, otherwise transparent anti-aliased pixels can reveal a second
+ * bright outline independently of the OS4 soft-edge setting.
  */
 public class Os4GlassEdgeOwnershipContractTest {
     private static final Path GLASS_HOST =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockLiquidGlassHostView.java");
+    private static final Path MIUIX_GLASS_HOOK =
+            Path.of("src/main/java/com/hellovoid/liquiddock/MiuixGlassHook.java");
 
     @Test
     public void glassHostPhysicallyRejectsForegroundEdgeLayer() throws Exception {
@@ -24,5 +26,17 @@ public class Os4GlassEdgeOwnershipContractTest {
         assertTrue(source.contains("public void setForeground(Drawable foreground)"));
         assertTrue(source.contains("super.setForeground(null);"));
         assertFalse(source.contains("public void onDrawForeground(Canvas canvas)"));
+    }
+
+    @Test
+    public void zeroCopySuppressesBothSupportedVendorMaterialBodies() throws Exception {
+        String source = Files.readString(MIUIX_GLASS_HOOK);
+        String expectedPolicy = """
+                return dockBg != null
+                        && (NATIVE_BACKGROUND_CLASS.equals(dockBg.getClass().getName())
+                        || COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName()));
+                """;
+
+        assertTrue(source.contains(expectedPolicy));
     }
 }
