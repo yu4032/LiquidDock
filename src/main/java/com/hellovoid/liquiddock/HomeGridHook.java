@@ -268,14 +268,7 @@ final class HomeGridHook {
                                             Object info, Object layoutParams) {
         try {
             if (!grid8x4Enabled || info == null || layoutParams == null) return;
-
-            HookUtil.InvocationResult<Object> widgetResult = HookUtil.tryInvoke(info, "isWidget");
-            boolean widget = widgetResult.succeeded() && Boolean.TRUE.equals(widgetResult.value());
-            if (!widget) {
-                int itemType = HookUtil.getIntField(info, "itemType");
-                widget = itemType == 4 || itemType == 5 || itemType == 19;
-            }
-            if (!widget) return;
+            if (!WidgetClassifier.isWidget(info)) return;
 
             int spanX = HookUtil.getIntField(info, "spanX");
             int spanY = HookUtil.getIntField(info, "spanY");
@@ -327,16 +320,7 @@ final class HomeGridHook {
                 if (child == null || child.getVisibility() == android.view.View.GONE) continue;
                 Object info = child.getTag();
                 if (info == null) continue;
-
-                HookUtil.InvocationResult<Object> widgetResult = HookUtil.tryInvoke(info, "isWidget");
-                boolean widget = widgetResult.succeeded() && Boolean.TRUE.equals(widgetResult.value());
-                if (!widget) {
-                    try {
-                        int itemType = HookUtil.getIntField(info, "itemType");
-                        widget = itemType == 4 || itemType == 5 || itemType == 19;
-                    } catch (Throwable ignored) {}
-                }
-                if (!widget) continue;
+                if (!WidgetClassifier.isWidget(info)) continue;
 
                 Object lpObject = child.getLayoutParams();
                 if (lpObject == null) continue;
