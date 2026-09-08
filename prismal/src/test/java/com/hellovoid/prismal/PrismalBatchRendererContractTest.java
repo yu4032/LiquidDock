@@ -45,4 +45,17 @@ public class PrismalBatchRendererContractTest {
         assertFalse(source.contains("LAUNCHER_COMPACT"));
         assertFalse(source.contains("PrismalLauncherCompactShader"));
     }
+
+    @Test
+    public void downsampledBackdropKeepsGlassOutputAtLogicalResolution() throws Exception {
+        String source = source();
+
+        assertTrue(source.contains("private int outputWidth;"));
+        assertTrue(source.contains("private int outputHeight;"));
+        assertTrue(source.contains(
+                "ensureTargets(physicalWidth, physicalHeight,\n                logicalFramebufferWidth, logicalFramebufferHeight);"));
+        assertTrue(source.contains("outputTexture = createTexture(outputWidth, outputHeight);"));
+        assertTrue(source.contains("GLES20.glViewport(0, 0, outputWidth, outputHeight);"));
+        assertFalse(source.contains("outputTexture = createTexture(renderWidth, renderHeight);"));
+    }
 }
