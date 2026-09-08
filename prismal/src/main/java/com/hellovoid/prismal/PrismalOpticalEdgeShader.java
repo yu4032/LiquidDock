@@ -43,6 +43,15 @@ public final class PrismalOpticalEdgeShader {
     private static final String PLAIN_HIGHLIGHT_ADD =
             "color += plusHL * vec3(0.99, 0.995, 1.0);";
 
+    private static final String OS4_EDGE_UNIFORMS = """
+            uniform float u_os4EdgeWidthPx;
+            uniform float u_os4ThicknessPx;
+            uniform float u_os4ReflectOffsetPx;
+            uniform float u_os4BloomWidthPx;
+            uniform float u_os4BloomIntensity;
+            uniform float u_os4BloomInMainPass;
+            """;
+
     private static final String OS4_EDGE_HELPERS = """
             float os4EdgeCurve(float t) {
                 t = clamp(t, 0.0, 1.0);
@@ -92,7 +101,7 @@ public final class PrismalOpticalEdgeShader {
         return source
                 .replace(PRECISION,
                         "#extension GL_OES_standard_derivatives : enable\n\n"
-                                + PRECISION + "\n\n" + OS4_EDGE_HELPERS)
+                                + PRECISION + "\n\n" + OS4_EDGE_UNIFORMS + "\n" + OS4_EDGE_HELPERS)
                 .replace(SHAPE_POSITION, SHAPE_POSITION + "\n"
                         + "    vec2 edgePixelStep = vec2(\n"
                         + "            max(length(dFdx(pPx)), 0.5),\n"
@@ -102,10 +111,13 @@ public final class PrismalOpticalEdgeShader {
                         + "    float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);\n"
                         + "    float edgeAa = max(fwidth(distMask), 0.75);\n"
                         + "    edgeAa = max(edgeAa, edgePixelFootprint * 0.55);\n"
-                        + "    // OS4 keeps material thickness separate from the visible Bloom width.\n"
-                        + "    float os4EdgePx = clamp(minDim * 0.060, 6.0, 18.0);\n"
-                        + "    float os4ThicknessPx = max(u_glassThickness, os4EdgePx + 6.0);\n"
-                        + "    float os4ReflectOffsetPx = clamp(os4ThicknessPx * 0.38, 4.0, 14.0);\n"
+                        + "    // Zero pixel controls preserve Milestone 1's size-dependent defaults.\n"
+                        + "    float os4EdgePx = u_os4EdgeWidthPx > 0.0\n"
+                        + "            ? u_os4EdgeWidthPx : clamp(minDim * 0.060, 6.0, 18.0);\n"
+                        + "    float os4ThicknessPx = u_os4ThicknessPx > 0.0\n"
+                        + "            ? u_os4ThicknessPx : max(u_glassThickness, os4EdgePx + 6.0);\n"
+                        + "    float os4ReflectOffsetPx = u_os4ReflectOffsetPx > 0.0\n"
+                        + "            ? u_os4ReflectOffsetPx : clamp(os4ThicknessPx * 0.38, 4.0, 14.0);\n"
                         + "    float os4EdgeDepth = clamp(edgeDist / max(os4EdgePx, 1.0), 0.0, 1.0);")
                 .replace(REFLECTION_SHELL,
                         "float reflShell = os4EdgeBand(edgeDist, "
@@ -168,8 +180,9 @@ public final class PrismalOpticalEdgeShader {
                                 + "* u_plainHighlight * u_rimStrength")
                 .replace(PLAIN_HIGHLIGHT_ADD, PLAIN_HIGHLIGHT_ADD + "\n"
                         + "\n"
-                        + "    // OS4-style finite-width Bloom stroke: real ring area, not a hairline.\n"
-                        + "    float os4BloomEdgePx = clamp(minDim * 0.090, 9.0, 28.0);\n"
+                        + "    // Compatibility Bloom path; runtime disables it when local Bloom is active.\n"
+                        + "    float os4BloomEdgePx = u_os4BloomWidthPx > 0.0\n"
+                        + "            ? u_os4BloomWidthPx : clamp(minDim * 0.090, 9.0, 28.0);\n"
                         + "    float os4BloomOuter = smoothstep(-edgeAa, edgeAa, edgeDist);\n"
                         + "    float os4BloomInner = smoothstep(os4BloomEdgePx - edgeAa,\n"
                         + "            os4BloomEdgePx + edgeAa, edgeDist);\n"
@@ -184,8 +197,9 @@ public final class PrismalOpticalEdgeShader {
                         + "    float os4BloomLight = max(os4BloomAmbient, os4BloomMain + os4BloomOpposite);\n"
                         + "    vec3 os4BloomTint = mix(vec3(0.91, 0.955, 1.035), vec3(1.0),\n"
                         + "            clamp(os4BloomMain, 0.0, 1.0));\n"
-                        + "    vec3 os4BloomColor = os4BloomTint * os4BloomLight * u_rimStrength * 0.62;\n"
-                        + "    color += os4BloomColor * os4BloomRing;");
+                        + "    vec3 os4BloomColor = os4BloomTint * os4BloomLight * u_rimStrength\n"
+                        + "            * u_os4BloomIntensity;\n"
+                        + "    color += os4BloomColor * os4BloomRing * u_os4BloomInMainPass;");
     }
 
     private static String resolveBaseOffsetAnchor(String source) {
