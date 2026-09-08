@@ -37,7 +37,10 @@ public final class PrismalSampling {
         float dispersion = Math.max(Math.abs(p.dispersionR), Math.abs(p.dispersionB));
         float chromatic = Math.abs(p.chromaticAberration) * 0.0018f
                 * dispersion * pxNorm * axis;
-        float reflection = 56f * pxNorm;
+        // The OS4 reflection offset is measured in logical output pixels. Its shader factor
+        // 2 * N.xy * N.z has magnitude at most one, so the selected offset is the exact
+        // additional reach; zero retains the automatic/default reflection budget.
+        float reflection = Math.max(56f * pxNorm, Math.max(0f, p.os4ReflectOffsetPx));
         float blur = BLUR_KERNEL_RADIUS / BLUR_FBO_SCALE;
 
         return Math.max(0, (int) Math.ceil(

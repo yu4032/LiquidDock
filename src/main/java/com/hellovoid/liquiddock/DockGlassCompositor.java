@@ -185,9 +185,12 @@ final class DockGlassCompositor {
     DockGlassSceneSnapshot latestScene() { return latestScene; }
 
     int drawFrame(PrismalRenderer renderer, PrismalGeometry dockBody, PrismalParams params,
+            PrismalHighlightProfile dockBodyHighlightProfile,
             DockGlassSceneSnapshot scene, int framebufferWidth, int framebufferHeight) {
+        PrismalHighlightProfile bodyHighlightProfile = dockBodyHighlightProfile != null
+                ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
         renderer.beginGlassFrame();
-        renderer.drawGlass(dockBody, params);
+        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;

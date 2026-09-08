@@ -73,6 +73,22 @@ public class Miuix307EdgeOverscanContractTest {
     }
 
     @Test
+    public void customOs4ReflectionOffsetExpandsTheLivePortableSamplingGuard() {
+        PrismalParams.Builder defaultsBuilder = PrismalParams.builder();
+        defaultsBuilder.os4ReflectOffsetPx = 0f;
+        PrismalParams.Builder customBuilder = PrismalParams.builder();
+        customBuilder.os4ReflectOffsetPx = 40f;
+
+        int defaults = PrismalSampling.requiredGuardPx(
+                defaultsBuilder.build(), 96f, 96f, true);
+        int custom = PrismalSampling.requiredGuardPx(
+                customBuilder.build(), 96f, 96f, true);
+
+        assertTrue("the live capture guard must cover a user-selected OS4 reflection offset",
+                custom > defaults);
+    }
+
+    @Test
     public void halfResolutionGaussianBlurHaloIsOwnedByPortablePrismalSampling() throws Exception {
         String sampling = Files.readString(PRISMAL.resolve("PrismalSampling.java"));
         assertTrue(sampling.contains("BLUR_FBO_SCALE = 0.5f"));

@@ -62,6 +62,26 @@ public class PrismalHighlightIsolationContractTest {
     }
 
     @Test
+    public void os4EdgeReplacementDisablesBothLegacyEdgeFamilies() {
+        PrismalHighlightProfile configured = new PrismalHighlightProfile(
+                true, true, true, true, true, true, true, true, true);
+
+        PrismalHighlightProfile replacement =
+                configured.withOs4EdgeReplacingLegacyEdge();
+
+        assertTrue(replacement.skyHaze);
+        assertFalse(replacement.specular);
+        assertFalse(replacement.litRim);
+        assertFalse(replacement.oppositeRim);
+        assertFalse(replacement.cornerRim);
+        assertFalse(replacement.faceSheen);
+        assertFalse(replacement.plainHighlight);
+        assertTrue(replacement.caustics);
+        assertTrue(replacement.pressGlow);
+        assertTrue(replacement.os4Edge);
+    }
+
+    @Test
     public void rendererCanCombinePerDrawProfileWithNodeOpacity() throws Exception {
         PrismalRenderer.class.getDeclaredMethod("drawGlass",
                 PrismalGeometry.class,
