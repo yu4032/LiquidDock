@@ -20,6 +20,12 @@ public class LauncherGlassBackdropRetentionPolicyTest {
     }
 
     @Test
+    public void renderDomainChangeDropsPreparedBackdrop() {
+        assertFalse(LauncherGlassBackdropRetentionPolicy.preservesPreparedBackdrop(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN));
+    }
+
+    @Test
     public void renderTargetDestructionDropsPreparedBackdrop() {
         assertFalse(LauncherGlassBackdropRetentionPolicy.preservesPreparedBackdrop(
                 LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_TARGET));
