@@ -27,80 +27,41 @@ jobs:
           path = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java')
           text = path.read_text()
 
-          old = '''    private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
-              private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-          '''
-          new = '''    private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
-              private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-              private final LauncherGlassScrollProjectionState workspaceScrollProjection =
-                      new LauncherGlassScrollProjectionState();
-          '''
-          if old not in text:
+          field_anchor = '    private final AtomicBoolean frameAvailable = new AtomicBoolean(false);\n'
+          if field_anchor not in text:
               raise SystemExit('field insertion anchor not found')
-          text = text.replace(old, new, 1)
+          text = text.replace(
+              field_anchor,
+              field_anchor
+              + '    private final LauncherGlassScrollProjectionState workspaceScrollProjection =\n'
+              + '            new LauncherGlassScrollProjectionState();\n',
+              1)
 
-          old = '''    void requestStaticRedraw() {
-              if (shuttingDown) return;
-              if (framePolicy.requestStatic()) postRender(this::drainFrameWork, null);
+          method_anchor = '    void suspendWorkspaceProducer() {\n'
+          if method_anchor not in text:
+              raise SystemExit('method insertion anchor not found')
+          methods = '''    void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
+              if (shuttingDown || beforeScrollX == afterScrollX) return;
+              workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
+              // Geometry-only redraw: reuse the prepared root-space backdrop. A producer refresh
+              // here would merely chase Launcher wallpaper Binder latency and reintroduce phase lag.
+              requestStaticRedraw();
           }
-          '''
-          new = '''    void requestStaticRedraw() {
-              if (shuttingDown) return;
-              if (framePolicy.requestStatic()) postRender(this::drainFrameWork, null);
-          }
-
-              void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
-                  if (shuttingDown || beforeScrollX == afterScrollX) return;
-                  workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
-                  // Geometry-only redraw: reuse the prepared root-space backdrop. A producer refresh
-                  // here would merely chase Launcher wallpaper Binder latency and reintroduce phase lag.
-                  requestStaticRedraw();
-              }
 
               void resetWorkspaceScrollProjection() {
                   workspaceScrollProjection.reset();
               }
-          '''
-          if old not in text:
-              raise SystemExit('requestStaticRedraw anchor not found')
-          text = text.replace(old, new, 1)
 
-          old = '''    private void renderStaticScene(PrismalParams params) {
-              OutputState output = staticOutput;
-              if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
-              makePbufferCurrent();
-              prismalRenderer.beginGlassFrame();
-              List<StaticNodeState> snapshot;
-              synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
-              Integer frameScrollX = null;
-              boolean frameAnchorConsistent = true;
-              for (StaticNodeState state : snapshot) {
-                  LauncherGlassStaticNode node = state.nodeRef.get();
-                  StaticGeometryFrame frame = state.frame;
-                  LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
-                  if (node == null || geometry == null) continue;
-                  if (frame.workspaceScrollValid) {
-                      if (frameScrollX == null) frameScrollX = frame.workspaceScrollX;
-                      else if (frameScrollX != frame.workspaceScrollX) frameAnchorConsistent = false;
-                  }
-                  PrismalGeometry prismalGeometry = new PrismalGeometry(
-                          rootWidth, rootHeight, geometry.centerX, geometry.centerY,
-                          geometry.width, geometry.height, geometry.cornerRadius);
-                  PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
-                          node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
-                  prismalRenderer.drawGlass(prismalGeometry, params, highlights,
-                          state.interaction, node.visibilityAlpha());
-              }
-              if (frameScrollX != null && frameAnchorConsistent) queueStaticFrameAnchor(frameScrollX);
-              presentFull(prismalRenderer.outputTexture(), output);
-          }
-
-              private void queueStaticFrameAnchor(int scrollX) {
-                  View root = rootRef.get();
-                  if (root != null) LauncherGlassStaticLayer.onStaticFrameAnchorQueued(root, scrollX);
-              }
           '''
-          new = '''    private void renderStaticScene(PrismalParams params) {
+          text = text.replace(method_anchor, methods + method_anchor, 1)
+
+          start_marker = '    private void renderStaticScene(PrismalParams params) {\n'
+          end_marker = '    private void renderDragOutputs(PrismalParams params) {\n'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('renderStaticScene structural anchors not found')
+          replacement = '''    private void renderStaticScene(PrismalParams params) {
               OutputState output = staticOutput;
               if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
               makePbufferCurrent();
@@ -124,11 +85,9 @@ jobs:
               }
               presentFull(prismalRenderer.outputTexture(), output);
           }
-          '''
-          if old not in text:
-              raise SystemExit('renderStaticScene anchor not found')
-          text = text.replace(old, new, 1)
 
+          '''
+          text = text[:start] + replacement + text[end:]
           path.write_text(text)
 
           legacy = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassScrollCompensationState.java')
