@@ -96,10 +96,10 @@ jobs:
           PY
 
           git diff --check
-          git diff --exit-code -- src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java >/dev/null && {
+          if git diff --quiet -- src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java; then
             echo 'LauncherGlassSession.java was not modified' >&2
             exit 1
-          }
+          fi
 
       - name: Commit patch
         shell: bash
