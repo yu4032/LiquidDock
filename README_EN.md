@@ -145,14 +145,14 @@ Issues and pull requests are welcome. When reporting rendering or compatibility 
 
 Please keep each pull request focused on one issue and avoid unrelated refactoring.
 
-## Risk notice and disclaimer
+## Risk notice
 
 > [!WARNING]
-> LiquidDock hooks the system Launcher and SystemUI through LSPosed / libxposed and calls private HyperOS vendor APIs. An unsupported version combination, ROM update, or unadapted system implementation may cause features to malfunction or Launcher / SystemUI to crash repeatedly. In extreme cases, recovery through LSPosed safe mode, ADB, Recovery, or another recovery path may be required. Use LiquidDock only when you have a workable recovery path and appropriate backups.
+> LiquidDock relies on private HyperOS interfaces and hooks the system Launcher and SystemUI through LSPosed / libxposed. System, Launcher, or SystemUI updates may introduce compatibility issues. Keep appropriate backups and make sure you have a working recovery method before use.
 
-LiquidDock is an unofficial community project and is not affiliated with Xiaomi, LSPosed, or any other vendor or project mentioned here. “HyperOS”, “MIUI”, and other names are used only for compatibility descriptions; their trademarks belong to their respective owners.
+LiquidDock is an unofficial community project and is not affiliated with Xiaomi, LSPosed, or other related vendors or projects. “HyperOS” and “MIUI” are mentioned only for compatibility purposes.
 
-This software is provided “AS IS”, without any express or implied warranty regarding compatibility, stability, data safety, merchantability, or fitness for a particular purpose. You assume the risk of installing, enabling, modifying, and using this software. To the maximum extent permitted by applicable law, the authors and contributors are not liable for direct, indirect, incidental, special, or consequential damages arising from use of or inability to use the software. The governing terms for licensing, warranty disclaimer, and limitation of liability remain Sections 15 and 16 of the [GPL-3.0](LICENSE), subject to applicable law.
+This project is provided “AS IS” and is used at your own risk. Licensing and liability terms are governed by the [GPL-3.0](LICENSE).
 
 ## Credits
 
