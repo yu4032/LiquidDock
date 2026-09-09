@@ -13,7 +13,7 @@
 
 LiquidDock is an LSPosed / libxposed API 101 module for the **HyperOS 3 tablet launcher**. It adds a customizable Liquid Glass rendering pipeline to the system launcher and extends controls for the Dock, workspace grid, widgets, folders, Recents, and Workstation layouts.
 
-The current 2.x mainline is primarily developed and validated for **HyperOS 3.0.307+** and **`com.miui.home` release-4.50.x.x**.
+LiquidDock is primarily developed and validated for **HyperOS 3.0.307+** and **`com.miui.home` release-4.50.x.x**.
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
@@ -41,7 +41,7 @@ The current 2.x mainline is primarily developed and validated for **HyperOS 3.0.
 
 ## Rendering architecture
 
-LiquidDock 2.x uses HyperOS native PassBlur together with OES / GLES and Prismal. The legacy 1.x CPU screenshot pipeline is no longer used by the current mainline:
+LiquidDock uses HyperOS native PassBlur together with OES / GLES and Prismal in a zero-copy rendering pipeline:
 
 ```text
 HyperOS SurfaceFlinger PassBlur
@@ -58,7 +58,6 @@ TextureView composition
 Current implementation properties:
 
 - Background frames stay on the GPU path and are not read back into CPU bitmaps.
-- The current mainline does not use the legacy real-time screenshot backend.
 - PassBlur updates are source-driven rather than requested by a fixed polling loop.
 - Local sampling / render quality can be adjusted without changing the launcher-wide coordinate system.
 
@@ -134,11 +133,6 @@ build/outputs/apk/
 
 Both Debug and Release builds use the Android Gradle Plugin optimization / shrinker path configured by the project.
 
-## Branches
-
-- **`main`** — current development mainline and zero-copy PassBlur implementation.
-- **`archive/1.x`** — archived legacy implementation based on ScreenCapture / bitmap readback.
-
 ## Feedback and contributing
 
 Issues and pull requests are welcome. When reporting rendering or compatibility problems, please include at least:
@@ -165,7 +159,6 @@ This software is provided “AS IS”, without any express or implied warranty r
 - **Prismal** — Liquid Glass optical model and shader parameter reference.
 - **LSPosed / libxposed** — hooking API and module runtime.
 - **HyperCeiler** — reference for HyperOS module engineering practices and project documentation structure.
-- **HyperLight** — reference for the legacy screen-capture implementation.
 
 ## License
 
