@@ -162,6 +162,8 @@ final class LauncherGlassSession {
     private final FloatBuffer quadBuffer;
     private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    private final LauncherGlassScrollProjectionState workspaceScrollProjection =
+            new LauncherGlassScrollProjectionState();
     // Main-thread epoch invalidates finishBind callbacks queued before any endpoint rollover.
     private volatile long producerBindEpoch;
     private final float[] textureMatrix = new float[16];
@@ -507,6 +509,18 @@ final class LauncherGlassSession {
     void requestStaticRedraw() {
         if (shuttingDown) return;
         if (framePolicy.requestStatic()) postRender(this::drainFrameWork, null);
+    }
+
+    void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
+    if (shuttingDown || beforeScrollX == afterScrollX) return;
+    workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
+    // Geometry-only redraw: reuse the prepared root-space backdrop. A producer refresh
+    // here would merely chase Launcher wallpaper Binder latency and reintroduce phase lag.
+    requestStaticRedraw();
+}
+
+    void resetWorkspaceScrollProjection() {
+        workspaceScrollProjection.reset();
     }
 
     void suspendWorkspaceProducer() {
@@ -1278,39 +1292,29 @@ final class LauncherGlassSession {
     }
 
     private void renderStaticScene(PrismalParams params) {
-        OutputState output = staticOutput;
-        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
-        makePbufferCurrent();
-        prismalRenderer.beginGlassFrame();
-        List<StaticNodeState> snapshot;
-        synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
-        Integer frameScrollX = null;
-        boolean frameAnchorConsistent = true;
-        for (StaticNodeState state : snapshot) {
-            LauncherGlassStaticNode node = state.nodeRef.get();
-            StaticGeometryFrame frame = state.frame;
-            LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
-            if (node == null || geometry == null) continue;
-            if (frame.workspaceScrollValid) {
-                if (frameScrollX == null) frameScrollX = frame.workspaceScrollX;
-                else if (frameScrollX != frame.workspaceScrollX) frameAnchorConsistent = false;
-            }
-            PrismalGeometry prismalGeometry = new PrismalGeometry(
-                    rootWidth, rootHeight, geometry.centerX, geometry.centerY,
-                    geometry.width, geometry.height, geometry.cornerRadius);
-            PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
-                    node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
-            prismalRenderer.drawGlass(prismalGeometry, params, highlights,
-                    state.interaction, node.visibilityAlpha());
-        }
-        if (frameScrollX != null && frameAnchorConsistent) queueStaticFrameAnchor(frameScrollX);
-        presentFull(prismalRenderer.outputTexture(), output);
+    OutputState output = staticOutput;
+    if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
+    makePbufferCurrent();
+    prismalRenderer.beginGlassFrame();
+    List<StaticNodeState> snapshot;
+    synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
+    for (StaticNodeState state : snapshot) {
+        LauncherGlassStaticNode node = state.nodeRef.get();
+        StaticGeometryFrame frame = state.frame;
+        LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
+        if (node == null || geometry == null) continue;
+        float projectedCenterX = workspaceScrollProjection.projectCenterX(
+                geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
+        PrismalGeometry prismalGeometry = new PrismalGeometry(
+                rootWidth, rootHeight, projectedCenterX, geometry.centerY,
+                geometry.width, geometry.height, geometry.cornerRadius);
+        PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
+                node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
+        prismalRenderer.drawGlass(prismalGeometry, params, highlights,
+                state.interaction, node.visibilityAlpha());
     }
-
-    private void queueStaticFrameAnchor(int scrollX) {
-        View root = rootRef.get();
-        if (root != null) LauncherGlassStaticLayer.onStaticFrameAnchorQueued(root, scrollX);
-    }
+    presentFull(prismalRenderer.outputTexture(), output);
+}
 
     private void renderDragOutputs(PrismalParams params) {
         for (Map.Entry<LauncherGlassSinkView, OutputState> entry
