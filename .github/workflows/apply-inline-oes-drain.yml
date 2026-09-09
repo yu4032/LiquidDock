@@ -26,41 +26,35 @@ jobs:
 
           path = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java')
           text = path.read_text()
-          old = '''            if (shouldRender || frameAvailable.get()) {
-              frameAvailable.set(true);
-              if (shouldRender) requestFrame(false);
-              return;
-          }
-'''
-          # Match the repository's actual indentation exactly if the first form is absent.
-          if old not in text:
-              old = '''            if (shouldRender || frameAvailable.get()) {
-                frameAvailable.set(true);
-                if (shouldRender) requestFrame(false);
-                return;
-            }
-'''
+          old = (
+              "            if (shouldRender || frameAvailable.get()) {\n"
+              "                frameAvailable.set(true);\n"
+              "                if (shouldRender) requestFrame(false);\n"
+              "                return;\n"
+              "            }\n"
+          )
           if old not in text:
               raise SystemExit('source-frame dispatch anchor not found')
-          new = '''            if (shouldRender || frameAvailable.get()) {
-                frameAvailable.set(true);
-                if (shouldRender) {
-                    // SurfaceTexture invokes this listener on renderHandler already. Consume the
-                    // newest source now instead of adding another queue turn before updateTexImage.
-                    framePolicy.request(false);
-                    drainFrameWork();
-                }
-                return;
-            }
-'''
+          new = (
+              "            if (shouldRender || frameAvailable.get()) {\n"
+              "                frameAvailable.set(true);\n"
+              "                if (shouldRender) {\n"
+              "                    // SurfaceTexture invokes this listener on renderHandler already. Consume the\n"
+              "                    // newest source now instead of adding another queue turn before updateTexImage.\n"
+              "                    framePolicy.request(false);\n"
+              "                    drainFrameWork();\n"
+              "                }\n"
+              "                return;\n"
+              "            }\n"
+          )
           path.write_text(text.replace(old, new, 1))
           PY
 
           git diff --check
-          git diff --exit-code -- src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java >/dev/null && {
+          if git diff --quiet -- src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java; then
             echo 'LauncherGlassSession.java was not modified' >&2
             exit 1
-          }
+          fi
 
       - name: Commit patch
         shell: bash
