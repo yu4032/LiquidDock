@@ -364,7 +364,8 @@ final class LauncherGlassSession {
     void invalidateGeneration(long generation) {
         if (shuttingDown || generation < sceneGeneration) return;
         sceneGeneration = generation;
-        invalidateBackdropFrameState();
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.SCENE_FRESHNESS);
     }
 
     void requestFreshBackdrop(long generation) {
@@ -393,8 +394,10 @@ final class LauncherGlassSession {
             wallpaperRequestedSceneGeneration = sceneGeneration;
             wallpaperRequestedAuthoritative = authoritative;
         }
-        // Keep the existing StaticLayer pixels visible while invalidating only the cached source.
-        invalidateBackdropFrameState();
+        // Keep the prepared StaticLayer backdrop renderable while this source request
+        // becomes stale against sceneGeneration; a fresh OES frame still owns freshness.
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.SCENE_FRESHNESS);
         requestFrame(true);
         return true;
     }
@@ -406,10 +409,13 @@ final class LauncherGlassSession {
         }
     }
 
-    private void invalidateBackdropFrameState() {
+    private void invalidateBackdropFrameState(
+            LauncherGlassBackdropRetentionPolicy.Invalidation invalidation) {
         frameAvailable.set(false);
-        consumedGeneration = -1L;
-        backdropPrepared = false;
+        if (!LauncherGlassBackdropRetentionPolicy.preservesPreparedBackdrop(invalidation)) {
+            consumedGeneration = -1L;
+            backdropPrepared = false;
+        }
     }
 
     private void clearWallpaperRequest() {
@@ -739,7 +745,8 @@ final class LauncherGlassSession {
         if (!LauncherGlassProducerGeometryGate.matchesRoot(
                 rootWidth, rootHeight, geometry.surfaceWidth, geometry.surfaceHeight,
                 geometry.insetLeft, geometry.insetTop, geometry.insetRight, geometry.insetBottom)) {
-            invalidateBackdropFrameState();
+            invalidateBackdropFrameState(
+                    LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN);
             MainHook.log(TAG + " producer geometry not coherent with root root="
                     + rootWidth + "x" + rootHeight + " surface="
                     + geometry.surfaceWidth + "x" + geometry.surfaceHeight);
@@ -763,7 +770,8 @@ final class LauncherGlassSession {
         if (!changed) return false;
 
         if (rotationChanged) beginRotationSettle(nextRotation);
-        invalidateBackdropFrameState();
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN);
         long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
         if (nextGeneration > 0L) sceneGeneration = nextGeneration;
         boundBufferWidth = geometry.bufferWidth;
@@ -1047,7 +1055,7 @@ final class LauncherGlassSession {
         Surface producer = new Surface(input);
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
-        backdropPrepared = false;
+        // Source endpoint identity is independent from the already-prepared consumer backdrop.
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
             PassBlurSourceFrameGate gate = passBlurSourceFrameGate;
@@ -1156,7 +1164,6 @@ final class LauncherGlassSession {
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
-        backdropPrepared = false;
         return postRender(() -> {
             boolean success = false;
             try {
@@ -1197,7 +1204,6 @@ final class LauncherGlassSession {
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
-        backdropPrepared = false;
         boolean queued = postRender(() -> {
             try {
                 if (shuttingDown) {
@@ -1247,7 +1253,8 @@ final class LauncherGlassSession {
         SurfaceTexture input = inputSurfaceTexture;
         inputSurfaceTexture = null;
 
-        invalidateBackdropFrameState();
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.SOURCE_ENDPOINT);
         clearWallpaperRequest();
 
         if (input != null) {
@@ -1457,7 +1464,8 @@ final class LauncherGlassSession {
         rawTexture = 0;
         rawWidth = 0;
         rawHeight = 0;
-        backdropPrepared = false;
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_TARGET);
     }
 
     void shutdown() {
