@@ -145,14 +145,14 @@ Debug 与 Release 均使用项目当前配置的 Android Gradle Plugin optimizat
 
 请尽量让每个 Pull Request 聚焦于单一问题，避免混入无关重构。
 
-## 风险提示与免责声明
+## 风险提示
 
 > [!WARNING]
-> LiquidDock 会通过 LSPosed / libxposed Hook 系统桌面和 SystemUI，并调用 HyperOS 私有 vendor API。错误的版本组合、ROM 更新或未适配的系统实现可能导致功能异常、Launcher / SystemUI 反复崩溃，极端情况下可能需要通过 LSPosed 安全模式、ADB、Recovery 或其他恢复方式处理。建议在具备恢复条件并完成必要备份后使用。
+> LiquidDock 依赖 HyperOS 的私有接口，并会通过 LSPosed / libxposed Hook 系统桌面和 SystemUI。系统、桌面或 SystemUI 更新后可能出现兼容性问题。建议在使用前做好必要备份，并确保有可用的恢复方式。
 
-LiquidDock 是非官方社区项目，与 Xiaomi、LSPosed 或其他相关厂商 / 项目不存在隶属或官方合作关系。“HyperOS”和“MIUI”等名称仅用于兼容性说明，其商标归各自权利人所有。
+LiquidDock 是非官方社区项目，与 Xiaomi、LSPosed 等相关厂商或项目不存在隶属关系。“HyperOS”和“MIUI”等名称仅用于兼容性说明。
 
-本软件按现状（“AS IS”）提供，不对兼容性、稳定性、数据安全、适销性或特定用途适用性作任何明示或默示保证。使用者自行承担安装、启用、修改和使用本软件的风险。在适用法律允许的最大范围内，作者及贡献者不对因使用或无法使用本软件造成的直接、间接、附带、特殊或后果性损失承担责任。具体授权、无担保和责任限制以 [GPL-3.0](LICENSE) 第 15、16 节及适用法律为准。
+本项目按现状（“AS IS”）提供，使用风险由使用者自行承担。许可与责任限制以 [GPL-3.0](LICENSE) 为准。
 
 ## 感谢
 
