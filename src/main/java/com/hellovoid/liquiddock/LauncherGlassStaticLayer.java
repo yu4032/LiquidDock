@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
-import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.os.Handler;
 import android.view.Surface;
@@ -21,14 +20,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
     private final LauncherGlassSession session;
     private final Handler mainHandler;
-    private final LauncherGlassScrollCompensationState scrollCompensation =
-            new LauncherGlassScrollCompensationState();
-    private final Matrix scrollTransform = new Matrix();
-    private final Object staticFrameAnchorLock = new Object();
     private Surface outputSurface;
     private boolean disposed;
-    private boolean staticFrameAnchorPending;
-    private int staticFrameAnchorX;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -88,8 +81,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return;
         layer.workspaceRef = new WeakReference<>(workspace);
-        layer.applyScrollCompensation(
-                layer.scrollCompensation.onScrollMutation(beforeScrollX, afterScrollX));
+        // Do not translate the root-wide TextureView. Its pixels include the already sampled
+        // backdrop, which belongs to root coordinates. Project only glass geometry in the session.
+        layer.session.onWorkspaceScrollMutation(beforeScrollX, afterScrollX);
     }
 
     static Integer captureWorkspaceScrollAnchor(View root) {
@@ -99,46 +93,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (workspace == null || !workspace.isAttachedToWindow()
                 || workspace.getRootView() != root) return null;
         return workspace.getScrollX();
-    }
-
-    static void onStaticFrameAnchorQueued(View root, int scrollX) {
-        LauncherGlassStaticLayer layer = find(root);
-        if (layer != null) layer.onStaticFrameAnchorQueued(scrollX);
-    }
-
-    void onStaticFrameAnchorQueued(int scrollX) {
-        synchronized (staticFrameAnchorLock) {
-            // Only the newest queued static frame matters. BufferQueue may coalesce older buffers
-            // before TextureView reports its next update, so a FIFO would retain obsolete anchors.
-            staticFrameAnchorX = scrollX;
-            staticFrameAnchorPending = true;
-        }
-    }
-
-    private Integer takeStaticFrameAnchor() {
-        synchronized (staticFrameAnchorLock) {
-            if (!staticFrameAnchorPending) return null;
-            staticFrameAnchorPending = false;
-            return staticFrameAnchorX;
-        }
-    }
-
-    private void applyScrollCompensation(float translationX) {
-        if (disposed) return;
-        scrollTransform.reset();
-        if (Float.isFinite(translationX) && Math.abs(translationX) > 0.001f) {
-            scrollTransform.setTranslate(translationX, 0f);
-        }
-        setTransform(scrollTransform);
-    }
-
-    private void resetScrollCompensation() {
-        scrollCompensation.reset();
-        synchronized (staticFrameAnchorLock) {
-            staticFrameAnchorPending = false;
-            staticFrameAnchorX = 0;
-        }
-        applyScrollCompensation(0f);
     }
 
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
@@ -167,7 +121,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     void dispose() {
         if (disposed) return;
-        resetScrollCompensation();
+        session.resetWorkspaceScrollProjection();
         disposed = true;
         View root = rootRef.get();
         if (root != null) {
@@ -179,6 +133,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
         if (disposed || texture == null) return;
+        session.resetWorkspaceScrollProjection();
         Surface next = new Surface(texture);
         Surface old = outputSurface;
         outputSurface = next;
@@ -188,12 +143,12 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
         if (disposed) return;
-        resetScrollCompensation();
+        session.resetWorkspaceScrollProjection();
         session.resizeStaticOutput(Math.max(1, width), Math.max(1, height));
     }
 
     @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
-        resetScrollCompensation();
+        session.resetWorkspaceScrollProjection();
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachStaticOutput(current);
@@ -201,10 +156,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {
-        if (disposed) return;
-        Integer frameScrollX = takeStaticFrameAnchor();
-        if (frameScrollX != null) {
-            applyScrollCompensation(scrollCompensation.onFramePresented(frameScrollX));
-        }
+        // The presented root-wide surface is intentionally never transformed after swap. The
+        // backdrop stays root-anchored while the renderer late-projects glass geometry itself.
     }
 }
