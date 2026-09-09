@@ -1,44 +1,13 @@
 # LiquidDock TODO
 
-当前主线为 **v2.2.1 / HyperOS 3.0.307+ / MiuiX 307 PassBlur + OES/GLES zero-copy**。旧 ScreenCapture / bitmap readback 架构仅保留在 `archive/1.x`，不再作为当前 TODO。
-
-本文件只记录当前 `main` 尚未完成、仍需结构收口或仍需真机验收的事项。已经进入 production 且有代码/测试依据的工作不继续以“待实现”形式保留；已完成的重要边界记录在文末，避免后续审计重复打开已经关闭的问题。
-
-## 1. Workstation / Laptop：剩余 ownership 与真机验收
-
-**状态：Recents shared producer correctness 的最小修复已经落地；完整 Workstation 适配仍未完成。**
-
-当前 production 已经具备：
-
-- `LauncherGlassSceneController.vendorRecentsCovered` 作为 Recents covered authority；
-- duplicate / non-covered `onRecentViewHide` 不再触发 Workstation producer rollover；
-- `LauncherGlassSession.workstationBindEpoch` 拒绝 rollover 前排队的 stale `finishBind()`；
-- Workstation-only `rebindWorkstationProducer(...)`，不改 unlock / rotation / generic rebind 路径；
-- request 与 endpoint recreation 的 structured diagnostics；
-- endpoint recreation 不直接授权 reveal，仍由现有 scene generation / fresh OES frame barrier 决定何时显示。
-
-除非出现新的、可复现的现实失败路径，**不要重新引入**单独的 producer recovery episode state machine、terminal multi-session aggregate 或另一套 fresh-frame authority。
+当前主线为 **v2.3.0 / HyperOS 3.0.308+ / MiuiX PassBlur + OES/GLES zero-copy**。
+本文件只记录当前 `main` 尚未完成、仍需结构收口或仍需真机验收的事项。
 
 剩余工作：
 
-- 拆出单一 `WorkstationModeController`，接管 mode probe、vendor callback、normal layout backup/restore、transition generation/cancellation；
-- `MainHook` 不再直接持有 Workstation mutable state；
-- 审计并约束现有 delayed restore/recheck callback，使 stale callback 具备 generation/cancellation 保护；
-- 真机完成以下矩阵：
-  - 进入/退出工作台；
-  - 普通桌面位置 backup/restore；
-  - Dock 宽度、图标 spacing/offset；
-  - All Apps 横竖屏；
-  - Recents 连续往返；
-  - Recents 附近旋转；
-  - PassBlur/OES producer suspend/rebind/fresh-frame；
-  - wallpaper freshness；
-  - Liquid Glass suspension/recovery；
-  - 普通模式无回归。
-
 结构性 Workstation 配置保持 restart-bound，除非未来建立完整、可逆的 runtime restore 路径。
 
-## 2. Widget classification / span extensibility
+## Widget classification / span extensibility
 
 **状态：部分完成。legacy `HomeGridHook.adaptTwoByOneWidget(...)` 已不在 production；统一 classifier/registry 仍未落地。**
 
@@ -56,7 +25,7 @@
 - 不 Hook `addOccupied()` / `transformToHVArray()`；
 - 不接管 MIUI occupied matrix / placement authority。
 
-## 3. `HomeGridHook` ownership 拆分
+## `HomeGridHook` ownership 拆分
 
 **状态：已有 orientation memory、profile overlay、drag/bounds 等辅助 Hook/policy，但 `HomeGridHook` 本体仍同时承担多个 runtime owner。**
 
@@ -78,7 +47,7 @@
 - MIUI native rotation/occupancy transform authority；
 - Workspace drop 行为。
 
-## 4. `MainHook` 收缩为 composition root
+## `MainHook` 收缩为 composition root
 
 **状态：未完成。已有部分独立 Hook/controller，但 `MainHook` 仍直接拥有 feature-level mutable state 与大量安装/恢复逻辑。**
 
@@ -90,7 +59,7 @@
 - 不把 `MainHook` 变成 service locator，不增加 setter bag 或无语义的 `Manager`/`Util`；
 - 重新审计 master-switch 边界：完整卸载结构 Hook 仍是 restart-bound，不允许用“视觉 owner 已释放”冒充完整 runtime uninstall。
 
-## 5. Launcher-wide glass / GPU ownership 收敛
+## Launcher-wide glass / GPU ownership 收敛
 
 **状态：部分完成。`LauncherGlassSession` / `LauncherGlassSessionRegistry` / `LauncherGlassSceneController` 与若干纯 transition/freshness policy 已经形成边界，但底层 producer/EGL/OES/renderer ownership 仍需审计。**
 
@@ -114,7 +83,7 @@
 - wallpaper/scene freshness generation 继续作为内容权威；
 - SystemUI unlock authority 不因 GPU 重构被替换。
 
-## 6. CI / build / engineering hygiene
+## CI / build / engineering hygiene
 
 ### CI / build
 
