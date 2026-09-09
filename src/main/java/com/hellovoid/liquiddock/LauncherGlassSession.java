@@ -1055,7 +1055,12 @@ final class LauncherGlassSession {
                     System.nanoTime(), consumedGeneration, sceneGeneration);
             if (shouldRender || frameAvailable.get()) {
                 frameAvailable.set(true);
-                if (shouldRender) requestFrame(false);
+                if (shouldRender) {
+                    // SurfaceTexture invokes this listener on renderHandler already. Consume the
+                    // newest source now instead of adding another queue turn before updateTexImage.
+                    framePolicy.request(false);
+                    drainFrameWork();
+                }
                 return;
             }
             drainSourceFrameWithoutRender(texture);
