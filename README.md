@@ -13,7 +13,7 @@
 
 LiquidDock 是一个面向 **HyperOS 3 平板系统桌面** 的 LSPosed / libxposed API 101 模块，用于为系统桌面提供可自定义的 Liquid Glass 渲染，并扩展 Dock、桌面网格、小组件、文件夹、多任务界面与工作台布局。
 
-当前 2.x 主线主要针对 **HyperOS 3.0.307+** 与 **`com.miui.home` release-4.50.x.x** 开发和验证。
+LiquidDock 主要针对 **HyperOS 3.0.307+** 与 **`com.miui.home` release-4.50.x.x** 开发和验证。
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
@@ -41,7 +41,7 @@ LiquidDock 是一个面向 **HyperOS 3 平板系统桌面** 的 LSPosed / libxpo
 
 ## 渲染架构
 
-LiquidDock 2.x 使用 HyperOS 原生 PassBlur、OES / GLES 与 Prismal 组成 zero-copy 渲染链，不再使用 1.x 的 CPU 屏幕截图方案：
+LiquidDock 使用 HyperOS 原生 PassBlur、OES / GLES 与 Prismal 组成 zero-copy 渲染链：
 
 ```text
 HyperOS SurfaceFlinger PassBlur
@@ -58,7 +58,6 @@ TextureView composition
 当前实现的主要特性：
 
 - 背景帧保持在 GPU 路径中，不回读为 CPU Bitmap。
-- 当前主线不使用旧版实时屏幕截图 backend。
 - PassBlur 更新由内容源驱动，不通过固定轮询持续请求帧。
 - 本地采样 / 渲染质量可以调整，而不改变 Launcher 全局坐标系。
 
@@ -134,11 +133,6 @@ build/outputs/apk/
 
 Debug 与 Release 均使用项目当前配置的 Android Gradle Plugin optimization / shrinker 路径。
 
-## 分支
-
-- **`main`** — 当前开发主线与 zero-copy PassBlur 实现。
-- **`archive/1.x`** — 已归档的旧版 ScreenCapture / bitmap readback 实现。
-
 ## 反馈与贡献
 
 欢迎提交 Issue 和 Pull Request。报告渲染或兼容性问题时，建议至少附带：
@@ -165,7 +159,6 @@ LiquidDock 是非官方社区项目，与 Xiaomi、LSPosed 或其他相关厂商
 - **Prismal** — Liquid Glass 光学模型与 Shader 参数设计参考。
 - **LSPosed / libxposed** — Hook API 与模块运行框架。
 - **HyperCeiler** — HyperOS 模块工程实践与项目文档结构参考。
-- **HyperLight** — 旧版本屏幕捕获设计参考。
 
 ## 开源许可
 
