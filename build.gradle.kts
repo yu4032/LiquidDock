@@ -19,8 +19,8 @@ android {
         applicationId = "com.hellovoid.liquiddock"
         minSdk = 33
         targetSdk = 37
-        versionCode = 15
-        versionName = "2.2.1"
+        versionCode = 16
+        versionName = "2.3.0"
     }
 
     signingConfigs {
