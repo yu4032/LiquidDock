@@ -2,23 +2,10 @@ package com.hellovoid.liquiddock;
 
 /** Shared geometry for widget layouts on the custom CellLayout grid. */
 final class WidgetGridSizing {
-    private static volatile boolean widgetAdaptationEnabled;
-
     private WidgetGridSizing() {}
-
-    static void setWidgetAdaptationEnabled(boolean enabled) {
-        widgetAdaptationEnabled = enabled;
-    }
 
     static boolean shouldAdaptWidgets(boolean gridEnabled, boolean adaptationEnabled) {
         return gridEnabled && adaptationEnabled;
-    }
-
-    static boolean isSupportedSpec(int spanX, int spanY) {
-        return (spanX == 1 && spanY == 1)
-                || (spanX == 2 && spanY == 1)
-                || (spanX == 2 && spanY == 2)
-                || (spanX == 4 && spanY == 2);
     }
 
     /**
@@ -26,10 +13,11 @@ final class WidgetGridSizing {
      * When widget adaptation is disabled, the empty rectangle makes both the
      * setupLayoutParam and post-layout enforcement paths leave MIUI untouched.
      */
-    static int[] gridRect(int cellX, int cellY, int spanX, int spanY,
+    static int[] gridRect(boolean adaptationEnabled,
+                          int cellX, int cellY, int spanX, int spanY,
                           int[] xs, int[] ys, int cellWidth, int cellHeight,
                           int widthGap, int heightGap) {
-        if (!widgetAdaptationEnabled) return new int[]{0, 0, 0, 0};
+        if (!adaptationEnabled) return new int[]{0, 0, 0, 0};
         if (spanX <= 0 || spanY <= 0 || cellWidth <= 0 || cellHeight <= 0
                 || xs == null || ys == null || xs.length == 0 || ys.length == 0
                 || cellX < 0 || cellY < 0

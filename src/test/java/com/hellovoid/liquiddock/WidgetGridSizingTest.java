@@ -1,7 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -10,27 +8,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class WidgetGridSizingTest {
-    @Before
-    public void enableAdaptationForGeometryTests() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(true);
-    }
-
-    @After
-    public void restoreDefaultAdaptationState() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(false);
-    }
-
-    @Test
-    public void supportedWidgetSpecsAreLimitedToLauncherSizes() {
-        assertTrue(WidgetGridSizing.isSupportedSpec(1, 1));
-        assertTrue(WidgetGridSizing.isSupportedSpec(2, 1));
-        assertTrue(WidgetGridSizing.isSupportedSpec(2, 2));
-        assertTrue(WidgetGridSizing.isSupportedSpec(4, 2));
-
-        assertFalse(WidgetGridSizing.isSupportedSpec(3, 1));
-        assertFalse(WidgetGridSizing.isSupportedSpec(4, 1));
-    }
-
     @Test
     public void widgetAdaptationRequiresGridAndExplicitSwitch() {
         assertFalse(WidgetGridSizing.shouldAdaptWidgets(false, false));
@@ -40,13 +17,12 @@ public class WidgetGridSizingTest {
     }
 
     @Test
-    public void disabledAdaptationLeavesWidgetGeometryUntouched() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(false);
+    public void disabledAdaptationReturnsEmptyRect() {
         assertArrayEquals(new int[]{0, 0, 0, 0},
                 WidgetGridSizing.gridRect(
-                        0, 0, 2, 2,
-                        new int[]{0, 112, 224}, new int[]{0, 108, 216},
-                        100, 100, 12, 8));
+                        false, 0, 0, 2, 1,
+                        new int[]{10, 110}, new int[]{20, 120},
+                        80, 80, 20, 20));
     }
 
     @Test
@@ -56,10 +32,10 @@ public class WidgetGridSizingTest {
 
         assertArrayEquals(new int[]{0, 0, 112, 108},
                 WidgetGridSizing.gridRect(
-                        0, 0, 1, 1, xs, ys, 100, 100, 12, 8));
+                        true, 0, 0, 1, 1, xs, ys, 100, 100, 12, 8));
         assertArrayEquals(new int[]{112, 0, 112, 108},
                 WidgetGridSizing.gridRect(
-                        1, 0, 1, 1, xs, ys, 100, 100, 12, 8));
+                        true, 1, 0, 1, 1, xs, ys, 100, 100, 12, 8));
     }
 
     @Test
@@ -68,13 +44,13 @@ public class WidgetGridSizingTest {
         int[] ys = {0, 108, 216};
 
         int[] oneByOne = WidgetGridSizing.gridRect(
-                0, 0, 1, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 0, 1, 1, xs, ys, 100, 100, 12, 8);
         int[] twoByOne = WidgetGridSizing.gridRect(
-                1, 0, 2, 1, xs, ys, 100, 100, 12, 8);
+                true, 1, 0, 2, 1, xs, ys, 100, 100, 12, 8);
         int[] top = WidgetGridSizing.gridRect(
-                0, 0, 2, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 0, 2, 1, xs, ys, 100, 100, 12, 8);
         int[] bottom = WidgetGridSizing.gridRect(
-                0, 1, 2, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 1, 2, 1, xs, ys, 100, 100, 12, 8);
 
         assertEquals(oneByOne[0] + oneByOne[2], twoByOne[0]);
         assertEquals(top[1] + top[3], bottom[1]);
@@ -87,7 +63,7 @@ public class WidgetGridSizingTest {
 
         assertArrayEquals(new int[]{10, 20, 220, 260},
                 WidgetGridSizing.gridRect(
-                        0, 0, 2, 2, xs, ys, 100, 100, 10, 30));
+                        true, 0, 0, 2, 2, xs, ys, 100, 100, 10, 30));
     }
 
     @Test
@@ -96,11 +72,11 @@ public class WidgetGridSizingTest {
         int[] ys = {0, 108, 216};
 
         int[] whole = WidgetGridSizing.gridRect(
-                0, 0, 2, 2, xs, ys, 100, 100, 12, 8);
+                true, 0, 0, 2, 2, xs, ys, 100, 100, 12, 8);
         int[] top = WidgetGridSizing.gridRect(
-                0, 0, 2, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 0, 2, 1, xs, ys, 100, 100, 12, 8);
         int[] bottom = WidgetGridSizing.gridRect(
-                0, 1, 2, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 1, 2, 1, xs, ys, 100, 100, 12, 8);
 
         assertEquals(whole[0], top[0]);
         assertEquals(whole[0] + whole[2], top[0] + top[2]);
@@ -115,15 +91,15 @@ public class WidgetGridSizingTest {
         int[] ys = {0, 108, 216};
 
         int[] whole = WidgetGridSizing.gridRect(
-                0, 0, 2, 2, xs, ys, 100, 100, 12, 8);
+                true, 0, 0, 2, 2, xs, ys, 100, 100, 12, 8);
         int[] topLeft = WidgetGridSizing.gridRect(
-                0, 0, 1, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 0, 1, 1, xs, ys, 100, 100, 12, 8);
         int[] topRight = WidgetGridSizing.gridRect(
-                1, 0, 1, 1, xs, ys, 100, 100, 12, 8);
+                true, 1, 0, 1, 1, xs, ys, 100, 100, 12, 8);
         int[] bottomLeft = WidgetGridSizing.gridRect(
-                0, 1, 1, 1, xs, ys, 100, 100, 12, 8);
+                true, 0, 1, 1, 1, xs, ys, 100, 100, 12, 8);
         int[] bottomRight = WidgetGridSizing.gridRect(
-                1, 1, 1, 1, xs, ys, 100, 100, 12, 8);
+                true, 1, 1, 1, 1, xs, ys, 100, 100, 12, 8);
 
         assertEquals(whole[0], topLeft[0]);
         assertEquals(whole[1], topLeft[1]);
@@ -142,7 +118,7 @@ public class WidgetGridSizingTest {
 
         assertArrayEquals(new int[]{230, 280, 110, 130},
                 WidgetGridSizing.gridRect(
-                        2, 2, 1, 1, xs, ys, 100, 100, 10, 30));
+                        true, 2, 2, 1, 1, xs, ys, 100, 100, 10, 30));
     }
 
     @Test
@@ -152,7 +128,7 @@ public class WidgetGridSizingTest {
 
         assertArrayEquals(new int[]{15, 25, 112, 108},
                 WidgetGridSizing.gridRect(
-                        0, 0, 1, 1, xs, ys, 100, 100, 12, 8));
+                        true, 0, 0, 1, 1, xs, ys, 100, 100, 12, 8));
     }
 
     @Test
@@ -161,6 +137,6 @@ public class WidgetGridSizingTest {
         int[] ys = {0, 108};
         assertArrayEquals(new int[]{0, 0, 0, 0},
                 WidgetGridSizing.gridRect(
-                        1, 0, 2, 1, xs, ys, 100, 100, 12, 8));
+                        true, 1, 0, 2, 1, xs, ys, 100, 100, 12, 8));
     }
 }

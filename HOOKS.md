@@ -22,6 +22,8 @@ API 101 入口为 `ModuleMain`。Launcher 进程启动时主要完成：
 
 完整 master-switch 启停仍属于 restart-bound：运行中关闭可以释放已接管的视觉 ownership，但不能安全撤销所有安装期结构 Hook。
 
+`WorkstationModeController` 已接管 Workstation mode、vendor-confirmed state、delayed fallback generation 与 normal-layout backup；`MainHook` 仍不是纯 composition root，因为 Dock/Grid/Glass 等其它 feature ownership 仍待继续收缩。
+
 ## 2. Dock 与 MiuiX zero-copy glass
 
 ### Material owner
@@ -118,7 +120,7 @@ Dock / Workspace app launch 的 floating icon proxy geometry 也会用于隐藏�
 | 目标 | 方法 | 作用 |
 |---|---|---|
 | `RecentsServiceDispatcher` | `onRecentViewShow()` | 将共享 Workspace static layer 标记为 Recents covered |
-| 同上 | `onRecentViewHide()` | 返回 HOME 前执行 Workstation producer recovery，再解除 covered |
+| 同上 | `onRecentViewHide()` | 仅在 covered authority 接受时执行 Workstation producer recovery，再解除 covered |
 
 ### Workstation recovery
 
@@ -128,20 +130,26 @@ Dock / Workspace app launch 的 floating icon proxy geometry 也会用于隐藏�
 
 ```text
 onRecentViewHide
-  -> LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn()
-  -> shared producer rollover/rebind
+  -> 检查 LauncherGlassSceneController.vendorRecentsCovered
+  -> duplicate/non-covered hide: reject, 不 rollover
+  -> valid Workstation return:
+       LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn()
+  -> Workstation-only producer endpoint recreation / rebind
+  -> workstationBindEpoch 拒绝旧 finishBind()
   -> LauncherGlassSceneController.setRecentsCoveredForAll(false)
-  -> 等待 fresh OES frame
+  -> 等待 matching scene generation 的 fresh OES frame
   -> static layer reveal
 ```
 
-不会直接强制显示旧 frame。
+endpoint recreation 本身不授权 reveal，也不会直接强制显示旧 frame。除非出现新的现实失败，不在该路径叠加另一套 recovery episode/aggregate/freshness state machine。
 
-## 7. Wallpaper freshness
+## 7. Wallpaper / unlock freshness
 
 `LauncherWallpaperFreshnessHook` 使用 Launcher wallpaper lifecycle 维护 wallpaper generation。其作用不是简单 invalidate，而是给 shared glass backdrop 一个内容新鲜度权威。
 
 常见边界包括 wallpaper changed、first-frame、draw completion 等 vendor callback。
+
+Unlock -> HOME 的释放 authority 来自 SystemUI `LOCKSCREEN -> GONE FINISHED TransitionStep`。Launcher PREPARE 只提前 freeze；之后 producer rollover 失败会 fail-closed，最终仍等待匹配 scene generation / fresh OES frame。
 
 ## 8. Runtime visual ownership
 
@@ -176,6 +184,8 @@ true -> false 时先发布 flag，再 dispatch teardown；已排队 callback 因
 - `DockStrokeRenderer.refreshInstalledFromCurrentConfig()`；
 - `DockDividerHook.onRuntimeDividerDisabled()`。
 
+`DockStrokeRenderer` 是当前 foreground stroke owner；历史 stroke-shadow 配置继续兼容，但不再依赖旧 overlay 作为正式实现。
+
 ## 9. Divider
 
 `DockDividerHook` 主要从 Workstation Dock line holder/bind 生命周期取得 divider View。
@@ -203,6 +213,7 @@ disable 时：
 
 - stroke disable -> 恢复原 foreground；
 - Squircle / Fill-Diff -> 主动 refresh 已安装 renderer；
+- stroke-shadow renderer 状态由现有 foreground/native MiShadow ownership 处理；
 - whole-Dock shadow 是独立 owner；
 - Dock customization 关闭后未来 vendor shadow 调用不再被继续抑制；
 - 未保存的 MIUI 原生 shadow 参数不会被构造。
@@ -222,19 +233,31 @@ disable 时：
 - Recents recovery；
 - 普通布局 backup/restore。
 
-整体仍属于实验性适配，结构配置保持 restart-bound。
+当前 `WorkstationModeController` 持有 mode、vendor confirmation、monotonic generation 与 normal-layout backup。Launcher 初始化后的 2 秒 re-query 仍存在，但 callback 捕获 controller generation；vendor callback 或更新 transition 会使旧 fallback 失效。`MainHook` 只负责 vendor Hook wiring 与已存在的模式切换 side effects，不再拥有第二份 Workstation mode/map state。
 
-## 12. Grid
+这次迁移不改变现有 producer recovery 语义。整体仍属于实验性适配，结构配置保持 restart-bound，最终设备矩阵仍需验收。
 
-`HomeGridHook` 仍覆盖：
+## 12. Grid / Widget
+
+`HomeGridHook` 当前覆盖：
 
 - cell count；
 - orientation-specific geometry；
-- Widget frame adaptation；
 - page indicator；
 - folder alignment；
 - rotation / refresh；
 - lazy/off-screen page preparation。
+
+Widget frame ownership 已迁到 `HomeGridWidgetAdaptationHook`：
+
+- `CellLayout.setupLayoutParam()` 负责现有 Widget allocation/frame 调整；
+- `CellLayout.onLayout()` 后 reassert final Widget frame；
+- `shouldAdapt(...)` 必须同时满足 install-time adaptation gate、`WidgetClassifier.isWidget(...)` 与 `WidgetSpecRegistry.DEFAULT.supports(...)`；
+- `WidgetClassifier` 优先使用 `ItemInfo.isWidget()`，item type `4` / `5` / `19` 只作为 compatibility fallback；
+- `WidgetSpecRegistry.DEFAULT` 当前只允许 1×1、2×1、2×2、4×2；
+- `WidgetGridSizing` 不再持有 process-global mutable config。
+
+`HomeGridHook` 自己的 `onLayout()` Hook 只保留 lazy/off-screen CellLayout first-valid-bounds geometry preparation，不再执行 Widget final-frame enforcement。
 
 `WorkspaceDropRuleHook` 只扩展 custom-grid 的合法坐标判定，不接管 MIUI occupancy matrix / placement。
 
@@ -244,10 +267,17 @@ disable 时：
 
 ## 14. 维护原则
 
-新增 Hook 时优先保持：
+新增或修改 Hook 时优先保持：
 
 - vendor state ownership 明确；
 - runtime callback 可撤销；
-- stale async callback 必须重新检查 live state；
+- stale async/delayed callback 必须重新检查 live state 或 generation/cancellation token；
 - producer/content freshness 不依赖普通 redraw；
-- 不恢复 1.x ScreenCapture 或 bitmap pipeline。
+- Workstation Recents recovery 不绕过 covered authority / bind epoch / fresh-frame barrier；
+- 不恢复 1.x ScreenCapture 或 bitmap pipeline；
+- 不为缩小大类而机械增加没有真实 ownership 的 `Manager` / `Util`。
+
+当前技术债务目标与顺序见 [TODO.md](TODO.md)；设计与第一阶段计划见：
+
+- [Technical-Debt Cleanup Design](docs/superpowers/specs/2026-09-07-technical-debt-cleanup-design.md)
+- [Technical-Debt Cleanup Phase 1 Implementation Plan](docs/superpowers/plans/2026-09-07-technical-debt-cleanup-phase1.md)

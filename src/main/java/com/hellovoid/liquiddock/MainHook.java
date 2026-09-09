@@ -24,10 +24,8 @@ public class MainHook {
         if (hotSeats != null) hotSeatsShadowOwnerRef = new WeakReference<>(hotSeats);
     }
     private static float strokeR = 30f;
-    private static volatile boolean workstationMode;
-    private static volatile boolean workstationModeHookConfirmed;
-    private static final java.util.Map<Long, HomeItemPosition> normalLayoutBackup =
-            new java.util.HashMap<>();
+    private static final WorkstationModeController workstationController =
+            new WorkstationModeController();
     private static final java.util.WeakHashMap<View, android.animation.ValueAnimator>
             dockResizeAnimators = new java.util.WeakHashMap<>();
 
@@ -36,8 +34,6 @@ public class MainHook {
     public void install(ClassLoader classLoader) {
         installWorkstationModeGuard(classLoader);
         LiquidDockConfig config = LiquidDockConfig.load();
-        WidgetGridSizing.setWidgetAdaptationEnabled(
-                WidgetGridSizing.shouldAdaptWidgets(config.grid.enabled, config.grid.widgetAdaptation));
         debugLogging = config.debugLog;
         log("[DC] LiquidDock " + (debugLogging ? "debug logging ON" : "loaded"));
         if (!config.enabled) {
@@ -50,10 +46,12 @@ public class MainHook {
         if (!config.dock.resizeAnimation)
             installDockResizeAnimationBypass(classLoader, config.dock.smoothResizeAnimation,
                     config.animation.dockResizeMs);
-        if (workstationMode)
+        if (isWorkstationMode())
             log("[DC] workstation active; using isolated workstation parameters");
 
         LiquidDockConfig.Grid grid = config.grid;
+        boolean widgetAdaptationEnabled = WidgetGridSizing.shouldAdaptWidgets(
+                grid.enabled, grid.widgetAdaptation);
         boolean grid8x4 = grid.enabled, dp = grid.dp, offsets = grid.offsets;
         float gridScale = dp ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
         int landXBase = dp ? 57 : 160, landYBase = dp ? 28 : 80;
@@ -75,7 +73,7 @@ public class MainHook {
             landGap -= dp ? 1 : 3; portGap -= dp ? 1 : 3;
         }
         DockDividerHook.install(classLoader);
-        HomeGridHook.install(classLoader, grid8x4,
+        HomeGridHook.install(classLoader, grid8x4, widgetAdaptationEnabled,
             Math.round(landLeft * gridScale), Math.round(landRight * gridScale),
             Math.round(landTop * gridScale), Math.round(landBottom * gridScale),
             Math.round(portLeft * gridScale), Math.round(portRight * gridScale),
@@ -142,7 +140,7 @@ public class MainHook {
                         "getItemOffsets",
                         chain -> {
                             Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
+                            if (isWorkstationMode() || !VisualRuntimeState.isDockCustomizationEnabled()) {
                                 return r;
                             }
                             Rect out = (Rect) chain.getArgs().get(0);
@@ -156,7 +154,7 @@ public class MainHook {
                     HookUtil.hookMethod(layoutManager, "updateBackgroundView",
                             new Class<?>[]{FrameLayout.class, int.class, int.class, float.class},
                             chain -> {
-                                if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
+                                if (isWorkstationMode() || !VisualRuntimeState.isDockCustomizationEnabled()) {
                                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                                 }
                                 int itemCount = (Integer) HookUtil.requireInvoke(
@@ -176,7 +174,7 @@ public class MainHook {
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (VisualRuntimeState.isDockCustomizationEnabled()
-                                && !workstationMode && wo != 0) {
+                                && !isWorkstationMode() && wo != 0) {
                             args[0] = (int) args[0] + wo;
                         }
                         Object r = chain.proceed(args);
@@ -189,7 +187,7 @@ public class MainHook {
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (VisualRuntimeState.isDockCustomizationEnabled()
-                                && !workstationMode && ho != 0) {
+                                && !isWorkstationMode() && ho != 0) {
                             args[0] = (int) args[0] + ho;
                         }
                         Object r = chain.proceed(args);
@@ -201,7 +199,7 @@ public class MainHook {
             HookUtil.hookMethod(cl, hsc, "setBackgroundRadius",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (!workstationMode && VisualRuntimeState.isDockCustomizationEnabled()) {
+                        if (!isWorkstationMode() && VisualRuntimeState.isDockCustomizationEnabled()) {
                             View v = (View) chain.getThisObject();
                             float systemRadius = (Float) args[0];
                             if (!animating(v)) strokeR = Math.max(0f, systemRadius + co);
@@ -229,7 +227,7 @@ public class MainHook {
                         chain -> {
                             Object[] args = chain.getArgs().toArray(new Object[0]);
                             if (VisualRuntimeState.isDockCustomizationEnabled()
-                                    && !workstationMode && br != 100) {
+                                    && !isWorkstationMode() && br != 100) {
                                 args[1] = br;
                             }
                             return chain.proceed(args);
@@ -284,7 +282,7 @@ public class MainHook {
     private static HotSeatsShadowScope pushConfiguredHotSeatsShadow(Object hotSeats) {
         LiquidDockConfig.Dock dock = currentNativeShadowConfig();
         if (hotSeats == null || !DockShadowRuntimePolicy.shouldApplyTemporaryOverrides(
-                workstationMode, VisualRuntimeState.isDockCustomizationEnabled(), dock != null)) {
+                isWorkstationMode(), VisualRuntimeState.isDockCustomizationEnabled(), dock != null)) {
             return HotSeatsShadowScope.noop();
         }
 
@@ -390,13 +388,13 @@ public class MainHook {
         // The parent customization callback runs first when the parent itself is disabled. In that
         // case the current effective state already tells the HotSeats hook to pass vendor values.
         if (!DockShadowRuntimePolicy.shouldRefreshVendorShadow(
-                workstationMode, VisualRuntimeState.isDockCustomizationEnabled())) return;
+                isWorkstationMode(), VisualRuntimeState.isDockCustomizationEnabled())) return;
         refreshVendorDockShadow();
     }
 
     static void onRuntimeDockShadowEnabled() {
         if (!DockShadowRuntimePolicy.shouldRefreshVendorShadow(
-                workstationMode, VisualRuntimeState.isDockCustomizationEnabled())) return;
+                isWorkstationMode(), VisualRuntimeState.isDockCustomizationEnabled())) return;
         try {
             nativeShadowConfig = LiquidDockConfig.load().dock;
         } catch (Throwable ignored) {
@@ -511,7 +509,7 @@ public class MainHook {
                     "getItemOffsets",
                     chain -> {
                         Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (workstationMode) {
+                        if (isWorkstationMode()) {
                             Rect out = (Rect) chain.getArgs().get(0);
                             out.top += iconTopOffset;
                             out.bottom += iconBottomOffset;
@@ -525,10 +523,12 @@ public class MainHook {
     private static void installWorkstationModeGuard(ClassLoader cl) {
         boolean detected = false;
         try {
-            Class<?> mc = Class.forName("com.miui.home.launcher.allapps.LauncherModeController", false, cl);
+            Class<?> mc = Class.forName(
+                    "com.miui.home.launcher.allapps.LauncherModeController", false, cl);
             Class<?> resolvedDeviceConfig;
             try {
-                resolvedDeviceConfig = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
+                resolvedDeviceConfig = Class.forName(
+                        "com.miui.home.launcher.DeviceConfig", false, cl);
             } catch (Throwable ignored) {
                 resolvedDeviceConfig = null;
             }
@@ -536,34 +536,41 @@ public class MainHook {
             HookUtil.InvocationResult<Object> laptopProbe = HookUtil.tryInvokeStatic(
                     mc, "isLaptopMode");
             Object laptopResult = laptopProbe.succeeded() ? laptopProbe.value() : null;
+            boolean initialMode;
             if (laptopResult instanceof Boolean) {
-                workstationMode = (Boolean) laptopResult;
+                initialMode = (Boolean) laptopResult;
             } else {
                 HookUtil.InvocationResult<Object> dcProbe = currentDeviceConfig == null
                         ? null
                         : HookUtil.tryInvokeStatic(
                                 currentDeviceConfig, "isMingouLaptopPcModeEnabled");
                 Object dcResult = dcProbe != null && dcProbe.succeeded() ? dcProbe.value() : null;
-                workstationMode = dcResult instanceof Boolean && (Boolean) dcResult;
+                initialMode = dcResult instanceof Boolean && (Boolean) dcResult;
             }
-            Class<?> sm = Class.forName("com.miui.home.launcher.laptop.LaptopStateManager", false, cl);
+            initializeWorkstationMode(initialMode);
+
+            Class<?> sm = Class.forName(
+                    "com.miui.home.launcher.laptop.LaptopStateManager", false, cl);
             HookUtil.hookMethod(sm, "onLaptopModeChanged", new Class<?>[]{boolean.class},
                     chain -> {
                         boolean entering = (Boolean) chain.getArgs().get(0);
-                        workstationModeHookConfirmed = true;
                         if (entering) backupNormalHomeLayout();
-                        setWorkstationMode(entering);
+                        workstationController.onVendorModeChanged(entering);
+                        applyWorkstationModeSideEffects(entering);
                         Object r = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         if (!entering) scheduleNormalLayoutRestore();
                         HomeGridHook.scheduleAllPageRefresh();
                         return r;
                     });
             detected = true;
-            log("[DC] workstation guard uses LauncherModeController; active=" + workstationMode);
-            // Deferred re-check: isLaptopMode() may return null at early startup;
-            // re-query after the Launcher has finished initializing its mode state.
+            log("[DC] workstation guard uses LauncherModeController; active="
+                    + isWorkstationMode());
+
+            // Deferred re-check: the early vendor probe may be unavailable before Launcher finishes
+            // initialization. The captured generation makes this callback stale as soon as a vendor
+            // mode callback confirms a newer state.
+            final long fallbackGeneration = workstationController.beginUnconfirmedProbe();
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                if (workstationModeHookConfirmed) return; // hook already confirmed the state
                 try {
                     HookUtil.InvocationResult<Object> recheckResult = HookUtil.tryInvokeStatic(
                             mc, "isLaptopMode");
@@ -574,10 +581,15 @@ public class MainHook {
                         HookUtil.InvocationResult<Object> dcResult = HookUtil.tryInvokeStatic(
                                 currentDeviceConfig, "isMingouLaptopPcModeEnabled");
                         if (dcResult.succeeded()) {
-                            actual = dcResult.value() instanceof Boolean && (Boolean) dcResult.value();
+                            actual = dcResult.value() instanceof Boolean
+                                    && (Boolean) dcResult.value();
                         }
                     }
-                    if (actual != workstationMode) setWorkstationMode(actual);
+                    boolean previous = isWorkstationMode();
+                    if (workstationController.acceptFallbackProbe(fallbackGeneration, actual)
+                            && actual != previous) {
+                        applyWorkstationModeSideEffects(actual);
+                    }
                 } catch (Throwable ignored) {}
             }, 2000L);
         } catch (Throwable currentApiError) {
@@ -585,26 +597,36 @@ public class MainHook {
         }
         if (!detected) try {
             Class<?> dc = Class.forName("com.miui.home.launcher.DeviceConfig", false, cl);
-            workstationMode = (Boolean) HookUtil.requireInvokeStatic(
-                    dc, "isMingouLaptopPcModeEnabled");
-            HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled", new Class<?>[]{boolean.class},
+            initializeWorkstationMode((Boolean) HookUtil.requireInvokeStatic(
+                    dc, "isMingouLaptopPcModeEnabled"));
+            HookUtil.hookMethod(dc, "setMingouLaptopPcModeEnabled",
+                    new Class<?>[]{boolean.class},
                     chain -> {
-                        setWorkstationMode((Boolean) chain.getArgs().get(0));
+                        boolean enabled = (Boolean) chain.getArgs().get(0);
+                        workstationController.onVendorModeChanged(enabled);
+                        applyWorkstationModeSideEffects(enabled);
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
             detected = true;
-            log("[DC] workstation guard uses legacy DeviceConfig; active=" + workstationMode);
+            log("[DC] workstation guard uses legacy DeviceConfig; active="
+                    + isWorkstationMode());
         } catch (Throwable legacyApiError) {
             log("[DC] legacy workstation API unavailable: " + legacyApiError);
         }
         if (!detected) {
-            workstationMode = false;
+            initializeWorkstationMode(false);
             log("[DC] ERROR: no supported workstation state API found");
         }
     }
 
-    private static void setWorkstationMode(boolean enabled) {
-        workstationMode = enabled;
+    /** Initializes mode ownership without replaying transition side effects during Launcher boot. */
+    private static void initializeWorkstationMode(boolean enabled) {
+        long generation = workstationController.beginUnconfirmedProbe();
+        workstationController.acceptFallbackProbe(generation, enabled);
+    }
+
+    /** Applies the existing transition effects after the controller has published the new mode. */
+    private static void applyWorkstationModeSideEffects(boolean enabled) {
         HomeGridHook.setWorkstationMode(enabled);
         WorkstationDockGeometryHook.onWorkstationModeChanged(enabled);
         log("[DC] Mingou workstation mode changed=" + enabled);
@@ -629,17 +651,18 @@ public class MainHook {
     }
 
     private static void backupNormalHomeLayout() {
-        normalLayoutBackup.clear();
+        workstationController.clearNormalLayoutBackup();
         View dockBg = oldBg();
         View root = dockBg == null ? null : dockBg.getRootView();
         if (root != null) collectHomeItemPositions(root, false);
-        log("[DC] normal 8x4 layout backup items=" + normalLayoutBackup.size());
+        log("[DC] normal 8x4 layout backup items="
+                + workstationController.normalLayoutBackupSize());
     }
 
     private static void scheduleNormalLayoutRestore() {
         View dockBg = oldBg();
         View root = dockBg == null ? null : dockBg.getRootView();
-        if (root == null || normalLayoutBackup.isEmpty()) return;
+        if (root == null || !workstationController.hasNormalLayoutBackup()) return;
         root.post(() -> restoreNormalLayout(root));
         root.postDelayed(() -> restoreNormalLayout(root), 250L);
         root.postDelayed(() -> restoreNormalLayout(root), 700L);
@@ -655,12 +678,16 @@ public class MainHook {
             long id = HookUtil.getLongField(tag, "id");
             if (id >= 0) {
                 if (!restore) {
-                    normalLayoutBackup.put(id, new HomeItemPosition(
+                    workstationController.rememberNormalItem(
+                            id,
                             HookUtil.getLongField(tag, "screenId"),
-                            HookUtil.getIntField(tag, "cellX"), HookUtil.getIntField(tag, "cellY"),
-                            HookUtil.getIntField(tag, "spanX"), HookUtil.getIntField(tag, "spanY")));
+                            HookUtil.getIntField(tag, "cellX"),
+                            HookUtil.getIntField(tag, "cellY"),
+                            HookUtil.getIntField(tag, "spanX"),
+                            HookUtil.getIntField(tag, "spanY"));
                 } else {
-                    HomeItemPosition saved = normalLayoutBackup.get(id);
+                    WorkstationModeController.HomeItemPosition saved =
+                            workstationController.normalItem(id);
                     if (saved != null) {
                         HookUtil.setLongField(tag, "screenId", saved.screenId);
                         HookUtil.setIntField(tag, "cellX", saved.cellX);
@@ -679,11 +706,12 @@ public class MainHook {
     }
 
     private static void restoreNormalHomeLayout(View root) {
-        if (workstationMode) return;
+        if (isWorkstationMode()) return;
         collectHomeItemPositions(root, true);
         root.requestLayout();
         root.invalidate();
-        log("[DC] normal 8x4 layout restored from backup items=" + normalLayoutBackup.size());
+        log("[DC] normal 8x4 layout restored from backup items="
+                + workstationController.normalLayoutBackupSize());
     }
 
     // ── drawing / sync ───────────────────────────────────────────────
@@ -702,7 +730,7 @@ public class MainHook {
         if (bg == null) return;
         setOldBg(bg);
         DockShadowRuntimePolicy.GeometrySync sync =
-                DockShadowRuntimePolicy.geometrySync(workstationMode, animating(bg));
+                DockShadowRuntimePolicy.geometrySync(isWorkstationMode(), animating(bg));
         if (sync == DockShadowRuntimePolicy.GeometrySync.REMEMBER_ONLY) return;
         try {
             syncDockShadow(bg, LiquidDockConfig.load().dock);
@@ -711,7 +739,7 @@ public class MainHook {
         }
     }
 
-    static boolean isWorkstationMode() { return workstationMode; }
+    static boolean isWorkstationMode() { return workstationController.isWorkstationMode(); }
 
     // ── logging ──────────────────────────────────────────────────────
 
@@ -783,15 +811,6 @@ public class MainHook {
         ShadowFieldState(java.lang.reflect.Field field, Object value) {
             this.field = field;
             this.value = value;
-        }
-    }
-
-    private static final class HomeItemPosition {
-        final long screenId;
-        final int cellX, cellY, spanX, spanY;
-        HomeItemPosition(long screenId, int cellX, int cellY, int spanX, int spanY) {
-            this.screenId = screenId; this.cellX = cellX; this.cellY = cellY;
-            this.spanX = spanX; this.spanY = spanY;
         }
     }
 }

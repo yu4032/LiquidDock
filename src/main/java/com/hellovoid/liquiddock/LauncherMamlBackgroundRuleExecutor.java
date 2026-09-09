@@ -14,8 +14,19 @@ final class LauncherMamlBackgroundRuleExecutor {
     private static final String LOG_TAG = "[MamlWidgetBg]";
     private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
     private static final int DUMP_CHUNK_SIZE = 16;
-    private static final WidgetBackgroundRuleEngine RULES =
+    private static final WidgetBackgroundRuleEngine.LoadResult RULE_LOAD =
             WidgetBackgroundRuleEngine.loadBundled();
+    private static final WidgetBackgroundRuleEngine RULES = RULE_LOAD.engine();
+    private static final OneShotDiagnostic DIAGNOSTIC =
+            new OneShotDiagnostic(MainHook::log);
+
+    static {
+        if (RULE_LOAD.status() != WidgetBackgroundRuleEngine.LoadStatus.LOADED) {
+            DIAGNOSTIC.emit(
+                    "widget_rules_" + RULE_LOAD.status().name(),
+                    "[DC][WidgetRules] bundled_rules_unavailable status=" + RULE_LOAD.status());
+        }
+    }
 
     private static final Map<View, Claim> CLAIMS =
             Collections.synchronizedMap(new WeakHashMap<>());

@@ -42,6 +42,7 @@ final class LauncherGlassDragOverlay {
     private float activeVisualRight;
     private float activeVisualBottom;
     private boolean tracking;
+    private boolean sourceCaptureBlocked;
     private boolean released;
 
     private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
@@ -175,12 +176,20 @@ final class LauncherGlassDragOverlay {
                 activeVisualBottom - activeVisualTop);
         sourceRef = new WeakReference<>(source);
         if (!coordinator.begin(token, kind, bounds, activeCornerRadiusPx)) return false;
+
+        // MIUI's external DragView surface is not part of the PassBlur exclusion list. Freeze the
+        // last clean root backdrop before the first drag-glass frame can sample the moving source.
+        View root = rootRef.get();
+        sourceCaptureBlocked = root != null
+                && LauncherGlassSessionRegistry.beginUnsafeDragCaptureForRoot(root);
+
         tracking = true;
         Choreographer.getInstance().removeFrameCallback(frameCallback);
         Choreographer.getInstance().postFrameCallback(frameCallback);
         syncFromSource();
         MainHook.log(TAG + " begin kind=" + kind + " source="
-                + source.getClass().getSimpleName());
+                + source.getClass().getSimpleName()
+                + " sourceCaptureBlocked=" + sourceCaptureBlocked);
         return true;
     }
 
@@ -194,7 +203,17 @@ final class LauncherGlassDragOverlay {
             sink.setVisibility(View.GONE);
             sink.requestLifecycleRefresh();
         }
+        releaseSourceCapture(true);
         MainHook.log(TAG + " end");
+    }
+
+    private void releaseSourceCapture(boolean requestFresh) {
+        if (!sourceCaptureBlocked) return;
+        sourceCaptureBlocked = false;
+        View root = rootRef.get();
+        if (root == null) return;
+        if (requestFresh) LauncherGlassSessionRegistry.endUnsafeDragCaptureForRoot(root);
+        else LauncherGlassSessionRegistry.cancelUnsafeDragCaptureForRoot(root);
     }
 
     private boolean owns(Object token) {
@@ -345,6 +364,7 @@ final class LauncherGlassDragOverlay {
         released = true;
         tracking = false;
         Choreographer.getInstance().removeFrameCallback(frameCallback);
+        releaseSourceCapture(false);
         LauncherGlassDragState state = coordinator.current();
         if (state != null) coordinator.cancel(state.token);
         sourceRef = new WeakReference<>(null);

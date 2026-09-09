@@ -80,13 +80,13 @@ Widget 类型和 span 规则目前仍有硬编码，后续计划迁移到 `Widge
 
 ### 描边阴影
 
-历史 `stroke_shadow` / `shadow_radius` / `shadow_alpha` 配置仍保留兼容，但旧 overlay 描边阴影已经不再是当前 renderer 的正式实现。后续要么设计适配 foreground renderer 的新方案，要么正式标记为 deprecated。
+历史 `stroke_shadow` / `shadow_radius` / `shadow_alpha` 配置继续保留兼容。当前 stroke-shadow 已归入现有 `DockStrokeRenderer` foreground / native MiShadow ownership，不再使用旧 1.x overlay 作为正式路径，也不再属于“未来实现或 deprecated”待决项。
 
 ---
 
 ## 整体 Dock 阴影 (Dock Shadow)
 
-这与历史“描边阴影”是独立功能。
+这与“描边阴影”是独立功能。
 
 | 参数 | 当前范围 | 说明 |
 |------|------:|------|
@@ -246,17 +246,19 @@ Launcher glass 支持按对象类型选择 highlight profile，使 Dock、普通
 
 HyperOS Workstation 可能在进入 Recents 后保留同一个“仍然 valid”的 Launcher `SurfaceControl`，但实际退役其 PassBlur BufferQueue producer。
 
-v2.1.1 对此增加专门恢复：
+当前恢复路径：
 
-1. `onRecentViewHide` 返回 HOME；
-2. Workstation 模式下先 rollover shared Launcher glass producer；
-3. 再解除 Recents covered；
-4. static layer 继续等待新的 OES frame；
-5. fresh frame 到达后才重新显示整个 shared glass layer。
+1. `onRecentViewHide` 先检查 Recents covered authority；
+2. duplicate / non-covered hide 直接拒绝，不 rollover producer；
+3. 有效 Workstation 返回 HOME 时执行 Workstation-only shared producer rebind；
+4. `workstationBindEpoch` 拒绝 rollover 前排队的 stale bind completion；
+5. 再解除 Recents covered；
+6. static layer 继续等待匹配 scene generation 的新 OES frame；
+7. fresh frame 到达后才重新显示整个 shared glass layer。
 
-这修复了“从多任务返回后整个 glass layer 消失、必须长按图标才能恢复”的共享 producer 生命周期问题。
+这修复了“从多任务返回后整个 glass layer 消失、必须长按图标才能恢复”的共享 producer 生命周期问题。endpoint recreation 本身不代表 fresh content。
 
-> 该路径仍属于工作台实验适配的一部分，需要继续真机回归。
+> 该路径仍属于工作台实验适配的一部分，需要继续真机回归；除非出现新的现实失败，不新增第二套 recovery/freshness state machine。
 
 ---
 
@@ -338,9 +340,11 @@ v2.1.1 支持多组可配置 glass 动画时序，包括：
 - Grid horizontal offset；
 - All Apps 横/竖屏独立 horizontal / vertical offset；
 - Divider 自定义；
-- PassBlur producer suspend / single-frame pulse / rebind policy；
+- PassBlur producer suspend / covered-state recovery / rebind / fresh-frame policy；
 - Recents shared-glass recovery；
 - 普通布局位置 backup / restore。
+
+当前 Workstation mode 初始化仍保留一次延迟 re-query fallback；vendor callback 已确认时会跳过，但完整 generation/cancellation ownership 尚待后续重构。该债务不改变当前用户可见的 Workstation 功能边界。
 
 相关参数：
 
@@ -380,7 +384,7 @@ v2.1.1 支持多组可配置 glass 动画时序，包括：
 
 当前支持自定义 Recents 背景模糊度，并且 Liquid Glass scene 使用 HyperOS semantic Recents dispatcher 处理 HOME / Recents coverage，而不是依赖单个 View 的挂载状态猜测场景。
 
-Recents 与 Launcher static glass 的关系由 fresh-frame barrier 控制；Workstation 另有 shared producer rollover 恢复路径。
+Recents 与 Launcher static glass 的关系由 fresh-frame barrier 控制；Workstation 另有 covered-gated shared producer rebind 恢复路径。
 
 ---
 
