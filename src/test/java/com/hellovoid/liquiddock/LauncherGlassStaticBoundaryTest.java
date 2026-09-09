@@ -63,4 +63,19 @@ public class LauncherGlassStaticBoundaryTest {
         assertFalse(hook.contains("WorkspaceScrollMotionTracker"));
         assertFalse(layer.contains("WorkspaceScrollMotionTracker"));
     }
+
+    @Test
+    public void sourceFrameCallbackDrainsInlineOnRenderHandler() throws Exception {
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        // SurfaceTexture delivers this callback on renderHandler already. Re-posting the drain
+        // adds another queue turn before updateTexImage()/backdrop rebuild and makes source lag
+        // strictly worse under Workspace motion.
+        assertTrue(session.contains(
+                "if (shouldRender) {\n"
+                        + "                    framePolicy.request(false);\n"
+                        + "                    drainFrameWork();\n"
+                        + "                }"));
+        assertFalse(session.contains("if (shouldRender) requestFrame(false);"));
+    }
 }
