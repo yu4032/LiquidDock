@@ -1,9 +1,8 @@
-![Uploading image.gif…]()
-# LiquidDock
-<p align="center">
-  <img src="artwork/liquid-dock-screenshot.jpg" alt="LiquidDock detail"/>
-</p>
 
+# LiquidDock
+
+<img width="3008" height="1880" alt="Screenshot_2026-09-09-13-32-34-219_com miui home" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
+<img width="704" height="440" alt="image" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
 LiquidDock 是一个面向 HyperOS 3 平板系统桌面 的 LSPosed / libxposed API 101 模块，用于实现系统桌面 UI 的液态玻璃，以及自定义 Dock 外观、桌面网格与工作台布局。
 
 
