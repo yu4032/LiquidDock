@@ -1,3 +1,4 @@
+![Uploading image.gif…]()
 # LiquidDock
 <p align="center">
   <img src="artwork/liquid-dock-screenshot.jpg" alt="LiquidDock detail"/>
