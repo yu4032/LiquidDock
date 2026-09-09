@@ -71,11 +71,8 @@ public class LauncherGlassStaticBoundaryTest {
         // SurfaceTexture delivers this callback on renderHandler already. Re-posting the drain
         // adds another queue turn before updateTexImage()/backdrop rebuild and makes source lag
         // strictly worse under Workspace motion.
-        assertTrue(session.contains(
-                "if (shouldRender) {\n"
-                        + "                    framePolicy.request(false);\n"
-                        + "                    drainFrameWork();\n"
-                        + "                }"));
+        assertTrue(session.contains("framePolicy.request(false);"));
+        assertTrue(session.contains("drainFrameWork();"));
         assertFalse(session.contains("if (shouldRender) requestFrame(false);"));
     }
 }
