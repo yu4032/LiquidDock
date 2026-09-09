@@ -37,7 +37,7 @@ public class LauncherGlassStaticBoundaryTest {
     }
 
     @Test
-    public void workspaceScrollLateLatchKeepsOneRootLayerAndDeclaredVendorHook() throws Exception {
+    public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
         String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
@@ -45,12 +45,34 @@ public class LauncherGlassStaticBoundaryTest {
         assertTrue(hook.contains("\"com.miui.home.launcher.ScreenView\""));
         assertTrue(hook.contains("getDeclaredMethod(\"scrollTo\", int.class, int.class)"));
         assertTrue(hook.contains("LauncherGlassStaticLayer.onWorkspaceScrollMutation"));
-        assertTrue(layer.contains("LauncherGlassScrollCompensationState"));
-        assertTrue(layer.contains("onSurfaceTextureUpdated"));
-        assertTrue(layer.contains("onStaticFrameAnchorQueued"));
+
+        // A root-wide TextureView transform moves the already sampled backdrop together with the
+        // glass geometry. That breaks behind-content correspondence for fixed/parallax wallpaper.
+        assertFalse(layer.contains("import android.graphics.Matrix"));
+        assertFalse(layer.contains("setTransform("));
+        assertTrue(layer.contains("session.onWorkspaceScrollMutation"));
+
+        // Geometry may be projected to the latest Workspace scroll, but the prepared backdrop
+        // remains in root coordinates and is not translated as a whole output surface.
+        assertTrue(session.contains("onWorkspaceScrollMutation"));
+        assertTrue(session.contains("workspaceScrollProjection"));
+        assertTrue(session.contains("projectCenterX"));
+        assertTrue(session.contains("requestStaticRedraw"));
         assertTrue(session.contains("StaticGeometryFrame"));
-        assertTrue(session.contains("queueStaticFrameAnchor"));
+
         assertFalse(hook.contains("WorkspaceScrollMotionTracker"));
         assertFalse(layer.contains("WorkspaceScrollMotionTracker"));
+    }
+
+    @Test
+    public void sourceFrameCallbackDrainsInlineOnRenderHandler() throws Exception {
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        // SurfaceTexture delivers this callback on renderHandler already. Re-posting the drain
+        // adds another queue turn before updateTexImage()/backdrop rebuild and makes source lag
+        // strictly worse under Workspace motion.
+        assertTrue(session.contains("framePolicy.request(false);"));
+        assertTrue(session.contains("drainFrameWork();"));
+        assertFalse(session.contains("if (shouldRender) requestFrame(false);"));
     }
 }

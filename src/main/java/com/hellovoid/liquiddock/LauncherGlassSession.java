@@ -162,6 +162,8 @@ final class LauncherGlassSession {
     private final FloatBuffer quadBuffer;
     private final LauncherGlassFramePolicy framePolicy = new LauncherGlassFramePolicy();
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    private final LauncherGlassScrollProjectionState workspaceScrollProjection =
+            new LauncherGlassScrollProjectionState();
     // Main-thread epoch invalidates finishBind callbacks queued before any endpoint rollover.
     private volatile long producerBindEpoch;
     private final float[] textureMatrix = new float[16];
@@ -362,7 +364,8 @@ final class LauncherGlassSession {
     void invalidateGeneration(long generation) {
         if (shuttingDown || generation < sceneGeneration) return;
         sceneGeneration = generation;
-        invalidateBackdropFrameState();
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.SCENE_FRESHNESS);
     }
 
     void requestFreshBackdrop(long generation) {
@@ -391,8 +394,10 @@ final class LauncherGlassSession {
             wallpaperRequestedSceneGeneration = sceneGeneration;
             wallpaperRequestedAuthoritative = authoritative;
         }
-        // Keep the existing StaticLayer pixels visible while invalidating only the cached source.
-        invalidateBackdropFrameState();
+        // Keep the prepared StaticLayer backdrop renderable while this source request
+        // becomes stale against sceneGeneration; a fresh OES frame still owns freshness.
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.SCENE_FRESHNESS);
         requestFrame(true);
         return true;
     }
@@ -404,10 +409,13 @@ final class LauncherGlassSession {
         }
     }
 
-    private void invalidateBackdropFrameState() {
+    private void invalidateBackdropFrameState(
+            LauncherGlassBackdropRetentionPolicy.Invalidation invalidation) {
         frameAvailable.set(false);
-        consumedGeneration = -1L;
-        backdropPrepared = false;
+        if (!LauncherGlassBackdropRetentionPolicy.preservesPreparedBackdrop(invalidation)) {
+            consumedGeneration = -1L;
+            backdropPrepared = false;
+        }
     }
 
     private void clearWallpaperRequest() {
@@ -507,6 +515,18 @@ final class LauncherGlassSession {
     void requestStaticRedraw() {
         if (shuttingDown) return;
         if (framePolicy.requestStatic()) postRender(this::drainFrameWork, null);
+    }
+
+    void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
+        if (shuttingDown || beforeScrollX == afterScrollX) return;
+        workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
+        // Geometry-only redraw: reuse the prepared root-space backdrop. A producer refresh
+        // here would merely chase Launcher wallpaper Binder latency and reintroduce phase lag.
+        requestStaticRedraw();
+    }
+
+    void resetWorkspaceScrollProjection() {
+        workspaceScrollProjection.reset();
     }
 
     void suspendWorkspaceProducer() {
@@ -725,7 +745,8 @@ final class LauncherGlassSession {
         if (!LauncherGlassProducerGeometryGate.matchesRoot(
                 rootWidth, rootHeight, geometry.surfaceWidth, geometry.surfaceHeight,
                 geometry.insetLeft, geometry.insetTop, geometry.insetRight, geometry.insetBottom)) {
-            invalidateBackdropFrameState();
+            invalidateBackdropFrameState(
+                    LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN);
             MainHook.log(TAG + " producer geometry not coherent with root root="
                     + rootWidth + "x" + rootHeight + " surface="
                     + geometry.surfaceWidth + "x" + geometry.surfaceHeight);
@@ -749,7 +770,8 @@ final class LauncherGlassSession {
         if (!changed) return false;
 
         if (rotationChanged) beginRotationSettle(nextRotation);
-        invalidateBackdropFrameState();
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN);
         long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
         if (nextGeneration > 0L) sceneGeneration = nextGeneration;
         boundBufferWidth = geometry.bufferWidth;
@@ -1033,7 +1055,7 @@ final class LauncherGlassSession {
         Surface producer = new Surface(input);
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
-        backdropPrepared = false;
+        // Source endpoint identity is independent from the already-prepared consumer backdrop.
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || rotationSettlePending || texture != inputSurfaceTexture) return;
             PassBlurSourceFrameGate gate = passBlurSourceFrameGate;
@@ -1041,7 +1063,12 @@ final class LauncherGlassSession {
                     System.nanoTime(), consumedGeneration, sceneGeneration);
             if (shouldRender || frameAvailable.get()) {
                 frameAvailable.set(true);
-                if (shouldRender) requestFrame(false);
+                if (shouldRender) {
+                    // SurfaceTexture invokes this listener on renderHandler already. Consume the
+                    // newest source now instead of adding another queue turn before updateTexImage.
+                    framePolicy.request(false);
+                    drainFrameWork();
+                }
                 return;
             }
             drainSourceFrameWithoutRender(texture);
@@ -1137,7 +1164,6 @@ final class LauncherGlassSession {
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
-        backdropPrepared = false;
         return postRender(() -> {
             boolean success = false;
             try {
@@ -1178,7 +1204,6 @@ final class LauncherGlassSession {
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
-        backdropPrepared = false;
         boolean queued = postRender(() -> {
             try {
                 if (shuttingDown) {
@@ -1228,7 +1253,8 @@ final class LauncherGlassSession {
         SurfaceTexture input = inputSurfaceTexture;
         inputSurfaceTexture = null;
 
-        invalidateBackdropFrameState();
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.SOURCE_ENDPOINT);
         clearWallpaperRequest();
 
         if (input != null) {
@@ -1284,32 +1310,22 @@ final class LauncherGlassSession {
         prismalRenderer.beginGlassFrame();
         List<StaticNodeState> snapshot;
         synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
-        Integer frameScrollX = null;
-        boolean frameAnchorConsistent = true;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
             LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
             if (node == null || geometry == null) continue;
-            if (frame.workspaceScrollValid) {
-                if (frameScrollX == null) frameScrollX = frame.workspaceScrollX;
-                else if (frameScrollX != frame.workspaceScrollX) frameAnchorConsistent = false;
-            }
+            float projectedCenterX = workspaceScrollProjection.projectCenterX(
+                    geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
             PrismalGeometry prismalGeometry = new PrismalGeometry(
-                    rootWidth, rootHeight, geometry.centerX, geometry.centerY,
+                    rootWidth, rootHeight, projectedCenterX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(prismalGeometry, params, highlights,
                     state.interaction, node.visibilityAlpha());
         }
-        if (frameScrollX != null && frameAnchorConsistent) queueStaticFrameAnchor(frameScrollX);
         presentFull(prismalRenderer.outputTexture(), output);
-    }
-
-    private void queueStaticFrameAnchor(int scrollX) {
-        View root = rootRef.get();
-        if (root != null) LauncherGlassStaticLayer.onStaticFrameAnchorQueued(root, scrollX);
     }
 
     private void renderDragOutputs(PrismalParams params) {
@@ -1448,7 +1464,8 @@ final class LauncherGlassSession {
         rawTexture = 0;
         rawWidth = 0;
         rawHeight = 0;
-        backdropPrepared = false;
+        invalidateBackdropFrameState(
+                LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_TARGET);
     }
 
     void shutdown() {
