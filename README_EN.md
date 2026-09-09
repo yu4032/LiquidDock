@@ -59,7 +59,6 @@ Current implementation properties:
 
 - Background frames stay on the GPU path and are not read back into CPU bitmaps.
 - PassBlur updates are source-driven rather than requested by a fixed polling loop.
-- Local sampling / render quality can be adjusted without changing the launcher-wide coordinate system.
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
@@ -162,4 +161,4 @@ This project is provided “AS IS” and is used at your own risk. Licensing and
 
 ## License
 
-LiquidDock is open-source software licensed under the [GNU General Public License v3.0](LICENSE). GPL-3.0 permits use, modification, and redistribution under its terms, including commercial use; this project does not add a conflicting non-commercial restriction.
+LiquidDock is open-source software licensed under the [GNU General Public License v3.0](LICENSE).
