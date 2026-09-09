@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply:
-    if: "${{ github.event.head_commit.message == 'chore: apply backdrop continuity patch' }}"
+    if: "${{ github.event.head_commit.message == 'chore: reapply backdrop continuity patch' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +44,14 @@ jobs:
           one('    private void invalidateBackdropFrameState() {\n        frameAvailable.set(false);\n        consumedGeneration = -1L;\n        backdropPrepared = false;\n    }\n',
               '    private void invalidateBackdropFrameState(\n            LauncherGlassBackdropRetentionPolicy.Invalidation invalidation) {\n        frameAvailable.set(false);\n        if (!LauncherGlassBackdropRetentionPolicy.preservesPreparedBackdrop(invalidation)) {\n            consumedGeneration = -1L;\n            backdropPrepared = false;\n        }\n    }\n',
               'typed backdrop invalidation')
+
+          one('            invalidateBackdropFrameState();\n            MainHook.log(TAG + " producer geometry not coherent with root root="',
+              '            invalidateBackdropFrameState(\n                    LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN);\n            MainHook.log(TAG + " producer geometry not coherent with root root="',
+              'incoherent producer geometry')
+
+          one('        if (rotationChanged) beginRotationSettle(nextRotation);\n        invalidateBackdropFrameState();\n        long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);\n',
+              '        if (rotationChanged) beginRotationSettle(nextRotation);\n        invalidateBackdropFrameState(\n                LauncherGlassBackdropRetentionPolicy.Invalidation.RENDER_DOMAIN);\n        long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);\n',
+              'render domain change')
 
           one('        inputSurfaceTexture = input;\n        inputProducerSurface = producer;\n        backdropPrepared = false;\n        input.setOnFrameAvailableListener',
               '        inputSurfaceTexture = input;\n        inputProducerSurface = producer;\n        // Source endpoint identity is independent from the already-prepared consumer backdrop.\n        input.setOnFrameAvailableListener',
