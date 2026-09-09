@@ -59,7 +59,6 @@ TextureView composition
 
 - 背景帧保持在 GPU 路径中，不回读为 CPU Bitmap。
 - PassBlur 更新由内容源驱动，不通过固定轮询持续请求帧。
-- 本地采样 / 渲染质量可以调整，而不改变 Launcher 全局坐标系。
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
@@ -162,4 +161,4 @@ LiquidDock 是非官方社区项目，与 Xiaomi、LSPosed 等相关厂商或项
 
 ## 开源许可
 
-LiquidDock 基于 [GNU General Public License v3.0](LICENSE) 开源。GPL-3.0 允许在许可证条款下使用、修改和再分发本项目，包括商业使用；本项目不额外设置与 GPL-3.0 冲突的“禁止商用”限制。
+LiquidDock 基于 [GNU General Public License v3.0](LICENSE) 开源。
