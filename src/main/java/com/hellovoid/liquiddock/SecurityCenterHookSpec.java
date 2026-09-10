@@ -25,7 +25,12 @@ final class SecurityCenterHookSpec {
     private final String boxViewGetter;
     private final String gameToolboxViewClass;
     private final String gameToolboxMaterialGetter;
+    private final String gameToolboxMaterialRestoreMethod;
     private final String gameToolboxCornerRadiusResource;
+    private final String videoToolboxAdapterClass;
+    private final String videoToolboxAdapterGetter;
+    private final String videoToolboxMaterialRestoreMethod;
+    private final String videoToolboxMaterialViewIdResource;
     private final String toggleAllAppsMethod;
     private final String removeTurboLayoutMethod;
     private final String removeTurboLayoutWithoutAnimationMethod;
@@ -53,7 +58,12 @@ final class SecurityCenterHookSpec {
             String boxViewGetter,
             String gameToolboxViewClass,
             String gameToolboxMaterialGetter,
+            String gameToolboxMaterialRestoreMethod,
             String gameToolboxCornerRadiusResource,
+            String videoToolboxAdapterClass,
+            String videoToolboxAdapterGetter,
+            String videoToolboxMaterialRestoreMethod,
+            String videoToolboxMaterialViewIdResource,
             String toggleAllAppsMethod,
             String removeTurboLayoutMethod,
             String removeTurboLayoutWithoutAnimationMethod,
@@ -80,7 +90,12 @@ final class SecurityCenterHookSpec {
         this.boxViewGetter = boxViewGetter;
         this.gameToolboxViewClass = gameToolboxViewClass;
         this.gameToolboxMaterialGetter = gameToolboxMaterialGetter;
+        this.gameToolboxMaterialRestoreMethod = gameToolboxMaterialRestoreMethod;
         this.gameToolboxCornerRadiusResource = gameToolboxCornerRadiusResource;
+        this.videoToolboxAdapterClass = videoToolboxAdapterClass;
+        this.videoToolboxAdapterGetter = videoToolboxAdapterGetter;
+        this.videoToolboxMaterialRestoreMethod = videoToolboxMaterialRestoreMethod;
+        this.videoToolboxMaterialViewIdResource = videoToolboxMaterialViewIdResource;
         this.toggleAllAppsMethod = toggleAllAppsMethod;
         this.removeTurboLayoutMethod = removeTurboLayoutMethod;
         this.removeTurboLayoutWithoutAnimationMethod = removeTurboLayoutWithoutAnimationMethod;
@@ -111,7 +126,12 @@ final class SecurityCenterHookSpec {
                 "getBoxView",
                 "com.miui.gamebooster.windowmanager.newbox.x1",
                 "getMainView",
+                "o",
                 "game_toolbox_background_radius",
+                "za.p",
+                "getVideoBoxViewAdapter",
+                "t",
+                "main_content",
                 "d0",
                 "d2",
                 "f2",
@@ -148,7 +168,12 @@ final class SecurityCenterHookSpec {
     String boxViewGetter() { return boxViewGetter; }
     String gameToolboxViewClass() { return gameToolboxViewClass; }
     String gameToolboxMaterialGetter() { return gameToolboxMaterialGetter; }
+    String gameToolboxMaterialRestoreMethod() { return gameToolboxMaterialRestoreMethod; }
     String gameToolboxCornerRadiusResource() { return gameToolboxCornerRadiusResource; }
+    String videoToolboxAdapterClass() { return videoToolboxAdapterClass; }
+    String videoToolboxAdapterGetter() { return videoToolboxAdapterGetter; }
+    String videoToolboxMaterialRestoreMethod() { return videoToolboxMaterialRestoreMethod; }
+    String videoToolboxMaterialViewIdResource() { return videoToolboxMaterialViewIdResource; }
     String toggleAllAppsMethod() { return toggleAllAppsMethod; }
     String removeTurboLayoutMethod() { return removeTurboLayoutMethod; }
     String removeTurboLayoutWithoutAnimationMethod() { return removeTurboLayoutWithoutAnimationMethod; }

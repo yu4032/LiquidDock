@@ -502,7 +502,10 @@ final class SecurityCenterGlassCoordinator
     private SecurityCenterGlassGeometry captureBoxGeometry() {
         View box = boxRef.get();
         if (box == null || !box.isAttachedToWindow() || box.getVisibility() != View.VISIBLE) return null;
-        int radiusRes = assistantType == ASSISTANT_GAME ? gameToolboxCornerRadiusResId : 0;
+        // Decompiled Game y1.o() and Video za.p.t() both use an exact 24dp outline resource.
+        int radiusRes = assistantType == ASSISTANT_GAME
+                ? gameToolboxCornerRadiusResId
+                : assistantType == ASSISTANT_VIDEO ? allAppsCornerRadiusResId : 0;
         return captureGeometry(box, null, radiusRes);
     }
 
