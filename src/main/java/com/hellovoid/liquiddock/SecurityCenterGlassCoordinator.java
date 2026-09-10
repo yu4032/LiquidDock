@@ -221,9 +221,12 @@ final class SecurityCenterGlassCoordinator
     public void onTerminalFailure(
             SecurityCenterGlassSession callbackSession, long generation, Throwable error) {
         View root = rootRef.get();
-        if (callbackSession != session || root == null || policy.currentSession() != callbackSession) {
-            return;
-        }
+        if (!policy.acceptsCallback(
+                root, callbackSession, generation, scene.generation(),
+                SecurityCenterGlassRuntimeState.isEnabled())) return;
+        if (callbackSession != session || callbackSession.isShutdown()
+                || root == null || !root.isAttachedToWindow()) return;
+
         SecurityCenterGlassSceneState.Decision decision = scene.onTerminalFailure();
         hideAndReleaseCustom();
         ReleaseDecision release = policy.releaseAll();
