@@ -5,22 +5,8 @@ final class SecurityCenterHookSpec {
     static final String BOOTSTRAP_SERVICE_CLASS =
             "com.miui.gamebooster.service.DockWindowManagerService";
 
-    private static final SecurityCenterHookSpec OS4_40011320 = new SecurityCenterHookSpec(
-            40011320L,
-            SecurityCenterVendorGeneration.OS4_SOFT_LIGHT_CAPABLE,
-            "com.miui.gamebooster.windowmanager.newbox.TurboLayout",
-            "com.miui.dock.sidebar.p",
-            "ja.a",
-            "M",
-            "f",
-            "getDockLayout",
-            "getAppsLayout",
-            "d0",
-            "U",
-            "f17941q",
-            "f17943s",
-            "gq.g",
-            "l");
+    private static final SecurityCenterHookSpec OS4_40011320 = os4SoftLightSpec(40011320L);
+    private static final SecurityCenterHookSpec OS4_40011355 = os4SoftLightSpec(40011355L);
 
     private final long versionCode;
     private final SecurityCenterVendorGeneration vendorGeneration;
@@ -70,8 +56,29 @@ final class SecurityCenterHookSpec {
         this.os4MaterialResetMethod = os4MaterialResetMethod;
     }
 
+    private static SecurityCenterHookSpec os4SoftLightSpec(long versionCode) {
+        return new SecurityCenterHookSpec(
+                versionCode,
+                SecurityCenterVendorGeneration.OS4_SOFT_LIGHT_CAPABLE,
+                "com.miui.gamebooster.windowmanager.newbox.TurboLayout",
+                "com.miui.dock.sidebar.p",
+                "ja.a",
+                "M",
+                "f",
+                "getDockLayout",
+                "getAppsLayout",
+                "d0",
+                "U",
+                "f17941q",
+                "f17943s",
+                "gq.g",
+                "l");
+    }
+
     static SecurityCenterHookSpec forVersionCode(long versionCode) {
-        return versionCode == 40011320L ? OS4_40011320 : null;
+        if (versionCode == 40011320L) return OS4_40011320;
+        if (versionCode == 40011355L) return OS4_40011355;
+        return null;
     }
 
     long versionCode() {
