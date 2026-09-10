@@ -6,8 +6,14 @@ final class SecurityCenterMaterialOwnershipState {
 
     private Owner owner = Owner.VENDOR;
 
+    /**
+     * Once custom material has been claimed, a newer transition generation must not reopen the
+     * vendor background while the previous rendered custom frame is still the authorized fallback.
+     */
     boolean canSuppressVendor(long renderedGeneration, long currentGeneration) {
-        return renderedGeneration >= 0L && renderedGeneration == currentGeneration;
+        return owner == Owner.CUSTOM
+                && renderedGeneration >= 0L
+                && currentGeneration >= renderedGeneration;
     }
 
     void onCustomClaimed() {
