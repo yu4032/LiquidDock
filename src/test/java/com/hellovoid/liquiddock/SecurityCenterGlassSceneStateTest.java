@@ -79,6 +79,37 @@ public class SecurityCenterGlassSceneStateTest {
     }
 
     @Test
+    public void settledGenerationCannotBeRetargetedByLateDuplicateObserver() {
+        SecurityCenterGlassSceneState state = readyDock();
+        long generation = state.generation();
+
+        SecurityCenterGlassSceneState.Decision late =
+                state.onGeometrySettled(SecurityCenterGlassSceneState.Target.ALL_APPS);
+
+        assertFalse(late.requestFresh);
+        assertEquals(generation, state.generation());
+        assertEquals(SecurityCenterGlassSceneState.Scene.DOCK, state.scene());
+    }
+
+    @Test
+    public void staleTransitionGenerationCannotSettleANewerTransition() {
+        SecurityCenterGlassSceneState state = readyDock();
+        SecurityCenterGlassSceneState.Decision first = state.onTransitionStarted();
+        long staleGeneration = first.generation;
+        state.onGeometrySettled(SecurityCenterGlassSceneState.Target.ALL_APPS, staleGeneration);
+        state.onFreshFrameRendered(staleGeneration);
+        assertEquals(SecurityCenterGlassSceneState.Scene.ALL_APPS, state.scene());
+
+        SecurityCenterGlassSceneState.Decision second = state.onTransitionStarted();
+        assertTrue(second.generation > staleGeneration);
+        SecurityCenterGlassSceneState.Decision stale =
+                state.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK, staleGeneration);
+
+        assertFalse(stale.requestFresh);
+        assertEquals(SecurityCenterGlassSceneState.Scene.TRANSITIONING, state.scene());
+    }
+
+    @Test
     public void disableFailureAndDetachFailClosedAndRejectStaleReveal() {
         SecurityCenterGlassSceneState disabledState = readyDock();
         long oldGeneration = disabledState.generation();
