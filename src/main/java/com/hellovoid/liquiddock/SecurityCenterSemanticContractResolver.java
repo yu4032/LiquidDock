@@ -45,10 +45,15 @@ final class SecurityCenterSemanticContractResolver {
                 "wrapper-to-Turbo relation");
 
         Field managerField = uniqueField(turboClass,
-                field -> managerTeardownMethods(field.getType(), wrapperClass).size() == 2,
+                field -> hasManagerTeardownAuthorities(field.getType(), wrapperClass),
                 "manager teardown authority");
         Class<?> managerClass = managerField.getType();
-        List<Method> teardowns = managerTeardownMethods(managerClass, wrapperClass);
+        Method removeAnimated = namedPrivateWrapperBoolean(
+                managerClass, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_METHOD,
+                wrapperClass, "animated manager teardown");
+        Method removeWithoutAnimation = namedPrivateWrapperBoolean(
+                managerClass, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_WITHOUT_ANIMATION_METHOD,
+                wrapperClass, "non-animated manager teardown");
 
         Method discriminator = resolveAssistantTypeDiscriminator(assistantTypeClass);
 
@@ -104,7 +109,7 @@ final class SecurityCenterSemanticContractResolver {
                 turboClass, wrapperClass, managerClass, assistantTypeClass,
                 gameBoxClass, gameMaterialClass, videoAdapterClass, allAppsClass,
                 configure, dockReady, toggle, finalBackground, wrapperTurboGetter,
-                teardowns.get(0), teardowns.get(1), dockGetter, appsGetter, boxGetter,
+                removeAnimated, removeWithoutAnimation, dockGetter, appsGetter, boxGetter,
                 gameGetter, gameMaterialGetter, gameRestore, videoGetter, videoRestore,
                 discriminator, allAppsPresent, transforming);
     }
@@ -158,16 +163,39 @@ final class SecurityCenterSemanticContractResolver {
         }
     }
 
-    private static List<Method> managerTeardownMethods(Class<?> type, Class<?> wrapperClass) {
-        return declaredMethods(type, method -> {
-            Class<?>[] p = method.getParameterTypes();
-            return !Modifier.isStatic(method.getModifiers())
-                    && Modifier.isPrivate(method.getModifiers())
-                    && method.getReturnType() == void.class
-                    && p.length == 2
-                    && p[0] == wrapperClass
-                    && p[1] == boolean.class;
-        });
+    private static boolean hasManagerTeardownAuthorities(
+            Class<?> type, Class<?> wrapperClass) {
+        return hasPrivateWrapperBoolean(
+                        type, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_METHOD, wrapperClass)
+                && hasPrivateWrapperBoolean(
+                        type, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_WITHOUT_ANIMATION_METHOD,
+                        wrapperClass);
+    }
+
+    private static boolean hasPrivateWrapperBoolean(
+            Class<?> type, String name, Class<?> wrapperClass) {
+        return declaredMethods(type, method ->
+                matchesPrivateWrapperBoolean(method, name, wrapperClass)).size() == 1;
+    }
+
+    private static Method namedPrivateWrapperBoolean(
+            Class<?> type, String name, Class<?> wrapperClass, String capability) {
+        List<Method> methods = declaredMethods(type, method ->
+                matchesPrivateWrapperBoolean(method, name, wrapperClass));
+        if (methods.size() != 1) throw reject(capability + " missing or ambiguous");
+        return accessible(methods.get(0));
+    }
+
+    private static boolean matchesPrivateWrapperBoolean(
+            Method method, String name, Class<?> wrapperClass) {
+        Class<?>[] p = method.getParameterTypes();
+        return method.getName().equals(name)
+                && !Modifier.isStatic(method.getModifiers())
+                && Modifier.isPrivate(method.getModifiers())
+                && method.getReturnType() == void.class
+                && p.length == 2
+                && p[0] == wrapperClass
+                && p[1] == boolean.class;
     }
 
     private static Method namedZeroArg(Class<?> type, String name, String capability) {

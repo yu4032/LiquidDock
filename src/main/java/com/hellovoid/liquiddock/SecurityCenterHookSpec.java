@@ -11,6 +11,8 @@ final class SecurityCenterHookSpec {
     static final String DOCK_READY_METHOD = "c0";
     static final String TOGGLE_ALL_APPS_METHOD = "d0";
     static final String FINAL_BACKGROUND_METHOD = "U";
+    static final String REMOVE_TURBO_LAYOUT_METHOD = "d2";
+    static final String REMOVE_TURBO_LAYOUT_WITHOUT_ANIMATION_METHOD = "f2";
     static final String SIDEBAR_TURBO_GETTER = "C";
     static final String DOCK_LAYOUT_GETTER = "getDockLayout";
     static final String APPS_LAYOUT_GETTER = "getAppsLayout";
