@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.content.res.Resources;
 import android.view.View;
 import android.view.ViewTreeObserver;
 
@@ -87,13 +88,12 @@ final class SecurityCenterGlassHook {
             return;
         }
 
-        // Pre-resolve the complete compatibility contract before installing any mutation hook.
+        // Pre-resolve the complete DEX compatibility contract before installing mutation hooks.
         Class<?> turboClass = Class.forName(spec.turboLayoutClass(), false, loader);
         Class<?> wrapperClass = Class.forName(spec.sidebarWrapperClass(), false, loader);
         Class<?> managerClass = Class.forName(spec.dockWindowManagerClass(), false, loader);
         Class<?> typeClass = Class.forName(spec.dockWindowTypeClass(), false, loader);
         Class<?> helperClass = Class.forName(spec.os4MaterialHelperClass(), false, loader);
-        Class<?> dimenClass = Class.forName(spec.resourceDimenClass(), false, loader);
         Method configure = HookUtil.findMethodExact(
                 turboClass, spec.configureDockMethod(),
                 new Class<?>[]{wrapperClass, boolean.class, String.class, int.class, typeClass,
@@ -117,8 +117,6 @@ final class SecurityCenterGlassHook {
                 helperClass, spec.os4MaterialResetMethod(), new Class<?>[]{View.class});
         Field transforming = HookUtil.findField(turboClass, spec.transformingField());
         Field allAppsPresent = HookUtil.findField(turboClass, spec.allAppsPresentField());
-        Field allAppsRadius = HookUtil.findField(dimenClass, spec.allAppsCornerRadiusResource());
-        allAppsRadius.setAccessible(true);
         if (type4.getReturnType() != boolean.class
                 || transforming.getType() != boolean.class
                 || allAppsPresent.getType() != boolean.class
@@ -128,14 +126,24 @@ final class SecurityCenterGlassHook {
                 || removeWithoutAnimation.getReturnType() != void.class
                 || finalBackground.getReturnType() != void.class
                 || !turboClass.isAssignableFrom(wrapperTurboGetter.getReturnType())
-                || allAppsRadius.getType() != int.class
-                || !Modifier.isStatic(allAppsRadius.getModifiers())
                 || !Modifier.isStatic(reset.getModifiers())) {
             throw new IllegalStateException("validated Security Center member shape changed");
         }
-        final int allAppsCornerRadiusResId = allAppsRadius.getInt(null);
-        if (allAppsCornerRadiusResId == 0) {
-            throw new IllegalStateException("Security Center dp_24 resource id unavailable");
+
+        // JADX's R.dimen symbol is source presentation only; R8 may remove the runtime R$dimen
+        // class. Resolve the exact vendor resource through the live Security Center resource table.
+        final Resources resources = service.getResources();
+        final String resourcePackage = service.getPackageName();
+        final String radiusEntry = spec.allAppsCornerRadiusResource();
+        final int allAppsCornerRadiusResId =
+                resources.getIdentifier(radiusEntry, "dimen", resourcePackage);
+        if (allAppsCornerRadiusResId == 0
+                || !resourcePackage.equals(resources.getResourcePackageName(allAppsCornerRadiusResId))
+                || !"dimen".equals(resources.getResourceTypeName(allAppsCornerRadiusResId))
+                || !radiusEntry.equals(resources.getResourceEntryName(allAppsCornerRadiusResId))) {
+            throw new IllegalStateException(
+                    "validated Security Center dimen resource unavailable: "
+                            + resourcePackage + ":dimen/" + radiusEntry);
         }
 
         SecurityCenterVendorMaterialBridge vendorBridge =
