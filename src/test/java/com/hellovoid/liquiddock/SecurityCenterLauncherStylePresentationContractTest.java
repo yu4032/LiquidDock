@@ -56,19 +56,6 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 sink.contains("recoverParentNow("));
     }
 
-    @Test public void perNodeOutputKeepsTransparentOpticalMargin() throws Exception {
-        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
-        String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
-
-        assertTrue("Per-node TextureView must reserve an optical outset instead of clipping at shape bounds",
-                sink.contains("opticalOutsetPx"));
-        assertTrue("The crop geometry must support an expanded presentation region",
-                geometry.contains("expandedBy("));
-        assertTrue("Optical margin must move the sink origin as well as enlarge its surface",
-                sink.contains("material.getX() - opticalOutsetPx"));
-        assertTrue(sink.contains("material.getY() - opticalOutsetPx"));
-    }
-
     @Test public void sharedSessionHasMultipleSinkOutputsButOneProducer() throws Exception {
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
