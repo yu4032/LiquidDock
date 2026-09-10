@@ -47,28 +47,6 @@ jobs:
           fi
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
-      - name: Prepare ephemeral release signing
-        if: github.head_ref == 'feature/security-center-liquid-glass' || github.ref == 'refs/heads/feature/security-center-liquid-glass'
-        shell: bash
-        run: |
-          keytool -genkeypair -noprompt \
-            -keystore liquiddock-ci-release.keystore \
-            -storepass liquid-dock-ci \
-            -keypass liquid-dock-ci \
-            -alias liquiddock \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 1 \
-            -dname 'CN=LiquidDock CI,O=LiquidDock,C=US'
-          cat > keystore.properties <<'EOF'
-          storeFile=liquiddock-ci-release.keystore
-          storePassword=liquid-dock-ci
-          keyAlias=liquiddock
-          keyPassword=liquid-dock-ci
-          EOF
-      - name: Security Center release verification
-        if: github.head_ref == 'feature/security-center-liquid-glass' || github.ref == 'refs/heads/feature/security-center-liquid-glass'
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug
