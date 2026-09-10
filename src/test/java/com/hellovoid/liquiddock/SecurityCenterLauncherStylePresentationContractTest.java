@@ -14,23 +14,16 @@ public class SecurityCenterLauncherStylePresentationContractTest {
 
     @Test public void customOwnershipClearsTurboLayoutMaterialToo() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
-
-        assertTrue("TurboLayout must be treated as a material View",
-                bridge.contains("View turboView = (View) turboLayout"));
-        assertTrue("TurboLayout MIUI material must be reset before custom reveal",
-                bridge.contains("resetVendorMaterial(turboView)"));
-        assertTrue("TurboLayout pass-window blur must be cleared",
-                bridge.contains("MiBlurBridge.clearPassWindowBlur(turboView)"));
-        assertTrue("TurboLayout drawable/background owner must be cleared",
-                bridge.contains("turboView.setBackground(null)"));
+        assertTrue(bridge.contains("View turboView = (View) turboLayout"));
+        assertTrue(bridge.contains("resetVendorMaterial(turboView)"));
+        assertTrue(bridge.contains("MiBlurBridge.clearPassWindowBlur(turboView)"));
+        assertTrue(bridge.contains("turboView.setBackground(null)"));
     }
 
     @Test public void securityCenterUsesPeerBoundSinkThatMirrorsVendorTransforms() throws Exception {
         Path sinkPath = MAIN.resolve("SecurityCenterGlassSinkView.java");
-        assertTrue("Security Center must use a peer-bound sink like Launcher",
-                Files.exists(sinkPath));
+        assertTrue(Files.exists(sinkPath));
         String sink = Files.readString(sinkPath);
-
         assertTrue(sink.contains("syncFromMaterial()"));
         assertTrue(sink.contains("material.getX()"));
         assertTrue(sink.contains("material.getY()"));
@@ -41,29 +34,35 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue(sink.contains("material.getRotation()"));
         assertTrue(sink.contains("material.getAlpha()"));
         assertTrue(sink.contains("material.getVisibility()"));
-        assertFalse("Animated screen bounds must not drive TextureView layout size",
-                sink.contains("getGlobalVisibleRect"));
+        assertFalse(sink.contains("getGlobalVisibleRect"));
     }
 
     @Test public void dynamicAllAppsMaterialCanRecoverAfterRuntimeAttach() throws Exception {
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        assertTrue(sink.contains("materialAttachListener"));
+        assertTrue(sink.contains("scheduleParentRecovery("));
+        assertTrue(sink.contains("recoverParentNow("));
+    }
 
-        assertTrue("Runtime-created All Apps nodes need an attach lifecycle observer",
-                sink.contains("materialAttachListener"));
-        assertTrue("A detached/reparented material must schedule parent recovery",
-                sink.contains("scheduleParentRecovery("));
-        assertTrue("Recovered sinks must be inserted beside the live material parent",
-                sink.contains("recoverParentNow("));
+    @Test public void perNodeOutputPreservesPrismalOuterEdgePixels() throws Exception {
+        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
+        assertTrue("Prismal edge shell reaches about 2.2 logical pixels outside the SDF",
+                sink.contains("OPTICAL_OUTSET_PX = 3f"));
+        assertTrue("Shape and presentation crop must be separable",
+                geometry.contains("expandedBy("));
+        assertTrue("Output surface must include both sides of the optical margin",
+                sink.contains("+ Math.round(OPTICAL_OUTSET_PX * 2f)"));
+        assertTrue("Crop must expand while preserving the original Prismal shape geometry",
+                sink.contains(".expandedBy(OPTICAL_OUTSET_PX * visualScale)"));
     }
 
     @Test public void sharedSessionHasMultipleSinkOutputsButOneProducer() throws Exception {
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
-
         assertTrue(session.contains("Map<SecurityCenterGlassSinkView, OutputState>"));
         assertFalse(session.contains("private OutputState output;"));
         assertTrue(session.contains("new RootPassBlurBackend("));
-        assertFalse("Coordinator must not retain the union output implementation",
-                coordinator.contains("SecurityCenterGlassOutputView output"));
+        assertFalse(coordinator.contains("SecurityCenterGlassOutputView output"));
     }
 }
