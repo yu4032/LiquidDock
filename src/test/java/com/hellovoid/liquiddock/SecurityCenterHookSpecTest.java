@@ -27,19 +27,24 @@ public class SecurityCenterHookSpecTest {
                 spec.vendorGeneration());
         assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout", spec.turboLayoutClass());
         assertEquals("com.miui.dock.sidebar.p", spec.sidebarWrapperClass());
+        assertEquals("ob.e0", spec.dockWindowManagerClass());
         assertEquals("ja.a", spec.dockWindowTypeClass());
         assertEquals("V", spec.configureDockMethod());
         assertEquals("c0", spec.dockReadyMethod());
         assertEquals("f", spec.type4PredicateMethod());
+        assertEquals("C", spec.sidebarTurboGetter());
         assertEquals("getDockLayout", spec.dockLayoutGetter());
         assertEquals("getAppsLayout", spec.appsLayoutGetter());
         assertEquals("d0", spec.toggleAllAppsMethod());
+        assertEquals("d2", spec.removeTurboLayoutMethod());
+        assertEquals("f2", spec.removeTurboLayoutWithoutAnimationMethod());
         assertEquals("U", spec.finalBackgroundMethod());
-        // hyperos-analysis/JADX shows these display names are collision renames from raw DEX q/s.
         assertEquals("q", spec.allAppsPresentField());
         assertEquals("s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
+        assertEquals("com.miui.securitycenter.R$dimen", spec.resourceDimenClass());
+        assertEquals("dp_24", spec.allAppsCornerRadiusResource());
     }
 
     @Test public void currentDeviceBuild40011355UsesSameValidatedMemberContract() {
@@ -51,18 +56,24 @@ public class SecurityCenterHookSpecTest {
                 spec.vendorGeneration());
         assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout", spec.turboLayoutClass());
         assertEquals("com.miui.dock.sidebar.p", spec.sidebarWrapperClass());
+        assertEquals("ob.e0", spec.dockWindowManagerClass());
         assertEquals("ja.a", spec.dockWindowTypeClass());
         assertEquals("V", spec.configureDockMethod());
         assertEquals("c0", spec.dockReadyMethod());
         assertEquals("f", spec.type4PredicateMethod());
+        assertEquals("C", spec.sidebarTurboGetter());
         assertEquals("getDockLayout", spec.dockLayoutGetter());
         assertEquals("getAppsLayout", spec.appsLayoutGetter());
         assertEquals("d0", spec.toggleAllAppsMethod());
+        assertEquals("d2", spec.removeTurboLayoutMethod());
+        assertEquals("f2", spec.removeTurboLayoutWithoutAnimationMethod());
         assertEquals("U", spec.finalBackgroundMethod());
         assertEquals("q", spec.allAppsPresentField());
         assertEquals("s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
+        assertEquals("com.miui.securitycenter.R$dimen", spec.resourceDimenClass());
+        assertEquals("dp_24", spec.allAppsCornerRadiusResource());
     }
 
     @Test public void toggleAuthorityUsesVendorTransformationStateInsteadOfTime() {
