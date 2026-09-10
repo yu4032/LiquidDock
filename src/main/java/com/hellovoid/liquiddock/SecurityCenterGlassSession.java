@@ -15,6 +15,10 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /** One root-wide Security Center consumer of the generic PassBlur/OES backend. */
 final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
@@ -35,10 +39,15 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private static final class FrameRequest {
         final long generation;
         final SecurityCenterGlassFrameGeometry frameGeometry;
+        final SecurityCenterGlassSinkView[] sinks;
 
-        FrameRequest(long generation, SecurityCenterGlassFrameGeometry frameGeometry) {
+        FrameRequest(
+                long generation,
+                SecurityCenterGlassFrameGeometry frameGeometry,
+                SecurityCenterGlassSinkView[] sinks) {
             this.generation = generation;
             this.frameGeometry = frameGeometry;
+            this.sinks = sinks;
         }
     }
 
@@ -66,10 +75,11 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile FrameRequest frameRequest;
 
-    // Backend render-thread only.
+    // Backend render-thread only, except identity checks guarded by synchronizedMap on callback.
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
-    private OutputState output;
+    private final Map<SecurityCenterGlassSinkView, OutputState> outputs =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     SecurityCenterGlassSession(
             View root, LiquidDockConfig.Glass glassConfig, Listener listener) {
@@ -114,18 +124,27 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         return shuttingDown;
     }
 
-    void requestFresh(long generation, SecurityCenterGlassFrameGeometry frameGeometry) {
-        if (shuttingDown || generation < 0L || frameGeometry == null) return;
+    void requestFresh(
+            long generation,
+            SecurityCenterGlassFrameGeometry frameGeometry,
+            SecurityCenterGlassSinkView[] sinks) {
+        if (shuttingDown || generation < 0L || frameGeometry == null || sinks == null
+                || sinks.length != frameGeometry.nodeCount() || sinks.length == 0) return;
         View root = rootRef.get();
         SecurityCenterGlassGeometry presentation = frameGeometry.presentationGeometry();
         if (root == null || presentation.rootWidth != root.getWidth()
                 || presentation.rootHeight != root.getHeight()) return;
-        frameRequest = new FrameRequest(generation, frameGeometry);
+        SecurityCenterGlassSinkView[] snapshot = sinks.clone();
+        for (SecurityCenterGlassSinkView sink : snapshot) {
+            if (sink == null || sink.isDisposed()) return;
+        }
+        frameRequest = new FrameRequest(generation, frameGeometry, snapshot);
         sourceBackend.requestFresh(generation);
     }
 
-    void attachOutput(Surface surface, int width, int height) {
-        if (surface == null) return;
+    void attachOutput(
+            SecurityCenterGlassSinkView sink, Surface surface, int width, int height) {
+        if (sink == null || surface == null) return;
         if (shuttingDown || !sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) {
                 surface.release();
@@ -133,20 +152,12 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             }
             try {
                 ensureGl();
-                releaseOutput(output);
+                OutputState previous = outputs.remove(sink);
+                releaseOutput(previous);
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
-                output = next;
-                FrameRequest request = frameRequest;
-                if (request != null) {
-                    mainHandler.post(() -> {
-                        FrameRequest current = frameRequest;
-                        if (!shuttingDown && current != null
-                                && current.generation == request.generation) {
-                            sourceBackend.requestFresh(current.generation);
-                        }
-                    });
-                }
+                outputs.put(sink, next);
+                requestLatestFrameAfterOutputMutation();
             } catch (Throwable error) {
                 surface.release();
                 throw error;
@@ -156,32 +167,23 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    void resizeOutput(int width, int height) {
-        if (shuttingDown) return;
+    void resizeOutput(SecurityCenterGlassSinkView sink, int width, int height) {
+        if (sink == null || shuttingDown) return;
         sourceBackend.postToRenderThread(() -> {
-            OutputState current = output;
+            OutputState current = outputs.get(sink);
             if (current == null) return;
             current.width = Math.max(1, width);
             current.height = Math.max(1, height);
-            FrameRequest request = frameRequest;
-            if (request != null) {
-                mainHandler.post(() -> {
-                    FrameRequest latest = frameRequest;
-                    if (!shuttingDown && latest != null
-                            && latest.generation == request.generation) {
-                        sourceBackend.requestFresh(latest.generation);
-                    }
-                });
-            }
+            requestLatestFrameAfterOutputMutation();
         });
     }
 
-    void detachOutput(Surface surface) {
+    void detachOutput(SecurityCenterGlassSinkView sink, Surface surface) {
         if (surface == null) return;
-        if (shuttingDown || !sourceBackend.postToRenderThread(() -> {
-            OutputState current = output;
+        if (sink == null || shuttingDown || !sourceBackend.postToRenderThread(() -> {
+            OutputState current = outputs.get(sink);
             if (current != null && current.surface == surface) {
-                output = null;
+                outputs.remove(sink);
                 releaseOutput(current);
             } else {
                 surface.release();
@@ -191,12 +193,23 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
+    private void requestLatestFrameAfterOutputMutation() {
+        FrameRequest request = frameRequest;
+        if (request == null) return;
+        mainHandler.post(() -> {
+            FrameRequest latest = frameRequest;
+            if (!shuttingDown && latest != null
+                    && latest.generation == request.generation) {
+                sourceBackend.requestFresh(latest.generation);
+            }
+        });
+    }
+
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null) return;
         FrameRequest request = frameRequest;
         View root = rootRef.get();
-        OutputState currentOutput = output;
         SecurityCenterGlassGeometry presentation = request != null
                 ? request.frameGeometry.presentationGeometry() : null;
         if (request == null || request.generation != frame.generation
@@ -204,9 +217,17 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 || root == null || !root.isAttachedToWindow()
                 || presentation.rootWidth != frame.logicalWidth
                 || presentation.rootHeight != frame.logicalHeight
-                || currentOutput == null
-                || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE) {
+                || request.sinks.length != request.frameGeometry.nodeCount()) {
             return;
+        }
+
+        OutputState[] requiredOutputs = new OutputState[request.sinks.length];
+        for (int i = 0; i < request.sinks.length; i++) {
+            SecurityCenterGlassSinkView sink = request.sinks[i];
+            OutputState current = outputs.get(sink);
+            if (sink == null || sink.isDisposed() || current == null
+                    || current.eglSurface == EGL14.EGL_NO_SURFACE) return;
+            requiredOutputs[i] = current;
         }
 
         try {
@@ -219,40 +240,37 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalWidth,
                     frame.logicalHeight,
                     prismalParams);
-            prismalRenderer.beginGlassFrame();
+
             for (int i = 0; i < request.frameGeometry.nodeCount(); i++) {
+                SecurityCenterGlassGeometry geometry = request.frameGeometry.nodeAt(i);
+                sourceBackend.makePbufferCurrent();
+                prismalRenderer.beginGlassFrame();
                 prismalRenderer.drawGlass(
-                        request.frameGeometry.nodeAt(i).toPrismalGeometry(),
+                        geometry.toPrismalGeometry(),
                         prismalParams,
                         highlightProfile);
+                presentTarget(prismalRenderer.outputTexture(), geometry, requiredOutputs[i]);
             }
-            presentTarget(prismalRenderer.outputTexture(), presentation, currentOutput);
             sourceBackend.makePbufferCurrent();
 
-            float[] crop = presentation.toCropUvRect();
             log("render generation=" + frame.generation
                     + " nodes=" + request.frameGeometry.nodeCount()
                     + " root=" + frame.logicalWidth + "x" + frame.logicalHeight
-                    + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight
-                    + " presentation=[" + presentation.left + "," + presentation.top
-                    + " " + presentation.width + "x" + presentation.height + "]"
-                    + " output=" + currentOutput.width + "x" + currentOutput.height
-                    + " cropUv=[" + crop[0] + "," + crop[1] + ","
-                    + crop[2] + "," + crop[3] + "]");
+                    + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight);
 
             long renderedGeneration = frame.generation;
             sourceBackend.postToRenderThread(() -> {
                 FrameRequest latest = frameRequest;
-                if (shuttingDown || latest == null
+                if (shuttingDown || latest != request
                         || latest.generation != renderedGeneration
-                        || output != currentOutput
+                        || !outputsStillCurrent(request, requiredOutputs)
                         || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
                 mainHandler.post(() -> {
                     FrameRequest mainLatest = frameRequest;
                     if (shuttingDown || rootRef.get() != root || !root.isAttachedToWindow()
-                            || mainLatest == null
+                            || mainLatest != request
                             || mainLatest.generation != renderedGeneration
-                            || output != currentOutput
+                            || !outputsStillCurrent(request, requiredOutputs)
                             || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
                     Listener currentListener = listener;
                     if (currentListener != null) {
@@ -265,6 +283,14 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             log("Prismal render failed generation=" + frame.generation + ": " + error);
             throw error;
         }
+    }
+
+    private boolean outputsStillCurrent(FrameRequest request, OutputState[] expected) {
+        if (request == null || expected == null || request.sinks.length != expected.length) return false;
+        for (int i = 0; i < request.sinks.length; i++) {
+            if (outputs.get(request.sinks[i]) != expected[i]) return false;
+        }
+        return true;
     }
 
     @Override
@@ -342,8 +368,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void releaseGl() {
-        releaseOutput(output);
-        output = null;
+        synchronized (outputs) {
+            for (OutputState current : new ArrayList<>(outputs.values())) releaseOutput(current);
+            outputs.clear();
+        }
         if (prismalRenderer != null) {
             try { prismalRenderer.close(); } catch (Throwable ignored) {}
             prismalRenderer = null;
