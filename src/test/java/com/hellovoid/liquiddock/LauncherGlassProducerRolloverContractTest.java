@@ -1,31 +1,32 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Regression contracts for Launcher shared producer endpoint rollover. */
+/** Regression contracts for shared producer endpoint rollover after the root-backend extraction. */
 public class LauncherGlassProducerRolloverContractTest {
-    @Test public void everyEndpointRolloverUsesOneSharedBindEpoch() throws Exception {
-        Field epoch = LauncherGlassSession.class.getDeclaredField("producerBindEpoch");
-        assertNotNull(epoch);
+    @Test
+    public void endpointRolloverUsesSharedProductionRecoveryState() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestFresh(40L));
+        assertTrue(state.onFreshFrame(40L));
 
-        try {
-            LauncherGlassSession.class.getDeclaredField("workstationBindEpoch");
-            fail("Workstation-only bind epoch leaves generic rollover callbacks stale");
-        } catch (NoSuchFieldException expected) {
-            // The epoch must represent producer endpoint identity, not one lifecycle caller.
-        }
-    }
+        ZeroCopyProducerRecoveryState.Decision first = state.requestRebind();
+        assertTrue(first.accepted);
+        assertTrue(first.recreateProducer);
+        assertFalse(state.hasFreshFrame(40L));
 
-    @Test public void genericRolloverReportsTerminalSuccessOrFailure() throws Exception {
-        Method method = LauncherGlassSession.class.getDeclaredMethod(
-                "rebindProducer", LauncherGlassSessionRegistry.RolloverCompletion.class);
-        assertEquals(boolean.class, method.getReturnType());
+        ZeroCopyProducerRecoveryState.Decision duplicate = state.requestRebind();
+        assertFalse(duplicate.accepted);
+
+        ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
+        assertTrue(recreated.accepted);
+        assertTrue(recreated.requestBind);
+        state.onBindSucceeded();
+
+        assertFalse(state.isRebindPending());
+        assertFalse(state.hasFreshFrame(40L));
     }
 }
