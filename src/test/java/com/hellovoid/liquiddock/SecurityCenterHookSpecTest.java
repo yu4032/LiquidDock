@@ -34,8 +34,9 @@ public class SecurityCenterHookSpecTest {
         assertEquals("getAppsLayout", spec.appsLayoutGetter());
         assertEquals("d0", spec.toggleAllAppsMethod());
         assertEquals("U", spec.finalBackgroundMethod());
-        assertEquals("f17941q", spec.allAppsPresentField());
-        assertEquals("f17943s", spec.transformingField());
+        // hyperos-analysis/JADX shows these display names are collision renames from raw DEX q/s.
+        assertEquals("q", spec.allAppsPresentField());
+        assertEquals("s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
     }
@@ -56,8 +57,8 @@ public class SecurityCenterHookSpecTest {
         assertEquals("getAppsLayout", spec.appsLayoutGetter());
         assertEquals("d0", spec.toggleAllAppsMethod());
         assertEquals("U", spec.finalBackgroundMethod());
-        assertEquals("f17941q", spec.allAppsPresentField());
-        assertEquals("f17943s", spec.transformingField());
+        assertEquals("q", spec.allAppsPresentField());
+        assertEquals("s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
     }
