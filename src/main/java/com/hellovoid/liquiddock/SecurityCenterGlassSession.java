@@ -7,7 +7,6 @@ import android.os.Handler;
 import android.view.Surface;
 import android.view.View;
 
-import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
@@ -35,11 +34,11 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     private static final class FrameRequest {
         final long generation;
-        final SecurityCenterGlassGeometry geometry;
+        final SecurityCenterGlassFrameGeometry frameGeometry;
 
-        FrameRequest(long generation, SecurityCenterGlassGeometry geometry) {
+        FrameRequest(long generation, SecurityCenterGlassFrameGeometry frameGeometry) {
             this.generation = generation;
-            this.geometry = geometry;
+            this.frameGeometry = frameGeometry;
         }
     }
 
@@ -115,12 +114,13 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         return shuttingDown;
     }
 
-    void requestFresh(long generation, SecurityCenterGlassGeometry geometry) {
-        if (shuttingDown || generation < 0L || geometry == null) return;
+    void requestFresh(long generation, SecurityCenterGlassFrameGeometry frameGeometry) {
+        if (shuttingDown || generation < 0L || frameGeometry == null) return;
         View root = rootRef.get();
-        if (root == null || geometry.rootWidth != root.getWidth()
-                || geometry.rootHeight != root.getHeight()) return;
-        frameRequest = new FrameRequest(generation, geometry);
+        SecurityCenterGlassGeometry presentation = frameGeometry.presentationGeometry();
+        if (root == null || presentation.rootWidth != root.getWidth()
+                || presentation.rootHeight != root.getHeight()) return;
+        frameRequest = new FrameRequest(generation, frameGeometry);
         sourceBackend.requestFresh(generation);
     }
 
@@ -140,8 +140,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 FrameRequest request = frameRequest;
                 if (request != null) {
                     mainHandler.post(() -> {
-                        if (!shuttingDown && frameRequest == request) {
-                            sourceBackend.requestFresh(request.generation);
+                        FrameRequest current = frameRequest;
+                        if (!shuttingDown && current != null
+                                && current.generation == request.generation) {
+                            sourceBackend.requestFresh(current.generation);
                         }
                     });
                 }
@@ -164,8 +166,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             FrameRequest request = frameRequest;
             if (request != null) {
                 mainHandler.post(() -> {
-                    if (!shuttingDown && frameRequest == request) {
-                        sourceBackend.requestFresh(request.generation);
+                    FrameRequest latest = frameRequest;
+                    if (!shuttingDown && latest != null
+                            && latest.generation == request.generation) {
+                        sourceBackend.requestFresh(latest.generation);
                     }
                 });
             }
@@ -193,10 +197,13 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         FrameRequest request = frameRequest;
         View root = rootRef.get();
         OutputState currentOutput = output;
+        SecurityCenterGlassGeometry presentation = request != null
+                ? request.frameGeometry.presentationGeometry() : null;
         if (request == null || request.generation != frame.generation
+                || presentation == null
                 || root == null || !root.isAttachedToWindow()
-                || request.geometry.rootWidth != frame.logicalWidth
-                || request.geometry.rootHeight != frame.logicalHeight
+                || presentation.rootWidth != frame.logicalWidth
+                || presentation.rootHeight != frame.logicalHeight
                 || currentOutput == null
                 || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE) {
             return;
@@ -213,28 +220,39 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             prismalRenderer.beginGlassFrame();
-            PrismalGeometry geometry = request.geometry.toPrismalGeometry();
-            prismalRenderer.drawGlass(geometry, prismalParams, highlightProfile);
-            presentTarget(prismalRenderer.outputTexture(), request.geometry, currentOutput);
+            for (int i = 0; i < request.frameGeometry.nodeCount(); i++) {
+                prismalRenderer.drawGlass(
+                        request.frameGeometry.nodeAt(i).toPrismalGeometry(),
+                        prismalParams,
+                        highlightProfile);
+            }
+            presentTarget(prismalRenderer.outputTexture(), presentation, currentOutput);
             sourceBackend.makePbufferCurrent();
 
-            float[] crop = request.geometry.toCropUvRect();
+            float[] crop = presentation.toCropUvRect();
             log("render generation=" + frame.generation
+                    + " nodes=" + request.frameGeometry.nodeCount()
                     + " root=" + frame.logicalWidth + "x" + frame.logicalHeight
                     + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight
-                    + " target=[" + request.geometry.left + "," + request.geometry.top
-                    + " " + request.geometry.width + "x" + request.geometry.height + "]"
+                    + " presentation=[" + presentation.left + "," + presentation.top
+                    + " " + presentation.width + "x" + presentation.height + "]"
                     + " output=" + currentOutput.width + "x" + currentOutput.height
                     + " cropUv=[" + crop[0] + "," + crop[1] + ","
                     + crop[2] + "," + crop[3] + "]");
 
             long renderedGeneration = frame.generation;
             sourceBackend.postToRenderThread(() -> {
-                if (shuttingDown || frameRequest != request || output != currentOutput
+                FrameRequest latest = frameRequest;
+                if (shuttingDown || latest == null
+                        || latest.generation != renderedGeneration
+                        || output != currentOutput
                         || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
                 mainHandler.post(() -> {
+                    FrameRequest mainLatest = frameRequest;
                     if (shuttingDown || rootRef.get() != root || !root.isAttachedToWindow()
-                            || frameRequest != request || output != currentOutput
+                            || mainLatest == null
+                            || mainLatest.generation != renderedGeneration
+                            || output != currentOutput
                             || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
                     Listener currentListener = listener;
                     if (currentListener != null) {
