@@ -28,7 +28,8 @@ public class SecurityCenterHookSpecTest {
         assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout", spec.turboLayoutClass());
         assertEquals("com.miui.dock.sidebar.p", spec.sidebarWrapperClass());
         assertEquals("ja.a", spec.dockWindowTypeClass());
-        assertEquals("M", spec.prepareDockMethod());
+        assertEquals("V", spec.configureDockMethod());
+        assertEquals("c0", spec.dockReadyMethod());
         assertEquals("f", spec.type4PredicateMethod());
         assertEquals("getDockLayout", spec.dockLayoutGetter());
         assertEquals("getAppsLayout", spec.appsLayoutGetter());
@@ -51,7 +52,8 @@ public class SecurityCenterHookSpecTest {
         assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout", spec.turboLayoutClass());
         assertEquals("com.miui.dock.sidebar.p", spec.sidebarWrapperClass());
         assertEquals("ja.a", spec.dockWindowTypeClass());
-        assertEquals("M", spec.prepareDockMethod());
+        assertEquals("V", spec.configureDockMethod());
+        assertEquals("c0", spec.dockReadyMethod());
         assertEquals("f", spec.type4PredicateMethod());
         assertEquals("getDockLayout", spec.dockLayoutGetter());
         assertEquals("getAppsLayout", spec.appsLayoutGetter());
