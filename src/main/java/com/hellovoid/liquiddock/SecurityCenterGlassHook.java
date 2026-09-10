@@ -5,7 +5,7 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
-import android.view.ViewTreeObserver;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
 import java.lang.reflect.Field;
@@ -22,7 +22,6 @@ final class SecurityCenterGlassHook {
     private static final int ASSISTANT_GAME = 1;
     private static final int ASSISTANT_VIDEO = 3;
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
-    private static final WeakHashMap<View, SettleObserver> SETTLE_OBSERVERS = new WeakHashMap<>();
     private static final WeakHashMap<View, Integer> CONFIGURED_ASSISTANTS = new WeakHashMap<>();
     private static final SecurityCenterOneShotTipPolicy UNSUPPORTED_TIP =
             new SecurityCenterOneShotTipPolicy();
@@ -36,11 +35,16 @@ final class SecurityCenterGlassHook {
     private static SecurityCenterSemanticContractResolver.ResolvedContract installedContract;
     private static SecurityCenterGlassCoordinator coordinator;
 
-    /** Pure vendor-authority policy: transformation state, never elapsed time, owns completion. */
-    static final class ToggleAuthority {
-        private ToggleAuthority() {}
-        static boolean shouldStartTransition(boolean transforming) { return !transforming; }
-        static boolean shouldKeepWaiting(boolean transforming) { return transforming; }
+    private static final class AllAppsMotionContract {
+        final Method attach;
+        final Method show;
+        final Method hide;
+
+        AllAppsMotionContract(Method attach, Method show, Method hide) {
+            this.attach = attach;
+            this.show = show;
+            this.hide = hide;
+        }
     }
 
     private SecurityCenterGlassHook() {}
@@ -109,7 +113,6 @@ final class SecurityCenterGlassHook {
         SecurityCenterSemanticContractResolver.ResolvedContract contract =
                 SecurityCenterSemanticContractResolver.resolve(turboClass, View.class, capabilities);
 
-        // Validate hidden View material mutation APIs as part of the atomic preflight.
         SecurityCenterVendorMaterialBridge vendorBridge =
                 new SecurityCenterVendorMaterialBridge(contract, videoMainContentResId);
         SecurityCenterGlassCoordinator nextCoordinator =
@@ -196,47 +199,45 @@ final class SecurityCenterGlassHook {
                 return result;
             });
 
-            HookUtil.hook(contract.toggleAllApps(), chain -> {
-                Object turboObject = chain.getThisObject();
-                if (!ACTIVATION.allowsMutation() || !(turboObject instanceof View)) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                View turbo = (View) turboObject;
-                final boolean transformingNow;
-                try {
-                    transformingNow = contract.transforming().getBoolean(turbo);
-                } catch (Throwable error) {
-                    log("toggle authority read failed", error);
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                if (!ToggleAuthority.shouldStartTransition(transformingNow)) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-
+            AllAppsMotionContract motion = resolveAllAppsMotionContract(contract.turboClass());
+            HookUtil.hook(motion.attach, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (!ACTIVATION.allowsMutation()) return result;
+                Object appsObject = chain.getArgs().size() > 1 ? chain.getArgs().get(1) : null;
+                if (!(appsObject instanceof View)) return result;
+                View apps = (View) appsObject;
+                View turbo = resolveTurboParent(apps, contract);
                 SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                final long transitionGeneration = live != null
-                        ? live.onAllAppsToggleStarted(turbo) : -1L;
-                final Object result;
-                try {
-                    result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                } catch (Throwable error) {
-                    if (live != null) live.releaseAll();
-                    throw error;
-                }
-                if (live != null) {
-                    try {
-                        Object apps = invoke(contract.appsGetter(), turbo);
-                        if (apps instanceof View) live.updateAllAppsLayout(turbo, (View) apps);
-                    } catch (Throwable error) {
-                        live.releaseAll();
-                        log("all-apps late-bind observation failed", error);
-                        return result;
+                if (live != null && turbo != null) live.onAllAppsPrepared(turbo, apps);
+                return result;
+            });
+            HookUtil.hook(motion.show, chain -> {
+                if (ACTIVATION.allowsMutation()) {
+                    Object appsObject = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
+                    if (appsObject instanceof View) {
+                        View apps = (View) appsObject;
+                        View turbo = resolveTurboParent(apps, contract);
+                        SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+                        if (live != null && turbo != null) {
+                            live.onAllAppsMotionStarted(turbo, apps, true);
+                        }
                     }
                 }
-                if (transitionGeneration >= 0L) {
-                    installSettleObserver(turbo, contract, transitionGeneration);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            HookUtil.hook(motion.hide, chain -> {
+                if (ACTIVATION.allowsMutation()) {
+                    Object appsObject = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
+                    if (appsObject instanceof View) {
+                        View apps = (View) appsObject;
+                        View turbo = resolveTurboParent(apps, contract);
+                        SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+                        if (live != null && turbo != null) {
+                            live.onAllAppsMotionStarted(turbo, apps, false);
+                        }
+                    }
                 }
-                return result;
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
             HookUtil.hook(contract.removeAnimated(), chain -> {
@@ -320,87 +321,49 @@ final class SecurityCenterGlassHook {
         }
     }
 
-    private static void installSettleObserver(
-            View turbo,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract,
-            long transitionGeneration) {
-        if (turbo == null || transitionGeneration < 0L) return;
-        ViewTreeObserver observer = turbo.getViewTreeObserver();
-        if (observer == null || !observer.isAlive()) {
-            log("toggle settle observer unavailable generation=" + transitionGeneration, null);
-            return;
+    private static AllAppsMotionContract resolveAllAppsMotionContract(Class<?> turboClass) {
+        if (turboClass == null) {
+            throw new IllegalStateException("Security Center All Apps motion contract missing TurboLayout");
         }
-        synchronized (LOCK) {
-            SettleObserver old = SETTLE_OBSERVERS.remove(turbo);
-            if (old != null) old.remove();
-            SettleObserver created = new SettleObserver(
-                    turbo, contract, observer, transitionGeneration);
-            SETTLE_OBSERVERS.put(turbo, created);
-            observer.addOnPreDrawListener(created);
+        AllAppsMotionContract resolved = null;
+        for (Field field : turboClass.getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
+            Class<?> candidate = field.getType();
+            Method attach = findDeclared(candidate, "i", void.class,
+                    ViewGroup.class, View.class, ViewGroup.LayoutParams.class);
+            Method show = findDeclared(candidate, "u", void.class, View.class);
+            Method hide = findDeclared(candidate, "t", void.class,
+                    View.class, float.class, float.class, Runnable.class);
+            if (attach == null || show == null || hide == null) continue;
+            if (resolved != null) {
+                throw new IllegalStateException(
+                        "Security Center All Apps motion helper is ambiguous");
+            }
+            resolved = new AllAppsMotionContract(attach, show, hide);
+        }
+        if (resolved == null) {
+            throw new IllegalStateException("Security Center All Apps motion helper unavailable");
+        }
+        return resolved;
+    }
+
+    private static Method findDeclared(
+            Class<?> owner, String name, Class<?> returnType, Class<?>... parameters) {
+        try {
+            Method method = owner.getDeclaredMethod(name, parameters);
+            if (method.getReturnType() != returnType) return null;
+            method.setAccessible(true);
+            return method;
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
-    private static final class SettleObserver implements ViewTreeObserver.OnPreDrawListener {
-        private final View turbo;
-        private final SecurityCenterSemanticContractResolver.ResolvedContract contract;
-        private final ViewTreeObserver observer;
-        private final long transitionGeneration;
-        private boolean removed;
-
-        SettleObserver(
-                View turbo,
-                SecurityCenterSemanticContractResolver.ResolvedContract contract,
-                ViewTreeObserver observer,
-                long transitionGeneration) {
-            this.turbo = turbo;
-            this.contract = contract;
-            this.observer = observer;
-            this.transitionGeneration = transitionGeneration;
-        }
-
-        @Override
-        public boolean onPreDraw() {
-            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-            if (!ACTIVATION.allowsMutation()
-                    || live == null || !SecurityCenterGlassRuntimeState.isEnabled()) {
-                remove();
-                return true;
-            }
-            final boolean transforming;
-            try {
-                transforming = contract.transforming().getBoolean(turbo);
-            } catch (Throwable error) {
-                remove();
-                live.releaseAll();
-                log("toggle settle authority read failed", error);
-                return true;
-            }
-            if (ToggleAuthority.shouldKeepWaiting(transforming)) {
-                live.refreshTransitionFrame(turbo);
-                return true;
-            }
-
-            remove();
-            try {
-                boolean allAppsPresent = contract.allAppsPresent().getBoolean(turbo);
-                live.onAllAppsToggleSettled(turbo, allAppsPresent, transitionGeneration);
-            } catch (Throwable error) {
-                live.releaseAll();
-                log("toggle settle state read failed", error);
-            }
-            return true;
-        }
-
-        void remove() {
-            if (removed) return;
-            removed = true;
-            synchronized (LOCK) {
-                if (SETTLE_OBSERVERS.get(turbo) == this) SETTLE_OBSERVERS.remove(turbo);
-            }
-            try {
-                if (observer.isAlive()) observer.removeOnPreDrawListener(this);
-            } catch (Throwable ignored) {}
-        }
+    private static View resolveTurboParent(
+            View apps, SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        if (apps == null || contract == null) return null;
+        Object parent = apps.getParent();
+        return contract.turboClass().isInstance(parent) ? (View) parent : null;
     }
 
     private static Object invoke(Method method, Object target, Object... args) {
