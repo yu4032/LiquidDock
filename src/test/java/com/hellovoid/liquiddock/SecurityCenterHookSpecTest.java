@@ -2,102 +2,47 @@ package com.hellovoid.liquiddock;
 
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class SecurityCenterHookSpecTest {
-    @Test public void resolvesOnlySupportedVersionCode() {
-        assertNull(SecurityCenterHookSpec.forVersionCode(40011319L));
-        assertNull(SecurityCenterHookSpec.forVersionCode(40011321L));
-        assertNull(SecurityCenterHookSpec.forVersionCode(40011354L));
-        assertNull(SecurityCenterHookSpec.forVersionCode(40011356L));
-        assertNull(SecurityCenterHookSpec.forVersionCode(0L));
-    }
-
-    @Test public void supportedVersionExposesExactCompatibilityContract() {
-        SecurityCenterHookSpec spec = SecurityCenterHookSpec.forVersionCode(40011320L);
-
+    @Test public void exposesOnlyStableEntryAndMemberAnchors() {
         assertEquals("com.miui.gamebooster.service.DockWindowManagerService",
                 SecurityCenterHookSpec.BOOTSTRAP_SERVICE_CLASS);
-        assertEquals(40011320L, spec.versionCode());
-        assertEquals(SecurityCenterVendorGeneration.OS4_SOFT_LIGHT_CAPABLE,
-                spec.vendorGeneration());
-        assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout", spec.turboLayoutClass());
-        assertEquals("com.miui.dock.sidebar.p", spec.sidebarWrapperClass());
-        assertEquals("ob.e0", spec.dockWindowManagerClass());
-        assertEquals("ja.a", spec.dockWindowTypeClass());
-        assertEquals("V", spec.configureDockMethod());
-        assertEquals("c0", spec.dockReadyMethod());
-        assertEquals("g", spec.gameToolboxPredicateMethod());
-        assertEquals("k", spec.videoToolboxPredicateMethod());
-        assertEquals("f", spec.globalDockPredicateMethod());
-        assertEquals("f", spec.type4PredicateMethod());
-        assertEquals("C", spec.sidebarTurboGetter());
-        assertEquals("getDockLayout", spec.dockLayoutGetter());
-        assertEquals("getAppsLayout", spec.appsLayoutGetter());
-        assertEquals("getBoxView", spec.boxViewGetter());
-        assertEquals("com.miui.gamebooster.windowmanager.newbox.x1", spec.gameToolboxViewClass());
-        assertEquals("getMainView", spec.gameToolboxMaterialGetter());
-        assertEquals("o", spec.gameToolboxMaterialRestoreMethod());
-        assertEquals("game_toolbox_background_radius", spec.gameToolboxCornerRadiusResource());
-        assertEquals("za.p", spec.videoToolboxAdapterClass());
-        assertEquals("getVideoBoxViewAdapter", spec.videoToolboxAdapterGetter());
-        assertEquals("t", spec.videoToolboxMaterialRestoreMethod());
-        assertEquals("main_content", spec.videoToolboxMaterialViewIdResource());
-        assertEquals("d0", spec.toggleAllAppsMethod());
-        assertEquals("d2", spec.removeTurboLayoutMethod());
-        assertEquals("f2", spec.removeTurboLayoutWithoutAnimationMethod());
-        assertEquals("U", spec.finalBackgroundMethod());
-        assertEquals("q", spec.allAppsPresentField());
-        assertEquals("s", spec.transformingField());
-        assertEquals("gq.g", spec.os4MaterialHelperClass());
-        assertEquals("l", spec.os4MaterialResetMethod());
-        assertEquals("dp_24", spec.allAppsCornerRadiusResource());
+        assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout",
+                SecurityCenterHookSpec.TURBO_LAYOUT_CLASS);
+        assertEquals("V", SecurityCenterHookSpec.CONFIGURE_DOCK_METHOD);
+        assertEquals("c0", SecurityCenterHookSpec.DOCK_READY_METHOD);
+        assertEquals("d0", SecurityCenterHookSpec.TOGGLE_ALL_APPS_METHOD);
+        assertEquals("U", SecurityCenterHookSpec.FINAL_BACKGROUND_METHOD);
+        assertEquals("C", SecurityCenterHookSpec.SIDEBAR_TURBO_GETTER);
+        assertEquals("getDockLayout", SecurityCenterHookSpec.DOCK_LAYOUT_GETTER);
+        assertEquals("getAppsLayout", SecurityCenterHookSpec.APPS_LAYOUT_GETTER);
+        assertEquals("getBoxView", SecurityCenterHookSpec.BOX_VIEW_GETTER);
+        assertEquals("getGameTurboLayout", SecurityCenterHookSpec.GAME_BOX_GETTER);
+        assertEquals("getMainView", SecurityCenterHookSpec.GAME_MATERIAL_GETTER);
+        assertEquals("getVideoBoxViewAdapter", SecurityCenterHookSpec.VIDEO_ADAPTER_GETTER);
+        assertEquals("game_toolbox_background_radius", SecurityCenterHookSpec.GAME_RADIUS_RESOURCE);
+        assertEquals("main_content", SecurityCenterHookSpec.VIDEO_CONTENT_RESOURCE);
+        assertEquals("dp_24", SecurityCenterHookSpec.ALL_APPS_RADIUS_RESOURCE);
     }
 
-    @Test public void currentDeviceBuild40011355UsesSameValidatedMemberContract() {
-        SecurityCenterHookSpec spec = SecurityCenterHookSpec.forVersionCode(40011355L);
-
-        assertNotNull(spec);
-        assertEquals(40011355L, spec.versionCode());
-        assertEquals(SecurityCenterVendorGeneration.OS4_SOFT_LIGHT_CAPABLE,
-                spec.vendorGeneration());
-        assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout", spec.turboLayoutClass());
-        assertEquals("com.miui.dock.sidebar.p", spec.sidebarWrapperClass());
-        assertEquals("ob.e0", spec.dockWindowManagerClass());
-        assertEquals("ja.a", spec.dockWindowTypeClass());
-        assertEquals("V", spec.configureDockMethod());
-        assertEquals("c0", spec.dockReadyMethod());
-        assertEquals("g", spec.gameToolboxPredicateMethod());
-        assertEquals("k", spec.videoToolboxPredicateMethod());
-        assertEquals("f", spec.globalDockPredicateMethod());
-        assertEquals("f", spec.type4PredicateMethod());
-        assertEquals("C", spec.sidebarTurboGetter());
-        assertEquals("getDockLayout", spec.dockLayoutGetter());
-        assertEquals("getAppsLayout", spec.appsLayoutGetter());
-        assertEquals("getBoxView", spec.boxViewGetter());
-        assertEquals("com.miui.gamebooster.windowmanager.newbox.x1", spec.gameToolboxViewClass());
-        assertEquals("getMainView", spec.gameToolboxMaterialGetter());
-        assertEquals("o", spec.gameToolboxMaterialRestoreMethod());
-        assertEquals("game_toolbox_background_radius", spec.gameToolboxCornerRadiusResource());
-        assertEquals("za.p", spec.videoToolboxAdapterClass());
-        assertEquals("getVideoBoxViewAdapter", spec.videoToolboxAdapterGetter());
-        assertEquals("t", spec.videoToolboxMaterialRestoreMethod());
-        assertEquals("main_content", spec.videoToolboxMaterialViewIdResource());
-        assertEquals("d0", spec.toggleAllAppsMethod());
-        assertEquals("d2", spec.removeTurboLayoutMethod());
-        assertEquals("f2", spec.removeTurboLayoutWithoutAnimationMethod());
-        assertEquals("U", spec.finalBackgroundMethod());
-        assertEquals("q", spec.allAppsPresentField());
-        assertEquals("s", spec.transformingField());
-        assertEquals("gq.g", spec.os4MaterialHelperClass());
-        assertEquals("l", spec.os4MaterialResetMethod());
-        assertEquals("dp_24", spec.allAppsCornerRadiusResource());
+    @Test public void specContainsNoVersionGateOrRenamedCarrierClassTable() {
+        for (Method method : SecurityCenterHookSpec.class.getDeclaredMethods()) {
+            assertFalse("compatibility must not expose a version-code selector",
+                    method.getName().toLowerCase().contains("versioncode"));
+        }
+        for (Field field : SecurityCenterHookSpec.class.getDeclaredFields()) {
+            String name = field.getName().toLowerCase();
+            assertFalse("renamed manager class must be resolved semantically", name.contains("managerclass"));
+            assertFalse("renamed wrapper class must be resolved semantically", name.contains("wrapperclass"));
+            assertFalse("renamed assistant type class must be resolved semantically", name.contains("typeclass"));
+            assertFalse("renamed material helper class must not be loaded", name.contains("helperclass"));
+        }
     }
 
     @Test public void resourceTableSymbolIsNotRuntimeDexClassContract() {
@@ -110,7 +55,6 @@ public class SecurityCenterHookSpecTest {
     @Test public void toggleAuthorityUsesVendorTransformationStateInsteadOfTime() {
         assertFalse(SecurityCenterGlassHook.ToggleAuthority.shouldStartTransition(true));
         assertTrue(SecurityCenterGlassHook.ToggleAuthority.shouldStartTransition(false));
-
         assertTrue(SecurityCenterGlassHook.ToggleAuthority.shouldKeepWaiting(true));
         assertFalse(SecurityCenterGlassHook.ToggleAuthority.shouldKeepWaiting(false));
     }
