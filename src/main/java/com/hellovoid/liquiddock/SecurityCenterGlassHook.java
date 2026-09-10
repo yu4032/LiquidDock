@@ -222,7 +222,8 @@ final class SecurityCenterGlassHook {
                 }
 
                 SecurityCenterGlassCoordinator live = currentCoordinator(spec);
-                if (live != null) live.onAllAppsToggleStarted(turbo);
+                final long transitionGeneration = live != null
+                        ? live.onAllAppsToggleStarted(turbo) : -1L;
                 final Object result;
                 try {
                     result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -242,7 +243,9 @@ final class SecurityCenterGlassHook {
                         return result;
                     }
                 }
-                installSettleObserver(turbo, spec);
+                if (transitionGeneration >= 0L) {
+                    installSettleObserver(turbo, spec, transitionGeneration);
+                }
                 return result;
             });
 
@@ -266,17 +269,19 @@ final class SecurityCenterGlassHook {
         }
     }
 
-    private static void installSettleObserver(View turbo, SecurityCenterHookSpec spec) {
-        if (turbo == null) return;
+    private static void installSettleObserver(
+            View turbo, SecurityCenterHookSpec spec, long transitionGeneration) {
+        if (turbo == null || transitionGeneration < 0L) return;
         ViewTreeObserver observer = turbo.getViewTreeObserver();
         if (observer == null || !observer.isAlive()) {
-            log("toggle settle observer unavailable", null);
+            log("toggle settle observer unavailable generation=" + transitionGeneration, null);
             return;
         }
         synchronized (LOCK) {
             SettleObserver old = SETTLE_OBSERVERS.remove(turbo);
             if (old != null) old.remove();
-            SettleObserver created = new SettleObserver(turbo, spec, observer);
+            SettleObserver created =
+                    new SettleObserver(turbo, spec, observer, transitionGeneration);
             SETTLE_OBSERVERS.put(turbo, created);
             observer.addOnPreDrawListener(created);
         }
@@ -286,12 +291,18 @@ final class SecurityCenterGlassHook {
         private final View turbo;
         private final SecurityCenterHookSpec spec;
         private final ViewTreeObserver observer;
+        private final long transitionGeneration;
         private boolean removed;
 
-        SettleObserver(View turbo, SecurityCenterHookSpec spec, ViewTreeObserver observer) {
+        SettleObserver(
+                View turbo,
+                SecurityCenterHookSpec spec,
+                ViewTreeObserver observer,
+                long transitionGeneration) {
             this.turbo = turbo;
             this.spec = spec;
             this.observer = observer;
+            this.transitionGeneration = transitionGeneration;
         }
 
         @Override
@@ -315,7 +326,7 @@ final class SecurityCenterGlassHook {
             remove();
             try {
                 boolean allAppsPresent = HookUtil.getBooleanField(turbo, spec.allAppsPresentField());
-                live.onAllAppsToggleSettled(turbo, allAppsPresent);
+                live.onAllAppsToggleSettled(turbo, allAppsPresent, transitionGeneration);
             } catch (Throwable error) {
                 live.releaseAll();
                 log("toggle settle state read failed", error);
