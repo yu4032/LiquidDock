@@ -4,6 +4,8 @@ import org.junit.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -52,10 +54,17 @@ public class SecurityCenterHookSpecTest {
         }
     }
 
-    @Test public void toggleAuthorityUsesVendorTransformationStateInsteadOfTime() {
-        assertFalse(SecurityCenterGlassHook.ToggleAuthority.shouldStartTransition(true));
-        assertTrue(SecurityCenterGlassHook.ToggleAuthority.shouldStartTransition(false));
-        assertTrue(SecurityCenterGlassHook.ToggleAuthority.shouldKeepWaiting(true));
-        assertFalse(SecurityCenterGlassHook.ToggleAuthority.shouldKeepWaiting(false));
+    @Test public void allAppsTimingUsesRealVendorMotionEntrypointsInsteadOfTurboDelayGate()
+            throws Exception {
+        String hook = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/SecurityCenterGlassHook.java"));
+        assertTrue(hook.contains("resolveAllAppsMotionContract"));
+        assertTrue(hook.contains("findDeclared(candidate, \"i\""));
+        assertTrue(hook.contains("findDeclared(candidate, \"u\""));
+        assertTrue(hook.contains("findDeclared(candidate, \"t\""));
+        assertFalse("TurboLayout's delayed transforming flag is not animation completion authority",
+                hook.contains("ToggleAuthority"));
+        assertFalse("Do not recover the old transforming-field settle loop",
+                hook.contains("contract.transforming()"));
     }
 }
