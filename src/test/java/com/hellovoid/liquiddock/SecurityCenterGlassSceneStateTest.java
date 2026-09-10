@@ -6,7 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Typed scene-generation contract for Security Center Global Dock / All Apps ownership. */
+/** Typed scene-generation contract for Security Center assistant glass ownership. */
 public class SecurityCenterGlassSceneStateTest {
     @Test
     public void initialDockRevealsOnlyAfterCurrentGenerationRender() {
@@ -40,13 +40,15 @@ public class SecurityCenterGlassSceneStateTest {
     }
 
     @Test
-    public void dockAllAppsDockChangesGenerationWithoutSessionRecreation() {
+    public void dockAllAppsDockKeepsCustomOwnershipThroughTransitions() {
         SecurityCenterGlassSceneState state = readyDock();
 
         SecurityCenterGlassSceneState.Decision started = state.onTransitionStarted();
         assertTrue(started.invalidateGeneration);
-        assertTrue(started.hideCustom);
-        assertTrue(started.releaseCustomOwnership);
+        assertFalse("transition must not hide an already-authorized custom glass frame",
+                started.hideCustom);
+        assertFalse("transition must not return material ownership to the vendor",
+                started.releaseCustomOwnership);
         assertFalse(started.ensureSession);
         assertFalse(started.shutdownSession);
         assertEquals(2L, started.generation);
@@ -67,7 +69,8 @@ public class SecurityCenterGlassSceneStateTest {
 
         SecurityCenterGlassSceneState.Decision back = state.onTransitionStarted();
         assertEquals(3L, back.generation);
-        assertFalse(back.ensureSession);
+        assertFalse(back.hideCustom);
+        assertFalse(back.releaseCustomOwnership);
         SecurityCenterGlassSceneState.Decision dockGeometry =
                 state.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK);
         assertTrue(dockGeometry.requestFresh);
