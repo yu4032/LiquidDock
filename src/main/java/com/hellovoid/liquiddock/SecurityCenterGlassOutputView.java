@@ -13,6 +13,9 @@ final class SecurityCenterGlassOutputView extends TextureView
     private final SecurityCenterGlassSession session;
     private Surface outputSurface;
     private boolean disposed;
+    private float desiredParentX;
+    private float desiredParentY;
+    private boolean hasPlacement;
 
     private SecurityCenterGlassOutputView(Context context, SecurityCenterGlassSession session) {
         super(context);
@@ -35,10 +38,38 @@ final class SecurityCenterGlassOutputView extends TextureView
         if (turboIndex < 0) return null;
         SecurityCenterGlassOutputView output =
                 new SecurityCenterGlassOutputView(turboLayout.getContext(), session);
-        parent.addView(output, turboIndex, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+        // Geometry is applied from the authoritative root/target screen coordinates immediately
+        // after attachment. Start minimal instead of creating a root-sized visible surface.
+        parent.addView(output, turboIndex, new ViewGroup.LayoutParams(1, 1));
         return output;
+    }
+
+    void updatePlacement(View root, SecurityCenterGlassGeometry geometry) {
+        if (disposed || session.isShutdown() || root == null || geometry == null
+                || !(getParent() instanceof ViewGroup)) return;
+        ViewGroup parent = (ViewGroup) getParent();
+        int[] rootLocation = new int[2];
+        int[] parentLocation = new int[2];
+        root.getLocationOnScreen(rootLocation);
+        parent.getLocationOnScreen(parentLocation);
+        float[] placement = geometry.toParentPlacement(
+                rootLocation[0], rootLocation[1], parentLocation[0], parentLocation[1]);
+        if (placement == null) return;
+
+        int width = Math.max(1, Math.round(placement[2]));
+        int height = Math.max(1, Math.round(placement[3]));
+        ViewGroup.LayoutParams params = getLayoutParams();
+        if (params == null) params = new ViewGroup.LayoutParams(width, height);
+        boolean sizeChanged = params.width != width || params.height != height;
+        params.width = width;
+        params.height = height;
+        if (sizeChanged) setLayoutParams(params);
+
+        desiredParentX = placement[0];
+        desiredParentY = placement[1];
+        hasPlacement = true;
+        applyPlacementTranslation();
+        if (sizeChanged) requestLayout();
     }
 
     void setAuthorizedVisible(boolean visible) {
@@ -60,6 +91,21 @@ final class SecurityCenterGlassOutputView extends TextureView
         if (getParent() instanceof ViewGroup) {
             ((ViewGroup) getParent()).removeView(this);
         }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        applyPlacementTranslation();
+    }
+
+    private void applyPlacementTranslation() {
+        if (!hasPlacement) return;
+        // setTranslation rather than margins keeps the mapping independent of the concrete parent
+        // LayoutParams class. Subtract the laid-out origin so the final visual position is exactly
+        // the target's parent-local screen position even when the parent has padding.
+        setTranslationX(desiredParentX - getLeft());
+        setTranslationY(desiredParentY - getTop());
     }
 
     @Override
