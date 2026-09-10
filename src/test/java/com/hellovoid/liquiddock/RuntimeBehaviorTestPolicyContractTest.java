@@ -47,6 +47,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherWidgetBackgroundControllerContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",
             "R8ReleaseKeepContractTest.java",
+            "RootPassBlurBackendBoundaryTest.java",
             "SystemUiHomeTransitionWiringContractTest.java",
             "UserFacingPreferenceSchemaTest.java",
             "WidgetRemoteViewsRootBackgroundContractTest.java",
