@@ -37,14 +37,17 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     };
 
     private static final class FrameRequest {
+        final long serial;
         final long generation;
         final SecurityCenterGlassFrameGeometry frameGeometry;
         final SecurityCenterGlassSinkView[] sinks;
 
         FrameRequest(
+                long serial,
                 long generation,
                 SecurityCenterGlassFrameGeometry frameGeometry,
                 SecurityCenterGlassSinkView[] sinks) {
+            this.serial = serial;
             this.generation = generation;
             this.frameGeometry = frameGeometry;
             this.sinks = sinks;
@@ -74,6 +77,11 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile boolean shuttingDown;
     private volatile FrameRequest frameRequest;
+    private volatile FrameRequest inFlight;
+    private volatile OutputState[] inFlightOutputs;
+    private long nextFrameSerial;
+    private final SecurityCenterPresentationBarrier presentationBarrier =
+            new SecurityCenterPresentationBarrier();
 
     // Backend render-thread only, except identity checks guarded by synchronizedMap on callback.
     private PrismalRenderer prismalRenderer;
@@ -138,7 +146,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         for (SecurityCenterGlassSinkView sink : snapshot) {
             if (sink == null || sink.isDisposed()) return;
         }
-        frameRequest = new FrameRequest(generation, frameGeometry, snapshot);
+        frameRequest = new FrameRequest(++nextFrameSerial, generation, frameGeometry, snapshot);
         sourceBackend.requestFresh(generation);
     }
 
@@ -183,6 +191,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         if (sink == null || shuttingDown || !sourceBackend.postToRenderThread(() -> {
             OutputState current = outputs.get(sink);
             if (current != null && current.surface == surface) {
+                cancelInFlightIfUses(sink);
                 outputs.remove(sink);
                 releaseOutput(current);
             } else {
@@ -207,7 +216,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || backend != sourceBackend || frame == null) return;
+        if (shuttingDown || backend != sourceBackend || frame == null || inFlight != null) return;
         FrameRequest request = frameRequest;
         View root = rootRef.get();
         SecurityCenterGlassGeometry presentation = request != null
@@ -230,6 +239,9 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             requiredOutputs[i] = current;
         }
 
+        inFlight = request;
+        inFlightOutputs = requiredOutputs;
+        presentationBarrier.begin(request.serial, request.sinks);
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
@@ -249,6 +261,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                         geometry.toPrismalGeometry(),
                         prismalParams,
                         highlightProfile);
+                request.sinks[i].armPresentation(request.serial, request.generation);
                 presentTarget(prismalRenderer.outputTexture(), geometry, requiredOutputs[i]);
             }
             sourceBackend.makePbufferCurrent();
@@ -258,31 +271,69 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                     + " root=" + frame.logicalWidth + "x" + frame.logicalHeight
                     + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight);
 
-            long renderedGeneration = frame.generation;
-            sourceBackend.postToRenderThread(() -> {
-                FrameRequest latest = frameRequest;
-                if (shuttingDown || latest != request
-                        || latest.generation != renderedGeneration
-                        || !outputsStillCurrent(request, requiredOutputs)
-                        || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
-                mainHandler.post(() -> {
-                    FrameRequest mainLatest = frameRequest;
-                    if (shuttingDown || rootRef.get() != root || !root.isAttachedToWindow()
-                            || mainLatest != request
-                            || mainLatest.generation != renderedGeneration
-                            || !outputsStillCurrent(request, requiredOutputs)
-                            || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
-                    Listener currentListener = listener;
-                    if (currentListener != null) {
-                        currentListener.onFrameRendered(
-                                SecurityCenterGlassSession.this, renderedGeneration);
-                    }
-                });
-            });
+            log("submitted serial=" + request.serial
+                    + " generation=" + frame.generation
+                    + " awaiting TextureView presentation ack");
         } catch (Throwable error) {
+            for (SecurityCenterGlassSinkView sink : request.sinks) {
+                if (sink != null) sink.clearPresentationArm(request.serial);
+            }
+            presentationBarrier.cancel(request.serial);
+            if (inFlight == request) {
+                inFlight = null;
+                inFlightOutputs = null;
+            }
             log("Prismal render failed generation=" + frame.generation + ": " + error);
             throw error;
         }
+    }
+
+    void onOutputPresented(
+            SecurityCenterGlassSinkView sink, long serial, long generation) {
+        if (shuttingDown || sink == null || serial < 0L || generation < 0L) return;
+        FrameRequest active = inFlight;
+        if (active == null || active.serial != serial || active.generation != generation
+                || !presentationBarrier.isCurrent(serial)) return;
+        if (!presentationBarrier.acknowledge(serial, sink)) return;
+
+        presentationBarrier.cancel(serial);
+        if (inFlight != active) return;
+        OutputState[] expectedOutputs = inFlightOutputs;
+        inFlight = null;
+        inFlightOutputs = null;
+        FrameRequest latest = frameRequest;
+        boolean current = latest == active
+                && outputsStillCurrent(active, expectedOutputs)
+                && sourceBackend.hasFreshFrame(generation);
+        if (current) {
+            Listener currentListener = listener;
+            if (currentListener != null) {
+                currentListener.onFrameRendered(this, generation);
+            }
+            log("presented serial=" + serial + " generation=" + generation);
+        }
+        if (!shuttingDown && latest != null && latest != active) {
+            sourceBackend.requestFresh(latest.generation);
+        }
+    }
+
+    private void cancelInFlightIfUses(SecurityCenterGlassSinkView sink) {
+        FrameRequest active = inFlight;
+        if (active == null || sink == null) return;
+        boolean uses = false;
+        for (SecurityCenterGlassSinkView candidate : active.sinks) {
+            if (candidate == sink) { uses = true; break; }
+        }
+        if (!uses) return;
+        for (SecurityCenterGlassSinkView candidate : active.sinks) {
+            if (candidate != null) candidate.clearPresentationArm(active.serial);
+        }
+        presentationBarrier.cancel(active.serial);
+        if (inFlight == active) {
+            inFlight = null;
+            inFlightOutputs = null;
+        }
+        requestLatestFrameAfterOutputMutation();
     }
 
     private boolean outputsStillCurrent(FrameRequest request, OutputState[] expected) {
@@ -306,6 +357,15 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        FrameRequest active = inFlight;
+        inFlight = null;
+        inFlightOutputs = null;
+        if (active != null) {
+            for (SecurityCenterGlassSinkView sink : active.sinks) {
+                if (sink != null) sink.clearPresentationArm(active.serial);
+            }
+        }
+        presentationBarrier.reset();
         frameRequest = null;
         log("session shutdown");
         boolean queued = sourceBackend.postToRenderThread(() -> {
