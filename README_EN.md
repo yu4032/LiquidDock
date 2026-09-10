@@ -57,8 +57,8 @@ TextureView composition
 
 Current implementation properties:
 
-- Background frames stay on the GPU path and are not read back into CPU bitmaps.
-- PassBlur updates are source-driven rather than requested by a fixed polling loop.
+- Background frames stay on the GPU path.
+- PassBlur updates are source-driven.
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
