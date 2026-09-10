@@ -1,7 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Point;
-import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
@@ -12,14 +10,10 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.view.Display;
 import android.view.Surface;
-import android.view.SurfaceControl;
 import android.view.View;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -28,10 +22,10 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Root-bound zero-copy PassBlur source backend shared by Launcher and Security Center domains.
  *
- * <p>The backend owns the authoritative ViewRoot/SurfaceControl endpoint, native producer Surface,
- * SurfaceTexture/OES input, source drain, normalization FBO, source freshness generation,
- * producer rollover, render thread and EGL context. Domain scene semantics and output ownership
- * remain in the caller.</p>
+ * <p>The backend owns native producer Surface, SurfaceTexture/OES input, source drain,
+ * normalization FBO, source freshness generation, producer rollover, render thread and EGL
+ * lifecycle. System-private ViewRoot/SurfaceControl access is isolated in
+ * {@link RootPassBlurEndpointBridge}; domain scene semantics and output ownership stay in callers.</p>
  */
 final class RootPassBlurBackend {
     interface Consumer {
@@ -48,54 +42,6 @@ final class RootPassBlurBackend {
             -1f,  1f, 0f, 1f,
              1f,  1f, 1f, 1f
     };
-
-    private static final class ProducerGeometry {
-        final int surfaceWidth;
-        final int surfaceHeight;
-        final int bufferWidth;
-        final int bufferHeight;
-        final int rotation;
-        final SurfaceControl rootSurface;
-        final int viewRootIdentity;
-        final int surfaceSequenceId;
-        final int rootLayerId;
-        final int insetLeft;
-        final int insetTop;
-        final int insetRight;
-        final int insetBottom;
-        final RootPassBlurContentRect contentRect;
-
-        ProducerGeometry(
-                int surfaceWidth,
-                int surfaceHeight,
-                int bufferWidth,
-                int bufferHeight,
-                int rotation,
-                SurfaceControl rootSurface,
-                int viewRootIdentity,
-                int surfaceSequenceId,
-                int rootLayerId,
-                int insetLeft,
-                int insetTop,
-                int insetRight,
-                int insetBottom) {
-            this.surfaceWidth = surfaceWidth;
-            this.surfaceHeight = surfaceHeight;
-            this.bufferWidth = bufferWidth;
-            this.bufferHeight = bufferHeight;
-            this.rotation = rotation;
-            this.rootSurface = rootSurface;
-            this.viewRootIdentity = viewRootIdentity;
-            this.surfaceSequenceId = surfaceSequenceId;
-            this.rootLayerId = rootLayerId;
-            this.insetLeft = insetLeft;
-            this.insetTop = insetTop;
-            this.insetRight = insetRight;
-            this.insetBottom = insetBottom;
-            contentRect = RootPassBlurContentRect.resolve(
-                    surfaceWidth, surfaceHeight, insetLeft, insetTop, insetRight, insetBottom);
-        }
-    }
 
     private final WeakReference<View> rootRef;
     private final PassBlurBindRequest bindRequest;
@@ -179,14 +125,14 @@ final class RootPassBlurBackend {
         requestFresh(generation, false);
     }
 
-    /** Launcher-only pulse variant; Workstation policy remains outside this backend. */
+    /** Launcher-only pulse selection; Workstation policy itself remains outside the backend. */
     void requestFresh(long generation, boolean singleFramePulse) {
         if (!state.requestFresh(generation) || shuttingDown) return;
         requestedSingleFramePulse = singleFramePulse;
         postToRenderThread(() -> {
             if (shuttingDown || state.requestedGeneration() != generation) return;
-            // Render-queue barrier: OES callbacks already queued before requestFresh execute with
-            // the previous sourceGeneration and cannot authorize the new generation.
+            // Render-queue barrier: source callbacks already queued before this request still carry
+            // the previous generation and cannot authorize the new consumer generation.
             sourceGeneration = generation;
             mainHandler.post(() -> ensureBoundAndRefresh(generation));
         });
@@ -257,8 +203,7 @@ final class RootPassBlurBackend {
     }
 
     boolean hasBinding() {
-        Miuix307PassBlurBridge.Binding current = binding;
-        return !shuttingDown && current != null && current.bound && current.rootSurface.isValid();
+        return !shuttingDown && RootPassBlurEndpointBridge.isBindingValid(binding);
     }
 
     boolean postToRenderThread(Runnable runnable) {
@@ -285,44 +230,42 @@ final class RootPassBlurBackend {
     }
 
     /**
-     * Main-thread endpoint/geometry reconciliation. Returns true only when source geometry or the
-     * endpoint generation changed; caller-owned logical layout changes are intentionally separate.
+     * Main-thread endpoint/geometry reconciliation. Returns true only for source geometry or
+     * endpoint generation changes; caller-owned logical layout changes remain a domain concern.
      */
     boolean reconcileRoot() {
         if (shuttingDown) return false;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return false;
+        RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
+        if (endpoint == null || !endpoint.isValid()) return false;
+
         int nextLogicalWidth = root.getWidth();
         int nextLogicalHeight = root.getHeight();
-        ProducerGeometry geometry = readSurfaceGeometry(root);
-        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
-            return false;
-        }
-
         boolean logicalChanged = nextLogicalWidth > 0 && nextLogicalHeight > 0
                 && (nextLogicalWidth != logicalWidth || nextLogicalHeight != logicalHeight);
         Miuix307PassBlurBridge.Binding current = binding;
-        boolean endpointChanged = current != null && (!current.rootSurface.isValid()
-                || !sameProducerSurfaceGeneration(current, geometry));
-        RootPassBlurContentRect nextContentRect = geometry.contentRect;
-        boolean sourceGeometryChanged = geometry.bufferWidth != bufferWidth
-                || geometry.bufferHeight != bufferHeight
-                || geometry.rotation != rotation
+        boolean endpointChanged = current != null
+                && !RootPassBlurEndpointBridge.sameGeneration(current, endpoint);
+        RootPassBlurContentRect nextContentRect = contentRect(endpoint);
+        boolean sourceGeometryChanged = endpoint.bufferWidth != bufferWidth
+                || endpoint.bufferHeight != bufferHeight
+                || endpoint.rotation != rotation
                 || !nextContentRect.sameAs(contentRect);
 
         if (nextLogicalWidth > 0) logicalWidth = nextLogicalWidth;
         if (nextLogicalHeight > 0) logicalHeight = nextLogicalHeight;
-        bufferWidth = geometry.bufferWidth;
-        bufferHeight = geometry.bufferHeight;
-        rotation = geometry.rotation;
+        bufferWidth = endpoint.bufferWidth;
+        bufferHeight = endpoint.bufferHeight;
+        rotation = endpoint.rotation;
         contentRect = nextContentRect;
 
         if (endpointChanged) {
             MainHook.log(TAG + " endpoint generation changed old=" + current.rootName
                     + " oldLayerId=" + current.rootLayerId
-                    + " newLayerId=" + geometry.rootLayerId
+                    + " newLayerId=" + endpoint.rootLayerId
                     + " oldSurfaceSeq=" + current.surfaceSequenceId
-                    + " newSurfaceSeq=" + geometry.surfaceSequenceId);
+                    + " newSurfaceSeq=" + endpoint.surfaceSequenceId);
             requestRebind("root-endpoint-changed");
             return true;
         }
@@ -330,10 +273,10 @@ final class RootPassBlurBackend {
         if (logicalChanged || sourceGeometryChanged) {
             state.onGeometryInvalidated();
             SurfaceTexture input = inputSurfaceTexture;
-            if (input != null && geometry.bufferWidth > 0 && geometry.bufferHeight > 0) {
+            if (input != null && endpoint.bufferWidth > 0 && endpoint.bufferHeight > 0) {
                 postToRenderThread(() -> {
                     if (shuttingDown || input != inputSurfaceTexture) return;
-                    input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
+                    input.setDefaultBufferSize(endpoint.bufferWidth, endpoint.bufferHeight);
                     releaseNormalizedTarget();
                 });
             }
@@ -410,10 +353,7 @@ final class RootPassBlurBackend {
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
         if (renderThread.isAlive()) {
-            try {
-                renderHandler.post(this::releaseGl);
-            } catch (Throwable ignored) {
-            }
+            try { renderHandler.post(this::releaseGl); } catch (Throwable ignored) {}
             renderThread.quitSafely();
         }
     }
@@ -429,7 +369,7 @@ final class RootPassBlurBackend {
             bindProducerWhenReady(0);
             return;
         }
-        if (!current.bound || !current.rootSurface.isValid()) {
+        if (!RootPassBlurEndpointBridge.isBindingValid(current)) {
             requestRebind("fresh-request-invalid-binding");
             return;
         }
@@ -510,9 +450,7 @@ final class RootPassBlurBackend {
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
                 GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
         SurfaceTexture input = new SurfaceTexture(oesTexture);
-        if (bufferWidth > 0 && bufferHeight > 0) {
-            input.setDefaultBufferSize(bufferWidth, bufferHeight);
-        }
+        if (bufferWidth > 0 && bufferHeight > 0) input.setDefaultBufferSize(bufferWidth, bufferHeight);
         Surface producer = new Surface(input);
         inputSurfaceTexture = input;
         inputProducerSurface = producer;
@@ -563,10 +501,8 @@ final class RootPassBlurBackend {
     }
 
     private RootPassBlurFrame normalizeFrame(long generation) {
-        int width = Math.max(1, logicalWidth);
-        int height = Math.max(1, logicalHeight);
         PassBlurRenderDomain domain = PassBlurRenderDomain.resolve(
-                width, height, physicalScalePercent);
+                Math.max(1, logicalWidth), Math.max(1, logicalHeight), physicalScalePercent);
         ensureNormalizedTarget(domain.renderWidth, domain.renderHeight);
 
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, normalizedFramebuffer);
@@ -612,27 +548,31 @@ final class RootPassBlurBackend {
             retryBind(attempt);
             return;
         }
-        ProducerGeometry geometry = readSurfaceGeometry(root);
-        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
+        RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
+        if (endpoint == null || !endpoint.isValid()) {
             retryBind(attempt);
             return;
         }
         logicalWidth = Math.max(1, root.getWidth());
         logicalHeight = Math.max(1, root.getHeight());
-        bufferWidth = geometry.bufferWidth;
-        bufferHeight = geometry.bufferHeight;
-        rotation = geometry.rotation;
-        contentRect = geometry.contentRect;
+        bufferWidth = endpoint.bufferWidth;
+        bufferHeight = endpoint.bufferHeight;
+        rotation = endpoint.rotation;
+        contentRect = contentRect(endpoint);
         long epoch = bindEpoch.get();
         postToRenderThread(() -> {
             if (shuttingDown || input != inputSurfaceTexture || epoch != bindEpoch.get()) return;
-            input.setDefaultBufferSize(geometry.bufferWidth, geometry.bufferHeight);
-            mainHandler.post(() -> finishBind(root, producer, geometry, attempt, epoch));
+            input.setDefaultBufferSize(endpoint.bufferWidth, endpoint.bufferHeight);
+            mainHandler.post(() -> finishBind(root, producer, endpoint, attempt, epoch));
         });
     }
 
     private void finishBind(
-            View root, Surface producer, ProducerGeometry geometry, int attempt, long epoch) {
+            View root,
+            Surface producer,
+            RootPassBlurEndpointBridge.Endpoint endpoint,
+            int attempt,
+            long epoch) {
         if (shuttingDown || binding != null || producer != inputProducerSurface
                 || epoch != bindEpoch.get() || rootRef.get() != root) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(bindRequest, producer);
@@ -640,7 +580,7 @@ final class RootPassBlurBackend {
             retryBind(attempt);
             return;
         }
-        if (!sameProducerSurfaceGeneration(next, geometry)) {
+        if (!RootPassBlurEndpointBridge.sameGeneration(next, endpoint)) {
             Miuix307PassBlurBridge.unbind(next);
             requestRebind("bind-endpoint-raced");
             return;
@@ -649,8 +589,8 @@ final class RootPassBlurBackend {
         state.onBindSucceeded();
         MainHook.log(TAG + " bound root=" + next.rootName
                 + " domain=" + bindRequest.domain()
-                + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
-                + " rotation=" + geometry.rotation);
+                + " buffer=" + endpoint.bufferWidth + "x" + endpoint.bufferHeight
+                + " rotation=" + endpoint.rotation);
         long generation = state.requestedGeneration();
         if (generation >= 0L) ensureBoundAndRefresh(generation);
     }
@@ -670,14 +610,22 @@ final class RootPassBlurBackend {
         }
     }
 
+    private RootPassBlurContentRect contentRect(RootPassBlurEndpointBridge.Endpoint endpoint) {
+        return RootPassBlurContentRect.resolve(
+                endpoint.surfaceWidth,
+                endpoint.surfaceHeight,
+                endpoint.insetLeft,
+                endpoint.insetTop,
+                endpoint.insetRight,
+                endpoint.insetBottom);
+    }
+
     private void ensureNormalizedTarget(int width, int height) {
         if (width <= 0 || height <= 0 || (maxTextureSize > 0
                 && (width > maxTextureSize || height > maxTextureSize))) {
             throw new IllegalStateException("root PassBlur FBO size invalid " + width + "x" + height);
         }
-        if (normalizedFramebuffer != 0 && normalizedWidth == width && normalizedHeight == height) {
-            return;
-        }
+        if (normalizedFramebuffer != 0 && normalizedWidth == width && normalizedHeight == height) return;
         releaseNormalizedTarget();
         normalizedTexture = createTexture2D(width, height);
         normalizedFramebuffer = createFramebuffer(normalizedTexture);
@@ -756,116 +704,6 @@ final class RootPassBlurBackend {
                 try { consumer.onTerminalFailure(generation, error); }
                 catch (Throwable ignored) {}
             });
-        }
-    }
-
-    private ProducerGeometry readSurfaceGeometry(View root) {
-        try {
-            Object viewRoot = getViewRootImpl(root);
-            if (viewRoot == null) return null;
-            Field sizeField = findField(viewRoot.getClass(), "mSurfaceSize");
-            sizeField.setAccessible(true);
-            Object sizeValue = sizeField.get(viewRoot);
-            if (!(sizeValue instanceof Point)) return null;
-            Point surfaceSize = (Point) sizeValue;
-            int surfaceWidth = surfaceSize.x;
-            int surfaceHeight = surfaceSize.y;
-            if (surfaceWidth <= 0 || surfaceHeight <= 0) return null;
-            Rect surfaceInsets = readSurfaceInsets(viewRoot);
-            int configRotation = readConfigRotation(root);
-            int nextBufferWidth = surfaceWidth;
-            int nextBufferHeight = surfaceHeight;
-            if (configRotation == 1 || configRotation == 3) {
-                nextBufferWidth = surfaceHeight;
-                nextBufferHeight = surfaceWidth;
-            }
-            Method method = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-            method.setAccessible(true);
-            Object value = method.invoke(viewRoot);
-            SurfaceControl surfaceControl = value instanceof SurfaceControl
-                    ? (SurfaceControl) value : null;
-            return new ProducerGeometry(
-                    surfaceWidth, surfaceHeight, nextBufferWidth, nextBufferHeight,
-                    configRotation, surfaceControl, System.identityHashCode(viewRoot),
-                    Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot),
-                    Miuix307PassBlurBridge.surfaceLayerId(surfaceControl),
-                    surfaceInsets.left, surfaceInsets.top, surfaceInsets.right, surfaceInsets.bottom);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static Rect readSurfaceInsets(Object viewRoot) {
-        Rect result = new Rect();
-        if (viewRoot == null) return result;
-        try {
-            Field attrsField = findField(viewRoot.getClass(), "mWindowAttributes");
-            attrsField.setAccessible(true);
-            Object attrs = attrsField.get(viewRoot);
-            if (attrs == null) return result;
-            Field insetsField = findField(attrs.getClass(), "surfaceInsets");
-            insetsField.setAccessible(true);
-            Object value = insetsField.get(attrs);
-            if (value instanceof Rect) result.set((Rect) value);
-        } catch (Throwable ignored) {}
-        return result;
-    }
-
-    private static int readConfigRotation(View view) {
-        Display display = view != null ? view.getDisplay() : null;
-        if (display == null) return 0;
-        int installOrientation = 0;
-        try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
-            if (value instanceof Number) installOrientation = ((Number) value).intValue();
-        } catch (Throwable ignored) {}
-        int result = (installOrientation + display.getRotation()) % 4;
-        return result < 0 ? result + 4 : result;
-    }
-
-    private static Object getViewRootImpl(View view) throws Exception {
-        Method method = View.class.getDeclaredMethod("getViewRootImpl");
-        method.setAccessible(true);
-        return method.invoke(view);
-    }
-
-    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
-        Class<?> current = type;
-        while (current != null) {
-            try { return current.getDeclaredField(name); }
-            catch (NoSuchFieldException ignored) { current = current.getSuperclass(); }
-        }
-        throw new NoSuchFieldException(name);
-    }
-
-    private static boolean sameProducerSurfaceGeneration(
-            Miuix307PassBlurBridge.Binding current, ProducerGeometry geometry) {
-        if (current == null || geometry == null) return false;
-        if (current.viewRootIdentity != 0 && geometry.viewRootIdentity != 0
-                && current.viewRootIdentity != geometry.viewRootIdentity) return false;
-        boolean comparedImmutableGeneration = false;
-        if (current.rootLayerId >= 0 && geometry.rootLayerId >= 0) {
-            comparedImmutableGeneration = true;
-            if (current.rootLayerId != geometry.rootLayerId) return false;
-        }
-        if (current.surfaceSequenceId >= 0 && geometry.surfaceSequenceId >= 0) {
-            comparedImmutableGeneration = true;
-            if (current.surfaceSequenceId != geometry.surfaceSequenceId) return false;
-        }
-        if (comparedImmutableGeneration) return true;
-        return isSameSurface(current.rootSurface, geometry.rootSurface);
-    }
-
-    private static boolean isSameSurface(SurfaceControl first, SurfaceControl second) {
-        if (first == second) return true;
-        if (first == null || second == null) return false;
-        try {
-            Method method = SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class);
-            Object value = method.invoke(first, second);
-            return value instanceof Boolean && (Boolean) value;
-        } catch (Throwable ignored) {
-            return first.equals(second);
         }
     }
 
