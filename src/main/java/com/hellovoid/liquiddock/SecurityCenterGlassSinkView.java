@@ -16,9 +16,11 @@ final class SecurityCenterGlassSinkView extends TextureView
     private final WeakReference<View> materialRef;
     private final SecurityCenterGlassSession session;
     private final float baseCornerRadiusPx;
+    private final View.OnAttachStateChangeListener materialAttachListener;
     private Surface outputSurface;
     private boolean disposed;
     private boolean authorizedVisible;
+    private boolean parentRecoveryPosted;
 
     private SecurityCenterGlassSinkView(
             Context context,
@@ -29,6 +31,17 @@ final class SecurityCenterGlassSinkView extends TextureView
         materialRef = new WeakReference<>(material);
         this.session = session;
         this.baseCornerRadiusPx = Math.max(0f, baseCornerRadiusPx);
+        materialAttachListener = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) {
+                scheduleParentRecovery("material-attached");
+                session.requestLatestFrame();
+            }
+
+            @Override public void onViewDetachedFromWindow(View v) {
+                session.requestLatestFrame();
+            }
+        };
+        material.addOnAttachStateChangeListener(materialAttachListener);
         setOpaque(false);
         setClickable(false);
         setFocusable(false);
@@ -64,9 +77,14 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     boolean syncFromMaterial() {
         View material = materialRef.get();
-        if (disposed || session.isShutdown() || material == null
-                || !(material.getParent() instanceof ViewGroup)
-                || material.getParent() != getParent()) return false;
+        if (disposed || session.isShutdown() || material == null) return false;
+        Object materialParent = material.getParent();
+        Object sinkParent = getParent();
+        if (!(materialParent instanceof ViewGroup)) return false;
+        if (materialParent != sinkParent) {
+            scheduleParentRecovery("parent-mismatch");
+            return true;
+        }
 
         boolean changed = false;
         int width = Math.max(1, material.getWidth());
@@ -86,6 +104,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         changed |= setFloatIfChanged(getScaleX(), material.getScaleX(), this::setScaleX);
         changed |= setFloatIfChanged(getScaleY(), material.getScaleY(), this::setScaleY);
         changed |= setFloatIfChanged(getRotation(), material.getRotation(), this::setRotation);
+        changed |= setFloatIfChanged(getZ(), material.getZ(), this::setZ);
 
         float desiredAlpha = authorizedVisible ? material.getAlpha() : 0f;
         changed |= setFloatIfChanged(getAlpha(), desiredAlpha, this::setAlpha);
@@ -157,11 +176,58 @@ final class SecurityCenterGlassSinkView extends TextureView
         disposed = true;
         authorizedVisible = false;
         setAlpha(0f);
+        View material = materialRef.get();
+        if (material != null) {
+            try { material.removeOnAttachStateChangeListener(materialAttachListener); }
+            catch (Throwable ignored) {}
+        }
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachOutput(this, current);
         if (getParent() instanceof ViewGroup) {
             ((ViewGroup) getParent()).removeView(this);
+        }
+    }
+
+    private void scheduleParentRecovery(String reason) {
+        if (disposed || parentRecoveryPosted || session.isShutdown()) return;
+        View material = materialRef.get();
+        if (material == null || !material.isAttachedToWindow()) return;
+        parentRecoveryPosted = true;
+        material.postOnAnimation(() -> {
+            parentRecoveryPosted = false;
+            recoverParentNow(reason);
+        });
+    }
+
+    private void recoverParentNow(String reason) {
+        if (disposed || session.isShutdown()) return;
+        View material = materialRef.get();
+        if (material == null || !(material.getParent() instanceof ViewGroup)) return;
+        ViewGroup target = (ViewGroup) material.getParent();
+        Object current = getParent();
+        if (current != target) {
+            if (current instanceof ViewGroup) ((ViewGroup) current).removeView(this);
+            int index = Math.max(0, target.indexOfChild(material));
+            target.addView(this, index, new ViewGroup.LayoutParams(
+                    Math.max(1, material.getWidth()), Math.max(1, material.getHeight())));
+            try {
+                Api101Bridge.log("[DC][SecurityCenterGlass] sink parent recovered reason=" + reason
+                        + " material=" + material.getClass().getSimpleName()
+                        + " parent=" + target.getClass().getSimpleName());
+            } catch (Throwable ignored) {}
+        }
+        syncFromMaterial();
+        session.requestLatestFrame();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (!disposed && !session.isShutdown()) {
+            syncFromMaterial();
+            scheduleParentRecovery("sink-attached");
+            session.requestLatestFrame();
         }
     }
 
