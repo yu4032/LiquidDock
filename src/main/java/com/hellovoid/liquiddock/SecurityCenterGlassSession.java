@@ -103,7 +103,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 renderFps,
                 this,
                 "LiquidDock-SecurityCenterGlass-EGL");
-        MainHook.log(TAG + " session created root=" + root.getClass().getSimpleName()
+        log("session created root=" + root.getClass().getSimpleName()
                 + "@" + Integer.toHexString(System.identityHashCode(root)));
     }
 
@@ -215,8 +215,18 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.beginGlassFrame();
             PrismalGeometry geometry = request.geometry.toPrismalGeometry();
             prismalRenderer.drawGlass(geometry, prismalParams, highlightProfile);
-            presentFull(prismalRenderer.outputTexture(), currentOutput);
+            presentTarget(prismalRenderer.outputTexture(), request.geometry, currentOutput);
             sourceBackend.makePbufferCurrent();
+
+            float[] crop = request.geometry.toCropUvRect();
+            log("render generation=" + frame.generation
+                    + " root=" + frame.logicalWidth + "x" + frame.logicalHeight
+                    + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight
+                    + " target=[" + request.geometry.left + "," + request.geometry.top
+                    + " " + request.geometry.width + "x" + request.geometry.height + "]"
+                    + " output=" + currentOutput.width + "x" + currentOutput.height
+                    + " cropUv=[" + crop[0] + "," + crop[1] + ","
+                    + crop[2] + "," + crop[3] + "]");
 
             long renderedGeneration = frame.generation;
             sourceBackend.postToRenderThread(() -> {
@@ -234,8 +244,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 });
             });
         } catch (Throwable error) {
-            MainHook.log(TAG + " Prismal render failed generation=" + frame.generation
-                    + ": " + error);
+            log("Prismal render failed generation=" + frame.generation + ": " + error);
             throw error;
         }
     }
@@ -243,6 +252,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
         if (shuttingDown) return;
+        log("source terminal failure generation=" + generation + ": " + error);
         Listener currentListener = listener;
         if (currentListener != null) {
             currentListener.onTerminalFailure(this, generation, error);
@@ -253,6 +263,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown) return;
         shuttingDown = true;
         frameRequest = null;
+        log("session shutdown");
         boolean queued = sourceBackend.postToRenderThread(() -> {
             releaseGl();
             sourceBackend.shutdown();
@@ -270,9 +281,14 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
 
-    private void presentFull(int sceneTexture, OutputState current) {
-        if (current == null || current.eglSurface == EGL14.EGL_NO_SURFACE
+    private void presentTarget(
+            int sceneTexture,
+            SecurityCenterGlassGeometry geometry,
+            OutputState current) {
+        if (current == null || geometry == null
+                || current.eglSurface == EGL14.EGL_NO_SURFACE
                 || current.width <= 0 || current.height <= 0) return;
+        float[] crop = geometry.toCropUvRect();
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -286,7 +302,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
         GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
-                0f, 0f, 1f, 1f);
+                crop[0], crop[1], crop[2], crop[3]);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         int error = GLES20.glGetError();
@@ -376,5 +392,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         int location = GLES20.glGetUniformLocation(program, name);
         if (location < 0) throw new IllegalStateException("missing uniform " + name);
         return location;
+    }
+
+    private static void log(String message) {
+        try { Api101Bridge.log(TAG + " " + message); }
+        catch (Throwable ignored) {}
     }
 }
