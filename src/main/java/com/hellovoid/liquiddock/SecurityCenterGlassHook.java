@@ -208,7 +208,7 @@ final class SecurityCenterGlassHook {
                 View apps = (View) appsObject;
                 View turbo = resolveTurboParent(apps, contract);
                 SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                if (live != null && turbo != null) live.onAllAppsPrepared(turbo, apps);
+                if (live != null && turbo != null) live.updateAllAppsLayout(turbo, apps);
                 return result;
             });
             HookUtil.hook(motion.show, chain -> {
@@ -219,7 +219,9 @@ final class SecurityCenterGlassHook {
                         View turbo = resolveTurboParent(apps, contract);
                         SecurityCenterGlassCoordinator live = currentCoordinator(contract);
                         if (live != null && turbo != null) {
-                            live.onAllAppsMotionStarted(turbo, apps, true);
+                            live.updateAllAppsLayout(turbo, apps);
+                            live.onAllAppsToggleStarted(turbo);
+                            live.refreshTransitionFrame(turbo);
                         }
                     }
                 }
@@ -233,7 +235,9 @@ final class SecurityCenterGlassHook {
                         View turbo = resolveTurboParent(apps, contract);
                         SecurityCenterGlassCoordinator live = currentCoordinator(contract);
                         if (live != null && turbo != null) {
-                            live.onAllAppsMotionStarted(turbo, apps, false);
+                            live.updateAllAppsLayout(turbo, apps);
+                            live.onAllAppsToggleStarted(turbo);
+                            live.refreshTransitionFrame(turbo);
                         }
                     }
                 }
