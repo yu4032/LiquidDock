@@ -9,46 +9,45 @@ import org.junit.Test;
 /** Typed vendor/custom ownership contract for Security Center material handoff. */
 public class SecurityCenterMaterialOwnershipStateTest {
     @Test
-    public void vendorSuppressionPersistsAcrossNewerTransitionGenerationsOnceCustomOwnsMaterial() {
+    public void preparingOwnershipSuppressesVendorBeforeAnyCustomFrameIsVisible() {
         SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
         assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
+        assertFalse(state.canSuppressVendor(-1L, 5L));
 
-        assertFalse(state.canSuppressVendor(-1L, -1L));
-        assertFalse(state.canSuppressVendor(5L, 5L));
+        state.onCustomPreparing();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM_PREPARING, state.owner());
+        assertTrue("vendor final background must stay suppressed after physical material clear",
+                state.canSuppressVendor(-1L, 5L));
 
-        state.onCustomClaimed();
+        state.onCustomPresented();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM, state.owner());
         assertTrue(state.canSuppressVendor(5L, 5L));
-        assertTrue("transition generation must not reopen vendor material",
-                state.canSuppressVendor(5L, 6L));
         assertTrue(state.canSuppressVendor(5L, 9L));
+    }
+
+    @Test
+    public void releaseFromPreparingOrVisibleCustomRestoresVendorAuthority() {
+        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
+        state.onCustomPreparing();
+        state.releaseToVendor();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
+
+        state.onCustomPreparing();
+        state.onCustomPresented();
+        state.releaseToVendor();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
+        state.releaseToVendor();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
+    }
+
+    @Test
+    public void visibleCustomStillRejectsInvalidGenerationOrdering() {
+        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
+        state.onCustomPreparing();
+        state.onCustomPresented();
+
         assertFalse(state.canSuppressVendor(-1L, 6L));
         assertFalse(state.canSuppressVendor(6L, 5L));
-    }
-
-    @Test
-    public void customClaimAndVendorReleaseAreExplicitAndIdempotent() {
-        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
-        state.onCustomClaimed();
-        assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM, state.owner());
-
-        state.releaseToVendor();
-        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
-        state.releaseToVendor();
-        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
-    }
-
-    @Test
-    public void vendorFinalBackgroundGateRequiresLiveCustomOwnershipAndAValidRenderedFrame() {
-        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
-        long rendered = 12L;
-
-        assertFalse(state.canSuppressVendor(rendered, rendered));
-
-        state.onCustomClaimed();
-        assertTrue(state.canSuppressVendor(rendered, rendered));
-        assertTrue(state.canSuppressVendor(rendered, rendered + 1L));
-
-        state.releaseToVendor();
-        assertFalse(state.canSuppressVendor(rendered, rendered + 1L));
+        assertTrue(state.canSuppressVendor(5L, 6L));
     }
 }
