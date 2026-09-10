@@ -1115,7 +1115,7 @@ final class LauncherGlassSession {
         if (shuttingDown || binding != null || producer != inputProducerSurface
                 || bindEpoch != producerBindEpoch) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(
-                root, producer, 1.0f);
+                PassBlurBindRequest.launcherWorkspace(root, 1.0f), producer);
         if (next == null) {
             retryBind(attempt);
             return;

@@ -975,7 +975,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
 
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(
-                materialHost, producer, 1.0f);
+                PassBlurBindRequest.dock(materialHost, 1.0f), producer);
         if (next == null) {
             retryBind(attempt, "framework bind returned null");
             return;
