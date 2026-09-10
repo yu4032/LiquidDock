@@ -34,11 +34,10 @@ final class SecurityCenterGlassSinkView extends TextureView
         materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 scheduleParentRecovery("material-attached");
-                session.requestLatestFrame();
             }
 
             @Override public void onViewDetachedFromWindow(View v) {
-                session.requestLatestFrame();
+                // The parent can change during the vendor's dynamic All Apps lifecycle.
             }
         };
         material.addOnAttachStateChangeListener(materialAttachListener);
@@ -218,7 +217,6 @@ final class SecurityCenterGlassSinkView extends TextureView
             } catch (Throwable ignored) {}
         }
         syncFromMaterial();
-        session.requestLatestFrame();
     }
 
     @Override
@@ -227,7 +225,6 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (!disposed && !session.isShutdown()) {
             syncFromMaterial();
             scheduleParentRecovery("sink-attached");
-            session.requestLatestFrame();
         }
     }
 
