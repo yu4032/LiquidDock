@@ -55,18 +55,26 @@ final class SecurityCenterVendorMaterialBridge {
 
     void claimCustom(
             Object turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
-        if (turboLayout == null || dockLayout == null) {
+        if (!(turboLayout instanceof View) || dockLayout == null) {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
+        View turboView = (View) turboLayout;
         int assistantType = classifyBoxMaterial(boxMaterialView);
         claimedAssistantTypes.put(turboLayout, assistantType);
         claimedBoxTargets.put(turboLayout, new WeakReference<>(boxMaterialView));
+
+        // TurboLayout owns a vendor blur/material layer in addition to its child surfaces.
+        // Clear it under the same custom-ownership transaction; finalBackground() reconstructs it.
+        resetVendorMaterial(turboView);
+        MiBlurBridge.clearPassWindowBlur(turboView);
+        turboView.setBackground(null);
 
         resetVendorMaterial(dockLayout);
         MiBlurBridge.clearPassWindowBlur(dockLayout);
         dockLayout.setBackground(null);
 
         if (boxMaterialView != null) {
+            resetVendorMaterial(boxMaterialView);
             MiBlurBridge.clearPassWindowBlur(boxMaterialView);
             boxMaterialView.setBackground(null);
         }
