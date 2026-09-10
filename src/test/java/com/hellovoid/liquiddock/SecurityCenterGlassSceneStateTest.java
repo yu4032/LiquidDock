@@ -9,7 +9,7 @@ import org.junit.Test;
 /** Typed scene-generation contract for Security Center assistant glass ownership. */
 public class SecurityCenterGlassSceneStateTest {
     @Test
-    public void initialDockRevealsOnlyAfterCurrentGenerationRender() {
+    public void initialDockClaimsBeforeFreshCaptureAndRevealsOnlyAfterPresentation() {
         SecurityCenterGlassSceneState state = new SecurityCenterGlassSceneState();
         assertEquals(SecurityCenterGlassSceneState.Scene.DETACHED, state.scene());
         assertEquals(0L, state.generation());
@@ -25,7 +25,10 @@ public class SecurityCenterGlassSceneStateTest {
 
         SecurityCenterGlassSceneState.Decision settled =
                 state.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK);
+        assertTrue("vendor material must be stripped before requesting the clean source frame",
+                settled.claimCustomOwnership);
         assertTrue(settled.requestFresh);
+        assertFalse(settled.revealCustom);
         assertEquals(1L, settled.generation);
 
         SecurityCenterGlassSceneState.Decision stale = state.onFreshFrameRendered(0L);
@@ -34,7 +37,8 @@ public class SecurityCenterGlassSceneStateTest {
         assertEquals(SecurityCenterGlassSceneState.Scene.PREPARING_DOCK, state.scene());
 
         SecurityCenterGlassSceneState.Decision fresh = state.onFreshFrameRendered(1L);
-        assertTrue(fresh.claimCustomOwnership);
+        assertFalse("fresh/presented frame must not perform a late vendor claim",
+                fresh.claimCustomOwnership);
         assertTrue(fresh.revealCustom);
         assertEquals(SecurityCenterGlassSceneState.Scene.DOCK, state.scene());
     }
@@ -56,6 +60,7 @@ public class SecurityCenterGlassSceneStateTest {
 
         SecurityCenterGlassSceneState.Decision appsGeometry =
                 state.onGeometrySettled(SecurityCenterGlassSceneState.Target.ALL_APPS);
+        assertTrue(appsGeometry.claimCustomOwnership);
         assertTrue(appsGeometry.requestFresh);
         assertFalse(appsGeometry.ensureSession);
         assertFalse(appsGeometry.shutdownSession);
@@ -63,7 +68,7 @@ public class SecurityCenterGlassSceneStateTest {
         assertEquals(SecurityCenterGlassSceneState.Scene.PREPARING_ALL_APPS, state.scene());
 
         SecurityCenterGlassSceneState.Decision appsFresh = state.onFreshFrameRendered(2L);
-        assertTrue(appsFresh.claimCustomOwnership);
+        assertFalse(appsFresh.claimCustomOwnership);
         assertTrue(appsFresh.revealCustom);
         assertEquals(SecurityCenterGlassSceneState.Scene.ALL_APPS, state.scene());
 
@@ -73,10 +78,11 @@ public class SecurityCenterGlassSceneStateTest {
         assertFalse(back.releaseCustomOwnership);
         SecurityCenterGlassSceneState.Decision dockGeometry =
                 state.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK);
+        assertTrue(dockGeometry.claimCustomOwnership);
         assertTrue(dockGeometry.requestFresh);
         assertEquals(3L, dockGeometry.generation);
         SecurityCenterGlassSceneState.Decision dockFresh = state.onFreshFrameRendered(3L);
-        assertTrue(dockFresh.claimCustomOwnership);
+        assertFalse(dockFresh.claimCustomOwnership);
         assertTrue(dockFresh.revealCustom);
         assertEquals(SecurityCenterGlassSceneState.Scene.DOCK, state.scene());
     }
