@@ -79,6 +79,37 @@ final class SecurityCenterGlassGeometry {
                 cornerRadius);
     }
 
+    /**
+     * Crop rectangle for a conventional GL FBO texture. Geometry is top-left/root-local while
+     * texture v=0 is the visual bottom, matching LauncherGlassSession's verified presentation.
+     */
+    float[] toCropUvRect() {
+        float cropLeft = left / rootWidth;
+        float cropBottom = (rootHeight - (top + height)) / rootHeight;
+        return new float[]{
+                clamp(cropLeft, 0f, 1f),
+                clamp(cropBottom, 0f, 1f),
+                clamp(width / rootWidth, 0f, 1f),
+                clamp(height / rootHeight, 0f, 1f)
+        };
+    }
+
+    /** Maps this root-local target into the actual output parent's local screen-aligned space. */
+    float[] toParentPlacement(
+            float rootScreenLeft,
+            float rootScreenTop,
+            float parentScreenLeft,
+            float parentScreenTop) {
+        if (!finite(rootScreenLeft) || !finite(rootScreenTop)
+                || !finite(parentScreenLeft) || !finite(parentScreenTop)) return null;
+        return new float[]{
+                rootScreenLeft + left - parentScreenLeft,
+                rootScreenTop + top - parentScreenTop,
+                width,
+                height
+        };
+    }
+
     boolean sameAs(SecurityCenterGlassGeometry other) {
         return other != null
                 && rootWidth == other.rootWidth
