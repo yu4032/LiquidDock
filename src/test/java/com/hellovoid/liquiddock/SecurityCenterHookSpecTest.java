@@ -3,7 +3,9 @@ package com.hellovoid.liquiddock;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class SecurityCenterHookSpecTest {
     @Test public void resolvesOnlySupportedVersionCode() {
@@ -33,5 +35,13 @@ public class SecurityCenterHookSpecTest {
         assertEquals("f17943s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
+    }
+
+    @Test public void toggleAuthorityUsesVendorTransformationStateInsteadOfTime() {
+        assertFalse(SecurityCenterGlassHook.ToggleAuthority.shouldStartTransition(true));
+        assertTrue(SecurityCenterGlassHook.ToggleAuthority.shouldStartTransition(false));
+
+        assertTrue(SecurityCenterGlassHook.ToggleAuthority.shouldKeepWaiting(true));
+        assertFalse(SecurityCenterGlassHook.ToggleAuthority.shouldKeepWaiting(false));
     }
 }
