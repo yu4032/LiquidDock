@@ -65,4 +65,30 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue(session.contains("new RootPassBlurBackend("));
         assertFalse(coordinator.contains("SecurityCenterGlassOutputView output"));
     }
+
+    @Test public void timingUsesVendorMotionAndTexturePresentationAuthorities() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
+        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
+
+        assertTrue("All Apps attach must be observed before its Folme pre-draw",
+                hook.contains("HookUtil.hook(motion.attach"));
+        assertTrue("Show must start from the vendor helper's real Folme entry",
+                hook.contains("HookUtil.hook(motion.show"));
+        assertTrue("Hide must start from the vendor helper's real Folme entry",
+                hook.contains("HookUtil.hook(motion.hide"));
+        assertFalse("The 400/600ms transforming gate cannot remain animation authority",
+                hook.contains("installSettleObserver("));
+        assertFalse("The vendor timing boolean cannot remain animation authority",
+                hook.contains("contract.transforming()"));
+
+        assertTrue("A submitted EGL frame must wait for TextureView consumption",
+                sink.contains("onSurfaceTextureUpdated"));
+        assertTrue("Surface timestamp must guard presentation acknowledgement",
+                sink.contains("texture.getTimestamp()"));
+        assertTrue("Session must serialize in-flight presentation",
+                session.contains("FrameRequest inFlight"));
+        assertTrue("Reveal callback must be driven by presentation acknowledgement",
+                session.contains("onOutputPresented("));
+    }
 }
