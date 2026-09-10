@@ -91,12 +91,14 @@ final class SecurityCenterGlassCoordinator
             new SecurityCenterMaterialOwnershipState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final LiquidDockConfig.Glass glassConfig;
+    private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
 
     private WeakReference<View> turboRef = new WeakReference<>(null);
     private WeakReference<View> dockRef = new WeakReference<>(null);
     private WeakReference<View> appsRef = new WeakReference<>(null);
     private WeakReference<View> rootRef = new WeakReference<>(null);
     private WeakReference<View> targetRef = new WeakReference<>(null);
+    private WeakReference<View> customOwnerTurboRef = new WeakReference<>(null);
     private SecurityCenterGlassSceneState.Target targetKind =
             SecurityCenterGlassSceneState.Target.DOCK;
     private SecurityCenterGlassGeometry currentGeometry;
@@ -134,12 +136,24 @@ final class SecurityCenterGlassCoordinator
             };
 
     SecurityCenterGlassCoordinator(LiquidDockConfig.Glass glassConfig) {
+        this(glassConfig, null);
+    }
+
+    SecurityCenterGlassCoordinator(
+            LiquidDockConfig.Glass glassConfig,
+            SecurityCenterVendorMaterialBridge vendorMaterialBridge) {
         this.glassConfig = glassConfig;
+        this.vendorMaterialBridge = vendorMaterialBridge;
         SecurityCenterGlassRuntimeState.setOwner(this);
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout, View appsLayout) {
         if (turboLayout == null || dockLayout == null || appsLayout == null) return;
+        View previousTurbo = turboRef.get();
+        if (previousTurbo != null && previousTurbo != turboLayout
+                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
+            hideAndRestoreVendor();
+        }
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
         appsRef = new WeakReference<>(appsLayout);
@@ -185,7 +199,7 @@ final class SecurityCenterGlassCoordinator
         if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) {
             scene.onRuntimeDisabled();
         }
-        hideAndReleaseCustom();
+        hideAndRestoreVendor();
         cleanupViewObservers(true);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) release.sessionToShutdown : session;
@@ -208,13 +222,32 @@ final class SecurityCenterGlassCoordinator
 
         SecurityCenterGlassSceneState.Decision decision = scene.onFreshFrameRendered(generation);
         if (!decision.claimCustomOwnership || !decision.revealCustom) return;
-        // Task 7 inserts the reversible vendor material claim immediately before this logical claim.
+        View turbo = turboRef.get();
+        View dock = dockRef.get();
+        SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
+        if (turbo == null || dock == null || bridge == null) return;
+        try {
+            bridge.claimCustom(turbo, dock);
+        } catch (Throwable error) {
+            hideCustomOnly();
+            ownership.releaseToVendor();
+            renderedGeneration = -1L;
+            try {
+                bridge.restoreVendor(turbo);
+            } catch (Throwable restoreError) {
+                log("claim rollback restore failed", restoreError);
+            }
+            log("custom material claim failed closed", error);
+            return;
+        }
+
         ownership.onCustomClaimed();
+        customOwnerTurboRef = new WeakReference<>(turbo);
         renderedGeneration = generation;
         SecurityCenterGlassOutputView current = output;
         if (current != null && !current.isDisposed()) current.setAuthorizedVisible(true);
-        MainHook.log(TAG + " current-generation scene revealed generation=" + generation
-                + " scene=" + scene.scene());
+        log("current-generation scene revealed generation=" + generation
+                + " scene=" + scene.scene(), null);
     }
 
     @Override
@@ -228,14 +261,14 @@ final class SecurityCenterGlassCoordinator
                 || root == null || !root.isAttachedToWindow()) return;
 
         SecurityCenterGlassSceneState.Decision decision = scene.onTerminalFailure();
-        hideAndReleaseCustom();
+        hideAndRestoreVendor();
         ReleaseDecision release = policy.releaseAll();
         cleanupViewObservers(false);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) release.sessionToShutdown : callbackSession;
         session = null;
         if (decision.shutdownSession && old != null) old.shutdown();
-        MainHook.log(TAG + " failed closed generation=" + generation + ": " + error);
+        log("failed closed generation=" + generation, error);
     }
 
     private void bindAttachedRoot(View turboLayout) {
@@ -256,8 +289,8 @@ final class SecurityCenterGlassCoordinator
 
         SecurityCenterGlassSession old = bind.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) bind.sessionToShutdown : session;
+        hideAndRestoreVendor();
         if (old != null) old.shutdown();
-        hideAndReleaseCustom();
         cleanupRootObserverOnly();
         if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) {
             scene.onRootDetached();
@@ -301,7 +334,7 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterGlassSceneState.Decision decision,
             SecurityCenterGlassGeometry geometry) {
         if (decision == null) return;
-        if (decision.hideCustom || decision.releaseCustomOwnership) hideAndReleaseCustom();
+        if (decision.hideCustom || decision.releaseCustomOwnership) hideAndRestoreVendor();
         if (decision.requestFresh) {
             SecurityCenterGlassSession live = session;
             SecurityCenterGlassGeometry next = geometry != null ? geometry : currentGeometry;
@@ -409,17 +442,32 @@ final class SecurityCenterGlassCoordinator
         return turboLayout != null && turboLayout == turboRef.get();
     }
 
-    private void hideAndReleaseCustom() {
+    private void hideCustomOnly() {
         SecurityCenterGlassOutputView current = output;
         if (current != null && !current.isDisposed()) current.setAuthorizedVisible(false);
+    }
+
+    private void hideAndRestoreVendor() {
+        hideCustomOnly();
+        boolean wasCustom = ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM;
+        View ownedTurbo = customOwnerTurboRef.get();
         ownership.releaseToVendor();
         renderedGeneration = -1L;
+        customOwnerTurboRef = new WeakReference<>(null);
+        if (!wasCustom || ownedTurbo == null || vendorMaterialBridge == null) return;
+        try {
+            vendorMaterialBridge.restoreVendor(ownedTurbo);
+        } catch (Throwable error) {
+            // Keep custom hidden and logical ownership released. Never synthesize guessed vendor
+            // tokens/blur/shadow state when the authoritative U() restoration itself fails.
+            log("vendor material restore failed", error);
+        }
     }
 
     private void releaseForRootDetach() {
         ReleaseDecision release = policy.releaseAll();
         scene.onRootDetached();
-        hideAndReleaseCustom();
+        hideAndRestoreVendor();
         cleanupViewObservers(false);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) release.sessionToShutdown : session;
@@ -458,5 +506,12 @@ final class SecurityCenterGlassCoordinator
             try { if (observer.isAlive()) observer.removeOnPreDrawListener(listener); }
             catch (Throwable ignored) {}
         }
+    }
+
+    private static void log(String message, Throwable error) {
+        try {
+            if (error != null) Api101Bridge.log(TAG + " " + message + ": " + error);
+            else Api101Bridge.log(TAG + " " + message);
+        } catch (Throwable ignored) {}
     }
 }
