@@ -13,6 +13,10 @@ import java.lang.ref.WeakReference;
 /** Launcher-style output sibling bound to one Security Center material peer. */
 final class SecurityCenterGlassSinkView extends TextureView
         implements TextureView.SurfaceTextureListener {
+    // Prismal's outer edge shell reaches roughly 2.2 logical pixels beyond the SDF boundary.
+    // Three pixels preserves that AA/highlight work area without changing the actual glass shape.
+    private static final float OPTICAL_OUTSET_PX = 3f;
+
     private final WeakReference<View> materialRef;
     private final SecurityCenterGlassSession session;
     private final float baseCornerRadiusPx;
@@ -60,8 +64,9 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (index < 0) return null;
         SecurityCenterGlassSinkView sink = new SecurityCenterGlassSinkView(
                 material.getContext(), material, session, baseCornerRadiusPx);
-        parent.addView(sink, index, new ViewGroup.LayoutParams(
-                Math.max(1, material.getWidth()), Math.max(1, material.getHeight())));
+        int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
+        int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
+        parent.addView(sink, index, new ViewGroup.LayoutParams(width, height));
         sink.syncFromMaterial();
         return sink;
     }
@@ -86,8 +91,8 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
 
         boolean changed = false;
-        int width = Math.max(1, material.getWidth());
-        int height = Math.max(1, material.getHeight());
+        int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
+        int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
         ViewGroup.LayoutParams params = getLayoutParams();
         if (params != null && (params.width != width || params.height != height)) {
             params.width = width;
@@ -96,10 +101,12 @@ final class SecurityCenterGlassSinkView extends TextureView
             changed = true;
         }
 
-        changed |= setFloatIfChanged(getX(), material.getX(), this::setX);
-        changed |= setFloatIfChanged(getY(), material.getY(), this::setY);
-        changed |= setFloatIfChanged(getPivotX(), material.getPivotX(), this::setPivotX);
-        changed |= setFloatIfChanged(getPivotY(), material.getPivotY(), this::setPivotY);
+        changed |= setFloatIfChanged(getX(), material.getX() - OPTICAL_OUTSET_PX, this::setX);
+        changed |= setFloatIfChanged(getY(), material.getY() - OPTICAL_OUTSET_PX, this::setY);
+        changed |= setFloatIfChanged(
+                getPivotX(), material.getPivotX() + OPTICAL_OUTSET_PX, this::setPivotX);
+        changed |= setFloatIfChanged(
+                getPivotY(), material.getPivotY() + OPTICAL_OUTSET_PX, this::setPivotY);
         changed |= setFloatIfChanged(getScaleX(), material.getScaleX(), this::setScaleX);
         changed |= setFloatIfChanged(getScaleY(), material.getScaleY(), this::setScaleY);
         changed |= setFloatIfChanged(getRotation(), material.getRotation(), this::setRotation);
@@ -116,8 +123,11 @@ final class SecurityCenterGlassSinkView extends TextureView
     }
 
     SecurityCenterGlassGeometry captureGeometry(View root) {
-        if (disposed || session.isShutdown() || root == null || !root.isAttachedToWindow()
+        View material = materialRef.get();
+        if (disposed || session.isShutdown() || material == null
+                || root == null || !root.isAttachedToWindow()
                 || !isAttachedToWindow() || getWidth() <= 0 || getHeight() <= 0
+                || material.getWidth() <= 0 || material.getHeight() <= 0
                 || root.getWidth() <= 0 || root.getHeight() <= 0) return null;
         try {
             Matrix sinkToGlobal = new Matrix();
@@ -127,11 +137,13 @@ final class SecurityCenterGlassSinkView extends TextureView
             Matrix globalToRoot = new Matrix();
             if (!rootToGlobal.invert(globalToRoot)) return null;
 
+            float rightLocal = OPTICAL_OUTSET_PX + material.getWidth();
+            float bottomLocal = OPTICAL_OUTSET_PX + material.getHeight();
             float[] points = new float[]{
-                    0f, 0f,
-                    getWidth(), 0f,
-                    getWidth(), getHeight(),
-                    0f, getHeight()
+                    OPTICAL_OUTSET_PX, OPTICAL_OUTSET_PX,
+                    rightLocal, OPTICAL_OUTSET_PX,
+                    rightLocal, bottomLocal,
+                    OPTICAL_OUTSET_PX, bottomLocal
             };
             sinkToGlobal.mapPoints(points);
             globalToRoot.mapPoints(points);
@@ -144,17 +156,20 @@ final class SecurityCenterGlassSinkView extends TextureView
                     || right <= left || bottom <= top) return null;
 
             float horizontalScale = distance(points[0], points[1], points[2], points[3])
-                    / Math.max(1f, getWidth());
+                    / Math.max(1f, material.getWidth());
             float verticalScale = distance(points[0], points[1], points[6], points[7])
-                    / Math.max(1f, getHeight());
+                    / Math.max(1f, material.getHeight());
             float visualScale = Math.min(horizontalScale, verticalScale);
             if (!finite(visualScale) || visualScale <= 0f) return null;
 
-            return SecurityCenterGlassGeometry.resolve(
+            SecurityCenterGlassGeometry shape = SecurityCenterGlassGeometry.resolve(
                     root.getWidth(), root.getHeight(),
                     0f, 0f,
                     left, top, right, bottom,
                     baseCornerRadiusPx * visualScale);
+            return shape != null
+                    ? shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)
+                    : null;
         } catch (Throwable ignored) {
             return null;
         }
@@ -208,8 +223,9 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (current != target) {
             if (current instanceof ViewGroup) ((ViewGroup) current).removeView(this);
             int index = Math.max(0, target.indexOfChild(material));
-            target.addView(this, index, new ViewGroup.LayoutParams(
-                    Math.max(1, material.getWidth()), Math.max(1, material.getHeight())));
+            int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
+            int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
+            target.addView(this, index, new ViewGroup.LayoutParams(width, height));
             try {
                 Api101Bridge.log("[DC][SecurityCenterGlass] sink parent recovered reason=" + reason
                         + " material=" + material.getClass().getSimpleName()
