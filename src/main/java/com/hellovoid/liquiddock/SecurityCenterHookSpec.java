@@ -69,8 +69,8 @@ final class SecurityCenterHookSpec {
                 "getAppsLayout",
                 "d0",
                 "U",
-                "f17941q",
-                "f17943s",
+                "q",
+                "s",
                 "gq.g",
                 "l");
     }
