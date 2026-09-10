@@ -21,7 +21,7 @@ import org.junit.Test;
  * <p>Every Java/Kotlin test is scanned. Production source/config inspection is denied by default.
  * Audited static API/architecture contracts are explicit exceptions; historical non-runtime
  * source readers outside this migration are explicit debt and may only shrink. Runtime behavior
- * must be exercised through typed production state/policy APIs.</p>
+ * must be exercised through typed production state/policy APIs.
  */
 public class RuntimeBehaviorTestPolicyContractTest {
     private static final List<Path> TEST_ROOTS = List.of(
@@ -150,30 +150,28 @@ public class RuntimeBehaviorTestPolicyContractTest {
             seenDebtReaders.add(name);
             return;
         }
-        violations.add(name + " reads production source but is neither a static contract nor legacy debt");
+        violations.add(name + " reads production source/config but is neither an audited static "
+                + "contract nor grandfathered debt");
+    }
+
+    private static boolean isProductionSourceReader(String source) {
+        // Default-deny by production/config reference instead of trying to enumerate all reader
+        // APIs. That keeps Files.lines/readAllLines/newBufferedReader and Kotlin readText/readLines
+        // from becoming trivial bypasses while audited static source contracts remain allowlisted.
+        return source.contains("src/main/")
+                || source.contains("build.gradle")
+                || source.contains("settings.gradle");
     }
 
     private static void rejectStaticRuntimeProof(
             String name, String source, List<String> violations) {
-        if (source.contains("substring(") || source.contains("indexOf(")) {
-            violations.add(name + " uses source slicing/order to prove behavior");
+        if (source.contains("indexOf(")
+                || source.contains("substring(")
+                || source.contains("split(")
+                || source.contains("lastIndexOf(")) {
+            violations.add(name + " is allowlisted only for static architecture/API assertions; "
+                    + "source slicing/order checks are runtime-behavior proof and must move to "
+                    + "typed state/policy tests");
         }
-    }
-
-    private static boolean isProductionSourceReader(String source) {
-        if (source == null || source.isEmpty()) return false;
-        boolean productionPath = source.contains("src/main/java")
-                || source.contains("src/main/kotlin")
-                || source.contains("src/main/resources")
-                || source.contains("src/main/AndroidManifest.xml")
-                || source.contains("build.gradle")
-                || source.contains("settings.gradle")
-                || source.contains("gradle.properties");
-        if (!productionPath) return false;
-        return source.contains("Files.readString(")
-                || source.contains("Files.readAllLines(")
-                || source.contains("Files.lines(")
-                || source.contains("Files.newBufferedReader(")
-                || source.contains(".readText()");
     }
 }
