@@ -26,6 +26,12 @@ final class UnlockCaptureRecoveryState {
     private boolean rolloverRequested;
 
     synchronized Decision onPrepare() {
+        // PREPARE may be emitted more than once for one keyguard transition. Once a recovery
+        // cycle is blocked, keep its serial and any in-flight rollover authority intact; otherwise
+        // the old completion can never release the barrier after a duplicate PREPARE.
+        if (blocked) {
+            return new Decision(false, false, false, activeSerial);
+        }
         activeSerial = ++nextSerial;
         blocked = true;
         rolloverRequested = false;
