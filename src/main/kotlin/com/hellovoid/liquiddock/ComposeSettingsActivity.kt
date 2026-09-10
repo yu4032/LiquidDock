@@ -608,6 +608,13 @@ private fun LiquidPage(
             stringResource(R.string.liquid_enable_summary),
             masterEnabled,
         ) { liquidGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SECURITY_CENTER_GLASS,
+            stringResource(R.string.liquid_security_center_glass_enable),
+            stringResource(R.string.liquid_security_center_glass_enable_summary),
+            masterEnabled && liquidGlass,
+        )
         BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
         IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && iconGlass)
         IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && iconGlass)
