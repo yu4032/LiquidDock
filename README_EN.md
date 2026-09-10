@@ -65,7 +65,7 @@ Current implementation properties:
 </p>
 
 ## Current support range
-
+<p align="center">
 | Item | Requirement |
 | --- | --- |
 | ROM | HyperOS 3.0.307+ |
@@ -73,7 +73,7 @@ Current implementation properties:
 | Hook environment | LSPosed / libxposed API 101 |
 | Build JDK | JDK 17 |
 | Android SDK | compileSdk 37 |
-
+</p>
 ### Before using
 
 LiquidDock directly depends on internal HyperOS Launcher / SystemUI behavior as well as vendor-private classes and hidden `SurfaceControl.Transaction` PassBlur APIs. A ROM, Launcher, or SystemUI update can change these private interfaces and temporarily break related features until LiquidDock is updated.
