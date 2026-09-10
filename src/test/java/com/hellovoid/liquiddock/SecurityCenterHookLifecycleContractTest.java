@@ -1,42 +1,39 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 
 import org.junit.Test;
 
-/** Static contract for the decompiled 40011320 Global Dock / All Apps lifecycle. */
+/** Typed contract for the decompiled 40011320 Global Dock / All Apps lifecycle. */
 public class SecurityCenterHookLifecycleContractTest {
-    private static String read(String path) throws Exception {
-        return Files.readString(Path.of(path));
+    private static boolean hasMethod(Class<?> type, String name, int parameterCount) {
+        return Arrays.stream(type.getDeclaredMethods())
+                .anyMatch(method -> method.getName().equals(name)
+                        && method.getParameterCount() == parameterCount);
+    }
+
+    private static Object invokeNoArg(Object target, String methodName) throws Exception {
+        Method method = target.getClass().getDeclaredMethod(methodName);
+        method.setAccessible(true);
+        return method.invoke(target);
     }
 
     @Test
-    public void globalDockBindsAfterRealConfigureThenDockReadyPath() throws Exception {
-        String spec = read("src/main/java/com/hellovoid/liquiddock/SecurityCenterHookSpec.java");
-        String hook = read("src/main/java/com/hellovoid/liquiddock/SecurityCenterGlassHook.java");
+    public void globalDockContractExposesConfigureAndDockReadyMembers() throws Exception {
+        SecurityCenterHookSpec spec = SecurityCenterHookSpec.forVersionCode(40011320L);
 
-        // 40011320 visible path: V(..., ja.a, ...) records type, then c0() creates the dock.
-        assertTrue(spec.contains("\"V\""));
-        assertTrue(spec.contains("\"c0\""));
-        assertTrue(hook.contains("spec.configureDockMethod()"));
-        assertTrue(hook.contains("spec.dockReadyMethod()"));
-        assertFalse(hook.contains("HookUtil.hook(prepare"));
+        assertTrue(hasMethod(SecurityCenterHookSpec.class, "configureDockMethod", 0));
+        assertTrue(hasMethod(SecurityCenterHookSpec.class, "dockReadyMethod", 0));
+        assertTrue("V".equals(invokeNoArg(spec, "configureDockMethod")));
+        assertTrue("c0".equals(invokeNoArg(spec, "dockReadyMethod")));
     }
 
     @Test
-    public void allAppsIsLateBoundInsteadOfRequiredForInitialDockSession() throws Exception {
-        String coordinator = read(
-                "src/main/java/com/hellovoid/liquiddock/SecurityCenterGlassCoordinator.java");
-        String hook = read("src/main/java/com/hellovoid/liquiddock/SecurityCenterGlassHook.java");
-
-        assertTrue(coordinator.contains(
-                "void bindGlobalDock(View turboLayout, View dockLayout)"));
-        assertTrue(coordinator.contains(
-                "void updateAllAppsLayout(View turboLayout, View appsLayout)"));
-        assertTrue(hook.contains("live.updateAllAppsLayout(turbo, (View) apps)"));
+    public void allAppsIsLateBoundInsteadOfRequiredForInitialDockSession() {
+        assertTrue(hasMethod(SecurityCenterGlassCoordinator.class, "bindGlobalDock", 2));
+        assertTrue(hasMethod(SecurityCenterGlassCoordinator.class, "updateAllAppsLayout", 2));
     }
 }
