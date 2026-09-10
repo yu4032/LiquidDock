@@ -5,8 +5,8 @@
 当前兼容边界：
 
 ```text
-HyperOS 3.0.307+
-com.miui.home release-4.50.x.x
+HyperOS 3.0.307+ / com.miui.home release-4.50.x.x
+HyperOS 4 / com.miui.securitycenter:ui versionCode 40011320（Global Dock + All Apps v1）
 libxposed API 101
 MiuiX PassBlur + OES/GLES zero-copy
 ```
@@ -15,7 +15,7 @@ MiuiX PassBlur + OES/GLES zero-copy
 
 ## 1. 进程与配置边界
 
-LiquidDock 当前主要注入 `com.miui.home`。`ModuleMain` 在包加载后完成 legacy migration、读取 API101 Remote Preferences，并安装 Launcher 侧模块。
+LiquidDock 的 Launcher 功能注入 `com.miui.home`，SystemUI 只提供 HOME/keyguard 时序源；Security Center v1 只在 `com.miui.securitycenter:ui` 安装专属侧边栏 glass hook。`ModuleMain` 是三者的 composition root：Launcher 才执行 legacy/config migration 与 `MainHook.install()`；Security Center 不运行 Launcher migration，也不进入 `MainHook` 生命周期。
 
 配置链路：
 
@@ -36,6 +36,8 @@ Settings SharedPreferences
 - `ConfigMigration` 只负责设置进程升级；
 - `LiquidDockConfig.load()` 不应产生跨模块副作用；
 - live visual toggle 通过独立 runtime state 管理，不要求重新构造整个 immutable config。
+
+Security Center 使用独立 `SecurityCenterGlassRuntimeState`，有效状态严格为 `Core.ENABLED && Glass.ENABLED && Glass.SECURITY_CENTER_GLASS`。关闭时先发布 disabled，再在主线程释放 custom material/session ownership，因此旧 callback 不能在 teardown 后重新 claim。
 
 ## 2. Runtime state
 
@@ -79,8 +81,10 @@ GPU normalization + overscan
         ↓
 Prismal optical renderer
         ↓
-Dock / Launcher output surface
+Dock / Launcher / Security Center output surface
 ```
+
+`RootPassBlurBackend` 是 Launcher root 与 Security Center sidebar root 共用的 source backend。它持有 native PassBlur producer、OES input、normalization、source freshness、producer recovery 与 EGL source lifecycle；ViewRoot/SurfaceControl 私有反射隔离在 `RootPassBlurEndpointBridge`。Launcher scene/Workstation/wallpaper policy 与 Security Center vendor/scene/material policy 都留在各自上层。
 
 原则：
 
@@ -88,7 +92,8 @@ Dock / Launcher output surface
 - 不恢复 ScreenCapture fallback；
 - vendor PassBlur 或隐藏 Surface API 不可用时 fail-closed；
 - sample validity 与最终 output coverage/scissor 分离；
-- overscan 用来保证强折射时仍能访问可见区域外的 backdrop 像素。
+- overscan 用来保证强折射时仍能访问可见区域外的 backdrop 像素；
+- native PassBlur scale 对 Launcher Workspace 与 Security Center root 均保持 `1.0`，质量缩放只发生在 OES normalization 之后。
 
 ### Workspace PassBlur 的 cadence 与质量域
 
@@ -126,7 +131,8 @@ Whole-Dock shadow 是独立能力。关闭后移除 LiquidDock 自己创建的 s
 
 核心组件：
 
-- `LauncherGlassSession`：共享 PassBlur/OES/EGL/renderer 生命周期；
+- `LauncherGlassSession`：Launcher-specific consumer，持有节点/output、Workspace projection、wallpaper 与 Workstation/rotation policy；
+- `RootPassBlurBackend`：共享 producer/OES/freshness/EGL source lifecycle；
 - `LauncherGlassSessionRegistry`：按稳定 Launcher root 管理 session；
 - `LauncherGlassSceneController`：负责 scene visibility、fresh-frame barrier 和 static layer；
 - `LauncherGlassStaticNode`：静态图标/Widget/文件夹节点；
@@ -152,7 +158,7 @@ Whole-Dock shadow 是独立能力。关闭后移除 LiquidDock 自己创建的 s
 
 ### Rotation
 
-旋转期间旧 producer 进入 settle/rebind 边界；新 orientation endpoint 准备并提交 fresh frame 后才恢复可见输出。
+旋转期间旧 producer 进入 settle/rebind 边界；新 orientation endpoint 准备并提交 fresh frame 后才恢复可见输出。Launcher 的已有 rotation settle policy 仍是 Launcher 专属行为，不进入共享 backend 或 Security Center。
 
 ## 7. Workstation / Laptop
 
@@ -209,6 +215,7 @@ HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid �
 ### Live visual
 
 - icon/widget/small-folder/large-folder glass；
+- Security Center sidebar glass component；
 - Dock customization 的可逆视觉 ownership；
 - Dock stroke；
 - Dock shadow；
@@ -226,7 +233,44 @@ HyperOS Workstation 可能在 Recents 往返时继续保留一个看似 valid �
 
 UI 文案必须区分“立即释放视觉 ownership”和“完整结构变更需重启桌面”。
 
-## 11. 当前重构方向
+## 11. Security Center Global Dock / All Apps v1
+
+首版只支持 `com.miui.securitycenter:ui` 的已验证 HyperOS 4 Security Center build：versionCode `40011320`，对应 versionName `13.2.0-260806.0.1.pad`。运行时 compatibility gate 以 versionCode 为程序化权威；未知 build 不安装版本专属 mutation hooks。`ja.a.f()==true` 的 type 4 / Global Dock 才进入 LiquidDock，type 1/3/5 保持 vendor-owned。
+
+Global Dock 与 All Apps 在已分析 build 中共享同一 sidebar Window/ViewRoot，因此结构为：
+
+```text
+one sidebar root
+  -> one RootPassBlurBackend
+  -> one native PassBlur producer / OES source
+  -> one SecurityCenterGlassSession
+  -> one transparent sibling SecurityCenterGlassOutputView
+```
+
+Dock -> All Apps -> Dock 只推进 scene generation、目标 geometry、clipping/material ownership；不会因页面切换重建 producer。只有 ViewRoot/SurfaceControl generation 真实变化或 producer recovery 才允许 endpoint rollover。
+
+显示授权严格经过：
+
+```text
+scene generation invalidated
+-> vendor transition visible
+-> geometry settled
+-> request current generation
+-> real OES frame
+-> normalization + Prismal render
+-> output eglSwapBuffers
+-> revalidate runtime/root/session/generation
+-> claim custom material
+-> reveal output
+```
+
+`bind/rebind` 成功本身不构成 freshness。旧 generation callback、root replacement、disable 或 terminal failure 后的 callback 都不能重新 reveal。
+
+Vendor handoff 只使用已验证语义边界：`TurboLayout.M(com.miui.dock.sidebar.p, ja.a)` 发现 type-4 panel；`TurboLayout.d0()` 启动 All Apps toggle；`f17943s` 是 transition completion authority，`f17941q` 是最终 page-presence authority；`gq.g.l(View)` 用于 HyperOS 4 material reset；`TurboLayout.U()` 是完整 vendor final-background restore authority。CUSTOM ownership 期间只抑制当前 TurboLayout 的 `U()`；释放时先把逻辑 owner 置回 VENDOR，再调用真实 `U()`，不重放猜测的 MiGlass/MaterialToken/blur/shadow 参数。
+
+HyperOS 3 的 capability policy 始终解析为普通 `BACKGROUND_BLUR`。这是未来兼容约束，不表示 v1 已支持未分析的 HyperOS 3 Security Center build，也不会把 HOS3 宣称为 soft-light glass。
+
+## 12. 当前重构方向
 
 后续优先级见 [TODO.md](TODO.md)。核心方向：
 
@@ -234,7 +278,7 @@ UI 文案必须区分“立即释放视觉 ownership”和“完整结构变更�
 2. 拆分 `WorkstationModeController`；
 3. 引入 `WidgetClassifier` / `WidgetSpecRegistry`；
 4. 按职责拆分 `HomeGridHook`；
-5. 将 `MainHook` 收缩为 composition root；
-6. 将 `LauncherGlassSession` 的 producer、freshness、EGL/OES 和 renderer 生命周期进一步分层。
+5. 将 `MainHook` 继续收缩为 Launcher composition boundary；
+6. 基于真机证据扩展 Security Center 其它 toolbox scene，而不是复制 producer/backend。
 
 任何重构都不得恢复 1.x ScreenCapture backend。
