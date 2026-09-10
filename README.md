@@ -57,8 +57,8 @@ TextureView composition
 
 当前实现的主要特性：
 
-- 背景帧保持在 GPU 路径中，不回读为 CPU Bitmap。
-- PassBlur 更新由内容源驱动，不通过固定轮询持续请求帧。
+- 背景帧保持在 GPU 路径中。
+- PassBlur 更新由内容源驱动，不需要通过固定轮询持续请求帧。
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
