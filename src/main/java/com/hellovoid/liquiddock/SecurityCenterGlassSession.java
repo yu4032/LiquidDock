@@ -83,7 +83,6 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private final SecurityCenterPresentationBarrier presentationBarrier =
             new SecurityCenterPresentationBarrier();
 
-    // Backend render-thread only, except identity checks guarded by synchronizedMap on callback.
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
     private final Map<SecurityCenterGlassSinkView, OutputState> outputs =
@@ -226,9 +225,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 || root == null || !root.isAttachedToWindow()
                 || presentation.rootWidth != frame.logicalWidth
                 || presentation.rootHeight != frame.logicalHeight
-                || request.sinks.length != request.frameGeometry.nodeCount()) {
-            return;
-        }
+                || request.sinks.length != request.frameGeometry.nodeCount()) return;
 
         OutputState[] requiredOutputs = new OutputState[request.sinks.length];
         for (int i = 0; i < request.sinks.length; i++) {
@@ -258,21 +255,12 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 sourceBackend.makePbufferCurrent();
                 prismalRenderer.beginGlassFrame();
                 prismalRenderer.drawGlass(
-                        geometry.toPrismalGeometry(),
-                        prismalParams,
-                        highlightProfile);
+                        geometry.toPrismalGeometry(), prismalParams, highlightProfile);
                 request.sinks[i].armPresentation(request.serial, request.generation);
                 presentTarget(prismalRenderer.outputTexture(), geometry, requiredOutputs[i]);
             }
             sourceBackend.makePbufferCurrent();
-
-            log("render generation=" + frame.generation
-                    + " nodes=" + request.frameGeometry.nodeCount()
-                    + " root=" + frame.logicalWidth + "x" + frame.logicalHeight
-                    + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight);
-
-            log("submitted serial=" + request.serial
-                    + " generation=" + frame.generation
+            log("submitted serial=" + request.serial + " generation=" + frame.generation
                     + " awaiting TextureView presentation ack");
         } catch (Throwable error) {
             for (SecurityCenterGlassSinkView sink : request.sinks) {
@@ -288,8 +276,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    void onOutputPresented(
-            SecurityCenterGlassSinkView sink, long serial, long generation) {
+    void onOutputPresented(SecurityCenterGlassSinkView sink, long serial, long generation) {
         if (shuttingDown || sink == null || serial < 0L || generation < 0L) return;
         FrameRequest active = inFlight;
         if (active == null || active.serial != serial || active.generation != generation
@@ -302,14 +289,13 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         inFlight = null;
         inFlightOutputs = null;
         FrameRequest latest = frameRequest;
-        boolean current = latest == active
+        boolean currentGenerationPresented = latest != null
+                && latest.generation == active.generation
                 && outputsStillCurrent(active, expectedOutputs)
                 && sourceBackend.hasFreshFrame(generation);
-        if (current) {
+        if (currentGenerationPresented) {
             Listener currentListener = listener;
-            if (currentListener != null) {
-                currentListener.onFrameRendered(this, generation);
-            }
+            if (currentListener != null) currentListener.onFrameRendered(this, generation);
             log("presented serial=" + serial + " generation=" + generation);
         }
         if (!shuttingDown && latest != null && latest != active) {
@@ -349,9 +335,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown) return;
         log("source terminal failure generation=" + generation + ": " + error);
         Listener currentListener = listener;
-        if (currentListener != null) {
-            currentListener.onTerminalFailure(this, generation, error);
-        }
+        if (currentListener != null) currentListener.onTerminalFailure(this, generation, error);
     }
 
     void shutdown() {
@@ -385,9 +369,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
 
-    private void presentTarget(
-            int sceneTexture,
-            SecurityCenterGlassGeometry geometry,
+    private void presentTarget(int sceneTexture, SecurityCenterGlassGeometry geometry,
             OutputState current) {
         if (current == null || geometry == null
                 || current.eglSurface == EGL14.EGL_NO_SURFACE
