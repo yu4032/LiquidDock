@@ -2,6 +2,8 @@ package com.hellovoid.liquiddock;
 
 import org.junit.Test;
 
+import java.lang.reflect.Method;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -43,7 +45,6 @@ public class SecurityCenterHookSpecTest {
         assertEquals("s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
-        assertEquals("com.miui.securitycenter.R$dimen", spec.resourceDimenClass());
         assertEquals("dp_24", spec.allAppsCornerRadiusResource());
     }
 
@@ -72,8 +73,14 @@ public class SecurityCenterHookSpecTest {
         assertEquals("s", spec.transformingField());
         assertEquals("gq.g", spec.os4MaterialHelperClass());
         assertEquals("l", spec.os4MaterialResetMethod());
-        assertEquals("com.miui.securitycenter.R$dimen", spec.resourceDimenClass());
         assertEquals("dp_24", spec.allAppsCornerRadiusResource());
+    }
+
+    @Test public void resourceTableSymbolIsNotRuntimeDexClassContract() {
+        for (Method method : SecurityCenterHookSpec.class.getDeclaredMethods()) {
+            assertFalse("JADX resource symbols must not become runtime class contracts",
+                    "resourceDimenClass".equals(method.getName()));
+        }
     }
 
     @Test public void toggleAuthorityUsesVendorTransformationStateInsteadOfTime() {
