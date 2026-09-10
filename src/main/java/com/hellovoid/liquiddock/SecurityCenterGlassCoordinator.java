@@ -8,7 +8,7 @@ import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
 
-/** Coordinates one Security Center Global Dock / All Apps glass session for the active root. */
+/** Coordinates one Security Center Global Dock / All Apps glass session for the active panel. */
 final class SecurityCenterGlassCoordinator
         implements SecurityCenterGlassRuntimeState.Owner, SecurityCenterGlassSession.Listener {
     static final class BindDecision {
@@ -92,17 +92,16 @@ final class SecurityCenterGlassCoordinator
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final LiquidDockConfig.Glass glassConfig;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
+    private final int allAppsCornerRadiusResId;
 
     private WeakReference<View> turboRef = new WeakReference<>(null);
     private WeakReference<View> dockRef = new WeakReference<>(null);
     private WeakReference<View> appsRef = new WeakReference<>(null);
     private WeakReference<View> rootRef = new WeakReference<>(null);
-    private WeakReference<View> targetRef = new WeakReference<>(null);
     private WeakReference<View> customOwnerTurboRef = new WeakReference<>(null);
-    private WeakReference<View> customOwnerTargetRef = new WeakReference<>(null);
     private SecurityCenterGlassSceneState.Target targetKind =
             SecurityCenterGlassSceneState.Target.DOCK;
-    private SecurityCenterGlassGeometry currentGeometry;
+    private SecurityCenterGlassFrameGeometry currentFrame;
     private SecurityCenterGlassSession session;
     private SecurityCenterGlassOutputView output;
     private long renderedGeneration = -1L;
@@ -118,11 +117,10 @@ final class SecurityCenterGlassCoordinator
                 }
 
                 @Override public void onViewDetachedFromWindow(View v) {
-                    // The FloatingWindow root can outlive one sidebar-panel presentation. Panel
-                    // detach therefore revokes visible glass independently from root authority.
+                    // Fallback only. Authoritative close is ob.e0.d2/f2 and revokes before teardown.
                     mainHandler.post(() -> {
                         if (v == turboRef.get() && !v.isAttachedToWindow()) {
-                            releaseForPanelDetach(v);
+                            releasePanel(v, "panel detached fallback");
                         }
                     });
                 }
@@ -143,30 +141,36 @@ final class SecurityCenterGlassCoordinator
             };
 
     SecurityCenterGlassCoordinator(LiquidDockConfig.Glass glassConfig) {
-        this(glassConfig, null);
+        this(glassConfig, null, 0);
     }
 
     SecurityCenterGlassCoordinator(
             LiquidDockConfig.Glass glassConfig,
             SecurityCenterVendorMaterialBridge vendorMaterialBridge) {
+        this(glassConfig, vendorMaterialBridge, 0);
+    }
+
+    SecurityCenterGlassCoordinator(
+            LiquidDockConfig.Glass glassConfig,
+            SecurityCenterVendorMaterialBridge vendorMaterialBridge,
+            int allAppsCornerRadiusResId) {
         this.glassConfig = glassConfig;
         this.vendorMaterialBridge = vendorMaterialBridge;
+        this.allAppsCornerRadiusResId = allAppsCornerRadiusResId;
         SecurityCenterGlassRuntimeState.setOwner(this);
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {
         if (turboLayout == null || dockLayout == null) return;
         View previousTurbo = turboRef.get();
-        if (previousTurbo != null && previousTurbo != turboLayout
-                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
-            hideAndRestoreVendor();
+        if (previousTurbo != null && previousTurbo != turboLayout) {
+            releasePanel(previousTurbo, "panel replaced");
         }
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
-        // c0() starts from R(), which disposes the vendor All Apps instance for this dock cycle.
         appsRef = new WeakReference<>(null);
-        targetRef = new WeakReference<>(dockLayout);
         targetKind = SecurityCenterGlassSceneState.Target.DOCK;
+        currentFrame = null;
         observeTurboAttach(turboLayout);
         if (!SecurityCenterGlassRuntimeState.isEnabled()) {
             releaseAll();
@@ -193,15 +197,9 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassSceneState.Target nextKind = allAppsPresent
                 ? SecurityCenterGlassSceneState.Target.ALL_APPS
                 : SecurityCenterGlassSceneState.Target.DOCK;
-        View target = allAppsPresent ? appsRef.get() : dockRef.get();
-        if (target == null) {
-            log("settled target missing target=" + nextKind
-                    + " generation=" + transitionGeneration, null);
-            return;
-        }
-        SecurityCenterGlassGeometry geometry = captureGeometry(target);
-        if (geometry == null) {
-            log("settled target geometry unavailable target=" + nextKind
+        SecurityCenterGlassFrameGeometry frame = captureFrame(nextKind);
+        if (frame == null) {
+            log("settled frame unavailable target=" + nextKind
                     + " generation=" + transitionGeneration, null);
             return;
         }
@@ -214,10 +212,14 @@ final class SecurityCenterGlassCoordinator
             return;
         }
         targetKind = nextKind;
-        targetRef = new WeakReference<>(target);
-        currentGeometry = geometry;
-        updateOutputPlacement(geometry);
-        applyDecision(settled, geometry);
+        currentFrame = frame;
+        updateOutputPlacement(frame);
+        applyDecision(settled, frame);
+    }
+
+    /** Called before vendor d2/f2 mutates or removes the panel. */
+    void onVendorPanelClosing(View turboLayout) {
+        releasePanel(turboLayout, "vendor panel close");
     }
 
     boolean shouldSuppressVendorFinalBackground(Object turboLayout) {
@@ -231,6 +233,11 @@ final class SecurityCenterGlassCoordinator
 
     @Override
     public void releaseAll() {
+        View turbo = turboRef.get();
+        if (turbo != null) {
+            releasePanel(turbo, "runtime release");
+            return;
+        }
         ReleaseDecision release = policy.releaseAll();
         if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) {
             scene.onRuntimeDisabled();
@@ -241,10 +248,7 @@ final class SecurityCenterGlassCoordinator
                 ? (SecurityCenterGlassSession) release.sessionToShutdown : session;
         session = null;
         if (old != null) old.shutdown();
-        rootRef = new WeakReference<>(null);
-        targetRef = new WeakReference<>(null);
-        currentGeometry = null;
-        renderedGeneration = -1L;
+        clearFrameState();
     }
 
     @Override
@@ -260,32 +264,29 @@ final class SecurityCenterGlassCoordinator
         if (!decision.claimCustomOwnership || !decision.revealCustom) return;
         View turbo = turboRef.get();
         View dock = dockRef.get();
-        View activeTarget = targetRef.get();
+        View apps = currentFrame != null && currentFrame.appsGeometry() != null ? appsRef.get() : null;
         SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
-        if (turbo == null || dock == null || activeTarget == null || bridge == null) return;
+        if (turbo == null || dock == null || bridge == null) return;
         try {
-            bridge.claimCustom(turbo, dock, activeTarget);
+            bridge.claimCustom(turbo, dock, apps);
         } catch (Throwable error) {
             hideCustomOnly();
             ownership.releaseToVendor();
             renderedGeneration = -1L;
-            try {
-                bridge.restoreVendor(turbo, activeTarget);
-            } catch (Throwable restoreError) {
-                log("claim rollback restore failed", restoreError);
-            }
+            try { bridge.restoreVendor(turbo); }
+            catch (Throwable restoreError) { log("claim rollback restore failed", restoreError); }
             log("custom material claim failed closed", error);
             return;
         }
 
         ownership.onCustomClaimed();
         customOwnerTurboRef = new WeakReference<>(turbo);
-        customOwnerTargetRef = new WeakReference<>(activeTarget);
         renderedGeneration = generation;
         SecurityCenterGlassOutputView current = output;
         if (current != null && !current.isDisposed()) current.setAuthorizedVisible(true);
         log("current-generation scene revealed generation=" + generation
-                + " scene=" + scene.scene(), null);
+                + " scene=" + scene.scene()
+                + " nodes=" + (currentFrame != null ? currentFrame.nodeCount() : 0), null);
     }
 
     @Override
@@ -297,15 +298,10 @@ final class SecurityCenterGlassCoordinator
                 SecurityCenterGlassRuntimeState.isEnabled())) return;
         if (callbackSession != session || callbackSession.isShutdown()
                 || root == null || !root.isAttachedToWindow()) return;
-
-        SecurityCenterGlassSceneState.Decision decision = scene.onTerminalFailure();
-        hideAndRestoreVendor();
-        ReleaseDecision release = policy.releaseAll();
-        cleanupViewObservers(false);
-        SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
-                ? (SecurityCenterGlassSession) release.sessionToShutdown : callbackSession;
-        session = null;
-        if (decision.shutdownSession && old != null) old.shutdown();
+        scene.onTerminalFailure();
+        View turbo = turboRef.get();
+        if (turbo != null) releasePanel(turbo, "terminal failure");
+        else releaseAll();
         log("failed closed generation=" + generation, error);
     }
 
@@ -320,7 +316,7 @@ final class SecurityCenterGlassCoordinator
         if (bind.reuseSession) {
             ensureOutputSibling(turboLayout);
             installRootObserver(root);
-            refreshCurrentGeometry(true);
+            refreshCurrentFrame(true);
             return;
         }
         if (!bind.createSession) return;
@@ -347,14 +343,13 @@ final class SecurityCenterGlassCoordinator
 
         SecurityCenterGlassSceneState.Decision attached = scene.onRootAttached();
         applyDecision(attached, null);
-        SecurityCenterGlassGeometry geometry = captureGeometry(dockRef.get());
-        if (geometry != null) {
-            currentGeometry = geometry;
-            updateOutputPlacement(geometry);
+        SecurityCenterGlassFrameGeometry frame = captureFrame(SecurityCenterGlassSceneState.Target.DOCK);
+        if (frame != null) {
+            currentFrame = frame;
+            updateOutputPlacement(frame);
         }
         applyDecision(
-                scene.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK),
-                geometry);
+                scene.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK), frame);
     }
 
     private void ensureOutputSibling(View turboLayout) {
@@ -365,37 +360,38 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassOutputView current = output;
         if (current != null && !current.isDisposed() && current.getParent() == parent
                 && parent.indexOfChild(current) == parent.indexOfChild(turboLayout) - 1) {
-            if (currentGeometry != null) current.updatePlacement(rootRef.get(), currentGeometry);
+            if (currentFrame != null) current.updatePlacement(
+                    rootRef.get(), currentFrame.presentationGeometry());
             return;
         }
         if (current != null) current.dispose();
         output = SecurityCenterGlassOutputView.attachBefore(turboLayout, live);
-        if (output != null && currentGeometry != null) {
-            output.updatePlacement(rootRef.get(), currentGeometry);
+        if (output != null && currentFrame != null) {
+            output.updatePlacement(rootRef.get(), currentFrame.presentationGeometry());
         }
     }
 
-    private void updateOutputPlacement(SecurityCenterGlassGeometry geometry) {
+    private void updateOutputPlacement(SecurityCenterGlassFrameGeometry frame) {
         SecurityCenterGlassOutputView current = output;
         View root = rootRef.get();
-        if (current != null && !current.isDisposed() && root != null && geometry != null) {
-            current.updatePlacement(root, geometry);
+        if (current != null && !current.isDisposed() && root != null && frame != null) {
+            current.updatePlacement(root, frame.presentationGeometry());
         }
     }
 
     private void applyDecision(
             SecurityCenterGlassSceneState.Decision decision,
-            SecurityCenterGlassGeometry geometry) {
+            SecurityCenterGlassFrameGeometry frame) {
         if (decision == null) return;
         if (decision.hideCustom || decision.releaseCustomOwnership) hideAndRestoreVendor();
-        if (geometry != null) updateOutputPlacement(geometry);
+        if (frame != null) updateOutputPlacement(frame);
         if (decision.requestFresh) {
             SecurityCenterGlassSession live = session;
             View root = rootRef.get();
             if (live != null && !live.isShutdown() && root != null
                     && policy.currentSession() == live && policy.currentRoot() == root
-                    && geometry != null && decision.generation == scene.generation()) {
-                live.requestFresh(decision.generation, geometry);
+                    && frame != null && decision.generation == scene.generation()) {
+                live.requestFresh(decision.generation, frame);
             }
         }
         if (decision.shutdownSession) {
@@ -407,15 +403,14 @@ final class SecurityCenterGlassCoordinator
         }
     }
 
-    private void refreshCurrentGeometry(boolean requestIfChanged) {
+    private void refreshCurrentFrame(boolean requestIfChanged) {
         if (!SecurityCenterGlassRuntimeState.isEnabled()
                 || scene.scene() == SecurityCenterGlassSceneState.Scene.DETACHED
                 || scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
-        View target = targetRef.get();
-        SecurityCenterGlassGeometry observed = captureGeometry(target);
+        SecurityCenterGlassFrameGeometry observed = captureFrame(targetKind);
         if (observed == null) return;
-        boolean changed = currentGeometry == null || !currentGeometry.sameAs(observed);
-        currentGeometry = observed;
+        boolean changed = currentFrame == null || !currentFrame.sameAs(observed);
+        currentFrame = observed;
         updateOutputPlacement(observed);
         if (!requestIfChanged || !changed) return;
         SecurityCenterGlassSession live = session;
@@ -427,7 +422,21 @@ final class SecurityCenterGlassCoordinator
         }
     }
 
-    private SecurityCenterGlassGeometry captureGeometry(View target) {
+    private SecurityCenterGlassFrameGeometry captureFrame(SecurityCenterGlassSceneState.Target kind) {
+        SecurityCenterGlassGeometry dock = captureGeometry(
+                dockRef.get(), SecurityCenterGlassSceneState.Target.DOCK);
+        if (dock == null) return null;
+        if (kind != SecurityCenterGlassSceneState.Target.ALL_APPS) {
+            return SecurityCenterGlassFrameGeometry.dockOnly(dock);
+        }
+        SecurityCenterGlassGeometry apps = captureGeometry(
+                appsRef.get(), SecurityCenterGlassSceneState.Target.ALL_APPS);
+        if (apps == null) return null;
+        return SecurityCenterGlassFrameGeometry.dockAndApps(dock, apps);
+    }
+
+    private SecurityCenterGlassGeometry captureGeometry(
+            View target, SecurityCenterGlassSceneState.Target kind) {
         View root = rootRef.get();
         if (root == null || target == null || !root.isAttachedToWindow()
                 || !target.isAttachedToWindow() || root.getWidth() <= 0 || root.getHeight() <= 0
@@ -436,9 +445,14 @@ final class SecurityCenterGlassCoordinator
         int[] targetLocation = new int[2];
         root.getLocationOnScreen(rootLocation);
         target.getLocationOnScreen(targetLocation);
-        float radius = MiuixGlassHook.readNativeOpticsRadius(target);
-        if (!Float.isFinite(radius) || radius <= 0f) {
-            radius = Math.min(target.getWidth(), target.getHeight()) * 0.12f;
+        float radius;
+        if (kind == SecurityCenterGlassSceneState.Target.ALL_APPS) {
+            if (allAppsCornerRadiusResId == 0) return null;
+            radius = target.getResources().getDimension(allAppsCornerRadiusResId);
+            if (!Float.isFinite(radius) || radius < 0f) return null;
+        } else {
+            radius = MiuixGlassHook.readNativeOpticsRadius(target);
+            if (!Float.isFinite(radius) || radius < 0f) radius = 0f;
         }
         return SecurityCenterGlassGeometry.resolve(
                 root.getWidth(), root.getHeight(),
@@ -463,7 +477,7 @@ final class SecurityCenterGlassCoordinator
                     && policy.currentRoot() == root
                     && policy.currentSession() == liveSession
                     && liveSession != null && !liveSession.isShutdown()) {
-                refreshCurrentGeometry(true);
+                refreshCurrentFrame(true);
             }
             return true;
         };
@@ -505,52 +519,49 @@ final class SecurityCenterGlassCoordinator
         hideCustomOnly();
         boolean wasCustom = ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM;
         View ownedTurbo = customOwnerTurboRef.get();
-        View ownedTarget = customOwnerTargetRef.get();
         ownership.releaseToVendor();
         renderedGeneration = -1L;
         customOwnerTurboRef = new WeakReference<>(null);
-        customOwnerTargetRef = new WeakReference<>(null);
         if (!wasCustom || ownedTurbo == null || vendorMaterialBridge == null) return;
         try {
-            vendorMaterialBridge.restoreVendor(ownedTurbo, ownedTarget);
+            vendorMaterialBridge.restoreVendor(ownedTurbo);
         } catch (Throwable error) {
-            // Keep custom hidden and logical ownership released. Never synthesize guessed vendor
-            // tokens/blur/shadow state when the authoritative U() restoration itself fails.
             log("vendor material restore failed", error);
         }
     }
 
-    private void releaseForPanelDetach(View turboLayout) {
+    private void releasePanel(View turboLayout, String reason) {
         if (turboLayout == null || turboLayout != turboRef.get()) return;
         ReleaseDecision release = policy.releaseAll();
-        scene.onRootDetached();
+        if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) scene.onRootDetached();
         hideAndRestoreVendor();
         cleanupViewObservers(true);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) release.sessionToShutdown : session;
         session = null;
         if (old != null) old.shutdown();
-        rootRef = new WeakReference<>(null);
-        targetRef = new WeakReference<>(null);
-        currentGeometry = null;
-        renderedGeneration = -1L;
-        log("panel detached; custom glass released", null);
+        clearFrameState();
+        log(reason + "; custom glass released", null);
     }
 
     private void releaseForRootDetach() {
         ReleaseDecision release = policy.releaseAll();
-        scene.onRootDetached();
+        if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) scene.onRootDetached();
         hideAndRestoreVendor();
         cleanupViewObservers(true);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) release.sessionToShutdown : session;
         session = null;
         if (old != null) old.shutdown();
-        rootRef = new WeakReference<>(null);
-        targetRef = new WeakReference<>(null);
-        currentGeometry = null;
-        renderedGeneration = -1L;
+        clearFrameState();
         log("root detached; custom glass released", null);
+    }
+
+    private void clearFrameState() {
+        rootRef = new WeakReference<>(null);
+        currentFrame = null;
+        targetKind = SecurityCenterGlassSceneState.Target.DOCK;
+        renderedGeneration = -1L;
     }
 
     private void cleanupViewObservers(boolean removeTurboListener) {
