@@ -24,6 +24,10 @@ final class SecurityCenterGlassSinkView extends TextureView
     private Surface outputSurface;
     private boolean disposed;
     private boolean authorizedVisible;
+    private volatile long pendingPresentationSerial = -1L;
+    private volatile long pendingPresentationGeneration = -1L;
+    private volatile long armedSurfaceTimestamp = Long.MIN_VALUE;
+    private volatile long lastObservedSurfaceTimestamp = Long.MIN_VALUE;
     private boolean parentRecoveryPosted;
 
     private SecurityCenterGlassSinkView(
@@ -181,6 +185,20 @@ final class SecurityCenterGlassSinkView extends TextureView
         syncFromMaterial();
     }
 
+    void armPresentation(long serial, long generation) {
+        if (disposed || session.isShutdown() || serial < 0L || generation < 0L) return;
+        pendingPresentationSerial = serial;
+        pendingPresentationGeneration = generation;
+        armedSurfaceTimestamp = lastObservedSurfaceTimestamp;
+    }
+
+    void clearPresentationArm(long serial) {
+        if (pendingPresentationSerial != serial) return;
+        pendingPresentationSerial = -1L;
+        pendingPresentationGeneration = -1L;
+        armedSurfaceTimestamp = Long.MIN_VALUE;
+    }
+
     boolean isDisposed() {
         return disposed || session.isShutdown();
     }
@@ -189,6 +207,9 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (disposed) return;
         disposed = true;
         authorizedVisible = false;
+        pendingPresentationSerial = -1L;
+        pendingPresentationGeneration = -1L;
+        armedSurfaceTimestamp = Long.MIN_VALUE;
         setAlpha(0f);
         View material = materialRef.get();
         if (material != null) {
@@ -271,7 +292,18 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture texture) {
-        // Current-generation visibility is authorized by SecurityCenterGlassCoordinator.
+        if (texture == null || disposed || session.isShutdown()) return;
+        long timestamp = texture.getTimestamp();
+        long previous = lastObservedSurfaceTimestamp;
+        lastObservedSurfaceTimestamp = timestamp;
+        long serial = pendingPresentationSerial;
+        long generation = pendingPresentationGeneration;
+        if (serial < 0L || generation < 0L || timestamp == armedSurfaceTimestamp
+                || timestamp == previous) return;
+        pendingPresentationSerial = -1L;
+        pendingPresentationGeneration = -1L;
+        armedSurfaceTimestamp = Long.MIN_VALUE;
+        session.onOutputPresented(this, serial, generation);
     }
 
     private interface FloatSetter { void set(float value); }
