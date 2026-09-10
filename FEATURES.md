@@ -1,9 +1,8 @@
 # LiquidDock 功能手册
 
-本文档按当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）的实际实现整理。当前 Liquid Glass 主线仅支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**。
+本文档按当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）的实际实现整理。Launcher Liquid Glass 主线支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**；Security Center v1 另增加已验证 HyperOS 4 build 的 Global Dock / All Apps 支持。
 
 旧的 ScreenCapture / bitmap readback / `DockLiquidGlassView` 捕获链只保留在 `archive/1.x`，不属于当前功能。
-
 
 ---
 
@@ -55,7 +54,7 @@ Widget 类型和 span 规则目前仍有硬编码，后续计划迁移到 `Widge
 | 描边圆角偏移 | −50 ~ 100 dp* | `corner_offset`；历史兼容语义由 typed config 保留 |
 | 内部模糊圆角偏移 | −50 ~ 100 dp | `blur_corner_offset` |
 | 方圆形 | 开/关 | 使用 squircle 轮廓；已安装描边会即时刷新 |
-| Fill-Diff | 开/关 | 使用 outer/inner 轮廓差形成描边；已安装描边会即时刷新 |
+| Fill-Diff | 开/关 | 使用 outer/inner 轮廓差形成描边 |
 
 关闭 Dock customization 后，LiquidDock 会停止继续修改 vendor Dock View，并在已保存原状态的路径上释放自己的视觉 ownership；不会伪造未知的 MIUI 原生 shadow 参数。
 
@@ -117,7 +116,7 @@ GPU normalization / overscan
         ↓
 Prismal optical renderer
         ↓
-Launcher / Dock output surface
+Launcher / Dock / Security Center output surface
 ```
 
 核心原则：
@@ -127,6 +126,7 @@ Launcher / Dock output surface
 - PassBlur producer / OES / EGL / Prismal 全部保持 GPU 路径；
 - vendor 私有接口不可用时 glass fail-closed，不退回 1.x 截图方案。
 
+`RootPassBlurBackend` 现负责可跨 Launcher root / Security Center root 复用的 producer、OES、normalization、freshness 与 EGL source 生命周期；各 domain 的 scene/material policy 留在自己的 coordinator/session。
 
 ## Workspace 实时采样与性能
 
@@ -156,9 +156,10 @@ Launcher Workspace 的 shared PassBlur 在 HOME 激活时保持 continuous updat
 - **Widget glass**：部分 Launcher Widget / MAML Widget；
 - **小文件夹 glass**；
 - **大文件夹 glass**；
-- **拖拽 / launch proxy glass**：在 Workspace drag / app launch 动画期间跟随代理几何。
+- **拖拽 / launch proxy glass**：在 Workspace drag / app launch 动画期间跟随代理几何；
+- **Security Center sidebar glass（v1）**：精确支持 build `40011320` 的 type-4 Global Dock 与 All Apps。
 
-图标、Widget、文件夹的静态 glass 不再各自建立独立渲染器，而是共享一个 root-wide `LauncherGlassSession` / static compositor；拖拽输出继续使用同一 backdrop/source 生命周期。
+图标、Widget、文件夹的静态 glass 不再各自建立独立渲染器，而是共享一个 root-wide `LauncherGlassSession` / static compositor；拖拽输出继续使用同一 backdrop/source 生命周期。Security Center 使用独立进程内的一个 root-wide session，但复用同一个通用 `RootPassBlurBackend` 抽象。
 
 ---
 
@@ -199,7 +200,7 @@ Launcher glass 支持按对象类型选择 highlight profile，使 Dock、普通
 - caustics；
 - edge band / edge thickness。
 
-这套 profile 与共享 backdrop 分离，因此调整对象的 highlight 不需要建立新的 PassBlur producer。
+这套 profile 与共享 backdrop 分离，因此调整对象的 highlight 不需要建立新的 PassBlur producer。Security Center 大面积 sidebar 使用现有 `largeSurfaceHighlightProfile`，v1 不增加一套独立光学参数。
 
 ---
 
@@ -267,7 +268,8 @@ v2.1.1 起，以下组件开关使用 live runtime state：
 - icon glass；
 - widget glass；
 - small-folder glass；
-- large-folder glass。
+- large-folder glass；
+- Security Center sidebar glass（独立 `SecurityCenterGlassRuntimeState`）。
 
 关闭组件时遵循：
 
@@ -276,9 +278,9 @@ v2.1.1 起，以下组件开关使用 live runtime state：
 3. 主线程释放对应 static/drag/vendor-material ownership；
 4. 其它 glass 类型不受影响。
 
-因此关闭 icon glass 不会一起销毁 widget glass，关闭 small-folder 也不会释放 large-folder 的 material ownership。
+因此关闭 icon glass 不会一起销毁 widget glass，关闭 small-folder 也不会释放 large-folder 的 material ownership。Security Center 的 effective state 是 Core、Liquid Glass master、Security Center component 三者的与；其中任一关闭都会隐藏 custom output、释放 vendor ownership 并 teardown sidebar session。
 
-重新开启时保留轻量 inert hooks，并通过 Workspace reconcile / attach lifecycle 重新取得 ownership，无需为了普通视觉开关重启 Launcher。
+重新开启时保留轻量 inert hooks，并通过对应 attach/lifecycle 重新取得 ownership；Launcher 的结构性 master/hook 安装边界仍遵循 restart-bound 说明。
 
 ---
 
@@ -294,6 +296,8 @@ v2.1.1 支持多组可配置 glass 动画时序，包括：
 
 文件夹打开/关闭期间，LiquidDock 会继续隐藏其已经接管的 vendor material，并用可逆 alpha transition 切换 Liquid Glass，降低 native background 闪现。
 
+Security Center Dock / All Apps 的页面完成不使用固定动画时长：vendor `f17943s` 是 transition-in-progress authority，pre-draw 等到它变为 false 后才读取最终页面状态并请求新 generation。
+
 ---
 
 # Runtime 生效边界
@@ -305,6 +309,7 @@ v2.1.1 支持多组可配置 glass 动画时序，包括：
 当前包括：
 
 - icon / widget / small-folder / large-folder glass；
+- Security Center sidebar glass component；
 - Dock customization 的视觉 ownership；
 - Dock stroke；
 - Dock shadow；
@@ -384,13 +389,50 @@ Recents 与 Launcher static glass 的关系由 fresh-frame barrier 控制；Work
 
 ---
 
+# 安全中心侧边栏 Liquid Glass（v1）
+
+当前首版支持边界：
+
+- package：`com.miui.securitycenter`；
+- process：`com.miui.securitycenter:ui`；
+- Security Center versionCode：`40011320`；对应 versionName：`13.2.0-260806.0.1.pad`；
+- scene：仅 type-4 Global Dock 与其 All Apps 页面；
+- type 1/3/5 Game/Video/Conversation toolbox 不接管。
+
+设置项为 `liquid_security_center_glass`，默认关闭。它复用现有 Prismal 光学参数和 `largeSurfaceHighlightProfile`，不提供 Security Center 专属参数组。
+
+Global Dock 与 All Apps 共用同一个 sidebar Window/ViewRoot，因此只创建一个 root-wide `RootPassBlurBackend`、一个 native PassBlur producer/OES source 和一个 `SecurityCenterGlassSession`。页面切换只改变 scene generation、geometry/clipping 与 material ownership，正常 Dock -> All Apps -> Dock 不重建 native endpoint。
+
+首帧与每次页面切换均遵守 current-generation barrier：
+
+```text
+vendor visible
+-> geometry settled
+-> request generation
+-> real OES frame
+-> Prismal render
+-> output swap
+-> runtime/root/session/generation recheck
+-> vendor material handoff
+-> custom reveal
+```
+
+因此 bind/rebind 成功、普通 View redraw 或旧纹理都不能授权显示。transition completion 由 vendor `f17943s` 决定，不使用固定延迟。
+
+HyperOS 4 的 vendor material release 使用 `TurboLayout.U()` 作为完整恢复权威；LiquidDock 不猜 MiGlass/MaterialToken/blur/shadow 参数。unsupported build、reflection failure、producer/EGL failure 或 stale callback 都 fail closed，保持或恢复 vendor material。
+
+HyperOS 3 capability policy 始终为普通 background blur；这是未来版本适配约束，当前 v1 不宣称支持未分析 HOS3 Security Center，也不会把其 blur 描述为 soft-light glass。
+
+---
+
 # 兼容性与失败模式
 
-当前 Liquid Glass 依赖 HyperOS 3.0.307+ 的 vendor 私有接口，包括 MiuiX PassBlur、隐藏 Surface / SurfaceControl 行为和 Launcher 4.50.x.x 内部类。
+Launcher Liquid Glass 依赖 HyperOS 3.0.307+ 的 vendor 私有接口，包括 MiuiX PassBlur、隐藏 Surface / SurfaceControl 行为和 Launcher 4.50.x.x 内部类。Security Center v1 另外依赖已验证的 HyperOS 4 build `40011320` 的精确 `M/d0/U` 与对应字段/材质 helper 语义。
 
 因此：
 
-- ROM / Launcher 升级后若 vendor class 或私有 API 变化，相关 Hook 可能 fail-closed；
+- ROM / Launcher / Security Center 升级后若 vendor class 或私有 API 变化，相关 Hook fail-closed；
+- 未知 Security Center versionCode 不安装版本专属 mutation hook；
 - zero-copy glass 不会回退到 ScreenCapture；
 - Widget glass 仍只属于“部分支持”；
 - Workstation / Laptop 仍属于实验性适配；

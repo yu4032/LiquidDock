@@ -6,9 +6,11 @@
 
 ```text
 com.miui.home
+com.android.systemui
+com.miui.securitycenter
 ```
 
-旧的 ScreenCapture / SystemUI freeform capture / bitmap readback Hook 不属于当前主线。
+其中 SystemUI 只提供时序源；Security Center 只在 `com.miui.securitycenter:ui` 的精确进程 gate 通过后安装专属 sidebar hook。旧的 ScreenCapture / SystemUI freeform capture / bitmap readback Hook 不属于当前主线。
 
 ## 1. 入口与安装边界
 
@@ -19,6 +21,8 @@ API 101 入口为 `ModuleMain`。Launcher 进程启动时主要完成：
 3. 初始化 `GlassRuntimeState` / `VisualRuntimeState` 等 live state；
 4. `MainHook.install(classLoader)`；
 5. 安装 Grid / Dock / Workstation / Recents / Liquid Glass 等模块。
+
+Security Center 分支不会执行 Launcher migration，也不会调用 `MainHook.install()`；它只读取 typed config，初始化 `SecurityCenterGlassRuntimeState`，然后安装 `SecurityCenterGlassHook`。
 
 完整 master-switch 启停仍属于 restart-bound：运行中关闭可以释放已接管的视觉 ownership，但不能安全撤销所有安装期结构 Hook。
 
@@ -51,8 +55,10 @@ MiuiX PassBlur
   -> SurfaceTexture / GL_TEXTURE_EXTERNAL_OES
   -> normalization / overscan
   -> Prismal renderer
-  -> Dock / Launcher output
+  -> Dock / Launcher / Security Center output
 ```
+
+共享 `RootPassBlurBackend` 只持有 root producer/OES/freshness/EGL source lifecycle；系统私有 ViewRoot/SurfaceControl inspection 在 `RootPassBlurEndpointBridge`。Launcher、Dock、Security Center 通过显式 `PassBlurDomain` / `PassBlurBindRequest` 选择策略，不再由 View hierarchy 猜 domain。
 
 ### Workspace source cadence / quality gate
 
@@ -63,7 +69,7 @@ MiuiX PassBlur
 - `PassBlurRenderDomain` 只计算本地 logical root 与 physical FBO 的 50%–100% 尺寸分离；
 - `PassBlurSourceFrameGate` 只对真实 `OnFrameAvailable` 决定是否触发 Prismal/output render，不创建 timer 或 Choreographer work；
 - 被 FPS gate 拒绝的 source frame 会走 source-only `updateTexImage()` drain，避免 BufferQueue 堵塞；
-- `consumedGeneration != sceneGeneration` 时 freshness 优先，当前 frame 绕过 render cap。
+- 当前 scene generation 的 freshness 优先于 render cap。
 
 分辨率变化只请求 backdrop rebuild，不因质量调整重建 native producer endpoint。
 
@@ -157,6 +163,8 @@ onRecentViewHide
 
 true -> false 时先发布 flag，再 dispatch teardown；已排队 callback 因此无法在释放后重新 claim。
 
+Security Center 使用独立 `SecurityCenterGlassRuntimeState`，有效状态为 Core + global glass + Security Center component 三者同时开启；同样遵守先发布 false、后释放 ownership/session 的顺序。
+
 ### Dock visuals
 
 `VisualRuntimeState` 监听：
@@ -242,7 +250,29 @@ disable 时：
 
 `RecentsBackgroundBlurHook` 继续针对 Launcher 自身 Recents blur 方法缩放背景模糊强度。它与 Liquid Glass backdrop producer 是独立功能，不参与 zero-copy capture/source selection。
 
-## 14. 维护原则
+## 14. Security Center Global Dock / All Apps
+
+`SecurityCenterGlassHook` 只在 `com.miui.securitycenter:ui` 且 package versionCode `40011320` 时安装版本专属 mutation hooks。对应 build label 为 `13.2.0-260806.0.1.pad`；未知 versionCode 只记录一次 diagnostic，不创建 producer、不修改 material。
+
+| 目标 | 精确方法/字段 | 作用 |
+|---|---|---|
+| `DockWindowManagerService` | `onCreate()` | original first，取得真实 `Context` 并读取 package versionCode，完成一次性 build validation |
+| `TurboLayout` | `M(com.miui.dock.sidebar.p, ja.a)` | original first；仅 `ja.a.f()==true` 的 type 4 获取 Dock/All Apps View 并绑定 coordinator |
+| `TurboLayout` | `d0()` | All Apps toggle；调用前读取 `f17943s`，vendor 已 transforming 时不启动 LiquidDock transition |
+| `TurboLayout` | `f17943s` | vendor transformation-in-progress authority；pre-draw 只在该字段变 false 后 settle |
+| `TurboLayout` | `f17941q` | settle 时读取最终 All Apps presence，决定目标 scene/geometry |
+| `gq.g` | static `l(View)` | 当前 generation Prismal 已完成后，reset Dock 的 HyperOS 4 vendor material |
+| `TurboLayout` | `U()` | 完整 vendor final-background restore；只在 CUSTOM + current generation 时 suppress |
+
+页面切换不靠固定 duration 或 frame count。`d0()` 后只安装一个 pre-draw observer，直到 `f17943s == false`；然后请求新 generation，等待真实 OES frame、Prismal render 与 output swap 完成才允许 custom claim/reveal。
+
+释放时先隐藏 custom 并把 material ownership 改回 VENDOR，再调用真实 `U()`。这样恢复调用不会被 LiquidDock 自己的 `U()` gate 拦截；LiquidDock 不调用私有 `S()`，不全局 hook material helper，也不重放猜测的 MiGlass/MaterialToken/blur/shadow 参数。
+
+Global Dock 与 All Apps 共用同一个 sidebar root，因此同一个 `RootPassBlurBackend` / native producer / `SecurityCenterGlassSession` 跨页复用。root/session/generation/runtime 任一不匹配时 callback 都 fail closed。
+
+HyperOS 3 capability 规则只允许普通 background blur；该规则用于未来 build 适配，不代表当前 v1 已支持未验证的 HOS3 Security Center。
+
+## 15. 维护原则
 
 新增 Hook 时优先保持：
 
@@ -250,4 +280,5 @@ disable 时：
 - runtime callback 可撤销；
 - stale async callback 必须重新检查 live state；
 - producer/content freshness 不依赖普通 redraw；
-- 不恢复 1.x ScreenCapture 或 bitmap pipeline。
+- 不恢复 1.x ScreenCapture 或 bitmap pipeline；
+- Security Center 新 scene 必须复用 root-session/backend 架构，不复制 page-owned producer。
