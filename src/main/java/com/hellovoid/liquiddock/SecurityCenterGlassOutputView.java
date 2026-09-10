@@ -28,7 +28,7 @@ final class SecurityCenterGlassOutputView extends TextureView
 
     static SecurityCenterGlassOutputView attachBefore(
             View turboLayout, SecurityCenterGlassSession session) {
-        if (turboLayout == null || session == null
+        if (turboLayout == null || session == null || session.isShutdown()
                 || !(turboLayout.getParent() instanceof ViewGroup)) return null;
         ViewGroup parent = (ViewGroup) turboLayout.getParent();
         int turboIndex = parent.indexOfChild(turboLayout);
@@ -42,12 +42,12 @@ final class SecurityCenterGlassOutputView extends TextureView
     }
 
     void setAuthorizedVisible(boolean visible) {
-        if (disposed) return;
+        if (disposed || session.isShutdown()) return;
         setAlpha(visible ? 1f : 0f);
     }
 
     boolean isDisposed() {
-        return disposed;
+        return disposed || session.isShutdown();
     }
 
     void dispose() {
@@ -64,7 +64,7 @@ final class SecurityCenterGlassOutputView extends TextureView
 
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
-        if (disposed || texture == null) return;
+        if (disposed || session.isShutdown() || texture == null) return;
         Surface next = new Surface(texture);
         Surface old = outputSurface;
         outputSurface = next;
@@ -74,7 +74,9 @@ final class SecurityCenterGlassOutputView extends TextureView
 
     @Override
     public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
-        if (!disposed) session.resizeOutput(Math.max(1, width), Math.max(1, height));
+        if (!disposed && !session.isShutdown()) {
+            session.resizeOutput(Math.max(1, width), Math.max(1, height));
+        }
     }
 
     @Override
