@@ -13,6 +13,10 @@ final class SecurityCenterGlassGeometry {
     final float centerX;
     final float centerY;
     final float cornerRadius;
+    private final float cropLeftPx;
+    private final float cropTopPx;
+    private final float cropWidthPx;
+    private final float cropHeightPx;
 
     private SecurityCenterGlassGeometry(
             int rootWidth,
@@ -22,6 +26,22 @@ final class SecurityCenterGlassGeometry {
             float width,
             float height,
             float cornerRadius) {
+        this(rootWidth, rootHeight, left, top, width, height, cornerRadius,
+                left, top, width, height);
+    }
+
+    private SecurityCenterGlassGeometry(
+            int rootWidth,
+            int rootHeight,
+            float left,
+            float top,
+            float width,
+            float height,
+            float cornerRadius,
+            float cropLeftPx,
+            float cropTopPx,
+            float cropWidthPx,
+            float cropHeightPx) {
         this.rootWidth = rootWidth;
         this.rootHeight = rootHeight;
         this.left = left;
@@ -32,6 +52,10 @@ final class SecurityCenterGlassGeometry {
         centerY = top + height * 0.5f;
         this.cornerRadius = Math.max(0f,
                 Math.min(cornerRadius, Math.min(width, height) * 0.5f));
+        this.cropLeftPx = cropLeftPx;
+        this.cropTopPx = cropTopPx;
+        this.cropWidthPx = cropWidthPx;
+        this.cropHeightPx = cropHeightPx;
     }
 
     /** Maps a screen-space target rectangle into the authoritative root's local coordinates. */
@@ -71,6 +95,23 @@ final class SecurityCenterGlassGeometry {
                 rootWidth, rootHeight, left, top, right - left, bottom - top, safeRadius);
     }
 
+    /**
+     * Expands only the presentation crop. The Prismal SDF shape remains exactly unchanged so
+     * outside-AA/highlight pixels have transparent room without moving the visible glass edge.
+     */
+    SecurityCenterGlassGeometry expandedBy(float outsetPx) {
+        if (!finite(outsetPx) || outsetPx <= 0f) return this;
+        float cropLeft = clamp(left - outsetPx, 0f, rootWidth);
+        float cropTop = clamp(top - outsetPx, 0f, rootHeight);
+        float cropRight = clamp(left + width + outsetPx, 0f, rootWidth);
+        float cropBottom = clamp(top + height + outsetPx, 0f, rootHeight);
+        if (cropRight <= cropLeft || cropBottom <= cropTop) return this;
+        return new SecurityCenterGlassGeometry(
+                rootWidth, rootHeight,
+                left, top, width, height, cornerRadius,
+                cropLeft, cropTop, cropRight - cropLeft, cropBottom - cropTop);
+    }
+
     /** Exact root-local union used only as an output/crop region; node radii remain on the nodes. */
     static SecurityCenterGlassGeometry covering(
             SecurityCenterGlassGeometry first,
@@ -100,13 +141,13 @@ final class SecurityCenterGlassGeometry {
      * texture v=0 is the visual bottom, matching LauncherGlassSession's verified presentation.
      */
     float[] toCropUvRect() {
-        float cropLeft = left / rootWidth;
-        float cropBottom = (rootHeight - (top + height)) / rootHeight;
+        float cropLeft = cropLeftPx / rootWidth;
+        float cropBottom = (rootHeight - (cropTopPx + cropHeightPx)) / rootHeight;
         return new float[]{
                 clamp(cropLeft, 0f, 1f),
                 clamp(cropBottom, 0f, 1f),
-                clamp(width / rootWidth, 0f, 1f),
-                clamp(height / rootHeight, 0f, 1f)
+                clamp(cropWidthPx / rootWidth, 0f, 1f),
+                clamp(cropHeightPx / rootHeight, 0f, 1f)
         };
     }
 
@@ -134,7 +175,11 @@ final class SecurityCenterGlassGeometry {
                 && close(top, other.top)
                 && close(width, other.width)
                 && close(height, other.height)
-                && close(cornerRadius, other.cornerRadius);
+                && close(cornerRadius, other.cornerRadius)
+                && close(cropLeftPx, other.cropLeftPx)
+                && close(cropTopPx, other.cropTopPx)
+                && close(cropWidthPx, other.cropWidthPx)
+                && close(cropHeightPx, other.cropHeightPx);
     }
 
     private static boolean finite(float value) {
