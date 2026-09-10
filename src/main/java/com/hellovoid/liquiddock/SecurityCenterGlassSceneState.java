@@ -63,11 +63,12 @@ final class SecurityCenterGlassSceneState {
 
     Decision onTransitionStarted() {
         if (scene == Scene.DETACHED) return none();
-        // Every real vendor d0() invocation is a new content generation, even when the user
-        // starts another toggle before the previous custom frame has finished presenting.
+        // A new vendor d0() invalidates freshness, not presentation ownership. Once a custom
+        // frame has been authorized, it remains visible until a newer custom frame replaces it.
+        // This forbids a custom -> vendor -> custom flash during Dock/All Apps transitions.
         generation++;
         scene = Scene.TRANSITIONING;
-        return decision(false, true, false, true, true, false, false, false);
+        return decision(false, true, false, false, false, false, false, false);
     }
 
     Decision onGeometrySettled(Target target) {
