@@ -147,8 +147,8 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassRuntimeState.setOwner(this);
     }
 
-    void bindGlobalDock(View turboLayout, View dockLayout, View appsLayout) {
-        if (turboLayout == null || dockLayout == null || appsLayout == null) return;
+    void bindGlobalDock(View turboLayout, View dockLayout) {
+        if (turboLayout == null || dockLayout == null) return;
         View previousTurbo = turboRef.get();
         if (previousTurbo != null && previousTurbo != turboLayout
                 && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
@@ -156,7 +156,8 @@ final class SecurityCenterGlassCoordinator
         }
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
-        appsRef = new WeakReference<>(appsLayout);
+        // c0() starts from R(), which disposes the vendor All Apps instance for this dock cycle.
+        appsRef = new WeakReference<>(null);
         targetRef = new WeakReference<>(dockLayout);
         targetKind = SecurityCenterGlassSceneState.Target.DOCK;
         observeTurboAttach(turboLayout);
@@ -165,6 +166,11 @@ final class SecurityCenterGlassCoordinator
             return;
         }
         if (turboLayout.isAttachedToWindow()) bindAttachedRoot(turboLayout);
+    }
+
+    void updateAllAppsLayout(View turboLayout, View appsLayout) {
+        if (!isCurrentTurbo(turboLayout) || appsLayout == null) return;
+        appsRef = new WeakReference<>(appsLayout);
     }
 
     void onAllAppsToggleStarted(View turboLayout) {
@@ -178,6 +184,11 @@ final class SecurityCenterGlassCoordinator
                 ? SecurityCenterGlassSceneState.Target.ALL_APPS
                 : SecurityCenterGlassSceneState.Target.DOCK;
         View target = allAppsPresent ? appsRef.get() : dockRef.get();
+        if (target == null) {
+            releaseAll();
+            log("settled target missing; failed closed target=" + targetKind, null);
+            return;
+        }
         targetRef = new WeakReference<>(target);
         SecurityCenterGlassGeometry geometry = captureGeometry(target);
         if (geometry != null) currentGeometry = geometry;
