@@ -30,4 +30,23 @@ public class SecurityCenterMaterialOwnershipStateTest {
         state.releaseToVendor();
         assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
     }
+
+    @Test
+    public void vendorFinalBackgroundGateRequiresOwnerAndCurrentGenerationTogether() {
+        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
+        long current = 12L;
+
+        assertFalse(state.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM
+                && state.canSuppressVendor(current, current));
+
+        state.onCustomClaimed();
+        assertTrue(state.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM
+                && state.canSuppressVendor(current, current));
+        assertFalse(state.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM
+                && state.canSuppressVendor(current - 1L, current));
+
+        state.releaseToVendor();
+        assertFalse(state.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM
+                && state.canSuppressVendor(current, current));
+    }
 }
