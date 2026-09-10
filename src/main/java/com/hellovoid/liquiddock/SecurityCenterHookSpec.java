@@ -13,7 +13,8 @@ final class SecurityCenterHookSpec {
     private final String turboLayoutClass;
     private final String sidebarWrapperClass;
     private final String dockWindowTypeClass;
-    private final String prepareDockMethod;
+    private final String configureDockMethod;
+    private final String dockReadyMethod;
     private final String type4PredicateMethod;
     private final String dockLayoutGetter;
     private final String appsLayoutGetter;
@@ -29,7 +30,8 @@ final class SecurityCenterHookSpec {
             String turboLayoutClass,
             String sidebarWrapperClass,
             String dockWindowTypeClass,
-            String prepareDockMethod,
+            String configureDockMethod,
+            String dockReadyMethod,
             String type4PredicateMethod,
             String dockLayoutGetter,
             String appsLayoutGetter,
@@ -44,7 +46,8 @@ final class SecurityCenterHookSpec {
         this.turboLayoutClass = turboLayoutClass;
         this.sidebarWrapperClass = sidebarWrapperClass;
         this.dockWindowTypeClass = dockWindowTypeClass;
-        this.prepareDockMethod = prepareDockMethod;
+        this.configureDockMethod = configureDockMethod;
+        this.dockReadyMethod = dockReadyMethod;
         this.type4PredicateMethod = type4PredicateMethod;
         this.dockLayoutGetter = dockLayoutGetter;
         this.appsLayoutGetter = appsLayoutGetter;
@@ -63,7 +66,8 @@ final class SecurityCenterHookSpec {
                 "com.miui.gamebooster.windowmanager.newbox.TurboLayout",
                 "com.miui.dock.sidebar.p",
                 "ja.a",
-                "M",
+                "V",
+                "c0",
                 "f",
                 "getDockLayout",
                 "getAppsLayout",
@@ -101,8 +105,12 @@ final class SecurityCenterHookSpec {
         return dockWindowTypeClass;
     }
 
-    String prepareDockMethod() {
-        return prepareDockMethod;
+    String configureDockMethod() {
+        return configureDockMethod;
+    }
+
+    String dockReadyMethod() {
+        return dockReadyMethod;
     }
 
     String type4PredicateMethod() {
