@@ -4,7 +4,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
@@ -110,7 +109,9 @@ final class SecurityCenterGlassCoordinator
     private int assistantType = ASSISTANT_GLOBAL_DOCK;
     private SecurityCenterGlassFrameGeometry currentFrame;
     private SecurityCenterGlassSession session;
-    private SecurityCenterGlassOutputView output;
+    private SecurityCenterGlassSinkView dockSink;
+    private SecurityCenterGlassSinkView boxSink;
+    private SecurityCenterGlassSinkView appsSink;
     private long renderedGeneration = -1L;
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
@@ -203,11 +204,14 @@ final class SecurityCenterGlassCoordinator
             return;
         }
 
-        // c0() has synchronously created the replacement vendor nodes. If this root is already
-        // under custom ownership, strip those new vendor materials before Android can draw them;
-        // the previous valid custom frame remains the presentation fallback until a fresh render.
-        if (replacingLiveNodes) claimCurrentTargetsWhileCustom();
+        // Bind/reconcile sinks before stripping replacement vendor materials so native radius and
+        // peer hierarchy are captured while the new c0() nodes still own their material.
         if (turboLayout.isAttachedToWindow()) bindAttachedRoot(turboLayout);
+        if (replacingLiveNodes) {
+            reconcileSinks();
+            claimCurrentTargetsWhileCustom();
+            syncSinksFromMaterials();
+        }
         log("assistant bound type=" + type
                 + " box=" + (boxLayout != null ? boxLayout.getClass().getName() : "none"), null);
     }
@@ -215,11 +219,13 @@ final class SecurityCenterGlassCoordinator
     void updateAllAppsLayout(View turboLayout, View appsLayout) {
         if (!isCurrentTurbo(turboLayout) || appsLayout == null) return;
         appsRef = new WeakReference<>(appsLayout);
-        // W() creates All Apps synchronously inside d0(). If custom already owns this lifecycle,
-        // remove the newly-created native material immediately instead of waiting for settle.
+        // W() creates All Apps synchronously inside d0(). Attach its peer sink before stripping the
+        // native material so the same View hierarchy remains the sole animation authority.
+        reconcileSinks();
         if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
             claimCurrentTargetsWhileCustom();
         }
+        syncSinksFromMaterials();
     }
 
     long onAllAppsToggleStarted(View turboLayout) {
@@ -233,11 +239,12 @@ final class SecurityCenterGlassCoordinator
     void refreshTransitionFrame(View turboLayout) {
         if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()
                 || scene.scene() != SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
+        reconcileSinks();
+        syncSinksFromMaterials();
         SecurityCenterGlassFrameGeometry observed = captureFrame(true);
         if (observed == null) return;
         boolean changed = currentFrame == null || !currentFrame.sameAs(observed);
         currentFrame = observed;
-        updateOutputPlacement(observed);
         if (!changed) return;
         requestCurrentGeneration(observed);
     }
@@ -248,6 +255,8 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassSceneState.Target nextKind = allAppsPresent
                 ? SecurityCenterGlassSceneState.Target.ALL_APPS
                 : SecurityCenterGlassSceneState.Target.DOCK;
+        reconcileSinks();
+        syncSinksFromMaterials();
         SecurityCenterGlassFrameGeometry frame = captureFrame(allAppsPresent);
         if (frame == null) {
             log("settled frame unavailable target=" + nextKind
@@ -264,7 +273,6 @@ final class SecurityCenterGlassCoordinator
         }
         targetKind = nextKind;
         currentFrame = frame;
-        updateOutputPlacement(frame);
         applyDecision(settled, frame);
     }
 
@@ -310,6 +318,15 @@ final class SecurityCenterGlassCoordinator
         if (callbackSession != session || callbackSession.isShutdown()
                 || root == null || !root.isAttachedToWindow()) return;
 
+        // During Folme motion the vendor View tree owns geometry. Custom ownership is already live,
+        // so each newly rendered generation may update/reveal its peer sinks without a vendor flash.
+        if (scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING
+                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
+            renderedGeneration = generation;
+            setAuthorizedSinksForFrame(currentFrame);
+            return;
+        }
+
         SecurityCenterGlassSceneState.Decision decision = scene.onFreshFrameRendered(generation);
         if (!decision.claimCustomOwnership || !decision.revealCustom) return;
         View turbo = turboRef.get();
@@ -333,8 +350,7 @@ final class SecurityCenterGlassCoordinator
         ownership.onCustomClaimed();
         customOwnerTurboRef = new WeakReference<>(turbo);
         renderedGeneration = generation;
-        SecurityCenterGlassOutputView current = output;
-        if (current != null && !current.isDisposed()) current.setAuthorizedVisible(true);
+        setAuthorizedSinksForFrame(currentFrame);
         log("current-generation scene revealed generation=" + generation
                 + " scene=" + scene.scene()
                 + " nodes=" + (currentFrame != null ? currentFrame.nodeCount() : 0), null);
@@ -365,7 +381,7 @@ final class SecurityCenterGlassCoordinator
 
         BindDecision bind = policy.bindRoot(root);
         if (bind.reuseSession) {
-            ensureOutputSibling(turboLayout);
+            reconcileSinks();
             installRootObserver(root);
             refreshCurrentFrame(true);
             return;
@@ -375,6 +391,7 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassSession old = bind.sessionToShutdown instanceof SecurityCenterGlassSession
                 ? (SecurityCenterGlassSession) bind.sessionToShutdown : session;
         hideAndRestoreVendor();
+        disposeSinks();
         if (old != null) old.shutdown();
         cleanupRootObserverOnly();
         if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) {
@@ -389,7 +406,7 @@ final class SecurityCenterGlassCoordinator
         }
         rootRef = new WeakReference<>(root);
         attachRootListener(root);
-        ensureOutputSibling(turboLayout);
+        reconcileSinks();
         installRootObserver(root);
 
         SecurityCenterGlassSceneState.Decision attached = scene.onRootAttached();
@@ -397,36 +414,75 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassFrameGeometry frame = captureFrame(false);
         if (frame != null) {
             currentFrame = frame;
-            updateOutputPlacement(frame);
         }
         applyDecision(
                 scene.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK), frame);
     }
 
-    private void ensureOutputSibling(View turboLayout) {
+    private void reconcileSinks() {
         SecurityCenterGlassSession live = session;
-        if (live == null || live.isShutdown() || turboLayout == null
-                || !(turboLayout.getParent() instanceof ViewGroup)) return;
-        ViewGroup parent = (ViewGroup) turboLayout.getParent();
-        SecurityCenterGlassOutputView current = output;
-        if (current != null && !current.isDisposed() && current.getParent() == parent
-                && parent.indexOfChild(current) == parent.indexOfChild(turboLayout) - 1) {
-            if (currentFrame != null) current.updatePlacement(
-                    rootRef.get(), currentFrame.presentationGeometry());
-            return;
-        }
-        if (current != null) current.dispose();
-        output = SecurityCenterGlassOutputView.attachBefore(turboLayout, live);
-        if (output != null && currentFrame != null) {
-            output.updatePlacement(rootRef.get(), currentFrame.presentationGeometry());
-        }
+        if (live == null || live.isShutdown()) return;
+        dockSink = reconcileSink(
+                dockSink, dockRef.get(), live, SecurityCenterGlassSceneState.Target.DOCK, 0);
+        int boxRadius = assistantType == ASSISTANT_GAME
+                ? gameToolboxCornerRadiusResId
+                : assistantType == ASSISTANT_VIDEO ? allAppsCornerRadiusResId : 0;
+        boxSink = reconcileSink(boxSink, boxRef.get(), live, null, boxRadius);
+        appsSink = reconcileSink(
+                appsSink, appsRef.get(), live,
+                SecurityCenterGlassSceneState.Target.ALL_APPS, allAppsCornerRadiusResId);
     }
 
-    private void updateOutputPlacement(SecurityCenterGlassFrameGeometry frame) {
-        SecurityCenterGlassOutputView current = output;
-        View root = rootRef.get();
-        if (current != null && !current.isDisposed() && root != null && frame != null) {
-            current.updatePlacement(root, frame.presentationGeometry());
+    private SecurityCenterGlassSinkView reconcileSink(
+            SecurityCenterGlassSinkView current,
+            View material,
+            SecurityCenterGlassSession live,
+            SecurityCenterGlassSceneState.Target kind,
+            int exactRadiusResId) {
+        if (material == null || !(material.getParent() instanceof ViewGroup)
+                || !material.isAttachedToWindow()) {
+            if (current != null) current.dispose();
+            return null;
+        }
+        if (current != null && current.ownsMaterial(material)
+                && current.getParent() == material.getParent()) {
+            current.syncFromMaterial();
+            return current;
+        }
+        if (current != null) current.dispose();
+        float radius = resolveBaseCornerRadius(material, kind, exactRadiusResId);
+        if (!Float.isFinite(radius) || radius < 0f) return null;
+        return SecurityCenterGlassSinkView.attachBefore(material, live, radius);
+    }
+
+    private float resolveBaseCornerRadius(
+            View target, SecurityCenterGlassSceneState.Target kind, int exactRadiusResId) {
+        if (target == null) return Float.NaN;
+        if (exactRadiusResId != 0) {
+            float radius = target.getResources().getDimension(exactRadiusResId);
+            return Float.isFinite(radius) && radius >= 0f ? radius : Float.NaN;
+        }
+        if (kind == SecurityCenterGlassSceneState.Target.ALL_APPS) return Float.NaN;
+        float radius = MiuixGlassHook.readNativeOpticsRadius(target);
+        return Float.isFinite(radius) && radius >= 0f ? radius : 0f;
+    }
+
+    private boolean syncSinksFromMaterials() {
+        boolean changed = false;
+        if (dockSink != null) changed |= dockSink.syncFromMaterial();
+        if (boxSink != null) changed |= boxSink.syncFromMaterial();
+        if (appsSink != null) changed |= appsSink.syncFromMaterial();
+        return changed;
+    }
+
+    private void setAuthorizedSinksForFrame(SecurityCenterGlassFrameGeometry frame) {
+        boolean hasFrame = frame != null;
+        if (dockSink != null) dockSink.setAuthorizedVisible(hasFrame);
+        if (boxSink != null) {
+            boxSink.setAuthorizedVisible(hasFrame && frame.boxGeometry() != null);
+        }
+        if (appsSink != null) {
+            appsSink.setAuthorizedVisible(hasFrame && frame.appsGeometry() != null);
         }
     }
 
@@ -435,7 +491,6 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterGlassFrameGeometry frame) {
         if (decision == null) return;
         if (decision.hideCustom || decision.releaseCustomOwnership) hideAndRestoreVendor();
-        if (frame != null) updateOutputPlacement(frame);
         if (decision.requestFresh && frame != null && decision.generation == scene.generation()) {
             requestCurrentGeneration(frame);
         }
@@ -452,11 +507,24 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassSession live = session;
         View root = rootRef.get();
         long generation = scene.generation();
-        if (live != null && !live.isShutdown() && root != null
-                && policy.currentSession() == live && policy.currentRoot() == root
-                && frame != null) {
-            live.requestFresh(generation, frame);
+        if (live == null || live.isShutdown() || root == null
+                || policy.currentSession() != live || policy.currentRoot() != root
+                || frame == null || dockSink == null) return;
+
+        int count = frame.nodeCount();
+        SecurityCenterGlassSinkView[] sinks = new SecurityCenterGlassSinkView[count];
+        int cursor = 0;
+        sinks[cursor++] = dockSink;
+        if (frame.boxGeometry() != null) {
+            if (boxSink == null) return;
+            sinks[cursor++] = boxSink;
         }
+        if (frame.appsGeometry() != null) {
+            if (appsSink == null) return;
+            sinks[cursor++] = appsSink;
+        }
+        if (cursor != count) return;
+        live.requestFresh(generation, frame, sinks);
     }
 
     private void refreshCurrentFrame(boolean requestIfChanged) {
@@ -466,28 +534,34 @@ final class SecurityCenterGlassCoordinator
             refreshTransitionFrame(turboRef.get());
             return;
         }
+        reconcileSinks();
+        boolean transformChanged = syncSinksFromMaterials();
         boolean includeApps = targetKind == SecurityCenterGlassSceneState.Target.ALL_APPS;
         SecurityCenterGlassFrameGeometry observed = captureFrame(includeApps);
         if (observed == null) return;
-        boolean changed = currentFrame == null || !currentFrame.sameAs(observed);
+        boolean changed = transformChanged || currentFrame == null || !currentFrame.sameAs(observed);
         currentFrame = observed;
-        updateOutputPlacement(observed);
         if (requestIfChanged && changed) requestCurrentGeneration(observed);
     }
 
     private SecurityCenterGlassFrameGeometry captureFrame(boolean includeAppsIfAvailable) {
-        SecurityCenterGlassGeometry dock = captureGeometry(
-                dockRef.get(), SecurityCenterGlassSceneState.Target.DOCK, 0);
+        SecurityCenterGlassGeometry dock = dockSink != null ? dockSink.captureGeometry(rootRef.get()) : null;
         if (dock == null) return null;
-        SecurityCenterGlassGeometry box = captureBoxGeometry();
+
+        SecurityCenterGlassGeometry box = null;
+        View boxView = boxRef.get();
+        if (boxView != null && boxView.isAttachedToWindow()
+                && boxView.getVisibility() == View.VISIBLE) {
+            box = boxSink != null ? boxSink.captureGeometry(rootRef.get()) : null;
+            if (box == null) return null;
+        }
+
         SecurityCenterGlassGeometry apps = null;
         if (includeAppsIfAvailable) {
             View appsView = appsRef.get();
             if (appsView != null && appsView.isAttachedToWindow()
                     && appsView.getVisibility() == View.VISIBLE) {
-                apps = captureGeometry(
-                        appsView, SecurityCenterGlassSceneState.Target.ALL_APPS,
-                        allAppsCornerRadiusResId);
+                apps = appsSink != null ? appsSink.captureGeometry(rootRef.get()) : null;
                 if (apps == null) return null;
             }
         }
@@ -497,71 +571,6 @@ final class SecurityCenterGlassCoordinator
             log("frame composition rejected", error);
             return null;
         }
-    }
-
-    private SecurityCenterGlassGeometry captureBoxGeometry() {
-        View box = boxRef.get();
-        if (box == null || !box.isAttachedToWindow() || box.getVisibility() != View.VISIBLE) return null;
-        // Decompiled Game y1.o() and Video za.p.t() both use an exact 24dp outline resource.
-        int radiusRes = assistantType == ASSISTANT_GAME
-                ? gameToolboxCornerRadiusResId
-                : assistantType == ASSISTANT_VIDEO ? allAppsCornerRadiusResId : 0;
-        return captureGeometry(box, null, radiusRes);
-    }
-
-    private SecurityCenterGlassGeometry captureGeometry(
-            View target,
-            SecurityCenterGlassSceneState.Target kind,
-            int exactRadiusResId) {
-        View root = rootRef.get();
-        if (root == null || target == null || !root.isAttachedToWindow()
-                || !target.isAttachedToWindow() || root.getWidth() <= 0 || root.getHeight() <= 0
-                || target.getWidth() <= 0 || target.getHeight() <= 0) return null;
-
-        ViewParent rawParent = target.getParent();
-        if (!(rawParent instanceof View)) return null;
-        View parent = (View) rawParent;
-        int[] rootLocation = new int[2];
-        int[] parentLocation = new int[2];
-        root.getLocationOnScreen(rootLocation);
-        parent.getLocationOnScreen(parentLocation);
-
-        float baseLeft = parentLocation[0] + target.getLeft() - parent.getScrollX();
-        float baseTop = parentLocation[1] + target.getTop() - parent.getScrollY();
-        SecurityCenterTransformedBounds bounds = SecurityCenterTransformedBounds.resolve(
-                baseLeft,
-                baseTop,
-                target.getWidth(),
-                target.getHeight(),
-                target.getPivotX(),
-                target.getPivotY(),
-                target.getScaleX(),
-                target.getScaleY(),
-                target.getTranslationX(),
-                target.getTranslationY());
-        if (bounds == null) return null;
-
-        float radius;
-        if (exactRadiusResId != 0) {
-            radius = target.getResources().getDimension(exactRadiusResId);
-            if (!Float.isFinite(radius) || radius < 0f) return null;
-            float visualScale = Math.min(target.getScaleX(), target.getScaleY());
-            if (!Float.isFinite(visualScale) || visualScale <= 0f) return null;
-            radius *= visualScale;
-        } else if (kind == SecurityCenterGlassSceneState.Target.ALL_APPS) {
-            return null;
-        } else {
-            radius = MiuixGlassHook.readNativeOpticsRadius(target);
-            if (!Float.isFinite(radius) || radius < 0f) radius = 0f;
-            float visualScale = Math.min(target.getScaleX(), target.getScaleY());
-            if (Float.isFinite(visualScale) && visualScale > 0f) radius *= visualScale;
-        }
-
-        return SecurityCenterGlassGeometry.resolve(
-                root.getWidth(), root.getHeight(),
-                rootLocation[0], rootLocation[1],
-                bounds.left, bounds.top, bounds.right, bounds.bottom,
-                radius);
     }
 
     private void claimCurrentTargetsWhileCustom() {
@@ -631,8 +640,9 @@ final class SecurityCenterGlassCoordinator
     }
 
     private void hideCustomOnly() {
-        SecurityCenterGlassOutputView current = output;
-        if (current != null && !current.isDisposed()) current.setAuthorizedVisible(false);
+        if (dockSink != null && !dockSink.isDisposed()) dockSink.setAuthorizedVisible(false);
+        if (boxSink != null && !boxSink.isDisposed()) boxSink.setAuthorizedVisible(false);
+        if (appsSink != null && !appsSink.isDisposed()) appsSink.setAuthorizedVisible(false);
     }
 
     private void hideAndRestoreVendor() {
@@ -685,6 +695,18 @@ final class SecurityCenterGlassCoordinator
         renderedGeneration = -1L;
     }
 
+    private void disposeSinks() {
+        SecurityCenterGlassSinkView oldDock = dockSink;
+        SecurityCenterGlassSinkView oldBox = boxSink;
+        SecurityCenterGlassSinkView oldApps = appsSink;
+        dockSink = null;
+        boxSink = null;
+        appsSink = null;
+        if (oldDock != null) oldDock.dispose();
+        if (oldBox != null) oldBox.dispose();
+        if (oldApps != null) oldApps.dispose();
+    }
+
     private void cleanupViewObservers(boolean removeTurboListener) {
         cleanupRootObserverOnly();
         if (attachedRoot != null) {
@@ -692,9 +714,7 @@ final class SecurityCenterGlassCoordinator
             catch (Throwable ignored) {}
             attachedRoot = null;
         }
-        SecurityCenterGlassOutputView current = output;
-        output = null;
-        if (current != null) current.dispose();
+        disposeSinks();
         if (removeTurboListener && attachObservedTurbo != null) {
             try { attachObservedTurbo.removeOnAttachStateChangeListener(turboAttachListener); }
             catch (Throwable ignored) {}
