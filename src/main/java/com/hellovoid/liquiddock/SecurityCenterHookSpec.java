@@ -16,10 +16,16 @@ final class SecurityCenterHookSpec {
     private final String dockWindowTypeClass;
     private final String configureDockMethod;
     private final String dockReadyMethod;
-    private final String type4PredicateMethod;
+    private final String gameToolboxPredicateMethod;
+    private final String videoToolboxPredicateMethod;
+    private final String globalDockPredicateMethod;
     private final String sidebarTurboGetter;
     private final String dockLayoutGetter;
     private final String appsLayoutGetter;
+    private final String boxViewGetter;
+    private final String gameToolboxViewClass;
+    private final String gameToolboxMaterialGetter;
+    private final String gameToolboxCornerRadiusResource;
     private final String toggleAllAppsMethod;
     private final String removeTurboLayoutMethod;
     private final String removeTurboLayoutWithoutAnimationMethod;
@@ -38,10 +44,16 @@ final class SecurityCenterHookSpec {
             String dockWindowTypeClass,
             String configureDockMethod,
             String dockReadyMethod,
-            String type4PredicateMethod,
+            String gameToolboxPredicateMethod,
+            String videoToolboxPredicateMethod,
+            String globalDockPredicateMethod,
             String sidebarTurboGetter,
             String dockLayoutGetter,
             String appsLayoutGetter,
+            String boxViewGetter,
+            String gameToolboxViewClass,
+            String gameToolboxMaterialGetter,
+            String gameToolboxCornerRadiusResource,
             String toggleAllAppsMethod,
             String removeTurboLayoutMethod,
             String removeTurboLayoutWithoutAnimationMethod,
@@ -59,10 +71,16 @@ final class SecurityCenterHookSpec {
         this.dockWindowTypeClass = dockWindowTypeClass;
         this.configureDockMethod = configureDockMethod;
         this.dockReadyMethod = dockReadyMethod;
-        this.type4PredicateMethod = type4PredicateMethod;
+        this.gameToolboxPredicateMethod = gameToolboxPredicateMethod;
+        this.videoToolboxPredicateMethod = videoToolboxPredicateMethod;
+        this.globalDockPredicateMethod = globalDockPredicateMethod;
         this.sidebarTurboGetter = sidebarTurboGetter;
         this.dockLayoutGetter = dockLayoutGetter;
         this.appsLayoutGetter = appsLayoutGetter;
+        this.boxViewGetter = boxViewGetter;
+        this.gameToolboxViewClass = gameToolboxViewClass;
+        this.gameToolboxMaterialGetter = gameToolboxMaterialGetter;
+        this.gameToolboxCornerRadiusResource = gameToolboxCornerRadiusResource;
         this.toggleAllAppsMethod = toggleAllAppsMethod;
         this.removeTurboLayoutMethod = removeTurboLayoutMethod;
         this.removeTurboLayoutWithoutAnimationMethod = removeTurboLayoutWithoutAnimationMethod;
@@ -84,10 +102,16 @@ final class SecurityCenterHookSpec {
                 "ja.a",
                 "V",
                 "c0",
+                "g",
+                "k",
                 "f",
                 "C",
                 "getDockLayout",
                 "getAppsLayout",
+                "getBoxView",
+                "com.miui.gamebooster.windowmanager.newbox.x1",
+                "getMainView",
+                "game_toolbox_background_radius",
                 "d0",
                 "d2",
                 "f2",
@@ -113,10 +137,18 @@ final class SecurityCenterHookSpec {
     String dockWindowTypeClass() { return dockWindowTypeClass; }
     String configureDockMethod() { return configureDockMethod; }
     String dockReadyMethod() { return dockReadyMethod; }
-    String type4PredicateMethod() { return type4PredicateMethod; }
+    String gameToolboxPredicateMethod() { return gameToolboxPredicateMethod; }
+    String videoToolboxPredicateMethod() { return videoToolboxPredicateMethod; }
+    String globalDockPredicateMethod() { return globalDockPredicateMethod; }
+    /** Compatibility alias retained for older exact-contract tests/callers. */
+    String type4PredicateMethod() { return globalDockPredicateMethod; }
     String sidebarTurboGetter() { return sidebarTurboGetter; }
     String dockLayoutGetter() { return dockLayoutGetter; }
     String appsLayoutGetter() { return appsLayoutGetter; }
+    String boxViewGetter() { return boxViewGetter; }
+    String gameToolboxViewClass() { return gameToolboxViewClass; }
+    String gameToolboxMaterialGetter() { return gameToolboxMaterialGetter; }
+    String gameToolboxCornerRadiusResource() { return gameToolboxCornerRadiusResource; }
     String toggleAllAppsMethod() { return toggleAllAppsMethod; }
     String removeTurboLayoutMethod() { return removeTurboLayoutMethod; }
     String removeTurboLayoutWithoutAnimationMethod() { return removeTurboLayoutWithoutAnimationMethod; }
