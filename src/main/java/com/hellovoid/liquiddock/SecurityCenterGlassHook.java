@@ -11,12 +11,15 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.WeakHashMap;
 
-/** Exact version-gated Security Center hooks for Global Dock / All Apps liquid glass. */
+/** Exact version-gated Security Center hooks for Game / Video / Global Dock liquid glass. */
 final class SecurityCenterGlassHook {
     private static final String TAG = "[DC][SecurityCenterGlass]";
     private static final Object LOCK = new Object();
+    private static final int ASSISTANT_GAME = 1;
+    private static final int ASSISTANT_VIDEO = 3;
+    private static final int ASSISTANT_GLOBAL_DOCK = 4;
     private static final WeakHashMap<View, SettleObserver> SETTLE_OBSERVERS = new WeakHashMap<>();
-    private static final WeakHashMap<View, Boolean> TYPE4_CONFIGURED = new WeakHashMap<>();
+    private static final WeakHashMap<View, Integer> CONFIGURED_ASSISTANTS = new WeakHashMap<>();
 
     private static boolean bootstrapInstalled;
     private static boolean validatedHooksInstalled;
@@ -88,12 +91,15 @@ final class SecurityCenterGlassHook {
             return;
         }
 
-        // Pre-resolve the complete DEX compatibility contract before installing mutation hooks.
+        // Resolve the complete decompiled compatibility contract before installing any mutation.
         Class<?> turboClass = Class.forName(spec.turboLayoutClass(), false, loader);
         Class<?> wrapperClass = Class.forName(spec.sidebarWrapperClass(), false, loader);
         Class<?> managerClass = Class.forName(spec.dockWindowManagerClass(), false, loader);
         Class<?> typeClass = Class.forName(spec.dockWindowTypeClass(), false, loader);
         Class<?> helperClass = Class.forName(spec.os4MaterialHelperClass(), false, loader);
+        Class<?> gameBoxClass = Class.forName(spec.gameToolboxViewClass(), false, loader);
+        Class<?> videoAdapterClass = Class.forName(spec.videoToolboxAdapterClass(), false, loader);
+
         Method configure = HookUtil.findMethodExact(
                 turboClass, spec.configureDockMethod(),
                 new Class<?>[]{wrapperClass, boolean.class, String.class, int.class, typeClass,
@@ -102,7 +108,12 @@ final class SecurityCenterGlassHook {
         Method toggle = HookUtil.findMethodExact(turboClass, spec.toggleAllAppsMethod(), new Class<?>[0]);
         Method finalBackground = HookUtil.findMethodExact(
                 turboClass, spec.finalBackgroundMethod(), new Class<?>[0]);
-        Method type4 = HookUtil.findMethodExact(typeClass, spec.type4PredicateMethod(), new Class<?>[0]);
+        Method typeGame = HookUtil.findMethodExact(
+                typeClass, spec.gameToolboxPredicateMethod(), new Class<?>[0]);
+        Method typeVideo = HookUtil.findMethodExact(
+                typeClass, spec.videoToolboxPredicateMethod(), new Class<?>[0]);
+        Method typeGlobalDock = HookUtil.findMethodExact(
+                typeClass, spec.globalDockPredicateMethod(), new Class<?>[0]);
         Method wrapperTurboGetter = HookUtil.findMethodExact(
                 wrapperClass, spec.sidebarTurboGetter(), new Class<?>[0]);
         Method removeAnimated = HookUtil.findMethodExact(
@@ -111,13 +122,31 @@ final class SecurityCenterGlassHook {
         Method removeWithoutAnimation = HookUtil.findMethodExact(
                 managerClass, spec.removeTurboLayoutWithoutAnimationMethod(),
                 new Class<?>[]{wrapperClass, boolean.class});
-        HookUtil.findMethodExact(turboClass, spec.dockLayoutGetter(), new Class<?>[0]);
-        HookUtil.findMethodExact(turboClass, spec.appsLayoutGetter(), new Class<?>[0]);
+        Method dockGetter = HookUtil.findMethodExact(
+                turboClass, spec.dockLayoutGetter(), new Class<?>[0]);
+        Method appsGetter = HookUtil.findMethodExact(
+                turboClass, spec.appsLayoutGetter(), new Class<?>[0]);
+        Method boxGetter = HookUtil.findMethodExact(
+                turboClass, spec.boxViewGetter(), new Class<?>[0]);
+        Method gameMaterialGetter = HookUtil.findMethodExact(
+                gameBoxClass, spec.gameToolboxMaterialGetter(), new Class<?>[0]);
+        Class<?> gameMaterialViewClass = gameMaterialGetter.getReturnType();
+        Method gameMaterialRestore = HookUtil.findMethodExact(
+                gameMaterialViewClass,
+                spec.gameToolboxMaterialRestoreMethod(), new Class<?>[0]);
+        Method videoAdapterGetter = HookUtil.findMethodExact(
+                turboClass, spec.videoToolboxAdapterGetter(), new Class<?>[0]);
+        Method videoMaterialRestore = HookUtil.findMethodExact(
+                videoAdapterClass,
+                spec.videoToolboxMaterialRestoreMethod(), new Class<?>[0]);
         Method reset = HookUtil.findMethodExact(
                 helperClass, spec.os4MaterialResetMethod(), new Class<?>[]{View.class});
         Field transforming = HookUtil.findField(turboClass, spec.transformingField());
         Field allAppsPresent = HookUtil.findField(turboClass, spec.allAppsPresentField());
-        if (type4.getReturnType() != boolean.class
+
+        if (typeGame.getReturnType() != boolean.class
+                || typeVideo.getReturnType() != boolean.class
+                || typeGlobalDock.getReturnType() != boolean.class
                 || transforming.getType() != boolean.class
                 || allAppsPresent.getType() != boolean.class
                 || configure.getReturnType() != void.class
@@ -125,32 +154,36 @@ final class SecurityCenterGlassHook {
                 || removeAnimated.getReturnType() != void.class
                 || removeWithoutAnimation.getReturnType() != void.class
                 || finalBackground.getReturnType() != void.class
+                || !View.class.isAssignableFrom(dockGetter.getReturnType())
+                || !View.class.isAssignableFrom(appsGetter.getReturnType())
+                || !View.class.isAssignableFrom(boxGetter.getReturnType())
+                || !View.class.isAssignableFrom(gameMaterialViewClass)
+                || gameMaterialRestore.getReturnType() != void.class
+                || !videoAdapterClass.isAssignableFrom(videoAdapterGetter.getReturnType())
+                || videoMaterialRestore.getReturnType() != void.class
                 || !turboClass.isAssignableFrom(wrapperTurboGetter.getReturnType())
                 || !Modifier.isStatic(reset.getModifiers())) {
             throw new IllegalStateException("validated Security Center member shape changed");
         }
 
-        // JADX's R.dimen symbol is source presentation only; R8 may remove the runtime R$dimen
-        // class. Resolve the exact vendor resource through the live Security Center resource table.
+        // Resolve exact vendor resources from the live Security Center table, never local guesses.
         final Resources resources = service.getResources();
         final String resourcePackage = service.getPackageName();
-        final String radiusEntry = spec.allAppsCornerRadiusResource();
-        final int allAppsCornerRadiusResId =
-                resources.getIdentifier(radiusEntry, "dimen", resourcePackage);
-        if (allAppsCornerRadiusResId == 0
-                || !resourcePackage.equals(resources.getResourcePackageName(allAppsCornerRadiusResId))
-                || !"dimen".equals(resources.getResourceTypeName(allAppsCornerRadiusResId))
-                || !radiusEntry.equals(resources.getResourceEntryName(allAppsCornerRadiusResId))) {
-            throw new IllegalStateException(
-                    "validated Security Center dimen resource unavailable: "
-                            + resourcePackage + ":dimen/" + radiusEntry);
-        }
+        final int allAppsCornerRadiusResId = resolveResource(
+                resources, resourcePackage, "dimen", spec.allAppsCornerRadiusResource());
+        final int gameToolboxCornerRadiusResId = resolveResource(
+                resources, resourcePackage, "dimen", spec.gameToolboxCornerRadiusResource());
+        final int videoMainContentResId = resolveResource(
+                resources, resourcePackage, "id", spec.videoToolboxMaterialViewIdResource());
 
         SecurityCenterVendorMaterialBridge vendorBridge =
-                new SecurityCenterVendorMaterialBridge(loader, spec);
+                new SecurityCenterVendorMaterialBridge(loader, spec, videoMainContentResId);
         SecurityCenterGlassCoordinator nextCoordinator =
                 new SecurityCenterGlassCoordinator(
-                        config.glass, vendorBridge, allAppsCornerRadiusResId);
+                        config.glass,
+                        vendorBridge,
+                        allAppsCornerRadiusResId,
+                        gameToolboxCornerRadiusResId);
 
         synchronized (LOCK) {
             if (validatedHooksInstalled) {
@@ -167,16 +200,17 @@ final class SecurityCenterGlassHook {
                 if (!(turboObject instanceof View) || typeArg == null) return result;
                 View turbo = (View) turboObject;
                 try {
-                    boolean isType4 = Boolean.TRUE.equals(
-                            HookUtil.requireInvoke(typeArg, spec.type4PredicateMethod()));
+                    int assistantType = resolveAssistantType(typeArg, spec);
                     synchronized (LOCK) {
-                        if (isType4) TYPE4_CONFIGURED.put(turbo, Boolean.TRUE);
-                        else TYPE4_CONFIGURED.remove(turbo);
+                        if (assistantType != 0) CONFIGURED_ASSISTANTS.put(turbo, assistantType);
+                        else CONFIGURED_ASSISTANTS.remove(turbo);
                     }
-                    if (isType4) log("type-4 dock configured", null);
+                    if (assistantType != 0) {
+                        log("assistant configured type=" + assistantType, null);
+                    }
                 } catch (Throwable error) {
-                    synchronized (LOCK) { TYPE4_CONFIGURED.remove(turbo); }
-                    log("type-4 configure observation failed", error);
+                    synchronized (LOCK) { CONFIGURED_ASSISTANTS.remove(turbo); }
+                    log("assistant configure observation failed", error);
                 }
                 return result;
             });
@@ -186,24 +220,53 @@ final class SecurityCenterGlassHook {
                 Object turboObject = chain.getThisObject();
                 if (!(turboObject instanceof View)) return result;
                 View turbo = (View) turboObject;
-                final boolean type4Configured;
-                synchronized (LOCK) {
-                    type4Configured = Boolean.TRUE.equals(TYPE4_CONFIGURED.get(turbo));
-                }
-                if (!type4Configured) return result;
+                final Integer assistantType;
+                synchronized (LOCK) { assistantType = CONFIGURED_ASSISTANTS.get(turbo); }
+                if (assistantType == null) return result;
+
+                SecurityCenterGlassCoordinator live = currentCoordinator(spec);
                 try {
-                    Object dock = HookUtil.requireInvoke(turbo, spec.dockLayoutGetter());
-                    if (!(dock instanceof View)) {
-                        log("type-4 dock-ready getter returned non-View value", null);
-                        return result;
+                    Object dockObject = HookUtil.requireInvoke(turbo, spec.dockLayoutGetter());
+                    if (!(dockObject instanceof View)) {
+                        throw new IllegalStateException("dock-ready getter returned non-View value");
                     }
-                    SecurityCenterGlassCoordinator live = currentCoordinator(spec);
+                    View boxMaterialView = null;
+                    if (assistantType == ASSISTANT_GAME || assistantType == ASSISTANT_VIDEO) {
+                        Object boxObject = HookUtil.requireInvoke(turbo, spec.boxViewGetter());
+                        if (!(boxObject instanceof View)) {
+                            throw new IllegalStateException("box getter returned non-View value");
+                        }
+                        View box = (View) boxObject;
+                        if (assistantType == ASSISTANT_GAME) {
+                            if (!gameBoxClass.isInstance(box)) {
+                                throw new IllegalStateException(
+                                        "game box class changed: " + box.getClass().getName());
+                            }
+                            Object material = HookUtil.requireInvoke(
+                                    box, spec.gameToolboxMaterialGetter());
+                            if (!(material instanceof View)
+                                    || !gameMaterialViewClass.isInstance(material)) {
+                                throw new IllegalStateException("game material carrier unavailable");
+                            }
+                            boxMaterialView = (View) material;
+                        } else {
+                            View material = box.findViewById(videoMainContentResId);
+                            if (material == null || material.getId() != videoMainContentResId) {
+                                throw new IllegalStateException("video main_content carrier unavailable");
+                            }
+                            boxMaterialView = material;
+                        }
+                    }
                     if (live != null) {
-                        live.bindGlobalDock(turbo, (View) dock);
-                        log("type-4 dock bound", null);
+                        live.bindAssistant(turbo, (View) dockObject, boxMaterialView, assistantType);
+                        log("assistant bound type=" + assistantType
+                                + " boxMaterial="
+                                + (boxMaterialView != null
+                                        ? boxMaterialView.getClass().getName() : "none"), null);
                     }
                 } catch (Throwable error) {
-                    log("type-4 dock-ready observation failed", error);
+                    if (live != null) live.releaseAll();
+                    log("assistant dock-ready observation failed type=" + assistantType, error);
                 }
                 return result;
             });
@@ -249,8 +312,8 @@ final class SecurityCenterGlassHook {
                 return result;
             });
 
-            // d2/f2 are the decompiled semantic teardown authorities. Revoke the custom layer
-            // before TurboLayout.t()/Q(), animation removal, or vendor PassBlur destruction.
+            // d2/f2 are the decompiled semantic teardown authorities. Revoke before vendor
+            // TurboLayout teardown or PassBlur destruction can expose stale custom composition.
             HookUtil.hook(removeAnimated, chain -> {
                 notifyVendorPanelClosing(chain.getArgs(), spec);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -270,7 +333,38 @@ final class SecurityCenterGlassHook {
             validatedHooksInstalled = true;
         }
         log("validated hooks installed versionCode=" + versionCode
-                + " allAppsRadiusResId=" + allAppsCornerRadiusResId, null);
+                + " allAppsRadiusResId=" + allAppsCornerRadiusResId
+                + " gameRadiusResId=" + gameToolboxCornerRadiusResId
+                + " videoMainContentResId=" + videoMainContentResId, null);
+    }
+
+    private static int resolveAssistantType(Object typeArg, SecurityCenterHookSpec spec) {
+        boolean game = Boolean.TRUE.equals(
+                HookUtil.requireInvoke(typeArg, spec.gameToolboxPredicateMethod()));
+        boolean video = Boolean.TRUE.equals(
+                HookUtil.requireInvoke(typeArg, spec.videoToolboxPredicateMethod()));
+        boolean globalDock = Boolean.TRUE.equals(
+                HookUtil.requireInvoke(typeArg, spec.globalDockPredicateMethod()));
+        int count = (game ? 1 : 0) + (video ? 1 : 0) + (globalDock ? 1 : 0);
+        if (count > 1) throw new IllegalStateException("assistant type predicates overlap");
+        if (game) return ASSISTANT_GAME;
+        if (video) return ASSISTANT_VIDEO;
+        if (globalDock) return ASSISTANT_GLOBAL_DOCK;
+        return 0;
+    }
+
+    private static int resolveResource(
+            Resources resources, String packageName, String type, String entry) {
+        int id = resources.getIdentifier(entry, type, packageName);
+        if (id == 0
+                || !packageName.equals(resources.getResourcePackageName(id))
+                || !type.equals(resources.getResourceTypeName(id))
+                || !entry.equals(resources.getResourceEntryName(id))) {
+            throw new IllegalStateException(
+                    "validated Security Center resource unavailable: "
+                            + packageName + ":" + type + "/" + entry);
+        }
+        return id;
     }
 
     private static void notifyVendorPanelClosing(
@@ -346,7 +440,12 @@ final class SecurityCenterGlassHook {
                 log("toggle settle authority read failed", error);
                 return true;
             }
-            if (ToggleAuthority.shouldKeepWaiting(transforming)) return true;
+            if (ToggleAuthority.shouldKeepWaiting(transforming)) {
+                // Raw DEX field s is the vendor animation authority. Sample the actual Folme
+                // transformed Views on each pre-draw; no fixed-delay interpolation is invented.
+                live.refreshTransitionFrame(turbo);
+                return true;
+            }
 
             remove();
             try {
