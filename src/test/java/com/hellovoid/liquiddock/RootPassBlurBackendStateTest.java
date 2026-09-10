@@ -57,6 +57,22 @@ public class RootPassBlurBackendStateTest {
     }
 
     @Test
+    public void qualityChangeInvalidatesFreshnessWithoutRecreatingNativeEndpoint() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestFresh(25L));
+        assertTrue(state.onFreshFrame(25L));
+
+        ZeroCopyProducerRecoveryState.Decision quality = state.onQualityChanged();
+
+        assertTrue(quality.accepted);
+        assertTrue(quality.clearFrameAvailable);
+        assertFalse(quality.recreateProducer);
+        assertFalse(quality.requestBind);
+        assertFalse(state.isRebindPending());
+        assertFalse(state.hasFreshFrame(25L));
+    }
+
+    @Test
     public void terminalFailureAndShutdownFailClosed() {
         RootPassBlurBackendState state = new RootPassBlurBackendState();
         assertTrue(state.requestFresh(30L));
