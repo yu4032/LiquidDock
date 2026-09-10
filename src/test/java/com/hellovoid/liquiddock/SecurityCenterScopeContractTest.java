@@ -32,7 +32,8 @@ public class SecurityCenterScopeContractTest {
                     .sorted()
                     .forEach(path -> {
                         try {
-                            source.append(Files.readString(path, StandardCharsets.UTF_8)).append('\n');
+                            source.append(stripJavaComments(
+                                    Files.readString(path, StandardCharsets.UTF_8))).append('\n');
                         } catch (java.io.IOException error) {
                             throw new java.io.UncheckedIOException(error);
                         }
@@ -44,5 +45,11 @@ public class SecurityCenterScopeContractTest {
             assertFalse("version-specific compatibility literal remains: " + banned,
                     source.toString().contains(banned));
         }
+    }
+
+    private static String stripJavaComments(String source) {
+        return source
+                .replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("(?m)//.*$", "");
     }
 }

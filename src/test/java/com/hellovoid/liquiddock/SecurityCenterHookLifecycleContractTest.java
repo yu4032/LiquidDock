@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 import org.junit.Test;
 
-/** Typed contract for the decompiled 40011320 assistant / All Apps lifecycle. */
+/** Typed contract for the semantic Security Center assistant / All Apps lifecycle. */
 public class SecurityCenterHookLifecycleContractTest {
     private static boolean hasMethod(Class<?> type, String name, int parameterCount) {
         return Arrays.stream(type.getDeclaredMethods())
@@ -17,28 +17,13 @@ public class SecurityCenterHookLifecycleContractTest {
                         && method.getParameterCount() == parameterCount);
     }
 
-    private static Object invokeNoArg(Object target, String methodName) throws Exception {
-        Method method = target.getClass().getDeclaredMethod(methodName);
-        method.setAccessible(true);
-        return method.invoke(target);
-    }
-
     @Test
-    public void assistantContractExposesExactTypeAndBoxMembers() throws Exception {
-        SecurityCenterHookSpec spec = SecurityCenterHookSpec.forVersionCode(40011320L);
-
-        assertTrue(hasMethod(SecurityCenterHookSpec.class, "configureDockMethod", 0));
-        assertTrue(hasMethod(SecurityCenterHookSpec.class, "dockReadyMethod", 0));
-        assertTrue(hasMethod(SecurityCenterHookSpec.class, "gameToolboxPredicateMethod", 0));
-        assertTrue(hasMethod(SecurityCenterHookSpec.class, "videoToolboxPredicateMethod", 0));
-        assertTrue(hasMethod(SecurityCenterHookSpec.class, "globalDockPredicateMethod", 0));
-        assertTrue(hasMethod(SecurityCenterHookSpec.class, "boxViewGetter", 0));
-        assertEquals("V", invokeNoArg(spec, "configureDockMethod"));
-        assertEquals("c0", invokeNoArg(spec, "dockReadyMethod"));
-        assertEquals("g", invokeNoArg(spec, "gameToolboxPredicateMethod"));
-        assertEquals("k", invokeNoArg(spec, "videoToolboxPredicateMethod"));
-        assertEquals("f", invokeNoArg(spec, "globalDockPredicateMethod"));
-        assertEquals("getBoxView", invokeNoArg(spec, "boxViewGetter"));
+    public void assistantContractIsResolvedBeforeMutationActivation() {
+        assertTrue(hasMethod(SecurityCenterSemanticContractResolver.class, "resolveForTest", 3));
+        assertTrue(hasMethod(SecurityCenterHookActivationState.class, "allowsMutation", 0));
+        assertTrue(hasMethod(SecurityCenterHookActivationState.class, "onCallbacksRegistered", 0));
+        assertTrue(hasMethod(SecurityCenterHookActivationState.class, "onValidationCommitted", 0));
+        assertTrue(hasMethod(SecurityCenterHookActivationState.class, "onValidationFailed", 0));
     }
 
     @Test

@@ -1,17 +1,21 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
-import android.content.pm.PackageInfo;
 import android.content.res.Resources;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewTreeObserver;
+import android.widget.Toast;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.WeakHashMap;
 
-/** Exact version-gated Security Center hooks for Game / Video / Global Dock liquid glass. */
+/** Semantic, fail-closed Security Center hooks for Game / Video / Global Dock liquid glass. */
 final class SecurityCenterGlassHook {
     private static final String TAG = "[DC][SecurityCenterGlass]";
     private static final Object LOCK = new Object();
@@ -20,13 +24,16 @@ final class SecurityCenterGlassHook {
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
     private static final WeakHashMap<View, SettleObserver> SETTLE_OBSERVERS = new WeakHashMap<>();
     private static final WeakHashMap<View, Integer> CONFIGURED_ASSISTANTS = new WeakHashMap<>();
+    private static final SecurityCenterOneShotTipPolicy UNSUPPORTED_TIP =
+            new SecurityCenterOneShotTipPolicy();
+    private static final SecurityCenterHookActivationState ACTIVATION =
+            new SecurityCenterHookActivationState();
 
     private static boolean bootstrapInstalled;
     private static boolean validatedHooksInstalled;
-    private static boolean unsupportedVersionLogged;
     private static ClassLoader installedLoader;
     private static LiquidDockConfig installedConfig;
-    private static SecurityCenterHookSpec installedSpec;
+    private static SecurityCenterSemanticContractResolver.ResolvedContract installedContract;
     private static SecurityCenterGlassCoordinator coordinator;
 
     /** Pure vendor-authority policy: transformation state, never elapsed time, owns completion. */
@@ -52,12 +59,17 @@ final class SecurityCenterGlassHook {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     Object owner = chain.getThisObject();
                     if (!(owner instanceof Context)) {
-                        log("bootstrap owner is not Context: "
-                                + (owner != null ? owner.getClass().getName() : "null"), null);
+                        log("bootstrap owner is not Context", null);
                         return result;
                     }
-                    try { installValidatedHooksOnce((Context) owner); }
-                    catch (Throwable error) { log("validated hook installation failed", error); }
+                    Context context = (Context) owner;
+                    try {
+                        installValidatedHooksOnce(context);
+                    } catch (Throwable error) {
+                        ACTIVATION.onValidationFailed();
+                        showUnsupportedTipOnce(context);
+                        log("semantic hook installation failed closed", error);
+                    }
                     return result;
                 });
                 bootstrapInstalled = true;
@@ -78,135 +90,53 @@ final class SecurityCenterGlassHook {
         }
         if (loader == null || config == null || service == null) return;
 
-        PackageInfo info = service.getPackageManager().getPackageInfo(service.getPackageName(), 0);
-        long versionCode = info.getLongVersionCode();
-        SecurityCenterHookSpec spec = SecurityCenterHookSpec.forVersionCode(versionCode);
-        if (spec == null) {
-            synchronized (LOCK) {
-                if (!unsupportedVersionLogged) {
-                    unsupportedVersionLogged = true;
-                    log("unsupported versionCode=" + versionCode + "; mutation hooks not installed", null);
-                }
-            }
-            return;
-        }
-
-        // Resolve the complete decompiled compatibility contract before installing any mutation.
-        Class<?> turboClass = Class.forName(spec.turboLayoutClass(), false, loader);
-        Class<?> wrapperClass = Class.forName(spec.sidebarWrapperClass(), false, loader);
-        Class<?> managerClass = Class.forName(spec.dockWindowManagerClass(), false, loader);
-        Class<?> typeClass = Class.forName(spec.dockWindowTypeClass(), false, loader);
-        Class<?> helperClass = Class.forName(spec.os4MaterialHelperClass(), false, loader);
-        Class<?> gameBoxClass = Class.forName(spec.gameToolboxViewClass(), false, loader);
-        Class<?> videoAdapterClass = Class.forName(spec.videoToolboxAdapterClass(), false, loader);
-
-        Method configure = HookUtil.findMethodExact(
-                turboClass, spec.configureDockMethod(),
-                new Class<?>[]{wrapperClass, boolean.class, String.class, int.class, typeClass,
-                        boolean.class, boolean.class, boolean.class});
-        Method dockReady = HookUtil.findMethodExact(turboClass, spec.dockReadyMethod(), new Class<?>[0]);
-        Method toggle = HookUtil.findMethodExact(turboClass, spec.toggleAllAppsMethod(), new Class<?>[0]);
-        Method finalBackground = HookUtil.findMethodExact(
-                turboClass, spec.finalBackgroundMethod(), new Class<?>[0]);
-        Method typeGame = HookUtil.findMethodExact(
-                typeClass, spec.gameToolboxPredicateMethod(), new Class<?>[0]);
-        Method typeVideo = HookUtil.findMethodExact(
-                typeClass, spec.videoToolboxPredicateMethod(), new Class<?>[0]);
-        Method typeGlobalDock = HookUtil.findMethodExact(
-                typeClass, spec.globalDockPredicateMethod(), new Class<?>[0]);
-        Method wrapperTurboGetter = HookUtil.findMethodExact(
-                wrapperClass, spec.sidebarTurboGetter(), new Class<?>[0]);
-        Method removeAnimated = HookUtil.findMethodExact(
-                managerClass, spec.removeTurboLayoutMethod(),
-                new Class<?>[]{wrapperClass, boolean.class});
-        Method removeWithoutAnimation = HookUtil.findMethodExact(
-                managerClass, spec.removeTurboLayoutWithoutAnimationMethod(),
-                new Class<?>[]{wrapperClass, boolean.class});
-        Method dockGetter = HookUtil.findMethodExact(
-                turboClass, spec.dockLayoutGetter(), new Class<?>[0]);
-        Method appsGetter = HookUtil.findMethodExact(
-                turboClass, spec.appsLayoutGetter(), new Class<?>[0]);
-        Method boxGetter = HookUtil.findMethodExact(
-                turboClass, spec.boxViewGetter(), new Class<?>[0]);
-        Method gameMaterialGetter = HookUtil.findMethodExact(
-                gameBoxClass, spec.gameToolboxMaterialGetter(), new Class<?>[0]);
-        Class<?> gameMaterialViewClass = gameMaterialGetter.getReturnType();
-        Method gameMaterialRestore = HookUtil.findMethodExact(
-                gameMaterialViewClass,
-                spec.gameToolboxMaterialRestoreMethod(), new Class<?>[0]);
-        Method videoAdapterGetter = HookUtil.findMethodExact(
-                turboClass, spec.videoToolboxAdapterGetter(), new Class<?>[0]);
-        Method videoMaterialRestore = HookUtil.findMethodExact(
-                videoAdapterClass,
-                spec.videoToolboxMaterialRestoreMethod(), new Class<?>[0]);
-        Method reset = HookUtil.findMethodExact(
-                helperClass, spec.os4MaterialResetMethod(), new Class<?>[]{View.class});
-        Field transforming = HookUtil.findField(turboClass, spec.transformingField());
-        Field allAppsPresent = HookUtil.findField(turboClass, spec.allAppsPresentField());
-
-        if (typeGame.getReturnType() != boolean.class
-                || typeVideo.getReturnType() != boolean.class
-                || typeGlobalDock.getReturnType() != boolean.class
-                || transforming.getType() != boolean.class
-                || allAppsPresent.getType() != boolean.class
-                || configure.getReturnType() != void.class
-                || dockReady.getReturnType() != void.class
-                || removeAnimated.getReturnType() != void.class
-                || removeWithoutAnimation.getReturnType() != void.class
-                || finalBackground.getReturnType() != void.class
-                || !View.class.isAssignableFrom(dockGetter.getReturnType())
-                || !View.class.isAssignableFrom(appsGetter.getReturnType())
-                || !View.class.isAssignableFrom(boxGetter.getReturnType())
-                || !View.class.isAssignableFrom(gameMaterialViewClass)
-                || gameMaterialRestore.getReturnType() != void.class
-                || !videoAdapterClass.isAssignableFrom(videoAdapterGetter.getReturnType())
-                || videoMaterialRestore.getReturnType() != void.class
-                || !turboClass.isAssignableFrom(wrapperTurboGetter.getReturnType())
-                || !Modifier.isStatic(reset.getModifiers())) {
-            throw new IllegalStateException("validated Security Center member shape changed");
-        }
-
-        // Resolve exact vendor resources from the live Security Center table, never local guesses.
         final Resources resources = service.getResources();
         final String resourcePackage = service.getPackageName();
         final int allAppsCornerRadiusResId = resolveResource(
-                resources, resourcePackage, "dimen", spec.allAppsCornerRadiusResource());
+                resources, resourcePackage, "dimen", SecurityCenterHookSpec.ALL_APPS_RADIUS_RESOURCE);
         final int gameToolboxCornerRadiusResId = resolveResource(
-                resources, resourcePackage, "dimen", spec.gameToolboxCornerRadiusResource());
+                resources, resourcePackage, "dimen", SecurityCenterHookSpec.GAME_RADIUS_RESOURCE);
         final int videoMainContentResId = resolveResource(
-                resources, resourcePackage, "id", spec.videoToolboxMaterialViewIdResource());
+                resources, resourcePackage, "id", SecurityCenterHookSpec.VIDEO_CONTENT_RESOURCE);
 
+        Set<String> capabilities = new HashSet<>();
+        capabilities.add("dimen:" + SecurityCenterHookSpec.ALL_APPS_RADIUS_RESOURCE);
+        capabilities.add("dimen:" + SecurityCenterHookSpec.GAME_RADIUS_RESOURCE);
+        capabilities.add("id:" + SecurityCenterHookSpec.VIDEO_CONTENT_RESOURCE);
+
+        Class<?> turboClass = Class.forName(
+                SecurityCenterHookSpec.TURBO_LAYOUT_CLASS, false, loader);
+        SecurityCenterSemanticContractResolver.ResolvedContract contract =
+                SecurityCenterSemanticContractResolver.resolve(turboClass, View.class, capabilities);
+
+        // Validate hidden View material mutation APIs as part of the atomic preflight.
         SecurityCenterVendorMaterialBridge vendorBridge =
-                new SecurityCenterVendorMaterialBridge(loader, spec, videoMainContentResId);
+                new SecurityCenterVendorMaterialBridge(contract, videoMainContentResId);
         SecurityCenterGlassCoordinator nextCoordinator =
                 new SecurityCenterGlassCoordinator(
-                        config.glass,
-                        vendorBridge,
-                        allAppsCornerRadiusResId,
-                        gameToolboxCornerRadiusResId);
+                        config.glass, vendorBridge,
+                        allAppsCornerRadiusResId, gameToolboxCornerRadiusResId);
 
         synchronized (LOCK) {
             if (validatedHooksInstalled) {
                 nextCoordinator.releaseAll();
                 return;
             }
-            installedSpec = spec;
+            installedContract = contract;
             coordinator = nextCoordinator;
 
-            HookUtil.hook(configure, chain -> {
+            HookUtil.hook(contract.configure(), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (!ACTIVATION.allowsMutation()) return result;
                 Object turboObject = chain.getThisObject();
                 Object typeArg = chain.getArgs().size() > 4 ? chain.getArgs().get(4) : null;
                 if (!(turboObject instanceof View) || typeArg == null) return result;
                 View turbo = (View) turboObject;
                 try {
-                    int assistantType = resolveAssistantType(typeArg, spec);
+                    int assistantType = resolveAssistantType(typeArg, contract);
                     synchronized (LOCK) {
                         if (assistantType != 0) CONFIGURED_ASSISTANTS.put(turbo, assistantType);
                         else CONFIGURED_ASSISTANTS.remove(turbo);
-                    }
-                    if (assistantType != 0) {
-                        log("assistant configured type=" + assistantType, null);
                     }
                 } catch (Throwable error) {
                     synchronized (LOCK) { CONFIGURED_ASSISTANTS.remove(turbo); }
@@ -215,8 +145,9 @@ final class SecurityCenterGlassHook {
                 return result;
             });
 
-            HookUtil.hook(dockReady, chain -> {
+            HookUtil.hook(contract.dockReady(), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (!ACTIVATION.allowsMutation()) return result;
                 Object turboObject = chain.getThisObject();
                 if (!(turboObject instanceof View)) return result;
                 View turbo = (View) turboObject;
@@ -224,62 +155,57 @@ final class SecurityCenterGlassHook {
                 synchronized (LOCK) { assistantType = CONFIGURED_ASSISTANTS.get(turbo); }
                 if (assistantType == null) return result;
 
-                SecurityCenterGlassCoordinator live = currentCoordinator(spec);
+                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
                 try {
-                    Object dockObject = HookUtil.requireInvoke(turbo, spec.dockLayoutGetter());
+                    Object dockObject = invoke(contract.dockGetter(), turbo);
                     if (!(dockObject instanceof View)) {
-                        throw new IllegalStateException("dock-ready getter returned non-View value");
+                        throw new IllegalStateException("dock getter returned non-View");
                     }
                     View boxMaterialView = null;
                     if (assistantType == ASSISTANT_GAME || assistantType == ASSISTANT_VIDEO) {
-                        Object boxObject = HookUtil.requireInvoke(turbo, spec.boxViewGetter());
+                        Object boxObject = invoke(contract.boxGetter(), turbo);
                         if (!(boxObject instanceof View)) {
-                            throw new IllegalStateException("box getter returned non-View value");
+                            throw new IllegalStateException("box getter returned non-View");
                         }
                         View box = (View) boxObject;
                         if (assistantType == ASSISTANT_GAME) {
-                            if (!gameBoxClass.isInstance(box)) {
-                                throw new IllegalStateException(
-                                        "game box class changed: " + box.getClass().getName());
+                            if (!contract.gameBoxClass().isInstance(box)) {
+                                throw new IllegalStateException("game box relation changed");
                             }
-                            Object material = HookUtil.requireInvoke(
-                                    box, spec.gameToolboxMaterialGetter());
+                            Object material = invoke(contract.gameMaterialGetter(), box);
                             if (!(material instanceof View)
-                                    || !gameMaterialViewClass.isInstance(material)) {
+                                    || !contract.gameMaterialClass().isInstance(material)) {
                                 throw new IllegalStateException("game material carrier unavailable");
                             }
                             boxMaterialView = (View) material;
                         } else {
                             View material = box.findViewById(videoMainContentResId);
                             if (material == null || material.getId() != videoMainContentResId) {
-                                throw new IllegalStateException("video main_content carrier unavailable");
+                                throw new IllegalStateException("video material carrier unavailable");
                             }
                             boxMaterialView = material;
                         }
                     }
                     if (live != null) {
                         live.bindAssistant(turbo, (View) dockObject, boxMaterialView, assistantType);
-                        log("assistant bound type=" + assistantType
-                                + " boxMaterial="
-                                + (boxMaterialView != null
-                                        ? boxMaterialView.getClass().getName() : "none"), null);
                     }
                 } catch (Throwable error) {
                     if (live != null) live.releaseAll();
-                    log("assistant dock-ready observation failed type=" + assistantType, error);
+                    log("assistant dock-ready observation failed", error);
                 }
                 return result;
             });
 
-            HookUtil.hook(toggle, chain -> {
+            HookUtil.hook(contract.toggleAllApps(), chain -> {
                 Object turboObject = chain.getThisObject();
-                if (!(turboObject instanceof View)) {
+                if (!ACTIVATION.allowsMutation() || !(turboObject instanceof View)) {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
                 View turbo = (View) turboObject;
                 final boolean transformingNow;
-                try { transformingNow = HookUtil.getBooleanField(turbo, spec.transformingField()); }
-                catch (Throwable error) {
+                try {
+                    transformingNow = contract.transforming().getBoolean(turbo);
+                } catch (Throwable error) {
                     log("toggle authority read failed", error);
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
@@ -287,18 +213,19 @@ final class SecurityCenterGlassHook {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
 
-                SecurityCenterGlassCoordinator live = currentCoordinator(spec);
+                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
                 final long transitionGeneration = live != null
                         ? live.onAllAppsToggleStarted(turbo) : -1L;
                 final Object result;
-                try { result = chain.proceed(chain.getArgs().toArray(new Object[0])); }
-                catch (Throwable error) {
+                try {
+                    result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                } catch (Throwable error) {
                     if (live != null) live.releaseAll();
                     throw error;
                 }
                 if (live != null) {
                     try {
-                        Object apps = HookUtil.requireInvoke(turbo, spec.appsLayoutGetter());
+                        Object apps = invoke(contract.appsGetter(), turbo);
                         if (apps instanceof View) live.updateAllAppsLayout(turbo, (View) apps);
                     } catch (Throwable error) {
                         live.releaseAll();
@@ -307,49 +234,52 @@ final class SecurityCenterGlassHook {
                     }
                 }
                 if (transitionGeneration >= 0L) {
-                    installSettleObserver(turbo, spec, transitionGeneration);
+                    installSettleObserver(turbo, contract, transitionGeneration);
                 }
                 return result;
             });
 
-            // d2/f2 are the decompiled semantic teardown authorities. Revoke before vendor
-            // TurboLayout teardown or PassBlur destruction can expose stale custom composition.
-            HookUtil.hook(removeAnimated, chain -> {
-                notifyVendorPanelClosing(chain.getArgs(), spec);
+            HookUtil.hook(contract.removeAnimated(), chain -> {
+                if (ACTIVATION.allowsMutation()) notifyVendorPanelClosing(chain.getArgs(), contract);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
-            HookUtil.hook(removeWithoutAnimation, chain -> {
-                notifyVendorPanelClosing(chain.getArgs(), spec);
+            HookUtil.hook(contract.removeWithoutAnimation(), chain -> {
+                if (ACTIVATION.allowsMutation()) notifyVendorPanelClosing(chain.getArgs(), contract);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
-            HookUtil.hook(finalBackground, chain -> {
+            HookUtil.hook(contract.finalBackground(), chain -> {
+                if (!ACTIVATION.allowsMutation()) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
                 Object turbo = chain.getThisObject();
-                SecurityCenterGlassCoordinator live = currentCoordinator(spec);
+                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
                 if (live != null && live.shouldSuppressVendorFinalBackground(turbo)) return null;
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
+            ACTIVATION.onCallbacksRegistered();
+            ACTIVATION.onValidationCommitted();
+            if (!ACTIVATION.allowsMutation()) {
+                throw new IllegalStateException("semantic hook activation did not commit");
+            }
             validatedHooksInstalled = true;
         }
-        log("validated hooks installed versionCode=" + versionCode
-                + " allAppsRadiusResId=" + allAppsCornerRadiusResId
-                + " gameRadiusResId=" + gameToolboxCornerRadiusResId
-                + " videoMainContentResId=" + videoMainContentResId, null);
+        log("semantic hooks installed; versionCode observed="
+                + service.getPackageManager().getPackageInfo(service.getPackageName(), 0)
+                        .getLongVersionCode(), null);
     }
 
-    private static int resolveAssistantType(Object typeArg, SecurityCenterHookSpec spec) {
-        boolean game = Boolean.TRUE.equals(
-                HookUtil.requireInvoke(typeArg, spec.gameToolboxPredicateMethod()));
-        boolean video = Boolean.TRUE.equals(
-                HookUtil.requireInvoke(typeArg, spec.videoToolboxPredicateMethod()));
-        boolean globalDock = Boolean.TRUE.equals(
-                HookUtil.requireInvoke(typeArg, spec.globalDockPredicateMethod()));
-        int count = (game ? 1 : 0) + (video ? 1 : 0) + (globalDock ? 1 : 0);
-        if (count > 1) throw new IllegalStateException("assistant type predicates overlap");
-        if (game) return ASSISTANT_GAME;
-        if (video) return ASSISTANT_VIDEO;
-        if (globalDock) return ASSISTANT_GLOBAL_DOCK;
+    private static int resolveAssistantType(
+            Object typeArg, SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        Object value = invoke(contract.assistantTypeDiscriminator(), typeArg);
+        if (!(value instanceof Number)) {
+            throw new IllegalStateException("assistant type discriminator returned non-number");
+        }
+        int type = ((Number) value).intValue();
+        if (type == ASSISTANT_GAME || type == ASSISTANT_VIDEO || type == ASSISTANT_GLOBAL_DOCK) {
+            return type;
+        }
         return 0;
     }
 
@@ -361,36 +291,39 @@ final class SecurityCenterGlassHook {
                 || !type.equals(resources.getResourceTypeName(id))
                 || !entry.equals(resources.getResourceEntryName(id))) {
             throw new IllegalStateException(
-                    "validated Security Center resource unavailable: "
+                    "Security Center resource unavailable: "
                             + packageName + ":" + type + "/" + entry);
         }
         return id;
     }
 
     private static void notifyVendorPanelClosing(
-            java.util.List<?> args, SecurityCenterHookSpec spec) {
+            java.util.List<?> args,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
         Object wrapper = args != null && !args.isEmpty() ? args.get(0) : null;
         if (wrapper == null) return;
         try {
-            Object turbo = HookUtil.requireInvoke(wrapper, spec.sidebarTurboGetter());
-            SecurityCenterGlassCoordinator live = currentCoordinator(spec);
+            Object turbo = invoke(contract.wrapperTurboGetter(), wrapper);
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
             if (live != null && turbo instanceof View) {
                 live.onVendorPanelClosing((View) turbo);
-                log("vendor panel close observed", null);
             }
         } catch (Throwable error) {
             log("vendor panel close observation failed", error);
         }
     }
 
-    private static SecurityCenterGlassCoordinator currentCoordinator(SecurityCenterHookSpec spec) {
+    private static SecurityCenterGlassCoordinator currentCoordinator(
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
         synchronized (LOCK) {
-            return validatedHooksInstalled && installedSpec == spec ? coordinator : null;
+            return validatedHooksInstalled && installedContract == contract ? coordinator : null;
         }
     }
 
     private static void installSettleObserver(
-            View turbo, SecurityCenterHookSpec spec, long transitionGeneration) {
+            View turbo,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract,
+            long transitionGeneration) {
         if (turbo == null || transitionGeneration < 0L) return;
         ViewTreeObserver observer = turbo.getViewTreeObserver();
         if (observer == null || !observer.isAlive()) {
@@ -400,8 +333,8 @@ final class SecurityCenterGlassHook {
         synchronized (LOCK) {
             SettleObserver old = SETTLE_OBSERVERS.remove(turbo);
             if (old != null) old.remove();
-            SettleObserver created =
-                    new SettleObserver(turbo, spec, observer, transitionGeneration);
+            SettleObserver created = new SettleObserver(
+                    turbo, contract, observer, transitionGeneration);
             SETTLE_OBSERVERS.put(turbo, created);
             observer.addOnPreDrawListener(created);
         }
@@ -409,47 +342,47 @@ final class SecurityCenterGlassHook {
 
     private static final class SettleObserver implements ViewTreeObserver.OnPreDrawListener {
         private final View turbo;
-        private final SecurityCenterHookSpec spec;
+        private final SecurityCenterSemanticContractResolver.ResolvedContract contract;
         private final ViewTreeObserver observer;
         private final long transitionGeneration;
         private boolean removed;
 
         SettleObserver(
                 View turbo,
-                SecurityCenterHookSpec spec,
+                SecurityCenterSemanticContractResolver.ResolvedContract contract,
                 ViewTreeObserver observer,
                 long transitionGeneration) {
             this.turbo = turbo;
-            this.spec = spec;
+            this.contract = contract;
             this.observer = observer;
             this.transitionGeneration = transitionGeneration;
         }
 
         @Override
         public boolean onPreDraw() {
-            SecurityCenterGlassCoordinator live = currentCoordinator(spec);
-            if (live == null || !SecurityCenterGlassRuntimeState.isEnabled()) {
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+            if (!ACTIVATION.allowsMutation()
+                    || live == null || !SecurityCenterGlassRuntimeState.isEnabled()) {
                 remove();
                 return true;
             }
             final boolean transforming;
-            try { transforming = HookUtil.getBooleanField(turbo, spec.transformingField()); }
-            catch (Throwable error) {
+            try {
+                transforming = contract.transforming().getBoolean(turbo);
+            } catch (Throwable error) {
                 remove();
                 live.releaseAll();
                 log("toggle settle authority read failed", error);
                 return true;
             }
             if (ToggleAuthority.shouldKeepWaiting(transforming)) {
-                // Raw DEX field s is the vendor animation authority. Sample the actual Folme
-                // transformed Views on each pre-draw; no fixed-delay interpolation is invented.
                 live.refreshTransitionFrame(turbo);
                 return true;
             }
 
             remove();
             try {
-                boolean allAppsPresent = HookUtil.getBooleanField(turbo, spec.allAppsPresentField());
+                boolean allAppsPresent = contract.allAppsPresent().getBoolean(turbo);
                 live.onAllAppsToggleSettled(turbo, allAppsPresent, transitionGeneration);
             } catch (Throwable error) {
                 live.releaseAll();
@@ -468,6 +401,36 @@ final class SecurityCenterGlassHook {
                 if (observer.isAlive()) observer.removeOnPreDrawListener(this);
             } catch (Throwable ignored) {}
         }
+    }
+
+    private static Object invoke(Method method, Object target, Object... args) {
+        try {
+            method.setAccessible(true);
+            return method.invoke(target, args);
+        } catch (InvocationTargetException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException("Security Center invocation failed", cause);
+        } catch (Throwable error) {
+            throw new IllegalStateException("Security Center invocation failed", error);
+        }
+    }
+
+    private static void showUnsupportedTipOnce(Context context) {
+        if (context == null || !UNSUPPORTED_TIP.shouldEmit()) return;
+        Runnable show = () -> {
+            try {
+                Toast.makeText(
+                        context.getApplicationContext(),
+                        "LiquidDock: Security Center glass is unavailable on this build",
+                        Toast.LENGTH_LONG).show();
+            } catch (Throwable error) {
+                log("compatibility tip unavailable", error);
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) show.run();
+        else new Handler(Looper.getMainLooper()).post(show);
     }
 
     private static void log(String message, Throwable error) {
