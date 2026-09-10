@@ -62,16 +62,29 @@ final class SecurityCenterGlassSceneState {
     }
 
     Decision onTransitionStarted() {
-        if (scene != Scene.DOCK && scene != Scene.ALL_APPS) return none();
+        if (scene == Scene.DETACHED) return none();
+        // Every real vendor d0() invocation is a new content generation, even when the user
+        // starts another toggle before the previous custom frame has finished presenting.
         generation++;
         scene = Scene.TRANSITIONING;
         return decision(false, true, false, true, true, false, false, false);
     }
 
     Decision onGeometrySettled(Target target) {
-        if (scene == Scene.DETACHED || target == null) return none();
-        scene = target == Target.ALL_APPS ? Scene.PREPARING_ALL_APPS : Scene.PREPARING_DOCK;
-        return decision(false, false, true, false, false, false, false, false);
+        if (target == null) return none();
+        // Initial Dock geometry is accepted only while preparing the newly attached root.
+        // A later observer cannot retarget an already revealed generation.
+        if (scene == Scene.PREPARING_DOCK && target == Target.DOCK) {
+            return settle(target);
+        }
+        if (scene != Scene.TRANSITIONING) return none();
+        return settle(target);
+    }
+
+    Decision onGeometrySettled(Target target, long expectedGeneration) {
+        if (expectedGeneration < 0L || expectedGeneration != generation) return none();
+        if (scene != Scene.TRANSITIONING || target == null) return none();
+        return settle(target);
     }
 
     Decision onFreshFrameRendered(long renderedGeneration) {
@@ -104,6 +117,11 @@ final class SecurityCenterGlassSceneState {
 
     long generation() {
         return generation;
+    }
+
+    private Decision settle(Target target) {
+        scene = target == Target.ALL_APPS ? Scene.PREPARING_ALL_APPS : Scene.PREPARING_DOCK;
+        return decision(false, false, true, false, false, false, false, false);
     }
 
     private Decision terminate() {
