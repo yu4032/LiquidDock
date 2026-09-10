@@ -15,6 +15,7 @@ final class SecurityCenterGlassHook {
     private static final String TAG = "[DC][SecurityCenterGlass]";
     private static final Object LOCK = new Object();
     private static final WeakHashMap<View, SettleObserver> SETTLE_OBSERVERS = new WeakHashMap<>();
+    private static final WeakHashMap<View, Boolean> TYPE4_CONFIGURED = new WeakHashMap<>();
 
     private static boolean bootstrapInstalled;
     private static boolean validatedHooksInstalled;
@@ -101,8 +102,21 @@ final class SecurityCenterGlassHook {
         Class<?> wrapperClass = Class.forName(spec.sidebarWrapperClass(), false, loader);
         Class<?> typeClass = Class.forName(spec.dockWindowTypeClass(), false, loader);
         Class<?> helperClass = Class.forName(spec.os4MaterialHelperClass(), false, loader);
-        Method prepare = HookUtil.findMethodExact(
-                turboClass, spec.prepareDockMethod(), new Class<?>[]{wrapperClass, typeClass});
+        Method configure = HookUtil.findMethodExact(
+                turboClass,
+                spec.configureDockMethod(),
+                new Class<?>[]{
+                        wrapperClass,
+                        boolean.class,
+                        String.class,
+                        int.class,
+                        typeClass,
+                        boolean.class,
+                        boolean.class,
+                        boolean.class
+                });
+        Method dockReady = HookUtil.findMethodExact(
+                turboClass, spec.dockReadyMethod(), new Class<?>[0]);
         Method toggle = HookUtil.findMethodExact(
                 turboClass, spec.toggleAllAppsMethod(), new Class<?>[0]);
         Method finalBackground = HookUtil.findMethodExact(
@@ -118,6 +132,8 @@ final class SecurityCenterGlassHook {
         if (type4.getReturnType() != boolean.class
                 || transforming.getType() != boolean.class
                 || allAppsPresent.getType() != boolean.class
+                || configure.getReturnType() != void.class
+                || dockReady.getReturnType() != void.class
                 || finalBackground.getReturnType() != void.class
                 || !Modifier.isStatic(reset.getModifiers())) {
             throw new IllegalStateException("validated Security Center member shape changed");
@@ -136,26 +152,54 @@ final class SecurityCenterGlassHook {
             installedSpec = spec;
             coordinator = nextCoordinator;
 
-            HookUtil.hook(prepare, chain -> {
+            // 40011320 visible Global Dock path is V(..., type, ..., false) -> c0().
+            // Record exact type authority at V(), then bind only after c0() creates the dock view.
+            HookUtil.hook(configure, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object turboObject = chain.getThisObject();
+                Object typeArg = chain.getArgs().size() > 4 ? chain.getArgs().get(4) : null;
+                if (!(turboObject instanceof View) || typeArg == null) return result;
+                View turbo = (View) turboObject;
                 try {
-                    Object turbo = chain.getThisObject();
-                    Object typeArg = chain.getArgs().size() > 1 ? chain.getArgs().get(1) : null;
-                    if (!(turbo instanceof View) || typeArg == null) return result;
-                    Object isType4 = HookUtil.requireInvoke(typeArg, spec.type4PredicateMethod());
-                    if (!Boolean.TRUE.equals(isType4)) return result;
+                    boolean isType4 = Boolean.TRUE.equals(
+                            HookUtil.requireInvoke(typeArg, spec.type4PredicateMethod()));
+                    synchronized (LOCK) {
+                        if (isType4) TYPE4_CONFIGURED.put(turbo, Boolean.TRUE);
+                        else TYPE4_CONFIGURED.remove(turbo);
+                    }
+                    if (isType4) log("type-4 dock configured", null);
+                } catch (Throwable error) {
+                    synchronized (LOCK) {
+                        TYPE4_CONFIGURED.remove(turbo);
+                    }
+                    log("type-4 configure observation failed", error);
+                }
+                return result;
+            });
+
+            HookUtil.hook(dockReady, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object turboObject = chain.getThisObject();
+                if (!(turboObject instanceof View)) return result;
+                View turbo = (View) turboObject;
+                final boolean type4Configured;
+                synchronized (LOCK) {
+                    type4Configured = Boolean.TRUE.equals(TYPE4_CONFIGURED.get(turbo));
+                }
+                if (!type4Configured) return result;
+                try {
                     Object dock = HookUtil.requireInvoke(turbo, spec.dockLayoutGetter());
-                    Object apps = HookUtil.requireInvoke(turbo, spec.appsLayoutGetter());
-                    if (!(dock instanceof View) || !(apps instanceof View)) {
-                        log("type-4 layout getters returned non-View values", null);
+                    if (!(dock instanceof View)) {
+                        log("type-4 dock-ready getter returned non-View value", null);
                         return result;
                     }
                     SecurityCenterGlassCoordinator live = currentCoordinator(spec);
                     if (live != null) {
-                        live.bindGlobalDock((View) turbo, (View) dock, (View) apps);
+                        live.bindGlobalDock(turbo, (View) dock);
+                        log("type-4 dock bound", null);
                     }
                 } catch (Throwable error) {
-                    log("type-4 prepare observation failed", error);
+                    log("type-4 dock-ready observation failed", error);
                 }
                 return result;
             });
@@ -185,6 +229,18 @@ final class SecurityCenterGlassHook {
                 } catch (Throwable error) {
                     if (live != null) live.releaseAll();
                     throw error;
+                }
+                if (live != null) {
+                    try {
+                        Object apps = HookUtil.requireInvoke(turbo, spec.appsLayoutGetter());
+                        if (apps instanceof View) {
+                            live.updateAllAppsLayout(turbo, (View) apps);
+                        }
+                    } catch (Throwable error) {
+                        live.releaseAll();
+                        log("all-apps late-bind observation failed", error);
+                        return result;
+                    }
                 }
                 installSettleObserver(turbo, spec);
                 return result;
