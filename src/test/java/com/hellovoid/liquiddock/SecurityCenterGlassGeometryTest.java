@@ -6,6 +6,8 @@ import static org.junit.Assert.assertNotNull;
 
 import com.hellovoid.prismal.PrismalGeometry;
 
+import java.lang.reflect.Method;
+
 import org.junit.Test;
 
 /** Pure root-local geometry contract for Security Center Global Dock and All Apps. */
@@ -55,6 +57,45 @@ public class SecurityCenterGlassGeometryTest {
         assertEquals(820f, prismal.centerY, 0.001f);
         assertEquals(920f, prismal.glassWidth, 0.001f);
         assertEquals(1520f, prismal.glassHeight, 0.001f);
+    }
+
+    @Test
+    public void presentationCropUsesTargetRegionInsteadOfFullRoot() throws Exception {
+        SecurityCenterGlassGeometry geometry = SecurityCenterGlassGeometry.resolve(
+                1200, 1800,
+                100f, 200f,
+                180f, 260f, 1100f, 1780f,
+                48f);
+        assertNotNull(geometry);
+
+        Method method = SecurityCenterGlassGeometry.class.getDeclaredMethod("toCropUvRect");
+        method.setAccessible(true);
+        float[] crop = (float[]) method.invoke(geometry);
+
+        assertEquals(80f / 1200f, crop[0], 0.0001f);
+        assertEquals(220f / 1800f, crop[1], 0.0001f);
+        assertEquals(920f / 1200f, crop[2], 0.0001f);
+        assertEquals(1520f / 1800f, crop[3], 0.0001f);
+    }
+
+    @Test
+    public void presentationPlacementUsesRealTargetAndParentScreenOrigins() throws Exception {
+        SecurityCenterGlassGeometry geometry = SecurityCenterGlassGeometry.resolve(
+                1200, 1800,
+                100f, 200f,
+                180f, 260f, 1100f, 1780f,
+                48f);
+        assertNotNull(geometry);
+
+        Method method = SecurityCenterGlassGeometry.class.getDeclaredMethod(
+                "toParentPlacement", float.class, float.class, float.class, float.class);
+        method.setAccessible(true);
+        float[] placement = (float[]) method.invoke(geometry, 100f, 200f, 40f, 50f);
+
+        assertEquals(140f, placement[0], 0.001f);
+        assertEquals(210f, placement[1], 0.001f);
+        assertEquals(920f, placement[2], 0.001f);
+        assertEquals(1520f, placement[3], 0.001f);
     }
 
     @Test
