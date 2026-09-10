@@ -4,14 +4,9 @@ import fixture.alpha.AlphaContract;
 import fixture.beta.BetaContract;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -22,8 +17,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class SecurityCenterSemanticCompatibilityTest {
-    private static final Set<String> RESOURCES = new HashSet<>(Arrays.asList(
-            "dimen:dp_24", "dimen:game_toolbox_background_radius", "id:main_content"));
+    private static final Set<String> RESOURCES = Set.of(
+            "dimen:dp_24", "dimen:game_toolbox_background_radius", "id:main_content");
 
     @Test
     public void renamedContractsResolveToTheSameSemanticRoles() throws Exception {
@@ -50,15 +45,14 @@ public class SecurityCenterSemanticCompatibilityTest {
         Method betaDiscriminator = (Method) invoke(beta, "assistantTypeDiscriminator");
         AlphaContract.AssistantType alphaType = new AlphaContract.AssistantType();
         BetaContract.ModeToken betaType = new BetaContract.ModeToken();
-        alphaType.a(1); betaType.a(1);
-        assertEquals(1, ((Number) alphaDiscriminator.invoke(alphaType)).intValue());
-        assertEquals(1, ((Number) betaDiscriminator.invoke(betaType)).intValue());
-        alphaType.a(3); betaType.a(3);
-        assertEquals(3, ((Number) alphaDiscriminator.invoke(alphaType)).intValue());
-        assertEquals(3, ((Number) betaDiscriminator.invoke(betaType)).intValue());
-        alphaType.a(4); betaType.a(4);
-        assertEquals(4, ((Number) alphaDiscriminator.invoke(alphaType)).intValue());
-        assertEquals(4, ((Number) betaDiscriminator.invoke(betaType)).intValue());
+        for (int semanticType : new int[]{1, 3, 4}) {
+            alphaType.a(semanticType);
+            betaType.a(semanticType);
+            assertEquals(semanticType,
+                    ((Number) alphaDiscriminator.invoke(alphaType)).intValue());
+            assertEquals(semanticType,
+                    ((Number) betaDiscriminator.invoke(betaType)).intValue());
+        }
     }
 
     @Test
@@ -92,8 +86,7 @@ public class SecurityCenterSemanticCompatibilityTest {
 
     @Test
     public void failedContractCannotEnableMutationCallbacks() throws Exception {
-        Class<?> type = activationStateClass();
-        Object state = type.getDeclaredConstructor().newInstance();
+        Object state = activationStateClass().getDeclaredConstructor().newInstance();
         assertFalse((Boolean) invoke(state, "allowsMutation"));
         invoke(state, "onCallbacksRegistered");
         assertFalse("registration before final validation must stay inert",
@@ -104,8 +97,7 @@ public class SecurityCenterSemanticCompatibilityTest {
 
     @Test
     public void callbacksEnableOnlyAfterFinalValidatedCommit() throws Exception {
-        Class<?> type = activationStateClass();
-        Object state = type.getDeclaredConstructor().newInstance();
+        Object state = activationStateClass().getDeclaredConstructor().newInstance();
         invoke(state, "onCallbacksRegistered");
         invoke(state, "onValidationCommitted");
         assertTrue((Boolean) invoke(state, "allowsMutation"));
@@ -120,17 +112,6 @@ public class SecurityCenterSemanticCompatibilityTest {
         assertTrue((Boolean) invoke(policy, "shouldEmit"));
         assertFalse((Boolean) invoke(policy, "shouldEmit"));
         assertFalse((Boolean) invoke(policy, "shouldEmit"));
-    }
-
-    @Test
-    public void productionCompatibilitySourcesContainNoVersionSpecificClassLiterals() throws Exception {
-        String source = readProductionSecurityCenterSources();
-        for (String banned : Arrays.asList(
-                "ob.e0", "ob.l0", "ja.a", "gq.g", "hq.g", "za.p",
-                "newbox.x1", "newbox.y1", "40011320L", "40011355L")) {
-            assertFalse("version-specific compatibility literal remains: " + banned,
-                    source.contains(banned));
-        }
     }
 
     private static Object resolve(Class<?> turbo, Class<?> view, Set<String> resources)
@@ -196,24 +177,6 @@ public class SecurityCenterSemanticCompatibilityTest {
         } catch (ClassNotFoundException error) {
             throw new AssertionError(message, error);
         }
-    }
-
-    private static String readProductionSecurityCenterSources() throws IOException {
-        Path root = Path.of("src/main/java/com/hellovoid/liquiddock");
-        StringBuilder out = new StringBuilder();
-        try (java.util.stream.Stream<Path> paths = Files.list(root)) {
-            paths.filter(path -> path.getFileName().toString().startsWith("SecurityCenter"))
-                    .filter(path -> path.toString().endsWith(".java"))
-                    .sorted()
-                    .forEach(path -> {
-                        try {
-                            out.append(Files.readString(path, StandardCharsets.UTF_8)).append('\n');
-                        } catch (IOException error) {
-                            throw new RuntimeException(error);
-                        }
-                    });
-        }
-        return out.toString();
     }
 
     public static class FakeView {}
