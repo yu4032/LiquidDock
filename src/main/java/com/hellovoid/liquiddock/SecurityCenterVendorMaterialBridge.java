@@ -35,6 +35,10 @@ final class SecurityCenterVendorMaterialBridge {
         HookUtil.requireInvokeStatic(
                 materialHelper, spec.os4MaterialResetMethod(), dockLayout);
         MiBlurBridge.clearPassWindowBlur(dockLayout);
+        // TurboLayout.S()/U() may leave shape_gb_turbo_bg as the View's own Drawable even after
+        // material/pass-blur reset. Custom ownership means that exact vendor backing surface must
+        // become transparent; U() remains the authoritative restoration path on release.
+        dockLayout.setBackground(null);
     }
 
     void restoreVendor(Object turboLayout) {
