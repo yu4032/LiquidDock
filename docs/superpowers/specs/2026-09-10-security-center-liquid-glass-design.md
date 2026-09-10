@@ -42,6 +42,12 @@ The implementation must therefore keep two concepts separate:
 
 No code may infer one from the other.
 
+### Support declaration versus capability semantics
+
+The first implementation declares support only for the analyzed Security Center build `40011320`, which is the current HyperOS 4 target used to derive the validated hook topology. The HyperOS 3.x rules above are a forward compatibility constraint, not a claim that an unanalysed HyperOS 3 Security Center build is already supported.
+
+A future HyperOS 3.x `SecurityCenterHookSpec` may be added only after its own decompilation/runtime validation. When added, its vendor restoration/fallback capability must resolve to ordinary background blur and must never emulate or advertise HyperOS 4 soft-light glass.
+
 ## 3. Confirmed Security Center topology
 
 The analyzed Security Center implementation creates the sidebar panel as an independent WindowManager root and then switches Global Dock / All Apps content under the same hierarchy.
