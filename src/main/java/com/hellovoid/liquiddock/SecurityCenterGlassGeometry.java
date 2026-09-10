@@ -2,7 +2,7 @@ package com.hellovoid.liquiddock;
 
 import com.hellovoid.prismal.PrismalGeometry;
 
-/** Immutable root-local geometry for one Security Center large glass surface. */
+/** Immutable root-local geometry for one Security Center glass node or presentation region. */
 final class SecurityCenterGlassGeometry {
     final int rootWidth;
     final int rootHeight;
@@ -69,6 +69,22 @@ final class SecurityCenterGlassGeometry {
         float safeRadius = finite(cornerRadiusPx) ? Math.max(0f, cornerRadiusPx) : 0f;
         return new SecurityCenterGlassGeometry(
                 rootWidth, rootHeight, left, top, right - left, bottom - top, safeRadius);
+    }
+
+    /** Exact root-local union used only as an output/crop region; node radii remain on the nodes. */
+    static SecurityCenterGlassGeometry covering(
+            SecurityCenterGlassGeometry first,
+            SecurityCenterGlassGeometry second) {
+        if (first == null || second == null
+                || first.rootWidth != second.rootWidth
+                || first.rootHeight != second.rootHeight) return null;
+        float left = Math.min(first.left, second.left);
+        float top = Math.min(first.top, second.top);
+        float right = Math.max(first.left + first.width, second.left + second.width);
+        float bottom = Math.max(first.top + first.height, second.top + second.height);
+        return new SecurityCenterGlassGeometry(
+                first.rootWidth, first.rootHeight,
+                left, top, right - left, bottom - top, 0f);
     }
 
     PrismalGeometry toPrismalGeometry() {
