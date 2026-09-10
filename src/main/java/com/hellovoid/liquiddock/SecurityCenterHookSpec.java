@@ -28,7 +28,6 @@ final class SecurityCenterHookSpec {
     private final String transformingField;
     private final String os4MaterialHelperClass;
     private final String os4MaterialResetMethod;
-    private final String resourceDimenClass;
     private final String allAppsCornerRadiusResource;
 
     private SecurityCenterHookSpec(long versionCode,
@@ -51,7 +50,6 @@ final class SecurityCenterHookSpec {
             String transformingField,
             String os4MaterialHelperClass,
             String os4MaterialResetMethod,
-            String resourceDimenClass,
             String allAppsCornerRadiusResource) {
         this.versionCode = versionCode;
         this.vendorGeneration = vendorGeneration;
@@ -73,7 +71,6 @@ final class SecurityCenterHookSpec {
         this.transformingField = transformingField;
         this.os4MaterialHelperClass = os4MaterialHelperClass;
         this.os4MaterialResetMethod = os4MaterialResetMethod;
-        this.resourceDimenClass = resourceDimenClass;
         this.allAppsCornerRadiusResource = allAppsCornerRadiusResource;
     }
 
@@ -99,7 +96,6 @@ final class SecurityCenterHookSpec {
                 "s",
                 "gq.g",
                 "l",
-                "com.miui.securitycenter.R$dimen",
                 "dp_24");
     }
 
@@ -129,6 +125,5 @@ final class SecurityCenterHookSpec {
     String transformingField() { return transformingField; }
     String os4MaterialHelperClass() { return os4MaterialHelperClass; }
     String os4MaterialResetMethod() { return os4MaterialResetMethod; }
-    String resourceDimenClass() { return resourceDimenClass; }
     String allAppsCornerRadiusResource() { return allAppsCornerRadiusResource; }
 }
