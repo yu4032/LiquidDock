@@ -4,11 +4,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
 
-/** Coordinates one Security Center Global Dock / All Apps glass session for the active panel. */
+/** Coordinates one root-wide Security Center assistant / All Apps glass session. */
 final class SecurityCenterGlassCoordinator
         implements SecurityCenterGlassRuntimeState.Owner, SecurityCenterGlassSession.Listener {
     static final class BindDecision {
@@ -84,6 +85,9 @@ final class SecurityCenterGlassCoordinator
     }
 
     private static final String TAG = "[DC][SecurityCenterGlass]";
+    private static final int ASSISTANT_GAME = 1;
+    private static final int ASSISTANT_VIDEO = 3;
+    private static final int ASSISTANT_GLOBAL_DOCK = 4;
 
     private final Policy policy = new Policy();
     private final SecurityCenterGlassSceneState scene = new SecurityCenterGlassSceneState();
@@ -93,14 +97,17 @@ final class SecurityCenterGlassCoordinator
     private final LiquidDockConfig.Glass glassConfig;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
     private final int allAppsCornerRadiusResId;
+    private final int gameToolboxCornerRadiusResId;
 
     private WeakReference<View> turboRef = new WeakReference<>(null);
     private WeakReference<View> dockRef = new WeakReference<>(null);
+    private WeakReference<View> boxRef = new WeakReference<>(null);
     private WeakReference<View> appsRef = new WeakReference<>(null);
     private WeakReference<View> rootRef = new WeakReference<>(null);
     private WeakReference<View> customOwnerTurboRef = new WeakReference<>(null);
     private SecurityCenterGlassSceneState.Target targetKind =
             SecurityCenterGlassSceneState.Target.DOCK;
+    private int assistantType = ASSISTANT_GLOBAL_DOCK;
     private SecurityCenterGlassFrameGeometry currentFrame;
     private SecurityCenterGlassSession session;
     private SecurityCenterGlassOutputView output;
@@ -141,34 +148,53 @@ final class SecurityCenterGlassCoordinator
             };
 
     SecurityCenterGlassCoordinator(LiquidDockConfig.Glass glassConfig) {
-        this(glassConfig, null, 0);
+        this(glassConfig, null, 0, 0);
     }
 
     SecurityCenterGlassCoordinator(
             LiquidDockConfig.Glass glassConfig,
             SecurityCenterVendorMaterialBridge vendorMaterialBridge) {
-        this(glassConfig, vendorMaterialBridge, 0);
+        this(glassConfig, vendorMaterialBridge, 0, 0);
     }
 
     SecurityCenterGlassCoordinator(
             LiquidDockConfig.Glass glassConfig,
             SecurityCenterVendorMaterialBridge vendorMaterialBridge,
             int allAppsCornerRadiusResId) {
+        this(glassConfig, vendorMaterialBridge, allAppsCornerRadiusResId, 0);
+    }
+
+    SecurityCenterGlassCoordinator(
+            LiquidDockConfig.Glass glassConfig,
+            SecurityCenterVendorMaterialBridge vendorMaterialBridge,
+            int allAppsCornerRadiusResId,
+            int gameToolboxCornerRadiusResId) {
         this.glassConfig = glassConfig;
         this.vendorMaterialBridge = vendorMaterialBridge;
         this.allAppsCornerRadiusResId = allAppsCornerRadiusResId;
+        this.gameToolboxCornerRadiusResId = gameToolboxCornerRadiusResId;
         SecurityCenterGlassRuntimeState.setOwner(this);
     }
 
+    /** Compatibility entry used by the existing Global Dock lifecycle. */
     void bindGlobalDock(View turboLayout, View dockLayout) {
-        if (turboLayout == null || dockLayout == null) return;
+        bindAssistant(turboLayout, dockLayout, null, ASSISTANT_GLOBAL_DOCK);
+    }
+
+    /** Binds one vendor c0() result; Dock, Game, Video and Global Dock share one root session. */
+    void bindAssistant(View turboLayout, View dockLayout, View boxLayout, int type) {
+        if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
         View previousTurbo = turboRef.get();
         if (previousTurbo != null && previousTurbo != turboLayout) {
             releasePanel(previousTurbo, "panel replaced");
         }
+        boolean replacingLiveNodes = previousTurbo == turboLayout
+                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM;
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
+        boxRef = new WeakReference<>(boxLayout);
         appsRef = new WeakReference<>(null);
+        assistantType = type;
         targetKind = SecurityCenterGlassSceneState.Target.DOCK;
         currentFrame = null;
         observeTurboAttach(turboLayout);
@@ -176,12 +202,24 @@ final class SecurityCenterGlassCoordinator
             releaseAll();
             return;
         }
+
+        // c0() has synchronously created the replacement vendor nodes. If this root is already
+        // under custom ownership, strip those new vendor materials before Android can draw them;
+        // the previous valid custom frame remains the presentation fallback until a fresh render.
+        if (replacingLiveNodes) claimCurrentTargetsWhileCustom();
         if (turboLayout.isAttachedToWindow()) bindAttachedRoot(turboLayout);
+        log("assistant bound type=" + type
+                + " box=" + (boxLayout != null ? boxLayout.getClass().getName() : "none"), null);
     }
 
     void updateAllAppsLayout(View turboLayout, View appsLayout) {
         if (!isCurrentTurbo(turboLayout) || appsLayout == null) return;
         appsRef = new WeakReference<>(appsLayout);
+        // W() creates All Apps synchronously inside d0(). If custom already owns this lifecycle,
+        // remove the newly-created native material immediately instead of waiting for settle.
+        if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
+            claimCurrentTargetsWhileCustom();
+        }
     }
 
     long onAllAppsToggleStarted(View turboLayout) {
@@ -191,13 +229,26 @@ final class SecurityCenterGlassCoordinator
         return decision.invalidateGeneration ? decision.generation : -1L;
     }
 
+    /** Called on every vendor-transform pre-draw while raw DEX field s remains true. */
+    void refreshTransitionFrame(View turboLayout) {
+        if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()
+                || scene.scene() != SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
+        SecurityCenterGlassFrameGeometry observed = captureFrame(true);
+        if (observed == null) return;
+        boolean changed = currentFrame == null || !currentFrame.sameAs(observed);
+        currentFrame = observed;
+        updateOutputPlacement(observed);
+        if (!changed) return;
+        requestCurrentGeneration(observed);
+    }
+
     void onAllAppsToggleSettled(
             View turboLayout, boolean allAppsPresent, long transitionGeneration) {
         if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()) return;
         SecurityCenterGlassSceneState.Target nextKind = allAppsPresent
                 ? SecurityCenterGlassSceneState.Target.ALL_APPS
                 : SecurityCenterGlassSceneState.Target.DOCK;
-        SecurityCenterGlassFrameGeometry frame = captureFrame(nextKind);
+        SecurityCenterGlassFrameGeometry frame = captureFrame(allAppsPresent);
         if (frame == null) {
             log("settled frame unavailable target=" + nextKind
                     + " generation=" + transitionGeneration, null);
@@ -225,7 +276,6 @@ final class SecurityCenterGlassCoordinator
     boolean shouldSuppressVendorFinalBackground(Object turboLayout) {
         return turboLayout != null
                 && turboLayout == turboRef.get()
-                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM
                 && ownership.canSuppressVendor(renderedGeneration, scene.generation())
                 && policy.currentSession() == session
                 && SecurityCenterGlassRuntimeState.isEnabled();
@@ -264,11 +314,12 @@ final class SecurityCenterGlassCoordinator
         if (!decision.claimCustomOwnership || !decision.revealCustom) return;
         View turbo = turboRef.get();
         View dock = dockRef.get();
+        View box = currentFrame != null && currentFrame.boxGeometry() != null ? boxRef.get() : null;
         View apps = currentFrame != null && currentFrame.appsGeometry() != null ? appsRef.get() : null;
         SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
         if (turbo == null || dock == null || bridge == null) return;
         try {
-            bridge.claimCustom(turbo, dock, apps);
+            bridge.claimCustom(turbo, dock, box, apps);
         } catch (Throwable error) {
             hideCustomOnly();
             ownership.releaseToVendor();
@@ -343,7 +394,7 @@ final class SecurityCenterGlassCoordinator
 
         SecurityCenterGlassSceneState.Decision attached = scene.onRootAttached();
         applyDecision(attached, null);
-        SecurityCenterGlassFrameGeometry frame = captureFrame(SecurityCenterGlassSceneState.Target.DOCK);
+        SecurityCenterGlassFrameGeometry frame = captureFrame(false);
         if (frame != null) {
             currentFrame = frame;
             updateOutputPlacement(frame);
@@ -385,14 +436,8 @@ final class SecurityCenterGlassCoordinator
         if (decision == null) return;
         if (decision.hideCustom || decision.releaseCustomOwnership) hideAndRestoreVendor();
         if (frame != null) updateOutputPlacement(frame);
-        if (decision.requestFresh) {
-            SecurityCenterGlassSession live = session;
-            View root = rootRef.get();
-            if (live != null && !live.isShutdown() && root != null
-                    && policy.currentSession() == live && policy.currentRoot() == root
-                    && frame != null && decision.generation == scene.generation()) {
-                live.requestFresh(decision.generation, frame);
-            }
+        if (decision.requestFresh && frame != null && decision.generation == scene.generation()) {
+            requestCurrentGeneration(frame);
         }
         if (decision.shutdownSession) {
             ReleaseDecision release = policy.releaseAll();
@@ -403,64 +448,132 @@ final class SecurityCenterGlassCoordinator
         }
     }
 
+    private void requestCurrentGeneration(SecurityCenterGlassFrameGeometry frame) {
+        SecurityCenterGlassSession live = session;
+        View root = rootRef.get();
+        long generation = scene.generation();
+        if (live != null && !live.isShutdown() && root != null
+                && policy.currentSession() == live && policy.currentRoot() == root
+                && frame != null) {
+            live.requestFresh(generation, frame);
+        }
+    }
+
     private void refreshCurrentFrame(boolean requestIfChanged) {
         if (!SecurityCenterGlassRuntimeState.isEnabled()
-                || scene.scene() == SecurityCenterGlassSceneState.Scene.DETACHED
-                || scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
-        SecurityCenterGlassFrameGeometry observed = captureFrame(targetKind);
+                || scene.scene() == SecurityCenterGlassSceneState.Scene.DETACHED) return;
+        if (scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING) {
+            refreshTransitionFrame(turboRef.get());
+            return;
+        }
+        boolean includeApps = targetKind == SecurityCenterGlassSceneState.Target.ALL_APPS;
+        SecurityCenterGlassFrameGeometry observed = captureFrame(includeApps);
         if (observed == null) return;
         boolean changed = currentFrame == null || !currentFrame.sameAs(observed);
         currentFrame = observed;
         updateOutputPlacement(observed);
-        if (!requestIfChanged || !changed) return;
-        SecurityCenterGlassSession live = session;
-        View root = rootRef.get();
-        long generation = scene.generation();
-        if (live != null && root != null && !live.isShutdown()
-                && policy.currentSession() == live && policy.currentRoot() == root) {
-            live.requestFresh(generation, observed);
+        if (requestIfChanged && changed) requestCurrentGeneration(observed);
+    }
+
+    private SecurityCenterGlassFrameGeometry captureFrame(boolean includeAppsIfAvailable) {
+        SecurityCenterGlassGeometry dock = captureGeometry(
+                dockRef.get(), SecurityCenterGlassSceneState.Target.DOCK, 0);
+        if (dock == null) return null;
+        SecurityCenterGlassGeometry box = captureBoxGeometry();
+        SecurityCenterGlassGeometry apps = null;
+        if (includeAppsIfAvailable) {
+            View appsView = appsRef.get();
+            if (appsView != null && appsView.isAttachedToWindow()
+                    && appsView.getVisibility() == View.VISIBLE) {
+                apps = captureGeometry(
+                        appsView, SecurityCenterGlassSceneState.Target.ALL_APPS,
+                        allAppsCornerRadiusResId);
+                if (apps == null) return null;
+            }
+        }
+        try {
+            return SecurityCenterGlassFrameGeometry.compose(dock, box, apps);
+        } catch (IllegalArgumentException error) {
+            log("frame composition rejected", error);
+            return null;
         }
     }
 
-    private SecurityCenterGlassFrameGeometry captureFrame(SecurityCenterGlassSceneState.Target kind) {
-        SecurityCenterGlassGeometry dock = captureGeometry(
-                dockRef.get(), SecurityCenterGlassSceneState.Target.DOCK);
-        if (dock == null) return null;
-        if (kind != SecurityCenterGlassSceneState.Target.ALL_APPS) {
-            return SecurityCenterGlassFrameGeometry.dockOnly(dock);
-        }
-        SecurityCenterGlassGeometry apps = captureGeometry(
-                appsRef.get(), SecurityCenterGlassSceneState.Target.ALL_APPS);
-        if (apps == null) return null;
-        return SecurityCenterGlassFrameGeometry.dockAndApps(dock, apps);
+    private SecurityCenterGlassGeometry captureBoxGeometry() {
+        View box = boxRef.get();
+        if (box == null || !box.isAttachedToWindow() || box.getVisibility() != View.VISIBLE) return null;
+        int radiusRes = assistantType == ASSISTANT_GAME ? gameToolboxCornerRadiusResId : 0;
+        return captureGeometry(box, null, radiusRes);
     }
 
     private SecurityCenterGlassGeometry captureGeometry(
-            View target, SecurityCenterGlassSceneState.Target kind) {
+            View target,
+            SecurityCenterGlassSceneState.Target kind,
+            int exactRadiusResId) {
         View root = rootRef.get();
         if (root == null || target == null || !root.isAttachedToWindow()
                 || !target.isAttachedToWindow() || root.getWidth() <= 0 || root.getHeight() <= 0
                 || target.getWidth() <= 0 || target.getHeight() <= 0) return null;
+
+        ViewParent rawParent = target.getParent();
+        if (!(rawParent instanceof View)) return null;
+        View parent = (View) rawParent;
         int[] rootLocation = new int[2];
-        int[] targetLocation = new int[2];
+        int[] parentLocation = new int[2];
         root.getLocationOnScreen(rootLocation);
-        target.getLocationOnScreen(targetLocation);
+        parent.getLocationOnScreen(parentLocation);
+
+        float baseLeft = parentLocation[0] + target.getLeft() - parent.getScrollX();
+        float baseTop = parentLocation[1] + target.getTop() - parent.getScrollY();
+        SecurityCenterTransformedBounds bounds = SecurityCenterTransformedBounds.resolve(
+                baseLeft,
+                baseTop,
+                target.getWidth(),
+                target.getHeight(),
+                target.getPivotX(),
+                target.getPivotY(),
+                target.getScaleX(),
+                target.getScaleY(),
+                target.getTranslationX(),
+                target.getTranslationY());
+        if (bounds == null) return null;
+
         float radius;
-        if (kind == SecurityCenterGlassSceneState.Target.ALL_APPS) {
-            if (allAppsCornerRadiusResId == 0) return null;
-            radius = target.getResources().getDimension(allAppsCornerRadiusResId);
+        if (exactRadiusResId != 0) {
+            radius = target.getResources().getDimension(exactRadiusResId);
             if (!Float.isFinite(radius) || radius < 0f) return null;
+            float visualScale = Math.min(target.getScaleX(), target.getScaleY());
+            if (!Float.isFinite(visualScale) || visualScale <= 0f) return null;
+            radius *= visualScale;
+        } else if (kind == SecurityCenterGlassSceneState.Target.ALL_APPS) {
+            return null;
         } else {
             radius = MiuixGlassHook.readNativeOpticsRadius(target);
             if (!Float.isFinite(radius) || radius < 0f) radius = 0f;
+            float visualScale = Math.min(target.getScaleX(), target.getScaleY());
+            if (Float.isFinite(visualScale) && visualScale > 0f) radius *= visualScale;
         }
+
         return SecurityCenterGlassGeometry.resolve(
                 root.getWidth(), root.getHeight(),
                 rootLocation[0], rootLocation[1],
-                targetLocation[0], targetLocation[1],
-                targetLocation[0] + target.getWidth(),
-                targetLocation[1] + target.getHeight(),
+                bounds.left, bounds.top, bounds.right, bounds.bottom,
                 radius);
+    }
+
+    private void claimCurrentTargetsWhileCustom() {
+        if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.CUSTOM) return;
+        View turbo = turboRef.get();
+        View dock = dockRef.get();
+        View box = boxRef.get();
+        View apps = appsRef.get();
+        SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
+        if (turbo == null || dock == null || bridge == null) return;
+        try {
+            bridge.claimCustom(turbo, dock, box, apps);
+        } catch (Throwable error) {
+            log("live material continuity claim failed", error);
+        }
     }
 
     private void installRootObserver(View root) {
@@ -508,6 +621,10 @@ final class SecurityCenterGlassCoordinator
 
     private boolean isCurrentTurbo(View turboLayout) {
         return turboLayout != null && turboLayout == turboRef.get();
+    }
+
+    private static boolean supportedAssistant(int type) {
+        return type == ASSISTANT_GAME || type == ASSISTANT_VIDEO || type == ASSISTANT_GLOBAL_DOCK;
     }
 
     private void hideCustomOnly() {
@@ -561,6 +678,7 @@ final class SecurityCenterGlassCoordinator
         rootRef = new WeakReference<>(null);
         currentFrame = null;
         targetKind = SecurityCenterGlassSceneState.Target.DOCK;
+        assistantType = ASSISTANT_GLOBAL_DOCK;
         renderedGeneration = -1L;
     }
 
@@ -580,6 +698,7 @@ final class SecurityCenterGlassCoordinator
             attachObservedTurbo = null;
             turboRef = new WeakReference<>(null);
             dockRef = new WeakReference<>(null);
+            boxRef = new WeakReference<>(null);
             appsRef = new WeakReference<>(null);
         }
     }
