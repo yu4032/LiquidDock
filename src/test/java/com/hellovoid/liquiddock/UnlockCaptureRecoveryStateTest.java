@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -18,6 +19,26 @@ public class UnlockCaptureRecoveryStateTest {
         assertFalse(decision.requestRollover);
         assertFalse(decision.releaseBarrier);
         assertTrue(decision.serial > 0L);
+    }
+
+    @Test
+    public void duplicatePrepareDoesNotInvalidateInFlightUnlockCycle() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        UnlockCaptureRecoveryState.Decision first = state.onPrepare();
+        UnlockCaptureRecoveryState.Decision request = state.onSystemUiGoneFinished();
+
+        UnlockCaptureRecoveryState.Decision duplicate = state.onPrepare();
+
+        assertEquals(first.serial, duplicate.serial);
+        assertEquals(request.serial, duplicate.serial);
+        assertFalse(duplicate.suspendProducers);
+        assertFalse(duplicate.requestRollover);
+        assertFalse(duplicate.releaseBarrier);
+
+        UnlockCaptureRecoveryState.Decision complete =
+                state.onRolloverFinished(request.serial, true);
+        assertTrue(complete.releaseBarrier);
+        assertFalse(state.isBlocked());
     }
 
     @Test
