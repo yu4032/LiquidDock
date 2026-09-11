@@ -48,6 +48,12 @@ public final class ModuleMain extends XposedModule {
                         runtimeConfig.enabled,
                         runtimeConfig.glass.enabled,
                         runtimeConfig.glass.securityCenterEnabled);
+                if (!SecurityCenterAdvancedMaterialHook.install()
+                        || !SecurityCenterSourceAuthorityHook.install(classLoader)) {
+                    Api101Bridge.log(
+                            "[DC][SecurityCenterGlass] required material/source authority unavailable; fail closed");
+                    return;
+                }
                 SecurityCenterGlassHook.install(classLoader, runtimeConfig);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] Security Center glass init failed", error);
