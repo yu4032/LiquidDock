@@ -2,37 +2,47 @@ package com.hellovoid.liquiddock;
 
 /** Android-free vendor/custom material ownership gate for Security Center glass. */
 final class SecurityCenterMaterialOwnershipState {
-    enum Owner { VENDOR, CUSTOM_PREPARING, CUSTOM }
+    enum Owner { VENDOR, CUSTOM_PREPARING, CUSTOM, CUSTOM_CLOSING }
 
     private Owner owner = Owner.VENDOR;
+    private boolean vendorSuppressed;
 
     /**
-     * CUSTOM_PREPARING means vendor material has already been physically stripped while custom
-     * sinks remain hidden waiting for a post-claim fresh frame. Vendor final-background callbacks
-     * must therefore stay suppressed even though no custom frame is visible yet.
+     * PREPARING keeps vendor presentation authoritative until a current-generation custom frame
+     * has been acknowledged by TextureView. CUSTOM_CLOSING preserves whichever presentation
+     * authority was active when the vendor close motion started.
      */
     boolean canSuppressVendor(long renderedGeneration, long currentGeneration) {
-        if (owner == Owner.CUSTOM_PREPARING) return currentGeneration >= 0L;
-        return owner == Owner.CUSTOM
+        return vendorSuppressed
+                && (owner == Owner.CUSTOM || owner == Owner.CUSTOM_CLOSING)
                 && renderedGeneration >= 0L
                 && currentGeneration >= renderedGeneration;
     }
 
     void onCustomPreparing() {
+        if (owner != Owner.VENDOR) return;
         owner = Owner.CUSTOM_PREPARING;
+        vendorSuppressed = false;
     }
 
     void onCustomPresented() {
-        if (owner != Owner.VENDOR) owner = Owner.CUSTOM;
+        if (owner == Owner.CUSTOM_PREPARING) {
+            owner = Owner.CUSTOM;
+            vendorSuppressed = true;
+        }
     }
 
-    void onCustomClaimed() {
-        onCustomPreparing();
-        onCustomPresented();
+    void onVendorClosing() {
+        if (owner != Owner.VENDOR) owner = Owner.CUSTOM_CLOSING;
+    }
+
+    boolean hasSuppressedVendor() {
+        return vendorSuppressed;
     }
 
     void releaseToVendor() {
         owner = Owner.VENDOR;
+        vendorSuppressed = false;
     }
 
     Owner owner() {

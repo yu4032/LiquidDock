@@ -21,7 +21,6 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     private final WeakReference<View> materialRef;
     private final SecurityCenterGlassSession session;
-    private final float baseCornerRadiusPx;
     private final Paint presentationPaint = new Paint();
     private final View.OnAttachStateChangeListener materialAttachListener;
     private Surface outputSurface;
@@ -37,12 +36,10 @@ final class SecurityCenterGlassSinkView extends TextureView
     private SecurityCenterGlassSinkView(
             Context context,
             View material,
-            SecurityCenterGlassSession session,
-            float baseCornerRadiusPx) {
+            SecurityCenterGlassSession session) {
         super(context);
         materialRef = new WeakReference<>(material);
         this.session = session;
-        this.baseCornerRadiusPx = Math.max(0f, baseCornerRadiusPx);
         materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 scheduleParentRecovery("material-attached");
@@ -65,15 +62,14 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     static SecurityCenterGlassSinkView attachBefore(
             View material,
-            SecurityCenterGlassSession session,
-            float baseCornerRadiusPx) {
+            SecurityCenterGlassSession session) {
         if (material == null || session == null || session.isShutdown()
                 || !(material.getParent() instanceof ViewGroup)) return null;
         ViewGroup parent = (ViewGroup) material.getParent();
         int index = parent.indexOfChild(material);
         if (index < 0) return null;
         SecurityCenterGlassSinkView sink = new SecurityCenterGlassSinkView(
-                material.getContext(), material, session, baseCornerRadiusPx);
+                material.getContext(), material, session);
         int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
         int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
         parent.addView(sink, index, new ViewGroup.LayoutParams(width, height));
@@ -139,10 +135,11 @@ final class SecurityCenterGlassSinkView extends TextureView
         return changed;
     }
 
-    SecurityCenterGlassGeometry captureGeometry(View root) {
+    SecurityCenterGlassGeometry captureGeometry(View root, float cornerRadiusPx) {
         View material = materialRef.get();
         if (disposed || session.isShutdown() || material == null
                 || root == null || !root.isAttachedToWindow()
+                || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f
                 || !isAttachedToWindow() || getWidth() <= 0 || getHeight() <= 0
                 || material.getWidth() <= 0 || material.getHeight() <= 0
                 || root.getWidth() <= 0 || root.getHeight() <= 0) return null;
@@ -183,7 +180,7 @@ final class SecurityCenterGlassSinkView extends TextureView
                     root.getWidth(), root.getHeight(),
                     0f, 0f,
                     left, top, right, bottom,
-                    baseCornerRadiusPx * visualScale);
+                    cornerRadiusPx * visualScale);
             return shape != null
                     ? shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)
                     : null;

@@ -23,6 +23,44 @@ final class SecurityCenterSemanticContractResolver {
         return resolveAllAppsMotion(turboClass, viewClass);
     }
 
+    static TerminalCleanupContract resolveTerminalCleanupForTest(
+            Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
+        return resolveTerminalCleanup(managerClass, turboClass, wrapperClass, viewClass);
+    }
+
+    static TerminalCleanupContract resolveTerminalCleanup(
+            Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
+        if (managerClass == null || turboClass == null || wrapperClass == null || viewClass == null) {
+            throw reject("missing terminal cleanup owner/signature types");
+        }
+        List<Method> direct = declaredMethods(managerClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 3
+                    && p[0] == turboClass
+                    && p[1] == wrapperClass
+                    && p[2] == viewClass;
+        });
+        List<Method> withMoveFlag = declaredMethods(managerClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 4
+                    && p[0] == boolean.class
+                    && p[1] == turboClass
+                    && p[2] == wrapperClass
+                    && p[3] == viewClass;
+        });
+        if (direct.size() != 2 || withMoveFlag.size() != 1) {
+            throw reject("animated terminal cleanup authority missing or ambiguous");
+        }
+        List<Method> methods = new ArrayList<>();
+        for (Method method : direct) methods.add(accessible(method));
+        methods.add(accessible(withMoveFlag.get(0)));
+        return new TerminalCleanupContract(methods);
+    }
+
     static AllAppsMotionContract resolveAllAppsMotion(
             Class<?> turboClass, Class<?> viewClass) {
         if (turboClass == null || viewClass == null) {
@@ -390,6 +428,16 @@ final class SecurityCenterSemanticContractResolver {
 
     private interface MethodPredicate { boolean matches(Method method); }
     private interface FieldPredicate { boolean matches(Field field); }
+
+    static final class TerminalCleanupContract {
+        private final List<Method> methods;
+
+        TerminalCleanupContract(List<Method> methods) {
+            this.methods = new ArrayList<>(methods);
+        }
+
+        List<Method> methods() { return new ArrayList<>(methods); }
+    }
 
     static final class AllAppsMotionContract {
         private final Class<?> helperClass;

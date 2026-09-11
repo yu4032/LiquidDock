@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 
@@ -80,4 +81,23 @@ public class SecurityCenterGlassFrameGeometryTest {
         assertEquals(2054f, presentation.width, 0.001f);
         assertEquals(1463f, presentation.height, 0.001f);
     }
+    @Test
+    public void liveRadiusChangeCreatesFreshPresentationGeometry() {
+        float firstLiveRadius = 18f;
+        float reopenedLiveRadius = 31f;
+        SecurityCenterGlassGeometry firstDock = SecurityCenterGlassGeometry.resolve(
+                3008, 1880, 0f, 0f, 34f, 261f, 240f, 1724f, firstLiveRadius);
+        SecurityCenterGlassGeometry reopenedDock = SecurityCenterGlassGeometry.resolve(
+                3008, 1880, 0f, 0f, 34f, 261f, 240f, 1724f, reopenedLiveRadius);
+        assertNotNull(firstDock);
+        assertNotNull(reopenedDock);
+
+        SecurityCenterGlassFrameGeometry first = SecurityCenterGlassFrameGeometry.dockOnly(firstDock);
+        SecurityCenterGlassFrameGeometry reopened =
+                SecurityCenterGlassFrameGeometry.dockOnly(reopenedDock);
+
+        assertFalse("live outline radius is presentation data, not static sink configuration",
+                first.sameAs(reopened));
+    }
+
 }

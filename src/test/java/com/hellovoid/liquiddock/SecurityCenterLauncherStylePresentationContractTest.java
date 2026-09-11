@@ -37,6 +37,18 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertFalse(sink.contains("getGlobalVisibleRect"));
     }
 
+    @Test public void dockShapeUsesLiveOutlineInsteadOfBackgroundHeuristic() throws Exception {
+        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        assertTrue(coordinator.contains("dock.getClipToOutline()"));
+        assertTrue(coordinator.contains("dock.getOutlineProvider()"));
+        assertTrue(coordinator.contains("outline.getRadius()"));
+        assertTrue(coordinator.contains("outline.getRect(bounds)"));
+        assertFalse(coordinator.contains("MiuixGlassHook.readNativeOpticsRadius"));
+        assertTrue("sink consumes normalized presentation radius instead of discovering vendor shape",
+                sink.contains("captureGeometry(View root, float cornerRadiusPx)"));
+    }
+
     @Test public void dynamicAllAppsMaterialCanRecoverAfterRuntimeAttach() throws Exception {
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
         assertTrue(sink.contains("materialAttachListener"));
@@ -83,6 +95,11 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 hook.contains("installSettleObserver("));
         assertFalse("The vendor timing boolean cannot remain animation authority",
                 hook.contains("contract.transforming()"));
+
+        assertTrue("Animated terminal release must use the semantic cleanup contract",
+                hook.contains("resolveTerminalCleanup("));
+        assertTrue("Animated terminal cleanup must release only after vendor cleanup proceeds",
+                hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
 
         assertTrue("A submitted EGL frame must wait for TextureView consumption",
                 sink.contains("onSurfaceTextureUpdated"));
