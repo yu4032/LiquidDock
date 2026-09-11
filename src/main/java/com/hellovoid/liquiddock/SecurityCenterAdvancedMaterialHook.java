@@ -74,7 +74,7 @@ final class SecurityCenterAdvancedMaterialHook {
                 boolean visible = !chain.getArgs().isEmpty()
                         && Boolean.TRUE.equals(chain.getArgs().get(0));
                 if (visible && SecurityCenterMaterialModePolicy.blockCustomPresentation()) {
-                    return chain.proceed(false);
+                    return chain.proceed(new Object[]{false});
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
