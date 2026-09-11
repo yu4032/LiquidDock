@@ -16,6 +16,7 @@ final class SecurityCenterGlassRuntimeState {
     private static volatile boolean coreEnabled;
     private static volatile boolean glassEnabled;
     private static volatile boolean securityCenterEnabled;
+    private static volatile boolean sourceAuthorityAvailable;
     private static volatile Owner owner;
     private static SharedPreferences preferences;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
@@ -40,6 +41,7 @@ final class SecurityCenterGlassRuntimeState {
         coreEnabled = initialCoreEnabled;
         glassEnabled = initialGlassEnabled;
         securityCenterEnabled = initialSecurityCenterEnabled;
+        sourceAuthorityAvailable = false;
         if (nextPreferences == null) return;
 
         listener = (sharedPreferences, key) -> {
@@ -63,8 +65,12 @@ final class SecurityCenterGlassRuntimeState {
         owner = nextOwner;
     }
 
+    static synchronized void onSourceAuthorityAvailable() {
+        sourceAuthorityAvailable = true;
+    }
+
     static boolean isEnabled() {
-        return coreEnabled && glassEnabled && securityCenterEnabled;
+        return coreEnabled && glassEnabled && securityCenterEnabled && sourceAuthorityAvailable;
     }
 
     static void bindAssistant(View turbo, View dock, View box, int type) {

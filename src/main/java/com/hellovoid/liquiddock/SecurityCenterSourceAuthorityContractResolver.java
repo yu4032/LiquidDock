@@ -94,7 +94,6 @@ final class SecurityCenterSourceAuthorityContractResolver {
     private static boolean matchesCallback(Method method, Class<?> componentNameClass) {
         Class<?>[] parameters = method.getParameterTypes();
         return !Modifier.isStatic(method.getModifiers())
-                && method.getName().equals("onActivityChanged")
                 && method.getReturnType() == void.class
                 && parameters.length == 2
                 && parameters[0] == componentNameClass
