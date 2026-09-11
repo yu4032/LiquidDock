@@ -68,6 +68,18 @@ final class SecurityCenterGlassSceneState {
         return decision(false, true, false, false, false, false, false, false);
     }
 
+    /**
+     * Underlying activity/window content changed while this Security Center root stayed attached.
+     * Revoke the old source generation and return presentation authority to vendor material until
+     * the replacement source has produced and presented a current-generation frame.
+     */
+    Decision onSourceAuthorityChanged(Target target) {
+        if (scene == Scene.DETACHED || target == null) return none();
+        generation++;
+        scene = target == Target.ALL_APPS ? Scene.PREPARING_ALL_APPS : Scene.PREPARING_DOCK;
+        return decision(false, true, true, true, true, true, false, false);
+    }
+
     Decision onGeometrySettled(Target target) {
         if (target == null) return none();
         if (scene == Scene.PREPARING_DOCK && target == Target.DOCK) {
