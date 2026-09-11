@@ -1,33 +1,18 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.drawable.Drawable;
 import android.view.View;
 
-import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.WeakHashMap;
 
 /** Exact, reversible vendor-material mutation boundary for Security Center. */
 final class SecurityCenterVendorMaterialBridge {
-    private static final int ASSISTANT_GAME = 1;
-    private static final int ASSISTANT_VIDEO = 3;
-    private static final int ASSISTANT_GLOBAL_DOCK = 4;
-
     private final SecurityCenterSemanticContractResolver.ResolvedContract contract;
     private final int videoMainContentResId;
     private final Method setMiViewBlurMode;
     private final Method clearMiBackgroundBlendColor;
     private final Method setMiBloomStroke;
     private final Method setMiShadow;
-    private final Map<View, Drawable> savedTargetBackgrounds = new WeakHashMap<>();
-    private final Set<View> capturedTargets = Collections.newSetFromMap(new WeakHashMap<>());
-    private final Map<Object, Integer> claimedAssistantTypes = new WeakHashMap<>();
-    private final Map<Object, WeakReference<View>> claimedBoxTargets = new WeakHashMap<>();
 
     SecurityCenterVendorMaterialBridge(
             SecurityCenterSemanticContractResolver.ResolvedContract contract,
@@ -60,69 +45,43 @@ final class SecurityCenterVendorMaterialBridge {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
         View turboView = (View) turboLayout;
-        int assistantType = classifyBoxMaterial(boxMaterialView);
-        claimedAssistantTypes.put(turboLayout, assistantType);
-        claimedBoxTargets.put(turboLayout, new WeakReference<>(boxMaterialView));
+        validateBoxMaterial(boxMaterialView);
 
-        resetVendorMaterial(turboView);
-        MiBlurBridge.clearPassWindowBlur(turboView);
-        turboView.setBackground(null);
-
-        resetVendorMaterial(dockLayout);
-        MiBlurBridge.clearPassWindowBlur(dockLayout);
-        dockLayout.setBackground(null);
-
-        if (boxMaterialView != null) {
-            resetVendorMaterial(boxMaterialView);
-            MiBlurBridge.clearPassWindowBlur(boxMaterialView);
-            boxMaterialView.setBackground(null);
-        }
-
-        if (allAppsLayout != null && allAppsLayout != dockLayout
-                && allAppsLayout != boxMaterialView) {
-            if (!capturedTargets.contains(allAppsLayout)) {
-                capturedTargets.add(allAppsLayout);
-                savedTargetBackgrounds.put(allAppsLayout, allAppsLayout.getBackground());
+        SecurityCenterVendorMaterialState.claimOwner(
+                turboLayout, turboView, dockLayout, boxMaterialView, allAppsLayout);
+        SecurityCenterVendorMaterialState.runModuleMutation(() -> {
+            clearVendorTarget(turboView);
+            clearVendorTarget(dockLayout);
+            if (boxMaterialView != null) clearVendorTarget(boxMaterialView);
+            if (allAppsLayout != null
+                    && allAppsLayout != dockLayout
+                    && allAppsLayout != boxMaterialView
+                    && allAppsLayout != turboView) {
+                clearVendorTarget(allAppsLayout);
             }
-            resetVendorMaterial(allAppsLayout);
-            MiBlurBridge.clearPassWindowBlur(allAppsLayout);
-            allAppsLayout.setBackground(null);
-        }
+        });
     }
 
     void restoreVendor(Object turboLayout) {
         if (turboLayout == null) throw new IllegalArgumentException("turboLayout == null");
+        SecurityCenterVendorMaterialState.restoreOwner(turboLayout);
+    }
 
-        for (View target : new ArrayList<>(capturedTargets)) {
-            if (target == null) continue;
-            Drawable original = savedTargetBackgrounds.remove(target);
-            target.setBackground(original);
-            capturedTargets.remove(target);
-        }
+    private void validateBoxMaterial(View boxMaterialView) {
+        if (boxMaterialView == null) return;
+        if (contract.gameMaterialClass().isInstance(boxMaterialView)) return;
+        if (boxMaterialView.getId() == videoMainContentResId) return;
+        throw new IllegalArgumentException(
+                "unvalidated Security Center box material carrier: "
+                        + boxMaterialView.getClass().getName()
+                        + " id=" + boxMaterialView.getId());
+    }
 
-        Integer assistantType = claimedAssistantTypes.remove(turboLayout);
-        WeakReference<View> boxRef = claimedBoxTargets.remove(turboLayout);
-        View boxMaterialView = boxRef != null ? boxRef.get() : null;
-
-        invoke(contract.finalBackground(), turboLayout);
-
-        if (assistantType == null || assistantType == ASSISTANT_GLOBAL_DOCK) return;
-        if (assistantType == ASSISTANT_GAME) {
-            if (boxMaterialView == null || !contract.gameMaterialClass().isInstance(boxMaterialView)) {
-                throw new IllegalStateException("game material carrier unavailable during restore");
-            }
-            invoke(contract.gameMaterialRestore(), boxMaterialView);
-            return;
-        }
-        if (assistantType == ASSISTANT_VIDEO) {
-            Object adapter = invoke(contract.videoAdapterGetter(), turboLayout);
-            if (adapter == null || !contract.videoAdapterClass().isInstance(adapter)) {
-                throw new IllegalStateException("video material adapter unavailable during restore");
-            }
-            invoke(contract.videoMaterialRestore(), adapter);
-            return;
-        }
-        throw new IllegalStateException("unknown claimed assistant type=" + assistantType);
+    private void clearVendorTarget(View target) {
+        if (target == null) return;
+        resetVendorMaterial(target);
+        MiBlurBridge.clearPassWindowBlur(target);
+        target.setBackground(null);
     }
 
     private void resetVendorMaterial(View target) {
@@ -130,16 +89,6 @@ final class SecurityCenterVendorMaterialBridge {
         invoke(clearMiBackgroundBlendColor, target);
         invoke(setMiBloomStroke, target, (Object) new float[21]);
         invoke(setMiShadow, target, 0, 0f, 0f, 0f, 1f);
-    }
-
-    private int classifyBoxMaterial(View boxMaterialView) {
-        if (boxMaterialView == null) return ASSISTANT_GLOBAL_DOCK;
-        if (contract.gameMaterialClass().isInstance(boxMaterialView)) return ASSISTANT_GAME;
-        if (boxMaterialView.getId() == videoMainContentResId) return ASSISTANT_VIDEO;
-        throw new IllegalArgumentException(
-                "unvalidated Security Center box material carrier: "
-                        + boxMaterialView.getClass().getName()
-                        + " id=" + boxMaterialView.getId());
     }
 
     private static Object invoke(Method method, Object target, Object... args) {

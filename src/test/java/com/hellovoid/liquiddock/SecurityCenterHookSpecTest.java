@@ -9,16 +9,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 public class SecurityCenterHookSpecTest {
-    @Test public void exposesOnlyStableEntryAndMemberAnchors() {
+    @Test public void exposesOnlyStableEntryGetterAndResourceAnchors() {
         assertEquals("com.miui.gamebooster.service.DockWindowManagerService",
                 SecurityCenterHookSpec.BOOTSTRAP_SERVICE_CLASS);
         assertEquals("com.miui.gamebooster.windowmanager.newbox.TurboLayout",
                 SecurityCenterHookSpec.TURBO_LAYOUT_CLASS);
-        assertEquals("V", SecurityCenterHookSpec.CONFIGURE_DOCK_METHOD);
-        assertEquals("c0", SecurityCenterHookSpec.DOCK_READY_METHOD);
-        assertEquals("d0", SecurityCenterHookSpec.TOGGLE_ALL_APPS_METHOD);
-        assertEquals("U", SecurityCenterHookSpec.FINAL_BACKGROUND_METHOD);
-        assertEquals("C", SecurityCenterHookSpec.SIDEBAR_TURBO_GETTER);
         assertEquals("getDockLayout", SecurityCenterHookSpec.DOCK_LAYOUT_GETTER);
         assertEquals("getAppsLayout", SecurityCenterHookSpec.APPS_LAYOUT_GETTER);
         assertEquals("getBoxView", SecurityCenterHookSpec.BOX_VIEW_GETTER);
