@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -22,7 +23,7 @@ public class UnlockCaptureRecoveryStateTest {
     }
 
     @Test
-    public void duplicatePrepareDoesNotInvalidateInFlightUnlockCycle() {
+    public void duplicatePreparePreservesInFlightRolloverSerial() {
         UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
         UnlockCaptureRecoveryState.Decision first = state.onPrepare();
         UnlockCaptureRecoveryState.Decision request = state.onSystemUiGoneFinished();
@@ -38,6 +39,39 @@ public class UnlockCaptureRecoveryStateTest {
         UnlockCaptureRecoveryState.Decision complete =
                 state.onRolloverFinished(request.serial, true);
         assertTrue(complete.releaseBarrier);
+        assertFalse(state.isBlocked());
+    }
+
+    @Test
+    public void failedRolloverRecoversOnNextUnlock() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        UnlockCaptureRecoveryState.Decision firstPrepare = state.onPrepare();
+        UnlockCaptureRecoveryState.Decision firstRequest = state.onSystemUiGoneFinished();
+
+        UnlockCaptureRecoveryState.Decision failed =
+                state.onRolloverFinished(firstRequest.serial, false);
+        assertFalse(failed.releaseBarrier);
+        assertTrue(state.isBlocked());
+
+        UnlockCaptureRecoveryState.Decision secondPrepare = state.onPrepare();
+        assertTrue(secondPrepare.suspendProducers);
+        assertFalse(secondPrepare.requestRollover);
+        assertFalse(secondPrepare.releaseBarrier);
+        assertNotEquals(firstPrepare.serial, secondPrepare.serial);
+
+        UnlockCaptureRecoveryState.Decision secondRequest = state.onSystemUiGoneFinished();
+        assertEquals(secondPrepare.serial, secondRequest.serial);
+        assertTrue(secondRequest.requestRollover);
+        assertFalse(secondRequest.releaseBarrier);
+
+        UnlockCaptureRecoveryState.Decision complete =
+                state.onRolloverFinished(secondRequest.serial, true);
+        assertTrue(complete.releaseBarrier);
+        assertFalse(state.isBlocked());
+
+        UnlockCaptureRecoveryState.Decision stale =
+                state.onRolloverFinished(firstRequest.serial, true);
+        assertFalse(stale.releaseBarrier);
         assertFalse(state.isBlocked());
     }
 
