@@ -21,6 +21,7 @@ final class SecurityCenterEarlyPrepareHook {
             SecurityCenterSemanticContractResolver.ResolvedContract contract,
             int videoMainContentResId) {
         if (contract == null || videoMainContentResId == 0) return;
+        SecurityCenterAdvancedMaterialHook.install();
         Method configure = contract.configure();
         synchronized (LOCK) {
             if (!INSTALLED.add(configure)) return;
