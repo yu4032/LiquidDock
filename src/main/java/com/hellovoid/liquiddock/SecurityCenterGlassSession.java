@@ -311,6 +311,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                         geometry.toPrismalGeometry(), prismalParams, highlightProfile);
                 request.sinks[i].armPresentation(request.serial, request.generation);
                 presentTarget(prismalRenderer.outputTexture(), geometry, requiredOutputs[i]);
+                request.sinks[i].requestPresentationDraw();
             }
             sourceBackend.makePbufferCurrent();
             log("submitted serial=" + request.serial + " generation=" + frame.generation
