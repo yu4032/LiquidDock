@@ -68,6 +68,15 @@ final class UnlockCaptureRecoveryState {
         return new Decision(false, false, true, activeSerial);
     }
 
+    synchronized Decision onBarrierTimeout(long serial) {
+        if (!blocked || serial != activeSerial) {
+            return new Decision(false, false, false, activeSerial);
+        }
+        blocked = false;
+        rolloverRequested = false;
+        return new Decision(false, false, true, activeSerial);
+    }
+
     synchronized boolean isBlocked() {
         return blocked;
     }

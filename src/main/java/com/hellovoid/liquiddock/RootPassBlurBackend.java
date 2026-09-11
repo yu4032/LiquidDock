@@ -17,6 +17,8 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -53,6 +55,9 @@ final class RootPassBlurBackend {
     private final RootPassBlurBackendState state = new RootPassBlurBackendState();
     private final AtomicLong bindEpoch = new AtomicLong();
     private final float[] textureMatrix = new float[16];
+    private final Object rolloverCompletionLock = new Object();
+    private final ArrayList<LauncherGlassSessionRegistry.RolloverCompletion> rolloverCompletions =
+            new ArrayList<>();
 
     private volatile boolean shuttingDown;
     private volatile int physicalScalePercent;
@@ -149,9 +154,33 @@ final class RootPassBlurBackend {
     }
 
     void requestRebind(String reason) {
-        if (shuttingDown || !renderThread.isAlive()) return;
+        requestRebind(reason, null);
+    }
+
+    boolean requestRebind(
+            String reason, LauncherGlassSessionRegistry.RolloverCompletion rolloverComplete) {
+        if (shuttingDown || state.isShutdown() || !renderThread.isAlive()) {
+            MainHook.log(TAG + " producer rebind rejected reason=" + reason
+                    + " cause=shutdown domain=" + bindRequest.domain());
+            return false;
+        }
         ZeroCopyProducerRecoveryState.Decision decision = state.requestRebind();
-        if (!decision.accepted) return;
+        if (!decision.accepted) {
+            if (state.isRebindPending() && rolloverComplete != null) {
+                boolean attached = attachRolloverCompletion(rolloverComplete);
+                MainHook.log(TAG + " producer rebind piggyback reason=" + reason
+                        + " attached=" + attached + " domain=" + bindRequest.domain());
+                return attached;
+            }
+            MainHook.log(TAG + " producer rebind rejected reason=" + reason
+                    + " cause=recovery-state domain=" + bindRequest.domain());
+            return false;
+        }
+        if (rolloverComplete != null && !attachRolloverCompletion(rolloverComplete)) {
+            MainHook.log(TAG + " producer rebind rejected reason=" + reason
+                    + " cause=completion-attach domain=" + bindRequest.domain());
+            return false;
+        }
         long epoch = bindEpoch.incrementAndGet();
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
@@ -175,6 +204,38 @@ final class RootPassBlurBackend {
             state.onRecreateFailed();
             notifyTerminalFailure(new IllegalStateException("render queue rejected rebind"));
         }
+        return queued;
+    }
+
+    boolean attachRolloverCompletion(
+            LauncherGlassSessionRegistry.RolloverCompletion rolloverComplete) {
+        if (rolloverComplete == null) return false;
+        synchronized (rolloverCompletionLock) {
+            if (shuttingDown || state.isShutdown() || !state.isRebindPending()) return false;
+            rolloverCompletions.add(rolloverComplete);
+        }
+        MainHook.log(TAG + " rollover completion attached domain=" + bindRequest.domain());
+        return true;
+    }
+
+    private void completeRolloverCompletions(boolean success, String reason) {
+        List<LauncherGlassSessionRegistry.RolloverCompletion> callbacks;
+        synchronized (rolloverCompletionLock) {
+            if (rolloverCompletions.isEmpty()) return;
+            callbacks = new ArrayList<>(rolloverCompletions);
+            rolloverCompletions.clear();
+        }
+        MainHook.log(TAG + " rollover completion result=" + success
+                + " reason=" + reason + " count=" + callbacks.size()
+                + " domain=" + bindRequest.domain());
+        mainHandler.post(() -> {
+            for (LauncherGlassSessionRegistry.RolloverCompletion callback : callbacks) {
+                try { callback.onComplete(success); }
+                catch (Throwable error) {
+                    MainHook.log(TAG + " rollover completion callback failed: " + error);
+                }
+            }
+        });
     }
 
     void setQuality(int physicalScalePercent, int renderFps) {
@@ -349,6 +410,7 @@ final class RootPassBlurBackend {
         shuttingDown = true;
         bindEpoch.incrementAndGet();
         state.onShutdown();
+        completeRolloverCompletions(false, "shutdown");
         Miuix307PassBlurBridge.Binding old = binding;
         binding = null;
         Miuix307PassBlurBridge.unbind(old);
@@ -590,6 +652,7 @@ final class RootPassBlurBackend {
         }
         binding = next;
         state.onBindSucceeded();
+        completeRolloverCompletions(true, "bind-succeeded");
         MainHook.log(TAG + " bound root=" + next.rootName
                 + " domain=" + bindRequest.domain()
                 + " buffer=" + endpoint.bufferWidth + "x" + endpoint.bufferHeight
@@ -699,6 +762,9 @@ final class RootPassBlurBackend {
         if (shuttingDown) return;
         state.onTerminalFailure();
         long generation = state.requestedGeneration();
+        String failureReason = error != null && error.getMessage() != null
+                ? error.getMessage() : String.valueOf(error);
+        completeRolloverCompletions(false, failureReason);
         MainHook.log(TAG + " terminal source failure generation=" + generation
                 + " domain=" + bindRequest.domain() + ": " + error);
         if (consumer != null) {
