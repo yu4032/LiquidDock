@@ -21,6 +21,7 @@ final class SecurityCenterGlassHook {
     private static final int ASSISTANT_VIDEO = 3;
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
     private static final WeakHashMap<View, Integer> CONFIGURED_ASSISTANTS = new WeakHashMap<>();
+    private static final WeakHashMap<View, Long> ALL_APPS_TRANSITIONS = new WeakHashMap<>();
     private static final SecurityCenterOneShotTipPolicy UNSUPPORTED_TIP =
             new SecurityCenterOneShotTipPolicy();
     private static final SecurityCenterHookActivationState ACTIVATION =
@@ -132,9 +133,13 @@ final class SecurityCenterGlassHook {
                     synchronized (LOCK) {
                         if (assistantType != 0) CONFIGURED_ASSISTANTS.put(turbo, assistantType);
                         else CONFIGURED_ASSISTANTS.remove(turbo);
+                        ALL_APPS_TRANSITIONS.remove(turbo);
                     }
                 } catch (Throwable error) {
-                    synchronized (LOCK) { CONFIGURED_ASSISTANTS.remove(turbo); }
+                    synchronized (LOCK) {
+                        CONFIGURED_ASSISTANTS.remove(turbo);
+                        ALL_APPS_TRANSITIONS.remove(turbo);
+                    }
                     log("assistant configure observation failed", error);
                 }
                 return result;
@@ -187,6 +192,15 @@ final class SecurityCenterGlassHook {
                 } catch (Throwable error) {
                     if (live != null) live.releaseAll();
                     log("assistant dock-ready observation failed", error);
+                }
+                return result;
+            });
+
+            HookUtil.hook(contract.toggleAllApps(), chain -> {
+                Object turboObject = chain.getThisObject();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (ACTIVATION.allowsMutation()) {
+                    notifyAllAppsToggleTargetResolved(turboObject, contract);
                 }
                 return result;
             });
@@ -296,8 +310,31 @@ final class SecurityCenterGlassHook {
         SecurityCenterGlassCoordinator live = currentCoordinator(contract);
         if (live == null || turbo == null) return;
         live.updateAllAppsLayout(turbo, apps);
-        live.onAllAppsToggleStarted(turbo);
+        long generation = live.onAllAppsToggleStarted(turbo);
+        if (generation >= 0L) {
+            synchronized (LOCK) { ALL_APPS_TRANSITIONS.put(turbo, generation); }
+        }
         live.refreshTransitionFrame(turbo);
+    }
+
+    private static void notifyAllAppsToggleTargetResolved(
+            Object turboObject,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        if (!(turboObject instanceof View) || contract == null
+                || !contract.turboClass().isInstance(turboObject)) return;
+        View turbo = (View) turboObject;
+        final Long generation;
+        synchronized (LOCK) { generation = ALL_APPS_TRANSITIONS.remove(turbo); }
+        if (generation == null || generation < 0L) return;
+        try {
+            boolean allAppsPresent = contract.allAppsPresent().getBoolean(turbo);
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+            if (live != null) {
+                live.onAllAppsToggleTargetResolved(turbo, allAppsPresent, generation);
+            }
+        } catch (Throwable error) {
+            log("All Apps target observation failed generation=" + generation, error);
+        }
     }
 
     private static void notifyVendorPanelClosing(
@@ -341,6 +378,7 @@ final class SecurityCenterGlassHook {
             if (turbo == null) {
                 throw new IllegalStateException("terminal cleanup missing TurboLayout arg");
             }
+            synchronized (LOCK) { ALL_APPS_TRANSITIONS.remove(turbo); }
             SecurityCenterGlassCoordinator live = currentCoordinator(contract);
             if (live != null) live.onVendorPanelTerminal(turbo);
         } catch (Throwable error) {
