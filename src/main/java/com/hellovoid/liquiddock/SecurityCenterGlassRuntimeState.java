@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
@@ -66,6 +67,13 @@ final class SecurityCenterGlassRuntimeState {
         return coreEnabled && glassEnabled && securityCenterEnabled;
     }
 
+    static void bindAssistant(View turbo, View dock, View box, int type) {
+        Owner currentOwner = owner;
+        if (currentOwner instanceof SecurityCenterGlassCoordinator) {
+            ((SecurityCenterGlassCoordinator) currentOwner).bindAssistant(turbo, dock, box, type);
+        }
+    }
+
     private static synchronized void apply(
             boolean nextCoreEnabled,
             boolean nextGlassEnabled,
@@ -75,7 +83,6 @@ final class SecurityCenterGlassRuntimeState {
                 new SecurityCenterGlassRuntimeTransitionPolicy.Snapshot(
                         nextCoreEnabled, nextGlassEnabled, nextSecurityCenterEnabled);
 
-        // Publish every live flag before any main-thread ownership release is queued.
         coreEnabled = nextCoreEnabled;
         glassEnabled = nextGlassEnabled;
         securityCenterEnabled = nextSecurityCenterEnabled;
