@@ -113,6 +113,8 @@ final class SecurityCenterGlassCoordinator
     private SecurityCenterGlassSinkView boxSink;
     private SecurityCenterGlassSinkView appsSink;
     private long renderedGeneration = -1L;
+    private long vendorClearCommitEpoch;
+    private boolean vendorClearCommitPending;
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
     private View attachObservedTurbo;
@@ -190,7 +192,7 @@ final class SecurityCenterGlassCoordinator
             releasePanel(previousTurbo, "panel replaced");
         }
         boolean replacingLiveNodes = previousTurbo == turboLayout
-                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM;
+                && ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR;
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
         boxRef = new WeakReference<>(boxLayout);
@@ -204,8 +206,6 @@ final class SecurityCenterGlassCoordinator
             return;
         }
 
-        // Bind/reconcile sinks before stripping replacement vendor materials so native radius and
-        // peer hierarchy are captured while the new c0() nodes still own their material.
         if (turboLayout.isAttachedToWindow()) bindAttachedRoot(turboLayout);
         if (replacingLiveNodes) {
             reconcileSinks();
@@ -219,10 +219,8 @@ final class SecurityCenterGlassCoordinator
     void updateAllAppsLayout(View turboLayout, View appsLayout) {
         if (!isCurrentTurbo(turboLayout) || appsLayout == null) return;
         appsRef = new WeakReference<>(appsLayout);
-        // W() creates All Apps synchronously inside d0(). Attach its peer sink before stripping the
-        // native material so the same View hierarchy remains the sole animation authority.
         reconcileSinks();
-        if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
+        if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR) {
             claimCurrentTargetsWhileCustom();
         }
         syncSinksFromMaterials();
@@ -235,7 +233,6 @@ final class SecurityCenterGlassCoordinator
         return decision.invalidateGeneration ? decision.generation : -1L;
     }
 
-    /** Called on every vendor-transform pre-draw while raw DEX field s remains true. */
     void refreshTransitionFrame(View turboLayout) {
         if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()
                 || scene.scene() != SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
@@ -276,7 +273,6 @@ final class SecurityCenterGlassCoordinator
         applyDecision(settled, frame);
     }
 
-    /** Called before vendor d2/f2 mutates or removes the panel. */
     void onVendorPanelClosing(View turboLayout) {
         releasePanel(turboLayout, "vendor panel close");
     }
@@ -318,37 +314,20 @@ final class SecurityCenterGlassCoordinator
         if (callbackSession != session || callbackSession.isShutdown()
                 || root == null || !root.isAttachedToWindow()) return;
 
-        // During Folme motion the vendor View tree owns geometry. Custom ownership is already live,
-        // so each newly rendered generation may update/reveal its peer sinks without a vendor flash.
-        if (scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING
-                && ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
+        if (scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING) {
+            if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.VENDOR) return;
+            ownership.onCustomPresented();
             renderedGeneration = generation;
             setAuthorizedSinksForFrame(currentFrame);
+            log("current-generation transition frame revealed generation=" + generation
+                    + " nodes=" + (currentFrame != null ? currentFrame.nodeCount() : 0), null);
             return;
         }
 
         SecurityCenterGlassSceneState.Decision decision = scene.onFreshFrameRendered(generation);
-        if (!decision.claimCustomOwnership || !decision.revealCustom) return;
-        View turbo = turboRef.get();
-        View dock = dockRef.get();
-        View box = currentFrame != null && currentFrame.boxGeometry() != null ? boxRef.get() : null;
-        View apps = currentFrame != null && currentFrame.appsGeometry() != null ? appsRef.get() : null;
-        SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
-        if (turbo == null || dock == null || bridge == null) return;
-        try {
-            bridge.claimCustom(turbo, dock, box, apps);
-        } catch (Throwable error) {
-            hideCustomOnly();
-            ownership.releaseToVendor();
-            renderedGeneration = -1L;
-            try { bridge.restoreVendor(turbo); }
-            catch (Throwable restoreError) { log("claim rollback restore failed", restoreError); }
-            log("custom material claim failed closed", error);
-            return;
-        }
-
-        ownership.onCustomClaimed();
-        customOwnerTurboRef = new WeakReference<>(turbo);
+        if (!decision.revealCustom
+                || ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.VENDOR) return;
+        ownership.onCustomPresented();
         renderedGeneration = generation;
         setAuthorizedSinksForFrame(currentFrame);
         log("current-generation scene revealed generation=" + generation
@@ -491,7 +470,13 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterGlassFrameGeometry frame) {
         if (decision == null) return;
         if (decision.hideCustom || decision.releaseCustomOwnership) hideAndRestoreVendor();
-        if (decision.requestFresh && frame != null && decision.generation == scene.generation()) {
+
+        boolean claimScheduledCommit = false;
+        if (decision.claimCustomOwnership && decision.generation == scene.generation()) {
+            claimScheduledCommit = prepareCustomOwnershipForCleanFrame();
+        }
+        if (decision.requestFresh && frame != null && decision.generation == scene.generation()
+                && !claimScheduledCommit) {
             requestCurrentGeneration(frame);
         }
         if (decision.shutdownSession) {
@@ -503,10 +488,91 @@ final class SecurityCenterGlassCoordinator
         }
     }
 
+    private boolean prepareCustomOwnershipForCleanFrame() {
+        if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR) {
+            return vendorClearCommitPending;
+        }
+        View turbo = turboRef.get();
+        View dock = dockRef.get();
+        View box = currentFrame != null && currentFrame.boxGeometry() != null ? boxRef.get() : null;
+        View apps = currentFrame != null && currentFrame.appsGeometry() != null ? appsRef.get() : null;
+        SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
+        if (turbo == null || dock == null || bridge == null) return false;
+        try {
+            hideCustomOnly();
+            bridge.claimCustom(turbo, dock, box, apps);
+            ownership.onCustomPreparing();
+            customOwnerTurboRef = new WeakReference<>(turbo);
+            renderedGeneration = -1L;
+            if (!scheduleVendorClearFrameCommit()) {
+                throw new IllegalStateException("vendor-clear frame commit unavailable");
+            }
+            log("vendor material cleared; waiting for UI frame commit generation="
+                    + scene.generation(), null);
+            return true;
+        } catch (Throwable error) {
+            ownership.releaseToVendor();
+            customOwnerTurboRef = new WeakReference<>(null);
+            renderedGeneration = -1L;
+            try { bridge.restoreVendor(turbo); }
+            catch (Throwable restoreError) { log("preclaim rollback restore failed", restoreError); }
+            log("custom preclaim failed closed", error);
+            return true;
+        }
+    }
+
+    private boolean scheduleVendorClearFrameCommit() {
+        if (vendorClearCommitPending) return true;
+        View root = rootRef.get();
+        SecurityCenterGlassSession expectedSession = session;
+        if (root == null || expectedSession == null || expectedSession.isShutdown()
+                || !root.isAttachedToWindow() || !root.isHardwareAccelerated()) return false;
+        ViewTreeObserver observer = root.getViewTreeObserver();
+        if (observer == null || !observer.isAlive()) return false;
+
+        final long epoch = ++vendorClearCommitEpoch;
+        vendorClearCommitPending = true;
+        try {
+            observer.registerFrameCommitCallback(() -> mainHandler.post(() -> {
+                if (epoch != vendorClearCommitEpoch || !vendorClearCommitPending
+                        || root != rootRef.get() || expectedSession != session
+                        || policy.currentRoot() != root
+                        || policy.currentSession() != expectedSession
+                        || expectedSession.isShutdown()
+                        || ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.VENDOR) {
+                    return;
+                }
+                vendorClearCommitPending = false;
+                SecurityCenterGlassFrameGeometry frame = currentFrame;
+                if (frame == null) {
+                    reconcileSinks();
+                    syncSinksFromMaterials();
+                    frame = captureFrame(targetKind == SecurityCenterGlassSceneState.Target.ALL_APPS);
+                    currentFrame = frame;
+                }
+                if (frame == null) {
+                    releasePanel(turboRef.get(), "clean-frame geometry unavailable");
+                    return;
+                }
+                log("vendor-clear UI frame committed; requesting clean source generation="
+                        + scene.generation(), null);
+                requestCurrentGeneration(frame);
+            }));
+            root.postInvalidateOnAnimation();
+            return true;
+        } catch (Throwable error) {
+            vendorClearCommitPending = false;
+            vendorClearCommitEpoch++;
+            log("vendor-clear frame commit registration failed", error);
+            return false;
+        }
+    }
+
     private void requestCurrentGeneration(SecurityCenterGlassFrameGeometry frame) {
         SecurityCenterGlassSession live = session;
         View root = rootRef.get();
         long generation = scene.generation();
+        if (vendorClearCommitPending) return;
         if (live == null || live.isShutdown() || root == null
                 || policy.currentSession() != live || policy.currentRoot() != root
                 || frame == null || dockSink == null) return;
@@ -574,7 +640,7 @@ final class SecurityCenterGlassCoordinator
     }
 
     private void claimCurrentTargetsWhileCustom() {
-        if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.CUSTOM) return;
+        if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.VENDOR) return;
         View turbo = turboRef.get();
         View dock = dockRef.get();
         View box = boxRef.get();
@@ -583,6 +649,9 @@ final class SecurityCenterGlassCoordinator
         if (turbo == null || dock == null || bridge == null) return;
         try {
             bridge.claimCustom(turbo, dock, box, apps);
+            if (!scheduleVendorClearFrameCommit()) {
+                releasePanel(turbo, "dynamic clean-frame barrier unavailable");
+            }
         } catch (Throwable error) {
             log("live material continuity claim failed", error);
         }
@@ -647,8 +716,10 @@ final class SecurityCenterGlassCoordinator
 
     private void hideAndRestoreVendor() {
         hideCustomOnly();
-        boolean wasCustom = ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM;
+        boolean wasCustom = ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR;
         View ownedTurbo = customOwnerTurboRef.get();
+        vendorClearCommitPending = false;
+        vendorClearCommitEpoch++;
         ownership.releaseToVendor();
         renderedGeneration = -1L;
         customOwnerTurboRef = new WeakReference<>(null);
@@ -693,6 +764,8 @@ final class SecurityCenterGlassCoordinator
         targetKind = SecurityCenterGlassSceneState.Target.DOCK;
         assistantType = ASSISTANT_GLOBAL_DOCK;
         renderedGeneration = -1L;
+        vendorClearCommitPending = false;
+        vendorClearCommitEpoch++;
     }
 
     private void disposeSinks() {
