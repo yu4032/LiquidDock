@@ -5,21 +5,26 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.lang.reflect.Method;
+
 import org.junit.Test;
 
 /** Typed compatibility contract for Security Center's native activity source authority. */
 public class SecurityCenterSourceAuthorityContractResolverTest {
     @Test
-    public void activityAuthorityResolvesByExactCallbackShape() {
+    public void inheritedStubShapeResolvesConcreteActivityCallbackAfterServiceCreate() {
+        ServiceWithAuthority service = new ServiceWithAuthority();
         SecurityCenterSourceAuthorityContractResolver.Contract contract =
                 SecurityCenterSourceAuthorityContractResolver.resolveForTest(
                         ServiceWithAuthority.class, FakeComponent.class);
 
-        assertSame(ActivityAuthority.class, contract.listenerClass());
-        assertEquals("onActivityChanged", contract.onActivityChanged().getName());
-        assertEquals(2, contract.onActivityChanged().getParameterCount());
-        assertSame(FakeComponent.class, contract.onActivityChanged().getParameterTypes()[0]);
-        assertSame(FakeComponent.class, contract.onActivityChanged().getParameterTypes()[1]);
+        assertSame(ActivityAuthorityStub.class, contract.listenerClass());
+        Method callback = contract.resolveConcreteCallbackForTest(service);
+        assertSame(ConcreteActivityAuthority.class, callback.getDeclaringClass());
+        assertEquals("onActivityChanged", callback.getName());
+        assertEquals(2, callback.getParameterCount());
+        assertSame(FakeComponent.class, callback.getParameterTypes()[0]);
+        assertSame(FakeComponent.class, callback.getParameterTypes()[1]);
     }
 
     @Test
@@ -40,7 +45,16 @@ public class SecurityCenterSourceAuthorityContractResolverTest {
 
     public static class FakeComponent {}
 
-    public static class ActivityAuthority {
+    public interface ActivityAuthority {
+        void onActivityChanged(FakeComponent previous, FakeComponent current);
+    }
+
+    public abstract static class ActivityAuthorityStub implements ActivityAuthority {
+        public void binderNoise() {}
+    }
+
+    public static class ConcreteActivityAuthority extends ActivityAuthorityStub {
+        @Override
         public void onActivityChanged(FakeComponent previous, FakeComponent current) {}
     }
 
@@ -49,7 +63,7 @@ public class SecurityCenterSourceAuthorityContractResolverTest {
     }
 
     public static class ServiceWithAuthority {
-        private final ActivityAuthority activity = new ActivityAuthority();
+        private final ActivityAuthorityStub activity = new ConcreteActivityAuthority();
         private final NoiseAuthority noise = new NoiseAuthority();
     }
 
@@ -58,7 +72,7 @@ public class SecurityCenterSourceAuthorityContractResolverTest {
     }
 
     public static class ServiceWithTwoAuthorities {
-        private final ActivityAuthority first = new ActivityAuthority();
-        private final ActivityAuthority second = new ActivityAuthority();
+        private final ActivityAuthorityStub first = new ConcreteActivityAuthority();
+        private final ActivityAuthorityStub second = new ConcreteActivityAuthority();
     }
 }
