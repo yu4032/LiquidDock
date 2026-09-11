@@ -10,8 +10,8 @@ final class SecurityCenterAdvancedMaterialHook {
 
     private SecurityCenterAdvancedMaterialHook() {}
 
-    static synchronized void install() {
-        if (installed) return;
+    static synchronized boolean install() {
+        if (installed) return true;
         try {
             Method bindAssistant = HookUtil.findMethodExact(
                     SecurityCenterGlassCoordinator.class,
@@ -102,8 +102,10 @@ final class SecurityCenterAdvancedMaterialHook {
                 return result;
             });
             installed = true;
+            return true;
         } catch (Throwable error) {
             log("advanced material hook unavailable: " + error);
+            return false;
         }
     }
 
