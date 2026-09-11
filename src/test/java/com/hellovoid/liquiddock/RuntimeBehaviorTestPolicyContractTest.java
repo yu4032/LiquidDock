@@ -49,6 +49,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "R8ReleaseKeepContractTest.java",
             "RootPassBlurBackendBoundaryTest.java",
             "SecurityCenterLauncherStylePresentationContractTest.java",
+            "SecurityCenterNoNameAnchorContractTest.java",
             "SecurityCenterScopeContractTest.java",
             "SystemUiHomeTransitionWiringContractTest.java",
             "UserFacingPreferenceSchemaTest.java",
