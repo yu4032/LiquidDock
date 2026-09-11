@@ -74,6 +74,18 @@ final class SecurityCenterGlassRuntimeState {
         }
     }
 
+    static void onSourceAuthorityChanged(Object previousAuthority, Object currentAuthority) {
+        if (!isEnabled() || previousAuthority == null || currentAuthority == null
+                || previousAuthority.equals(currentAuthority)) return;
+        Owner currentOwner = owner;
+        if (currentOwner instanceof SecurityCenterGlassCoordinator) {
+            SecurityCenterSourceAuthorityController.rollover(
+                    (SecurityCenterGlassCoordinator) currentOwner,
+                    previousAuthority,
+                    currentAuthority);
+        }
+    }
+
     private static synchronized void apply(
             boolean nextCoreEnabled,
             boolean nextGlassEnabled,
