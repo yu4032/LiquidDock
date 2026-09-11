@@ -63,9 +63,6 @@ final class SecurityCenterGlassSceneState {
 
     Decision onTransitionStarted() {
         if (scene == Scene.DETACHED) return none();
-        // A new vendor d0() invalidates freshness, not presentation ownership. Once a custom
-        // frame has been authorized, it remains visible until a newer custom frame replaces it.
-        // This forbids a custom -> vendor -> custom flash during Dock/All Apps transitions.
         generation++;
         scene = Scene.TRANSITIONING;
         return decision(false, true, false, false, false, false, false, false);
@@ -73,8 +70,6 @@ final class SecurityCenterGlassSceneState {
 
     Decision onGeometrySettled(Target target) {
         if (target == null) return none();
-        // Initial Dock geometry is accepted only while preparing the newly attached root.
-        // A later observer cannot retarget an already revealed generation.
         if (scene == Scene.PREPARING_DOCK && target == Target.DOCK) {
             return settle(target);
         }
@@ -97,7 +92,7 @@ final class SecurityCenterGlassSceneState {
         } else {
             return none();
         }
-        return decision(false, false, false, false, false, true, true, false);
+        return decision(false, false, false, false, false, false, true, false);
     }
 
     Decision onRuntimeDisabled() {
@@ -122,7 +117,7 @@ final class SecurityCenterGlassSceneState {
 
     private Decision settle(Target target) {
         scene = target == Target.ALL_APPS ? Scene.PREPARING_ALL_APPS : Scene.PREPARING_DOCK;
-        return decision(false, false, true, false, false, false, false, false);
+        return decision(false, false, true, false, false, true, false, false);
     }
 
     private Decision terminate() {
