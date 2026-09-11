@@ -7,6 +7,11 @@ final class Miuix307PrismalAdapter {
     private Miuix307PrismalAdapter() {}
 
     static PrismalParams toPortable(Miuix307PrismalMaterial.Params p) {
+        return toPortable(p, true);
+    }
+
+    static PrismalParams toPortable(
+            Miuix307PrismalMaterial.Params p, boolean shaderBlurEnabled) {
         if (p == null) return PrismalParams.builder().build();
         PrismalParams.Builder b = PrismalParams.builder();
         b.ior = p.ior;
@@ -46,7 +51,7 @@ final class Miuix307PrismalAdapter {
         b.backdropScaleX = p.backdropScaleX;
         b.backdropScaleY = p.backdropScaleY;
         b.parallaxScale = p.parallaxScale;
-        b.blurRadiusPx = p.blurRadiusPx;
+        b.blurRadiusPx = shaderBlurEnabled ? p.blurRadiusPx : 0f;
         b.tintR = p.tintR;
         b.tintG = p.tintG;
         b.tintB = p.tintB;
