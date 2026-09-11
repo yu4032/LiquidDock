@@ -1,7 +1,10 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import java.lang.reflect.Method;
 
 import org.junit.Test;
 
@@ -49,5 +52,14 @@ public class LauncherGlassProducerRolloverContractTest {
         assertFalse(state.isRebindPending());
         assertFalse("A successful bind still requires a new producer frame before reveal",
                 state.hasFreshFrame(41L));
+    }
+
+    @Test
+    public void inFlightBackendRolloverExposesCompletionPiggyback() throws Exception {
+        Method attach = RootPassBlurBackend.class.getDeclaredMethod(
+                "attachRolloverCompletion",
+                LauncherGlassSessionRegistry.RolloverCompletion.class);
+
+        assertEquals(boolean.class, attach.getReturnType());
     }
 }
