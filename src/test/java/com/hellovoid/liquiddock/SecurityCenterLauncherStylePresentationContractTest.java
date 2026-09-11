@@ -86,8 +86,8 @@ public class SecurityCenterLauncherStylePresentationContractTest {
 
         assertTrue("A submitted EGL frame must wait for TextureView consumption",
                 sink.contains("onSurfaceTextureUpdated"));
-        assertTrue("Surface timestamp must guard presentation acknowledgement",
-                sink.contains("texture.getTimestamp()"));
+        assertTrue("Surface update sequence must guard presentation acknowledgement",
+                sink.contains("updateSequence <= armedSurfaceUpdateSequence"));
         assertTrue("Session must serialize in-flight presentation",
                 session.contains("FrameRequest inFlight"));
         assertTrue("Reveal callback must be driven by presentation acknowledgement",
