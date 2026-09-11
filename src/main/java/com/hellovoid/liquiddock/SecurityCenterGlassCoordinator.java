@@ -95,6 +95,8 @@ final class SecurityCenterGlassCoordinator
     private final SecurityCenterGlassSceneState scene = new SecurityCenterGlassSceneState();
     private final SecurityCenterMaterialOwnershipState ownership =
             new SecurityCenterMaterialOwnershipState();
+    private final SecurityCenterAllAppsSettleState allAppsSettle =
+            new SecurityCenterAllAppsSettleState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final LiquidDockConfig.Glass glassConfig;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
@@ -203,6 +205,7 @@ final class SecurityCenterGlassCoordinator
         assistantType = type;
         targetKind = SecurityCenterGlassSceneState.Target.DOCK;
         currentFrame = null;
+        allAppsSettle.reset();
         observeTurboAttach(turboLayout);
         if (!SecurityCenterGlassRuntimeState.isEnabled()) {
             releaseAll();
@@ -233,10 +236,22 @@ final class SecurityCenterGlassCoordinator
         if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()) return -1L;
         SecurityCenterGlassSceneState.Decision decision = scene.onTransitionStarted();
         applyDecision(decision, null);
+        if (decision.invalidateGeneration) {
+            allAppsSettle.onTransitionStarted(decision.generation);
+        }
         if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
             handoffPending = true;
         }
         return decision.invalidateGeneration ? decision.generation : -1L;
+    }
+
+    void onAllAppsToggleTargetResolved(
+            View turboLayout, boolean allAppsPresent, long transitionGeneration) {
+        if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()) return;
+        allAppsSettle.onTargetResolved(transitionGeneration, allAppsPresent);
+        log("All Apps target resolved present=" + allAppsPresent
+                + " generation=" + transitionGeneration, null);
+        trySettlePresentedAllAppsTransition(renderedGeneration, currentFrame);
     }
 
     void refreshTransitionFrame(View turboLayout) {
@@ -352,6 +367,7 @@ final class SecurityCenterGlassCoordinator
                 + " scene=" + scene.scene()
                 + " owner=" + ownership.owner()
                 + " nodes=" + (currentFrame != null ? currentFrame.nodeCount() : 0), null);
+        trySettlePresentedAllAppsTransition(generation, currentFrame);
     }
 
     @Override
@@ -368,6 +384,20 @@ final class SecurityCenterGlassCoordinator
         if (turbo != null) releasePanel(turbo, "terminal failure");
         else releaseAll();
         log("failed closed generation=" + generation, error);
+    }
+
+    private void trySettlePresentedAllAppsTransition(
+            long generation, SecurityCenterGlassFrameGeometry frame) {
+        View turbo = turboRef.get();
+        if (turbo == null || frame == null
+                || scene.scene() != SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
+        SecurityCenterAllAppsSettleState.Decision settled =
+                allAppsSettle.onFramePresented(generation, frame.appsGeometry() != null);
+        if (!settled.settle) return;
+        log("All Apps presented composition matched target present=" + settled.allAppsPresent
+                + " generation=" + settled.generation
+                + " nodes=" + frame.nodeCount(), null);
+        onAllAppsToggleSettled(turbo, settled.allAppsPresent, settled.generation);
     }
 
     private void bindAttachedRoot(View turboLayout) {
@@ -759,6 +789,8 @@ final class SecurityCenterGlassCoordinator
         assistantType = ASSISTANT_GLOBAL_DOCK;
         handoffPending = false;
         renderedGeneration = -1L;
+        requestedGeneration = -1L;
+        allAppsSettle.reset();
     }
 
     private void disposeSinks() {
