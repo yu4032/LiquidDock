@@ -119,6 +119,32 @@ public class SecurityCenterGlassSceneStateTest {
     }
 
     @Test
+    public void sourceAuthorityChangeRevokesOldFrameUntilNewGenerationPresents() {
+        SecurityCenterGlassSceneState state = readyDock();
+        long oldGeneration = state.generation();
+
+        SecurityCenterGlassSceneState.Decision rollover =
+                state.onSourceAuthorityChanged(SecurityCenterGlassSceneState.Target.DOCK);
+
+        assertTrue(rollover.invalidateGeneration);
+        assertTrue(rollover.hideCustom);
+        assertTrue(rollover.releaseCustomOwnership);
+        assertTrue(rollover.claimCustomOwnership);
+        assertTrue(rollover.requestFresh);
+        assertTrue(rollover.generation > oldGeneration);
+        assertEquals(SecurityCenterGlassSceneState.Scene.PREPARING_DOCK, state.scene());
+
+        SecurityCenterGlassSceneState.Decision stale = state.onFreshFrameRendered(oldGeneration);
+        assertFalse(stale.revealCustom);
+        assertEquals(SecurityCenterGlassSceneState.Scene.PREPARING_DOCK, state.scene());
+
+        SecurityCenterGlassSceneState.Decision fresh =
+                state.onFreshFrameRendered(rollover.generation);
+        assertTrue(fresh.revealCustom);
+        assertEquals(SecurityCenterGlassSceneState.Scene.DOCK, state.scene());
+    }
+
+    @Test
     public void disableFailureAndDetachFailClosedAndRejectStaleReveal() {
         SecurityCenterGlassSceneState disabledState = readyDock();
         long oldGeneration = disabledState.generation();
