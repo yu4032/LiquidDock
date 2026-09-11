@@ -21,7 +21,8 @@ final class SecurityCenterMaterialModePolicy {
     }
 
     static synchronized boolean prepareBind(Object owner) {
-        if (currentMode() != LiquidBlurMode.ADVANCED_MATERIAL) {
+        LiquidBlurMode mode = currentMode();
+        if (mode != LiquidBlurMode.ADVANCED_MATERIAL) {
             advancedPresentationFailed = false;
             lifecycleOwner = new WeakReference<>(owner);
             return true;
@@ -30,12 +31,22 @@ final class SecurityCenterMaterialModePolicy {
             advancedPresentationFailed = false;
             lifecycleOwner = new WeakReference<>(owner);
         }
-        if (!MiBlurBridge.isAvailable()) advancedPresentationFailed = true;
+        if (!canPresentCustom(mode, MiBlurBridge.isAvailable())) {
+            advancedPresentationFailed = true;
+        }
         return !advancedPresentationFailed;
     }
 
     static boolean useShaderBlur() {
-        return currentMode() != LiquidBlurMode.ADVANCED_MATERIAL;
+        return shaderBlurEnabled(currentMode());
+    }
+
+    static boolean canPresentCustom(LiquidBlurMode mode, boolean advancedAvailable) {
+        return mode != LiquidBlurMode.ADVANCED_MATERIAL || advancedAvailable;
+    }
+
+    static boolean shaderBlurEnabled(LiquidBlurMode mode) {
+        return mode != LiquidBlurMode.ADVANCED_MATERIAL;
     }
 
     static boolean configureSink(View sink) {
