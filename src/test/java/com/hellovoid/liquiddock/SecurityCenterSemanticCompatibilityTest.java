@@ -56,6 +56,32 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
 
     @Test
+    public void allAppsMotionResolvesByStructureNotObfuscatedMethodNames() {
+        SecurityCenterSemanticContractResolver.AllAppsMotionContract alpha =
+                SecurityCenterSemanticContractResolver.resolveAllAppsMotionForTest(
+                        AlphaMotionTurbo.class, FakeView.class);
+        SecurityCenterSemanticContractResolver.AllAppsMotionContract beta =
+                SecurityCenterSemanticContractResolver.resolveAllAppsMotionForTest(
+                        BetaMotionTurbo.class, FakeView.class);
+
+        assertSame(AlphaMotionHelper.class, alpha.helperClass());
+        assertEquals("i", alpha.attach().getName());
+        assertEquals("n", alpha.dismiss().getName());
+        assertEquals("p", alpha.dismissToPoint().getName());
+
+        assertSame(BetaMotionHelper.class, beta.helperClass());
+        assertEquals("mount", beta.attach().getName());
+        assertEquals("dismiss", beta.dismiss().getName());
+        assertEquals("dismissAt", beta.dismissToPoint().getName());
+    }
+
+    @Test
+    public void allAppsMotionFailsClosedForMissingOrAmbiguousHelper() {
+        expectMotionRejected(NoMotionTurbo.class, FakeView.class, "missing motion helper");
+        expectMotionRejected(AmbiguousMotionTurbo.class, FakeView.class, "ambiguous motion helper");
+    }
+
+    @Test
     public void resolutionIsCapabilityDrivenNotVersionWhitelisted() throws Exception {
         Method method = resolverClass().getDeclaredMethod(
                 "resolveForTest", Class.class, Class.class, Set.class);
@@ -139,6 +165,17 @@ public class SecurityCenterSemanticCompatibilityTest {
         }
     }
 
+    private static void expectMotionRejected(
+            Class<?> turbo, Class<?> view, String expectedReason) {
+        try {
+            SecurityCenterSemanticContractResolver.resolveAllAppsMotionForTest(turbo, view);
+            fail("expected fail-closed rejection for " + expectedReason);
+        } catch (IllegalStateException expected) {
+            assertTrue("reason should identify the rejected capability: " + expected,
+                    expected.getMessage() != null && !expected.getMessage().isEmpty());
+        }
+    }
+
     private static void assertRole(Object contract, String method, Class<?> expected) throws Exception {
         assertSame(expected, invoke(contract, method));
     }
@@ -180,6 +217,39 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
 
     public static class FakeView {}
+    public static class FakeGroup extends FakeView {}
+    public static class FakeLayoutParams {}
+    public interface MotionAnchorProvider {
+        void location(int[] out);
+        int width();
+        int height();
+    }
+    public interface MotionCompletion { void complete(); }
+
+    public static class AlphaMotionHelper {
+        public AlphaMotionHelper(FakeView anchor, MotionAnchorProvider provider) {}
+        public void i(FakeGroup parent, FakeView apps, FakeLayoutParams params) {}
+        public void n(FakeView apps, MotionCompletion completion) {}
+        public void p(FakeView apps, MotionCompletion completion, int x, int y) {}
+        private void u(FakeView apps) {}
+        private void t(FakeView apps, float x, float y, Runnable completion) {}
+    }
+    public static class BetaMotionHelper {
+        public BetaMotionHelper(FakeView anchor, MotionAnchorProvider provider) {}
+        public void mount(FakeGroup parent, FakeView apps, FakeLayoutParams params) {}
+        public void dismiss(FakeView apps, MotionCompletion completion) {}
+        public void dismissAt(FakeView apps, MotionCompletion completion, int x, int y) {}
+        private void animateIn(FakeView apps) {}
+        private void animateOut(FakeView apps, float x, float y, Runnable completion) {}
+    }
+    public static class AlphaMotionTurbo extends FakeView { private AlphaMotionHelper motion; }
+    public static class BetaMotionTurbo extends FakeView { private BetaMotionHelper renamedMotion; }
+    public static class NoMotionTurbo extends FakeView { private String unrelated; }
+    public static class AmbiguousMotionTurbo extends FakeView {
+        private AlphaMotionHelper first;
+        private BetaMotionHelper second;
+    }
+
     public static class Wrapper { public ValidTurbo C() { return null; } }
     public static class Manager {
         private void d2(Wrapper wrapper, boolean animate) {}

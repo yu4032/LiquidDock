@@ -5,10 +5,8 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Toast;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashSet;
@@ -34,18 +32,6 @@ final class SecurityCenterGlassHook {
     private static LiquidDockConfig installedConfig;
     private static SecurityCenterSemanticContractResolver.ResolvedContract installedContract;
     private static SecurityCenterGlassCoordinator coordinator;
-
-    private static final class AllAppsMotionContract {
-        final Method attach;
-        final Method show;
-        final Method hide;
-
-        AllAppsMotionContract(Method attach, Method show, Method hide) {
-            this.attach = attach;
-            this.show = show;
-            this.hide = hide;
-        }
-    }
 
     private SecurityCenterGlassHook() {}
 
@@ -112,6 +98,8 @@ final class SecurityCenterGlassHook {
                 SecurityCenterHookSpec.TURBO_LAYOUT_CLASS, false, loader);
         SecurityCenterSemanticContractResolver.ResolvedContract contract =
                 SecurityCenterSemanticContractResolver.resolve(turboClass, View.class, capabilities);
+        SecurityCenterSemanticContractResolver.AllAppsMotionContract allAppsMotion =
+                SecurityCenterSemanticContractResolver.resolveAllAppsMotion(turboClass, View.class);
 
         SecurityCenterVendorMaterialBridge vendorBridge =
                 new SecurityCenterVendorMaterialBridge(contract, videoMainContentResId);
@@ -199,47 +187,25 @@ final class SecurityCenterGlassHook {
                 return result;
             });
 
-            AllAppsMotionContract motion = resolveAllAppsMotionContract(contract.turboClass());
-            HookUtil.hook(motion.attach, chain -> {
+            HookUtil.hook(allAppsMotion.attach(), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (!ACTIVATION.allowsMutation()) return result;
-                Object appsObject = chain.getArgs().size() > 1 ? chain.getArgs().get(1) : null;
-                if (!(appsObject instanceof View)) return result;
-                View apps = (View) appsObject;
-                View turbo = resolveTurboParent(apps, contract);
-                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                if (live != null && turbo != null) live.updateAllAppsLayout(turbo, apps);
+                if (ACTIVATION.allowsMutation()) {
+                    observeAllAppsTransitionStart(
+                            chain.getArgs().size() > 1 ? chain.getArgs().get(1) : null, contract);
+                }
                 return result;
             });
-            HookUtil.hook(motion.show, chain -> {
+            HookUtil.hook(allAppsMotion.dismiss(), chain -> {
                 if (ACTIVATION.allowsMutation()) {
-                    Object appsObject = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
-                    if (appsObject instanceof View) {
-                        View apps = (View) appsObject;
-                        View turbo = resolveTurboParent(apps, contract);
-                        SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                        if (live != null && turbo != null) {
-                            live.updateAllAppsLayout(turbo, apps);
-                            live.onAllAppsToggleStarted(turbo);
-                            live.refreshTransitionFrame(turbo);
-                        }
-                    }
+                    observeAllAppsTransitionStart(
+                            chain.getArgs().isEmpty() ? null : chain.getArgs().get(0), contract);
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
-            HookUtil.hook(motion.hide, chain -> {
+            HookUtil.hook(allAppsMotion.dismissToPoint(), chain -> {
                 if (ACTIVATION.allowsMutation()) {
-                    Object appsObject = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
-                    if (appsObject instanceof View) {
-                        View apps = (View) appsObject;
-                        View turbo = resolveTurboParent(apps, contract);
-                        SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                        if (live != null && turbo != null) {
-                            live.updateAllAppsLayout(turbo, apps);
-                            live.onAllAppsToggleStarted(turbo);
-                            live.refreshTransitionFrame(turbo);
-                        }
-                    }
+                    observeAllAppsTransitionStart(
+                            chain.getArgs().isEmpty() ? null : chain.getArgs().get(0), contract);
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
@@ -302,6 +268,21 @@ final class SecurityCenterGlassHook {
         return id;
     }
 
+    private static void observeAllAppsTransitionStart(
+            Object appsObject,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        if (appsObject == null || contract == null
+                || !contract.allAppsClass().isInstance(appsObject)
+                || !(appsObject instanceof View)) return;
+        View apps = (View) appsObject;
+        View turbo = resolveTurboParent(apps, contract);
+        SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+        if (live == null || turbo == null) return;
+        live.updateAllAppsLayout(turbo, apps);
+        live.onAllAppsToggleStarted(turbo);
+        live.refreshTransitionFrame(turbo);
+    }
+
     private static void notifyVendorPanelClosing(
             java.util.List<?> args,
             SecurityCenterSemanticContractResolver.ResolvedContract contract) {
@@ -322,44 +303,6 @@ final class SecurityCenterGlassHook {
             SecurityCenterSemanticContractResolver.ResolvedContract contract) {
         synchronized (LOCK) {
             return validatedHooksInstalled && installedContract == contract ? coordinator : null;
-        }
-    }
-
-    private static AllAppsMotionContract resolveAllAppsMotionContract(Class<?> turboClass) {
-        if (turboClass == null) {
-            throw new IllegalStateException("Security Center All Apps motion contract missing TurboLayout");
-        }
-        AllAppsMotionContract resolved = null;
-        for (Field field : turboClass.getDeclaredFields()) {
-            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
-            Class<?> candidate = field.getType();
-            Method attach = findDeclared(candidate, "i", void.class,
-                    ViewGroup.class, View.class, ViewGroup.LayoutParams.class);
-            Method show = findDeclared(candidate, "u", void.class, View.class);
-            Method hide = findDeclared(candidate, "t", void.class,
-                    View.class, float.class, float.class, Runnable.class);
-            if (attach == null || show == null || hide == null) continue;
-            if (resolved != null) {
-                throw new IllegalStateException(
-                        "Security Center All Apps motion helper is ambiguous");
-            }
-            resolved = new AllAppsMotionContract(attach, show, hide);
-        }
-        if (resolved == null) {
-            throw new IllegalStateException("Security Center All Apps motion helper unavailable");
-        }
-        return resolved;
-    }
-
-    private static Method findDeclared(
-            Class<?> owner, String name, Class<?> returnType, Class<?>... parameters) {
-        try {
-            Method method = owner.getDeclaredMethod(name, parameters);
-            if (method.getReturnType() != returnType) return null;
-            method.setAccessible(true);
-            return method;
-        } catch (Throwable ignored) {
-            return null;
         }
     }
 
