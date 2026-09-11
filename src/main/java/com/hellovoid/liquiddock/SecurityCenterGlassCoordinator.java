@@ -113,6 +113,7 @@ final class SecurityCenterGlassCoordinator
     private SecurityCenterGlassSinkView boxSink;
     private SecurityCenterGlassSinkView appsSink;
     private long renderedGeneration = -1L;
+    private long requestedGeneration = -1L;
     private long vendorClearCommitEpoch;
     private boolean vendorClearCommitPending;
     private ViewTreeObserver rootObserver;
@@ -127,7 +128,7 @@ final class SecurityCenterGlassCoordinator
                 }
 
                 @Override public void onViewDetachedFromWindow(View v) {
-                    // Fallback only. Authoritative close is ob.e0.d2/f2 and revokes before teardown.
+                    // Fallback only. The semantically resolved manager teardown hooks revoke first.
                     mainHandler.post(() -> {
                         if (v == turboRef.get() && !v.isAttachedToWindow()) {
                             releasePanel(v, "panel detached fallback");
@@ -504,6 +505,7 @@ final class SecurityCenterGlassCoordinator
             ownership.onCustomPreparing();
             customOwnerTurboRef = new WeakReference<>(turbo);
             renderedGeneration = -1L;
+            requestedGeneration = -1L;
             if (!scheduleVendorClearFrameCommit()) {
                 throw new IllegalStateException("vendor-clear frame commit unavailable");
             }
@@ -551,6 +553,12 @@ final class SecurityCenterGlassCoordinator
                     currentFrame = frame;
                 }
                 if (frame == null) {
+                    if (awaitingPresentationReadiness()) {
+                        log("vendor-clear committed; waiting for compositable targets generation="
+                                + scene.generation(), null);
+                        root.postInvalidateOnAnimation();
+                        return;
+                    }
                     releasePanel(turboRef.get(), "clean-frame geometry unavailable");
                     return;
                 }
@@ -575,22 +583,36 @@ final class SecurityCenterGlassCoordinator
         if (vendorClearCommitPending) return;
         if (live == null || live.isShutdown() || root == null
                 || policy.currentSession() != live || policy.currentRoot() != root
-                || frame == null || dockSink == null) return;
+                || frame == null || dockSink == null || !dockSink.isPresentationReady()) return;
 
         int count = frame.nodeCount();
         SecurityCenterGlassSinkView[] sinks = new SecurityCenterGlassSinkView[count];
         int cursor = 0;
         sinks[cursor++] = dockSink;
         if (frame.boxGeometry() != null) {
-            if (boxSink == null) return;
+            if (boxSink == null || !boxSink.isPresentationReady()) return;
             sinks[cursor++] = boxSink;
         }
         if (frame.appsGeometry() != null) {
-            if (appsSink == null) return;
+            if (appsSink == null || !appsSink.isPresentationReady()) return;
             sinks[cursor++] = appsSink;
         }
         if (cursor != count) return;
         live.requestFresh(generation, frame, sinks);
+        requestedGeneration = generation;
+    }
+
+    private boolean awaitingPresentationReadiness() {
+        View dock = dockRef.get();
+        if (dock != null && dock.isAttachedToWindow() && dockSink != null
+                && !dockSink.isPresentationReady()) return true;
+        View box = boxRef.get();
+        if (box != null && box.isAttachedToWindow() && box.getVisibility() == View.VISIBLE
+                && boxSink != null && !boxSink.isPresentationReady()) return true;
+        View apps = appsRef.get();
+        return apps != null && apps.isAttachedToWindow()
+                && apps.getVisibility() == View.VISIBLE && appsSink != null
+                && !appsSink.isPresentationReady();
     }
 
     private void refreshCurrentFrame(boolean requestIfChanged) {
@@ -607,10 +629,13 @@ final class SecurityCenterGlassCoordinator
         if (observed == null) return;
         boolean changed = transformChanged || currentFrame == null || !currentFrame.sameAs(observed);
         currentFrame = observed;
-        if (requestIfChanged && changed) requestCurrentGeneration(observed);
+        if (requestIfChanged && (changed || requestedGeneration != scene.generation())) {
+            requestCurrentGeneration(observed);
+        }
     }
 
     private SecurityCenterGlassFrameGeometry captureFrame(boolean includeAppsIfAvailable) {
+        if (dockSink == null || !dockSink.isPresentationReady()) return null;
         SecurityCenterGlassGeometry dock = dockSink != null ? dockSink.captureGeometry(rootRef.get()) : null;
         if (dock == null) return null;
 
@@ -618,7 +643,8 @@ final class SecurityCenterGlassCoordinator
         View boxView = boxRef.get();
         if (boxView != null && boxView.isAttachedToWindow()
                 && boxView.getVisibility() == View.VISIBLE) {
-            box = boxSink != null ? boxSink.captureGeometry(rootRef.get()) : null;
+            if (boxSink == null || !boxSink.isPresentationReady()) return null;
+            box = boxSink.captureGeometry(rootRef.get());
             if (box == null) return null;
         }
 
@@ -627,7 +653,8 @@ final class SecurityCenterGlassCoordinator
             View appsView = appsRef.get();
             if (appsView != null && appsView.isAttachedToWindow()
                     && appsView.getVisibility() == View.VISIBLE) {
-                apps = appsSink != null ? appsSink.captureGeometry(rootRef.get()) : null;
+                if (appsSink == null || !appsSink.isPresentationReady()) return null;
+                apps = appsSink.captureGeometry(rootRef.get());
                 if (apps == null) return null;
             }
         }

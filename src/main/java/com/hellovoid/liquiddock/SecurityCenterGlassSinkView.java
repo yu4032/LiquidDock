@@ -2,11 +2,13 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 
 import java.lang.ref.WeakReference;
 
@@ -20,14 +22,16 @@ final class SecurityCenterGlassSinkView extends TextureView
     private final WeakReference<View> materialRef;
     private final SecurityCenterGlassSession session;
     private final float baseCornerRadiusPx;
+    private final Paint presentationPaint = new Paint();
     private final View.OnAttachStateChangeListener materialAttachListener;
     private Surface outputSurface;
     private boolean disposed;
     private boolean authorizedVisible;
+    private float contentAlpha;
     private volatile long pendingPresentationSerial = -1L;
     private volatile long pendingPresentationGeneration = -1L;
-    private volatile long armedSurfaceTimestamp = Long.MIN_VALUE;
-    private volatile long lastObservedSurfaceTimestamp = Long.MIN_VALUE;
+    private volatile long surfaceUpdateSequence;
+    private volatile long armedSurfaceUpdateSequence;
     private boolean parentRecoveryPosted;
 
     private SecurityCenterGlassSinkView(
@@ -54,7 +58,9 @@ final class SecurityCenterGlassSinkView extends TextureView
         setFocusable(false);
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         setSurfaceTextureListener(this);
-        setAlpha(0f);
+        presentationPaint.setAlpha(0);
+        setLayerPaint(presentationPaint);
+        setAlpha(1f);
     }
 
     static SecurityCenterGlassSinkView attachBefore(
@@ -95,6 +101,17 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
 
         boolean changed = false;
+        int desiredVisibility = material.getVisibility();
+        if (getVisibility() != desiredVisibility) {
+            setVisibility(desiredVisibility);
+            changed = true;
+        }
+        boolean materialVisible = desiredVisibility == View.VISIBLE;
+        if (!SecurityCenterSinkPresentationState.shouldCompose(materialVisible)) {
+            return setContentAlphaIfChanged(0f) || changed;
+        }
+
+        changed |= setFloatIfChanged(getAlpha(), 1f, this::setAlpha);
         int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
         int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
         ViewGroup.LayoutParams params = getLayoutParams();
@@ -116,13 +133,9 @@ final class SecurityCenterGlassSinkView extends TextureView
         changed |= setFloatIfChanged(getRotation(), material.getRotation(), this::setRotation);
         changed |= setFloatIfChanged(getZ(), material.getZ(), this::setZ);
 
-        float desiredAlpha = authorizedVisible ? material.getAlpha() : 0f;
-        changed |= setFloatIfChanged(getAlpha(), desiredAlpha, this::setAlpha);
-        int desiredVisibility = material.getVisibility();
-        if (getVisibility() != desiredVisibility) {
-            setVisibility(desiredVisibility);
-            changed = true;
-        }
+        float desiredAlpha = SecurityCenterSinkPresentationState.contentAlpha(
+                true, authorizedVisible, material.getAlpha());
+        changed |= setContentAlphaIfChanged(desiredAlpha);
         return changed;
     }
 
@@ -189,14 +202,33 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (disposed || session.isShutdown() || serial < 0L || generation < 0L) return;
         pendingPresentationSerial = serial;
         pendingPresentationGeneration = generation;
-        armedSurfaceTimestamp = lastObservedSurfaceTimestamp;
+        armedSurfaceUpdateSequence = surfaceUpdateSequence;
+    }
+
+    boolean isPresentationReady() {
+        if (disposed || session.isShutdown() || !isAttachedToWindow()
+                || !isHardwareAccelerated() || getWindowVisibility() != View.VISIBLE) return false;
+        View current = this;
+        float effectiveAlpha = 1f;
+        while (current != null) {
+            if (current.getVisibility() != View.VISIBLE) return false;
+            effectiveAlpha *= current.getAlpha();
+            if (!Float.isFinite(effectiveAlpha) || effectiveAlpha < 0.99f) return false;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return true;
+    }
+
+    void requestPresentationDraw() {
+        if (!disposed && !session.isShutdown()) postInvalidateOnAnimation();
     }
 
     void clearPresentationArm(long serial) {
         if (pendingPresentationSerial != serial) return;
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
-        armedSurfaceTimestamp = Long.MIN_VALUE;
+        armedSurfaceUpdateSequence = surfaceUpdateSequence;
     }
 
     boolean isDisposed() {
@@ -209,7 +241,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         authorizedVisible = false;
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
-        armedSurfaceTimestamp = Long.MIN_VALUE;
+        armedSurfaceUpdateSequence = surfaceUpdateSequence;
         setAlpha(0f);
         View material = materialRef.get();
         if (material != null) {
@@ -293,20 +325,26 @@ final class SecurityCenterGlassSinkView extends TextureView
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture texture) {
         if (texture == null || disposed || session.isShutdown()) return;
-        long timestamp = texture.getTimestamp();
-        long previous = lastObservedSurfaceTimestamp;
-        lastObservedSurfaceTimestamp = timestamp;
+        long updateSequence = ++surfaceUpdateSequence;
         long serial = pendingPresentationSerial;
         long generation = pendingPresentationGeneration;
-        if (serial < 0L || generation < 0L || timestamp == armedSurfaceTimestamp
-                || timestamp == previous) return;
+        if (serial < 0L || generation < 0L
+                || updateSequence <= armedSurfaceUpdateSequence) return;
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
-        armedSurfaceTimestamp = Long.MIN_VALUE;
+        armedSurfaceUpdateSequence = updateSequence;
         session.onOutputPresented(this, serial, generation);
     }
 
     private interface FloatSetter { void set(float value); }
+
+    private boolean setContentAlphaIfChanged(float desired) {
+        if (Math.abs(contentAlpha - desired) < 0.001f) return false;
+        contentAlpha = desired;
+        presentationPaint.setAlpha(Math.round(desired * 255f));
+        invalidate();
+        return true;
+    }
 
     private static boolean setFloatIfChanged(float current, float desired, FloatSetter setter) {
         if (Math.abs(current - desired) < 0.001f) return false;
