@@ -18,6 +18,32 @@ final class SecurityCenterSemanticContractResolver {
         return resolve(turboClass, viewClass, availableResources);
     }
 
+    static AllAppsMotionContract resolveAllAppsMotionForTest(
+            Class<?> turboClass, Class<?> viewClass) {
+        return resolveAllAppsMotion(turboClass, viewClass);
+    }
+
+    static AllAppsMotionContract resolveAllAppsMotion(
+            Class<?> turboClass, Class<?> viewClass) {
+        if (turboClass == null || viewClass == null) {
+            throw reject("missing All Apps motion owner/View");
+        }
+
+        List<AllAppsMotionContract> matches = new ArrayList<>();
+        for (Class<?> current = turboClass; current != null; current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                AllAppsMotionContract candidate = resolveAllAppsMotionCandidate(
+                        field.getType(), viewClass);
+                if (candidate != null) matches.add(candidate);
+            }
+        }
+        if (matches.size() != 1) {
+            throw reject("All Apps motion helper missing or ambiguous");
+        }
+        return matches.get(0);
+    }
+
     static ResolvedContract resolve(
             Class<?> turboClass, Class<?> viewClass, Set<String> availableResources) {
         if (turboClass == null || viewClass == null) throw reject("missing TurboLayout/View");
@@ -112,6 +138,98 @@ final class SecurityCenterSemanticContractResolver {
                 removeAnimated, removeWithoutAnimation, dockGetter, appsGetter, boxGetter,
                 gameGetter, gameMaterialGetter, gameRestore, videoGetter, videoRestore,
                 discriminator, allAppsPresent, transforming);
+    }
+
+    private static AllAppsMotionContract resolveAllAppsMotionCandidate(
+            Class<?> helperClass, Class<?> viewClass) {
+        if (helperClass == null || helperClass.isPrimitive() || helperClass == Object.class
+                || viewClass.isAssignableFrom(helperClass)) return null;
+
+        List<Constructor<?>> anchors = new ArrayList<>();
+        for (Constructor<?> constructor : helperClass.getDeclaredConstructors()) {
+            Class<?>[] p = constructor.getParameterTypes();
+            if (p.length == 2 && p[0] == viewClass && isMotionAnchorProvider(p[1])) {
+                anchors.add(constructor);
+            }
+        }
+        if (anchors.size() != 1) return null;
+
+        List<Method> attachMethods = declaredMethods(helperClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 3
+                    && p[0] != viewClass
+                    && viewClass.isAssignableFrom(p[0])
+                    && p[1] == viewClass
+                    && !p[2].isPrimitive()
+                    && !viewClass.isAssignableFrom(p[2]);
+        });
+        if (attachMethods.size() != 1) return null;
+
+        List<Method> dismissMethods = declaredMethods(helperClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 2
+                    && p[0] == viewClass
+                    && isMotionCompletionCallback(p[1]);
+        });
+        if (dismissMethods.size() != 1) return null;
+        Class<?> completionCallback = dismissMethods.get(0).getParameterTypes()[1];
+
+        List<Method> dismissToPointMethods = declaredMethods(helperClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 4
+                    && p[0] == viewClass
+                    && p[1] == completionCallback
+                    && p[2] == int.class
+                    && p[3] == int.class;
+        });
+        if (dismissToPointMethods.size() != 1) return null;
+
+        return new AllAppsMotionContract(
+                helperClass,
+                accessible(attachMethods.get(0)),
+                accessible(dismissMethods.get(0)),
+                accessible(dismissToPointMethods.get(0)));
+    }
+
+    private static boolean isMotionAnchorProvider(Class<?> type) {
+        if (type == null || !type.isInterface()) return false;
+        int locationWriter = 0;
+        int scalarReaders = 0;
+        int abstractInstanceMethods = 0;
+        for (Method method : type.getDeclaredMethods()) {
+            if (Modifier.isStatic(method.getModifiers()) || !Modifier.isAbstract(method.getModifiers())) {
+                continue;
+            }
+            abstractInstanceMethods++;
+            Class<?>[] p = method.getParameterTypes();
+            if (method.getReturnType() == void.class
+                    && p.length == 1 && p[0] == int[].class) {
+                locationWriter++;
+            } else if (method.getReturnType() == int.class && p.length == 0) {
+                scalarReaders++;
+            }
+        }
+        return abstractInstanceMethods == 3 && locationWriter == 1 && scalarReaders == 2;
+    }
+
+    private static boolean isMotionCompletionCallback(Class<?> type) {
+        if (type == null || !type.isInterface()) return false;
+        int matches = 0;
+        int abstractInstanceMethods = 0;
+        for (Method method : type.getDeclaredMethods()) {
+            if (Modifier.isStatic(method.getModifiers()) || !Modifier.isAbstract(method.getModifiers())) {
+                continue;
+            }
+            abstractInstanceMethods++;
+            if (method.getReturnType() == void.class && method.getParameterCount() == 0) matches++;
+        }
+        return abstractInstanceMethods == 1 && matches == 1;
     }
 
     private static void requireResources(Set<String> resources) {
@@ -272,6 +390,26 @@ final class SecurityCenterSemanticContractResolver {
 
     private interface MethodPredicate { boolean matches(Method method); }
     private interface FieldPredicate { boolean matches(Field field); }
+
+    static final class AllAppsMotionContract {
+        private final Class<?> helperClass;
+        private final Method attach;
+        private final Method dismiss;
+        private final Method dismissToPoint;
+
+        AllAppsMotionContract(
+                Class<?> helperClass, Method attach, Method dismiss, Method dismissToPoint) {
+            this.helperClass = helperClass;
+            this.attach = attach;
+            this.dismiss = dismiss;
+            this.dismissToPoint = dismissToPoint;
+        }
+
+        Class<?> helperClass() { return helperClass; }
+        Method attach() { return attach; }
+        Method dismiss() { return dismiss; }
+        Method dismissToPoint() { return dismissToPoint; }
+    }
 
     static final class ResolvedContract {
         private final Class<?> turboClass;
