@@ -100,6 +100,10 @@ final class SecurityCenterGlassHook {
                 SecurityCenterSemanticContractResolver.resolve(turboClass, View.class, capabilities);
         SecurityCenterSemanticContractResolver.AllAppsMotionContract allAppsMotion =
                 SecurityCenterSemanticContractResolver.resolveAllAppsMotion(turboClass, View.class);
+        SecurityCenterSemanticContractResolver.TerminalCleanupContract terminalCleanup =
+                SecurityCenterSemanticContractResolver.resolveTerminalCleanup(
+                        contract.managerClass(), contract.turboClass(),
+                        contract.wrapperClass(), View.class);
 
         SecurityCenterVendorMaterialBridge vendorBridge =
                 new SecurityCenterVendorMaterialBridge(contract, videoMainContentResId);
@@ -216,8 +220,21 @@ final class SecurityCenterGlassHook {
             });
             HookUtil.hook(contract.removeWithoutAnimation(), chain -> {
                 if (ACTIVATION.allowsMutation()) notifyVendorPanelClosing(chain.getArgs(), contract);
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (ACTIVATION.allowsMutation()) {
+                    notifyVendorPanelTerminalFromWrapper(chain.getArgs(), contract);
+                }
+                return result;
             });
+            for (Method terminalMethod : terminalCleanup.methods()) {
+                HookUtil.hook(terminalMethod, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (ACTIVATION.allowsMutation()) {
+                        notifyVendorPanelTerminal(chain.getArgs(), contract);
+                    }
+                    return result;
+                });
+            }
 
             HookUtil.hook(contract.finalBackground(), chain -> {
                 if (!ACTIVATION.allowsMutation()) {
@@ -286,17 +303,58 @@ final class SecurityCenterGlassHook {
     private static void notifyVendorPanelClosing(
             java.util.List<?> args,
             SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        Object wrapper = args != null && !args.isEmpty() ? args.get(0) : null;
-        if (wrapper == null) return;
         try {
-            Object turbo = invoke(contract.wrapperTurboGetter(), wrapper);
+            View turbo = resolveTurboFromWrapperArgs(args, contract);
             SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-            if (live != null && turbo instanceof View) {
-                live.onVendorPanelClosing((View) turbo);
-            }
+            if (live != null && turbo != null) live.onVendorPanelClosing(turbo);
         } catch (Throwable error) {
             log("vendor panel close observation failed", error);
         }
+    }
+
+    private static void notifyVendorPanelTerminalFromWrapper(
+            java.util.List<?> args,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        try {
+            View turbo = resolveTurboFromWrapperArgs(args, contract);
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+            if (live != null && turbo != null) live.onVendorPanelTerminal(turbo);
+        } catch (Throwable error) {
+            log("synchronous vendor panel terminal observation failed", error);
+        }
+    }
+
+    private static void notifyVendorPanelTerminal(
+            java.util.List<?> args,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        try {
+            View turbo = null;
+            if (args != null) {
+                for (Object arg : args) {
+                    if (!contract.turboClass().isInstance(arg) || !(arg instanceof View)) continue;
+                    if (turbo != null && turbo != arg) {
+                        throw new IllegalStateException("terminal cleanup exposed multiple TurboLayout args");
+                    }
+                    turbo = (View) arg;
+                }
+            }
+            if (turbo == null) {
+                throw new IllegalStateException("terminal cleanup missing TurboLayout arg");
+            }
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+            if (live != null) live.onVendorPanelTerminal(turbo);
+        } catch (Throwable error) {
+            log("animated vendor panel terminal observation failed", error);
+        }
+    }
+
+    private static View resolveTurboFromWrapperArgs(
+            java.util.List<?> args,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        Object wrapper = args != null && !args.isEmpty() ? args.get(0) : null;
+        if (wrapper == null || !contract.wrapperClass().isInstance(wrapper)) return null;
+        Object turbo = invoke(contract.wrapperTurboGetter(), wrapper);
+        return turbo instanceof View && contract.turboClass().isInstance(turbo) ? (View) turbo : null;
     }
 
     private static SecurityCenterGlassCoordinator currentCoordinator(

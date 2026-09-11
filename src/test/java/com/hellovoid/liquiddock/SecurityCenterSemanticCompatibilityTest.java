@@ -82,6 +82,32 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
 
     @Test
+    public void terminalCleanupResolvesByStructureNotObfuscatedMethodNames() {
+        SecurityCenterSemanticContractResolver.TerminalCleanupContract alpha =
+                SecurityCenterSemanticContractResolver.resolveTerminalCleanupForTest(
+                        AlphaTerminalManager.class, TerminalTurbo.class,
+                        TerminalWrapper.class, FakeView.class);
+        SecurityCenterSemanticContractResolver.TerminalCleanupContract beta =
+                SecurityCenterSemanticContractResolver.resolveTerminalCleanupForTest(
+                        BetaTerminalManager.class, TerminalTurbo.class,
+                        TerminalWrapper.class, FakeView.class);
+
+        Set<String> alphaNames = new HashSet<>();
+        for (Method method : alpha.methods()) alphaNames.add(method.getName());
+        Set<String> betaNames = new HashSet<>();
+        for (Method method : beta.methods()) betaNames.add(method.getName());
+
+        assertEquals(Set.of("k1", "m1", "n1"), alphaNames);
+        assertEquals(Set.of("finishEdge", "finishPanel", "finishClassic"), betaNames);
+    }
+
+    @Test
+    public void terminalCleanupFailsClosedForMissingOrAmbiguousAuthority() {
+        expectTerminalCleanupRejected(MissingTerminalManager.class, "missing terminal cleanup");
+        expectTerminalCleanupRejected(AmbiguousTerminalManager.class, "ambiguous terminal cleanup");
+    }
+
+    @Test
     public void resolutionIsCapabilityDrivenNotVersionWhitelisted() throws Exception {
         Method method = resolverClass().getDeclaredMethod(
                 "resolveForTest", Class.class, Class.class, Set.class);
@@ -176,6 +202,18 @@ public class SecurityCenterSemanticCompatibilityTest {
         }
     }
 
+    private static void expectTerminalCleanupRejected(
+            Class<?> manager, String expectedReason) {
+        try {
+            SecurityCenterSemanticContractResolver.resolveTerminalCleanupForTest(
+                    manager, TerminalTurbo.class, TerminalWrapper.class, FakeView.class);
+            fail("expected fail-closed rejection for " + expectedReason);
+        } catch (IllegalStateException expected) {
+            assertTrue("reason should identify the rejected capability: " + expected,
+                    expected.getMessage() != null && !expected.getMessage().isEmpty());
+        }
+    }
+
     private static void assertRole(Object contract, String method, Class<?> expected) throws Exception {
         assertSame(expected, invoke(contract, method));
     }
@@ -248,6 +286,31 @@ public class SecurityCenterSemanticCompatibilityTest {
     public static class AmbiguousMotionTurbo extends FakeView {
         private AlphaMotionHelper first;
         private BetaMotionHelper second;
+    }
+
+    public static class TerminalTurbo extends FakeView {}
+    public static class TerminalWrapper {}
+    public static class AlphaTerminalManager {
+        private void k1(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void m1(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void n1(boolean moveSidebar, TerminalTurbo turbo,
+                        TerminalWrapper wrapper, FakeView panel) {}
+    }
+    public static class BetaTerminalManager {
+        private void finishEdge(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void finishPanel(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void finishClassic(boolean moveSidebar, TerminalTurbo turbo,
+                                   TerminalWrapper wrapper, FakeView panel) {}
+    }
+    public static class MissingTerminalManager {
+        private void unrelated(TerminalTurbo turbo, TerminalWrapper wrapper) {}
+    }
+    public static class AmbiguousTerminalManager {
+        private void first(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void second(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void third(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void finish(boolean moveSidebar, TerminalTurbo turbo,
+                            TerminalWrapper wrapper, FakeView panel) {}
     }
 
     public static class Wrapper { public ValidTurbo C() { return null; } }

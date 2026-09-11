@@ -9,45 +9,50 @@ import org.junit.Test;
 /** Typed vendor/custom ownership contract for Security Center material handoff. */
 public class SecurityCenterMaterialOwnershipStateTest {
     @Test
-    public void preparingOwnershipSuppressesVendorBeforeAnyCustomFrameIsVisible() {
+    public void preparingKeepsVendorUntilCurrentGenerationPresentationAck() {
         SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
         assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
-        assertFalse(state.canSuppressVendor(-1L, 5L));
 
         state.onCustomPreparing();
         assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM_PREPARING, state.owner());
-        assertTrue("vendor final background must stay suppressed after physical material clear",
+        assertFalse("vendor must remain authoritative before presentation ACK",
                 state.canSuppressVendor(-1L, 5L));
+        assertFalse(state.canSuppressVendor(5L, 5L));
 
         state.onCustomPresented();
         assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM, state.owner());
         assertTrue(state.canSuppressVendor(5L, 5L));
-        assertTrue(state.canSuppressVendor(5L, 9L));
+        assertTrue("active custom ownership remains authoritative while a newer scene frame is prepared",
+                state.canSuppressVendor(5L, 6L));
     }
 
     @Test
-    public void releaseFromPreparingOrVisibleCustomRestoresVendorAuthority() {
-        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
-        state.onCustomPreparing();
-        state.releaseToVendor();
-        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
-
-        state.onCustomPreparing();
-        state.onCustomPresented();
-        state.releaseToVendor();
-        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
-        state.releaseToVendor();
-        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
-    }
-
-    @Test
-    public void visibleCustomStillRejectsInvalidGenerationOrdering() {
+    public void closeRequestRetainsCustomUntilTerminalRelease() {
         SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
         state.onCustomPreparing();
         state.onCustomPresented();
 
-        assertFalse(state.canSuppressVendor(-1L, 6L));
-        assertFalse(state.canSuppressVendor(6L, 5L));
-        assertTrue(state.canSuppressVendor(5L, 6L));
+        state.onVendorClosing();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING, state.owner());
+        assertTrue("active custom presentation remains authoritative during vendor close motion",
+                state.canSuppressVendor(9L, 9L));
+
+        state.releaseToVendor();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
+        assertFalse(state.canSuppressVendor(9L, 9L));
+    }
+
+    @Test
+    public void closeDuringPreparingNeverSuppressesVendor() {
+        SecurityCenterMaterialOwnershipState state = new SecurityCenterMaterialOwnershipState();
+        state.onCustomPreparing();
+        state.onVendorClosing();
+
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING, state.owner());
+        assertFalse(state.hasSuppressedVendor());
+        assertFalse(state.canSuppressVendor(3L, 3L));
+
+        state.releaseToVendor();
+        assertEquals(SecurityCenterMaterialOwnershipState.Owner.VENDOR, state.owner());
     }
 }
