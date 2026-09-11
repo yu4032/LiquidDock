@@ -72,11 +72,13 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
 
         assertTrue("All Apps attach must be observed before its Folme pre-draw",
-                hook.contains("HookUtil.hook(motion.attach"));
-        assertTrue("Show must start from the vendor helper's real Folme entry",
-                hook.contains("HookUtil.hook(motion.show"));
-        assertTrue("Hide must start from the vendor helper's real Folme entry",
-                hook.contains("HookUtil.hook(motion.hide"));
+                hook.contains("HookUtil.hook(allAppsMotion.attach()"));
+        assertTrue("Normal hide must start from the vendor helper's public dismiss boundary",
+                hook.contains("HookUtil.hook(allAppsMotion.dismiss()"));
+        assertTrue("Point-target hide must start from the vendor helper's public dismiss boundary",
+                hook.contains("HookUtil.hook(allAppsMotion.dismissToPoint()"));
+        assertFalse("Private obfuscated animation methods cannot remain lifecycle authority",
+                hook.contains("findDeclared(candidate,"));
         assertFalse("The 400/600ms transforming gate cannot remain animation authority",
                 hook.contains("installSettleObserver("));
         assertFalse("The vendor timing boolean cannot remain animation authority",
