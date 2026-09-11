@@ -20,6 +20,27 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue(bridge.contains("turboView.setBackground(null)"));
     }
 
+    @Test public void advancedMaterialUsesCarrierPassWindowBlurInsteadOfSinkSelfBlur() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SecurityCenterAdvancedMaterialHook.java"));
+        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
+
+        assertFalse("advanced material must not self-blur the TextureView sink",
+                policy.contains("applyContentBlur(sink"));
+        assertFalse("sink attachment is not Security Center background-blur authority",
+                hook.contains("\"attachOutput\""));
+        assertTrue("advanced material must be bound when custom carrier ownership is claimed",
+                hook.contains("configureAdvancedMaterial("));
+        assertTrue("TurboLayout pass-window enable is a separate verified step",
+                policy.contains("setPassWindowBlurEnabled(turbo, true)"));
+        assertTrue("carrier must use background blur mode",
+                blur.contains("setMiBackgroundBlurMode"));
+        assertTrue("carrier must use verified blend-color API",
+                blur.contains("setMiBackgroundBlendColors"));
+        assertTrue("Security Center verified advanced radius is 100",
+                policy.contains("ADVANCED_BLUR_RADIUS_PX = 100"));
+    }
+
     @Test public void securityCenterUsesPeerBoundSinkThatMirrorsVendorTransforms() throws Exception {
         Path sinkPath = MAIN.resolve("SecurityCenterGlassSinkView.java");
         assertTrue(Files.exists(sinkPath));

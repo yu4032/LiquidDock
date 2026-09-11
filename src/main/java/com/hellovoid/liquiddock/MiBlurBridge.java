@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Point;
 import android.view.View;
 
 import java.lang.reflect.Method;
@@ -18,7 +19,10 @@ final class MiBlurBridge {
     // Realtime pass-window/background blur used by the MiuiX dock.
     private static final Method SET_PASS_WINDOW_BLUR_ENABLED;
     private static final Method SET_MI_VIEW_BLUR_MODE;
+    private static final Method SET_MI_BACKGROUND_BLUR_MODE;
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
+    private static final Method SET_MI_BACKGROUND_BLEND_COLORS;
+    private static final Method CLEAR_MI_BACKGROUND_BLEND_COLOR;
     private static final boolean PASS_BLUR_AVAILABLE;
 
     static volatile boolean liquidGlassActive;
@@ -44,19 +48,29 @@ final class MiBlurBridge {
 
         Method passEnabled = null;
         Method viewBlurMode = null;
+        Method backgroundMode = null;
         Method backgroundRadius = null;
+        Method backgroundBlendColors = null;
+        Method clearBackgroundBlendColor = null;
         boolean passAvailable = false;
         try {
             passEnabled = View.class.getMethod("setPassWindowBlurEnabled", boolean.class);
             viewBlurMode = View.class.getMethod("setMiViewBlurMode", int.class);
+            backgroundMode = View.class.getMethod("setMiBackgroundBlurMode", int.class);
             backgroundRadius = View.class.getMethod("setMiBackgroundBlurRadius", int.class);
+            backgroundBlendColors = View.class.getMethod(
+                    "setMiBackgroundBlendColors", ArrayList.class);
+            clearBackgroundBlendColor = View.class.getMethod("clearMiBackgroundBlendColor");
             passAvailable = true;
         } catch (Throwable ignored) {
             // Some older builds expose only self blur. MiuiX caller will fall back cleanly.
         }
         SET_PASS_WINDOW_BLUR_ENABLED = passEnabled;
         SET_MI_VIEW_BLUR_MODE = viewBlurMode;
+        SET_MI_BACKGROUND_BLUR_MODE = backgroundMode;
         SET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadius;
+        SET_MI_BACKGROUND_BLEND_COLORS = backgroundBlendColors;
+        CLEAR_MI_BACKGROUND_BLEND_COLOR = clearBackgroundBlendColor;
         PASS_BLUR_AVAILABLE = passAvailable;
     }
 
@@ -109,14 +123,38 @@ final class MiBlurBridge {
         }
     }
 
+    /** Enable only window pass-through on a parent/root material owner. */
+    static boolean setPassWindowBlurEnabled(View view, boolean enabled) {
+        if (!PASS_BLUR_AVAILABLE || view == null) return false;
+        try {
+            Object result = SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, enabled);
+            return !(result instanceof Boolean) || (Boolean) result;
+        } catch (Throwable e) {
+            MainHook.log("[DC] pass window blur enable failed: " + e);
+            return false;
+        }
+    }
+
     /** Apply realtime blur to content behind {@code view}; this is not self/content blur. */
     static boolean applyPassWindowBlur(View view, int radiusPx) {
+        return applyPassWindowBlur(view, radiusPx, null);
+    }
+
+    /** Exact HyperOS background-material path with optional compositor blend colors. */
+    static boolean applyPassWindowBlur(
+            View view, int radiusPx, ArrayList<Point> blendColors) {
         if (!PASS_BLUR_AVAILABLE || view == null) return false;
         int safeRadius = Math.max(0, Math.min(400, radiusPx));
         try {
             SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
-            SET_MI_VIEW_BLUR_MODE.invoke(view, 1);
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1);
             Object result = SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, safeRadius);
+            SET_MI_VIEW_BLUR_MODE.invoke(view, 1);
+            if (blendColors != null) {
+                SET_MI_BACKGROUND_BLEND_COLORS.invoke(view, new ArrayList<>(blendColors));
+            } else {
+                CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
+            }
             if (result instanceof Boolean && !((Boolean) result)) {
                 clearPassWindowBlur(view);
                 return false;
@@ -138,7 +176,13 @@ final class MiBlurBridge {
             SET_MI_VIEW_BLUR_MODE.invoke(view, 0);
         } catch (Throwable ignored) {}
         try {
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 0);
+        } catch (Throwable ignored) {}
+        try {
             SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 0);
+        } catch (Throwable ignored) {}
+        try {
+            CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
         } catch (Throwable ignored) {}
     }
 
