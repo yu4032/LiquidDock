@@ -131,4 +131,22 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue("Reveal callback must be driven by presentation acknowledgement",
                 session.contains("onOutputPresented("));
     }
+
+    @Test public void allAppsSettleUsesVendorTargetAndMatchingPresentedComposition() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+
+        assertTrue("TurboLayout toggle must resolve the final vendor All Apps target",
+                hook.contains("HookUtil.hook(contract.toggleAllApps()"));
+        assertTrue("Resolved q/allAppsPresent is the target state, not the transforming timer",
+                hook.contains("contract.allAppsPresent().getBoolean"));
+        assertTrue("The transition generation must be handed to the coordinator with q",
+                hook.contains("onAllAppsToggleTargetResolved("));
+        assertTrue("Settlement must be retried from real TextureView presentation acknowledgement",
+                coordinator.contains("trySettlePresentedAllAppsTransition("));
+        assertTrue("A target can settle only when the presented frame has matching All Apps nodes",
+                coordinator.contains("frame.appsGeometry() != null"));
+        assertFalse("Vendor transforming/postDelayed timing must stay non-authoritative",
+                hook.contains("contract.transforming()"));
+    }
 }
