@@ -38,6 +38,7 @@ final class SecurityCenterVendorMaterialBridge {
         }
         this.contract = contract;
         this.videoMainContentResId = videoMainContentResId;
+        SecurityCenterEarlyPrepareHook.install(contract, videoMainContentResId);
         try {
             setMiViewBlurMode = HookUtil.findMethodExact(
                     View.class, "setMiViewBlurMode", new Class<?>[]{int.class});
@@ -63,8 +64,6 @@ final class SecurityCenterVendorMaterialBridge {
         claimedAssistantTypes.put(turboLayout, assistantType);
         claimedBoxTargets.put(turboLayout, new WeakReference<>(boxMaterialView));
 
-        // TurboLayout owns a vendor blur/material layer in addition to its child surfaces.
-        // Clear it under the same custom-ownership transaction; finalBackground() reconstructs it.
         resetVendorMaterial(turboView);
         MiBlurBridge.clearPassWindowBlur(turboView);
         turboView.setBackground(null);
