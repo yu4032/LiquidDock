@@ -582,7 +582,10 @@ final class RootPassBlurBackend {
         }
         if (!RootPassBlurEndpointBridge.sameGeneration(next, endpoint)) {
             Miuix307PassBlurBridge.unbind(next);
-            requestRebind("bind-endpoint-raced");
+            // The producer endpoint is still valid. Only the ViewRoot generation raced while
+            // binding, so stay inside the accepted rollover and retry against the next frame's
+            // authoritative endpoint instead of issuing a nested rebind that recovery rejects.
+            retryBind(attempt);
             return;
         }
         binding = next;
