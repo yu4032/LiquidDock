@@ -58,8 +58,8 @@ final class SecurityCenterMaterialModePolicy {
     }
 
     /**
-     * Replays Security Center's verified advanced-background branch on LiquidDock-owned carriers:
-     * TurboLayout only enables pass-window blur; Dock/All Apps own blur mode, radius and blends.
+     * Applies LiquidDock advanced material only under the explicit module-mutation guard so the
+     * stable View-API vendor mirror never mistakes our writes for vendor intent.
      */
     static synchronized boolean configureAdvancedMaterial(View turbo, View dock, View apps) {
         if (currentMode() != LiquidBlurMode.ADVANCED_MATERIAL) return true;
@@ -69,33 +69,36 @@ final class SecurityCenterMaterialModePolicy {
             return false;
         }
 
-        clearConfiguredTargets();
-        boolean turboReady = MiBlurBridge.setPassWindowBlurEnabled(turbo, true);
-        boolean dockReady = turboReady && MiBlurBridge.applyPassWindowBlur(
-                dock, ADVANCED_BLUR_RADIUS_PX, blendColors(dock));
-        boolean appsReady = apps == null || (dockReady && MiBlurBridge.applyPassWindowBlur(
-                apps, ADVANCED_BLUR_RADIUS_PX, blendColors(apps)));
-        if (!turboReady || !dockReady || !appsReady) {
-            MiBlurBridge.clearPassWindowBlur(turbo);
-            MiBlurBridge.clearPassWindowBlur(dock);
-            if (apps != null) MiBlurBridge.clearPassWindowBlur(apps);
-            advancedPresentationFailed = true;
-            return false;
-        }
+        return SecurityCenterVendorMaterialState.withModuleMutation(() -> {
+            clearConfiguredTargetsUnsafe();
+            boolean turboReady = MiBlurBridge.setPassWindowBlurEnabled(turbo, true);
+            boolean dockReady = turboReady && MiBlurBridge.applyPassWindowBlur(
+                    dock, ADVANCED_BLUR_RADIUS_PX, blendColors(dock));
+            boolean appsReady = apps == null || (dockReady && MiBlurBridge.applyPassWindowBlur(
+                    apps, ADVANCED_BLUR_RADIUS_PX, blendColors(apps)));
+            if (!turboReady || !dockReady || !appsReady) {
+                MiBlurBridge.clearPassWindowBlur(turbo);
+                MiBlurBridge.clearPassWindowBlur(dock);
+                if (apps != null) MiBlurBridge.clearPassWindowBlur(apps);
+                advancedPresentationFailed = true;
+                return false;
+            }
 
-        advancedTurbo = new WeakReference<>(turbo);
-        advancedDock = new WeakReference<>(dock);
-        advancedApps = new WeakReference<>(apps);
-        return true;
+            advancedTurbo = new WeakReference<>(turbo);
+            advancedDock = new WeakReference<>(dock);
+            advancedApps = new WeakReference<>(apps);
+            return true;
+        });
     }
 
     static boolean blockCustomPresentation() {
         return currentMode() == LiquidBlurMode.ADVANCED_MATERIAL && advancedPresentationFailed;
     }
 
-    /** Clear LiquidDock's material before vendor U()/S() restores its own presentation. */
+    /** Clear LiquidDock material before the stable View-API vendor snapshot is replayed. */
     static synchronized void releaseAdvancedMaterial() {
-        clearConfiguredTargets();
+        SecurityCenterVendorMaterialState.runModuleMutation(
+                SecurityCenterMaterialModePolicy::clearConfiguredTargetsUnsafe);
     }
 
     static synchronized void resetLifecycle() {
@@ -106,7 +109,7 @@ final class SecurityCenterMaterialModePolicy {
         advancedApps = new WeakReference<>(null);
     }
 
-    private static void clearConfiguredTargets() {
+    private static void clearConfiguredTargetsUnsafe() {
         View turbo = advancedTurbo.get();
         View dock = advancedDock.get();
         View apps = advancedApps.get();

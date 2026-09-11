@@ -15,9 +15,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
     @Test public void customOwnershipClearsTurboLayoutMaterialToo() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         assertTrue(bridge.contains("View turboView = (View) turboLayout"));
-        assertTrue(bridge.contains("resetVendorMaterial(turboView)"));
-        assertTrue(bridge.contains("MiBlurBridge.clearPassWindowBlur(turboView)"));
-        assertTrue(bridge.contains("turboView.setBackground(null)"));
+        assertTrue(bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
+        assertTrue(bridge.contains("clearVendorTarget(turboView)"));
+        assertTrue(bridge.contains("target.setBackground(null)"));
     }
 
     @Test public void advancedMaterialUsesCarrierPassWindowBlurInsteadOfSinkSelfBlur() throws Exception {
@@ -39,6 +39,29 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 blur.contains("setMiBackgroundBlendColors"));
         assertTrue("Security Center verified advanced radius is 100",
                 policy.contains("ADVANCED_BLUR_RADIUS_PX = 100"));
+    }
+
+    @Test public void stableViewApiMirrorReplacesPrivateMaterialRestoreAuthorities() throws Exception {
+        Path statePath = MAIN.resolve("SecurityCenterVendorMaterialState.java");
+        assertTrue(Files.exists(statePath));
+        String state = Files.readString(statePath);
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+        String resolver = Files.readString(MAIN.resolve("SecurityCenterSemanticContractResolver.java"));
+
+        assertTrue(state.contains("setPassWindowBlurEnabled"));
+        assertTrue(state.contains("setMiBackgroundBlurRadius"));
+        assertTrue(state.contains("setMiBackgroundBlendColors"));
+        assertTrue(state.contains("setBackground"));
+        assertTrue("claimed carriers must suppress later vendor writes while retaining intent",
+                state.contains("successfulSuppressionResult(method)"));
+        assertTrue("release must replay the latest vendor snapshot",
+                bridge.contains("SecurityCenterVendorMaterialState.restoreOwner(turboLayout)"));
+        assertFalse("private game material restore must not be part of semantic contract",
+                resolver.contains("gameMaterialRestore"));
+        assertFalse("private video material restore must not be part of semantic contract",
+                resolver.contains("videoMaterialRestore"));
+        assertFalse("private final-background restore must not be part of semantic contract",
+                resolver.contains("finalBackground"));
     }
 
     @Test public void securityCenterUsesPeerBoundSinkThatMirrorsVendorTransforms() throws Exception {
@@ -104,22 +127,22 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
 
-        assertTrue("All Apps attach must be observed before its Folme pre-draw",
+        assertTrue("All Apps attach must be observed at the helper's public attach boundary",
                 hook.contains("HookUtil.hook(allAppsMotion.attach()"));
         assertTrue("Normal hide must start from the vendor helper's public dismiss boundary",
                 hook.contains("HookUtil.hook(allAppsMotion.dismiss()"));
         assertTrue("Point-target hide must start from the vendor helper's public dismiss boundary",
                 hook.contains("HookUtil.hook(allAppsMotion.dismissToPoint()"));
-        assertFalse("Private obfuscated animation methods cannot remain lifecycle authority",
+        assertFalse("Private animation methods cannot remain lifecycle authority",
                 hook.contains("findDeclared(candidate,"));
-        assertFalse("The 400/600ms transforming gate cannot remain animation authority",
+        assertFalse("Fixed-delay settle cannot remain animation authority",
                 hook.contains("installSettleObserver("));
-        assertFalse("The vendor timing boolean cannot remain animation authority",
+        assertFalse("Vendor timing booleans cannot remain animation authority",
                 hook.contains("contract.transforming()"));
 
         assertTrue("Animated terminal release must use the semantic cleanup contract",
                 hook.contains("resolveTerminalCleanup("));
-        assertTrue("Animated terminal cleanup must release only after vendor cleanup proceeds",
+        assertTrue("Terminal cleanup must release only after vendor cleanup proceeds",
                 hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
 
         assertTrue("A submitted EGL frame must wait for TextureView consumption",
@@ -132,16 +155,18 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 session.contains("onOutputPresented("));
     }
 
-    @Test public void allAppsSettleUsesVendorTargetAndMatchingPresentedComposition() throws Exception {
+    @Test public void allAppsSettleUsesMotionTargetAndMatchingPresentedComposition() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
-        assertTrue("TurboLayout toggle must resolve the final vendor All Apps target",
-                hook.contains("HookUtil.hook(contract.toggleAllApps()"));
-        assertTrue("Resolved q/allAppsPresent is the target state, not the transforming timer",
-                hook.contains("contract.allAppsPresent().getBoolean"));
-        assertTrue("The transition generation must be handed to the coordinator with q",
-                hook.contains("onAllAppsToggleTargetResolved("));
+        assertFalse("TurboLayout toggle names must not define target state",
+                hook.contains("contract.toggleAllApps()"));
+        assertFalse("private page-presence fields must not define target state",
+                hook.contains("contract.allAppsPresent()"));
+        assertTrue("motion semantic must carry target state directly",
+                hook.contains("boolean targetPresent"));
+        assertTrue("motion target and generation must reach the existing settle gate",
+                hook.contains("live.onAllAppsToggleTargetResolved(turbo, targetPresent, generation)"));
         assertTrue("Settlement must be retried from real TextureView presentation acknowledgement",
                 coordinator.contains("trySettlePresentedAllAppsTransition("));
         assertTrue("A target can settle only when the presented frame has matching All Apps nodes",

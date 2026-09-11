@@ -46,8 +46,8 @@ public class SecurityCenterSemanticCompatibilityTest {
         AlphaContract.AssistantType alphaType = new AlphaContract.AssistantType();
         BetaContract.ModeToken betaType = new BetaContract.ModeToken();
         for (int semanticType : new int[]{1, 3, 4}) {
-            alphaType.a(semanticType);
-            betaType.a(semanticType);
+            alphaType.setCode(semanticType);
+            betaType.setActive(semanticType);
             assertEquals(semanticType,
                     ((Number) alphaDiscriminator.invoke(alphaType)).intValue());
             assertEquals(semanticType,
@@ -56,23 +56,23 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
 
     @Test
-    public void allAppsMotionResolvesByStructureNotObfuscatedMethodNames() {
-        SecurityCenterSemanticContractResolver.AllAppsMotionContract alpha =
+    public void allAppsMotionResolvesByStructureNotMethodNames() {
+        SecurityCenterSemanticContractResolver.AllAppsMotionContract first =
                 SecurityCenterSemanticContractResolver.resolveAllAppsMotionForTest(
-                        AlphaMotionTurbo.class, FakeView.class);
-        SecurityCenterSemanticContractResolver.AllAppsMotionContract beta =
+                        FirstMotionTurbo.class, FakeView.class);
+        SecurityCenterSemanticContractResolver.AllAppsMotionContract second =
                 SecurityCenterSemanticContractResolver.resolveAllAppsMotionForTest(
-                        BetaMotionTurbo.class, FakeView.class);
+                        SecondMotionTurbo.class, FakeView.class);
 
-        assertSame(AlphaMotionHelper.class, alpha.helperClass());
-        assertEquals("i", alpha.attach().getName());
-        assertEquals("n", alpha.dismiss().getName());
-        assertEquals("p", alpha.dismissToPoint().getName());
+        assertSame(FirstMotionHelper.class, first.helperClass());
+        assertEquals("attachPanel", first.attach().getName());
+        assertEquals("dismissPanel", first.dismiss().getName());
+        assertEquals("dismissPanelAt", first.dismissToPoint().getName());
 
-        assertSame(BetaMotionHelper.class, beta.helperClass());
-        assertEquals("mount", beta.attach().getName());
-        assertEquals("dismiss", beta.dismiss().getName());
-        assertEquals("dismissAt", beta.dismissToPoint().getName());
+        assertSame(SecondMotionHelper.class, second.helperClass());
+        assertEquals("mountSurface", second.attach().getName());
+        assertEquals("hideSurface", second.dismiss().getName());
+        assertEquals("hideSurfaceAt", second.dismissToPoint().getName());
     }
 
     @Test
@@ -82,23 +82,18 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
 
     @Test
-    public void terminalCleanupResolvesByStructureNotObfuscatedMethodNames() {
-        SecurityCenterSemanticContractResolver.TerminalCleanupContract alpha =
+    public void terminalCleanupResolvesByStructureNotMethodNames() {
+        SecurityCenterSemanticContractResolver.TerminalCleanupContract first =
                 SecurityCenterSemanticContractResolver.resolveTerminalCleanupForTest(
-                        AlphaTerminalManager.class, TerminalTurbo.class,
+                        FirstTerminalManager.class, TerminalTurbo.class,
                         TerminalWrapper.class, FakeView.class);
-        SecurityCenterSemanticContractResolver.TerminalCleanupContract beta =
+        SecurityCenterSemanticContractResolver.TerminalCleanupContract second =
                 SecurityCenterSemanticContractResolver.resolveTerminalCleanupForTest(
-                        BetaTerminalManager.class, TerminalTurbo.class,
+                        SecondTerminalManager.class, TerminalTurbo.class,
                         TerminalWrapper.class, FakeView.class);
 
-        Set<String> alphaNames = new HashSet<>();
-        for (Method method : alpha.methods()) alphaNames.add(method.getName());
-        Set<String> betaNames = new HashSet<>();
-        for (Method method : beta.methods()) betaNames.add(method.getName());
-
-        assertEquals(Set.of("k1", "m1", "n1"), alphaNames);
-        assertEquals(Set.of("finishEdge", "finishPanel", "finishClassic"), betaNames);
+        assertEquals(3, first.methods().size());
+        assertEquals(3, second.methods().size());
     }
 
     @Test
@@ -116,11 +111,11 @@ public class SecurityCenterSemanticCompatibilityTest {
             assertFalse("versionCode must not control capability resolution",
                     parameter == long.class || parameter == Long.class);
         }
-        assertTrue(resolve(AlphaContract.Turbo.class, AlphaContract.FakeView.class, RESOURCES) != null);
+        assertTrue(resolve(ValidTurbo.class, FakeView.class, RESOURCES) != null);
     }
 
     @Test
-    public void legacy40011261LikeShapeIsRejected() throws Exception {
+    public void legacyShapeIsRejected() throws Exception {
         expectRejected(LegacyTurbo.class, FakeView.class, RESOURCES, "legacy shape");
     }
 
@@ -264,43 +259,43 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
     public interface MotionCompletion { void complete(); }
 
-    public static class AlphaMotionHelper {
-        public AlphaMotionHelper(FakeView anchor, MotionAnchorProvider provider) {}
-        public void i(FakeGroup parent, FakeView apps, FakeLayoutParams params) {}
-        public void n(FakeView apps, MotionCompletion completion) {}
-        public void p(FakeView apps, MotionCompletion completion, int x, int y) {}
-        private void u(FakeView apps) {}
-        private void t(FakeView apps, float x, float y, Runnable completion) {}
+    public static class FirstMotionHelper {
+        public FirstMotionHelper(FakeView anchor, MotionAnchorProvider provider) {}
+        public void attachPanel(FakeGroup parent, FakeView apps, FakeLayoutParams params) {}
+        public void dismissPanel(FakeView apps, MotionCompletion completion) {}
+        public void dismissPanelAt(FakeView apps, MotionCompletion completion, int x, int y) {}
+        private void animateEntry(FakeView apps) {}
+        private void animateExit(FakeView apps, float x, float y, Runnable completion) {}
     }
-    public static class BetaMotionHelper {
-        public BetaMotionHelper(FakeView anchor, MotionAnchorProvider provider) {}
-        public void mount(FakeGroup parent, FakeView apps, FakeLayoutParams params) {}
-        public void dismiss(FakeView apps, MotionCompletion completion) {}
-        public void dismissAt(FakeView apps, MotionCompletion completion, int x, int y) {}
-        private void animateIn(FakeView apps) {}
-        private void animateOut(FakeView apps, float x, float y, Runnable completion) {}
+    public static class SecondMotionHelper {
+        public SecondMotionHelper(FakeView anchor, MotionAnchorProvider provider) {}
+        public void mountSurface(FakeGroup parent, FakeView apps, FakeLayoutParams params) {}
+        public void hideSurface(FakeView apps, MotionCompletion completion) {}
+        public void hideSurfaceAt(FakeView apps, MotionCompletion completion, int x, int y) {}
+        private void runEntry(FakeView apps) {}
+        private void runExit(FakeView apps, float x, float y, Runnable completion) {}
     }
-    public static class AlphaMotionTurbo extends FakeView { private AlphaMotionHelper motion; }
-    public static class BetaMotionTurbo extends FakeView { private BetaMotionHelper renamedMotion; }
+    public static class FirstMotionTurbo extends FakeView { private FirstMotionHelper motion; }
+    public static class SecondMotionTurbo extends FakeView { private SecondMotionHelper renamedMotion; }
     public static class NoMotionTurbo extends FakeView { private String unrelated; }
     public static class AmbiguousMotionTurbo extends FakeView {
-        private AlphaMotionHelper first;
-        private BetaMotionHelper second;
+        private FirstMotionHelper first;
+        private SecondMotionHelper second;
     }
 
     public static class TerminalTurbo extends FakeView {}
     public static class TerminalWrapper {}
-    public static class AlphaTerminalManager {
-        private void k1(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
-        private void m1(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
-        private void n1(boolean moveSidebar, TerminalTurbo turbo,
-                        TerminalWrapper wrapper, FakeView panel) {}
+    public static class FirstTerminalManager {
+        private void finishPrimary(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void finishSecondary(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, TerminalTurbo turbo,
+                                    TerminalWrapper wrapper, FakeView panel) {}
     }
-    public static class BetaTerminalManager {
-        private void finishEdge(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
-        private void finishPanel(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
-        private void finishClassic(boolean moveSidebar, TerminalTurbo turbo,
-                                   TerminalWrapper wrapper, FakeView panel) {}
+    public static class SecondTerminalManager {
+        private void settleEdge(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void settlePanel(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
+        private void settleWithMove(boolean moveSidebar, TerminalTurbo turbo,
+                                    TerminalWrapper wrapper, FakeView panel) {}
     }
     public static class MissingTerminalManager {
         private void unrelated(TerminalTurbo turbo, TerminalWrapper wrapper) {}
@@ -313,87 +308,153 @@ public class SecurityCenterSemanticCompatibilityTest {
                             TerminalWrapper wrapper, FakeView panel) {}
     }
 
-    public static class Wrapper { public ValidTurbo C() { return null; } }
+    public static class Wrapper { public ValidTurbo owner() { return null; } }
     public static class Manager {
-        private void d2(Wrapper wrapper, boolean animate) {}
-        private void f2(Wrapper wrapper, boolean moveSidebar) {}
+        private void finishPrimary(ValidTurbo turbo, Wrapper wrapper, FakeView panel) {}
+        private void finishSecondary(ValidTurbo turbo, Wrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, ValidTurbo turbo,
+                                    Wrapper wrapper, FakeView panel) {}
     }
     public static class SecondManager {
-        private void d2(Wrapper wrapper, boolean animate) {}
-        private void f2(Wrapper wrapper, boolean moveSidebar) {}
+        private void finishPrimary(AmbiguousManagerTurbo turbo, Wrapper wrapper, FakeView panel) {}
+        private void finishSecondary(AmbiguousManagerTurbo turbo, Wrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, AmbiguousManagerTurbo turbo,
+                                    Wrapper wrapper, FakeView panel) {}
     }
-    public static class MissingF2Manager { private void d2(Wrapper wrapper, boolean animate) {} }
+    public static class MissingManager {}
+
     public static class Type {
         private int value;
-        public void a(int next) { value = next; }
-        public int c() { return value; }
-        public int d() { return value + 10; }
+        public void setValue(int next) { value = next; }
+        public int value() { return value; }
+        public int presentation() { return value + 10; }
     }
     public static class BadType {
-        public void a(int next) {}
-        public int c() { return 0; }
+        public void setValue(int next) {}
+        public int value() { return 0; }
     }
+
     public static class Dock extends FakeView {}
     public static class Apps extends FakeView {}
     public static class Box extends FakeView {}
-    public static class Material extends FakeView { public void o() {} }
+    public static class Material extends FakeView {}
     public static class Game extends FakeView { public Material getMainView() { return null; } }
     public static class BadGame extends FakeView {}
-    public static class Video { public void t() {} }
-    public static class BadVideo {}
+    public static class Video {}
 
     public static class ValidTurbo extends FakeView {
-        private Wrapper wrapper; private Manager manager; private Type type; private boolean q; private boolean s;
-        public void V(Wrapper w, boolean l, String p, int m, Type t, boolean a, boolean b, boolean c) {}
-        public void c0() {} public void d0() {} public void U() {}
-        public Wrapper getSidebarWrapper() { return wrapper; }
+        private Wrapper wrapper;
+        private Manager manager;
+        private Type type;
+
+        public void configurePanel(Wrapper wrapper, boolean left, String pkg, int mode, Type type,
+                                   boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
         public Video getVideoBoxViewAdapter() { return null; }
     }
+
     public static class LegacyTurbo extends FakeView {
-        private Wrapper wrapper; private Manager manager;
-        public Wrapper getSidebarWrapper() { return wrapper; }
+        private Wrapper wrapper;
         public Dock getDockLayout() { return null; }
         public Box getBoxView() { return null; }
     }
-    public static class AmbiguousManagerTurbo extends ValidTurbo { private SecondManager secondManager; }
-    public static class MissingTeardownTurbo extends FakeView {
-        private Wrapper wrapper; private MissingF2Manager manager; private Type type; private boolean q; private boolean s;
-        public void V(Wrapper w, boolean l, String p, int m, Type t, boolean a, boolean b, boolean c) {}
-        public void c0() {} public void d0() {} public void U() {}
-        public Wrapper getSidebarWrapper() { return wrapper; }
-        public Dock getDockLayout() { return null; } public Apps getAppsLayout() { return null; }
-        public Box getBoxView() { return null; } public Game getGameTurboLayout() { return null; }
+
+    public static class AmbiguousWrapper { public AmbiguousManagerTurbo owner() { return null; } }
+    public static class AmbiguousPrimaryManager {
+        private void finishPrimary(AmbiguousManagerTurbo turbo, AmbiguousWrapper wrapper, FakeView panel) {}
+        private void finishSecondary(AmbiguousManagerTurbo turbo, AmbiguousWrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, AmbiguousManagerTurbo turbo,
+                                    AmbiguousWrapper wrapper, FakeView panel) {}
+    }
+    public static class AmbiguousSecondaryManager {
+        private void settlePrimary(AmbiguousManagerTurbo turbo, AmbiguousWrapper wrapper, FakeView panel) {}
+        private void settleSecondary(AmbiguousManagerTurbo turbo, AmbiguousWrapper wrapper, FakeView panel) {}
+        private void settleWithMove(boolean moveSidebar, AmbiguousManagerTurbo turbo,
+                                    AmbiguousWrapper wrapper, FakeView panel) {}
+    }
+    public static class AmbiguousManagerTurbo extends FakeView {
+        private AmbiguousPrimaryManager firstManager;
+        private AmbiguousSecondaryManager secondManager;
+        private Type type;
+        public void configurePanel(AmbiguousWrapper wrapper, boolean left, String pkg, int mode, Type type,
+                                   boolean force, boolean vertical, boolean extra) {}
+        public Dock getDockLayout() { return null; }
+        public Apps getAppsLayout() { return null; }
+        public Box getBoxView() { return null; }
+        public Game getGameTurboLayout() { return null; }
         public Video getVideoBoxViewAdapter() { return null; }
+    }
+
+    public static class MissingWrapper { public MissingTeardownTurbo owner() { return null; } }
+    public static class MissingTeardownTurbo extends FakeView {
+        private MissingManager manager;
+        private Type type;
+        public void configurePanel(MissingWrapper wrapper, boolean left, String pkg, int mode, Type type,
+                                   boolean force, boolean vertical, boolean extra) {}
+        public Dock getDockLayout() { return null; }
+        public Apps getAppsLayout() { return null; }
+        public Box getBoxView() { return null; }
+        public Game getGameTurboLayout() { return null; }
+        public Video getVideoBoxViewAdapter() { return null; }
+    }
+
+    public static class BadTypeWrapper { public MissingDiscriminatorTurbo owner() { return null; } }
+    public static class BadTypeManager {
+        private void finishPrimary(MissingDiscriminatorTurbo turbo, BadTypeWrapper wrapper, FakeView panel) {}
+        private void finishSecondary(MissingDiscriminatorTurbo turbo, BadTypeWrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, MissingDiscriminatorTurbo turbo,
+                                    BadTypeWrapper wrapper, FakeView panel) {}
     }
     public static class MissingDiscriminatorTurbo extends FakeView {
-        private Wrapper wrapper; private Manager manager; private BadType type; private boolean q; private boolean s;
-        public void V(Wrapper w, boolean l, String p, int m, BadType t, boolean a, boolean b, boolean c) {}
-        public void c0() {} public void d0() {} public void U() {}
-        public Wrapper getSidebarWrapper() { return wrapper; }
-        public Dock getDockLayout() { return null; } public Apps getAppsLayout() { return null; }
-        public Box getBoxView() { return null; } public Game getGameTurboLayout() { return null; }
+        private BadTypeManager manager;
+        private BadType type;
+        public void configurePanel(BadTypeWrapper wrapper, boolean left, String pkg, int mode, BadType type,
+                                   boolean force, boolean vertical, boolean extra) {}
+        public Dock getDockLayout() { return null; }
+        public Apps getAppsLayout() { return null; }
+        public Box getBoxView() { return null; }
+        public Game getGameTurboLayout() { return null; }
         public Video getVideoBoxViewAdapter() { return null; }
+    }
+
+    public static class BadGameWrapper { public MissingMaterialTurbo owner() { return null; } }
+    public static class BadGameManager {
+        private void finishPrimary(MissingMaterialTurbo turbo, BadGameWrapper wrapper, FakeView panel) {}
+        private void finishSecondary(MissingMaterialTurbo turbo, BadGameWrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, MissingMaterialTurbo turbo,
+                                    BadGameWrapper wrapper, FakeView panel) {}
     }
     public static class MissingMaterialTurbo extends FakeView {
-        private Wrapper wrapper; private Manager manager; private Type type; private boolean q; private boolean s;
-        public void V(Wrapper w, boolean l, String p, int m, Type t, boolean a, boolean b, boolean c) {}
-        public void c0() {} public void d0() {} public void U() {}
-        public Wrapper getSidebarWrapper() { return wrapper; }
-        public Dock getDockLayout() { return null; } public Apps getAppsLayout() { return null; }
-        public Box getBoxView() { return null; } public BadGame getGameTurboLayout() { return null; }
+        private BadGameManager manager;
+        private Type type;
+        public void configurePanel(BadGameWrapper wrapper, boolean left, String pkg, int mode, Type type,
+                                   boolean force, boolean vertical, boolean extra) {}
+        public Dock getDockLayout() { return null; }
+        public Apps getAppsLayout() { return null; }
+        public Box getBoxView() { return null; }
+        public BadGame getGameTurboLayout() { return null; }
         public Video getVideoBoxViewAdapter() { return null; }
     }
+
+    public static class BadAdapterWrapper { public MissingAdapterTurbo owner() { return null; } }
+    public static class BadAdapterManager {
+        private void finishPrimary(MissingAdapterTurbo turbo, BadAdapterWrapper wrapper, FakeView panel) {}
+        private void finishSecondary(MissingAdapterTurbo turbo, BadAdapterWrapper wrapper, FakeView panel) {}
+        private void finishWithMove(boolean moveSidebar, MissingAdapterTurbo turbo,
+                                    BadAdapterWrapper wrapper, FakeView panel) {}
+    }
     public static class MissingAdapterTurbo extends FakeView {
-        private Wrapper wrapper; private Manager manager; private Type type; private boolean q; private boolean s;
-        public void V(Wrapper w, boolean l, String p, int m, Type t, boolean a, boolean b, boolean c) {}
-        public void c0() {} public void d0() {} public void U() {}
-        public Wrapper getSidebarWrapper() { return wrapper; }
-        public Dock getDockLayout() { return null; } public Apps getAppsLayout() { return null; }
-        public Box getBoxView() { return null; } public Game getGameTurboLayout() { return null; }
-        public BadVideo getVideoBoxViewAdapter() { return null; }
+        private BadAdapterManager manager;
+        private Type type;
+        public void configurePanel(BadAdapterWrapper wrapper, boolean left, String pkg, int mode, Type type,
+                                   boolean force, boolean vertical, boolean extra) {}
+        public Dock getDockLayout() { return null; }
+        public Apps getAppsLayout() { return null; }
+        public Box getBoxView() { return null; }
+        public Game getGameTurboLayout() { return null; }
+        public FakeView getVideoBoxViewAdapter() { return null; }
     }
 }

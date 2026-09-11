@@ -13,6 +13,10 @@ final class SecurityCenterAdvancedMaterialHook {
     static synchronized boolean install() {
         if (installed) return true;
         try {
+            if (!SecurityCenterVendorMaterialState.install()) {
+                log("stable vendor material state interception unavailable");
+                return false;
+            }
             Method bindAssistant = HookUtil.findMethodExact(
                     SecurityCenterGlassCoordinator.class,
                     "bindAssistant",

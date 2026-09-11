@@ -33,25 +33,10 @@ final class SecurityCenterSemanticContractResolver {
         if (managerClass == null || turboClass == null || wrapperClass == null || viewClass == null) {
             throw reject("missing terminal cleanup owner/signature types");
         }
-        List<Method> direct = declaredMethods(managerClass, method -> {
-            Class<?>[] p = method.getParameterTypes();
-            return !Modifier.isStatic(method.getModifiers())
-                    && method.getReturnType() == void.class
-                    && p.length == 3
-                    && p[0] == turboClass
-                    && p[1] == wrapperClass
-                    && p[2] == viewClass;
-        });
-        List<Method> withMoveFlag = declaredMethods(managerClass, method -> {
-            Class<?>[] p = method.getParameterTypes();
-            return !Modifier.isStatic(method.getModifiers())
-                    && method.getReturnType() == void.class
-                    && p.length == 4
-                    && p[0] == boolean.class
-                    && p[1] == turboClass
-                    && p[2] == wrapperClass
-                    && p[3] == viewClass;
-        });
+        List<Method> direct = terminalDirectMethods(
+                managerClass, turboClass, wrapperClass, viewClass);
+        List<Method> withMoveFlag = terminalMoveFlagMethods(
+                managerClass, turboClass, wrapperClass, viewClass);
         if (direct.size() != 2 || withMoveFlag.size() != 1) {
             throw reject("animated terminal cleanup authority missing or ambiguous");
         }
@@ -109,15 +94,10 @@ final class SecurityCenterSemanticContractResolver {
                 "wrapper-to-Turbo relation");
 
         Field managerField = uniqueField(turboClass,
-                field -> hasManagerTeardownAuthorities(field.getType(), wrapperClass),
-                "manager teardown authority");
+                field -> hasTerminalCleanupAuthorities(
+                        field.getType(), turboClass, wrapperClass, viewClass),
+                "manager terminal-cleanup authority");
         Class<?> managerClass = managerField.getType();
-        Method removeAnimated = namedPrivateWrapperBoolean(
-                managerClass, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_METHOD,
-                wrapperClass, "animated manager teardown");
-        Method removeWithoutAnimation = namedPrivateWrapperBoolean(
-                managerClass, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_WITHOUT_ANIMATION_METHOD,
-                wrapperClass, "non-animated manager teardown");
 
         Method discriminator = resolveAssistantTypeDiscriminator(assistantTypeClass);
 
@@ -151,31 +131,45 @@ final class SecurityCenterSemanticContractResolver {
             throw reject("game material carrier changed");
         }
 
-        Method gameRestore = namedVoidZeroArg(gameMaterialClass,
-                SecurityCenterHookSpec.GAME_MATERIAL_RESTORE_METHOD,
-                "game material restore");
-        Method videoRestore = namedVoidZeroArg(videoAdapterClass,
-                SecurityCenterHookSpec.VIDEO_MATERIAL_RESTORE_METHOD,
-                "video material restore");
-
-        Method dockReady = namedVoidZeroArg(turboClass,
-                SecurityCenterHookSpec.DOCK_READY_METHOD, "dock-ready authority");
-        Method toggle = namedVoidZeroArg(turboClass,
-                SecurityCenterHookSpec.TOGGLE_ALL_APPS_METHOD, "all-apps toggle authority");
-        Method finalBackground = namedVoidZeroArg(turboClass,
-                SecurityCenterHookSpec.FINAL_BACKGROUND_METHOD, "final background authority");
-        Field allAppsPresent = namedBooleanField(turboClass,
-                SecurityCenterHookSpec.ALL_APPS_PRESENT_FIELD, "all-apps state");
-        Field transforming = namedBooleanField(turboClass,
-                SecurityCenterHookSpec.TRANSFORMING_FIELD, "transforming state");
-
         return new ResolvedContract(
                 turboClass, wrapperClass, managerClass, assistantTypeClass,
                 gameBoxClass, gameMaterialClass, videoAdapterClass, allAppsClass,
-                configure, dockReady, toggle, finalBackground, wrapperTurboGetter,
-                removeAnimated, removeWithoutAnimation, dockGetter, appsGetter, boxGetter,
-                gameGetter, gameMaterialGetter, gameRestore, videoGetter, videoRestore,
-                discriminator, allAppsPresent, transforming);
+                configure, wrapperTurboGetter,
+                dockGetter, appsGetter, boxGetter, gameGetter,
+                gameMaterialGetter, videoGetter, discriminator);
+    }
+
+    private static List<Method> terminalDirectMethods(
+            Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
+        return declaredMethods(managerClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 3
+                    && p[0] == turboClass
+                    && p[1] == wrapperClass
+                    && p[2] == viewClass;
+        });
+    }
+
+    private static List<Method> terminalMoveFlagMethods(
+            Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
+        return declaredMethods(managerClass, method -> {
+            Class<?>[] p = method.getParameterTypes();
+            return !Modifier.isStatic(method.getModifiers())
+                    && method.getReturnType() == void.class
+                    && p.length == 4
+                    && p[0] == boolean.class
+                    && p[1] == turboClass
+                    && p[2] == wrapperClass
+                    && p[3] == viewClass;
+        });
+    }
+
+    private static boolean hasTerminalCleanupAuthorities(
+            Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
+        return terminalDirectMethods(managerClass, turboClass, wrapperClass, viewClass).size() == 2
+                && terminalMoveFlagMethods(managerClass, turboClass, wrapperClass, viewClass).size() == 1;
     }
 
     private static AllAppsMotionContract resolveAllAppsMotionCandidate(
@@ -319,41 +313,6 @@ final class SecurityCenterSemanticContractResolver {
         }
     }
 
-    private static boolean hasManagerTeardownAuthorities(
-            Class<?> type, Class<?> wrapperClass) {
-        return hasPrivateWrapperBoolean(
-                        type, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_METHOD, wrapperClass)
-                && hasPrivateWrapperBoolean(
-                        type, SecurityCenterHookSpec.REMOVE_TURBO_LAYOUT_WITHOUT_ANIMATION_METHOD,
-                        wrapperClass);
-    }
-
-    private static boolean hasPrivateWrapperBoolean(
-            Class<?> type, String name, Class<?> wrapperClass) {
-        return declaredMethods(type, method ->
-                matchesPrivateWrapperBoolean(method, name, wrapperClass)).size() == 1;
-    }
-
-    private static Method namedPrivateWrapperBoolean(
-            Class<?> type, String name, Class<?> wrapperClass, String capability) {
-        List<Method> methods = declaredMethods(type, method ->
-                matchesPrivateWrapperBoolean(method, name, wrapperClass));
-        if (methods.size() != 1) throw reject(capability + " missing or ambiguous");
-        return accessible(methods.get(0));
-    }
-
-    private static boolean matchesPrivateWrapperBoolean(
-            Method method, String name, Class<?> wrapperClass) {
-        Class<?>[] p = method.getParameterTypes();
-        return method.getName().equals(name)
-                && !Modifier.isStatic(method.getModifiers())
-                && Modifier.isPrivate(method.getModifiers())
-                && method.getReturnType() == void.class
-                && p.length == 2
-                && p[0] == wrapperClass
-                && p[1] == boolean.class;
-    }
-
     private static Method namedZeroArg(Class<?> type, String name, String capability) {
         List<Method> methods = declaredMethods(type, method ->
                 method.getName().equals(name)
@@ -361,24 +320,6 @@ final class SecurityCenterSemanticContractResolver {
                         && method.getParameterCount() == 0);
         if (methods.size() != 1) throw reject(capability + " missing or ambiguous");
         return accessible(methods.get(0));
-    }
-
-    private static Method namedVoidZeroArg(Class<?> type, String name, String capability) {
-        Method method = namedZeroArg(type, name, capability);
-        if (method.getReturnType() != void.class) throw reject(capability + " shape changed");
-        return method;
-    }
-
-    private static Field namedBooleanField(Class<?> type, String name, String capability) {
-        List<Field> fields = new ArrayList<>();
-        for (Field field : type.getDeclaredFields()) {
-            if (!Modifier.isStatic(field.getModifiers())
-                    && field.getName().equals(name)
-                    && field.getType() == boolean.class) fields.add(field);
-        }
-        if (fields.size() != 1) throw reject(capability + " missing or ambiguous");
-        fields.get(0).setAccessible(true);
-        return fields.get(0);
     }
 
     private static void requireViewReturn(Method method, Class<?> viewClass, String capability) {
@@ -469,34 +410,22 @@ final class SecurityCenterSemanticContractResolver {
         private final Class<?> videoAdapterClass;
         private final Class<?> allAppsClass;
         private final Method configure;
-        private final Method dockReady;
-        private final Method toggleAllApps;
-        private final Method finalBackground;
         private final Method wrapperTurboGetter;
-        private final Method removeAnimated;
-        private final Method removeWithoutAnimation;
         private final Method dockGetter;
         private final Method appsGetter;
         private final Method boxGetter;
         private final Method gameGetter;
         private final Method gameMaterialGetter;
-        private final Method gameMaterialRestore;
         private final Method videoAdapterGetter;
-        private final Method videoMaterialRestore;
         private final Method assistantTypeDiscriminator;
-        private final Field allAppsPresent;
-        private final Field transforming;
 
         ResolvedContract(
                 Class<?> turboClass, Class<?> wrapperClass, Class<?> managerClass,
                 Class<?> assistantTypeClass, Class<?> gameBoxClass, Class<?> gameMaterialClass,
                 Class<?> videoAdapterClass, Class<?> allAppsClass, Method configure,
-                Method dockReady, Method toggleAllApps, Method finalBackground,
-                Method wrapperTurboGetter, Method removeAnimated, Method removeWithoutAnimation,
-                Method dockGetter, Method appsGetter, Method boxGetter, Method gameGetter,
-                Method gameMaterialGetter, Method gameMaterialRestore, Method videoAdapterGetter,
-                Method videoMaterialRestore, Method assistantTypeDiscriminator,
-                Field allAppsPresent, Field transforming) {
+                Method wrapperTurboGetter, Method dockGetter, Method appsGetter,
+                Method boxGetter, Method gameGetter, Method gameMaterialGetter,
+                Method videoAdapterGetter, Method assistantTypeDiscriminator) {
             this.turboClass = turboClass;
             this.wrapperClass = wrapperClass;
             this.managerClass = managerClass;
@@ -506,23 +435,14 @@ final class SecurityCenterSemanticContractResolver {
             this.videoAdapterClass = videoAdapterClass;
             this.allAppsClass = allAppsClass;
             this.configure = configure;
-            this.dockReady = dockReady;
-            this.toggleAllApps = toggleAllApps;
-            this.finalBackground = finalBackground;
             this.wrapperTurboGetter = wrapperTurboGetter;
-            this.removeAnimated = removeAnimated;
-            this.removeWithoutAnimation = removeWithoutAnimation;
             this.dockGetter = dockGetter;
             this.appsGetter = appsGetter;
             this.boxGetter = boxGetter;
             this.gameGetter = gameGetter;
             this.gameMaterialGetter = gameMaterialGetter;
-            this.gameMaterialRestore = gameMaterialRestore;
             this.videoAdapterGetter = videoAdapterGetter;
-            this.videoMaterialRestore = videoMaterialRestore;
             this.assistantTypeDiscriminator = assistantTypeDiscriminator;
-            this.allAppsPresent = allAppsPresent;
-            this.transforming = transforming;
         }
 
         Class<?> turboClass() { return turboClass; }
@@ -534,22 +454,13 @@ final class SecurityCenterSemanticContractResolver {
         Class<?> videoAdapterClass() { return videoAdapterClass; }
         Class<?> allAppsClass() { return allAppsClass; }
         Method configure() { return configure; }
-        Method dockReady() { return dockReady; }
-        Method toggleAllApps() { return toggleAllApps; }
-        Method finalBackground() { return finalBackground; }
         Method wrapperTurboGetter() { return wrapperTurboGetter; }
-        Method removeAnimated() { return removeAnimated; }
-        Method removeWithoutAnimation() { return removeWithoutAnimation; }
         Method dockGetter() { return dockGetter; }
         Method appsGetter() { return appsGetter; }
         Method boxGetter() { return boxGetter; }
         Method gameGetter() { return gameGetter; }
         Method gameMaterialGetter() { return gameMaterialGetter; }
-        Method gameMaterialRestore() { return gameMaterialRestore; }
         Method videoAdapterGetter() { return videoAdapterGetter; }
-        Method videoMaterialRestore() { return videoMaterialRestore; }
         Method assistantTypeDiscriminator() { return assistantTypeDiscriminator; }
-        Field allAppsPresent() { return allAppsPresent; }
-        Field transforming() { return transforming; }
     }
 }
