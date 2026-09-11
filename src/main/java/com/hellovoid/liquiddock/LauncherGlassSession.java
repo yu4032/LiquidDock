@@ -933,20 +933,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     boolean rebindProducer(LauncherGlassSessionRegistry.RolloverCompletion rolloverComplete) {
-        if (shuttingDown || sourceBackend.isShutdown() || sourceBackend.isRebindPending()) {
+        if (shuttingDown || sourceBackend.isShutdown()) {
+            MainHook.log(TAG + " unlock endpoint rollover rejected " + diagnosticSessionId()
+                    + " reason=shutdown");
             return false;
         }
-        sourceBackend.requestRebind("launcher-endpoint-rollover");
-        if (!sourceBackend.isRebindPending()) return false;
-        if (rolloverComplete != null) {
-            sourceBackend.postToRenderThread(() -> {
-                boolean success = !shuttingDown
-                        && !sourceBackend.isActivationExhausted()
-                        && !sourceBackend.isShutdown();
-                mainHandler.post(() -> rolloverComplete.onComplete(success));
-            });
+        boolean accepted = sourceBackend.requestRebind(
+                "launcher-endpoint-rollover", rolloverComplete);
+        if (!accepted) {
+            MainHook.log(TAG + " unlock endpoint rollover rejected " + diagnosticSessionId()
+                    + " reason=backend-request");
         }
-        return true;
+        return accepted;
     }
 
     boolean rebindWorkstationProducer(String reason, long generation) {
