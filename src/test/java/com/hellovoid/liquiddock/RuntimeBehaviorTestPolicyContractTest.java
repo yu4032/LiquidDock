@@ -48,6 +48,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherWidgetTransitionWiringContractTest.java",
             "R8ReleaseKeepContractTest.java",
             "RootPassBlurBackendBoundaryTest.java",
+            "SecurityCenterFrameworkDockContractTest.java",
             "SecurityCenterLauncherStylePresentationContractTest.java",
             "SecurityCenterNoNameAnchorContractTest.java",
             "SecurityCenterScopeContractTest.java",
