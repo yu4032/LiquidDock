@@ -51,6 +51,21 @@ public class SecurityCenterFrameworkDockContractTest {
     }
 
     @Test
+    public void customPreparingLatchesVendorFallbackBeforeDestructiveHandoff() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+        String coordinator = Files.readString(
+                MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+
+        assertTrue("CUSTOM_PREPARING must expose a non-destructive vendor fallback latch",
+                bridge.contains("void protectVendorFallback("));
+        assertTrue("the coordinator must protect the current vendor material before waiting for ACK",
+                coordinator.contains("vendorMaterialBridge.protectVendorFallback("));
+        assertTrue("destructive vendor clearing must remain a separate presentation handoff",
+                bridge.contains("void claimCustom(")
+                        && bridge.contains("clearVendorTarget(dockLayout)"));
+    }
+
+    @Test
     public void frameworkOwnershipCoversDockToolboxAndAllAppsButNeverTheTurboRoot() throws Exception {
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
@@ -74,7 +89,8 @@ public class SecurityCenterFrameworkDockContractTest {
     @Test
     public void panelCloseRestoresVendorAfterCustomGlassRelease() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
-        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+        String coordinator = Files.readString(
+                MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
         assertFalse("custom glass must not retain a framework-material claim after close",
                 bridge.contains("retainFrameworkDockOnPanelClose"));
