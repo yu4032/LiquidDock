@@ -13,6 +13,8 @@ public class R8ReleaseKeepContractTest {
     private static final Path KEEP = Path.of("src/main/keepRules/liquiddock.keep");
     private static final Path REFLECTION_KEEP =
             Path.of("src/main/keepRules/runtime-reflection.keep");
+    private static final Path SECURITY_CENTER_AUTHORITY = Path.of(
+            "src/main/java/com/hellovoid/liquiddock/SecurityCenterSourceAuthorityController.java");
 
     @Test public void xposedTimingBoundaryHasTargetedKeepRules() throws Exception {
         assertTrue("AGP 9.3 keepRules source-set file must exist", Files.exists(KEEP));
@@ -39,5 +41,22 @@ public class R8ReleaseKeepContractTest {
                 "com.hellovoid.liquiddock.Miuix307PassBlurBridge$Binding binding;"));
         assertFalse(reflectionRules.contains("void rebindProducer();"));
         assertFalse(reflectionRules.contains("LauncherGlassSession"));
+    }
+
+    @Test public void securityCenterAuthorityUsesTypedProjectOwnedApis() throws Exception {
+        assertTrue("Security Center authority controller source must exist",
+                Files.exists(SECURITY_CENTER_AUTHORITY));
+        String source = Files.readString(SECURITY_CENTER_AUTHORITY);
+
+        assertFalse("Project-owned Security Center lifecycle must not use raw reflection",
+                source.contains("java.lang.reflect."));
+        assertFalse("Project-owned coordinator members must be called through typed APIs",
+                source.contains("SecurityCenterGlassCoordinator.class"));
+        assertFalse("Project-owned session members must be called through typed APIs",
+                source.contains("SecurityCenterGlassSession.class"));
+        assertFalse("Project-owned fields must not be resolved by name",
+                source.contains("getDeclaredField("));
+        assertFalse("Project-owned methods must not be resolved by name",
+                source.contains("getDeclaredMethod("));
     }
 }
