@@ -46,4 +46,27 @@ public class SecurityCenterGlassRuntimeTransitionPolicyTest {
                 new SecurityCenterGlassRuntimeTransitionPolicy.Snapshot(true, true, true))
                 .releaseAll);
     }
+
+    @Test
+    public void gameToolboxRestoresVendorWhileVideoAndGlobalDockKeepCustomGlass() {
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition game =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(1);
+        assertFalse(game.bindCustomGlass);
+        assertTrue(game.releaseExistingCustomGlass);
+
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition video =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(3);
+        assertTrue(video.bindCustomGlass);
+        assertFalse(video.releaseExistingCustomGlass);
+
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition globalDock =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(4);
+        assertTrue(globalDock.bindCustomGlass);
+        assertFalse(globalDock.releaseExistingCustomGlass);
+
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition unknown =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(99);
+        assertFalse(unknown.bindCustomGlass);
+        assertFalse(unknown.releaseExistingCustomGlass);
+    }
 }
