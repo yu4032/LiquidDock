@@ -80,7 +80,14 @@ final class SecurityCenterGlassRuntimeState {
     }
 
     static void bindAssistant(View turbo, View dock, View box, int type) {
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
         Owner currentOwner = owner;
+        if (transition.releaseExistingCustomGlass) {
+            if (currentOwner != null) currentOwner.releaseAll();
+            return;
+        }
+        if (!transition.bindCustomGlass) return;
         if (currentOwner instanceof SecurityCenterGlassCoordinator) {
             ((SecurityCenterGlassCoordinator) currentOwner).bindAssistant(turbo, dock, box, type);
         }
