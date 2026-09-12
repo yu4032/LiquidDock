@@ -7,7 +7,7 @@
     com.hellovoid.liquiddock.SecurityCenterGlassSceneState$Target targetKind;
     com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry currentFrame;
     com.hellovoid.liquiddock.SecurityCenterGlassSession session;
-    java.lang.ref.WeakReference turboRef;
+    *** turboRef;
 
     void reconcileSinks();
     boolean syncSinksFromMaterials();
