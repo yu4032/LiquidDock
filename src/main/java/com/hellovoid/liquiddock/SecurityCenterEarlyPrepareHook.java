@@ -19,6 +19,12 @@ final class SecurityCenterEarlyPrepareHook {
     private static final int ASSISTANT_GAME = 1;
     private static final int ASSISTANT_VIDEO = 3;
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
+    private static WeakReference<View> rearmTurboRef = new WeakReference<>(null);
+    private static int rearmType;
+    private static SecurityCenterSemanticContractResolver.ResolvedContract rearmContract;
+    private static int rearmVideoMainContentResId;
+    private static WeakReference<View> activeTurboRef = new WeakReference<>(null);
+    private static int activeType;
 
     private SecurityCenterEarlyPrepareHook() {}
 
@@ -37,14 +43,20 @@ final class SecurityCenterEarlyPrepareHook {
             if (!(turboObject instanceof View) || typeArg == null) return result;
             try {
                 int type = assistantType(typeArg, contract);
-                if (type == 0) return result;
+                if (type == 0) {
+                    clearCustomRearm();
+                    return result;
+                }
                 SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
                         SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
+                if (!transition.rearmOnSidebarShow) clearCustomRearm();
                 if (!transition.requiresDeferredPrepare) {
                     SecurityCenterGlassRuntimeState.bindAssistant(null, null, null, type);
                     log("immediate vendor handoff type=" + type, null);
                     return result;
                 }
+                rememberCustomRearm(
+                        (View) turboObject, type, contract, videoMainContentResId);
                 armPendingPrepare(
                         (View) turboObject, type, contract, videoMainContentResId);
             } catch (Throwable error) {
@@ -52,6 +64,73 @@ final class SecurityCenterEarlyPrepareHook {
             }
             return result;
         });
+    }
+
+    static void onSidebarShowStarting() {
+        synchronized (LOCK) {
+            activeTurboRef = new WeakReference<>(null);
+            activeType = 0;
+        }
+    }
+
+    static void rearmLastCustomOnSidebarShow() {
+        final View turbo;
+        final int type;
+        final SecurityCenterSemanticContractResolver.ResolvedContract contract;
+        final int videoMainContentResId;
+        synchronized (LOCK) {
+            turbo = rearmTurboRef.get();
+            type = rearmType;
+            contract = rearmContract;
+            videoMainContentResId = rearmVideoMainContentResId;
+            if (turbo == null || contract == null || type == 0) {
+                clearCustomRearmLocked();
+                return;
+            }
+            if (activeTurboRef.get() == turbo && activeType == type) {
+                return;
+            }
+        }
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
+        if (!transition.rearmOnSidebarShow) return;
+        armPendingPrepare(turbo, type, contract, videoMainContentResId);
+        log("sidebar show rearmed custom assistant type=" + type, null);
+    }
+
+    private static void rememberCustomRearm(
+            View turbo,
+            int type,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract,
+            int videoMainContentResId) {
+        synchronized (LOCK) {
+            rearmTurboRef = new WeakReference<>(turbo);
+            rearmType = type;
+            rearmContract = contract;
+            rearmVideoMainContentResId = videoMainContentResId;
+        }
+    }
+
+    private static void markActive(View turbo, int type) {
+        synchronized (LOCK) {
+            activeTurboRef = new WeakReference<>(turbo);
+            activeType = type;
+        }
+    }
+
+    private static void clearCustomRearm() {
+        synchronized (LOCK) {
+            clearCustomRearmLocked();
+        }
+    }
+
+    private static void clearCustomRearmLocked() {
+        rearmTurboRef = new WeakReference<>(null);
+        rearmType = 0;
+        rearmContract = null;
+        rearmVideoMainContentResId = 0;
+        activeTurboRef = new WeakReference<>(null);
+        activeType = 0;
     }
 
     private static void armPendingPrepare(
@@ -86,6 +165,7 @@ final class SecurityCenterEarlyPrepareHook {
             }
             SecurityCenterGlassRuntimeState.bindAssistant(
                     turbo, dock, boxMaterial, pending.type);
+            markActive(turbo, pending.type);
             log("deferred prepare bound type=" + pending.type, null);
             return true;
         } catch (Throwable error) {
