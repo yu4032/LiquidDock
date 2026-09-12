@@ -5,11 +5,19 @@ final class SecurityCenterLivePresentationState {
     private long awaitingGeneration = -1L;
     private long liveGeneration = -1L;
 
+    synchronized void beginStrictPresentation(long generation) {
+        if (generation < 0L) {
+            invalidate();
+            return;
+        }
+        awaitingGeneration = generation;
+        liveGeneration = -1L;
+    }
+
     synchronized void onStrictPresentation(long generation, boolean requestedFollowUp) {
         if (generation < 0L) return;
         if (requestedFollowUp) {
-            awaitingGeneration = generation;
-            liveGeneration = -1L;
+            beginStrictPresentation(generation);
             return;
         }
         if (awaitingGeneration == generation) {
