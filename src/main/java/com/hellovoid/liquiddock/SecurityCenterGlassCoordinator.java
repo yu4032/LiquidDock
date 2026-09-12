@@ -192,6 +192,7 @@ final class SecurityCenterGlassCoordinator
     /** Binds one semantically resolved assistant panel; Dock, Game, Video and Global Dock share one root session. */
     void bindAssistant(View turboLayout, View dockLayout, View boxLayout, int type) {
         if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
+        if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return;
         View previousTurbo = turboRef.get();
         if (previousTurbo != null && previousTurbo != turboLayout) {
             releasePanel(previousTurbo, "panel replaced");
@@ -305,16 +306,9 @@ final class SecurityCenterGlassCoordinator
         releasePanel(turboLayout, "vendor panel terminal cleanup");
     }
 
-    boolean shouldSuppressVendorFinalBackground(Object turboLayout) {
-        return turboLayout != null
-                && turboLayout == turboRef.get()
-                && ownership.canSuppressVendor(renderedGeneration, scene.generation())
-                && policy.currentSession() == session
-                && SecurityCenterGlassRuntimeState.isEnabled();
-    }
-
     @Override
     public void releaseAll() {
+        SecurityCenterVendorMaterialBridge.releaseClaim();
         View turbo = turboRef.get();
         if (turbo != null) {
             releasePanel(turbo, "runtime release");

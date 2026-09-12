@@ -12,7 +12,7 @@ import org.junit.Test;
 public class SecurityCenterLauncherStylePresentationContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void frameworkOwnershipClearsDockButKeepsTurboAsPassWindowHost() throws Exception {
+    @Test public void customOwnershipClearsDockButKeepsTurboAsSourceHost() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         assertTrue("Dock is the claimed material carrier",
@@ -21,32 +21,30 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 bridge.contains("clearVendorTarget(dockLayout)"));
         assertFalse("Turbo/root is only the pass-window host and must not be cleared as a carrier",
                 bridge.contains("clearVendorTarget(turboView)"));
-        assertTrue("Turbo/root still enables the framework pass-window capability",
-                policy.contains("setPassWindowBlurEnabled(turbo, true)"));
+        assertTrue("Security Center selects LiquidDock's shader material",
+                policy.contains("return LiquidBlurMode.SHADER;"));
+        assertTrue("Security Center enables shader blur in its Prismal parameters",
+                policy.contains("static boolean useShaderBlur() {\n        return true;"));
         assertTrue("claimed Dock carrier clears its ordinary background",
                 bridge.contains("target.setBackground(null)"));
     }
 
-    @Test public void advancedMaterialUsesCarrierPassWindowBlurInsteadOfSinkSelfBlur() throws Exception {
+    @Test public void customShaderUsesSharedPassBlurSourceAndTypedVendorClaim() throws Exception {
         String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
-        String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
+        String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
 
-        assertFalse("advanced material must not self-blur the TextureView sink",
+        assertFalse("custom glass must not self-blur the TextureView sink",
                 policy.contains("applyContentBlur(sink"));
-        assertTrue("framework material must be claimed at semantic Dock readiness",
-                early.contains("claimFrameworkDock(turbo, dock)"));
-        assertTrue("eager claim must apply the verified advanced material without a fresh-frame gate",
-                bridge.contains("SecurityCenterMaterialModePolicy.configureAdvancedMaterial("));
-        assertTrue("TurboLayout pass-window enable is a separate verified step",
-                policy.contains("setPassWindowBlurEnabled(turbo, true)"));
-        assertTrue("carrier must use background blur mode",
-                blur.contains("setMiBackgroundBlurMode"));
-        assertTrue("carrier must use verified blend-color API",
-                blur.contains("setMiBackgroundBlendColors"));
-        assertTrue("Security Center verified advanced radius is 100",
-                policy.contains("ADVANCED_BLUR_RADIUS_PX = 100"));
+        assertTrue("semantic readiness must bind the custom glass session",
+                early.contains("SecurityCenterGlassRuntimeState.bindAssistant("));
+        assertTrue("custom presentation must use the typed vendor claim",
+                bridge.contains("void claimCustom("));
+        assertTrue("custom presentation must keep the shared pass-blur producer",
+                session.contains("new RootPassBlurBackend("));
+        assertFalse("the old framework-material configuration must not remain",
+                bridge.contains("configureAdvancedMaterial("));
     }
 
     @Test public void stableViewApiMirrorReplacesPrivateMaterialRestoreAuthorities() throws Exception {

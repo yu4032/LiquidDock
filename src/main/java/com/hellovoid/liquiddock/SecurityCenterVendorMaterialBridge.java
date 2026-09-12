@@ -14,8 +14,7 @@ final class SecurityCenterVendorMaterialBridge {
     private final Method clearMiBackgroundBlendColor;
     private final Method setMiBloomStroke;
     private final Method setMiShadow;
-    private WeakReference<Object> frameworkOwner = new WeakReference<>(null);
-    private WeakReference<View> frameworkDock = new WeakReference<>(null);
+    private WeakReference<Object> claimedOwner = new WeakReference<>(null);
 
     SecurityCenterVendorMaterialBridge(
             SecurityCenterSemanticContractResolver.ResolvedContract contract,
@@ -41,16 +40,10 @@ final class SecurityCenterVendorMaterialBridge {
         activeBridge = this;
     }
 
-    /** Eager framework-material claim used as soon as the semantic Dock carrier is ready. */
-    static boolean claimFrameworkDock(View turboLayout, View dockLayout) {
+    /** Full teardown of the temporary vendor-material claim. */
+    static void releaseClaim() {
         SecurityCenterVendorMaterialBridge bridge = activeBridge;
-        return bridge != null && bridge.claimFrameworkDockInternal(turboLayout, dockLayout);
-    }
-
-    /** Full teardown only. Normal panel close deliberately keeps the Dock carrier claimed. */
-    static void releaseFrameworkDock() {
-        SecurityCenterVendorMaterialBridge bridge = activeBridge;
-        if (bridge != null) bridge.releaseFrameworkDockInternal();
+        if (bridge != null) bridge.releaseClaimInternal();
     }
 
     void claimCustom(
@@ -58,25 +51,21 @@ final class SecurityCenterVendorMaterialBridge {
         if (!(turboLayout instanceof View) || dockLayout == null) {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
-        if (!claimFrameworkDockInternal((View) turboLayout, dockLayout)) {
-            throw new IllegalStateException("Security Center framework Dock material unavailable");
+        if (!claimCustomInternal((View) turboLayout, dockLayout)) {
+            throw new IllegalStateException("Security Center Dock material unavailable");
         }
     }
 
     void restoreVendor(Object turboLayout) {
         if (turboLayout == null) throw new IllegalArgumentException("turboLayout == null");
-        if (SecurityCenterMaterialModePolicy.retainFrameworkDockOnPanelClose()
-                && frameworkOwner.get() == turboLayout) {
-            return;
-        }
-        releaseFrameworkDockInternal(turboLayout);
+        releaseClaimInternal(turboLayout);
     }
 
-    private synchronized boolean claimFrameworkDockInternal(View turboLayout, View dockLayout) {
+    private synchronized boolean claimCustomInternal(View turboLayout, View dockLayout) {
         if (turboLayout == null || dockLayout == null) return false;
-        Object previousOwner = frameworkOwner.get();
+        Object previousOwner = claimedOwner.get();
         if (previousOwner != null && previousOwner != turboLayout) {
-            releaseFrameworkDockInternal(previousOwner);
+            releaseClaimInternal(previousOwner);
         }
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return false;
 
@@ -84,40 +73,27 @@ final class SecurityCenterVendorMaterialBridge {
             SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout);
             SecurityCenterVendorMaterialState.runModuleMutation(
                     () -> clearVendorTarget(dockLayout));
-            if (!SecurityCenterMaterialModePolicy.configureAdvancedMaterial(
-                    turboLayout, dockLayout)) {
-                throw new IllegalStateException("framework Dock material apply failed");
-            }
-            frameworkOwner = new WeakReference<>(turboLayout);
-            frameworkDock = new WeakReference<>(dockLayout);
+            claimedOwner = new WeakReference<>(turboLayout);
             return true;
         } catch (Throwable error) {
-            SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
             try { SecurityCenterVendorMaterialState.restoreOwner(turboLayout); }
             catch (Throwable ignored) {}
-            frameworkOwner = new WeakReference<>(null);
-            frameworkDock = new WeakReference<>(null);
+            claimedOwner = new WeakReference<>(null);
             return false;
         }
     }
 
-    private synchronized void releaseFrameworkDockInternal() {
-        Object owner = frameworkOwner.get();
-        if (owner != null) releaseFrameworkDockInternal(owner);
-        else {
-            SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
-            SecurityCenterMaterialModePolicy.resetLifecycle();
-            frameworkDock = new WeakReference<>(null);
-        }
+    private synchronized void releaseClaimInternal() {
+        Object owner = claimedOwner.get();
+        if (owner != null) releaseClaimInternal(owner);
+        else SecurityCenterMaterialModePolicy.resetLifecycle();
     }
 
-    private synchronized void releaseFrameworkDockInternal(Object owner) {
+    private synchronized void releaseClaimInternal(Object owner) {
         if (owner == null) return;
-        SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
         SecurityCenterVendorMaterialState.restoreOwner(owner);
-        if (frameworkOwner.get() == owner) {
-            frameworkOwner = new WeakReference<>(null);
-            frameworkDock = new WeakReference<>(null);
+        if (claimedOwner.get() == owner) {
+            claimedOwner = new WeakReference<>(null);
         }
         SecurityCenterMaterialModePolicy.resetLifecycle();
     }
