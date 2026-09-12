@@ -151,8 +151,15 @@ final class SecurityCenterGlassHook {
             });
 
             HookUtil.hook(sidebarLifecycle.show(), chain -> {
-                if (ACTIVATION.allowsMutation()) notifySidebarShowRequested(contract);
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (ACTIVATION.allowsMutation()) {
+                    SecurityCenterEarlyPrepareHook.onSidebarShowStarting();
+                    notifySidebarShowRequested(contract);
+                }
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (ACTIVATION.allowsMutation()) {
+                    SecurityCenterEarlyPrepareHook.rearmLastCustomOnSidebarShow();
+                }
+                return result;
             });
             HookUtil.hook(sidebarLifecycle.hideImmediate(), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
