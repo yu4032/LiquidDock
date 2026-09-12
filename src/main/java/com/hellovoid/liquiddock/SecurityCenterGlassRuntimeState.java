@@ -69,8 +69,14 @@ final class SecurityCenterGlassRuntimeState {
         sourceAuthorityAvailable = true;
     }
 
+    /** Config-only gate for framework material; it does not require the shader source producer. */
+    static boolean isMaterialEnabled() {
+        return coreEnabled && glassEnabled && securityCenterEnabled;
+    }
+
+    /** Shader/session gate. Framework Dock material deliberately does not depend on this. */
     static boolean isEnabled() {
-        return coreEnabled && glassEnabled && securityCenterEnabled && sourceAuthorityAvailable;
+        return isMaterialEnabled() && sourceAuthorityAvailable;
     }
 
     static void bindAssistant(View turbo, View dock, View box, int type) {
@@ -108,7 +114,7 @@ final class SecurityCenterGlassRuntimeState {
         if (SecurityCenterGlassRuntimeTransitionPolicy.plan(before, after).releaseAll) {
             runOnMain(() -> {
                 Owner currentOwner = owner;
-                if (currentOwner != null && !isEnabled()) currentOwner.releaseAll();
+                if (currentOwner != null && !isMaterialEnabled()) currentOwner.releaseAll();
             });
         }
     }
