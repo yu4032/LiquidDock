@@ -2,6 +2,15 @@
 
 ## Unreleased / main (2026-09-07)
 
+### Security Center Global Dock / All Apps Liquid Glass
+
+- 新增仅在 `com.miui.securitycenter:ui` 安装的安全中心侧边栏 Liquid Glass；首个支持 build 为 versionCode `40011320`（versionName `13.2.0-260806.0.1.pad`），仅接管 type-4 Global Dock 与其 All Apps 页面，type 1/3/5 保持 vendor-owned
+- 将 Launcher 中可复用的 root PassBlur producer、OES normalization、freshness、producer recovery 与 EGL source lifecycle 抽成 `RootPassBlurBackend`；Launcher 与 Security Center 都以显式 domain/request 使用它，native PassBlur scale 保持 `1.0`
+- Security Center Dock / All Apps 切换使用 scene generation + vendor `f17943s` authority；只有当前 generation 的真实 OES frame 完成 Prismal render 与 output swap 后才允许 material claim/reveal，旧 callback、bind/rebind 成功或普通 redraw 都不构成 freshness
+- HyperOS 4 vendor handoff 使用已验证的 `gq.g.l(View)` material reset 和 `TurboLayout.U()` 完整 final-background restore；unsupported build、reflection/producer/EGL failure 均 fail closed，不猜测 MiGlass/MaterialToken/blur/shadow 参数
+- 新增 `liquid_security_center_glass` typed setting 与三层 effective runtime gate（Core + Liquid Glass + Security Center component），并将 `com.miui.securitycenter` 加入 Xposed scope；Security Center 不运行 Launcher migration，也不进入 `MainHook.install()`
+- HyperOS 3 vendor capability 明确保持 background-blur-only；该规则仅用于未来兼容，不宣称当前 v1 已支持未分析的 HyperOS 3 Security Center
+
 ### Workspace continuous PassBlur
 
 - Workspace HOME shared PassBlur 从消费后一帧暂停改为持续 update permission；显式 Recents/folder/presentation coverage 仍由既有生命周期决定是否 suspend

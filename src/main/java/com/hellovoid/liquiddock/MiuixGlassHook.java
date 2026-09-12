@@ -13,11 +13,10 @@ import java.lang.reflect.Field;
 /**
  * MiuiX-specific zero-copy glass installer for HyperOS 3.0.307+ docks.
  *
- * The vendor background remains the authoritative Dock geometry shell. Parent compositor blur is
- * suppressed for both supported HotSeats owners. The themed BlurBackground2 material body is made
- * transparent because Prismal fully replaces it; the default MiuiX material body remains visible
- * as failure protection while LiquidDock renders PassBlur -> OES -> Prismal in a child TextureView.
- * There is deliberately no screen-capture fallback.
+ * The vendor background remains the authoritative Dock geometry shell. Parent compositor blur and
+ * the vendor material body are suppressed for both supported HotSeats owners once the attached
+ * Prismal host takes ownership. LiquidDock renders PassBlur -> OES -> Prismal in a child
+ * TextureView. There is deliberately no screen-capture fallback.
  */
 final class MiuixGlassHook {
     private static final String TAG = "[DC][MG]";
@@ -97,6 +96,7 @@ final class MiuixGlassHook {
         }
         removeVendorGpuBlurSuppressor();
         Miuix307ZeroCopyRenderer.clear();
+        restoreVendorMaterialBody();
         clearTrackedViews();
     });
 }
@@ -157,9 +157,18 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
                 && Miuix307ZeroCopyRenderer.isActive();
     }
 
-    static boolean hasReadyNativeGeometry(View dockBg) {
+    /**
+     * Geometry callbacks can arrive after the material View is already attached and visible.
+     * Binding at this boundary prevents the first Dock reveal from briefly retaining the vendor
+     * material while width, height, or radius are still being committed.
+     */
+    static boolean canInstallBeforeGeometry(View dockBg) {
         if (dockBg == null || !isNativeVisualOwner(dockBg)) return false;
-        if (!dockBg.isAttachedToWindow() || !(dockBg.getParent() instanceof ViewGroup)) return false;
+        return dockBg.isAttachedToWindow() && dockBg.getParent() instanceof ViewGroup;
+    }
+
+    static boolean hasReadyNativeGeometry(View dockBg) {
+        if (!canInstallBeforeGeometry(dockBg)) return false;
         if (dockBg.getWidth() <= 0 || dockBg.getHeight() <= 0) return false;
         float radius = readRadius(dockBg);
         return !Float.isNaN(radius) && !Float.isInfinite(radius) && radius > 0.5f;
@@ -195,7 +204,12 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
             syncGeometry(dockBg, config);
             return true;
         }
-        if (!hasReadyNativeGeometry(dockBg)) return false;
+        if (!canInstallBeforeGeometry(dockBg)) return false;
+        if (!hasReadyNativeGeometry(dockBg)) {
+            MainHook.log(TAG + " installing Prismal host before final native geometry"
+                    + " size=" + dockBg.getWidth() + "x" + dockBg.getHeight()
+                    + " radius=" + readNativeOpticsRadius(dockBg));
+        }
 
         removeVendorGpuBlurSuppressor();
         Miuix307ZeroCopyRenderer.clear();
@@ -203,6 +217,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (previousHost != null && previousHost.getParent() instanceof ViewGroup) {
             ((ViewGroup) previousHost.getParent()).removeView(previousHost);
         }
+        restoreVendorMaterialBody();
         clearTrackedViews();
 
         if (nativeVisualOwner) suppressVendorGpuBlur(dockBg);
@@ -335,8 +350,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     }
 
     private static boolean shouldSuppressVendorMaterialBody(View dockBg) {
-        return dockBg != null
-                && COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName());
+        return isNativeVisualOwner(dockBg);
     }
 
     static void suppressVendorGpuBlur(View dockBg) {
@@ -412,7 +426,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (dockBg.getBackground() != transparentMaterialBody) dockBg.setBackground(transparentMaterialBody);
         if (materialBodyLoggedFor.get() != dockBg) {
             materialBodyLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " themed vendor material body transparent; native optics radius="
+            MainHook.log(TAG + " vendor material body transparent; native optics radius="
                     + radius + " class=" + dockBg.getClass().getSimpleName());
         }
     }

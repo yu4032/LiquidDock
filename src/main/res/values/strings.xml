@@ -3,6 +3,7 @@
     <string name="app_name">LiquidDock</string>
     <string name="action_back">Back</string>
     <string name="action_restart_launcher">Restart desktop</string>
+    <string name="action_restart_security_center">Restart Security Center</string>
     <string name="action_restart_system_ui">Restart System UI</string>
     <string name="page_grid">Home screen layout</string>
     <string name="page_dock">Dock size and blur</string>
@@ -59,6 +60,8 @@
     <string name="recents_header_summary">Adjust the system wallpaper blur shown behind task cards; restart the launcher to apply.</string>
     <string name="liquid_enable">Enable liquid glass</string>
     <string name="liquid_enable_summary">Turning off releases the live glass layer immediately; restart the launcher to fully install glass hooks after enabling</string>
+    <string name="liquid_security_center_glass_enable">Security Center sidebar glass</string>
+    <string name="liquid_security_center_glass_enable_summary">Use LiquidDock glass for the supported Global Dock and All Apps sidebar; Security Center restores its native material or blur when LiquidDock releases ownership.</string>
     <string name="liquid_folder_glass_enable">Enable folder glass</string>
     <string name="liquid_folder_glass_enable_summary">Applies liquid glass to supported home-screen folders; restart launcher to apply</string>
     <string name="liquid_blur_method">Blur method</string>

@@ -26,6 +26,12 @@ final class UnlockCaptureRecoveryState {
     private boolean rolloverRequested;
 
     synchronized Decision onPrepare() {
+        // Preserve the active serial only while a real rollover completion is still in flight.
+        // A failed/stale blocked cycle has no completion authority left, so the next PREPARE must
+        // be able to arm a new recovery cycle instead of turning blocked into a permanent latch.
+        if (blocked && rolloverRequested) {
+            return new Decision(false, false, false, activeSerial);
+        }
         activeSerial = ++nextSerial;
         blocked = true;
         rolloverRequested = false;
@@ -52,6 +58,18 @@ final class UnlockCaptureRecoveryState {
             return new Decision(false, false, false, activeSerial);
         }
         if (!success) {
+            // The current cycle remains fail-closed, but this completion is terminal: it is no
+            // longer an in-flight rollover that may protect the serial from the next PREPARE.
+            rolloverRequested = false;
+            return new Decision(false, false, false, activeSerial);
+        }
+        blocked = false;
+        rolloverRequested = false;
+        return new Decision(false, false, true, activeSerial);
+    }
+
+    synchronized Decision onBarrierTimeout(long serial) {
+        if (!blocked || serial != activeSerial) {
             return new Decision(false, false, false, activeSerial);
         }
         blocked = false;

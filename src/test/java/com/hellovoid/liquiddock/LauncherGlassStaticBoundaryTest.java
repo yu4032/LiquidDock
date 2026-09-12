@@ -52,8 +52,8 @@ public class LauncherGlassStaticBoundaryTest {
         assertFalse(layer.contains("setTransform("));
         assertTrue(layer.contains("session.onWorkspaceScrollMutation"));
 
-        // Geometry may be projected to the latest Workspace scroll, but the prepared backdrop
-        // remains in root coordinates and is not translated as a whole output surface.
+        // This is retained legacy source-reader debt. New runtime callback/freshness contracts
+        // belong in typed production state tests rather than method-body/source-order assertions.
         assertTrue(session.contains("onWorkspaceScrollMutation"));
         assertTrue(session.contains("workspaceScrollProjection"));
         assertTrue(session.contains("projectCenterX"));
@@ -62,17 +62,5 @@ public class LauncherGlassStaticBoundaryTest {
 
         assertFalse(hook.contains("WorkspaceScrollMotionTracker"));
         assertFalse(layer.contains("WorkspaceScrollMotionTracker"));
-    }
-
-    @Test
-    public void sourceFrameCallbackDrainsInlineOnRenderHandler() throws Exception {
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
-
-        // SurfaceTexture delivers this callback on renderHandler already. Re-posting the drain
-        // adds another queue turn before updateTexImage()/backdrop rebuild and makes source lag
-        // strictly worse under Workspace motion.
-        assertTrue(session.contains("framePolicy.request(false);"));
-        assertTrue(session.contains("drainFrameWork();"));
-        assertFalse(session.contains("if (shouldRender) requestFrame(false);"));
     }
 }
