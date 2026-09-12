@@ -51,20 +51,24 @@ public class SecurityCenterFrameworkDockContractTest {
     }
 
     @Test
-    public void frameworkOwnershipIsDockOnlyAndAllAppsStaysVendorOwned() throws Exception {
+    public void frameworkOwnershipCoversDockToolboxAndAllAppsButNeverTheTurboRoot() throws Exception {
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        assertFalse("All Apps must never be a vendor-material carrier claimed by the module",
+        assertFalse("policy must not revive the removed advanced-material carriers",
                 policy.contains("advancedApps"));
         assertFalse("All Apps must never receive module pass-window blur",
                 policy.contains("applyPassWindowBlur(\n                    apps"));
         assertFalse("Turbo root is a source host, not a cleared material carrier",
                 bridge.contains("clearVendorTarget(turboView)"));
-        assertFalse("All Apps must keep its vendor material",
-                bridge.contains("clearVendorTarget(allAppsLayout)"));
-        assertTrue("custom handoff must clear only the vendor Dock carrier",
+        assertTrue("Dock vendor material must be cleared at the custom handoff",
                 bridge.contains("clearVendorTarget(dockLayout)"));
+        assertTrue("the upper toolbox carrier must be cleared at the custom handoff",
+                bridge.contains("clearVendorTarget(boxMaterialView)"));
+        assertTrue("All Apps vendor material must be cleared at the custom handoff",
+                bridge.contains("clearVendorTarget(allAppsLayout)"));
+        assertTrue("the claim must register exactly the three cleared carriers",
+                bridge.contains("dockLayout, boxMaterialView, allAppsLayout"));
     }
 
     @Test
