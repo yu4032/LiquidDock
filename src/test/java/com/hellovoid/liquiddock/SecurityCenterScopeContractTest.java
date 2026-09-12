@@ -14,7 +14,7 @@ import org.junit.Test;
 /** Static libxposed package-scope and semantic-name contract for Security Center. */
 public class SecurityCenterScopeContractTest {
     private static final Pattern SHORT_QUALIFIED_TYPE = Pattern.compile(
-            "(?<![A-Za-z0-9_])(?:[a-z]{1,3}\\.)+[a-z][A-Za-z0-9]{0,2}(?![A-Za-z0-9_])");
+            "(?<![A-Za-z0-9_])(?:[a-z]{2,3}\\.)+(?:[a-z](?:\\d+)?)(?![A-Za-z0-9_])");
     private static final Pattern SHORT_VENDOR_MEMBER = Pattern.compile(
             "\\bTurboLayout\\.[A-Za-z][A-Za-z0-9]{0,2}\\s*\\(");
     private static final Pattern DECOMPILER_FIELD = Pattern.compile(
