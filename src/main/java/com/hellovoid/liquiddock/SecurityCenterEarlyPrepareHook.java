@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-/** Defers Security Center material binding until the configured panel views are actually ready. */
+/** Defers Security Center material binding until the configured panel views are ready. */
 final class SecurityCenterEarlyPrepareHook {
     private static final Object LOCK = new Object();
     private static final Set<Method> INSTALLED = new HashSet<>();
@@ -19,6 +19,12 @@ final class SecurityCenterEarlyPrepareHook {
     private static final int ASSISTANT_GAME = 1;
     private static final int ASSISTANT_VIDEO = 3;
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
+    private static WeakReference<View> rearmTurboRef = new WeakReference<>(null);
+    private static int rearmType;
+    private static SecurityCenterSemanticContractResolver.ResolvedContract rearmContract;
+    private static int rearmVideoMainContentResId;
+    private static WeakReference<View> activeTurboRef = new WeakReference<>(null);
+    private static int activeType;
 
     private SecurityCenterEarlyPrepareHook() {}
 
@@ -37,7 +43,20 @@ final class SecurityCenterEarlyPrepareHook {
             if (!(turboObject instanceof View) || typeArg == null) return result;
             try {
                 int type = assistantType(typeArg, contract);
-                if (type == 0) return result;
+                if (type == 0) {
+                    clearCustomRearm();
+                    return result;
+                }
+                SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                        SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
+                if (!transition.rearmOnSidebarShow) clearCustomRearm();
+                if (!transition.requiresDeferredPrepare) {
+                    SecurityCenterGlassRuntimeState.bindAssistant(null, null, null, type);
+                    log("immediate vendor handoff type=" + type, null);
+                    return result;
+                }
+                rememberCustomRearm(
+                        (View) turboObject, type, contract, videoMainContentResId);
                 armPendingPrepare(
                         (View) turboObject, type, contract, videoMainContentResId);
             } catch (Throwable error) {
@@ -45,6 +64,73 @@ final class SecurityCenterEarlyPrepareHook {
             }
             return result;
         });
+    }
+
+    static void onSidebarShowStarting() {
+        synchronized (LOCK) {
+            activeTurboRef = new WeakReference<>(null);
+            activeType = 0;
+        }
+    }
+
+    static void rearmLastCustomOnSidebarShow() {
+        final View turbo;
+        final int type;
+        final SecurityCenterSemanticContractResolver.ResolvedContract contract;
+        final int videoMainContentResId;
+        synchronized (LOCK) {
+            turbo = rearmTurboRef.get();
+            type = rearmType;
+            contract = rearmContract;
+            videoMainContentResId = rearmVideoMainContentResId;
+            if (turbo == null || contract == null || type == 0) {
+                clearCustomRearmLocked();
+                return;
+            }
+            if (activeTurboRef.get() == turbo && activeType == type) {
+                return;
+            }
+        }
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
+        if (!transition.rearmOnSidebarShow) return;
+        armPendingPrepare(turbo, type, contract, videoMainContentResId);
+        log("sidebar show rearmed material type=" + type, null);
+    }
+
+    private static void rememberCustomRearm(
+            View turbo,
+            int type,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract,
+            int videoMainContentResId) {
+        synchronized (LOCK) {
+            rearmTurboRef = new WeakReference<>(turbo);
+            rearmType = type;
+            rearmContract = contract;
+            rearmVideoMainContentResId = videoMainContentResId;
+        }
+    }
+
+    private static void markActive(View turbo, int type) {
+        synchronized (LOCK) {
+            activeTurboRef = new WeakReference<>(turbo);
+            activeType = type;
+        }
+    }
+
+    private static void clearCustomRearm() {
+        synchronized (LOCK) {
+            clearCustomRearmLocked();
+        }
+    }
+
+    private static void clearCustomRearmLocked() {
+        rearmTurboRef = new WeakReference<>(null);
+        rearmType = 0;
+        rearmContract = null;
+        rearmVideoMainContentResId = 0;
+        activeTurboRef = new WeakReference<>(null);
+        activeType = 0;
     }
 
     private static void armPendingPrepare(
@@ -63,25 +149,41 @@ final class SecurityCenterEarlyPrepareHook {
 
     private static boolean tryBindWhenReady(PendingPrepare pending) {
         View turbo = pending.turboRef.get();
-        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()) return false;
+        if (turbo == null || !SecurityCenterGlassRuntimeState.isMaterialEnabled()) return false;
         try {
+            SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                    SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(pending.type);
+
             Object dockObject = invoke(pending.contract.dockGetter(), turbo);
             if (!(dockObject instanceof View)) return false;
             View dock = (View) dockObject;
 
-            View boxMaterial = resolveBoxMaterial(
-                    turbo,
-                    pending.type,
-                    pending.contract,
-                    pending.videoMainContentResId);
-            if ((pending.type == ASSISTANT_GAME || pending.type == ASSISTANT_VIDEO)
-                    && boxMaterial == null) {
-                return false;
+            if (transition.backend
+                    == SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.CUSTOM_SHADER) {
+                if (!SecurityCenterGlassRuntimeState.isEnabled()) return false;
+                View boxMaterial = resolveBoxMaterial(
+                        turbo,
+                        pending.type,
+                        pending.contract,
+                        pending.videoMainContentResId);
+                if (pending.type == ASSISTANT_VIDEO && boxMaterial == null) return false;
+                SecurityCenterGlassRuntimeState.bindAssistant(
+                        turbo, dock, boxMaterial, pending.type);
+                markActive(turbo, pending.type);
+                log("custom shader prepared type=" + pending.type, null);
+                return true;
             }
-            SecurityCenterGlassRuntimeState.bindAssistant(
-                    turbo, dock, boxMaterial, pending.type);
-            log("deferred prepare bound type=" + pending.type, null);
-            return true;
+
+            if (transition.backend
+                    == SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.FRAMEWORK_PASS_WINDOW) {
+                if (!SecurityCenterVendorMaterialBridge.claimFrameworkDock(turbo, dock)) {
+                    return false;
+                }
+                markActive(turbo, pending.type);
+                log("framework Dock prepared type=" + pending.type, null);
+                return true;
+            }
+            return false;
         } catch (Throwable error) {
             log("deferred prepare not ready", error);
             return false;
@@ -103,15 +205,10 @@ final class SecurityCenterEarlyPrepareHook {
             SecurityCenterSemanticContractResolver.ResolvedContract contract,
             int videoMainContentResId) {
         if (type == ASSISTANT_GLOBAL_DOCK) return null;
+        if (type != ASSISTANT_VIDEO) return null;
         Object boxObject = invoke(contract.boxGetter(), turbo);
         if (!(boxObject instanceof View)) return null;
         View box = (View) boxObject;
-        if (type == ASSISTANT_GAME) {
-            if (!contract.gameBoxClass().isInstance(box)) return null;
-            Object material = invoke(contract.gameMaterialGetter(), box);
-            return material instanceof View && contract.gameMaterialClass().isInstance(material)
-                    ? (View) material : null;
-        }
         View material = box.findViewById(videoMainContentResId);
         return material != null && material.getId() == videoMainContentResId ? material : null;
     }

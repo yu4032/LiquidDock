@@ -26,6 +26,13 @@ public class PassBlurBindPolicyTest {
     }
 
     @Test
+    public void securityCenterPausesAfterFreshSourceWhileContinuousDomainsStayLive() {
+        assertTrue(PassBlurBindPolicy.shouldPauseAfterFreshFrame(PassBlurDomain.SECURITY_CENTER));
+        assertFalse(PassBlurBindPolicy.shouldPauseAfterFreshFrame(PassBlurDomain.LAUNCHER_WORKSPACE));
+        assertFalse(PassBlurBindPolicy.shouldPauseAfterFreshFrame(PassBlurDomain.DOCK));
+    }
+
+    @Test
     public void exclusionsUseRuntimeRootAndRemoveDuplicates() {
         assertArrayEquals(
                 new String[]{

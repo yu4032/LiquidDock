@@ -8,12 +8,12 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Regression contracts for the single-owner Security Center PassBlur producer. */
+/** Regression contracts for Security Center material ownership and zero-copy shader recovery. */
 public class SecurityCenterPassBlurOwnershipContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void claimedVendorBlurCannotReplaceTheModuleProducer() throws Exception {
+    public void claimedVendorBlurCannotReplaceALegacyModuleProducer() throws Exception {
         String state = Files.readString(
                 MAIN.resolve("SecurityCenterVendorMaterialState.java"));
         String bridge = Files.readString(
@@ -25,50 +25,43 @@ public class SecurityCenterPassBlurOwnershipContractTest {
 
         assertTrue("claimed vendor calls must be suppressed from reaching ViewRootImpl",
                 state.contains("successfulSuppressionResult(method)"));
-        assertTrue("claim must clear the already-active native pass-window output",
+        assertTrue("custom claim must clear an already-active native pass-window output",
                 bridge.contains("MiBlurBridge.clearPassWindowBlur(target)"));
-        assertTrue("a changed vendor claim must request a fresh module producer binding",
+        assertTrue("changed vendor claim keeps its producer-rebind recovery",
                 coordinator.contains("requestSourceRebind("));
-        assertTrue("the session must expose producer rebind to the coordinator",
+        assertTrue("session keeps producer rebind available to the coordinator",
                 session.contains("requestSourceRebind("));
     }
 
     @Test
-    public void securityCenterUsesPassBlurAsPrismalInputAndReplacesVendorMaterial()
+    public void activeSecurityCenterPathUsesZeroCopyPrismalWithVendorFallbackOwnership()
             throws Exception {
         String policy = Files.readString(
                 MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
-        String coordinator = Files.readString(
-                MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+        String transition = Files.readString(
+                MAIN.resolve("SecurityCenterGlassRuntimeTransitionPolicy.java"));
+        String early = Files.readString(
+                MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(
                 MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String session = Files.readString(
                 MAIN.resolve("SecurityCenterGlassSession.java"));
-        String passBlur = Files.readString(
-                MAIN.resolve("Miuix307PassBlurBridge.java"));
 
-        assertTrue("Security Center must use LiquidDock's Prismal material path",
+        assertTrue("Video/Global must select the custom shader backend",
+                transition.contains("AssistantBackend.CUSTOM_SHADER"));
+        assertTrue("Security Center active material must be Prismal shader",
                 policy.contains("return LiquidBlurMode.SHADER;"));
-        assertTrue("Prismal must calculate the material from the PassBlur input",
-                policy.contains("static boolean useShaderBlur() {\n        return true;")
-                        && session.contains("prismalRenderer.prepareBackdrop(")
-                        && session.contains("prismalRenderer.drawGlass("));
-        assertTrue("the source must be bound through SurfaceFlinger PassBlur",
-                session.contains("PassBlurBindRequest.securityCenter(root)")
-                        && passBlur.contains("SetPassBlurSurface"));
-        assertTrue("the coordinator must create the PassBlur/Prismal session",
-                coordinator.contains("bindAttachedRoot(turboLayout)")
-                        && !coordinator.contains("usesDirectNativeMaterial()"));
-        assertTrue("Prismal output must replace the vendor material at handoff",
-                bridge.contains("claimCustom(")
-                        && coordinator.contains("bridge.claimCustom(turbo, dock, box, apps)"));
-        assertTrue("Dock, upper toolbox, and All Apps vendor carriers must all be cleared",
-                bridge.contains("dockLayout, boxMaterialView, allAppsLayout")
-                        && bridge.contains("clearVendorTarget(boxMaterialView)")
-                        && bridge.contains("clearVendorTarget(allAppsLayout)"));
-        assertTrue("Security Center must not fall back to ordinary vendor background blur",
-                !policy.contains("MiBlurBridge.applyPassWindowBlur(")
-                        && !bridge.contains("configureAdvancedMaterial("));
+        assertTrue("active Prismal rendering must keep shader blur enabled",
+                policy.contains("static boolean useShaderBlur() {\n        return true;"));
+        assertTrue("semantic readiness must bind the typed root-bound OES/Prismal session",
+                early.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                        turbo, dock, boxMaterial, pending.type)"));
+        assertTrue("custom ownership must latch vendor fallback before destructive handoff",
+                bridge.contains("claimCustomInternal")
+                        && bridge.contains("protectVendorFallbackInternal("));
+        assertTrue("the active path must retain the shared zero-copy root PassBlur producer",
+                session.contains("new RootPassBlurBackend("));
+        assertFalse("active Video/Global readiness must not directly claim framework Dock blur",
+                early.contains("AssistantBackend.CUSTOM_SHADER) {\n                if (!SecurityCenterGlassRuntimeState.isEnabled()) return false;\n                SecurityCenterVendorMaterialBridge.claimFrameworkDock"));
     }
 
     @Test

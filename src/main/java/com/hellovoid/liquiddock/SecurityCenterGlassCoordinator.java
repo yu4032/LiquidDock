@@ -361,6 +361,51 @@ final class SecurityCenterGlassCoordinator
         clearFrameState();
     }
 
+    boolean rolloverSourceAuthority(Object previousAuthority, Object currentAuthority) {
+        if (previousAuthority == null || currentAuthority == null
+                || previousAuthority.equals(currentAuthority)
+                || !SecurityCenterGlassRuntimeState.isEnabled()) return false;
+        try {
+            View turbo = turboRef.get();
+            if (turbo == null || !turbo.isAttachedToWindow()) return false;
+
+            SecurityCenterGlassSceneState.Target target = targetKind;
+            if (target == null || scene.scene() == SecurityCenterGlassSceneState.Scene.DETACHED) {
+                return false;
+            }
+
+            SecurityCenterGlassSceneState.Decision decision = scene.onSourceAuthorityChanged(target);
+            if (!decision.invalidateGeneration) return false;
+
+            reconcileSinks();
+            syncSinksFromMaterials();
+            SecurityCenterGlassFrameGeometry frame = captureFrame(
+                    target == SecurityCenterGlassSceneState.Target.ALL_APPS);
+
+            hideAndRestoreVendor();
+            prepareCustomOwnershipForPresentation();
+            currentFrame = frame;
+
+            SecurityCenterGlassSession live = session;
+            if (frame == null || live == null || live.isShutdown()) {
+                log("source authority changed; waiting fail-closed for a capturable frame", null);
+                return true;
+            }
+
+            live.requestSourceRebind("security-center-source-authority");
+            requestCurrentGeneration(frame);
+            log("source authority rollover generation=" + decision.generation
+                    + " target=" + target
+                    + " previous=" + previousAuthority
+                    + " current=" + currentAuthority, null);
+            return true;
+        } catch (Throwable error) {
+            log("source authority rollover failed closed", error);
+            try { releaseAll(); } catch (Throwable ignored) {}
+            return false;
+        }
+    }
+
     @Override
     public void onWindowVisibilityRestored(
             SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
@@ -465,7 +510,27 @@ final class SecurityCenterGlassCoordinator
         log("All Apps presented composition matched target present=" + settled.allAppsPresent
                 + " generation=" + settled.generation
                 + " nodes=" + frame.nodeCount(), null);
-        onAllAppsToggleSettled(turbo, settled.allAppsPresent, settled.generation);
+        applyPresentedAllAppsSettlement(settled, frame);
+    }
+
+    private void applyPresentedAllAppsSettlement(
+            SecurityCenterAllAppsSettleState.Decision settled,
+            SecurityCenterGlassFrameGeometry presentedFrame) {
+        if (settled == null || !settled.settle || presentedFrame == null) return;
+        SecurityCenterGlassSceneState.Target nextKind = settled.allAppsPresent
+                ? SecurityCenterGlassSceneState.Target.ALL_APPS
+                : SecurityCenterGlassSceneState.Target.DOCK;
+        SecurityCenterGlassSceneState.Decision sceneSettled =
+                scene.onGeometrySettled(nextKind, settled.generation);
+        if (!sceneSettled.requestFresh) {
+            log("stale presented settle ignored target=" + nextKind
+                    + " generation=" + settled.generation
+                    + " currentGeneration=" + scene.generation(), null);
+            return;
+        }
+        targetKind = nextKind;
+        currentFrame = presentedFrame;
+        applyDecision(sceneSettled, presentedFrame);
     }
 
     private void bindAttachedRoot(View turboLayout) {

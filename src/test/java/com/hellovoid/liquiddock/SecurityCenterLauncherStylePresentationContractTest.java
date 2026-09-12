@@ -8,47 +8,43 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Locks verified Security Center Dock/toolbox/All Apps material ownership and remaining shader-session boundaries. */
+/** Locks the active shader presentation path plus framework/vendor recovery boundaries. */
 public class SecurityCenterLauncherStylePresentationContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void customOwnershipClearsDockToolboxAndAllAppsButKeepsTurboAsSourceHost() throws Exception {
+    @Test public void activePresentationUsesPrismalWhileFrameworkDockRemainsDormant() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
-        assertTrue("Dock, upper toolbox and All Apps are the claimed carriers",
-                bridge.contains("dockLayout, boxMaterialView, allAppsLayout"));
-        assertTrue("Dock vendor material must be cleared before module material is applied",
-                bridge.contains("clearVendorTarget(dockLayout)"));
-        assertTrue("the upper toolbox carrier must be cleared before module material is applied",
-                bridge.contains("clearVendorTarget(boxMaterialView)"));
-        assertTrue("All Apps vendor material must be cleared before module material is applied",
-                bridge.contains("clearVendorTarget(allAppsLayout)"));
+        assertTrue("framework material must remain available as a typed dormant Dock claim",
+                bridge.contains("claimFrameworkDockInternal"));
         assertFalse("Turbo/root is only the pass-window host and must not be cleared as a carrier",
                 bridge.contains("clearVendorTarget(turboView)"));
-        assertTrue("Security Center selects LiquidDock's shader material",
+        assertTrue("Security Center active Video/Global path selects Prismal shader material",
                 policy.contains("return LiquidBlurMode.SHADER;"));
-        assertTrue("Security Center enables shader blur in its Prismal parameters",
+        assertTrue("Security Center active path enables shader blur",
                 policy.contains("static boolean useShaderBlur() {\n        return true;"));
-        assertTrue("claimed Dock carrier clears its ordinary background",
-                bridge.contains("target.setBackground(null)"));
+        assertTrue("verified framework fallback remains present without becoming the active route",
+                policy.contains("MiBlurBridge.setPassWindowBlurEnabled(turbo, true)")
+                        && policy.contains("MiBlurBridge.applyPassWindowBlur("));
     }
 
-    @Test public void customShaderUsesSharedPassBlurSourceAndTypedVendorClaim() throws Exception {
+    @Test public void activeMaterialUsesTypedCustomSessionInsteadOfFrameworkClaim() throws Exception {
         String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
-        String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
+        String transition = Files.readString(
+                MAIN.resolve("SecurityCenterGlassRuntimeTransitionPolicy.java"));
 
-        assertFalse("custom glass must not self-blur the TextureView sink",
+        assertFalse("shader Dock must not self-blur a TextureView sink through framework APIs",
                 policy.contains("applyContentBlur(sink"));
-        assertTrue("semantic readiness must bind the custom glass session",
-                early.contains("SecurityCenterGlassRuntimeState.bindAssistant("));
-        assertTrue("custom presentation must use the typed vendor claim",
-                bridge.contains("void claimCustom("));
-        assertTrue("custom presentation must keep the shared pass-blur producer",
-                session.contains("new RootPassBlurBackend("));
-        assertFalse("the old framework-material configuration must not remain",
-                bridge.contains("configureAdvancedMaterial("));
+        assertTrue("Video/Global readiness must start the root-bound OES/Prismal session",
+                early.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                        turbo, dock, boxMaterial, pending.type)"));
+        assertTrue("custom handoff must use the typed vendor material bridge",
+                bridge.contains("void claimCustom(") && bridge.contains("claimCustomInternal"));
+        assertTrue("typed assistant policy must expose the custom shader backend",
+                transition.contains("AssistantBackend.CUSTOM_SHADER"));
+        assertTrue("framework presentation remains only a dormant capability",
+                bridge.contains("static boolean claimFrameworkDock("));
     }
 
     @Test public void stableViewApiMirrorReplacesPrivateMaterialRestoreAuthorities() throws Exception {

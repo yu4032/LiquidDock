@@ -8,11 +8,13 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Release-only contract: R8 must not rewrite the Xposed timing boundary. */
+/** Release-only contract: R8 must not rewrite runtime-by-name boundaries. */
 public class R8ReleaseKeepContractTest {
     private static final Path KEEP = Path.of("src/main/keepRules/liquiddock.keep");
     private static final Path REFLECTION_KEEP =
             Path.of("src/main/keepRules/runtime-reflection.keep");
+    private static final Path SECURITY_CENTER_AUTHORITY = Path.of(
+            "src/main/java/com/hellovoid/liquiddock/SecurityCenterSourceAuthorityController.java");
 
     @Test public void xposedTimingBoundaryHasTargetedKeepRules() throws Exception {
         assertTrue("AGP 9.3 keepRules source-set file must exist", Files.exists(KEEP));
@@ -28,6 +30,8 @@ public class R8ReleaseKeepContractTest {
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionRuntime { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionTracker { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.LauncherGlassHomePresentationHook { *; }"));
+        assertFalse("Removed screenshot-era classes must not retain stale keep rules",
+                rules.contains("LiveScreenCapture"));
 
         assertFalse("Do not disable R8 for the whole project",
                 rules.contains("-keep class com.hellovoid.liquiddock.** { *; }"));
@@ -39,5 +43,26 @@ public class R8ReleaseKeepContractTest {
                 "com.hellovoid.liquiddock.Miuix307PassBlurBridge$Binding binding;"));
         assertFalse(reflectionRules.contains("void rebindProducer();"));
         assertFalse(reflectionRules.contains("LauncherGlassSession"));
+        assertFalse(reflectionRules.contains("SecurityCenterGlassCoordinator"));
+        assertFalse(reflectionRules.contains("SecurityCenterGlassSession"));
+    }
+
+    @Test public void securityCenterAuthorityUsesTypedProjectOwnedApis() throws Exception {
+        assertTrue("Security Center authority controller source must exist",
+                Files.exists(SECURITY_CENTER_AUTHORITY));
+        String source = Files.readString(SECURITY_CENTER_AUTHORITY);
+
+        assertFalse("Project-owned Security Center lifecycle must not use raw reflection",
+                source.contains("java.lang.reflect."));
+        assertFalse("Project-owned coordinator members must not be resolved by class literal",
+                source.contains("SecurityCenterGlassCoordinator.class"));
+        assertFalse("Project-owned session members must not be resolved by class literal",
+                source.contains("SecurityCenterGlassSession.class"));
+        assertFalse("Project-owned fields must not be resolved by name",
+                source.contains("getDeclaredField("));
+        assertFalse("Project-owned methods must not be resolved by name",
+                source.contains("getDeclaredMethod("));
+        assertTrue("Authority rollover must delegate through the typed coordinator API",
+                source.contains("coordinator.rolloverSourceAuthority("));
     }
 }

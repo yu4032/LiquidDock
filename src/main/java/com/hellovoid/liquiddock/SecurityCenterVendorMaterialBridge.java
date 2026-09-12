@@ -15,6 +15,8 @@ final class SecurityCenterVendorMaterialBridge {
     private final Method setMiBloomStroke;
     private final Method setMiShadow;
     private WeakReference<Object> claimedOwner = new WeakReference<>(null);
+    private WeakReference<Object> frameworkOwner = new WeakReference<>(null);
+    private WeakReference<View> frameworkDock = new WeakReference<>(null);
 
     SecurityCenterVendorMaterialBridge(
             SecurityCenterSemanticContractResolver.ResolvedContract contract,
@@ -40,7 +42,13 @@ final class SecurityCenterVendorMaterialBridge {
         activeBridge = this;
     }
 
-    /** Full teardown of the temporary vendor-material claim. */
+    /** Eager framework-material claim used once the semantic Dock carrier is ready. */
+    static boolean claimFrameworkDock(View turboLayout, View dockLayout) {
+        SecurityCenterVendorMaterialBridge bridge = activeBridge;
+        return bridge != null && bridge.claimFrameworkDockInternal(turboLayout, dockLayout);
+    }
+
+    /** Full teardown of either framework or legacy custom material ownership. */
     static void releaseClaim() {
         SecurityCenterVendorMaterialBridge bridge = activeBridge;
         if (bridge != null) bridge.releaseClaimInternal();
@@ -70,7 +78,46 @@ final class SecurityCenterVendorMaterialBridge {
 
     void restoreVendor(Object turboLayout) {
         if (turboLayout == null) throw new IllegalArgumentException("turboLayout == null");
+        if (frameworkOwner.get() == turboLayout) {
+            if (SecurityCenterMaterialModePolicy.retainFrameworkDockOnPanelClose()) return;
+            releaseFrameworkDockInternal(turboLayout);
+            return;
+        }
         releaseClaimInternal(turboLayout);
+    }
+
+    private synchronized boolean claimFrameworkDockInternal(View turboLayout, View dockLayout) {
+        if (turboLayout == null || dockLayout == null) return false;
+        Object previousFrameworkOwner = frameworkOwner.get();
+        if (previousFrameworkOwner != null && previousFrameworkOwner != turboLayout) {
+            releaseFrameworkDockInternal(previousFrameworkOwner);
+        }
+        Object previousCustomOwner = claimedOwner.get();
+        if (previousCustomOwner != null) {
+            releaseClaimInternal(previousCustomOwner);
+        }
+        if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return false;
+
+        try {
+            SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout);
+            SecurityCenterVendorMaterialState.runModuleMutation(
+                    () -> clearVendorTarget(dockLayout));
+            if (!SecurityCenterMaterialModePolicy.configureAdvancedMaterial(
+                    turboLayout, dockLayout)) {
+                throw new IllegalStateException("framework Dock material apply failed");
+            }
+            frameworkOwner = new WeakReference<>(turboLayout);
+            frameworkDock = new WeakReference<>(dockLayout);
+            return true;
+        } catch (Throwable error) {
+            SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
+            try { SecurityCenterVendorMaterialState.restoreOwner(turboLayout); }
+            catch (Throwable ignored) {}
+            frameworkOwner = new WeakReference<>(null);
+            frameworkDock = new WeakReference<>(null);
+            SecurityCenterMaterialModePolicy.resetLifecycle();
+            return false;
+        }
     }
 
     private synchronized boolean protectVendorFallbackInternal(
@@ -83,9 +130,6 @@ final class SecurityCenterVendorMaterialBridge {
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return false;
 
         try {
-            // Claiming alone is non-destructive: vendor intent keeps being recorded, but late
-            // material clears cannot blank the panel while the custom TextureView is still
-            // waiting for a real presentation acknowledgement.
             SecurityCenterVendorMaterialState.claimOwner(
                     turboLayout, dockLayout, boxMaterialView, allAppsLayout);
             claimedOwner = new WeakReference<>(turboLayout);
@@ -118,9 +162,32 @@ final class SecurityCenterVendorMaterialBridge {
     }
 
     private synchronized void releaseClaimInternal() {
-        Object owner = claimedOwner.get();
-        if (owner != null) releaseClaimInternal(owner);
-        else SecurityCenterMaterialModePolicy.resetLifecycle();
+        boolean released = false;
+        Object owner = frameworkOwner.get();
+        if (owner != null) {
+            releaseFrameworkDockInternal(owner);
+            released = true;
+        }
+        Object customOwner = claimedOwner.get();
+        if (customOwner != null) {
+            releaseClaimInternal(customOwner);
+            released = true;
+        }
+        if (!released) {
+            SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
+            SecurityCenterMaterialModePolicy.resetLifecycle();
+        }
+    }
+
+    private synchronized void releaseFrameworkDockInternal(Object owner) {
+        if (owner == null) return;
+        SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
+        SecurityCenterVendorMaterialState.restoreOwner(owner);
+        if (frameworkOwner.get() == owner) {
+            frameworkOwner = new WeakReference<>(null);
+            frameworkDock = new WeakReference<>(null);
+        }
+        SecurityCenterMaterialModePolicy.resetLifecycle();
     }
 
     private synchronized void releaseClaimInternal(Object owner) {
