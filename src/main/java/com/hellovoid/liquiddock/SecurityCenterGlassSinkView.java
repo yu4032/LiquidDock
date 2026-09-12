@@ -32,6 +32,8 @@ final class SecurityCenterGlassSinkView extends TextureView
     private volatile long surfaceUpdateSequence;
     private volatile long armedSurfaceUpdateSequence;
     private boolean parentRecoveryPosted;
+    private boolean hasBeenWindowVisible;
+    private boolean windowVisibilityInterrupted;
 
     private SecurityCenterGlassSinkView(
             Context context,
@@ -291,6 +293,21 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (!disposed && !session.isShutdown()) {
             syncFromMaterial();
             scheduleParentRecovery("sink-attached");
+        }
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        SecurityCenterGlassSession live = session;
+        if (disposed || live == null || live.isShutdown()) return;
+        if (visibility == View.VISIBLE) {
+            boolean restored = hasBeenWindowVisible && windowVisibilityInterrupted;
+            hasBeenWindowVisible = true;
+            windowVisibilityInterrupted = false;
+            if (restored) live.onOutputWindowVisibilityRestored(this);
+        } else if (hasBeenWindowVisible) {
+            windowVisibilityInterrupted = true;
         }
     }
 

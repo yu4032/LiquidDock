@@ -362,6 +362,46 @@ final class SecurityCenterGlassCoordinator
     }
 
     @Override
+    public void onWindowVisibilityRestored(
+            SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
+        View root = rootRef.get();
+        if (!SecurityCenterGlassRuntimeState.isEnabled()
+                || callbackSession == null || callbackSession != session
+                || callbackSession.isShutdown() || sink == null || sink != dockSink
+                || root == null || !root.isAttachedToWindow()
+                || policy.currentRoot() != root
+                || policy.currentSession() != callbackSession) {
+            return;
+        }
+
+        SecurityCenterMaterialOwnershipState.Owner owner = ownership.owner();
+        if (owner == SecurityCenterMaterialOwnershipState.Owner.VENDOR
+                || owner == SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING) {
+            return;
+        }
+
+        SecurityCenterGlassSceneState.Decision decision =
+                scene.onSourceAuthorityChanged(targetKind);
+        if (!decision.invalidateGeneration) return;
+
+        reconcileSinks();
+        syncSinksFromMaterials();
+        SecurityCenterGlassFrameGeometry frame = captureFrame(
+                targetKind == SecurityCenterGlassSceneState.Target.ALL_APPS);
+
+        // Window visibility restoration can preserve every Java View while replacing the
+        // underlying ViewRoot/BLAST producer. Return to vendor fallback before rebuilding the
+        // zero-copy source; only a fresh TextureView presentation ACK may hand ownership back.
+        applyDecision(decision, null);
+        currentFrame = frame;
+        boolean recoveryAccepted = callbackSession.recoverSourceAfterWindowVisibilityRestored();
+        if (frame != null) requestCurrentGeneration(frame);
+        log("window visibility restored; refreshing source generation=" + decision.generation
+                + " target=" + targetKind
+                + " recoveryAccepted=" + recoveryAccepted, null);
+    }
+
+    @Override
     public void onFrameRendered(SecurityCenterGlassSession callbackSession, long generation) {
         View root = rootRef.get();
         if (!policy.acceptsCallback(

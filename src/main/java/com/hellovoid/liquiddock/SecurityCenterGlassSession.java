@@ -24,6 +24,8 @@ import java.util.WeakHashMap;
 final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onFrameRendered(SecurityCenterGlassSession session, long generation);
+        void onWindowVisibilityRestored(
+                SecurityCenterGlassSession session, SecurityCenterGlassSinkView sink);
         void onTerminalFailure(
                 SecurityCenterGlassSession session, long generation, Throwable error);
     }
@@ -136,8 +138,27 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     boolean requestSourceRebind(String reason) {
-        if (shuttingDown || !sourceBackend.hasBinding()) return false;
+        if (shuttingDown || sourceBackend.isShutdown()) return false;
+        sourceBackend.reconcileRoot();
+        if (sourceBackend.isRebindPending()) return true;
         return sourceBackend.requestRebind(reason, null);
+    }
+
+    boolean recoverSourceAfterWindowVisibilityRestored() {
+        if (shuttingDown || sourceBackend.isShutdown()) return false;
+        sourceBackend.reconcileRoot();
+        if (!sourceBackend.isRebindPending()) {
+            sourceBackend.requestRebind("security-center-window-visible");
+        }
+        return sourceBackend.isRebindPending();
+    }
+
+    void onOutputWindowVisibilityRestored(SecurityCenterGlassSinkView sink) {
+        if (shuttingDown || sink == null || sink.isDisposed()) return;
+        Listener currentListener = listener;
+        if (currentListener != null) {
+            currentListener.onWindowVisibilityRestored(this, sink);
+        }
     }
 
     void requestFresh(
