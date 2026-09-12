@@ -27,6 +27,20 @@ public class SecurityCenterLivePresentationStateTest {
     }
 
     @Test
+    public void sameGenerationStrictRefreshCanResumeLiveWithoutAnotherRebind() {
+        SecurityCenterLivePresentationState state = new SecurityCenterLivePresentationState();
+        state.onStrictPresentation(7L, true);
+        state.onStrictPresentation(7L, false);
+        assertTrue(state.isLive(7L));
+
+        state.beginStrictPresentation(7L);
+        assertFalse(state.isLive(7L));
+        state.onStrictPresentation(7L, false);
+
+        assertTrue(state.isLive(7L));
+    }
+
+    @Test
     public void differentGenerationOrInvalidationCannotInheritLive() {
         SecurityCenterLivePresentationState state = new SecurityCenterLivePresentationState();
 
