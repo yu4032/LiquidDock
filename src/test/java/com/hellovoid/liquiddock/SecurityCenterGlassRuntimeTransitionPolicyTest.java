@@ -112,7 +112,7 @@ public class SecurityCenterGlassRuntimeTransitionPolicyTest {
     }
 
     @Test
-    public void videoAndGlobalUseFrameworkPassWindowWhileGameStaysVendorOnly() {
+    public void videoAndGlobalUseCustomShaderWhileGameStaysVendorOnly() {
         SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition game =
                 SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(1);
         assertEquals(SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.VENDOR_ONLY,
@@ -120,12 +120,12 @@ public class SecurityCenterGlassRuntimeTransitionPolicyTest {
 
         SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition video =
                 SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(3);
-        assertEquals(SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.FRAMEWORK_PASS_WINDOW,
+        assertEquals(SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.CUSTOM_SHADER,
                 video.backend);
 
         SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition globalDock =
                 SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(4);
-        assertEquals(SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.FRAMEWORK_PASS_WINDOW,
+        assertEquals(SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.CUSTOM_SHADER,
                 globalDock.backend);
 
         SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition unknown =
