@@ -8,21 +8,22 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Static architecture contracts for the verified Security Center framework-material path. */
+/** Static architecture contracts for Security Center shader ownership plus dormant framework fallback. */
 public class SecurityCenterFrameworkDockContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void securityCenterUsesFrameworkPassWindowBackend() throws Exception {
+    public void securityCenterUsesPrismalShaderBackendWhileFrameworkCapabilityStaysDormant()
+            throws Exception {
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
 
         assertFalse("Security Center must not inherit Launcher's persisted shader selection",
                 policy.contains("ConfigReader config = ConfigReader.load()"));
-        assertTrue("Security Center must use the verified framework material backend",
-                policy.contains("return LiquidBlurMode.ADVANCED_MATERIAL;"));
-        assertTrue("Security Center must not route its active material through shader blur",
-                policy.contains("static boolean useShaderBlur() {\n        return false;"));
-        assertTrue("Turbo must host framework pass-window blur and Dock must be its carrier",
+        assertTrue("Video/Global must reactivate the Prismal shader material path",
+                policy.contains("return LiquidBlurMode.SHADER;"));
+        assertTrue("active Security Center Prismal rendering must include shader blur",
+                policy.contains("static boolean useShaderBlur() {\n        return true;"));
+        assertTrue("verified framework pass-window material remains available as a dormant capability",
                 policy.contains("MiBlurBridge.setPassWindowBlurEnabled(turbo, true)")
                         && policy.contains("MiBlurBridge.applyPassWindowBlur("));
     }
@@ -34,26 +35,21 @@ public class SecurityCenterFrameworkDockContractTest {
 
         assertTrue("material feature keeps a config-only gate",
                 runtime.contains("static boolean isMaterialEnabled()"));
-        assertTrue("legacy shader readiness may still retain its source-authority gate",
+        assertTrue("shader readiness retains its source-authority gate",
                 runtime.contains("return isMaterialEnabled() && sourceAuthorityAvailable;"));
-        assertTrue("framework Dock preparation must use the config-only material gate",
+        assertTrue("dormant framework Dock preparation keeps the config-only material gate",
                 prepare.contains("SecurityCenterGlassRuntimeState.isMaterialEnabled()"));
-        assertFalse("framework readiness must not wait for shader source authority",
-                prepare.contains("turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()"));
     }
 
     @Test
-    public void semanticDockReadinessClaimsFrameworkMaterialWithoutCreatingShaderSession()
-            throws Exception {
+    public void semanticDockReadinessKeepsDormantFrameworkClaimAvailable() throws Exception {
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        assertTrue("semantic Dock readiness must claim the framework carrier",
+        assertTrue("semantic Dock readiness keeps the framework carrier capability available",
                 prepare.contains("SecurityCenterVendorMaterialBridge.claimFrameworkDock(turbo, dock)"));
         assertTrue("the bridge must expose the typed framework claim",
                 bridge.contains("static boolean claimFrameworkDock("));
-        assertFalse("Video/Global readiness must not bind the RootPassBlur shader session",
-                prepare.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                    turbo, dock"));
     }
 
     @Test
@@ -63,11 +59,11 @@ public class SecurityCenterFrameworkDockContractTest {
         String coordinator = Files.readString(
                 MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
-        assertTrue("legacy CUSTOM_PREPARING must keep its non-destructive fallback latch",
+        assertTrue("CUSTOM_PREPARING must keep its non-destructive fallback latch",
                 bridge.contains("void protectVendorFallback("));
-        assertTrue("the dormant shader coordinator must still fail closed before ACK",
+        assertTrue("the shader coordinator must fail closed before ACK",
                 coordinator.contains("vendorMaterialBridge.protectVendorFallback("));
-        assertTrue("legacy destructive clearing remains isolated behind claimCustom",
+        assertTrue("destructive clearing remains isolated behind claimCustom",
                 bridge.contains("void claimCustom(")
                         && bridge.contains("clearVendorTarget(dockLayout)"));
     }
@@ -119,26 +115,25 @@ public class SecurityCenterFrameworkDockContractTest {
         assertFalse(earlyPrepare.contains("SecurityCenterAdvancedMaterialHook"));
         assertFalse(Files.exists(MAIN.resolve("SecurityCenterAdvancedMaterialHook.java")));
         assertTrue(moduleMain.contains("SecurityCenterVendorMaterialState.install()"));
-        assertTrue(policy.contains("FRAMEWORK_PASS_WINDOW"));
+        assertTrue(policy.contains("CUSTOM_SHADER"));
         assertTrue(earlyPrepare.contains("transition.backend"));
         assertTrue(bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
     }
 
     @Test
-    public void frameworkMaterialReplacesDockAtTypedClaimBoundary() throws Exception {
+    public void customShaderReclaimsVideoAndGlobalAtTypedPrepareBoundary() throws Exception {
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        assertTrue(policy.contains("return LiquidBlurMode.ADVANCED_MATERIAL;"));
-        assertTrue(policy.contains("static boolean useShaderBlur() {\n        return false;"));
-        assertTrue(prepare.contains("SecurityCenterGlassRuntimeState.isMaterialEnabled()"));
-        assertTrue(prepare.contains("claimFrameworkDock(turbo, dock)"));
-        assertFalse(prepare.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                    turbo, dock"));
-
-        assertTrue(bridge.contains("claimFrameworkDockInternal"));
-        assertTrue(bridge.contains("configureAdvancedMaterial("));
-        assertTrue(bridge.contains("SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout)"));
-        assertTrue(bridge.contains("clearVendorTarget(dockLayout)"));
+        assertTrue(policy.contains("return LiquidBlurMode.SHADER;"));
+        assertTrue(policy.contains("static boolean useShaderBlur() {\n        return true;"));
+        assertTrue("active shader readiness must require the source-authority gate",
+                prepare.contains("SecurityCenterGlassRuntimeState.isEnabled()"));
+        assertTrue("Video/Global preparation must bind the root-bound OES/Prismal session",
+                prepare.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                        turbo, dock, boxMaterial, pending.type)"));
+        assertTrue("custom ownership must still latch vendor fallback before destructive handoff",
+                bridge.contains("claimCustomInternal")
+                        && bridge.contains("protectVendorFallbackInternal("));
     }
 }

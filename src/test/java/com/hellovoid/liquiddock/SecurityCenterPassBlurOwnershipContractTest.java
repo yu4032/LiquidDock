@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Regression contracts for Security Center material ownership and legacy shader recovery. */
+/** Regression contracts for Security Center material ownership and zero-copy shader recovery. */
 public class SecurityCenterPassBlurOwnershipContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -25,16 +25,16 @@ public class SecurityCenterPassBlurOwnershipContractTest {
 
         assertTrue("claimed vendor calls must be suppressed from reaching ViewRootImpl",
                 state.contains("successfulSuppressionResult(method)"));
-        assertTrue("legacy claim must clear an already-active native pass-window output",
+        assertTrue("custom claim must clear an already-active native pass-window output",
                 bridge.contains("MiBlurBridge.clearPassWindowBlur(target)"));
-        assertTrue("legacy changed vendor claim keeps its producer-rebind recovery",
+        assertTrue("changed vendor claim keeps its producer-rebind recovery",
                 coordinator.contains("requestSourceRebind("));
-        assertTrue("legacy session keeps producer rebind available to the coordinator",
+        assertTrue("session keeps producer rebind available to the coordinator",
                 session.contains("requestSourceRebind("));
     }
 
     @Test
-    public void activeSecurityCenterPathUsesFrameworkPassWindowInsteadOfFrozenOesProducer()
+    public void activeSecurityCenterPathUsesZeroCopyPrismalWithVendorFallbackOwnership()
             throws Exception {
         String policy = Files.readString(
                 MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
@@ -44,21 +44,24 @@ public class SecurityCenterPassBlurOwnershipContractTest {
                 MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(
                 MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+        String session = Files.readString(
+                MAIN.resolve("SecurityCenterGlassSession.java"));
 
-        assertTrue("Video/Global must select the framework producer",
-                transition.contains("AssistantBackend.FRAMEWORK_PASS_WINDOW"));
-        assertTrue("Security Center must use framework advanced material",
-                policy.contains("return LiquidBlurMode.ADVANCED_MATERIAL;"));
-        assertTrue("framework material must be driven by system pass-window blur",
-                policy.contains("MiBlurBridge.setPassWindowBlurEnabled(turbo, true)")
-                        && policy.contains("MiBlurBridge.applyPassWindowBlur("));
-        assertTrue("semantic readiness must claim the typed framework Dock",
-                early.contains("SecurityCenterVendorMaterialBridge.claimFrameworkDock(turbo, dock)"));
-        assertFalse("Video/Global readiness must not create the root-bound OES/Prismal session",
-                early.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                    turbo, dock"));
-        assertTrue("framework claim must be owned and released through the stable vendor mirror",
-                bridge.contains("claimFrameworkDockInternal")
-                        && bridge.contains("SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout)"));
+        assertTrue("Video/Global must select the custom shader backend",
+                transition.contains("AssistantBackend.CUSTOM_SHADER"));
+        assertTrue("Security Center active material must be Prismal shader",
+                policy.contains("return LiquidBlurMode.SHADER;"));
+        assertTrue("active Prismal rendering must keep shader blur enabled",
+                policy.contains("static boolean useShaderBlur() {\n        return true;"));
+        assertTrue("semantic readiness must bind the typed root-bound OES/Prismal session",
+                early.contains("SecurityCenterGlassRuntimeState.bindAssistant(\n                        turbo, dock, boxMaterial, pending.type)"));
+        assertTrue("custom ownership must latch vendor fallback before destructive handoff",
+                bridge.contains("claimCustomInternal")
+                        && bridge.contains("protectVendorFallbackInternal("));
+        assertTrue("the active path must retain the shared zero-copy root PassBlur producer",
+                session.contains("new RootPassBlurBackend("));
+        assertFalse("active Video/Global readiness must not directly claim framework Dock blur",
+                early.contains("AssistantBackend.CUSTOM_SHADER) {\n                if (!SecurityCenterGlassRuntimeState.isEnabled()) return false;\n                SecurityCenterVendorMaterialBridge.claimFrameworkDock"));
     }
 
     @Test
