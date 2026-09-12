@@ -469,21 +469,28 @@ final class Miuix307MaterialPipeline {
             return true;
         }
 
-        // setupViews/onAttachedToWindow run before BlurBackground2 has committed its real radius.
-        // Preserve the untouched vendor material during that placeholder phase. Existing vendor
-        // setBackgroundRadius/triggerMeasure callbacks naturally retry this method once geometry
-        // is valid, so no fixed-delay polling is needed.
-        if (!MiuixGlassHook.hasReadyNativeGeometry(background)) {
+        // setupViews/onAttachedToWindow can run before the vendor has committed final width,
+        // height, or radius. The attached-parent boundary is sufficient to install the Prismal
+        // host immediately; later geometry callbacks refine its clip and sampling rectangle.
+        if (!MiuixGlassHook.canInstallBeforeGeometry(background)) {
             if (geometryDeferredLoggedFor.get() != background) {
                 geometryDeferredLoggedFor = new WeakReference<>(background);
-                MainHook.log("[DC] MiuiX 307 Prismal handoff deferred; native geometry not ready"
+                MainHook.log("[DC] MiuiX 307 Prismal handoff waiting for attached native owner"
                         + " class=" + background.getClass().getSimpleName()
                         + " size=" + background.getWidth() + "x" + background.getHeight()
                         + " radius=" + MiuixGlassHook.readNativeOpticsRadius(background));
             }
             return false;
         }
-        if (geometryDeferredLoggedFor.get() == background) {
+        boolean nativeGeometryReady = MiuixGlassHook.hasReadyNativeGeometry(background);
+        if (!nativeGeometryReady && geometryDeferredLoggedFor.get() != background) {
+            geometryDeferredLoggedFor = new WeakReference<>(background);
+            MainHook.log("[DC] MiuiX 307 Prismal handoff attach-first; native geometry pending"
+                    + "; installing shell class=" + background.getClass().getSimpleName()
+                    + " size=" + background.getWidth() + "x" + background.getHeight()
+                    + " radius=" + MiuixGlassHook.readNativeOpticsRadius(background));
+        }
+        if (nativeGeometryReady && geometryDeferredLoggedFor.get() == background) {
             MainHook.log("[DC] MiuiX 307 native geometry ready; committing Prismal handoff"
                     + " size=" + background.getWidth() + "x" + background.getHeight()
                     + " radius=" + MiuixGlassHook.readNativeOpticsRadius(background));

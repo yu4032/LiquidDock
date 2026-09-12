@@ -103,6 +103,29 @@ public class SecurityCenterSemanticCompatibilityTest {
     }
 
     @Test
+    public void sidebarLifecycleResolvesFromTheAidlStubShape() {
+        SecurityCenterSemanticContractResolver.SidebarLifecycleContract lifecycle =
+                SecurityCenterSemanticContractResolver.resolveSidebarLifecycleForTest(
+                        SidebarService.class, SidebarStub.class);
+
+        assertSame(SidebarService.Binder.class, lifecycle.binderClass());
+        assertEquals("present", lifecycle.show().getName());
+        assertEquals("hideNow", lifecycle.hideImmediate().getName());
+        assertEquals("hideAnimated", lifecycle.hideAnimated().getName());
+    }
+
+    @Test
+    public void sidebarLifecycleFailsClosedWhenTheAidlImplementationIsAmbiguous() {
+        try {
+            SecurityCenterSemanticContractResolver.resolveSidebarLifecycleForTest(
+                    AmbiguousSidebarService.class, SidebarStub.class);
+            fail("expected fail-closed rejection for ambiguous sidebar binder");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage() != null && !expected.getMessage().isEmpty());
+        }
+    }
+
+    @Test
     public void resolutionIsCapabilityDrivenNotVersionWhitelisted() throws Exception {
         Method method = resolverClass().getDeclaredMethod(
                 "resolveForTest", Class.class, Class.class, Set.class);
@@ -306,6 +329,31 @@ public class SecurityCenterSemanticCompatibilityTest {
         private void third(TerminalTurbo turbo, TerminalWrapper wrapper, FakeView panel) {}
         private void finish(boolean moveSidebar, TerminalTurbo turbo,
                             TerminalWrapper wrapper, FakeView panel) {}
+    }
+
+    public abstract static class SidebarStub {}
+    public static class LiveSidebarBinder extends SidebarStub {
+        public void present(int x, int y, int width, int height, int radius) {}
+        public void hideNow() {}
+        public void hideAnimated(int gesture) {}
+        public boolean showing() { return false; }
+        private void postedPresent(int x, int y, int width, int height, int radius) {}
+        private void postedHide() {}
+    }
+    public static class SidebarService {
+        public static class Noise {}
+        public static class Binder extends SidebarStub {
+            public void present(int x, int y, int width, int height, int radius) {}
+            public void hideNow() {}
+            public void hideAnimated(int gesture) {}
+            public boolean showing() { return false; }
+            private void postedPresent(int x, int y, int width, int height, int radius) {}
+            private void postedHide() {}
+        }
+    }
+    public static class AmbiguousSidebarService {
+        public static class First extends LiveSidebarBinder {}
+        public static class Second extends LiveSidebarBinder {}
     }
 
     public static class Wrapper { public ValidTurbo owner() { return null; } }

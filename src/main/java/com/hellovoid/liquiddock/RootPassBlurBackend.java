@@ -38,6 +38,8 @@ final class RootPassBlurBackend {
 
     private static final String TAG = "[DC][RootPassBlur]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    private static final int MAX_FIRST_FRAME_REBINDS = 2;
+    private static final long FIRST_FRAME_WATCHDOG_MS = 240L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -53,6 +55,8 @@ final class RootPassBlurBackend {
     private final Handler mainHandler;
     private final FloatBuffer quadBuffer;
     private final RootPassBlurBackendState state = new RootPassBlurBackendState();
+    private final PassBlurFirstFrameRecoveryState firstFrameRecovery =
+            new PassBlurFirstFrameRecoveryState(MAX_FIRST_FRAME_REBINDS);
     private final AtomicLong bindEpoch = new AtomicLong();
     private final float[] textureMatrix = new float[16];
     private final Object rolloverCompletionLock = new Object();
@@ -133,6 +137,7 @@ final class RootPassBlurBackend {
     /** Launcher-only pulse selection; Workstation policy itself remains outside the backend. */
     void requestFresh(long generation, boolean singleFramePulse) {
         if (!state.requestFresh(generation) || shuttingDown) return;
+        armFirstFrameWatchdog(generation);
         requestedSingleFramePulse = singleFramePulse;
         postToRenderThread(() -> {
             if (shuttingDown || state.requestedGeneration() != generation) return;
@@ -408,6 +413,7 @@ final class RootPassBlurBackend {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        firstFrameRecovery.cancel();
         bindEpoch.incrementAndGet();
         state.onShutdown();
         completeRolloverCompletions(false, "shutdown");
@@ -552,6 +558,7 @@ final class RootPassBlurBackend {
             input.getTransformMatrix(textureMatrix);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
+            firstFrameRecovery.onFreshFrame(generation);
             RootPassBlurFrame frame = normalizeFrame(generation);
             if (consumer != null) consumer.onFreshFrame(this, frame);
             if (generation == sourceGeneration && state.onFreshFrame(generation)) {
@@ -559,6 +566,35 @@ final class RootPassBlurBackend {
             }
         } catch (Throwable error) {
             notifyTerminalFailure(error);
+        }
+    }
+
+    private void armFirstFrameWatchdog(long generation) {
+        PassBlurFirstFrameRecoveryState.Ticket ticket = firstFrameRecovery.arm(generation);
+        if (!ticket.armed || shuttingDown) return;
+        mainHandler.postDelayed(() -> onFirstFrameWatchdog(ticket), FIRST_FRAME_WATCHDOG_MS);
+    }
+
+    private void onFirstFrameWatchdog(PassBlurFirstFrameRecoveryState.Ticket ticket) {
+        if (shuttingDown) return;
+        PassBlurFirstFrameRecoveryState.Decision decision =
+                firstFrameRecovery.onTimeout(ticket);
+        if (decision.rebind) {
+            Api101Bridge.log(TAG + " first-frame watchdog rebuilding producer generation="
+                    + ticket.generation + " domain=" + bindRequest.domain());
+            boolean accepted = requestRebind("first-frame-timeout", success -> {
+                if (success && !shuttingDown
+                        && state.requestedGeneration() == ticket.generation) {
+                    armFirstFrameWatchdog(ticket.generation);
+                }
+            });
+            if (!accepted) {
+                notifyTerminalFailure(new IllegalStateException(
+                        "PassBlur first-frame recovery rejected"));
+            }
+        } else if (decision.terminalFailure) {
+            notifyTerminalFailure(new IllegalStateException(
+                    "PassBlur first frame missing after producer recovery"));
         }
     }
 
