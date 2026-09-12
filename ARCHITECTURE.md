@@ -235,7 +235,7 @@ UI 文案必须区分“立即释放视觉 ownership”和“完整结构变更�
 
 ## 11. Security Center Global Dock / All Apps v1
 
-首版只支持 `com.miui.securitycenter:ui` 的已验证 HyperOS 4 Security Center build：versionCode `40011320`，对应 versionName `13.2.0-260806.0.1.pad`。运行时 compatibility gate 以 versionCode 为程序化权威；未知 build 不安装版本专属 mutation hooks。`ja.a.f()==true` 的 type 4 / Global Dock 才进入 LiquidDock，type 1/3/5 保持 vendor-owned。
+首版以已验证的 HyperOS 4 Security Center build 为反编译与行为基线；运行时 hook 不把私有类、方法或字段名作为兼容性 authority。Global Dock 是否进入 LiquidDock 由结构解析得到的 assistant-type discriminator 与支持的语义类型共同决定；不支持的类型保持 vendor-owned。
 
 Global Dock 与 All Apps 在已分析 build 中共享同一 sidebar Window/ViewRoot，因此结构为：
 
@@ -266,7 +266,9 @@ scene generation invalidated
 
 `bind/rebind` 成功本身不构成 freshness。旧 generation callback、root replacement、disable 或 terminal failure 后的 callback 都不能重新 reveal。
 
-Vendor handoff 只使用已验证语义边界：`TurboLayout.M(com.miui.dock.sidebar.p, ja.a)` 发现 type-4 panel；`TurboLayout.d0()` 启动 All Apps toggle；`f17943s` 是 transition completion authority，`f17941q` 是最终 page-presence authority；`gq.g.l(View)` 用于 HyperOS 4 material reset；`TurboLayout.U()` 是完整 vendor final-background restore authority。CUSTOM ownership 期间只抑制当前 TurboLayout 的 `U()`；释放时先把逻辑 owner 置回 VENDOR，再调用真实 `U()`，不重放猜测的 MiGlass/MaterialToken/blur/shadow 参数。
+Vendor handoff 只使用语义/结构边界：8 参数 configure 只建立 panel carrier 与 assistant type 关系，不作为 View-ready 事件；Dock/Box material 通过允许的稳定 getter，在 attach/pre-draw 生命周期中等待到真实 View 就绪后绑定。All Apps 的目标状态来自结构唯一的 motion helper 公共 attach/dismiss 形状，terminal release 来自结构唯一的 cleanup 方法族。任何语义角色出现 0 个或多个候选都 fail-closed，不回退到私有名称或固定延迟。
+
+CUSTOM material ownership 只在当前已 claim 的 carrier 上拦截稳定 `android.view.View` material API，并记录 vendor 最新意图；释放时先 relinquish ownership，再通过相同稳定 API 重放保存状态。源码、测试和文档都不得把反编译私有类、方法或字段名作为 hook authority。
 
 HyperOS 3 的 capability policy 始终解析为普通 `BACKGROUND_BLUR`。这是未来兼容约束，不表示 v1 已支持未分析的 HyperOS 3 Security Center build，也不会把 HOS3 宣称为 soft-light glass。
 
