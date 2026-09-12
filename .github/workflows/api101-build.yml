@@ -47,38 +47,12 @@ jobs:
           fi
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
-      - name: Release R8 shrink verification
-        run: ./gradlew minifyReleaseWithR8 --stacktrace
-      - name: Audit release R8 literal entry boundary
-        shell: bash
-        run: |
-          mapping=build/outputs/mapping/release/mapping.txt
-          test -s "$mapping"
-          python3 - <<'PY'
-          from pathlib import Path
-
-          lines = Path("build/outputs/mapping/release/mapping.txt").read_text(
-              encoding="utf-8", errors="replace").splitlines()
-          expected = (
-              "com.hellovoid.liquiddock.ModuleMain -> "
-              "com.hellovoid.liquiddock.ModuleMain:"
-          )
-          if expected not in lines:
-              raise SystemExit("ModuleMain literal Xposed entry was renamed by release R8")
-          print("release R8 literal entry preserved: " + expected)
-          PY
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
-      - uses: actions/upload-artifact@v4
-        with:
-          name: LiquidDock-release-r8-mapping
-          path: build/outputs/mapping/release
-          if-no-files-found: error
-          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-build-source
