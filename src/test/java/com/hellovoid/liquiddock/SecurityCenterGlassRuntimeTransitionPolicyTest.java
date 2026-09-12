@@ -1,7 +1,10 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
@@ -68,5 +71,17 @@ public class SecurityCenterGlassRuntimeTransitionPolicyTest {
                 SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(99);
         assertFalse(unknown.bindCustomGlass);
         assertFalse(unknown.releaseExistingCustomGlass);
+    }
+
+    @Test
+    public void gameToolboxBindReleasesExistingRuntimeOwner() {
+        AtomicInteger releases = new AtomicInteger();
+        SecurityCenterGlassRuntimeState.setOwner(releases::incrementAndGet);
+        try {
+            SecurityCenterGlassRuntimeState.bindAssistant(null, null, null, 1);
+            assertEquals(1, releases.get());
+        } finally {
+            SecurityCenterGlassRuntimeState.setOwner(null);
+        }
     }
 }
