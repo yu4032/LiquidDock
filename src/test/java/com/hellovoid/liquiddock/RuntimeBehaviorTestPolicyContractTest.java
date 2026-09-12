@@ -51,6 +51,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "RootPassBlurBackendBoundaryTest.java",
             "SecurityCenterFrameworkDockContractTest.java",
             "SecurityCenterLauncherStylePresentationContractTest.java",
+            "SecurityCenterLivePresentationContractTest.java",
             "SecurityCenterNoNameAnchorContractTest.java",
             "SecurityCenterPassBlurOwnershipContractTest.java",
             "SecurityCenterScopeContractTest.java",
