@@ -510,7 +510,27 @@ final class SecurityCenterGlassCoordinator
         log("All Apps presented composition matched target present=" + settled.allAppsPresent
                 + " generation=" + settled.generation
                 + " nodes=" + frame.nodeCount(), null);
-        onAllAppsToggleSettled(turbo, settled.allAppsPresent, settled.generation);
+        applyPresentedAllAppsSettlement(settled, frame);
+    }
+
+    private void applyPresentedAllAppsSettlement(
+            SecurityCenterAllAppsSettleState.Decision settled,
+            SecurityCenterGlassFrameGeometry presentedFrame) {
+        if (settled == null || !settled.settle || presentedFrame == null) return;
+        SecurityCenterGlassSceneState.Target nextKind = settled.allAppsPresent
+                ? SecurityCenterGlassSceneState.Target.ALL_APPS
+                : SecurityCenterGlassSceneState.Target.DOCK;
+        SecurityCenterGlassSceneState.Decision sceneSettled =
+                scene.onGeometrySettled(nextKind, settled.generation);
+        if (!sceneSettled.requestFresh) {
+            log("stale presented settle ignored target=" + nextKind
+                    + " generation=" + settled.generation
+                    + " currentGeneration=" + scene.generation(), null);
+            return;
+        }
+        targetKind = nextKind;
+        currentFrame = presentedFrame;
+        applyDecision(sceneSettled, presentedFrame);
     }
 
     private void bindAttachedRoot(View turboLayout) {
