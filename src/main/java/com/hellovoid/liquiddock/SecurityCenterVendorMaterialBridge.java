@@ -2,17 +2,20 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-/** Exact, reversible vendor-material mutation boundary for Security Center. */
+/** Stable View-API boundary for Security Center Dock material ownership. */
 final class SecurityCenterVendorMaterialBridge {
-    private final SecurityCenterSemanticContractResolver.ResolvedContract contract;
-    private final int videoMainContentResId;
+    private static volatile SecurityCenterVendorMaterialBridge activeBridge;
+
     private final Method setMiViewBlurMode;
     private final Method clearMiBackgroundBlendColor;
     private final Method setMiBloomStroke;
     private final Method setMiShadow;
+    private WeakReference<Object> frameworkOwner = new WeakReference<>(null);
+    private WeakReference<View> frameworkDock = new WeakReference<>(null);
 
     SecurityCenterVendorMaterialBridge(
             SecurityCenterSemanticContractResolver.ResolvedContract contract,
@@ -21,8 +24,6 @@ final class SecurityCenterVendorMaterialBridge {
         if (videoMainContentResId == 0) {
             throw new IllegalArgumentException("videoMainContentResId == 0");
         }
-        this.contract = contract;
-        this.videoMainContentResId = videoMainContentResId;
         SecurityCenterEarlyPrepareHook.install(contract, videoMainContentResId);
         try {
             setMiViewBlurMode = HookUtil.findMethodExact(
@@ -37,6 +38,19 @@ final class SecurityCenterVendorMaterialBridge {
         } catch (Throwable error) {
             throw new IllegalStateException("Security Center vendor material API unavailable", error);
         }
+        activeBridge = this;
+    }
+
+    /** Eager framework-material claim used as soon as the semantic Dock carrier is ready. */
+    static boolean claimFrameworkDock(View turboLayout, View dockLayout) {
+        SecurityCenterVendorMaterialBridge bridge = activeBridge;
+        return bridge != null && bridge.claimFrameworkDockInternal(turboLayout, dockLayout);
+    }
+
+    /** Full teardown only. Normal panel close deliberately keeps the Dock carrier claimed. */
+    static void releaseFrameworkDock() {
+        SecurityCenterVendorMaterialBridge bridge = activeBridge;
+        if (bridge != null) bridge.releaseFrameworkDockInternal();
     }
 
     void claimCustom(
@@ -44,37 +58,68 @@ final class SecurityCenterVendorMaterialBridge {
         if (!(turboLayout instanceof View) || dockLayout == null) {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
-        View turboView = (View) turboLayout;
-        validateBoxMaterial(boxMaterialView);
-
-        SecurityCenterVendorMaterialState.claimOwner(
-                turboLayout, turboView, dockLayout, boxMaterialView, allAppsLayout);
-        SecurityCenterVendorMaterialState.runModuleMutation(() -> {
-            clearVendorTarget(turboView);
-            clearVendorTarget(dockLayout);
-            if (boxMaterialView != null) clearVendorTarget(boxMaterialView);
-            if (allAppsLayout != null
-                    && allAppsLayout != dockLayout
-                    && allAppsLayout != boxMaterialView
-                    && allAppsLayout != turboView) {
-                clearVendorTarget(allAppsLayout);
-            }
-        });
+        if (!claimFrameworkDockInternal((View) turboLayout, dockLayout)) {
+            throw new IllegalStateException("Security Center framework Dock material unavailable");
+        }
     }
 
     void restoreVendor(Object turboLayout) {
         if (turboLayout == null) throw new IllegalArgumentException("turboLayout == null");
-        SecurityCenterVendorMaterialState.restoreOwner(turboLayout);
+        if (SecurityCenterMaterialModePolicy.retainFrameworkDockOnPanelClose()
+                && frameworkOwner.get() == turboLayout) {
+            return;
+        }
+        releaseFrameworkDockInternal(turboLayout);
     }
 
-    private void validateBoxMaterial(View boxMaterialView) {
-        if (boxMaterialView == null) return;
-        if (contract.gameMaterialClass().isInstance(boxMaterialView)) return;
-        if (boxMaterialView.getId() == videoMainContentResId) return;
-        throw new IllegalArgumentException(
-                "unvalidated Security Center box material carrier: "
-                        + boxMaterialView.getClass().getName()
-                        + " id=" + boxMaterialView.getId());
+    private synchronized boolean claimFrameworkDockInternal(View turboLayout, View dockLayout) {
+        if (turboLayout == null || dockLayout == null) return false;
+        Object previousOwner = frameworkOwner.get();
+        if (previousOwner != null && previousOwner != turboLayout) {
+            releaseFrameworkDockInternal(previousOwner);
+        }
+        if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return false;
+
+        try {
+            SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout);
+            SecurityCenterVendorMaterialState.runModuleMutation(
+                    () -> clearVendorTarget(dockLayout));
+            if (!SecurityCenterMaterialModePolicy.configureAdvancedMaterial(
+                    turboLayout, dockLayout)) {
+                throw new IllegalStateException("framework Dock material apply failed");
+            }
+            frameworkOwner = new WeakReference<>(turboLayout);
+            frameworkDock = new WeakReference<>(dockLayout);
+            return true;
+        } catch (Throwable error) {
+            SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
+            try { SecurityCenterVendorMaterialState.restoreOwner(turboLayout); }
+            catch (Throwable ignored) {}
+            frameworkOwner = new WeakReference<>(null);
+            frameworkDock = new WeakReference<>(null);
+            return false;
+        }
+    }
+
+    private synchronized void releaseFrameworkDockInternal() {
+        Object owner = frameworkOwner.get();
+        if (owner != null) releaseFrameworkDockInternal(owner);
+        else {
+            SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
+            SecurityCenterMaterialModePolicy.resetLifecycle();
+            frameworkDock = new WeakReference<>(null);
+        }
+    }
+
+    private synchronized void releaseFrameworkDockInternal(Object owner) {
+        if (owner == null) return;
+        SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();
+        SecurityCenterVendorMaterialState.restoreOwner(owner);
+        if (frameworkOwner.get() == owner) {
+            frameworkOwner = new WeakReference<>(null);
+            frameworkDock = new WeakReference<>(null);
+        }
+        SecurityCenterMaterialModePolicy.resetLifecycle();
     }
 
     private void clearVendorTarget(View target) {
