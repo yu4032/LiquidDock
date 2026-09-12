@@ -7,7 +7,7 @@ import android.view.View;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 
-/** Security Center policy for the verified framework pass-window material backend. */
+/** Security Center material policy with custom shader as the active Video/Global path. */
 final class SecurityCenterMaterialModePolicy {
     private static final int ADVANCED_BLUR_RADIUS_PX = 100;
 
@@ -18,9 +18,9 @@ final class SecurityCenterMaterialModePolicy {
 
     private SecurityCenterMaterialModePolicy() {}
 
-    /** Security Center uses the framework producer so the backdrop remains system-driven/live. */
+    /** Video/Global use LiquidDock's Prismal shader; framework material remains a dormant fallback capability. */
     static LiquidBlurMode currentMode() {
-        return LiquidBlurMode.ADVANCED_MATERIAL;
+        return LiquidBlurMode.SHADER;
     }
 
     static synchronized boolean prepareBind(Object owner) {
@@ -35,7 +35,7 @@ final class SecurityCenterMaterialModePolicy {
     }
 
     static boolean useShaderBlur() {
-        return false;
+        return true;
     }
 
     static boolean canPresentCustom(LiquidBlurMode mode, boolean advancedAvailable) {
@@ -46,7 +46,7 @@ final class SecurityCenterMaterialModePolicy {
         return mode != LiquidBlurMode.ADVANCED_MATERIAL;
     }
 
-    /** Applies framework blur to Dock while TurboLayout only hosts pass-window blur. */
+    /** Dormant framework material capability retained for fail-closed compatibility paths. */
     static synchronized boolean configureAdvancedMaterial(View turbo, View dock) {
         if (advancedPresentationFailed || !MiBlurBridge.isPassWindowBlurAvailable()
                 || turbo == null || dock == null) {
@@ -76,9 +76,9 @@ final class SecurityCenterMaterialModePolicy {
         return advancedPresentationFailed;
     }
 
-    /** Normal panel close keeps the framework Dock carrier; full release is explicit. */
     static boolean retainFrameworkDockOnPanelClose() {
-        return !advancedPresentationFailed && advancedDock.get() != null;
+        return currentMode() == LiquidBlurMode.ADVANCED_MATERIAL
+                && !advancedPresentationFailed && advancedDock.get() != null;
     }
 
     static synchronized void releaseAdvancedMaterial() {
