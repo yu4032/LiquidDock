@@ -305,7 +305,7 @@ final class SecurityCenterGlassSinkView extends TextureView
             boolean restored = hasBeenWindowVisible && windowVisibilityInterrupted;
             hasBeenWindowVisible = true;
             windowVisibilityInterrupted = false;
-            if (restored) live.onOutputWindowVisibilityRestored(this);
+            if (restored) session.onOutputWindowVisibilityRestored(this);
         } else if (hasBeenWindowVisible) {
             windowVisibilityInterrupted = true;
         }
