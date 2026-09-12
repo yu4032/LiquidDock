@@ -22,6 +22,16 @@ final class PassBlurBindPolicy {
         return domain == PassBlurDomain.LAUNCHER_WORKSPACE;
     }
 
+    /**
+     * Security Center consumes PassBlur on demand. Pausing after each accepted source frame makes
+     * the next request a real false -> true compositor update edge instead of a no-op resume while
+     * the binding is already marked enabled. Launcher Workspace and Dock retain their established
+     * continuous producer behavior.
+     */
+    static boolean shouldPauseAfterFreshFrame(PassBlurDomain domain) {
+        return domain == PassBlurDomain.SECURITY_CENTER;
+    }
+
     static String[] exclusions(String rootSurfaceName, String[] extras) {
         LinkedHashSet<String> exclusions = new LinkedHashSet<>();
         addIfPresent(exclusions, rootSurfaceName);
