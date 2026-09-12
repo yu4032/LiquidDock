@@ -34,12 +34,12 @@ public class SecurityCenterFrameworkDockContractTest {
     }
 
     @Test
-    public void semanticDockBindPreparesFrameworkMaterialBeforeAnyFreshFrame() throws Exception {
-        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+    public void semanticDockReadinessPreparesFrameworkMaterialBeforeAnyFreshFrame() throws Exception {
+        String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        assertTrue("semantic Dock bind must expose eager framework material preparation",
-                coordinator.contains("claimFrameworkDock("));
+        assertTrue("semantic Dock readiness must claim/apply framework material eagerly",
+                prepare.contains("claimFrameworkDock("));
         assertTrue("framework Dock claim must exist independently of shader presentation",
                 bridge.contains("claimFrameworkDock("));
     }
