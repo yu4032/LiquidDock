@@ -67,7 +67,8 @@ public class R8ReleaseKeepContractTest {
         assertTrue(rules.contains(
                 "com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry currentFrame;"));
         assertTrue(rules.contains("com.hellovoid.liquiddock.SecurityCenterGlassSession session;"));
-        assertTrue(rules.contains("java.lang.ref.WeakReference turboRef;"));
+        assertTrue("Use a type-agnostic keep for turboRef; release R8 rewrites the generic field otherwise",
+                rules.contains("*** turboRef;"));
         assertTrue(rules.contains("void reconcileSinks();"));
         assertTrue(rules.contains("boolean syncSinksFromMaterials();"));
         assertTrue(rules.contains(
