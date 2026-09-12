@@ -34,14 +34,17 @@ final class SecurityCenterGlassRuntimeTransitionPolicy {
         final boolean bindCustomGlass;
         final boolean releaseExistingCustomGlass;
         final boolean requiresDeferredPrepare;
+        final boolean rearmOnSidebarShow;
 
         AssistantTransition(
                 boolean bindCustomGlass,
                 boolean releaseExistingCustomGlass,
-                boolean requiresDeferredPrepare) {
+                boolean requiresDeferredPrepare,
+                boolean rearmOnSidebarShow) {
             this.bindCustomGlass = bindCustomGlass;
             this.releaseExistingCustomGlass = releaseExistingCustomGlass;
             this.requiresDeferredPrepare = requiresDeferredPrepare;
+            this.rearmOnSidebarShow = rearmOnSidebarShow;
         }
     }
 
@@ -53,11 +56,11 @@ final class SecurityCenterGlassRuntimeTransitionPolicy {
 
     static AssistantTransition planAssistant(int type) {
         if (type == ASSISTANT_GAME) {
-            return new AssistantTransition(false, true, false);
+            return new AssistantTransition(false, true, false, false);
         }
         if (type == ASSISTANT_VIDEO || type == ASSISTANT_GLOBAL_DOCK) {
-            return new AssistantTransition(true, false, true);
+            return new AssistantTransition(true, false, true, true);
         }
-        return new AssistantTransition(false, false, false);
+        return new AssistantTransition(false, false, false, false);
     }
 }
