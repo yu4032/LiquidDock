@@ -90,8 +90,15 @@ final class SecurityCenterGlassHook {
 
         Class<?> turboClass = Class.forName(
                 SecurityCenterHookSpec.TURBO_LAYOUT_CLASS, false, loader);
+        Class<?> serviceClass = Class.forName(
+                SecurityCenterHookSpec.BOOTSTRAP_SERVICE_CLASS, false, loader);
+        Class<?> sidebarStubClass = Class.forName(
+                SecurityCenterHookSpec.SIDEBAR_OVERLAY_STUB_CLASS, false, loader);
         SecurityCenterSemanticContractResolver.ResolvedContract contract =
                 SecurityCenterSemanticContractResolver.resolve(turboClass, View.class, capabilities);
+        SecurityCenterSemanticContractResolver.SidebarLifecycleContract sidebarLifecycle =
+                SecurityCenterSemanticContractResolver.resolveSidebarLifecycle(
+                        serviceClass, sidebarStubClass);
         SecurityCenterSemanticContractResolver.AllAppsMotionContract allAppsMotion =
                 SecurityCenterSemanticContractResolver.resolveAllAppsMotion(turboClass, View.class);
         SecurityCenterSemanticContractResolver.TerminalCleanupContract terminalCleanup =
@@ -141,6 +148,25 @@ final class SecurityCenterGlassHook {
                             false);
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+
+            HookUtil.hook(sidebarLifecycle.show(), chain -> {
+                if (ACTIVATION.allowsMutation()) notifySidebarShowRequested(contract);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            HookUtil.hook(sidebarLifecycle.hideImmediate(), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (ACTIVATION.allowsMutation()) {
+                    notifySidebarHideRequested(contract, false);
+                }
+                return result;
+            });
+            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (ACTIVATION.allowsMutation()) {
+                    notifySidebarHideRequested(contract, true);
+                }
+                return result;
             });
 
             for (Method terminalMethod : terminalCleanup.methods()) {
@@ -210,6 +236,27 @@ final class SecurityCenterGlassHook {
             if (live != null && turbo != null) live.onVendorPanelClosing(turbo);
         } catch (Throwable error) {
             log("vendor panel close observation failed", error);
+        }
+    }
+
+    private static void notifySidebarShowRequested(
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        try {
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+            if (live != null) live.onSidebarShowRequested();
+        } catch (Throwable error) {
+            log("sidebar show lifecycle observation failed", error);
+        }
+    }
+
+    private static void notifySidebarHideRequested(
+            SecurityCenterSemanticContractResolver.ResolvedContract contract,
+            boolean animated) {
+        try {
+            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+            if (live != null) live.onSidebarHideRequested(animated);
+        } catch (Throwable error) {
+            log("sidebar hide lifecycle observation failed", error);
         }
     }
 

@@ -4,6 +4,8 @@ package com.hellovoid.liquiddock;
 final class SecurityCenterHookSpec {
     static final String BOOTSTRAP_SERVICE_CLASS =
             "com.miui.gamebooster.service.DockWindowManagerService";
+    static final String SIDEBAR_OVERLAY_STUB_CLASS =
+            "com.miui.sidebar.ISidebarOverlay$Stub";
     static final String TURBO_LAYOUT_CLASS =
             "com.miui.gamebooster.windowmanager.newbox.TurboLayout";
 

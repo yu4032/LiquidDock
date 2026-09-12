@@ -90,6 +90,7 @@ final class SecurityCenterGlassCoordinator
     private static final int ASSISTANT_GAME = 1;
     private static final int ASSISTANT_VIDEO = 3;
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
+    private static final long ANIMATED_HIDE_TERMINAL_FALLBACK_MS = 1200L;
 
     private final Policy policy = new Policy();
     private final SecurityCenterGlassSceneState scene = new SecurityCenterGlassSceneState();
@@ -124,6 +125,7 @@ final class SecurityCenterGlassCoordinator
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
     private View attachObservedTurbo;
     private View attachedRoot;
+    private long sidebarLifecycleEpoch;
 
     private final View.OnAttachStateChangeListener turboAttachListener =
             new View.OnAttachStateChangeListener() {
@@ -304,6 +306,39 @@ final class SecurityCenterGlassCoordinator
 
     void onVendorPanelTerminal(View turboLayout) {
         releasePanel(turboLayout, "vendor panel terminal cleanup");
+    }
+
+    void onSidebarShowRequested() {
+        sidebarLifecycleEpoch++;
+        View staleTurbo = turboRef.get();
+        if (staleTurbo != null) {
+            releasePanel(staleTurbo, "sidebar show revoked stale presentation");
+        }
+        log("sidebar show requested epoch=" + sidebarLifecycleEpoch, null);
+    }
+
+    void onSidebarHideRequested(boolean animated) {
+        View closingTurbo = turboRef.get();
+        final long epoch = ++sidebarLifecycleEpoch;
+        if (closingTurbo == null) {
+            log("sidebar hide requested without custom presentation epoch=" + epoch, null);
+            return;
+        }
+        onVendorPanelClosing(closingTurbo);
+        Runnable terminalFallback = () -> {
+            if (epoch == sidebarLifecycleEpoch && closingTurbo == turboRef.get()) {
+                releasePanel(closingTurbo, animated
+                        ? "animated sidebar hide terminal fallback"
+                        : "immediate sidebar hide terminal");
+            }
+        };
+        if (animated) {
+            mainHandler.postDelayed(terminalFallback, ANIMATED_HIDE_TERMINAL_FALLBACK_MS);
+        } else {
+            // The vendor binder posts O0(false) to the same main Looper before this callback.
+            mainHandler.post(terminalFallback);
+        }
+        log("sidebar hide requested animated=" + animated + " epoch=" + epoch, null);
     }
 
     @Override
@@ -570,6 +605,10 @@ final class SecurityCenterGlassCoordinator
         try {
             if (firstHandoff) ownership.onCustomPresented();
             bridge.claimCustom(turbo, dock, box, apps);
+            if (firstHandoff && session != null
+                    && !session.requestSourceRebind("security-center-material-handoff")) {
+                log("PassBlur source rebind deferred after material handoff", null);
+            }
             customOwnerTurboRef = new WeakReference<>(turbo);
             handoffPending = false;
             log("current-generation presentation handed off generation=" + generation

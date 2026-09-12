@@ -135,6 +135,11 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         return shuttingDown;
     }
 
+    boolean requestSourceRebind(String reason) {
+        if (shuttingDown || !sourceBackend.hasBinding()) return false;
+        return sourceBackend.requestRebind(reason, null);
+    }
+
     void requestFresh(
             long generation,
             SecurityCenterGlassFrameGeometry frameGeometry,

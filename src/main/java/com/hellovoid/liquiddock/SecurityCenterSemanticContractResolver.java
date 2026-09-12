@@ -28,6 +28,41 @@ final class SecurityCenterSemanticContractResolver {
         return resolveTerminalCleanup(managerClass, turboClass, wrapperClass, viewClass);
     }
 
+    static SidebarLifecycleContract resolveSidebarLifecycleForTest(
+            Class<?> serviceClass, Class<?> sidebarStubClass) {
+        return resolveSidebarLifecycle(serviceClass, sidebarStubClass);
+    }
+
+    static SidebarLifecycleContract resolveSidebarLifecycle(
+            Class<?> serviceClass, Class<?> sidebarStubClass) {
+        if (serviceClass == null || sidebarStubClass == null) {
+            throw reject("missing sidebar lifecycle service/AIDL stub");
+        }
+        List<Class<?>> implementations = new ArrayList<>();
+        for (Class<?> candidate : serviceClass.getDeclaredClasses()) {
+            if (candidate != sidebarStubClass
+                    && sidebarStubClass.isAssignableFrom(candidate)
+                    && !Modifier.isAbstract(candidate.getModifiers())) {
+                implementations.add(candidate);
+            }
+        }
+        if (implementations.size() != 1) {
+            throw reject("sidebar AIDL implementation missing or ambiguous");
+        }
+        Class<?> binderClass = implementations.get(0);
+        Method show = uniqueDeclaredMethod(binderClass,
+                method -> isPublicInstanceVoid(method) && hasIntParameters(method, 5),
+                "sidebar show authority");
+        Method hideImmediate = uniqueDeclaredMethod(binderClass,
+                method -> isPublicInstanceVoid(method) && method.getParameterCount() == 0,
+                "sidebar immediate-hide authority");
+        Method hideAnimated = uniqueDeclaredMethod(binderClass,
+                method -> isPublicInstanceVoid(method) && hasIntParameters(method, 1),
+                "sidebar animated-hide authority");
+        return new SidebarLifecycleContract(
+                binderClass, show, hideImmediate, hideAnimated);
+    }
+
     static TerminalCleanupContract resolveTerminalCleanup(
             Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
         if (managerClass == null || turboClass == null || wrapperClass == null || viewClass == null) {
@@ -170,6 +205,22 @@ final class SecurityCenterSemanticContractResolver {
             Class<?> managerClass, Class<?> turboClass, Class<?> wrapperClass, Class<?> viewClass) {
         return terminalDirectMethods(managerClass, turboClass, wrapperClass, viewClass).size() == 2
                 && terminalMoveFlagMethods(managerClass, turboClass, wrapperClass, viewClass).size() == 1;
+    }
+
+    private static boolean isPublicInstanceVoid(Method method) {
+        int modifiers = method.getModifiers();
+        return Modifier.isPublic(modifiers)
+                && !Modifier.isStatic(modifiers)
+                && method.getReturnType() == void.class;
+    }
+
+    private static boolean hasIntParameters(Method method, int count) {
+        Class<?>[] parameters = method.getParameterTypes();
+        if (parameters.length != count) return false;
+        for (Class<?> parameter : parameters) {
+            if (parameter != int.class) return false;
+        }
+        return true;
     }
 
     private static AllAppsMotionContract resolveAllAppsMotionCandidate(
@@ -378,6 +429,26 @@ final class SecurityCenterSemanticContractResolver {
         }
 
         List<Method> methods() { return new ArrayList<>(methods); }
+    }
+
+    static final class SidebarLifecycleContract {
+        private final Class<?> binderClass;
+        private final Method show;
+        private final Method hideImmediate;
+        private final Method hideAnimated;
+
+        SidebarLifecycleContract(
+                Class<?> binderClass, Method show, Method hideImmediate, Method hideAnimated) {
+            this.binderClass = binderClass;
+            this.show = show;
+            this.hideImmediate = hideImmediate;
+            this.hideAnimated = hideAnimated;
+        }
+
+        Class<?> binderClass() { return binderClass; }
+        Method show() { return show; }
+        Method hideImmediate() { return hideImmediate; }
+        Method hideAnimated() { return hideAnimated; }
     }
 
     static final class AllAppsMotionContract {

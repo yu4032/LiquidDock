@@ -181,6 +181,7 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
+    private volatile boolean hasPresentedFrame;
     private volatile boolean producerUpdatesEnabled = true;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
@@ -405,6 +406,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         shuttingDown = true;
         producerRecovery.onShutdown();
         gpuBackdropActive = false;
+        hasPresentedFrame = false;
         removeGeometryObserver();
 
         Miuix307PassBlurBridge.Binding currentBinding = binding;
@@ -438,6 +440,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         outputSurfaceTexture = surface;
         outputWidth = Math.max(1, width);
         outputHeight = Math.max(1, height);
+        hasPresentedFrame = false;
         updateBackdropMapping();
         Surface window = new Surface(surface);
         Surface stale = outputWindowSurface;
@@ -450,6 +453,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (shuttingDown || surface != outputSurfaceTexture) return;
         outputWidth = Math.max(1, width);
         outputHeight = Math.max(1, height);
+        hasPresentedFrame = false;
         updateBackdropMapping();
         renderHandler.post(() -> {
             if (eglWindowSurface == EGL14.EGL_NO_SURFACE) return;
@@ -488,6 +492,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (stale != null && stale != window) destroyOutputWindow(stale);
             ensureEglContext();
             destroyEglWindowSurfaceOnly();
+            hasPresentedFrame = false;
             int[] attrs = new int[]{EGL14.EGL_NONE};
             eglWindowSurface = EGL14.eglCreateWindowSurface(
                     eglDisplay, eglConfig, window, attrs, 0);
@@ -712,7 +717,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                     dockBodyHighlightProfile, dockScene,
                     mapping.sampleWidth, mapping.sampleHeight);
             int prismalTexture = prismalRenderer.outputTexture();
-            renderCompositePass(prismalTexture, mapping);
+            if (!renderCompositePass(prismalTexture, mapping)) return;
 
             int glError = GLES20.glGetError();
             if (glError != GLES20.GL_NO_ERROR) {
@@ -731,6 +736,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 throw new IllegalStateException("eglSwapBuffers error=0x"
                         + Integer.toHexString(EGL14.eglGetError()));
             }
+            hasPresentedFrame = true;
             renderedFrameCount++;
             maybeLogPowerStats();
 
@@ -837,18 +843,21 @@ final class Miuix307PassBlurTextureView extends TextureView
                 cornerRadiusPx);
     }
 
-    private void renderCompositePass(int prismalTexture, BackdropSnapshot mapping) {
+    private boolean renderCompositePass(int prismalTexture, BackdropSnapshot mapping) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, mapping.visibleWidth, mapping.visibleHeight);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
         if (mapping.coverage == Miuix307BackdropMapping.Coverage.OUTSIDE
                 || mapping.validDockRight <= mapping.validDockLeft
                 || mapping.validDockTop <= mapping.validDockBottom) {
-            return;
+            if (hasPresentedFrame) return false;
+            GLES20.glClearColor(0f, 0f, 0f, 0f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            return true;
         }
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         if (mapping.coverage == Miuix307BackdropMapping.Coverage.PARTIAL) {
             int left = Math.max(0, Math.round(mapping.validDockLeft * mapping.visibleWidth));
             int bottom = Math.max(0, Math.round(mapping.validDockBottom * mapping.visibleHeight));
@@ -875,6 +884,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         unbindQuad(compositeProgram);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        return true;
     }
 
     private void logPrismalMapping(PrismalGeometry g, BackdropSnapshot mapping) {
