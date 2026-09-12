@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-/** Defers Security Center material binding until the configured panel views are actually ready. */
+/** Defers Security Center custom material binding until the configured panel views are ready. */
 final class SecurityCenterEarlyPrepareHook {
     private static final Object LOCK = new Object();
     private static final Set<Method> INSTALLED = new HashSet<>();
@@ -38,6 +38,13 @@ final class SecurityCenterEarlyPrepareHook {
             try {
                 int type = assistantType(typeArg, contract);
                 if (type == 0) return result;
+                SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                        SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
+                if (!transition.requiresDeferredPrepare) {
+                    SecurityCenterGlassRuntimeState.bindAssistant(null, null, null, type);
+                    log("immediate vendor handoff type=" + type, null);
+                    return result;
+                }
                 armPendingPrepare(
                         (View) turboObject, type, contract, videoMainContentResId);
             } catch (Throwable error) {
@@ -74,8 +81,7 @@ final class SecurityCenterEarlyPrepareHook {
                     pending.type,
                     pending.contract,
                     pending.videoMainContentResId);
-            if ((pending.type == ASSISTANT_GAME || pending.type == ASSISTANT_VIDEO)
-                    && boxMaterial == null) {
+            if (pending.type == ASSISTANT_VIDEO && boxMaterial == null) {
                 return false;
             }
             SecurityCenterGlassRuntimeState.bindAssistant(
@@ -106,12 +112,6 @@ final class SecurityCenterEarlyPrepareHook {
         Object boxObject = invoke(contract.boxGetter(), turbo);
         if (!(boxObject instanceof View)) return null;
         View box = (View) boxObject;
-        if (type == ASSISTANT_GAME) {
-            if (!contract.gameBoxClass().isInstance(box)) return null;
-            Object material = invoke(contract.gameMaterialGetter(), box);
-            return material instanceof View && contract.gameMaterialClass().isInstance(material)
-                    ? (View) material : null;
-        }
         View material = box.findViewById(videoMainContentResId);
         return material != null && material.getId() == videoMainContentResId ? material : null;
     }
