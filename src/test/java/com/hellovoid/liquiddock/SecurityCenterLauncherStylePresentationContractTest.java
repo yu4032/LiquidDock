@@ -8,29 +8,37 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Locks Launcher-style animation authority and full Security Center material ownership. */
+/** Locks verified Security Center Dock material ownership and remaining shader-session boundaries. */
 public class SecurityCenterLauncherStylePresentationContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void customOwnershipClearsTurboLayoutMaterialToo() throws Exception {
+    @Test public void frameworkOwnershipClearsDockButKeepsTurboAsPassWindowHost() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
-        assertTrue(bridge.contains("View turboView = (View) turboLayout"));
-        assertTrue(bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
-        assertTrue(bridge.contains("clearVendorTarget(turboView)"));
-        assertTrue(bridge.contains("target.setBackground(null)"));
+        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        assertTrue("Dock is the claimed material carrier",
+                bridge.contains("SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout)"));
+        assertTrue("Dock vendor material must be cleared before module material is applied",
+                bridge.contains("clearVendorTarget(dockLayout)"));
+        assertFalse("Turbo/root is only the pass-window host and must not be cleared as a carrier",
+                bridge.contains("clearVendorTarget(turboView)"));
+        assertTrue("Turbo/root still enables the framework pass-window capability",
+                policy.contains("setPassWindowBlurEnabled(turbo, true)"));
+        assertTrue("claimed Dock carrier clears its ordinary background",
+                bridge.contains("target.setBackground(null)"));
     }
 
     @Test public void advancedMaterialUsesCarrierPassWindowBlurInsteadOfSinkSelfBlur() throws Exception {
-        String hook = Files.readString(MAIN.resolve("SecurityCenterAdvancedMaterialHook.java"));
+        String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
 
         assertFalse("advanced material must not self-blur the TextureView sink",
                 policy.contains("applyContentBlur(sink"));
-        assertFalse("sink attachment is not Security Center background-blur authority",
-                hook.contains("\"attachOutput\""));
-        assertTrue("advanced material must be bound when custom carrier ownership is claimed",
-                hook.contains("configureAdvancedMaterial("));
+        assertTrue("framework material must be claimed at semantic Dock readiness",
+                early.contains("claimFrameworkDock(turbo, dock)"));
+        assertTrue("eager claim must apply the verified advanced material without a fresh-frame gate",
+                bridge.contains("SecurityCenterMaterialModePolicy.configureAdvancedMaterial("));
         assertTrue("TurboLayout pass-window enable is a separate verified step",
                 policy.contains("setPassWindowBlurEnabled(turbo, true)"));
         assertTrue("carrier must use background blur mode",
@@ -54,8 +62,8 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue(state.contains("setBackground"));
         assertTrue("claimed carriers must suppress later vendor writes while retaining intent",
                 state.contains("successfulSuppressionResult(method)"));
-        assertTrue("release must replay the latest vendor snapshot",
-                bridge.contains("SecurityCenterVendorMaterialState.restoreOwner(turboLayout)"));
+        assertTrue("full release must replay the latest vendor snapshot",
+                bridge.contains("SecurityCenterVendorMaterialState.restoreOwner(owner)"));
         assertFalse("private game material restore must not be part of semantic contract",
                 resolver.contains("gameMaterialRestore"));
         assertFalse("private video material restore must not be part of semantic contract",
