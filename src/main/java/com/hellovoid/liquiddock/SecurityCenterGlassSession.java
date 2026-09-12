@@ -291,10 +291,6 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             inFlight = request;
         }
 
-        if (PassBlurBindPolicy.shouldPauseAfterFreshFrame(PassBlurDomain.SECURITY_CENTER)) {
-            sourceBackend.setUpdatesEnabled(false, "security-center-fresh-source-consumed");
-        }
-
         View root = rootRef.get();
         SecurityCenterGlassGeometry presentation = request.frameGeometry.presentationGeometry();
         if (presentation == null
@@ -320,7 +316,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         synchronized (pipelineLock) {
             if (inFlight != request) return;
             inFlightOutputs = requiredOutputs;
-      }
+        }
 
         presentationBarrier.begin(request.serial, request.sinks);
         try {
@@ -368,7 +364,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             framePipeline.cancelPresentation(request.serial);
             inFlight = null;
             inFlightOutputs = null;
-      }
+        }
     }
 
     void onOutputPresented(SecurityCenterGlassSinkView sink, long serial, long generation) {
@@ -392,14 +388,14 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             inFlightOutputs = null;
         }
 
-        boolean outputsCurrent = outputsStillCurrent(active, expected);
+        boolean outputsCurrent = outputsStillCurrent(active, expectedOutputs);
         if (presented.acceptedCurrentGeneration && outputsCurrent) {
             Listener currentListener = listener;
             if (currentListener != null) currentListener.onFrameRendered(this, generation);
             log("presented serial=" + serial + " generation=" + generation);
         } else {
             log("presentation rejected serial=" + serial + " generation=" + generation
-                    + " OutputsCurrent=" + outputsCurrent);
+                    + " outputsCurrent=" + outputsCurrent);
         }
         if (presented.requestSource && !shuttingDown) {
             sourceBackend.requestFresh(presented.nextGeneration);
@@ -585,7 +581,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glShaderSource(shader, source);
         GLES20.glCompileShader(shader);
         int[] compiled = new int[1];
-        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS,  compiled, 0);
+        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
         if (compiled[0] == 0) {
             String log = GLES20.glGetShaderInfoLog(shader);
             GLES20.glDeleteShader(shader);
