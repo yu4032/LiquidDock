@@ -13,6 +13,16 @@ public class SecurityCenterFrameworkDockContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
+    public void securityCenterAlwaysUsesFrameworkBackend() throws Exception {
+        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+
+        assertFalse("Security Center must not inherit Launcher's persisted shader selection",
+                policy.contains("ConfigReader config = ConfigReader.load()"));
+        assertTrue("Security Center background backend is the verified framework material",
+                policy.contains("return LiquidBlurMode.ADVANCED_MATERIAL;"));
+    }
+
+    @Test
     public void frameworkDockReadinessDoesNotDependOnShaderSourceAuthority() throws Exception {
         String runtime = Files.readString(MAIN.resolve("SecurityCenterGlassRuntimeState.java"));
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
