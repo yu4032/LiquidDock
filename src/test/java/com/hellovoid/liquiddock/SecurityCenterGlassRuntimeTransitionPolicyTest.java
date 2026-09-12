@@ -74,6 +74,25 @@ public class SecurityCenterGlassRuntimeTransitionPolicyTest {
     }
 
     @Test
+    public void vendorOnlyGameDoesNotWaitForCustomPreparation() {
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition game =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(1);
+        assertFalse(game.requiresDeferredPrepare);
+
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition video =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(3);
+        assertTrue(video.requiresDeferredPrepare);
+
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition globalDock =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(4);
+        assertTrue(globalDock.requiresDeferredPrepare);
+
+        SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition unknown =
+                SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(99);
+        assertFalse(unknown.requiresDeferredPrepare);
+    }
+
+    @Test
     public void gameToolboxBindReleasesExistingRuntimeOwner() {
         AtomicInteger releases = new AtomicInteger();
         SecurityCenterGlassRuntimeState.setOwner(releases::incrementAndGet);
