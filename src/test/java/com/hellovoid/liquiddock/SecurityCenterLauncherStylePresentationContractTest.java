@@ -122,6 +122,18 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertFalse(coordinator.contains("SecurityCenterGlassOutputView output"));
     }
 
+    @Test public void earlyPrepareWaitsForPostConfigureViewReadinessWithoutTimers() throws Exception {
+        String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
+        assertTrue("configure-time discovery must survive DockLayout creation that occurs later",
+                early.contains("ViewTreeObserver.OnPreDrawListener"));
+        assertTrue("a not-yet-attached TurboLayout must arm readiness when it attaches",
+                early.contains("addOnAttachStateChangeListener"));
+        assertTrue("readiness must be retried through one semantic bind gate",
+                early.contains("tryBindWhenReady("));
+        assertFalse("Security Center readiness must not use fixed-delay recovery",
+                early.contains("postDelayed("));
+    }
+
     @Test public void timingUsesVendorMotionAndTexturePresentationAuthorities() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
