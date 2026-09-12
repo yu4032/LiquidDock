@@ -7,7 +7,7 @@ import android.view.View;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
-/** Process-local Security Center glass state that releases ownership when it becomes inactive. */
+/** Process-local Security Center glass state owned by the vendor material lifecycle. */
 final class SecurityCenterGlassRuntimeState {
     interface Owner {
         void releaseAll();
@@ -69,14 +69,22 @@ final class SecurityCenterGlassRuntimeState {
         sourceAuthorityAvailable = true;
     }
 
-    /** Config-only gate for the Security Center material feature. */
+    /** Config gate for the Security Center material feature. */
     static boolean isMaterialEnabled() {
         return coreEnabled && glassEnabled && securityCenterEnabled;
     }
 
-    /** Custom shader/session gate; source authority must be live before binding. */
+    /**
+     * The vendor material lifecycle is the primary authority for presentation lifetime. The
+     * activity listener is only an optional producer-rollover hint and must not gate creation of
+     * the replacement output: video/game pages can change while staying inside one Activity.
+     */
     static boolean isEnabled() {
-        return isMaterialEnabled() && sourceAuthorityAvailable;
+        return isMaterialEnabled();
+    }
+
+    static boolean hasSourceAuthorityHint() {
+        return sourceAuthorityAvailable;
     }
 
     static void bindAssistant(View turbo, View dock, View box, int type) {
