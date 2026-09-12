@@ -177,6 +177,24 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 session.contains("onOutputPresented("));
     }
 
+    @Test public void windowVisibilityRestoreForcesProducerRecoveryWithoutRequiringOldBinding() throws Exception {
+        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
+        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+
+        assertTrue("a surviving TextureView must observe real window visibility restoration",
+                sink.contains("onWindowVisibilityChanged(int visibility)"));
+        assertTrue("hidden-to-visible restoration must notify the live session",
+                sink.contains("session.onOutputWindowVisibilityRestored(this)"));
+        assertTrue("session recovery must rebuild the producer even when the old binding is invalid",
+                session.contains("requestRebind(\"security-center-window-visible\")"));
+        assertFalse("unlock recovery must not require the stale binding to still be valid",
+                session.contains("if (shuttingDown || !sourceBackend.hasBinding()) return false;"));
+        assertTrue("coordinator must return to vendor fallback before awaiting a fresh unlock frame",
+                coordinator.contains("window visibility restored; refreshing source generation")
+                        && coordinator.contains("scene.onSourceAuthorityChanged(targetKind)"));
+    }
+
     @Test public void allAppsSettleUsesMotionTargetAndMatchingPresentedComposition() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
