@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Release-only contract: R8 must not rewrite the Xposed timing boundary. */
+/** Release-only contract: R8 must not rewrite runtime-by-name boundaries. */
 public class R8ReleaseKeepContractTest {
     private static final Path KEEP = Path.of("src/main/keepRules/liquiddock.keep");
     private static final Path REFLECTION_KEEP =
@@ -30,6 +30,8 @@ public class R8ReleaseKeepContractTest {
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionRuntime { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionTracker { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.LauncherGlassHomePresentationHook { *; }"));
+        assertFalse("Removed screenshot-era classes must not retain stale keep rules",
+                rules.contains("LiveScreenCapture"));
 
         assertFalse("Do not disable R8 for the whole project",
                 rules.contains("-keep class com.hellovoid.liquiddock.** { *; }"));
@@ -43,20 +45,49 @@ public class R8ReleaseKeepContractTest {
         assertFalse(reflectionRules.contains("LauncherGlassSession"));
     }
 
-    @Test public void securityCenterAuthorityUsesTypedProjectOwnedApis() throws Exception {
+    @Test public void securityCenterSelfReflectionHasTargetedReleaseKeeps() throws Exception {
         assertTrue("Security Center authority controller source must exist",
                 Files.exists(SECURITY_CENTER_AUTHORITY));
-        String source = Files.readString(SECURITY_CENTER_AUTHORITY);
+        assertTrue("reflection keep file must exist", Files.exists(REFLECTION_KEEP));
 
-        assertFalse("Project-owned Security Center lifecycle must not use raw reflection",
-                source.contains("java.lang.reflect."));
-        assertFalse("Project-owned coordinator members must be called through typed APIs",
-                source.contains("SecurityCenterGlassCoordinator.class"));
-        assertFalse("Project-owned session members must be called through typed APIs",
-                source.contains("SecurityCenterGlassSession.class"));
-        assertFalse("Project-owned fields must not be resolved by name",
-                source.contains("getDeclaredField("));
-        assertFalse("Project-owned methods must not be resolved by name",
-                source.contains("getDeclaredMethod("));
+        String source = Files.readString(SECURITY_CENTER_AUTHORITY);
+        String rules = Files.readString(REFLECTION_KEEP);
+
+        assertTrue("The intentional self-reflection exception must remain explicit",
+                source.contains("java.lang.reflect.Field")
+                        && source.contains("java.lang.reflect.Method")
+                        && source.contains("getDeclaredField(")
+                        && source.contains("getDeclaredMethod("));
+
+        assertTrue(rules.contains(
+                "-keepclassmembers class com.hellovoid.liquiddock.SecurityCenterGlassCoordinator"));
+        assertTrue(rules.contains("com.hellovoid.liquiddock.SecurityCenterGlassSceneState scene;"));
+        assertTrue(rules.contains(
+                "com.hellovoid.liquiddock.SecurityCenterGlassSceneState$Target targetKind;"));
+        assertTrue(rules.contains(
+                "com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry currentFrame;"));
+        assertTrue(rules.contains("com.hellovoid.liquiddock.SecurityCenterGlassSession session;"));
+        assertTrue(rules.contains("java.lang.ref.WeakReference turboRef;"));
+        assertTrue(rules.contains("void reconcileSinks();"));
+        assertTrue(rules.contains("boolean syncSinksFromMaterials();"));
+        assertTrue(rules.contains(
+                "com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry captureFrame(boolean);"));
+        assertTrue(rules.contains("void hideAndRestoreVendor();"));
+        assertTrue(rules.contains("void prepareCustomOwnershipForPresentation();"));
+        assertTrue(rules.contains(
+                "void requestCurrentGeneration(com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry);"));
+
+        assertTrue(rules.contains(
+                "-keepclassmembers class com.hellovoid.liquiddock.SecurityCenterGlassSession"));
+        assertTrue(rules.contains("com.hellovoid.liquiddock.RootPassBlurBackend sourceBackend;"));
+
+        assertFalse("Keep only reflected members, not the whole coordinator",
+                rules.contains(
+                        "-keep class com.hellovoid.liquiddock.SecurityCenterGlassCoordinator { *; }"));
+        assertFalse("Keep only reflected members, not the whole session",
+                rules.contains(
+                        "-keep class com.hellovoid.liquiddock.SecurityCenterGlassSession { *; }"));
+        assertFalse("Never keep the whole LiquidDock package",
+                rules.contains("-keep class com.hellovoid.liquiddock.** { *; }"));
     }
 }
