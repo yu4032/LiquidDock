@@ -9,6 +9,7 @@ final class SecurityCenterGlassRuntimeTransitionPolicy {
     enum AssistantBackend {
         IGNORE,
         VENDOR_ONLY,
+        CUSTOM_SHADER,
         FRAMEWORK_PASS_WINDOW
     }
 
@@ -70,7 +71,7 @@ final class SecurityCenterGlassRuntimeTransitionPolicy {
         }
         if (type == ASSISTANT_VIDEO || type == ASSISTANT_GLOBAL_DOCK) {
             return new AssistantTransition(
-                    true, false, true, true, AssistantBackend.FRAMEWORK_PASS_WINDOW);
+                    true, false, true, true, AssistantBackend.CUSTOM_SHADER);
         }
         return new AssistantTransition(false, false, false, false, AssistantBackend.IGNORE);
     }
