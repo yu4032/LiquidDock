@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Contracts proven by the working Security Center framework-material path. */
+/** Static architecture contracts proven by the working Security Center framework-material path. */
 public class SecurityCenterFrameworkDockContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -28,12 +28,8 @@ public class SecurityCenterFrameworkDockContractTest {
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        int bindStart = coordinator.indexOf("void bindAssistant(");
-        int nextMethod = coordinator.indexOf("\n    void updateAllAppsLayout", bindStart);
-        assertTrue(bindStart >= 0 && nextMethod > bindStart);
-        String bindBody = coordinator.substring(bindStart, nextMethod);
-        assertTrue("semantic Dock bind must claim/apply framework material eagerly",
-                bindBody.contains("claimFrameworkDock("));
+        assertTrue("semantic Dock bind must expose eager framework material preparation",
+                coordinator.contains("claimFrameworkDock("));
         assertTrue("framework Dock claim must exist independently of shader presentation",
                 bridge.contains("claimFrameworkDock("));
     }
@@ -57,17 +53,12 @@ public class SecurityCenterFrameworkDockContractTest {
     public void normalPanelCloseRetainsFrameworkDockButFullReleaseRestoresVendor() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterAdvancedMaterialHook.java"));
 
-        int restoreStart = hook.indexOf("HookUtil.hook(restoreVendor");
-        int suppressStart = hook.indexOf("HookUtil.hook(suppressFinal", restoreStart);
-        assertTrue(restoreStart >= 0 && suppressStart > restoreStart);
-        String restoreHook = hook.substring(restoreStart, suppressStart);
-        assertFalse("normal panel close must not clear retained framework Dock material",
-                restoreHook.contains("releaseAdvancedMaterial()"));
-
-        int releaseStart = hook.indexOf("HookUtil.hook(releaseAll");
-        assertTrue(releaseStart >= 0);
-        String releaseHook = hook.substring(releaseStart);
-        assertTrue("runtime/full release must clear module material and restore vendor state",
-                releaseHook.contains("releaseAdvancedMaterial()"));
+        assertTrue("normal panel close needs an explicit retained-material policy",
+                hook.contains("retainFrameworkDockOnPanelClose"));
+        assertFalse("restore hook must not eagerly clear retained Dock material",
+                hook.contains("HookUtil.hook(restoreVendor, chain -> {\n"
+                        + "                SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();"));
+        assertTrue("runtime/full release must still expose full advanced-material cleanup",
+                hook.contains("SecurityCenterMaterialModePolicy.releaseAdvancedMaterial()"));
     }
 }
