@@ -46,6 +46,17 @@ final class SecurityCenterVendorMaterialBridge {
         if (bridge != null) bridge.releaseClaimInternal();
     }
 
+    void protectVendorFallback(
+            Object turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
+        if (!(turboLayout instanceof View) || dockLayout == null) {
+            throw new IllegalArgumentException("missing Security Center material owner");
+        }
+        if (!protectVendorFallbackInternal(
+                (View) turboLayout, dockLayout, boxMaterialView, allAppsLayout)) {
+            throw new IllegalStateException("Security Center vendor fallback unavailable");
+        }
+    }
+
     void claimCustom(
             Object turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
         if (!(turboLayout instanceof View) || dockLayout == null) {
@@ -62,7 +73,7 @@ final class SecurityCenterVendorMaterialBridge {
         releaseClaimInternal(turboLayout);
     }
 
-    private synchronized boolean claimCustomInternal(
+    private synchronized boolean protectVendorFallbackInternal(
             View turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
         if (turboLayout == null || dockLayout == null) return false;
         Object previousOwner = claimedOwner.get();
@@ -72,14 +83,31 @@ final class SecurityCenterVendorMaterialBridge {
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return false;
 
         try {
+            // Claiming alone is non-destructive: vendor intent keeps being recorded, but late
+            // material clears cannot blank the panel while the custom TextureView is still
+            // waiting for a real presentation acknowledgement.
             SecurityCenterVendorMaterialState.claimOwner(
                     turboLayout, dockLayout, boxMaterialView, allAppsLayout);
+            claimedOwner = new WeakReference<>(turboLayout);
+            return true;
+        } catch (Throwable error) {
+            try { SecurityCenterVendorMaterialState.restoreOwner(turboLayout); }
+            catch (Throwable ignored) {}
+            claimedOwner = new WeakReference<>(null);
+            return false;
+        }
+    }
+
+    private synchronized boolean claimCustomInternal(
+            View turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
+        if (!protectVendorFallbackInternal(
+                turboLayout, dockLayout, boxMaterialView, allAppsLayout)) return false;
+        try {
             SecurityCenterVendorMaterialState.runModuleMutation(() -> {
                 clearVendorTarget(dockLayout);
                 clearVendorTarget(boxMaterialView);
                 clearVendorTarget(allAppsLayout);
             });
-            claimedOwner = new WeakReference<>(turboLayout);
             return true;
         } catch (Throwable error) {
             try { SecurityCenterVendorMaterialState.restoreOwner(turboLayout); }
