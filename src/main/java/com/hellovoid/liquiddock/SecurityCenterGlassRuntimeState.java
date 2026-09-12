@@ -69,12 +69,12 @@ final class SecurityCenterGlassRuntimeState {
         sourceAuthorityAvailable = true;
     }
 
-    /** Config-only gate for framework material; it does not require the shader source producer. */
+    /** Config-only gate for the Security Center material feature. */
     static boolean isMaterialEnabled() {
         return coreEnabled && glassEnabled && securityCenterEnabled;
     }
 
-    /** Shader/session gate. Framework Dock material deliberately does not depend on this. */
+    /** Custom shader/session gate; source authority must be live before binding. */
     static boolean isEnabled() {
         return isMaterialEnabled() && sourceAuthorityAvailable;
     }

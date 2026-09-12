@@ -8,40 +8,46 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Static architecture contracts proven by the working Security Center framework-material path. */
+/** Static architecture contracts for the verified Security Center custom-glass path. */
 public class SecurityCenterFrameworkDockContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
-    public void securityCenterAlwaysUsesFrameworkBackend() throws Exception {
+    public void securityCenterAlwaysUsesCustomShaderBackend() throws Exception {
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
 
         assertFalse("Security Center must not inherit Launcher's persisted shader selection",
                 policy.contains("ConfigReader config = ConfigReader.load()"));
-        assertTrue("Security Center background backend is the verified framework material",
-                policy.contains("return LiquidBlurMode.ADVANCED_MATERIAL;"));
+        assertTrue("Security Center must use LiquidDock's shader backend",
+                policy.contains("return LiquidBlurMode.SHADER;"));
+        assertTrue("Security Center sessions must use shader blur",
+                policy.contains("static boolean useShaderBlur() {\n        return true;"));
     }
 
     @Test
-    public void frameworkDockReadinessDoesNotDependOnShaderSourceAuthority() throws Exception {
+    public void customGlassReadinessRequiresShaderSourceAuthority() throws Exception {
         String runtime = Files.readString(MAIN.resolve("SecurityCenterGlassRuntimeState.java"));
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
 
-        assertTrue("framework material needs a config-only enable gate",
+        assertTrue("custom glass keeps a config-only material gate",
                 runtime.contains("static boolean isMaterialEnabled()"));
-        assertTrue("deferred Dock preparation must use the config-only material gate",
-                prepare.contains("SecurityCenterGlassRuntimeState.isMaterialEnabled()"));
+        assertTrue("custom glass readiness must include live shader source authority",
+                runtime.contains("return isMaterialEnabled() && sourceAuthorityAvailable;"));
+        assertTrue("deferred Dock preparation must use the custom session gate",
+                prepare.contains("SecurityCenterGlassRuntimeState.isEnabled()"));
     }
 
     @Test
-    public void semanticDockReadinessPreparesFrameworkMaterialBeforeAnyFreshFrame() throws Exception {
+    public void semanticDockReadinessPreparesCustomSessionBeforeVendorHandoff() throws Exception {
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        assertTrue("semantic Dock readiness must claim/apply framework material eagerly",
-                prepare.contains("claimFrameworkDock("));
-        assertTrue("framework Dock claim must exist independently of shader presentation",
-                bridge.contains("claimFrameworkDock("));
+        assertTrue("semantic Dock readiness must bind the custom session",
+                prepare.contains("SecurityCenterGlassRuntimeState.bindAssistant("));
+        assertTrue("vendor material must be claimed only at the custom handoff",
+                bridge.contains("void claimCustom("));
+        assertFalse("the old framework-material claim must not remain",
+                prepare.contains("claimFrameworkDock(") || bridge.contains("claimFrameworkDock("));
     }
 
     @Test
@@ -49,26 +55,72 @@ public class SecurityCenterFrameworkDockContractTest {
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
-        assertFalse("All Apps must never be an advanced-material carrier",
+        assertFalse("All Apps must never be a vendor-material carrier claimed by the module",
                 policy.contains("advancedApps"));
         assertFalse("All Apps must never receive module pass-window blur",
                 policy.contains("applyPassWindowBlur(\n                    apps"));
-        assertFalse("Turbo root is pass-window host only, not a cleared material carrier",
+        assertFalse("Turbo root is a source host, not a cleared material carrier",
                 bridge.contains("clearVendorTarget(turboView)"));
         assertFalse("All Apps must keep its vendor material",
                 bridge.contains("clearVendorTarget(allAppsLayout)"));
+        assertTrue("custom handoff must clear only the vendor Dock carrier",
+                bridge.contains("clearVendorTarget(dockLayout)"));
     }
 
     @Test
-    public void normalPanelCloseRetainsFrameworkDockButFullReleaseRestoresVendor() throws Exception {
-        String hook = Files.readString(MAIN.resolve("SecurityCenterAdvancedMaterialHook.java"));
+    public void panelCloseRestoresVendorAfterCustomGlassRelease() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
-        assertTrue("normal panel close needs an explicit retained-material policy",
-                hook.contains("retainFrameworkDockOnPanelClose"));
-        assertFalse("restore hook must not eagerly clear retained Dock material",
-                hook.contains("HookUtil.hook(restoreVendor, chain -> {\n"
-                        + "                SecurityCenterMaterialModePolicy.releaseAdvancedMaterial();"));
-        assertTrue("runtime/full release must still expose full advanced-material cleanup",
-                hook.contains("SecurityCenterMaterialModePolicy.releaseAdvancedMaterial()"));
+        assertFalse("custom glass must not retain a framework-material claim after close",
+                bridge.contains("retainFrameworkDockOnPanelClose"));
+        assertTrue("runtime/full release must release the custom vendor claim",
+                coordinator.contains("SecurityCenterVendorMaterialBridge.releaseClaim()"));
+        assertTrue("custom release must replay the latest vendor state",
+                bridge.contains("SecurityCenterVendorMaterialState.restoreOwner(owner)"));
+    }
+
+    @Test
+    public void securityCenterOwnImplementationUsesTypedCallsInsteadOfSelfReflection()
+            throws Exception {
+        String moduleMain = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String earlyPrepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
+        String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
+        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+
+        assertFalse(moduleMain.contains("SecurityCenterAdvancedMaterialHook"));
+        assertFalse(earlyPrepare.contains("SecurityCenterAdvancedMaterialHook"));
+        assertFalse(Files.exists(MAIN.resolve("SecurityCenterAdvancedMaterialHook.java")));
+        assertTrue(moduleMain.contains("SecurityCenterVendorMaterialState.install()"));
+        assertTrue(coordinator.contains("SecurityCenterMaterialModePolicy.prepareBind(turboLayout)"));
+        assertTrue(session.contains("Miuix307PrismalAdapter.toPortable("));
+        assertTrue(session.contains("SecurityCenterMaterialModePolicy.useShaderBlur()"));
+        assertTrue(sink.contains("setAuthorizedVisible(boolean visible)"));
+        assertTrue(bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
+    }
+
+    @Test
+    public void customGlassReplacesAdvancedDockMaterialAtTheTypedClaimBoundary()
+            throws Exception {
+        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
+        String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+
+        assertTrue(policy.contains("return LiquidBlurMode.SHADER;"));
+        assertTrue(policy.contains("static boolean useShaderBlur() {\n        return true;"));
+        assertTrue(prepare.contains("SecurityCenterGlassRuntimeState.isEnabled()"));
+        assertFalse(prepare.contains("claimFrameworkDock(turbo, dock)"));
+        assertTrue(prepare.contains("SecurityCenterGlassRuntimeState.bindAssistant("));
+        assertTrue(session.contains("SecurityCenterMaterialModePolicy.useShaderBlur()"));
+
+        assertTrue(bridge.contains("void claimCustom("));
+        assertTrue(bridge.contains("void restoreVendor("));
+        assertFalse(bridge.contains("claimFrameworkDockInternal"));
+        assertFalse(bridge.contains("configureAdvancedMaterial"));
+        assertTrue(bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
+        assertTrue(bridge.contains("clearVendorTarget(dockLayout)"));
     }
 }
