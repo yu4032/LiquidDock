@@ -573,13 +573,29 @@ final class SecurityCenterGlassCoordinator
 
     private void prepareCustomOwnershipForPresentation() {
         if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR) return;
+        View turbo = turboRef.get();
+        View dock = dockRef.get();
+        SecurityCenterVendorMaterialBridge bridge = vendorMaterialBridge;
+        if (turbo == null || dock == null || bridge == null) {
+            log("custom presentation preparation missing vendor fallback authority", null);
+            return;
+        }
+        try {
+            // Latch the currently visible vendor material without clearing it. Any vendor clear
+            // that races the PassBlur/TextureView presentation is recorded for later replay but
+            // suppressed on-screen until the custom frame has a real presentation ACK.
+            vendorMaterialBridge.protectVendorFallback(turbo, dock, boxRef.get(), appsRef.get());
+        } catch (Throwable error) {
+            log("vendor fallback latch failed closed", error);
+            return;
+        }
         hideCustomOnly();
         ownership.onCustomPreparing();
         handoffPending = true;
-        customOwnerTurboRef = new WeakReference<>(null);
+        customOwnerTurboRef = new WeakReference<>(turbo);
         renderedGeneration = -1L;
         requestedGeneration = -1L;
-        log("custom presentation preparing; vendor remains authoritative generation="
+        log("custom presentation preparing; vendor fallback latched generation="
                 + scene.generation(), null);
     }
 
