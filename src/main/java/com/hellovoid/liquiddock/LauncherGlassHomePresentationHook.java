@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 
 /** Gates Workspace wallpaper capture across HOME and keyguard presentation boundaries. */
@@ -14,8 +16,12 @@ final class LauncherGlassHomePresentationHook {
     private static final String UNLOCK_STATE =
             "com.miui.home.launcher.common.UnlockAnimationStateMachine";
     private static final String PREPARE = "PREPARE";
+    private static final long UNLOCK_CAPTURE_FAIL_OPEN_MS = 2_000L;
 
     private static boolean installed;
+    private static volatile long unlockBarrierSerial = -1L;
+    private static volatile long unlockBarrierStartedAtMs = -1L;
+    private static Handler unlockTimeoutHandler;
 
     private static final HomeTransitionAuthorityState HOME_AUTHORITY =
             new HomeTransitionAuthorityState();
@@ -126,9 +132,8 @@ final class LauncherGlassHomePresentationHook {
     }
 
     /**
-     * Launcher PREPARE is only an early freeze signal. It may hide the glass and pause the
-     * zero-copy producer, but it is never allowed to release capture again. The sole release
-     * authority is SystemUI's LOCKSCREEN -> GONE FINISHED TransitionStep.
+     * Launcher PREPARE is the early freeze signal. SystemUI FINISHED normally starts endpoint
+     * rollover; a bounded fail-open only releases a barrier whose exact serial is still current.
      */
     private static void hookUnlockState(ClassLoader classLoader) {
         try {
@@ -144,13 +149,13 @@ final class LauncherGlassHomePresentationHook {
                 }
                 return chain.proceed(args);
             }, "com.miui.home.launcher.common.UnlockAnimationStateMachine$STATE");
-            MainHook.log(TAG + " unlock freeze installed PREPARE; release=SystemUI FINISHED only");
+            MainHook.log(TAG + " unlock freeze installed PREPARE; release=SystemUI FINISHED/timeout");
         } catch (Throwable error) {
             MainHook.log(TAG + " unlock PREPARE freeze unavailable: " + error);
         }
     }
 
-    /** Sole unlock capture boundary: SystemUI LOCKSCREEN -> GONE FINISHED. */
+    /** Normal unlock capture boundary: SystemUI LOCKSCREEN -> GONE FINISHED. */
     static void onSystemUiLockscreenGoneFinished() {
         UnlockCaptureRecoveryState.Decision decision = UNLOCK_RECOVERY.onSystemUiGoneFinished();
         applyUnlockDecision(decision, decision.suspendProducers
@@ -159,6 +164,13 @@ final class LauncherGlassHomePresentationHook {
     }
 
     static boolean isUnlockCaptureBlocked() {
+        if (!UNLOCK_RECOVERY.isBlocked()) return false;
+        long serial = unlockBarrierSerial;
+        long startedAtMs = unlockBarrierStartedAtMs;
+        if (serial > 0L && startedAtMs >= 0L
+                && SystemClock.elapsedRealtime() - startedAtMs >= UNLOCK_CAPTURE_FAIL_OPEN_MS) {
+            failOpenUnlockBarrierIfCurrent(serial, "gate-age");
+        }
         return UNLOCK_RECOVERY.isBlocked();
     }
 
@@ -168,6 +180,7 @@ final class LauncherGlassHomePresentationHook {
         if (decision.suspendProducers) {
             LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
             LauncherGlassSessionRegistry.suspendForUnlockCapture();
+            armUnlockFailOpen(decision.serial);
             MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
                     + " serial=" + decision.serial);
         }
@@ -191,10 +204,40 @@ final class LauncherGlassHomePresentationHook {
         });
     }
 
+    private static void armUnlockFailOpen(long serial) {
+        unlockBarrierSerial = serial;
+        unlockBarrierStartedAtMs = SystemClock.elapsedRealtime();
+        timeoutHandler().postDelayed(
+                () -> failOpenUnlockBarrierIfCurrent(serial, "PREPARE-timeout"),
+                UNLOCK_CAPTURE_FAIL_OPEN_MS);
+    }
+
+    private static void failOpenUnlockBarrierIfCurrent(long serial, String trigger) {
+        UnlockCaptureRecoveryState.Decision timedOut = UNLOCK_RECOVERY.onBarrierTimeout(serial);
+        if (!timedOut.releaseBarrier) return;
+        MainHook.log(TAG + " unlock capture timeout fail-open trigger=" + trigger
+                + " serial=" + serial + " ageMs="
+                + Math.max(0L, SystemClock.elapsedRealtime() - unlockBarrierStartedAtMs));
+        finishUnlockBarrierNow("unlock-timeout/" + trigger, timedOut.serial);
+    }
+
+    private static Handler timeoutHandler() {
+        synchronized (LauncherGlassHomePresentationHook.class) {
+            if (unlockTimeoutHandler == null) {
+                unlockTimeoutHandler = new Handler(Looper.getMainLooper());
+            }
+            return unlockTimeoutHandler;
+        }
+    }
+
     private static void finishUnlockBarrierNow(String reason, long serial) {
+        if (unlockBarrierSerial == serial) {
+            unlockBarrierSerial = -1L;
+            unlockBarrierStartedAtMs = -1L;
+        }
         MainHook.log(TAG + " unlock wallpaper capture released: " + reason
                 + " serial=" + serial);
-        // SceneController keeps the glass hidden until the first fresh producer generation lands.
+        // SceneController requests a fresh generation before exposing Workspace glass again.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
     }
 

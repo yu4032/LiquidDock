@@ -14,10 +14,13 @@ public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
+    private String loadedProcessName;
+
     @Override
     public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
         Api101Bridge.init(this);
-        Api101Bridge.log("[DC] API101 module loaded process=" + param.getProcessName()
+        loadedProcessName = param.getProcessName();
+        Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
     }
 
@@ -30,6 +33,30 @@ public final class ModuleMain extends XposedModule {
                 SystemUiHomeTransitionSource.install(param.getClassLoader());
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI timing source init failed", error);
+            }
+            return;
+        }
+        if (SecurityCenterProcessPolicy.PACKAGE.equals(packageName)) {
+            if (!SecurityCenterProcessPolicy.shouldInstall(packageName, loadedProcessName)) return;
+            try {
+                ClassLoader classLoader = param.getClassLoader();
+                if (classLoader == null) return;
+                ConfigReader configReader = ConfigReader.load();
+                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                SecurityCenterGlassRuntimeState.initialize(
+                        Api101Bridge.remotePreferences("config"),
+                        runtimeConfig.enabled,
+                        runtimeConfig.glass.enabled,
+                        runtimeConfig.glass.securityCenterEnabled);
+                if (!SecurityCenterVendorMaterialState.install()
+                        || !SecurityCenterSourceAuthorityHook.install(classLoader)) {
+                    Api101Bridge.log(
+                            "[DC][SecurityCenterGlass] required material/source authority unavailable; fail closed");
+                    return;
+                }
+                SecurityCenterGlassHook.install(classLoader, runtimeConfig);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC] Security Center glass init failed", error);
             }
             return;
         }

@@ -33,7 +33,20 @@ jobs:
           # is small enough that retaining prior entries is preferable here.
           cache-cleanup: never
       - run: chmod +x ./gradlew
-      - run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Audit Security Center zero-copy constraints
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(
+            src/main/java/com/hellovoid/liquiddock/SecurityCenter*.java
+            src/main/java/com/hellovoid/liquiddock/RootPassBlur*.java
+          )
+          if (( ${#files[@]} > 0 )) && grep -En 'ScreenCapture|Bitmap\.createBitmap|PixelCopy|postDelayed\(' "${files[@]}"; then
+            echo "Forbidden Security Center/root PassBlur regression detected" >&2
+            exit 1
+          fi
+      - name: Unit + debug assembly
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api101-debug

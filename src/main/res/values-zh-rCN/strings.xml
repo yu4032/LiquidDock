@@ -3,6 +3,7 @@
     <string name="app_name">LiquidDock</string>
     <string name="action_back">返回</string>
     <string name="action_restart_launcher">重启桌面</string>
+    <string name="action_restart_security_center">重启安全中心</string>
     <string name="action_restart_system_ui">重启系统界面</string>
     <string name="page_grid">主屏幕布局</string>
     <string name="page_dock">Dock 尺寸与模糊</string>
@@ -58,6 +59,8 @@
     <string name="recents_header_summary">调整任务卡片后方的系统壁纸模糊程度；修改后重启桌面生效。</string>
     <string name="liquid_enable">启用液态玻璃</string>
     <string name="liquid_enable_summary">关闭会立即释放现有玻璃层；重新启用并完整安装玻璃 Hook 需重启桌面</string>
+    <string name="liquid_security_center_glass_enable">安全中心侧边栏玻璃</string>
+    <string name="liquid_security_center_glass_enable_summary">为已支持的全局侧边栏与所有应用使用 LiquidDock 液态玻璃；LiquidDock 释放所有权后由安全中心自行恢复原生材质或背景模糊。</string>
     <string name="liquid_blur_method">模糊方法</string>
     <string name="liquid_shader_blur">Shader 双环模糊</string>
     <string name="liquid_native_blur">系统原生 Self Blur</string>
