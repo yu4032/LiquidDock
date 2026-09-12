@@ -8,17 +8,21 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Locks verified Security Center Dock material ownership and remaining shader-session boundaries. */
+/** Locks verified Security Center Dock/toolbox/All Apps material ownership and remaining shader-session boundaries. */
 public class SecurityCenterLauncherStylePresentationContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void customOwnershipClearsDockButKeepsTurboAsSourceHost() throws Exception {
+    @Test public void customOwnershipClearsDockToolboxAndAllAppsButKeepsTurboAsSourceHost() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
-        assertTrue("Dock is the claimed material carrier",
-                bridge.contains("SecurityCenterVendorMaterialState.claimOwner(turboLayout, dockLayout)"));
+        assertTrue("Dock, upper toolbox and All Apps are the claimed carriers",
+                bridge.contains("dockLayout, boxMaterialView, allAppsLayout"));
         assertTrue("Dock vendor material must be cleared before module material is applied",
                 bridge.contains("clearVendorTarget(dockLayout)"));
+        assertTrue("the upper toolbox carrier must be cleared before module material is applied",
+                bridge.contains("clearVendorTarget(boxMaterialView)"));
+        assertTrue("All Apps vendor material must be cleared before module material is applied",
+                bridge.contains("clearVendorTarget(allAppsLayout)"));
         assertFalse("Turbo/root is only the pass-window host and must not be cleared as a carrier",
                 bridge.contains("clearVendorTarget(turboView)"));
         assertTrue("Security Center selects LiquidDock's shader material",
