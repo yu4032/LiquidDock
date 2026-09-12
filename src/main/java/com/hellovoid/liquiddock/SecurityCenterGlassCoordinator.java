@@ -189,7 +189,7 @@ final class SecurityCenterGlassCoordinator
         bindAssistant(turboLayout, dockLayout, null, ASSISTANT_GLOBAL_DOCK);
     }
 
-    /** Binds one vendor c0() result; Dock, Game, Video and Global Dock share one root session. */
+    /** Binds one semantically resolved assistant panel; Dock, Game, Video and Global Dock share one root session. */
     void bindAssistant(View turboLayout, View dockLayout, View boxLayout, int type) {
         if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
         View previousTurbo = turboRef.get();
