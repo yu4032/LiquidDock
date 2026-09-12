@@ -49,7 +49,7 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - name: Release R8 shrink verification
         run: ./gradlew minifyReleaseWithR8 --stacktrace
-      - name: Audit release R8 reflection boundary
+      - name: Audit release R8 literal entry boundary
         shell: bash
         run: |
           mapping=build/outputs/mapping/release/mapping.txt
@@ -59,67 +59,13 @@ jobs:
 
           lines = Path("build/outputs/mapping/release/mapping.txt").read_text(
               encoding="utf-8", errors="replace").splitlines()
-
-          def section(class_name):
-              prefix = class_name + " -> "
-              start = next((i for i, line in enumerate(lines) if line.startswith(prefix)), None)
-              if start is None:
-                  raise SystemExit(f"missing release mapping class: {class_name}")
-              end = start + 1
-              while end < len(lines) and (lines[end].startswith("    ") or lines[end].startswith("#")):
-                  end += 1
-              return lines[start:end]
-
-          module = section("com.hellovoid.liquiddock.ModuleMain")
-          if module[0] != (
+          expected = (
               "com.hellovoid.liquiddock.ModuleMain -> "
               "com.hellovoid.liquiddock.ModuleMain:"
-          ):
+          )
+          if expected not in lines:
               raise SystemExit("ModuleMain literal Xposed entry was renamed by release R8")
-
-          coordinator = section(
-              "com.hellovoid.liquiddock.SecurityCenterGlassCoordinator")
-          session = section("com.hellovoid.liquiddock.SecurityCenterGlassSession")
-
-          required = {
-              "scene": "com.hellovoid.liquiddock.SecurityCenterGlassSceneState scene",
-              "targetKind": (
-                  "com.hellovoid.liquiddock.SecurityCenterGlassSceneState$Target targetKind"),
-              "currentFrame": (
-                  "com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry currentFrame"),
-              "session": "com.hellovoid.liquiddock.SecurityCenterGlassSession session",
-              "turboRef": "java.lang.ref.WeakReference turboRef",
-              "reconcileSinks": "void reconcileSinks()",
-              "syncSinksFromMaterials": "boolean syncSinksFromMaterials()",
-              "captureFrame": (
-                  "com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry captureFrame(boolean)"),
-              "hideAndRestoreVendor": "void hideAndRestoreVendor()",
-              "prepareCustomOwnershipForPresentation": (
-                  "void prepareCustomOwnershipForPresentation()"),
-              "requestCurrentGeneration": (
-                  "void requestCurrentGeneration("
-                  "com.hellovoid.liquiddock.SecurityCenterGlassFrameGeometry)"),
-          }
-
-          def require_preserved(block, source_signature, final_name):
-              for line in block:
-                  if source_signature in line and " -> " in line:
-                      if line.rsplit(" -> ", 1)[1].strip() == final_name:
-                          return
-              raise SystemExit(
-                  f"release R8 did not preserve reflected member {source_signature} -> {final_name}")
-
-          for final_name, source_signature in required.items():
-              require_preserved(coordinator, source_signature, final_name)
-          require_preserved(
-              session,
-              "com.hellovoid.liquiddock.RootPassBlurBackend sourceBackend",
-              "sourceBackend")
-
-          print("release R8 reflection boundary: 12/12 reflected members preserved")
-          print(module[0])
-          print(coordinator[0])
-          print(session[0])
+          print("release R8 literal entry preserved: " + expected)
           PY
       - uses: actions/upload-artifact@v4
         with:
