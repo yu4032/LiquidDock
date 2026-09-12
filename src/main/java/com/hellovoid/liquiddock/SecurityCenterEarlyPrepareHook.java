@@ -64,10 +64,22 @@ final class SecurityCenterEarlyPrepareHook {
 
     private static boolean tryBindWhenReady(PendingPrepare pending) {
         View turbo = pending.turboRef.get();
-        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()) return false;
+        if (turbo == null || !SecurityCenterGlassRuntimeState.isMaterialEnabled()) return false;
         try {
             Object dockObject = invoke(pending.contract.dockGetter(), turbo);
             if (!(dockObject instanceof View)) return false;
+            View dock = (View) dockObject;
+
+            // The verified Security Center path is framework material. Claim it immediately at
+            // semantic readiness instead of waiting for a shader source/fresh-frame callback.
+            if (SecurityCenterMaterialModePolicy.currentMode() == LiquidBlurMode.ADVANCED_MATERIAL) {
+                if (!SecurityCenterVendorMaterialBridge.claimFrameworkDock(turbo, dock)) {
+                    return false;
+                }
+                log("framework Dock prepared type=" + pending.type, null);
+                return true;
+            }
+
             View boxMaterial = resolveBoxMaterial(
                     turbo,
                     pending.type,
@@ -78,7 +90,7 @@ final class SecurityCenterEarlyPrepareHook {
                 return false;
             }
             SecurityCenterGlassRuntimeState.bindAssistant(
-                    turbo, (View) dockObject, boxMaterial, pending.type);
+                    turbo, dock, boxMaterial, pending.type);
             log("deferred prepare bound type=" + pending.type, null);
             return true;
         } catch (Throwable error) {
