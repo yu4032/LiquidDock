@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -80,12 +81,14 @@ public class SecurityCenterPassBlurOwnershipContractTest {
                 hook.contains("sidebarLifecycle.show()")
                         && hook.contains("sidebarLifecycle.hideImmediate()")
                         && hook.contains("sidebarLifecycle.hideAnimated()"));
-        assertTrue("an immediate vendor hide must terminate the custom session on the next loop",
+        assertTrue("an immediate vendor hide must terminate on the next main-loop turn",
                 coordinator.contains("immediate sidebar hide terminal")
-                        && coordinator.contains("mainHandler.post(terminalFallback)"));
-        assertTrue("a missed animated terminal callback must have a bounded cleanup fallback",
-                coordinator.contains("ANIMATED_HIDE_TERMINAL_FALLBACK_MS")
-                        && coordinator.contains("mainHandler.postDelayed(terminalFallback"));
+                        && coordinator.contains("mainHandler.post(immediateTerminal)"));
+        assertTrue("animated teardown must wait for the semantic terminal-cleanup authority",
+                coordinator.contains("animated sidebar hide awaiting semantic terminal cleanup")
+                        && hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
+        assertFalse("animated teardown must not invent a fixed-delay terminal fallback",
+                coordinator.contains("postDelayed("));
         assertTrue("a new show must revoke a stale previous presentation before rebinding",
                 coordinator.contains("sidebar show revoked stale presentation"));
     }

@@ -90,7 +90,6 @@ final class SecurityCenterGlassCoordinator
     private static final int ASSISTANT_GAME = 1;
     private static final int ASSISTANT_VIDEO = 3;
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
-    private static final long ANIMATED_HIDE_TERMINAL_FALLBACK_MS = 1200L;
 
     private final Policy policy = new Policy();
     private final SecurityCenterGlassSceneState scene = new SecurityCenterGlassSceneState();
@@ -325,18 +324,18 @@ final class SecurityCenterGlassCoordinator
             return;
         }
         onVendorPanelClosing(closingTurbo);
-        Runnable terminalFallback = () -> {
-            if (epoch == sidebarLifecycleEpoch && closingTurbo == turboRef.get()) {
-                releasePanel(closingTurbo, animated
-                        ? "animated sidebar hide terminal fallback"
-                        : "immediate sidebar hide terminal");
-            }
-        };
-        if (animated) {
-            mainHandler.postDelayed(terminalFallback, ANIMATED_HIDE_TERMINAL_FALLBACK_MS);
+        if (!animated) {
+            Runnable immediateTerminal = () -> {
+                if (epoch == sidebarLifecycleEpoch && closingTurbo == turboRef.get()) {
+                    releasePanel(closingTurbo, "immediate sidebar hide terminal");
+                }
+            };
+            // The vendor binder posts its immediate hide to the same main Looper before this callback.
+            mainHandler.post(immediateTerminal);
         } else {
-            // The vendor binder posts O0(false) to the same main Looper before this callback.
-            mainHandler.post(terminalFallback);
+            // Animated teardown is authoritative only at the semantically resolved terminal cleanup.
+            // Detach, runtime disable, and the next show remain independent fail-safe release paths.
+            log("animated sidebar hide awaiting semantic terminal cleanup epoch=" + epoch, null);
         }
         log("sidebar hide requested animated=" + animated + " epoch=" + epoch, null);
     }
