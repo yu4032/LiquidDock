@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
-/** Defers Security Center custom material binding until the configured panel views are ready. */
+/** Defers Security Center material binding until the configured panel views are ready. */
 final class SecurityCenterEarlyPrepareHook {
     private static final Object LOCK = new Object();
     private static final Set<Method> INSTALLED = new HashSet<>();
@@ -95,7 +95,7 @@ final class SecurityCenterEarlyPrepareHook {
                 SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(type);
         if (!transition.rearmOnSidebarShow) return;
         armPendingPrepare(turbo, type, contract, videoMainContentResId);
-        log("sidebar show rearmed custom assistant type=" + type, null);
+        log("sidebar show rearmed material type=" + type, null);
     }
 
     private static void rememberCustomRearm(
@@ -149,24 +149,24 @@ final class SecurityCenterEarlyPrepareHook {
 
     private static boolean tryBindWhenReady(PendingPrepare pending) {
         View turbo = pending.turboRef.get();
-        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()) return false;
+        if (turbo == null || !SecurityCenterGlassRuntimeState.isMaterialEnabled()) return false;
         try {
+            SecurityCenterGlassRuntimeTransitionPolicy.AssistantTransition transition =
+                    SecurityCenterGlassRuntimeTransitionPolicy.planAssistant(pending.type);
+            if (transition.backend
+                    != SecurityCenterGlassRuntimeTransitionPolicy.AssistantBackend.FRAMEWORK_PASS_WINDOW) {
+                return false;
+            }
+
             Object dockObject = invoke(pending.contract.dockGetter(), turbo);
             if (!(dockObject instanceof View)) return false;
             View dock = (View) dockObject;
 
-            View boxMaterial = resolveBoxMaterial(
-                    turbo,
-                    pending.type,
-                    pending.contract,
-                    pending.videoMainContentResId);
-            if (pending.type == ASSISTANT_VIDEO && boxMaterial == null) {
+            if (!SecurityCenterVendorMaterialBridge.claimFrameworkDock(turbo, dock)) {
                 return false;
             }
-            SecurityCenterGlassRuntimeState.bindAssistant(
-                    turbo, dock, boxMaterial, pending.type);
             markActive(turbo, pending.type);
-            log("deferred prepare bound type=" + pending.type, null);
+            log("framework Dock prepared type=" + pending.type, null);
             return true;
         } catch (Throwable error) {
             log("deferred prepare not ready", error);
@@ -181,19 +181,6 @@ final class SecurityCenterEarlyPrepareHook {
         int type = ((Number) value).intValue();
         return type == ASSISTANT_GAME || type == ASSISTANT_VIDEO || type == ASSISTANT_GLOBAL_DOCK
                 ? type : 0;
-    }
-
-    private static View resolveBoxMaterial(
-            View turbo,
-            int type,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract,
-            int videoMainContentResId) {
-        if (type == ASSISTANT_GLOBAL_DOCK) return null;
-        Object boxObject = invoke(contract.boxGetter(), turbo);
-        if (!(boxObject instanceof View)) return null;
-        View box = (View) boxObject;
-        View material = box.findViewById(videoMainContentResId);
-        return material != null && material.getId() == videoMainContentResId ? material : null;
     }
 
     private static Object invoke(Method method, Object target, Object... args) {
