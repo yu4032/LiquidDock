@@ -3,46 +3,53 @@ package com.hellovoid.liquiddock;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import org.junit.Test;
 
-/** Dock backdrop sampling must not add an extra VSYNC behind vendor Dock motion. */
+/** Dock backdrop sampling must consume every vendor motion update before VSYNC-loop coalescing. */
 public class DockBackdropMotionSyncContractTest {
-    private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
-
     @Test
-    public void sceneRefreshDoesNotDeferMappingToNextVsync() throws Exception {
-        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
-        String method = slice(view,
-                "void requestDockSceneRefresh()",
-                "/**\n     * Reconnect SurfaceFlinger's PassBlur producer");
+    public void firstVendorMotionFrameRefreshesNowAndSchedulesContinuation() {
+        DockBackdropMotionSyncState state = new DockBackdropMotionSyncState();
 
-        assertTrue(method.contains("dockCompositor.invalidateUiScene();"));
-        assertTrue(method.contains("updateBackdropMapping();"));
-        assertFalse("motion refresh must not add a postOnAnimation VSYNC before mapping",
-                method.contains("postOnAnimation("));
+        DockBackdropMotionSyncState.Decision decision = state.onVendorMotionFrame();
+
+        assertTrue(decision.refreshMappingNow);
+        assertTrue(decision.scheduleContinuation);
     }
 
     @Test
-    public void currentAnimationFrameRefreshesEvenWhenFadeLoopIsAlreadyScheduled() throws Exception {
-        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
-        String method = slice(renderer,
-                "static void requestDockAnimationFrames()",
-                "static void clear()");
+    public void laterVendorMotionFrameStillRefreshesNowWhenContinuationAlreadyPending() {
+        DockBackdropMotionSyncState state = new DockBackdropMotionSyncState();
+        state.onVendorMotionFrame();
 
-        int refresh = method.indexOf("gpuBackdrop.requestDockSceneRefresh();");
-        int coalesce = method.indexOf("dockAnimationFrameScheduled");
-        assertTrue("vendor animation frame must refresh backdrop before loop coalescing",
-                refresh >= 0 && coalesce >= 0 && refresh < coalesce);
+        DockBackdropMotionSyncState.Decision decision = state.onVendorMotionFrame();
+
+        assertTrue("coalescing the continuation must never suppress current-frame mapping",
+                decision.refreshMappingNow);
+        assertFalse(decision.scheduleContinuation);
     }
 
-    private static String slice(String source, String startToken, String endToken) {
-        int start = source.indexOf(startToken);
-        if (start < 0) throw new AssertionError("missing start token: " + startToken);
-        int end = source.indexOf(endToken, start);
-        if (end < 0) throw new AssertionError("missing end token: " + endToken);
-        return source.substring(start, end);
+    @Test
+    public void continuationVsyncReopensOneSchedulingSlot() {
+        DockBackdropMotionSyncState state = new DockBackdropMotionSyncState();
+        state.onVendorMotionFrame();
+
+        state.onContinuationVsync();
+        DockBackdropMotionSyncState.Decision next = state.onVendorMotionFrame();
+
+        assertTrue(next.refreshMappingNow);
+        assertTrue(next.scheduleContinuation);
+    }
+
+    @Test
+    public void resetDropsPendingContinuation() {
+        DockBackdropMotionSyncState state = new DockBackdropMotionSyncState();
+        state.onVendorMotionFrame();
+
+        state.reset();
+        DockBackdropMotionSyncState.Decision next = state.onVendorMotionFrame();
+
+        assertTrue(next.refreshMappingNow);
+        assertTrue(next.scheduleContinuation);
     }
 }
