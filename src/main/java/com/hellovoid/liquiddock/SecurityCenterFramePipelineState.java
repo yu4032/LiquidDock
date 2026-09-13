@@ -1,10 +1,10 @@
 package com.hellovoid.liquiddock;
 
 /**
- * Android-free back-pressure state for Security Center root capture and TextureView presentation.
- * At most one root source request and one submitted presentation may be outstanding. Geometry
- * changes coalesce to the latest serial, but a frame that has already been submitted to a
- * TextureView must reach its own Surface update acknowledgement before a replacement is armed.
+ * Android-free back-pressure state for Security Center source freshness and TextureView
+ * presentation. At most one physical presentation may be outstanding. Fresh PassBlur acquisition
+ * stays live independently, while geometry changes may reuse the latest normalized backdrop from
+ * the same generation instead of waiting for another producer buffer.
  */
 final class SecurityCenterFramePipelineState {
     static final class Offer {
@@ -51,8 +51,17 @@ final class SecurityCenterFramePipelineState {
     private long latestGeneration = -1L;
     private boolean sourceRequested;
     private long sourceGeneration = -1L;
+
+    private long cachedGeneration = -1L;
+    private long cachedRevision;
+
     private long inFlightSerial = -1L;
     private long inFlightGeneration = -1L;
+    private long inFlightRevision = -1L;
+
+    private long presentedSerial = -1L;
+    private long presentedGeneration = -1L;
+    private long presentedRevision = -1L;
 
     synchronized Offer offer(long serial, long generation) {
         if (serial < 0L || generation < 0L) return noneOffer();
@@ -92,19 +101,59 @@ final class SecurityCenterFramePipelineState {
                 request ? sourceGeneration : -1L);
     }
 
+    /**
+     * Consumes one genuinely new normalized PassBlur backdrop. The source request is satisfied even
+     * when an older physical presentation is still awaiting TextureView ACK; the newer backdrop is
+     * retained as a cached revision and will be replayed after that ACK instead of stealing it.
+     */
     synchronized Submission onFreshSource(long generation) {
-        if (!sourceRequested || inFlightSerial >= 0L
+        if (!sourceRequested
                 || generation < 0L
                 || generation != sourceGeneration
                 || generation != latestGeneration
                 || latestSerial < 0L) {
-            return new Submission(false, -1L, -1L);
+            return noneSubmission();
         }
+
         sourceRequested = false;
         sourceGeneration = -1L;
+        cachedGeneration = generation;
+        cachedRevision++;
+
+        if (inFlightSerial >= 0L) return noneSubmission();
+        return beginSubmission(cachedRevision, true);
+    }
+
+    /**
+     * Reuses the already normalized backdrop for geometry-only presentation work. Reuse never
+     * crosses generations, never creates a second physical in-flight presentation, and only runs
+     * when either geometry or cached backdrop content is newer than the last presented frame.
+     */
+    synchronized Submission onCachedSource(long generation) {
+        if (generation < 0L
+                || generation != latestGeneration
+                || generation != cachedGeneration
+                || latestSerial < 0L
+                || inFlightSerial >= 0L) {
+            return noneSubmission();
+        }
+
+        boolean geometryChanged = presentedGeneration != latestGeneration
+                || presentedSerial != latestSerial;
+        boolean backdropChanged = presentedGeneration != latestGeneration
+                || presentedRevision != cachedRevision;
+        if (!geometryChanged && !backdropChanged) return noneSubmission();
+
+        return beginSubmission(cachedRevision, false);
+    }
+
+    private Submission beginSubmission(long revision, boolean freshSource) {
         inFlightSerial = latestSerial;
         inFlightGeneration = latestGeneration;
-        SecurityCenterGlassMorphProbe.sourceAccepted(inFlightGeneration, inFlightSerial);
+        inFlightRevision = revision;
+        if (freshSource) {
+            SecurityCenterGlassMorphProbe.sourceAccepted(inFlightGeneration, inFlightSerial);
+        }
         return new Submission(true, inFlightSerial, inFlightGeneration);
     }
 
@@ -112,17 +161,24 @@ final class SecurityCenterFramePipelineState {
      * Consume exactly the serial that was submitted to TextureView. A physically presented frame
      * from the still-current generation is immediately eligible to reveal custom glass, even when
      * a newer geometry serial arrived while it was awaiting the Surface update. Serial freshness
-     * only controls whether another source frame is needed; it must not keep vendor material visible
-     * throughout a continuously changing animation. A frame from an obsolete generation is consumed
-     * but never allowed to reveal.
+     * only controls catch-up; it must not keep vendor material visible throughout a continuously
+     * changing animation. A frame from an obsolete generation is consumed but never allowed to
+     * reveal.
      */
     synchronized Presentation onPresented(long serial, long generation) {
         if (serial < 0L || generation < 0L
                 || serial != inFlightSerial || generation != inFlightGeneration) {
             return new Presentation(false, false, -1L);
         }
+
+        long revision = inFlightRevision;
         inFlightSerial = -1L;
         inFlightGeneration = -1L;
+        inFlightRevision = -1L;
+
+        presentedSerial = serial;
+        presentedGeneration = generation;
+        presentedRevision = revision;
         boolean current = generation == latestGeneration;
 
         boolean request = false;
@@ -146,6 +202,7 @@ final class SecurityCenterFramePipelineState {
         SecurityCenterGlassMorphProbe.presentationCancelled(serial, "output-invalidated");
         inFlightSerial = -1L;
         inFlightGeneration = -1L;
+        inFlightRevision = -1L;
         boolean request = false;
         long nextGeneration = -1L;
         if (latestSerial >= 0L && latestGeneration >= 0L && !sourceRequested) {
@@ -167,11 +224,21 @@ final class SecurityCenterFramePipelineState {
         latestGeneration = -1L;
         sourceRequested = false;
         sourceGeneration = -1L;
+        cachedGeneration = -1L;
+        cachedRevision = 0L;
         inFlightSerial = -1L;
         inFlightGeneration = -1L;
+        inFlightRevision = -1L;
+        presentedSerial = -1L;
+        presentedGeneration = -1L;
+        presentedRevision = -1L;
     }
 
     private static Offer noneOffer() {
         return new Offer(false, false, -1L, -1L);
+    }
+
+    private static Submission noneSubmission() {
+        return new Submission(false, -1L, -1L);
     }
 }
