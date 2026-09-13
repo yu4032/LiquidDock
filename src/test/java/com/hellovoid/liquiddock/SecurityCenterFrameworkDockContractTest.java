@@ -56,12 +56,12 @@ public class SecurityCenterFrameworkDockContractTest {
         String coordinator = Files.readString(
                 MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
-        assertTrue("CUSTOM_PREPARING must expose a non-destructive vendor fallback observer",
+        assertTrue("CUSTOM_PREPARING must expose a non-destructive vendor fallback latch",
                 bridge.contains("void protectVendorFallback("));
-        assertTrue("the coordinator must keep the vendor fallback available while waiting for ACK",
+        assertTrue("the coordinator must keep the current vendor fallback while waiting for ACK",
                 coordinator.contains("bridge.protectVendorFallback("));
-        assertTrue("preparing must observe vendor material without claiming/suppressing it",
-                bridge.contains("SecurityCenterVendorMaterialState.observeOwner("));
+        assertTrue("preparing may validate material mode but must not establish carrier ownership",
+                bridge.contains("return SecurityCenterMaterialModePolicy.prepareBind(turboLayout);"));
         assertTrue("the real custom handoff must still claim vendor carriers",
                 bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
         assertTrue("destructive vendor clearing must remain a separate presentation handoff",
