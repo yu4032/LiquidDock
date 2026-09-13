@@ -102,7 +102,7 @@ public class StageWorkspaceRuntimeContractTest {
         assertTrue(source.contains("overlayState.evaluate"));
         assertTrue(source.contains("StageWorkspaceOverlayState.Action.IGNORE"));
         assertTrue(source.contains("StageWorkspaceOverlayState.Action.HIDE"));
-        assertTrue(source.contains("StageWorkspaceOverlayState.Action.SHOW"));
+        assertTrue(source.contains("StageWorkspaceOverlayContentPolicy.shouldRefresh"));
     }
 
     @Test
