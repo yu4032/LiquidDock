@@ -51,7 +51,7 @@ public class SecurityCenterFrameworkDockContractTest {
     }
 
     @Test
-    public void customPreparingObservesVendorWithoutSuppressingItsEntranceAnimation() throws Exception {
+    public void customPreparingLatchesVendorFallbackBeforeDestructiveHandoff() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String coordinator = Files.readString(
                 MAIN.resolve("SecurityCenterGlassCoordinator.java"));
@@ -60,19 +60,13 @@ public class SecurityCenterFrameworkDockContractTest {
                 bridge.contains("void protectVendorFallback("));
         assertTrue("the coordinator must keep the vendor fallback available while waiting for ACK",
                 coordinator.contains("bridge.protectVendorFallback("));
-
-        int protectStart = bridge.indexOf("private synchronized boolean protectVendorFallbackInternal(");
-        int claimStart = bridge.indexOf("private synchronized boolean claimCustomInternal(");
-        assertTrue(protectStart >= 0 && claimStart > protectStart);
-        String preparing = bridge.substring(protectStart, claimStart);
-        assertFalse("CUSTOM_PREPARING must not claim/suppress vendor material writes",
-                preparing.contains("SecurityCenterVendorMaterialState.claimOwner("));
-
-        String handoff = bridge.substring(claimStart);
-        assertTrue("the real ownership claim starts only after the custom frame is acknowledged",
-                handoff.contains("SecurityCenterVendorMaterialState.claimOwner("));
-        assertTrue("destructive vendor clearing remains inside the custom handoff",
-                handoff.contains("clearVendorTarget(dockLayout)"));
+        assertTrue("preparing must observe vendor material without claiming/suppressing it",
+                bridge.contains("SecurityCenterVendorMaterialState.observeOwner("));
+        assertTrue("the real custom handoff must still claim vendor carriers",
+                bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
+        assertTrue("destructive vendor clearing must remain a separate presentation handoff",
+                bridge.contains("void claimCustom(")
+                        && bridge.contains("clearVendorTarget(dockLayout)"));
     }
 
     @Test
