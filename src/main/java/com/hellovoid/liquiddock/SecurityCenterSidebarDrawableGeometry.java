@@ -63,8 +63,12 @@ final class SecurityCenterSidebarDrawableGeometry {
             return live ? new Snapshot(left, top, right, bottom) : null;
         }
 
-        synchronized void clear() {
+        synchronized void beginAnimationEpoch() {
             live = false;
+        }
+
+        synchronized void clear() {
+            beginAnimationEpoch();
         }
     }
 
