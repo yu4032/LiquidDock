@@ -19,6 +19,7 @@ final class SecurityCenterGlassSinkView extends TextureView
     // Prismal's outer edge shell reaches roughly 2.2 logical pixels beyond the SDF boundary.
     // Three pixels preserves that AA/highlight work area without changing the actual glass shape.
     private static final float OPTICAL_OUTSET_PX = 3f;
+    private static final String ALL_APPS_PACKAGE_PREFIX = "com.miui.dock.allapps.";
 
     private static final class OverlayHost {
         final ViewGroup parent;
@@ -52,6 +53,7 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     private final WeakReference<View> materialRef;
     private final SecurityCenterGlassSession session;
+    private final boolean rootSpaceOutput;
     private final Paint presentationPaint = new Paint();
     private final View.OnAttachStateChangeListener materialAttachListener;
     private Surface outputSurface;
@@ -73,6 +75,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         super(context);
         materialRef = new WeakReference<>(material);
         this.session = session;
+        rootSpaceOutput = usesRootSpaceOutput(material);
         materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 scheduleParentRecovery("material-attached");
@@ -146,10 +149,21 @@ final class SecurityCenterGlassSinkView extends TextureView
             return setContentAlphaIfChanged(0f) || changed;
         }
 
-        Bounds bounds = mapBounds(material, host.parent);
+        View geometrySource = material;
+        float outset = OPTICAL_OUTSET_PX;
+        if (rootSpaceOutput) {
+            View root = material.getRootView();
+            if (root == null || !root.isAttachedToWindow()) {
+                return setContentAlphaIfChanged(0f) || changed;
+            }
+            geometrySource = root;
+            outset = 0f;
+        }
+
+        Bounds bounds = mapBounds(geometrySource, host.parent);
         if (bounds == null) return setContentAlphaIfChanged(0f) || changed;
-        int width = Math.max(1, (int) Math.ceil(bounds.right - bounds.left + OPTICAL_OUTSET_PX * 2f));
-        int height = Math.max(1, (int) Math.ceil(bounds.bottom - bounds.top + OPTICAL_OUTSET_PX * 2f));
+        int width = Math.max(1, (int) Math.ceil(bounds.right - bounds.left + outset * 2f));
+        int height = Math.max(1, (int) Math.ceil(bounds.bottom - bounds.top + outset * 2f));
         ViewGroup.LayoutParams params = getLayoutParams();
         if (params != null && (params.width != width || params.height != height)) {
             params.width = width;
@@ -158,8 +172,8 @@ final class SecurityCenterGlassSinkView extends TextureView
             changed = true;
         }
 
-        changed |= setFloatIfChanged(getX(), bounds.left - OPTICAL_OUTSET_PX, this::setX);
-        changed |= setFloatIfChanged(getY(), bounds.top - OPTICAL_OUTSET_PX, this::setY);
+        changed |= setFloatIfChanged(getX(), bounds.left - outset, this::setX);
+        changed |= setFloatIfChanged(getY(), bounds.top - outset, this::setY);
         changed |= setFloatIfChanged(getPivotX(), 0f, this::setPivotX);
         changed |= setFloatIfChanged(getPivotY(), 0f, this::setPivotY);
         changed |= setFloatIfChanged(getScaleX(), 1f, this::setScaleX);
@@ -190,9 +204,10 @@ final class SecurityCenterGlassSinkView extends TextureView
                     0f, 0f,
                     bounds.left, bounds.top, bounds.right, bounds.bottom,
                     cornerRadiusPx * visualScale);
-            return shape != null
-                    ? shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)
-                    : null;
+            if (shape == null) return null;
+            return rootSpaceOutput
+                    ? shape.withRootCrop()
+                    : shape.expandedBy(OPTICAL_OUTSET_PX * visualScale);
         } catch (Throwable ignored) {
             return null;
         }
@@ -305,6 +320,12 @@ final class SecurityCenterGlassSinkView extends TextureView
             parent = parent.getParent();
         }
         return null;
+    }
+
+    private static boolean usesRootSpaceOutput(View material) {
+        if (material == null) return false;
+        String name = material.getClass().getName();
+        return name != null && name.startsWith(ALL_APPS_PACKAGE_PREFIX);
     }
 
     private static boolean isStructurallyVisible(View material, ViewGroup stopParent) {
