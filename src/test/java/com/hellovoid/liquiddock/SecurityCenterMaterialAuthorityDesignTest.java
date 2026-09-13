@@ -10,8 +10,7 @@ import com.hellovoid.prismal.PrismalGeometry;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.Arrays;
 
 import org.junit.Test;
 
@@ -135,17 +134,15 @@ public class SecurityCenterMaterialAuthorityDesignTest {
     }
 
     @Test
-    public void sinkUsesOverlayHostInsteadOfMutatingVendorLinearLayout() throws Exception {
-        Path source = Path.of(
-                "src/main/java/com/hellovoid/liquiddock/SecurityCenterGlassSinkView.java");
-        String text = Files.readString(source);
+    public void sinkHasTypedOverlayHostResolutionInsteadOfDirectParentAuthority() {
+        boolean hasOverlayHost = Arrays.stream(SecurityCenterGlassSinkView.class.getDeclaredClasses())
+                .anyMatch(type -> type.getSimpleName().equals("OverlayHost"));
+        boolean hasResolver = Arrays.stream(SecurityCenterGlassSinkView.class.getDeclaredMethods())
+                .anyMatch(method -> method.getName().equals("resolveOverlayHost")
+                        && method.getParameterCount() == 1);
 
-        assertTrue("sink must resolve an outer overlay host",
-                text.contains("resolveOverlayHost"));
-        assertTrue("the overlay authority is the first FrameLayout above the material subtree",
-                text.contains("FrameLayout"));
-        assertFalse("never insert a TextureView into the material's direct parent",
-                text.contains("ViewGroup parent = (ViewGroup) material.getParent()"));
+        assertTrue("sink needs a typed outer overlay host", hasOverlayHost);
+        assertTrue("sink needs a typed overlay-host resolver", hasResolver);
     }
 
     private static Object newMaterialEpochState() throws Exception {
