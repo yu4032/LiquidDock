@@ -55,7 +55,7 @@ final class DockGlassCompositor {
         if (!iconStyle.enabled) latestScene = DockGlassSceneSnapshot.EMPTY;
     }
 
-    void setWorkstationIconCornerRadiusDp(float radiusDp) {
+    void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationIconCornerRadiusDp = Math.max(0f, radiusDp);
         seenRevision = -1L;
         lastFingerprint = Long.MIN_VALUE;
@@ -189,21 +189,8 @@ final class DockGlassCompositor {
             DockGlassSceneSnapshot scene, int framebufferWidth, int framebufferHeight) {
         PrismalHighlightProfile bodyHighlightProfile = dockBodyHighlightProfile != null
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
-        PrismalGeometry resolvedBody = dockBody;
-        View outputRoot = outputRootRef.get();
-        View visualHost = outputRoot != null && outputRoot.getParent() instanceof View
-                ? (View) outputRoot.getParent() : ownershipRootRef.get();
-        if (dockBody != null && visualHost != null
-                && visualHost.getWidth() > 0 && visualHost.getHeight() > 0) {
-            resolvedBody = new PrismalGeometry(
-                    framebufferWidth, framebufferHeight,
-                    dockBody.centerX, dockBody.centerY,
-                    visualHost.getWidth(), visualHost.getHeight(),
-                    dockBody.topLeftRadius, dockBody.topRightRadius,
-                    dockBody.bottomRightRadius, dockBody.bottomLeftRadius);
-        }
         renderer.beginGlassFrame();
-        renderer.drawGlass(resolvedBody, params, bodyHighlightProfile);
+        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
