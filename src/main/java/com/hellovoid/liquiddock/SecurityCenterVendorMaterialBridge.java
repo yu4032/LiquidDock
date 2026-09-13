@@ -80,22 +80,9 @@ final class SecurityCenterVendorMaterialBridge {
         if (previousOwner != null && previousOwner != turboLayout) {
             releaseClaimInternal(previousOwner);
         }
-        if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return false;
-
-        try {
-            // Claiming alone is non-destructive: vendor intent keeps being recorded, but late
-            // material clears cannot blank the panel while the custom TextureView is still
-            // waiting for a real presentation acknowledgement.
-            SecurityCenterVendorMaterialState.claimOwner(
-                    turboLayout, dockLayout, boxMaterialView, allAppsLayout);
-            claimedOwner = new WeakReference<>(turboLayout);
-            return true;
-        } catch (Throwable error) {
-            try { SecurityCenterVendorMaterialState.restoreOwner(turboLayout); }
-            catch (Throwable ignored) {}
-            claimedOwner = new WeakReference<>(null);
-            return false;
-        }
+        // Vendor hooks already record intent before ownership is claimed. PREPARING intentionally
+        // leaves those writes visible until a current-generation custom frame has been presented.
+        return SecurityCenterMaterialModePolicy.prepareBind(turboLayout);
     }
 
     private synchronized boolean claimCustomInternal(
@@ -103,6 +90,9 @@ final class SecurityCenterVendorMaterialBridge {
         if (!protectVendorFallbackInternal(
                 turboLayout, dockLayout, boxMaterialView, allAppsLayout)) return false;
         try {
+            SecurityCenterVendorMaterialState.claimOwner(
+                    turboLayout, dockLayout, boxMaterialView, allAppsLayout);
+            claimedOwner = new WeakReference<>(turboLayout);
             SecurityCenterVendorMaterialState.runModuleMutation(() -> {
                 clearVendorTarget(dockLayout);
                 clearVendorTarget(boxMaterialView);

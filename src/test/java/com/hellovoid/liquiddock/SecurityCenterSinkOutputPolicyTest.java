@@ -10,10 +10,10 @@ import java.lang.reflect.Method;
 
 import org.junit.Test;
 
-/** Root-space output is reserved for the semantic All Apps material role. */
+/** Animated material carriers use root-space output so backdrop pixels stay screen-stable. */
 public class SecurityCenterSinkOutputPolicyTest {
     @Test
-    public void onlyAllAppsRoleUsesRootSpaceOutput() throws Exception {
+    public void allAnimatedSecurityCenterRolesUseRootSpaceOutput() throws Exception {
         Class<?> policy;
         Class<?> role;
         try {
@@ -34,8 +34,9 @@ public class SecurityCenterSinkOutputPolicyTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Object allApps = Enum.valueOf((Class<? extends Enum>) role, "ALL_APPS");
 
-        assertFalse((Boolean) method.invoke(null, dock));
-        assertFalse((Boolean) method.invoke(null, toolbox));
+        assertTrue("Dock height/scale/radius are animated every frame and must not resize its Surface",
+                (Boolean) method.invoke(null, dock));
+        assertTrue((Boolean) method.invoke(null, toolbox));
         assertTrue((Boolean) method.invoke(null, allApps));
         assertFalse((Boolean) method.invoke(null, new Object[]{null}));
     }

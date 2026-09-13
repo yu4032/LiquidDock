@@ -58,8 +58,12 @@ public class SecurityCenterFrameworkDockContractTest {
 
         assertTrue("CUSTOM_PREPARING must expose a non-destructive vendor fallback latch",
                 bridge.contains("void protectVendorFallback("));
-        assertTrue("the coordinator must protect the current vendor material before waiting for ACK",
+        assertTrue("the coordinator must keep the current vendor fallback while waiting for ACK",
                 coordinator.contains("bridge.protectVendorFallback("));
+        assertTrue("preparing may validate material mode but must not establish carrier ownership",
+                bridge.contains("return SecurityCenterMaterialModePolicy.prepareBind(turboLayout);"));
+        assertTrue("the real custom handoff must still claim vendor carriers",
+                bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
         assertTrue("destructive vendor clearing must remain a separate presentation handoff",
                 bridge.contains("void claimCustom(")
                         && bridge.contains("clearVendorTarget(dockLayout)"));
