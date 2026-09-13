@@ -531,6 +531,23 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
     val profileOptions = profileLabels.zip(profileValues)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
+        item { SmallTitle("图标大小 · Launcher 4.50") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
+                    "自定义图标大小",
+                    "作用于工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
+                    masterEnabled,
+                ) { launcher450IconSizeEnabled = it }
+                IntSetting(
+                    prefs,
+                    launcher450IconSizeSpec,
+                    masterEnabled && launcher450IconSizeEnabled,
+                )
+            }
+        }
         item { SmallTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
@@ -543,23 +560,6 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     enabled = masterEnabled && customGrid,
                 )
                 BooleanSetting(prefs, ConfigSchema.Grid.WIDGET_ADAPTATION, stringResource(R.string.enable_widget_adaptation), stringResource(R.string.enable_widget_adaptation_summary), masterEnabled && customGrid)
-            }
-        }
-        item { SmallTitle("图标大小 · Launcher 4.50") }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
-                    "自定义图标大小",
-                    "仅作用于工作区、Dock 与小文件夹；重启桌面后生效",
-                    masterEnabled,
-                ) { launcher450IconSizeEnabled = it }
-                IntSetting(
-                    prefs,
-                    launcher450IconSizeSpec,
-                    masterEnabled && launcher450IconSizeEnabled,
-                )
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }
@@ -626,6 +626,10 @@ private fun LiquidPage(
 ) {
     var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
     var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
+    var functionalDockIconGlass by remember { mutableStateOf(prefs.getBoolean(
+        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
+        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.uiDefault(),
+    )) }
     var widgetGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())) }
     var smallFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault())) }
     var largeFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault())) }
@@ -648,9 +652,16 @@ private fun LiquidPage(
             stringResource(R.string.liquid_security_center_glass_enable_summary),
             masterEnabled && liquidGlass,
         )
-        BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
-        IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && iconGlass)
-        IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && iconGlass)
+        BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+            "仅 Dock 功能图标玻璃",
+            "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
+            masterEnabled && liquidGlass,
+        ) { functionalDockIconGlass = it }
+        IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
+        IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
         BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃", "只替换材质背景，保留 RemoteViews / MAML 内容", masterEnabled && liquidGlass) { widgetGlass = it }
         BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配", "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容", masterEnabled && liquidGlass && widgetGlass)
         IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)

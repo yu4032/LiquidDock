@@ -1,24 +1,30 @@
 package com.hellovoid.liquiddock;
 
 import android.view.View;
+import android.view.ViewParent;
 
 import java.lang.reflect.Method;
 
 /**
  * HyperOS Launcher 4.50 icon-size hook.
  *
- * <p>Launcher 4.50 derives Workspace/Dock ShortcutIcon and FolderIcon1x1 geometry from
- * GridConfig during onMeasure(). We scope the override to those vendor measurement transactions
- * with a ThreadLocal, so shared GridConfig instances are never mutated and All Apps/search keep
- * the vendor size.</p>
+ * <p>Launcher 4.50 derives Workspace/Dock/open-Folder/workstation app-page ShortcutIcon and
+ * FolderIcon1x1 geometry from GridConfig during onMeasure(). We scope the override to those
+ * vendor measurement transactions with a ThreadLocal, so shared GridConfig instances are never
+ * mutated and ordinary All Apps/search keep the vendor size.</p>
  */
 final class Launcher450IconSizeHook {
     private static final String TAG = "[DC][IconSize450]";
     private static final String SHORTCUT_ICON = "com.miui.home.launcher.ShortcutIcon";
     private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";
+    private static final String FOLDER_GRID_VIEW = "com.miui.home.launcher.FolderGridView";
+    private static final String WORKSTATION_ALL_APPS_WORKSPACE =
+            "com.miui.home.launcher.laptop.launchpad.AllAppsWorkspace";
     private static final String GRID_CONFIG = "com.miui.home.launcher.grid.GridConfig";
 
-    private enum MeasureDomain { WORKSPACE, DOCK, FOLDER }
+    private enum MeasureDomain {
+        WORKSPACE, DOCK, FOLDER, FOLDER_CONTENT, WORKSTATION_APPS
+    }
 
     private static final ThreadLocal<MeasureDomain> ACTIVE_DOMAIN = new ThreadLocal<>();
     private static volatile boolean enabled;
@@ -108,9 +114,22 @@ final class Launcher450IconSizeHook {
 
     private static MeasureDomain shortcutDomain(View view) {
         if (!enabled || view == null) return null;
+        if (hasAncestor(view, FOLDER_GRID_VIEW)) return MeasureDomain.FOLDER_CONTENT;
+        if (hasAncestor(view, WORKSTATION_ALL_APPS_WORKSPACE)) {
+            return MeasureDomain.WORKSTATION_APPS;
+        }
         LauncherGlassHierarchy.Domain domain = LauncherGlassHierarchy.classify(view);
         if (domain == LauncherGlassHierarchy.Domain.WORKSPACE) return MeasureDomain.WORKSPACE;
         if (domain == LauncherGlassHierarchy.Domain.DOCK) return MeasureDomain.DOCK;
         return null;
+    }
+
+    private static boolean hasAncestor(View view, String className) {
+        for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof View && className.equals(parent.getClass().getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

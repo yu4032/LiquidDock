@@ -256,6 +256,9 @@ public final class ConfigSchema {
                 "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ICON_GLASS = bool(
                 "liquid_icon_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> FUNCTIONAL_DOCK_ICON_GLASS = bool(
+                "liquid_functional_dock_icon_glass", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> FOLDER_CORNER_RADIUS = integer(
                 "liquid_folder_corner_radius", 0, 0, 0, 0, 96, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> ICON_SIZE_OFFSET = dp(
@@ -579,6 +582,7 @@ public final class ConfigSchema {
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
+                Glass.FUNCTIONAL_DOCK_ICON_GLASS,
                 Glass.FOLDER_CORNER_RADIUS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
                 Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,

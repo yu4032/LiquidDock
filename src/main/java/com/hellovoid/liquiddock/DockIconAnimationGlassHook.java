@@ -70,7 +70,7 @@ final class DockIconAnimationGlassHook {
                                 && LauncherGlassHierarchy.isDock(host)) {
                             DockAnimationTrace.sourceEvent(
                                     "setAnimTargetVisibility-post", host, visibility);
-                            if (visibility == View.VISIBLE && GlassRuntimeState.isIconEnabled()) {
+                            if (visibility == View.VISIBLE && GlassRuntimeState.isAnyIconEnabled()) {
                                 DockGlassItemRegistry.endLaunchAnimation(host);
                             }
                         }
@@ -212,7 +212,7 @@ final class DockIconAnimationGlassHook {
                                                 proxyAlpha, progress);
                                     }
                                 }
-                                if (GlassRuntimeState.isIconEnabled()) {
+                                if (GlassRuntimeState.isAnyIconEnabled()) {
                                     DockGlassItemRegistry.observeLaunchAnimationFrame(
                                             dockTarget, progress);
                                 }

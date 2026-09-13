@@ -14,7 +14,7 @@ final class DockGlassItemRegistry {
     private DockGlassItemRegistry() {}
 
     static synchronized void register(View view) {
-        if (!GlassRuntimeState.isIconEnabled() || view == null || ICONS.containsKey(view)) return;
+        if (!GlassRuntimeState.isAnyIconEnabled() || view == null || ICONS.containsKey(view)) return;
         ICONS.put(view, Boolean.TRUE);
         membershipRevision++;
     }
@@ -27,14 +27,14 @@ final class DockGlassItemRegistry {
         if (!ICONS.isEmpty()) { ICONS.clear(); membershipRevision++; }
     }
     static synchronized void observeLaunchAnimationFrame(View view, float progress) {
-        if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
+        if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
         DockAnimationTrace.animationRegistry("registry-observe", view, progress);
         if (!ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis())) return;
         DockAnimationTrace.animationRegistry("registry-state-change", view, progress);
         Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
     }
     static synchronized void endLaunchAnimation(View view) {
-        if (!GlassRuntimeState.isIconEnabled() || view == null || !ICONS.containsKey(view)) return;
+        if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
         DockAnimationTrace.animationRegistry("registry-end-pre", view, Float.NaN);
         ANIMATION.end(view, SystemClock.uptimeMillis());
         DockAnimationTrace.animationRegistry("registry-end-post", view, Float.NaN);
@@ -60,7 +60,7 @@ final class DockGlassItemRegistry {
     static synchronized long revision() { return membershipRevision; }
     static synchronized ArrayList<View> snapshotForRoot(View root) {
         ArrayList<View> out = new ArrayList<>();
-        if (!GlassRuntimeState.isIconEnabled() || root == null) return out;
+        if (!GlassRuntimeState.isAnyIconEnabled() || root == null) return out;
         for (View view : new ArrayList<>(ICONS.keySet())) {
             if (view != null && view.isAttachedToWindow() && view.getRootView() == root) out.add(view);
         }

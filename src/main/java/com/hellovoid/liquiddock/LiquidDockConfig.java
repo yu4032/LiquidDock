@@ -235,7 +235,7 @@ final class LiquidDockConfig {
 
     static final class Glass {
         final boolean enabled, securityCenterEnabled, folderEnabled, widgetEnabled,
-                widgetDarkContent, iconEnabled;
+                widgetDarkContent, iconEnabled, functionalDockIconEnabled;
         final float folderCornerRadiusDp;
         final GlassComponentStyle iconStyle;
         final GlassComponentStyle widgetStyle;
@@ -271,6 +271,9 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.FOLDER_CORNER_RADIUS.runtimeFallback());
             boolean resolvedIconEnabled = c.b(ConfigSchema.Glass.ICON_GLASS.name(),
                     ConfigSchema.Glass.ICON_GLASS.runtimeFallback());
+            functionalDockIconEnabled = c.b(
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.runtimeFallback());
             boolean resolvedWidgetEnabled = c.b(ConfigSchema.Glass.WIDGET_GLASS.name(),
                     ConfigSchema.Glass.WIDGET_GLASS.runtimeFallback());
             widgetDarkContent = c.b(ConfigSchema.Glass.WIDGET_DARK_CONTENT.name(),
@@ -287,7 +290,8 @@ final class LiquidDockConfig {
             float largeRadius = c.has(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name())
                     ? c.f(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(), 0f)
                     : legacyFolderRadius;
-            iconStyle = new GlassComponentStyle(resolvedIconEnabled,
+            iconStyle = new GlassComponentStyle(
+                    resolvedIconEnabled || functionalDockIconEnabled,
                     c.f(ConfigSchema.Glass.ICON_SIZE_OFFSET.name(), 0f),
                     c.f(ConfigSchema.Glass.ICON_CORNER_RADIUS.name(), 0f));
             widgetStyle = new GlassComponentStyle(resolvedWidgetEnabled,
@@ -297,7 +301,7 @@ final class LiquidDockConfig {
                     c.f(ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET.name(), 0f), smallRadius);
             largeFolderStyle = new GlassComponentStyle(resolvedLargeEnabled,
                     c.f(ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET.name(), 0f), largeRadius);
-            iconEnabled = iconStyle.enabled;
+            iconEnabled = resolvedIconEnabled;
             widgetEnabled = widgetStyle.enabled;
             folderEnabled = smallFolderStyle.enabled || largeFolderStyle.enabled;
             folderCornerRadiusDp = legacyFolderRadius;
