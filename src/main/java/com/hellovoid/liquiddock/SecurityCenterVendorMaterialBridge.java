@@ -80,6 +80,9 @@ final class SecurityCenterVendorMaterialBridge {
         if (previousOwner != null && previousOwner != turboLayout) {
             releaseClaimInternal(previousOwner);
         }
+        // Bind the visible Global Dock morph authority before the first custom frame. The vendor
+        // material View is already at final size here, while sidebar_background continues to morph.
+        SecurityCenterSidebarDrawableGeometry.bindDock(dockLayout);
         // Vendor hooks already record intent before ownership is claimed. PREPARING intentionally
         // leaves those writes visible until a current-generation custom frame has been presented.
         return SecurityCenterMaterialModePolicy.prepareBind(turboLayout);
@@ -110,7 +113,10 @@ final class SecurityCenterVendorMaterialBridge {
     private synchronized void releaseClaimInternal() {
         Object owner = claimedOwner.get();
         if (owner != null) releaseClaimInternal(owner);
-        else SecurityCenterMaterialModePolicy.resetLifecycle();
+        else {
+            SecurityCenterSidebarDrawableGeometry.clearRuntime();
+            SecurityCenterMaterialModePolicy.resetLifecycle();
+        }
     }
 
     private synchronized void releaseClaimInternal(Object owner) {
@@ -119,6 +125,7 @@ final class SecurityCenterVendorMaterialBridge {
         if (claimedOwner.get() == owner) {
             claimedOwner = new WeakReference<>(null);
         }
+        SecurityCenterSidebarDrawableGeometry.clearRuntime();
         SecurityCenterMaterialModePolicy.resetLifecycle();
     }
 
