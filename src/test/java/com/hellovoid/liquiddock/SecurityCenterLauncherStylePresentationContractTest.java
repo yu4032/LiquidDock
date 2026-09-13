@@ -172,9 +172,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertFalse("Vendor timing booleans cannot remain animation authority",
                 hook.contains("contract.transforming()"));
 
-        assertTrue("Animated terminal release must use the semantic cleanup contract",
+        assertTrue("terminal methods may be resolved for compatibility observation",
                 hook.contains("resolveTerminalCleanup("));
-        assertTrue("Terminal cleanup must release only after vendor cleanup proceeds",
+        assertFalse("synthetic terminal cleanup must not drive material teardown",
                 hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
 
         assertTrue("A submitted EGL frame must wait for TextureView consumption",
