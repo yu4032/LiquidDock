@@ -44,7 +44,7 @@ public class SecurityCenterMaterialAuthorityDesignTest {
                 (Boolean) bind.invoke(state, turbo, dockOne, gameOne, 1));
         assertEquals(1L, ((Number) generation.invoke(state)).longValue());
 
-        assertTrue("same TurboLayout with rebuilt o0/y1 must create a new material epoch",
+        assertTrue("same TurboLayout with rebuilt material carriers must create a new material epoch",
                 (Boolean) bind.invoke(state, turbo, dockTwo, gameTwo, 1));
         assertEquals(2L, ((Number) generation.invoke(state)).longValue());
     }
@@ -72,7 +72,7 @@ public class SecurityCenterMaterialAuthorityDesignTest {
 
         assertTrue((Boolean) attach.invoke(state, turbo, apps));
         assertEquals(2L, ((Number) generation.invoke(state)).longValue());
-        assertFalse("duplicate observation of the same w must be idempotent",
+        assertFalse("duplicate observation of the same All Apps carrier must be idempotent",
                 (Boolean) attach.invoke(state, turbo, apps));
         assertEquals(2L, ((Number) generation.invoke(state)).longValue());
 
@@ -161,6 +161,27 @@ public class SecurityCenterMaterialAuthorityDesignTest {
                 hasLegacyAttach);
         assertTrue("typed material-role attachment is the only supported sink boundary",
                 hasTypedAttach);
+    }
+
+    @Test
+    public void coordinatorUsesCarrierEpochInsteadOfParallelPageSceneState() throws Exception {
+        boolean hasMaterialEpoch = Arrays.stream(SecurityCenterGlassCoordinator.class.getDeclaredFields())
+                .anyMatch(field -> field.getType() == SecurityCenterMaterialEpochState.class);
+        boolean hasLegacyScene = Arrays.stream(SecurityCenterGlassCoordinator.class.getDeclaredFields())
+                .anyMatch(field -> field.getType().getSimpleName().equals("SecurityCenterGlassSceneState"));
+        boolean hasLegacySettle = Arrays.stream(SecurityCenterGlassCoordinator.class.getDeclaredFields())
+                .anyMatch(field -> field.getType().getSimpleName().equals("SecurityCenterAllAppsSettleState"));
+        boolean hasLegacyTarget = Arrays.stream(SecurityCenterGlassCoordinator.class.getDeclaredFields())
+                .anyMatch(field -> field.getName().equals("targetKind"));
+
+        assertTrue("material carrier identity must be coordinator lifecycle authority", hasMaterialEpoch);
+        assertFalse("page-scene state must not shadow carrier lifecycle", hasLegacyScene);
+        assertFalse("All Apps settle state must not synthesize a second lifecycle", hasLegacySettle);
+        assertFalse("targetKind must be derived from live carriers, not cached page state", hasLegacyTarget);
+
+        Method sourceRollover = SecurityCenterGlassCoordinator.class.getDeclaredMethod(
+                "onSourceAuthorityChanged", Object.class, Object.class);
+        assertEquals(boolean.class, sourceRollover.getReturnType());
     }
 
     private static Object newMaterialEpochState() throws Exception {
