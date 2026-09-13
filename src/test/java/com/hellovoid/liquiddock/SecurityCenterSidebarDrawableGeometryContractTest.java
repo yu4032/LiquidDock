@@ -4,9 +4,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.Test;
 
 public class SecurityCenterSidebarDrawableGeometryContractTest {
+    private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
+
     @Test
     public void animatedDrawableRectOverridesStaticMaterialBounds() {
         SecurityCenterSidebarDrawableGeometry.State state =
@@ -47,5 +52,16 @@ public class SecurityCenterSidebarDrawableGeometryContractTest {
         state.clear();
 
         assertFalse(state.hasLiveGeometry());
+    }
+
+    @Test
+    public void productionDockGeometryConsultsLiveSidebarDrawableAuthority() throws Exception {
+        String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
+        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+        String spec = Files.readString(MAIN.resolve("SecurityCenterHookSpec.java"));
+
+        assertTrue(geometry.contains("SecurityCenterSidebarDrawableGeometry.overrideForCandidate("));
+        assertTrue(bridge.contains("SecurityCenterSidebarDrawableGeometry.bindDock("));
+        assertTrue(spec.contains("SIDEBAR_BACKGROUND_RESOURCE"));
     }
 }
