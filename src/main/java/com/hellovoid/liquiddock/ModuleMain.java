@@ -119,6 +119,8 @@ public final class ModuleMain extends XposedModule {
             DockBottomGeometryHook.install(classLoader);
             HomeGridProfileOverlayHook.install(classLoader,
                     customGridEnabled, selectedProfile);
+            StageWorkspaceRuntime.install(classLoader,
+                    customGridEnabled, selectedProfile);
             HomeGridOrientationMemoryHook.install(classLoader,
                     customGridEnabled, selectedProfile);
             HomeGridMutationCaptureHook.install(classLoader,
