@@ -79,9 +79,12 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile boolean shuttingDown;
     private final Object pipelineLock = new Object();
+    private final Object cachedReplayLock = new Object();
+    private boolean cachedReplayQueued;
     private volatile FrameRequest frameRequest;
     private volatile FrameRequest inFlight;
     private volatile OutputState[] inFlightOutputs;
+    private volatile RootPassBlurFrame cachedSourceFrame;
     private long nextFrameSerial;
     private final SecurityCenterFramePipelineState framePipeline =
             new SecurityCenterFramePipelineState();
@@ -139,6 +142,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     boolean requestSourceRebind(String reason) {
         if (shuttingDown || sourceBackend.isShutdown()) return false;
+        cachedSourceFrame = null;
         sourceBackend.reconcileRoot();
         if (sourceBackend.isRebindPending()) return true;
         return sourceBackend.requestRebind(reason, null);
@@ -146,6 +150,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     boolean recoverSourceAfterWindowVisibilityRestored() {
         if (shuttingDown || sourceBackend.isShutdown()) return false;
+        cachedSourceFrame = null;
         sourceBackend.reconcileRoot();
         if (!sourceBackend.isRebindPending()) {
             sourceBackend.requestRebind("security-center-window-visible");
@@ -171,6 +176,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         SecurityCenterGlassGeometry presentation = frameGeometry.presentationGeometry();
         if (root == null || presentation.rootWidth != root.getWidth()
                 || presentation.rootHeight != root.getHeight()) return;
+        if (sourceBackend.reconcileRoot()) cachedSourceFrame = null;
         SecurityCenterGlassSinkView[] snapshot = sinks.clone();
         for (SecurityCenterGlassSinkView sink : snapshot) {
             if (sink == null || sink.isDisposed()) return;
@@ -195,6 +201,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.requestFresh(offer.sourceGeneration);
             log("source requested serial=" + next.serial + " generation=" + generation);
         }
+        requestCachedPresentation(generation);
     }
 
     void attachOutput(
@@ -286,11 +293,80 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             request = frameRequest;
             if (request == null || request.generation != frame.generation) return;
             submission = framePipeline.onFreshSource(frame.generation);
-            if (!submission.accepted || submission.serial != request.serial
+            if (submission.backdropUpdated) cachedSourceFrame = frame;
+            if (!submission.accepted) return;
+            if (submission.serial != request.serial
                     || submission.generation != request.generation) return;
             inFlight = request;
         }
+        renderAcceptedFrame(frame, request);
+    }
 
+    private void requestCachedPresentation(long generation) {
+        RootPassBlurFrame cached = cachedSourceFrame;
+        if (!hasCachedFrameForGeneration(cached, generation)) return;
+        if (!sourceBackend.hasBinding() || sourceBackend.isRebindPending()) {
+            cachedSourceFrame = null;
+            return;
+        }
+        synchronized (cachedReplayLock) {
+            if (cachedReplayQueued) return;
+            cachedReplayQueued = true;
+        }
+        boolean queued = sourceBackend.postToRenderThread(() -> {
+            try {
+                drainCachedPresentation();
+            } finally {
+                synchronized (cachedReplayLock) {
+                    cachedReplayQueued = false;
+                }
+            }
+        });
+        if (!queued) {
+            synchronized (cachedReplayLock) {
+                cachedReplayQueued = false;
+            }
+        }
+    }
+
+    /** Render-thread drain; one queued task always consumes the latest geometry/cache state. */
+    private void drainCachedPresentation() {
+        RootPassBlurFrame currentFrame = cachedSourceFrame;
+        FrameRequest observed = frameRequest;
+        if (observed == null
+                || !hasCachedFrameForGeneration(currentFrame, observed.generation)
+                || !sourceBackend.hasBinding()
+                || sourceBackend.isRebindPending()
+                || currentFrame.normalizedTextureId == 0
+                || !GLES20.glIsTexture(currentFrame.normalizedTextureId)) return;
+
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()
+                || currentFrame.logicalWidth != root.getWidth()
+                || currentFrame.logicalHeight != root.getHeight()
+                || currentFrame.logicalWidth != sourceBackend.logicalWidth()
+                || currentFrame.logicalHeight != sourceBackend.logicalHeight()
+                || currentFrame.rotation != sourceBackend.currentRotation()) return;
+
+        FrameRequest request;
+        SecurityCenterFramePipelineState.Submission submission;
+        synchronized (pipelineLock) {
+            request = frameRequest;
+            if (request == null || request.generation != currentFrame.generation) return;
+            submission = framePipeline.onCachedSource(request.generation);
+            if (!submission.accepted
+                    || submission.serial != request.serial
+                    || submission.generation != request.generation) return;
+            inFlight = request;
+        }
+        renderAcceptedFrame(currentFrame, request);
+    }
+
+    private static boolean hasCachedFrameForGeneration(RootPassBlurFrame frame, long generation) {
+        return frame != null && frame.generation == generation;
+    }
+
+    private void renderAcceptedFrame(RootPassBlurFrame frame, FrameRequest request) {
         View root = rootRef.get();
         SecurityCenterGlassGeometry presentation = request.frameGeometry.presentationGeometry();
         if (presentation == null
@@ -341,7 +417,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 request.sinks[i].requestPresentationDraw();
             }
             sourceBackend.makePbufferCurrent();
-            log("submitted serial=" + request.serial + " generation=" + frame.generation
+            log("submitted serial=" + request.serial + " generation=" + request.generation
                     + " awaiting TextureView presentation ack");
         } catch (Throwable error) {
             cancelPresentationArms(request);
@@ -352,7 +428,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                     inFlightOutputs = null;
                 }
             }
-            log("Prismal render failed generation=" + frame.generation + ": " + error);
+            log("Prismal render failed generation=" + request.generation + ": " + error);
             throw error;
         }
     }
@@ -401,6 +477,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.requestFresh(presented.nextGeneration);
             log("source requested after presentation generation=" + presented.nextGeneration);
         }
+        FrameRequest latest = frameRequest;
+        if (!shuttingDown && latest != null) {
+            requestCachedPresentation(latest.generation);
+        }
     }
 
     private void cancelPresentationArms(FrameRequest request) {
@@ -443,6 +523,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
         if (shuttingDown) return;
+        cachedSourceFrame = null;
         log("source terminal failure generation=" + generation + ": " + error);
         Listener currentListener = listener;
         if (currentListener != null) currentListener.onTerminalFailure(this, generation, error);
@@ -451,6 +532,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        cachedSourceFrame = null;
         FrameRequest active;
         synchronized (pipelineLock) {
             active = inFlight;

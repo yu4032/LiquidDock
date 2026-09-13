@@ -31,13 +31,17 @@ public class SecurityCenterFramePipelineStateTest {
         assertFalse(whilePresented.cancelPresentation);
 
         SecurityCenterFramePipelineState.Presentation presented = state.onPresented(7L, 39L);
-        assertTrue(presented.acceptedCurrentGeneration);
+        assertTrue("a physically presented frame from the current generation must be allowed to "
+                        + "reveal custom glass even when a newer geometry serial is pending",
+                presented.acceptedCurrentGeneration);
         assertTrue("after ACK the latest pending geometry gets exactly one new source request",
                 presented.requestSource);
 
         SecurityCenterFramePipelineState.Submission next = state.onFreshSource(39L);
         assertTrue(next.accepted);
         assertEquals(9L, next.serial);
+        SecurityCenterFramePipelineState.Presentation latest = state.onPresented(9L, 39L);
+        assertTrue(latest.acceptedCurrentGeneration);
     }
 
     @Test
@@ -78,18 +82,80 @@ public class SecurityCenterFramePipelineStateTest {
     }
 
     @Test
-    public void newerGenerationSupersedesOldPresentationButOldGenerationCannotReveal() {
+    public void geometryCanReplayCachedBackdropWhileNextFreshSourceIsStillPending() {
+        SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
+
+        assertTrue(state.offer(1L, 21L).requestSource);
+        assertTrue(state.onFreshSource(21L).accepted);
+        SecurityCenterFramePipelineState.Presentation first = state.onPresented(1L, 21L);
+        assertTrue(first.requestSource);
+
+        SecurityCenterFramePipelineState.Offer geometry = state.offer(2L, 21L);
+        assertFalse("the existing fresh request stays outstanding", geometry.requestSource);
+
+        SecurityCenterFramePipelineState.Submission cached = state.onCachedSource(21L);
+        assertTrue("geometry must not wait for another PassBlur producer buffer once this generation "
+                        + "already has a valid normalized backdrop",
+                cached.accepted);
+        assertEquals(2L, cached.serial);
+        assertEquals(21L, cached.generation);
+    }
+
+    @Test
+    public void freshBackdropArrivingDuringCachedPresentationIsReplayedAfterItsAck() {
+        SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
+
+        assertTrue(state.offer(1L, 22L).requestSource);
+        assertTrue(state.onFreshSource(22L).accepted);
+        assertTrue(state.onPresented(1L, 22L).requestSource);
+
+        state.offer(2L, 22L);
+        assertTrue(state.onCachedSource(22L).accepted);
+
+        SecurityCenterFramePipelineState.Submission freshWhileBusy = state.onFreshSource(22L);
+        assertFalse("a new backdrop cannot steal the physical TextureView ACK", freshWhileBusy.accepted);
+
+        state.onPresented(2L, 22L);
+        SecurityCenterFramePipelineState.Submission replay = state.onCachedSource(22L);
+        assertTrue("the newer normalized backdrop must remain pending after the old physical ACK",
+                replay.accepted);
+        assertEquals(2L, replay.serial);
+    }
+
+    @Test
+    public void cachedBackdropNeverCrossesPresentationGeneration() {
+        SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
+
+        assertTrue(state.offer(1L, 30L).requestSource);
+        assertTrue(state.onFreshSource(30L).accepted);
+        state.onPresented(1L, 30L);
+
+        SecurityCenterFramePipelineState.Offer nextGeneration = state.offer(2L, 31L);
+        assertTrue(nextGeneration.requestSource);
+        assertFalse("a cached normalized backdrop belongs only to the generation that made it fresh",
+                state.onCachedSource(31L).accepted);
+        assertTrue(state.onFreshSource(31L).accepted);
+    }
+
+    @Test
+    public void newerGenerationWaitsForSubmittedPresentationAckBeforeArmingReplacement() {
         SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
         assertTrue(state.offer(1L, 5L).requestSource);
         assertEquals(1L, state.onFreshSource(5L).serial);
 
         SecurityCenterFramePipelineState.Offer newer = state.offer(2L, 6L);
-        assertTrue(newer.cancelPresentation);
-        assertEquals(1L, newer.cancelledSerial);
-        assertTrue(newer.requestSource);
+        assertFalse("a frame already submitted to TextureView cannot be logically cancelled; "
+                        + "its Surface update could otherwise acknowledge the replacement serial",
+                newer.cancelPresentation);
+        assertFalse("the replacement source must wait until the submitted Surface update is consumed",
+                newer.requestSource);
 
         SecurityCenterFramePipelineState.Presentation stale = state.onPresented(1L, 5L);
-        assertFalse(stale.acceptedCurrentGeneration);
+        assertFalse("a physically presented frame from an obsolete generation cannot reveal custom glass",
+                stale.acceptedCurrentGeneration);
+        assertTrue("after consuming the stale physical presentation, request the latest generation",
+                stale.requestSource);
+        assertEquals(6L, stale.nextGeneration);
 
         SecurityCenterFramePipelineState.Submission current = state.onFreshSource(6L);
         assertTrue(current.accepted);

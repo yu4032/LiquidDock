@@ -1,8 +1,10 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -138,5 +140,42 @@ public class DockIconAnimationStateTest {
         state.observeProxyFrame(icon, 0.4f, 1_020L);
         assertFalse(state.isFading(icon));
         assertEquals(0f, state.opacity(icon, 1_020L), 0f);
+    }
+
+    @Test
+    public void proxyGeometryIsIndependentFromRevealOpacity() {
+        DockIconAnimationState state = new DockIconAnimationState(180L);
+        Object icon = new Object();
+        float[] first = {10f, 20f, 50f, 80f};
+
+        assertTrue(state.updateProxyGeometry(icon, first));
+        DockIconAnimationState.Sample sample = state.sample(icon, 1_000L);
+        assertEquals(1f, sample.opacity, 0f);
+        assertTrue(sample.proxyActive);
+        assertArrayEquals(first, sample.proxyRect, 0f);
+
+        assertFalse(state.updateProxyGeometry(icon, first.clone()));
+        assertTrue(state.updateProxyGeometry(icon, new float[]{12f, 22f, 60f, 90f}));
+        assertTrue(state.endProxyGeometry(icon));
+        sample = state.sample(icon, 1_010L);
+        assertFalse(sample.proxyActive);
+        assertNull(sample.proxyRect);
+        assertEquals(1f, sample.opacity, 0f);
+    }
+
+    @Test
+    public void hiddenProxyOwnsGeometrySlotWithoutPublishingTaskRect() {
+        DockIconAnimationState state = new DockIconAnimationState(180L);
+        Object icon = new Object();
+
+        assertTrue(state.holdProxyHidden(icon));
+        DockIconAnimationState.Sample sample = state.sample(icon, 2_000L);
+        assertTrue(sample.proxyActive);
+        assertNull(sample.proxyRect);
+        assertEquals(1f, sample.opacity, 0f);
+
+        assertTrue(state.updateProxyGeometry(icon, new float[]{1f, 2f, 21f, 22f}));
+        sample = state.sample(icon, 2_010L);
+        assertArrayEquals(new float[]{1f, 2f, 21f, 22f}, sample.proxyRect, 0f);
     }
 }

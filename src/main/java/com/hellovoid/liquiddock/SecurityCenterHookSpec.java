@@ -20,6 +20,7 @@ final class SecurityCenterHookSpec {
     static final String ALL_APPS_RADIUS_RESOURCE = "dp_24";
     static final String GAME_RADIUS_RESOURCE = "game_toolbox_background_radius";
     static final String VIDEO_CONTENT_RESOURCE = "main_content";
+    static final String SIDEBAR_BACKGROUND_RESOURCE = "sidebar_background";
 
     private SecurityCenterHookSpec() {}
 }
