@@ -11,19 +11,9 @@ final class RootPassBlurBackendState {
 
     synchronized boolean requestFresh(long generation) {
         if (shutdown || generation < 0L || generation < requestedGeneration) return false;
-
-        boolean reusableSameGeneration = generation == requestedGeneration
-                && generation == freshGeneration
-                && producerRecovery.hasFreshFrame();
         requestedGeneration = generation;
-
-        // A request for another producer buffer in the same scene generation must not destroy the
-        // already normalized GPU backdrop. New generations and invalid/uninitialized generations
-        // still fail closed until a real source frame is consumed.
-        if (!reusableSameGeneration) {
-            freshGeneration = -1L;
-            producerRecovery.onGeometryInvalidated();
-        }
+        freshGeneration = -1L;
+        producerRecovery.onGeometryInvalidated();
         return true;
     }
 
