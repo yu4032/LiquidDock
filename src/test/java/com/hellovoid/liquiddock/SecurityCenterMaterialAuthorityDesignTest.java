@@ -1,0 +1,164 @@
+package com.hellovoid.liquiddock;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.hellovoid.prismal.PrismalGeometry;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import org.junit.Test;
+
+/**
+ * Device-accepted contracts recovered from Security Center 11.0.6-260825.1.2.
+ *
+ * These tests intentionally describe carrier authority rather than the old page-scene model:
+ * TurboLayout/root may be reused while Dock/Game material children are rebuilt, All Apps is a
+ * temporary material sibling, and output readiness must not depend on vendor animation alpha.
+ */
+public class SecurityCenterMaterialAuthorityDesignTest {
+    @Test
+    public void materialEpochTracksCarrierIdentityInsteadOfRootIdentity() throws Exception {
+        Object state = newMaterialEpochState();
+        Method bind = state.getClass().getDeclaredMethod(
+                "bindAssistant", Object.class, Object.class, Object.class, int.class);
+        Method generation = state.getClass().getDeclaredMethod("generation");
+        bind.setAccessible(true);
+        generation.setAccessible(true);
+
+        Object turbo = new Object();
+        Object dockOne = new Object();
+        Object gameOne = new Object();
+        Object dockTwo = new Object();
+        Object gameTwo = new Object();
+
+        assertTrue((Boolean) bind.invoke(state, turbo, dockOne, gameOne, 1));
+        assertEquals(1L, ((Number) generation.invoke(state)).longValue());
+
+        assertFalse("rebinding the same live carriers must not create a fake epoch",
+                (Boolean) bind.invoke(state, turbo, dockOne, gameOne, 1));
+        assertEquals(1L, ((Number) generation.invoke(state)).longValue());
+
+        assertTrue("same TurboLayout with rebuilt o0/y1 must create a new material epoch",
+                (Boolean) bind.invoke(state, turbo, dockTwo, gameTwo, 1));
+        assertEquals(2L, ((Number) generation.invoke(state)).longValue());
+    }
+
+    @Test
+    public void allAppsAttachAndRemoveAreMaterialEpochBoundaries() throws Exception {
+        Object state = newMaterialEpochState();
+        Method bind = state.getClass().getDeclaredMethod(
+                "bindAssistant", Object.class, Object.class, Object.class, int.class);
+        Method attach = state.getClass().getDeclaredMethod(
+                "attachAllApps", Object.class, Object.class);
+        Method detach = state.getClass().getDeclaredMethod(
+                "detachAllApps", Object.class, Object.class);
+        Method generation = state.getClass().getDeclaredMethod("generation");
+        bind.setAccessible(true);
+        attach.setAccessible(true);
+        detach.setAccessible(true);
+        generation.setAccessible(true);
+
+        Object turbo = new Object();
+        Object dock = new Object();
+        Object game = new Object();
+        Object apps = new Object();
+        bind.invoke(state, turbo, dock, game, 1);
+
+        assertTrue((Boolean) attach.invoke(state, turbo, apps));
+        assertEquals(2L, ((Number) generation.invoke(state)).longValue());
+        assertFalse("duplicate observation of the same w must be idempotent",
+                (Boolean) attach.invoke(state, turbo, apps));
+        assertEquals(2L, ((Number) generation.invoke(state)).longValue());
+
+        assertFalse("a stale TurboLayout may not retire the current All Apps carrier",
+                (Boolean) detach.invoke(state, new Object(), apps));
+        assertEquals(2L, ((Number) generation.invoke(state)).longValue());
+
+        assertTrue((Boolean) detach.invoke(state, turbo, apps));
+        assertEquals(3L, ((Number) generation.invoke(state)).longValue());
+    }
+
+    @Test
+    public void rootCropChangesPresentationUvWithoutChangingGlassShape() throws Exception {
+        SecurityCenterGlassGeometry geometry = SecurityCenterGlassGeometry.resolve(
+                1200, 1800,
+                0f, 0f,
+                180f, 260f, 1100f, 1780f,
+                48f);
+        Method rootCrop;
+        try {
+            rootCrop = SecurityCenterGlassGeometry.class.getDeclaredMethod("withRootCrop");
+        } catch (NoSuchMethodException missing) {
+            fail("SecurityCenterGlassGeometry.withRootCrop() is required for All Apps root-space output");
+            return;
+        }
+        rootCrop.setAccessible(true);
+        SecurityCenterGlassGeometry cropped =
+                (SecurityCenterGlassGeometry) rootCrop.invoke(geometry);
+
+        PrismalGeometry before = geometry.toPrismalGeometry();
+        PrismalGeometry after = cropped.toPrismalGeometry();
+        assertEquals(before.centerX, after.centerX, 0.001f);
+        assertEquals(before.centerY, after.centerY, 0.001f);
+        assertEquals(before.glassWidth, after.glassWidth, 0.001f);
+        assertEquals(before.glassHeight, after.glassHeight, 0.001f);
+
+        Method crop = SecurityCenterGlassGeometry.class.getDeclaredMethod("toCropUvRect");
+        crop.setAccessible(true);
+        assertArrayEquals(new float[]{0f, 0f, 1f, 1f},
+                (float[]) crop.invoke(cropped), 0.0001f);
+    }
+
+    @Test
+    public void presentationReadinessIsIndependentFromAnimationAlpha() throws Exception {
+        Method ready;
+        try {
+            ready = SecurityCenterSinkPresentationState.class.getDeclaredMethod(
+                    "isPresentationReady",
+                    boolean.class, boolean.class, boolean.class, boolean.class, boolean.class);
+        } catch (NoSuchMethodException missing) {
+            fail("presentation readiness must be an alpha-independent structural policy");
+            return;
+        }
+        ready.setAccessible(true);
+
+        assertTrue((Boolean) ready.invoke(null, true, true, true, true, true));
+        assertFalse((Boolean) ready.invoke(null, false, true, true, true, true));
+        assertFalse((Boolean) ready.invoke(null, true, true, true, true, false));
+    }
+
+    @Test
+    public void sinkUsesOverlayHostInsteadOfMutatingVendorLinearLayout() throws Exception {
+        Path source = Path.of(
+                "src/main/java/com/hellovoid/liquiddock/SecurityCenterGlassSinkView.java");
+        String text = Files.readString(source);
+
+        assertTrue("sink must resolve an outer overlay host",
+                text.contains("resolveOverlayHost"));
+        assertTrue("the overlay authority is the first FrameLayout above the material subtree",
+                text.contains("FrameLayout"));
+        assertFalse("never insert a TextureView into the material's direct parent",
+                text.contains("ViewGroup parent = (ViewGroup) material.getParent()"));
+    }
+
+    private static Object newMaterialEpochState() throws Exception {
+        final Class<?> type;
+        try {
+            type = Class.forName(
+                    "com.hellovoid.liquiddock.SecurityCenterMaterialEpochState");
+        } catch (ClassNotFoundException missing) {
+            fail("SecurityCenterMaterialEpochState is required by the material-authority design");
+            throw missing;
+        }
+        Constructor<?> constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
+    }
+}
