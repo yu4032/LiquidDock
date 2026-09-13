@@ -504,11 +504,12 @@ final class MiuixLauncherStaticGlassHook {
     }
 
     private static boolean isIconHostEligible(View host) {
-        if (host == null || !GlassRuntimeState.isAnyIconEnabled()) return false;
-        if (GlassRuntimeState.isIconEnabled()) return true;
-        return GlassRuntimeState.isFunctionalDockIconEnabled()
-                && LauncherGlassHierarchy.classify(host) == LauncherGlassHierarchy.Domain.DOCK
-                && Launcher450DockFunctionalIconRegistry.isFunctional(host);
+        if (host == null) return false;
+        return Launcher450DockFunctionalIconPolicy.shouldRender(
+                GlassRuntimeState.isIconEnabled(),
+                GlassRuntimeState.isFunctionalDockIconEnabled(),
+                LauncherGlassHierarchy.classify(host) == LauncherGlassHierarchy.Domain.DOCK,
+                Launcher450DockFunctionalIconRegistry.isFunctional(host));
     }
 
     private static boolean isIconHost(View host) {
