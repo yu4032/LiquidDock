@@ -74,21 +74,25 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 resolver.contains("finalBackground"));
     }
 
-    @Test public void securityCenterUsesPeerBoundSinkThatMirrorsVendorTransforms() throws Exception {
+    @Test public void securityCenterUsesOverlayBoundSinkMappedFromVendorMaterial() throws Exception {
         Path sinkPath = MAIN.resolve("SecurityCenterGlassSinkView.java");
         assertTrue(Files.exists(sinkPath));
         String sink = Files.readString(sinkPath);
         assertTrue(sink.contains("syncFromMaterial()"));
-        assertTrue(sink.contains("material.getX()"));
-        assertTrue(sink.contains("material.getY()"));
-        assertTrue(sink.contains("material.getPivotX()"));
-        assertTrue(sink.contains("material.getPivotY()"));
-        assertTrue(sink.contains("material.getScaleX()"));
-        assertTrue(sink.contains("material.getScaleY()"));
-        assertTrue(sink.contains("material.getRotation()"));
-        assertTrue(sink.contains("material.getAlpha()"));
-        assertTrue(sink.contains("material.getVisibility()"));
-        assertFalse(sink.contains("getGlobalVisibleRect"));
+        assertTrue("sink must resolve an outer overlay host instead of joining vendor measurement",
+                sink.contains("resolveOverlayHost(material)"));
+        assertTrue("material animation geometry must be mapped through the real transform chain",
+                sink.contains("material.transformMatrixToGlobal(materialToGlobal)"));
+        assertTrue("overlay-local placement must invert the host transform",
+                sink.contains("target.transformMatrixToGlobal(targetToGlobal)"));
+        assertTrue("visual alpha remains inherited without controlling readiness",
+                sink.contains("effectiveMaterialAlpha(material, host.parent)"));
+        assertTrue("vendor visibility remains authoritative",
+                sink.contains("isStructurallyVisible(material, host.parent)"));
+        assertFalse("direct material scale mirroring would reintroduce Surface/layout coupling",
+                sink.contains("setScaleX(material.getScaleX())"));
+        assertFalse("global-visible-rect heuristics must not replace transform mapping",
+                sink.contains("getGlobalVisibleRect"));
     }
 
     @Test public void dockShapeUsesLiveOutlineInsteadOfBackgroundHeuristic() throws Exception {
@@ -110,17 +114,23 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue(sink.contains("recoverParentNow("));
     }
 
-    @Test public void perNodeOutputPreservesPrismalOuterEdgePixels() throws Exception {
+    @Test public void perNodeOutputPreservesPrismalOuterEdgePixelsWithoutResizingRootSpaceOutput() throws Exception {
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
         String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
         assertTrue("Prismal edge shell reaches about 2.2 logical pixels outside the SDF",
                 sink.contains("OPTICAL_OUTSET_PX = 3f"));
         assertTrue("Shape and presentation crop must be separable",
                 geometry.contains("expandedBy("));
-        assertTrue("Output surface must include both sides of the optical margin",
-                sink.contains("+ Math.round(OPTICAL_OUTSET_PX * 2f)"));
-        assertTrue("Crop must expand while preserving the original Prismal shape geometry",
-                sink.contains(".expandedBy(OPTICAL_OUTSET_PX * visualScale)"));
+        assertTrue("animated All Apps must have a full-root crop without changing its shape",
+                geometry.contains("withRootCrop()"));
+        assertTrue("node-space output retains both sides of the optical margin",
+                sink.contains("outset * 2f"));
+        assertTrue("node-space crop expands while preserving original Prismal geometry",
+                sink.contains("shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)"));
+        assertTrue("root-space output must not resize its Surface with the animated node",
+                sink.contains("rootSpaceOutput ? material.getRootView() : material"));
+        assertTrue("only root-space output uses the full-root crop",
+                sink.contains("rootSpaceOutput\n                    ? shape.withRootCrop()"));
     }
 
     @Test public void sharedSessionHasMultipleSinkOutputsButOneProducer() throws Exception {
