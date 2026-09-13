@@ -31,7 +31,8 @@ public class SecurityCenterFramePipelineStateTest {
         assertFalse(whilePresented.cancelPresentation);
 
         SecurityCenterFramePipelineState.Presentation presented = state.onPresented(7L, 39L);
-        assertFalse("serial 7 is physically consumed but cannot reveal after serial 9 became latest",
+        assertTrue("a physically presented frame from the current generation must be allowed to "
+                        + "reveal custom glass even when a newer geometry serial is pending",
                 presented.acceptedCurrentGeneration);
         assertTrue("after ACK the latest pending geometry gets exactly one new source request",
                 presented.requestSource);
@@ -94,7 +95,8 @@ public class SecurityCenterFramePipelineStateTest {
                 newer.requestSource);
 
         SecurityCenterFramePipelineState.Presentation stale = state.onPresented(1L, 5L);
-        assertFalse(stale.acceptedCurrentGeneration);
+        assertFalse("a physically presented frame from an obsolete generation cannot reveal custom glass",
+                stale.acceptedCurrentGeneration);
         assertTrue("after consuming the stale physical presentation, request the latest generation",
                 stale.requestSource);
         assertEquals(6L, stale.nextGeneration);
