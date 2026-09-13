@@ -531,6 +531,23 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
     val profileOptions = profileLabels.zip(profileValues)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
+        item { SmallTitle("图标大小 · Launcher 4.50") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
+                    "自定义图标大小",
+                    "作用于工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
+                    masterEnabled,
+                ) { launcher450IconSizeEnabled = it }
+                IntSetting(
+                    prefs,
+                    launcher450IconSizeSpec,
+                    masterEnabled && launcher450IconSizeEnabled,
+                )
+            }
+        }
         item { SmallTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
@@ -543,23 +560,6 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     enabled = masterEnabled && customGrid,
                 )
                 BooleanSetting(prefs, ConfigSchema.Grid.WIDGET_ADAPTATION, stringResource(R.string.enable_widget_adaptation), stringResource(R.string.enable_widget_adaptation_summary), masterEnabled && customGrid)
-            }
-        }
-        item { SmallTitle("图标大小 · Launcher 4.50") }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
-                    "自定义图标大小",
-                    "仅作用于工作区、Dock 与小文件夹；重启桌面后生效",
-                    masterEnabled,
-                ) { launcher450IconSizeEnabled = it }
-                IntSetting(
-                    prefs,
-                    launcher450IconSizeSpec,
-                    masterEnabled && launcher450IconSizeEnabled,
-                )
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }
