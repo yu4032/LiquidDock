@@ -48,6 +48,25 @@ final class SecurityCenterMaterialEpochState {
         return true;
     }
 
+    /**
+     * Forget the terminally released material subtree while keeping the epoch counter monotonic.
+     * This is required because the vendor may later reuse the same Java View objects after the
+     * root/session lifetime has ended; identity from a dead lifetime must never suppress a new
+     * material epoch.
+     */
+    boolean reset() {
+        if (turbo == null && dock == null && box == null && apps == null && assistantType == 0) {
+            return false;
+        }
+        turbo = null;
+        dock = null;
+        box = null;
+        apps = null;
+        assistantType = 0;
+        generation++;
+        return true;
+    }
+
     long generation() {
         return generation;
     }
