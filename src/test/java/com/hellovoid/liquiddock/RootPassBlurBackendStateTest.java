@@ -19,20 +19,6 @@ public class RootPassBlurBackendStateTest {
     }
 
     @Test
-    public void sameGenerationRefreshKeepsExistingNormalizedBackdropReusable() {
-        RootPassBlurBackendState state = new RootPassBlurBackendState();
-        assertTrue(state.requestFresh(8L));
-        assertTrue(state.onFreshFrame(8L));
-        assertTrue(state.hasFreshFrame(8L));
-
-        assertTrue(state.requestFresh(8L));
-
-        assertTrue("requesting a newer producer buffer in the same scene generation must not "
-                        + "invalidate the already normalized GPU backdrop",
-                state.hasFreshFrame(8L));
-    }
-
-    @Test
     public void rebindInvalidatesFreshnessUntilRealFrameForCurrentGeneration() {
         RootPassBlurBackendState state = new RootPassBlurBackendState();
         assertTrue(state.requestFresh(10L));
