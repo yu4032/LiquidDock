@@ -4,6 +4,8 @@ import java.util.LinkedHashSet;
 
 /** Pure domain policy for native PassBlur binding. */
 final class PassBlurBindPolicy {
+    private static final float SECURITY_CENTER_NATIVE_SCALE = 0.25f;
+
     private static final String[] SYSTEM_EXCLUSIONS = {
             "NavigationBar",
             "StatusBar",
@@ -13,6 +15,13 @@ final class PassBlurBindPolicy {
     private PassBlurBindPolicy() {}
 
     static float nativeScale(PassBlurDomain domain, float requestedScale) {
+        // Security Center's vendor PassBlur producer is natively configured at 0.25. Device logs
+        // show that changing the same root to 1.0 stops RenderEngine backdrop production even
+        // while updateTextureFlag remains true. Treat this as a producer protocol contract rather
+        // than a quality knob. Launcher/Dock keep their existing 1.0 bridge policy.
+        if (domain == PassBlurDomain.SECURITY_CENTER) {
+            return SECURITY_CENTER_NATIVE_SCALE;
+        }
         return PassBlurQualityPolicy.bridgeScale(
                 domain == PassBlurDomain.LAUNCHER_WORKSPACE,
                 Math.round(requestedScale * 100f));
