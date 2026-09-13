@@ -1,0 +1,34 @@
+name: Apply functional Dock glass patch
+
+on:
+  push:
+    branches:
+      - fix/launcher450-folder-inner-icon-size
+    paths:
+      - .github/workflows/apply-functional-dock-glass.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/launcher450-folder-inner-icon-size
+      - name: Apply functional Dock glass integration
+        run: python3 .github/scripts/patch_functional_dock_glass.py
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java \
+                  src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java \
+                  src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java \
+                  src/main/java/com/hellovoid/liquiddock/ModuleMain.java \
+                  src/main/java/com/hellovoid/liquiddock/MiuixLauncherStaticGlassHook.java \
+                  src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
+          git diff --cached --check
+          git commit -m "feat: add functional-only Dock icon glass"
+          git push origin HEAD:fix/launcher450-folder-inner-icon-size
