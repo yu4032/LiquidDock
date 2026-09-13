@@ -27,6 +27,8 @@ final class LauncherIconSizeHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, int[]> BASE_VIEW_SIZE =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, View.OnAttachStateChangeListener> OWNER_ATTACH_LISTENERS =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, View.OnLayoutChangeListener> FOLDER_LAYOUT_LISTENERS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -50,7 +52,7 @@ final class LauncherIconSizeHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
-                if (owner instanceof View) applyBoundIcon((View) owner);
+                if (owner instanceof View) observeBoundIcon((View) owner);
                 return result;
             });
             installed = true;
@@ -64,11 +66,45 @@ final class LauncherIconSizeHook {
     }
 
     static void applyBoundIcon(View owner) {
-        if (owner == null) return;
+        observeBoundIcon(owner);
+    }
+
+    private static void observeBoundIcon(View owner) {
+        if (owner == null || !isSupportedOwner(owner)) return;
+        synchronized (OWNER_ATTACH_LISTENERS) {
+            if (!OWNER_ATTACH_LISTENERS.containsKey(owner)) {
+                View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
+                    @Override public void onViewAttachedToWindow(View view) {
+                        applyAttachedOwner(view);
+                    }
+
+                    @Override public void onViewDetachedFromWindow(View view) {
+                        // A ShortcutIcon may later be rebound into a different Launcher domain.
+                        // Re-evaluate only when it has a live parent again.
+                    }
+                };
+                OWNER_ATTACH_LISTENERS.put(owner, listener);
+                owner.addOnAttachStateChangeListener(listener);
+            }
+        }
+        if (owner.isAttachedToWindow()) applyAttachedOwner(owner);
+    }
+
+    private static boolean isSupportedOwner(View owner) {
+        String simpleName = owner.getClass().getSimpleName();
+        String className = owner.getClass().getName();
+        return SHORTCUT_ICON.equals(simpleName) || className.endsWith("." + SHORTCUT_ICON)
+                || SMALL_FOLDER.equals(simpleName) || className.endsWith("." + SMALL_FOLDER);
+    }
+
+    private static void applyAttachedOwner(View owner) {
         String simpleName = owner.getClass().getSimpleName();
         String className = owner.getClass().getName();
         if (SHORTCUT_ICON.equals(simpleName) || className.endsWith("." + SHORTCUT_ICON)) {
-            applyShortcutIcon(owner);
+            LauncherGlassHierarchy.Domain domain = LauncherGlassHierarchy.classify(owner);
+            boolean inScope = domain == LauncherGlassHierarchy.Domain.WORKSPACE
+                    || domain == LauncherGlassHierarchy.Domain.DOCK;
+            applyShortcutIcon(owner, inScope && enabled);
             return;
         }
         if (SMALL_FOLDER.equals(simpleName) || className.endsWith("." + SMALL_FOLDER)) {
@@ -76,7 +112,7 @@ final class LauncherIconSizeHook {
         }
     }
 
-    private static void applyShortcutIcon(View owner) {
+    private static void applyShortcutIcon(View owner, boolean active) {
         if (!(owner instanceof TextView)) return;
         TextView text = (TextView) owner;
         Drawable drawable = topDrawable(text);
@@ -94,8 +130,8 @@ final class LauncherIconSizeHook {
             BASE_DRAWABLE_BOUNDS.put(drawable, base);
         }
 
-        int width = LauncherIconSizePolicy.scaledPx(base.width(), enabled, percent);
-        int height = LauncherIconSizePolicy.scaledPx(base.height(), enabled, percent);
+        int width = LauncherIconSizePolicy.scaledPx(base.width(), active, percent);
+        int height = LauncherIconSizePolicy.scaledPx(base.height(), active, percent);
         Rect current = drawable.getBounds();
         if (current.width() == width && current.height() == height) return;
         drawable.setBounds(0, 0, width, height);
@@ -148,8 +184,9 @@ final class LauncherIconSizeHook {
 
         ViewGroup.LayoutParams lp = material.getLayoutParams();
         if (lp == null) return;
-        int targetWidth = LauncherIconSizePolicy.scaledPx(base[0], enabled, percent);
-        int targetHeight = LauncherIconSizePolicy.scaledPx(base[1], enabled, percent);
+        boolean active = enabled && LauncherGlassHierarchy.isWorkspace(material);
+        int targetWidth = LauncherIconSizePolicy.scaledPx(base[0], active, percent);
+        int targetHeight = LauncherIconSizePolicy.scaledPx(base[1], active, percent);
         if (lp.width == targetWidth && lp.height == targetHeight) return;
         lp.width = targetWidth;
         lp.height = targetHeight;
