@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.SurfaceTexture;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -128,7 +129,9 @@ final class Miuix307ZeroCopyRenderer {
         if (gpuBackdrop == null) return;
         long serial = ++homeFreshnessSerial;
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
+        boolean hadOverride = homeProducerOverride;
         homeProducerOverride = false;
+        if (hadOverride) applyProducerUpdatesPolicy("home-freshness-restarted");
         if (decision.blockPresentation) {
             gpuBackdrop.setAlpha(0f);
             MainHook.log(TAG + " HOME backdrop presentation blocked serial=" + serial);
@@ -137,8 +140,9 @@ final class Miuix307ZeroCopyRenderer {
 
     /**
      * The vendor may enter static-Dock snapshot mode at HOME and pause PassBlur updates. Temporarily
-     * override that power policy until one producer frame and its matching EGL publication occur
-     * after the accepted HOME FINISH boundary, then restore the vendor-requested policy.
+     * override that power policy until an input buffer newer than the accepted HOME FINISH is
+     * consumed, then cross one UI VSYNC before exposing the TextureView and restoring the vendor
+     * policy. No fixed timing assumption is used.
      */
     static void onHomeOpeningFinished() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
@@ -147,53 +151,63 @@ final class Miuix307ZeroCopyRenderer {
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeFinished(serial);
         if (!decision.forceProducerUpdates) return;
 
-        final long producerBaseline = readCounter(gpuBackdrop, "producerFrameCount");
-        final long renderedBaseline = readCounter(gpuBackdrop, "renderedFrameCount");
+        final long inputTimestampBaseline = readInputTimestamp(gpuBackdrop);
         homeProducerOverride = true;
         applyProducerUpdatesPolicy("home-freshness-finish");
-        awaitFreshHomeBackdrop(gpuBackdrop, serial, producerBaseline, renderedBaseline);
+        awaitFreshHomeInput(gpuBackdrop, serial, inputTimestampBaseline);
         MainHook.log(TAG + " HOME backdrop fresh frame armed serial=" + serial
-                + " producerBaseline=" + producerBaseline
-                + " renderedBaseline=" + renderedBaseline);
+                + " inputTimestampBaseline=" + inputTimestampBaseline);
     }
 
-    private static void awaitFreshHomeBackdrop(
+    private static void awaitFreshHomeInput(
             Miuix307PassBlurTextureView gpuBackdrop,
             long serial,
-            long producerBaseline,
-            long renderedBaseline) {
+            long inputTimestampBaseline) {
         if (gpuBackdropRef.get() != gpuBackdrop || serial != homeFreshnessSerial
                 || !gpuBackdrop.isAttachedToWindow()) {
             return;
         }
 
-        long producerNow = readCounter(gpuBackdrop, "producerFrameCount");
-        long renderedNow = readCounter(gpuBackdrop, "renderedFrameCount");
-        if (producerNow > producerBaseline && renderedNow > renderedBaseline) {
-            DockHomeBackdropFreshnessState.Decision decision =
-                    HOME_FRESHNESS.onProducerFrameAvailable();
-            if (decision.releasePresentation) {
-                gpuBackdrop.setAlpha(1f);
-                MainHook.log(TAG + " HOME backdrop fresh frame published serial=" + serial
-                        + " producer=" + producerNow + " rendered=" + renderedNow);
-            }
-            if (decision.releaseProducerOverride) {
-                homeProducerOverride = false;
-                applyProducerUpdatesPolicy("home-freshness-complete");
-            }
+        long inputTimestamp = readInputTimestamp(gpuBackdrop);
+        if (inputTimestamp > 0L && inputTimestamp != inputTimestampBaseline) {
+            // input.getTimestamp() changes only after drawLatestFrame() consumes updateTexImage().
+            // Publish on the next UI VSYNC so that render-thread normalization/composition and the
+            // corresponding EGL swap can complete before stale presentation is made visible again.
+            gpuBackdrop.postOnAnimation(() -> publishFreshHomeBackdrop(
+                    gpuBackdrop, serial, inputTimestamp));
             return;
         }
 
-        gpuBackdrop.postOnAnimation(() -> awaitFreshHomeBackdrop(
-                gpuBackdrop, serial, producerBaseline, renderedBaseline));
+        gpuBackdrop.postOnAnimation(() -> awaitFreshHomeInput(
+                gpuBackdrop, serial, inputTimestampBaseline));
     }
 
-    private static long readCounter(Miuix307PassBlurTextureView gpuBackdrop, String field) {
+    private static void publishFreshHomeBackdrop(
+            Miuix307PassBlurTextureView gpuBackdrop, long serial, long inputTimestamp) {
+        if (gpuBackdropRef.get() != gpuBackdrop || serial != homeFreshnessSerial
+                || !gpuBackdrop.isAttachedToWindow()) {
+            return;
+        }
+        DockHomeBackdropFreshnessState.Decision decision =
+                HOME_FRESHNESS.onProducerFrameAvailable();
+        if (decision.releasePresentation) {
+            gpuBackdrop.setAlpha(1f);
+            MainHook.log(TAG + " HOME backdrop fresh frame published serial=" + serial
+                    + " inputTimestamp=" + inputTimestamp);
+        }
+        if (decision.releaseProducerOverride) {
+            homeProducerOverride = false;
+            applyProducerUpdatesPolicy("home-freshness-complete");
+        }
+    }
+
+    private static long readInputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {
         try {
-            return HookUtil.getLongField(gpuBackdrop, field);
+            Object value = HookUtil.getField(gpuBackdrop, "inputSurfaceTexture");
+            return value instanceof SurfaceTexture ? ((SurfaceTexture) value).getTimestamp() : 0L;
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME freshness counter unavailable field=" + field + ": " + error);
-            return Long.MIN_VALUE;
+            MainHook.log(TAG + " HOME freshness input timestamp unavailable: " + error);
+            return 0L;
         }
     }
 
