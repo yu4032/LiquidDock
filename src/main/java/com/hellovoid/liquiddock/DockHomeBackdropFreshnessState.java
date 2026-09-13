@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Android-free freshness barrier for Dock PassBlur presentation across App -> HOME. */
+/** Android-free producer refresh state for Dock PassBlur across App -> HOME. */
 final class DockHomeBackdropFreshnessState {
     static final class Decision {
         final boolean blockPresentation;
@@ -23,16 +23,12 @@ final class DockHomeBackdropFreshnessState {
             return new Decision(false, false, false, false);
         }
 
-        static Decision block() {
-            return new Decision(true, false, false, false);
-        }
-
         static Decision forceFreshFrame() {
             return new Decision(false, true, false, false);
         }
 
-        static Decision release() {
-            return new Decision(false, false, true, true);
+        static Decision releaseOverride() {
+            return new Decision(false, false, false, true);
         }
     }
 
@@ -43,14 +39,13 @@ final class DockHomeBackdropFreshnessState {
     synchronized Decision onHomeStarted(long serial) {
         if (serial <= 0L) return Decision.none();
         activeHomeSerial = serial;
-        requiredFrameSerial = -1L;
-        return Decision.block();
+        requiredFrameSerial = producerFrameSerial + 1L;
+        return Decision.forceFreshFrame();
     }
 
     synchronized Decision onHomeFinished(long serial) {
         if (serial <= 0L || serial != activeHomeSerial) return Decision.none();
-        requiredFrameSerial = producerFrameSerial + 1L;
-        return Decision.forceFreshFrame();
+        return Decision.none();
     }
 
     synchronized Decision onProducerFrameAvailable() {
@@ -61,7 +56,7 @@ final class DockHomeBackdropFreshnessState {
         }
         activeHomeSerial = -1L;
         requiredFrameSerial = -1L;
-        return Decision.release();
+        return Decision.releaseOverride();
     }
 
     synchronized void reset() {
@@ -70,6 +65,6 @@ final class DockHomeBackdropFreshnessState {
     }
 
     synchronized boolean isPresentationBlocked() {
-        return activeHomeSerial > 0L;
+        return false;
     }
 }
