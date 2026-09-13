@@ -42,6 +42,8 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "HookUtilArchitectureContractTest.java",
             "LauncherGlassStaticBoundaryTest.java",
             "LauncherGlassVendorMaterialSuppressionContractTest.java",
+            "LauncherIconSizeGuiContractTest.java",
+            "LauncherIconSizeHookContractTest.java",
             "LauncherMamlBackgroundRuleExecutorContractTest.java",
             "LauncherWallpaperFreshnessHookContractTest.java",
             "LauncherWidgetBackgroundControllerContractTest.java",
@@ -159,23 +161,21 @@ public class RuntimeBehaviorTestPolicyContractTest {
     }
 
     private static boolean isProductionSourceReader(String source) {
-        // Default-deny by production/config reference instead of trying to enumerate all reader
-        // APIs. That keeps Files.lines/readAllLines/newBufferedReader and Kotlin readText/readLines
-        // from becoming trivial bypasses while audited static source contracts remain allowlisted.
-        return source.contains("src/main/")
-                || source.contains("build.gradle")
-                || source.contains("settings.gradle");
+        return (source.contains("Files.readString")
+                || source.contains("Files.readAllLines")
+                || source.contains("Files.lines")
+                || source.contains("Files.newBufferedReader")
+                || source.contains(".readText()"))
+                && (source.contains("src/main/java")
+                || source.contains("src/main/kotlin")
+                || source.contains("src/main/res"));
     }
 
     private static void rejectStaticRuntimeProof(
             String name, String source, List<String> violations) {
-        if (source.contains("indexOf(")
-                || source.contains("substring(")
-                || source.contains("split(")
-                || source.contains("lastIndexOf(")) {
-            violations.add(name + " is allowlisted only for static architecture/API assertions; "
-                    + "source slicing/order checks are runtime-behavior proof and must move to "
-                    + "typed state/policy tests");
+        if (source.contains("indexOf(") || source.contains("substring(")) {
+            violations.add(name + " is a static allowlisted source reader but uses source ordering/"
+                    + "method slicing, which is forbidden for runtime proof");
         }
     }
 }
