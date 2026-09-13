@@ -1,0 +1,30 @@
+name: Fix functional Dock glass downstream gates
+
+on:
+  push:
+    branches:
+      - fix/launcher450-folder-inner-icon-size
+    paths:
+      - .github/workflows/fix-functional-dock-glass-downstream.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/launcher450-folder-inner-icon-size
+      - name: Apply downstream fixes
+        run: python3 .github/scripts/fix_functional_dock_glass_downstream.py
+      - name: Commit downstream fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/com/hellovoid/liquiddock/DockGlassItemRegistry.java \
+                  src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java
+          git diff --cached --check
+          git commit -m "fix: keep functional-only Dock glass render path live"
+          git push origin HEAD:fix/launcher450-folder-inner-icon-size
