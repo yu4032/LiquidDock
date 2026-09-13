@@ -256,6 +256,7 @@ final class HomeGridMutationCaptureHook {
         long fingerprint = HomeGridLayoutFingerprint.of(positions);
         if (!CAPTURE_POLICY.shouldCapture(orientation, fingerprint)) return;
 
+        StageWorkspaceRuntime.recordSettledOrdinaryLayout(orientation, positions);
         HomeGridLayoutSnapshot other = active.preflightOther(orientation, positions);
         MainHook.log("[DC] orientation mutation captured=" + orientation
                 + " items=" + positions.size()
