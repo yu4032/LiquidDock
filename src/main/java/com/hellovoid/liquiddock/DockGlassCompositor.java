@@ -84,7 +84,7 @@ final class DockGlassCompositor {
             seenRevision = -1L;
         }
         float resolvedRadiusDp = WorkstationDockIconRadiusPolicy.resolve(
-                iconStyle.cornerRadiusDp, workstationIconCornerRadiusDp, 1f,
+                iconStyle.cornerRadiusDp, workstationDockIconCornerRadiusDp, 1f,
                 workstationMode);
         GlassComponentStyle resolvedStyle = new GlassComponentStyle(
                 iconStyle.enabled, iconStyle.sizeOffsetDp, resolvedRadiusDp);
@@ -195,13 +195,12 @@ final class DockGlassCompositor {
                 ? (View) outputRoot.getParent() : ownershipRootRef.get();
         if (dockBody != null && visualHost != null
                 && visualHost.getWidth() > 0 && visualHost.getHeight() > 0) {
-            float bodyWidth = visualHost.getWidth();
-            float bodyHeight = visualHost.getHeight();
-            float bodyRadius = Math.min(dockBody.cornerRadius, Math.max(1f, bodyHeight * 0.44f));
             resolvedBody = new PrismalGeometry(
                     framebufferWidth, framebufferHeight,
                     dockBody.centerX, dockBody.centerY,
-                    bodyWidth, bodyHeight, bodyRadius);
+                    visualHost.getWidth(), visualHost.getHeight(),
+                    dockBody.topLeftRadius, dockBody.topRightRadius,
+                    dockBody.bottomRightRadius, dockBody.bottomLeftRadius);
         }
         renderer.beginGlassFrame();
         renderer.drawGlass(resolvedBody, params, bodyHighlightProfile);
