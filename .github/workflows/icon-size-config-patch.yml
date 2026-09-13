@@ -27,7 +27,6 @@ jobs:
                   src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java \
                   src/main/java/com/hellovoid/liquiddock/ModuleMain.java \
                   src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
-          git diff --cached --check
           if git diff --cached --quiet; then
             echo "Nothing to patch"
             exit 0
