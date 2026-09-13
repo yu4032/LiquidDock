@@ -22,13 +22,6 @@ final class Launcher450DockFunctionalIconRegistry {
     private static final String VIEW_HOLDER =
             "com.miui.home.launcher.hotseats.HotSeatsListContentAdapter$ViewHolder";
 
-    static final int VIEW_TYPE_SEARCH = 2;
-    static final int VIEW_TYPE_ALL_APPS = 512;
-    static final int VIEW_TYPE_RECENTS = 1024;
-    static final int VIEW_TYPE_HOME = 2048;
-    static final int VIEW_TYPE_PHONE = 4096;
-    static final int VIEW_TYPE_XIAOAI = 16384;
-
     private static final Map<View, Boolean> FUNCTIONAL =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static boolean installed;
@@ -56,7 +49,8 @@ final class Launcher450DockFunctionalIconRegistry {
                 Object content = contentResult.succeeded() ? contentResult.value() : null;
                 if (type instanceof Number && content instanceof View) {
                     View icon = (View) content;
-                    boolean functional = isFunctionalViewType(((Number) type).intValue());
+                    boolean functional = Launcher450DockFunctionalIconPolicy.isFunctionalViewType(
+                            ((Number) type).intValue());
                     if (functional) FUNCTIONAL.put(icon, Boolean.TRUE);
                     else FUNCTIONAL.remove(icon);
                     // A holder can change role after recycling. Reconcile every bind so stale
@@ -76,14 +70,5 @@ final class Launcher450DockFunctionalIconRegistry {
 
     static boolean isFunctional(View host) {
         return host != null && Boolean.TRUE.equals(FUNCTIONAL.get(host));
-    }
-
-    static boolean isFunctionalViewType(int viewType) {
-        return viewType == VIEW_TYPE_SEARCH
-                || viewType == VIEW_TYPE_XIAOAI
-                || viewType == VIEW_TYPE_ALL_APPS
-                || viewType == VIEW_TYPE_RECENTS
-                || viewType == VIEW_TYPE_HOME
-                || viewType == VIEW_TYPE_PHONE;
     }
 }
