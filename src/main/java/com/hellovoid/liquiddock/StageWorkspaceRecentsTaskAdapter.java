@@ -51,7 +51,7 @@ final class StageWorkspaceRecentsTaskAdapter {
 
     private static Object readField(Object owner, String name) throws Exception {
         Field field = findField(owner.getClass(), name);
-        if (!field.canAccess(owner)) field.setAccessible(true);
+        field.setAccessible(true);
         return field.get(owner);
     }
 
@@ -88,7 +88,7 @@ final class StageWorkspaceRecentsTaskAdapter {
                                          Class<?>[] parameterTypes,
                                          Object... args) throws Exception {
         Method method = findMethod(owner.getClass(), name, parameterTypes);
-        if (!method.canAccess(owner)) method.setAccessible(true);
+        method.setAccessible(true);
         return method.invoke(owner, args);
     }
 
