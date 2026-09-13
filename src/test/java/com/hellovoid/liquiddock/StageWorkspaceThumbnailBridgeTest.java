@@ -10,8 +10,8 @@ public class StageWorkspaceThumbnailBridgeTest {
     @Test
     public void thumbnailComesFromActivityManagerWrapperForVendorTaskKey() {
         Object bitmap = new Object();
-        FakeTask task = new FakeTask(71, bitmap);
-        FakeActivityManagerWrapper wrapper = new FakeActivityManagerWrapper();
+        FakeTask task = new FakeTask(71);
+        FakeActivityManagerWrapper wrapper = new FakeActivityManagerWrapper(bitmap);
 
         Object result = StageWorkspaceThumbnailBridge.thumbnailFrom(wrapper, task);
 
@@ -22,10 +22,10 @@ public class StageWorkspaceThumbnailBridgeTest {
     @Test
     public void missingTaskKeyOrThumbnailFailsClosed() {
         assertNull(StageWorkspaceThumbnailBridge.thumbnailFrom(
-                new FakeActivityManagerWrapper(), new Object()));
+                new FakeActivityManagerWrapper(new Object()), new Object()));
         assertNull(StageWorkspaceThumbnailBridge.thumbnailFrom(
-                new FakeActivityManagerWrapper(), new FakeTask(72, null)));
-        assertNull(StageWorkspaceThumbnailBridge.thumbnailFrom(null, new FakeTask(73, new Object())));
+                new FakeActivityManagerWrapper(null), new FakeTask(72)));
+        assertNull(StageWorkspaceThumbnailBridge.thumbnailFrom(null, new FakeTask(73)));
     }
 
     public static final class FakeTaskKey {
@@ -46,37 +46,23 @@ public class StageWorkspaceThumbnailBridgeTest {
 
     public static final class FakeTask {
         public final FakeTaskKey key;
-        private final Object thumbnail;
 
-        FakeTask(int id, Object thumbnail) {
+        FakeTask(int id) {
             key = new FakeTaskKey(id);
-            this.thumbnail = thumbnail;
         }
     }
 
     public static final class FakeActivityManagerWrapper {
+        private final Object thumbnail;
         Object requestedKey;
+
+        FakeActivityManagerWrapper(Object thumbnail) {
+            this.thumbnail = thumbnail;
+        }
 
         public FakeThumbnailData getTaskThumbnail(FakeTaskKey key) {
             requestedKey = key;
-            return new FakeThumbnailData(findThumbnail(key));
+            return new FakeThumbnailData(thumbnail);
         }
-
-        private Object findThumbnail(FakeTaskKey key) {
-            return key == null ? null : ThumbnailRegistry.find(key.id);
-        }
-    }
-
-    private static final class ThumbnailRegistry {
-        private static FakeTask current;
-
-        static Object find(int taskId) {
-            return current != null && current.key.id == taskId ? current.thumbnail : null;
-        }
-    }
-
-    private static FakeTask register(FakeTask task) {
-        ThumbnailRegistry.current = task;
-        return task;
     }
 }
