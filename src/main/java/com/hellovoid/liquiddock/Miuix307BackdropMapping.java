@@ -37,27 +37,27 @@ final class Miuix307BackdropMapping {
     private Miuix307BackdropMapping() {}
 
     static Result compute(
-            int hostLeft, int hostTop, int hostWidth, int hostHeight,
-            int frameLeft, int frameTop, int frameWidth, int frameHeight) {
-        if (hostWidth <= 0 || hostHeight <= 0 || frameWidth <= 0 || frameHeight <= 0) {
+            float hostLeft, float hostTop, float hostWidth, float hostHeight,
+            float frameLeft, float frameTop, float frameWidth, float frameHeight) {
+        if (hostWidth <= 0f || hostHeight <= 0f || frameWidth <= 0f || frameHeight <= 0f) {
             return outside();
         }
 
-        float backdropX = (hostLeft - frameLeft) / (float) frameWidth;
-        float top = (hostTop - frameTop) / (float) frameHeight;
-        float backdropW = hostWidth / (float) frameWidth;
-        float backdropH = hostHeight / (float) frameHeight;
+        float backdropX = (hostLeft - frameLeft) / frameWidth;
+        float top = (hostTop - frameTop) / frameHeight;
+        float backdropW = hostWidth / frameWidth;
+        float backdropH = hostHeight / frameHeight;
         float backdropY = 1f - (top + backdropH);
 
-        int hostRight = hostLeft + hostWidth;
-        int hostBottom = hostTop + hostHeight;
-        int frameRight = frameLeft + frameWidth;
-        int frameBottom = frameTop + frameHeight;
+        float hostRight = hostLeft + hostWidth;
+        float hostBottom = hostTop + hostHeight;
+        float frameRight = frameLeft + frameWidth;
+        float frameBottom = frameTop + frameHeight;
 
-        int intersectionLeft = Math.max(hostLeft, frameLeft);
-        int intersectionTop = Math.max(hostTop, frameTop);
-        int intersectionRight = Math.min(hostRight, frameRight);
-        int intersectionBottom = Math.min(hostBottom, frameBottom);
+        float intersectionLeft = Math.max(hostLeft, frameLeft);
+        float intersectionTop = Math.max(hostTop, frameTop);
+        float intersectionRight = Math.min(hostRight, frameRight);
+        float intersectionBottom = Math.min(hostBottom, frameBottom);
 
         if (intersectionLeft >= intersectionRight || intersectionTop >= intersectionBottom) {
             return new Result(
@@ -65,22 +65,26 @@ final class Miuix307BackdropMapping {
                     0f, 0f, 0f, 0f, Coverage.OUTSIDE);
         }
 
-        float validLeft = clamp01((intersectionLeft - hostLeft) / (float) hostWidth);
-        float validRight = clamp01((intersectionRight - hostLeft) / (float) hostWidth);
+        float validLeft = clamp01((intersectionLeft - hostLeft) / hostWidth);
+        float validRight = clamp01((intersectionRight - hostLeft) / hostWidth);
 
         // Android screen coordinates are top-left based while the Dock-local shader UV is
         // bottom-left based. Convert the visible top-down host interval into GL UV coordinates.
-        float validBottom = clamp01(1f - (intersectionBottom - hostTop) / (float) hostHeight);
-        float validTop = clamp01(1f - (intersectionTop - hostTop) / (float) hostHeight);
+        float validBottom = clamp01(1f - (intersectionBottom - hostTop) / hostHeight);
+        float validTop = clamp01(1f - (intersectionTop - hostTop) / hostHeight);
 
-        boolean full = intersectionLeft == hostLeft
-                && intersectionTop == hostTop
-                && intersectionRight == hostRight
-                && intersectionBottom == hostBottom;
+        boolean full = approximatelyEqual(intersectionLeft, hostLeft)
+                && approximatelyEqual(intersectionTop, hostTop)
+                && approximatelyEqual(intersectionRight, hostRight)
+                && approximatelyEqual(intersectionBottom, hostBottom);
         return new Result(
                 backdropX, backdropY, backdropW, backdropH,
                 validLeft, validBottom, validRight, validTop,
                 full ? Coverage.FULL : Coverage.PARTIAL);
+    }
+
+    private static boolean approximatelyEqual(float a, float b) {
+        return Math.abs(a - b) <= 0.0001f;
     }
 
     private static Result outside() {
