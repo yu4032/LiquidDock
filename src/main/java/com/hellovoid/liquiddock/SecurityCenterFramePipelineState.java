@@ -24,11 +24,13 @@ final class SecurityCenterFramePipelineState {
 
     static final class Submission {
         final boolean accepted;
+        final boolean backdropUpdated;
         final long serial;
         final long generation;
 
-        Submission(boolean accepted, long serial, long generation) {
+        Submission(boolean accepted, boolean backdropUpdated, long serial, long generation) {
             this.accepted = accepted;
+            this.backdropUpdated = backdropUpdated;
             this.serial = serial;
             this.generation = generation;
         }
@@ -120,7 +122,9 @@ final class SecurityCenterFramePipelineState {
         cachedGeneration = generation;
         cachedRevision++;
 
-        if (inFlightSerial >= 0L) return noneSubmission();
+        if (inFlightSerial >= 0L) {
+            return new Submission(false, true, -1L, -1L);
+        }
         return beginSubmission(cachedRevision, true);
     }
 
@@ -154,7 +158,7 @@ final class SecurityCenterFramePipelineState {
         if (freshSource) {
             SecurityCenterGlassMorphProbe.sourceAccepted(inFlightGeneration, inFlightSerial);
         }
-        return new Submission(true, inFlightSerial, inFlightGeneration);
+        return new Submission(true, freshSource, inFlightSerial, inFlightGeneration);
     }
 
     /**
@@ -239,6 +243,6 @@ final class SecurityCenterFramePipelineState {
     }
 
     private static Submission noneSubmission() {
-        return new Submission(false, -1L, -1L);
+        return new Submission(false, false, -1L, -1L);
     }
 }
