@@ -29,6 +29,8 @@ final class Miuix307ZeroCopyRenderer {
     private static boolean worldLockConfigured;
     private static boolean worldLockAnchored;
     private static int worldLockGuardPx;
+    private static int worldLockHostWidth;
+    private static int worldLockHostHeight;
     private static int worldLockAnchorX;
     private static int worldLockAnchorY;
 
@@ -41,9 +43,6 @@ final class Miuix307ZeroCopyRenderer {
         if (materialHost == null || host == null || glassConfig == null
                 || workstationConfig == null) return false;
 
-        // This is the first zero-copy boundary that owns a real Launcher View. Install the
-        // app-to-home icon handoff hooks here so they use the target Launcher ClassLoader rather
-        // than being skipped by MainHook's successful 307 early return.
         LiquidDockConfig runtimeConfig = LiquidDockConfig.load();
         boolean animationHookInstalled = DockIconAnimationGlassHook.install(
                 materialHost.getClass().getClassLoader(), runtimeConfig);
@@ -51,10 +50,6 @@ final class Miuix307ZeroCopyRenderer {
                 + " iconEnabled=" + GlassRuntimeState.isIconEnabled()
                 + " host=" + materialHost.getClass().getSimpleName());
 
-        // The current zero-copy backend binds SurfaceFlinger's PassBlur producer directly to the
-        // Floating Dock root through SetPassBlurSurface. It does not depend on the themed
-        // BlurBackground2#setBackgroundBlur path, so both supported HotSeats material owners must
-        // reach the same TextureView renderer.
         Miuix307PassBlurTextureView gpuBackdrop = new Miuix307PassBlurTextureView(
                 materialHost.getContext(), materialHost);
         gpuBackdrop.setGlassConfig(glassConfig);
@@ -62,10 +57,9 @@ final class Miuix307ZeroCopyRenderer {
                 workstationConfig.dockIconGlassCornerRadius);
         gpuBackdrop.setId(View.generateViewId());
 
-        // The TextureView is expanded after Host measurement. Its extra pixels are real sampled
-        // world-space background, not a scaled copy. During motion we counter-translate this child
-        // so its screen position stays fixed while the Host clip follows the Dock in the UI
-        // timeline. This removes BufferQueue/EGL presentation latency from backdrop positioning.
+        // Give the TextureView a real overscan ring. The parent Host continues to own the exact
+        // Dock clip/stroke. During motion the oversized child is counter-translated on the UI
+        // timeline so its already-presented pixels stay fixed in screen/world coordinates.
         host.removeAllViews();
         host.addView(gpuBackdrop, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -78,11 +72,7 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
-        worldLockConfigured = false;
-        worldLockAnchored = false;
-        worldLockGuardPx = 0;
-        worldLockAnchorX = 0;
-        worldLockAnchorY = 0;
+        resetWorldLockState();
         host.post(() -> configureWorldLockOverscan(gpuBackdrop, host));
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
@@ -143,11 +133,6 @@ final class Miuix307ZeroCopyRenderer {
                 + (homeProducerOverride ? "/home-refresh-override" : ""));
     }
 
-    /**
-     * HOME authority starts the refresh immediately. Keep the already-presented Dock visible, but
-     * temporarily force the PassBlur producer live so the first desktop/wallpaper buffer replaces
-     * the App buffer as soon as SurfaceFlinger produces it. No alpha/visibility barrier is used.
-     */
     static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
@@ -164,7 +149,6 @@ final class Miuix307ZeroCopyRenderer {
                 + " inputTimestampBaseline=" + inputTimestampBaseline);
     }
 
-    /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
     static void onHomeOpeningFinished() {
         if (homeFreshnessSerial <= 0L) return;
         HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
@@ -216,12 +200,6 @@ final class Miuix307ZeroCopyRenderer {
         }
     }
 
-    /**
-     * FloatingIcon update arrives after the vendor has applied this frame's animation state. Keep
-     * the oversized backdrop child fixed in world coordinates first, then refresh mapping. The
-     * moving Host clip is therefore synchronized with Launcher while the background buffer is not
-     * required to traverse EGL/BufferQueue on every position change.
-     */
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
@@ -266,35 +244,47 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdrop.setLayoutParams(lp);
         gpuBackdrop.setTranslationX(0f);
         gpuBackdrop.setTranslationY(0f);
+
+        int[] hostScreen = new int[2];
+        host.getLocationOnScreen(hostScreen);
         worldLockGuardPx = guard;
+        worldLockHostWidth = hostWidth;
+        worldLockHostHeight = hostHeight;
+        worldLockAnchorX = hostScreen[0];
+        worldLockAnchorY = hostScreen[1];
         worldLockConfigured = true;
-        worldLockAnchored = false;
+        worldLockAnchored = true;
         MainHook.log(TAG + " Dock world-lock overscan configured host="
-                + hostWidth + "x" + hostHeight + " guard=" + guard);
+                + hostWidth + "x" + hostHeight + " guard=" + guard
+                + " anchor=[" + worldLockAnchorX + "," + worldLockAnchorY + "]");
     }
 
     private static void applyWorldLockForMotion(Miuix307PassBlurTextureView gpuBackdrop) {
         DockLiquidGlassHostView host = hostRef.get();
         if (host == null || !host.isAttachedToWindow()) return;
+
+        int hostWidth = host.getWidth();
+        int hostHeight = host.getHeight();
         if (!worldLockConfigured || worldLockGuardPx <= 0
-                || gpuBackdrop.getWidth() <= host.getWidth()
-                || gpuBackdrop.getHeight() <= host.getHeight()) {
+                || hostWidth != worldLockHostWidth || hostHeight != worldLockHostHeight) {
             configureWorldLockOverscan(gpuBackdrop, host);
-            if (!worldLockConfigured) return;
+        }
+        if (!worldLockConfigured || !worldLockAnchored) return;
+
+        // setLayoutParams() is asynchronous. Never re-anchor merely because the enlarged child has
+        // not completed layout yet; wait for the overscan dimensions to become real instead.
+        int guard = worldLockGuardPx;
+        int expectedWidth = hostWidth + guard * 2;
+        int expectedHeight = hostHeight + guard * 2;
+        if (gpuBackdrop.getWidth() != expectedWidth || gpuBackdrop.getHeight() != expectedHeight) {
+            return;
         }
 
         int[] hostScreen = new int[2];
         host.getLocationOnScreen(hostScreen);
-        if (!worldLockAnchored) {
-            worldLockAnchorX = hostScreen[0];
-            worldLockAnchorY = hostScreen[1];
-            worldLockAnchored = true;
-        }
-
-        int guard = worldLockGuardPx;
         DockBackdropWorldLockState.Crop crop = DockBackdropWorldLockState.compute(
-                host.getWidth(), host.getHeight(),
-                host.getWidth() + guard * 2, host.getHeight() + guard * 2,
+                hostWidth, hostHeight,
+                expectedWidth, expectedHeight,
                 guard, guard,
                 worldLockAnchorX, worldLockAnchorY,
                 hostScreen[0], hostScreen[1]);
@@ -324,6 +314,16 @@ final class Miuix307ZeroCopyRenderer {
         }
     }
 
+    private static void resetWorldLockState() {
+        worldLockConfigured = false;
+        worldLockAnchored = false;
+        worldLockGuardPx = 0;
+        worldLockHostWidth = 0;
+        worldLockHostHeight = 0;
+        worldLockAnchorX = 0;
+        worldLockAnchorY = 0;
+    }
+
     static void clear() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         gpuBackdropRef = new WeakReference<>(null);
@@ -334,11 +334,7 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
-        worldLockConfigured = false;
-        worldLockAnchored = false;
-        worldLockGuardPx = 0;
-        worldLockAnchorX = 0;
-        worldLockAnchorY = 0;
+        resetWorldLockState();
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }
