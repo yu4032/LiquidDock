@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Method;
 
 /** Builds the feedback-safe HyperOS 307 PassBlur -> OES -> TextureView material composition. */
 final class Miuix307ZeroCopyRenderer {
@@ -18,7 +19,9 @@ final class Miuix307ZeroCopyRenderer {
     private static WeakReference<View> materialHostRef = new WeakReference<>(null);
     private static final DockHomeBackdropFreshnessState HOME_FRESHNESS =
             new DockHomeBackdropFreshnessState();
-    private static boolean dockAnimationFrameScheduled;
+    private static final DockBackdropMotionSyncState MOTION_SYNC =
+            new DockBackdropMotionSyncState();
+    private static Method backdropMappingMethod;
     private static boolean producerUpdatesPolicyEnabled = true;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
@@ -63,7 +66,7 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
-        dockAnimationFrameScheduled = false;
+        MOTION_SYNC.reset();
         producerUpdatesPolicyEnabled = true;
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
@@ -196,20 +199,48 @@ final class Miuix307ZeroCopyRenderer {
         }
     }
 
+    /**
+     * FloatingIcon update arrives after the vendor has applied this frame's animation state. Read
+     * the Dock's final screen position immediately and publish a matching mapping generation before
+     * coalescing the continuation VSYNC. Otherwise a pending continuation suppresses this vendor
+     * frame and the independent EGL surface visibly trails the Dock by one or more frames.
+     */
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
-        dockAnimationFrameScheduled = true;
+        if (gpuBackdrop == null) return;
+
+        DockBackdropMotionSyncState.Decision decision = MOTION_SYNC.onVendorMotionFrame();
+        if (decision.refreshMappingNow) {
+            syncBackdropMappingForMotion(gpuBackdrop);
+        }
+        if (!decision.scheduleContinuation) return;
+
         DockAnimationTrace.rendererEvent("anim-frame-request");
         gpuBackdrop.requestDockSceneRefresh();
         gpuBackdrop.postOnAnimation(() -> {
             if (gpuBackdropRef.get() != gpuBackdrop) return;
             DockAnimationTrace.rendererEvent("anim-frame-vsync");
-            dockAnimationFrameScheduled = false;
+            MOTION_SYNC.onContinuationVsync();
             if (DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
             }
         });
+    }
+
+    private static void syncBackdropMappingForMotion(Miuix307PassBlurTextureView gpuBackdrop) {
+        try {
+            Method method = backdropMappingMethod;
+            if (method == null) {
+                method = HookUtil.findMethodExact(
+                        Miuix307PassBlurTextureView.class,
+                        "updateBackdropMapping",
+                        new Class<?>[0]);
+                backdropMappingMethod = method;
+            }
+            method.invoke(gpuBackdrop);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " Dock motion mapping sync unavailable: " + error);
+        }
     }
 
     static void clear() {
@@ -217,7 +248,7 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(null);
         hostRef = new WeakReference<>(null);
         materialHostRef = new WeakReference<>(null);
-        dockAnimationFrameScheduled = false;
+        MOTION_SYNC.reset();
         producerUpdatesPolicyEnabled = true;
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
