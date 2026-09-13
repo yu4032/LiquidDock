@@ -152,12 +152,12 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
             return;
         }
-        setUpdatesEnabled(binding, true);
+        setUpdatesEnabled(binding, true, false);
         host.postInvalidateOnAnimation();
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
     }
 
-    /** Persistent resume used by Dock when HyperOS leaves its HOME snapshot state. */
+    /** Persistent resume used by Dock and Security Center live capture. */
     static void resumeUpdates(Binding binding) {
         if (binding == null) return;
         if (PassBlurBindPolicy.requiresUnlockGate(binding.domain)
@@ -165,13 +165,20 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
-        setUpdatesEnabled(binding, true);
+        // Security Center owns the same root SurfaceControl that the vendor material pipeline
+        // mutates while switching Toolbox / All Apps pages. Those vendor transactions can turn
+        // updateTextureFlag off behind our Java-side Binding state, leaving updatesEnabled=true
+        // here while SurfaceFlinger has already entered snapshot mode. Re-assert TRUE for every
+        // Security Center fresh-frame request so we inherit the vendor host lifecycle without
+        // inheriting its snapshot/freeze output policy. Launcher/Dock keep the cached fast path.
+        boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER;
+        setUpdatesEnabled(binding, true, force);
     }
 
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;
-        setUpdatesEnabled(binding, false);
+        setUpdatesEnabled(binding, false, false);
     }
 
     private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
@@ -186,9 +193,9 @@ final class Miuix307PassBlurBridge {
         host.postOnAnimation(() -> schedulePauseUpdates(host, binding, framesLeft - 1));
     }
 
-    private static void setUpdatesEnabled(Binding binding, boolean enabled) {
+    private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
         if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
-        if (binding.updatesEnabled == enabled) return;
+        if (!force && binding.updatesEnabled == enabled) return;
         try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
             binding.setUpdateTextureFlag.invoke(
                     transaction,
@@ -198,6 +205,8 @@ final class Miuix307PassBlurBridge {
             transaction.apply();
             binding.updatesEnabled = enabled;
             MainHook.log(TAG + " PassBlur producer updates=" + enabled
+                    + " force=" + force
+                    + " domain=" + binding.domain
                     + " root=" + binding.rootName);
         } catch (Throwable error) {
             MainHook.log(TAG + " PassBlur update toggle failed: " + error);
