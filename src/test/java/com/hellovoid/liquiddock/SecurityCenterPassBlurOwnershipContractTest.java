@@ -34,6 +34,35 @@ public class SecurityCenterPassBlurOwnershipContractTest {
     }
 
     @Test
+    public void securityCenterOwnsPassBlurSurfaceContinuouslyAcrossVendorTransactions()
+            throws Exception {
+        Path authorityPath = MAIN.resolve("SecurityCenterPassBlurContinuousAuthority.java");
+        assertTrue("Security Center must keep a root-level native producer authority",
+                Files.exists(authorityPath));
+
+        String authority = Files.readString(authorityPath);
+        String moduleMain = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String passBlur = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue("Security Center startup must install continuous PassBlur authority",
+                moduleMain.contains("SecurityCenterPassBlurContinuousAuthority.install()"));
+        assertTrue("vendor SetPassBlurSurface writes must be intercepted while our root is claimed",
+                authority.contains("SetPassBlurSurface")
+                        && authority.contains("args[1] = claim.surface"));
+        assertTrue("vendor update flag/scale writes must preserve live LiquidDock updates",
+                authority.contains("setUpdateTextureFlag")
+                        && authority.contains("args[1] = Boolean.TRUE")
+                        && authority.contains("args[2] = Float.valueOf(claim.scale)"));
+        assertTrue("Security Center bind must claim the caller-owned producer Surface",
+                passBlur.contains("SecurityCenterPassBlurContinuousAuthority.claim("));
+        assertTrue("Security Center unbind must release that exact producer claim",
+                passBlur.contains("SecurityCenterPassBlurContinuousAuthority.release("));
+        assertTrue("Security Center resume must force the native update contract even when Java state is already true",
+                passBlur.contains("boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER")
+                        && passBlur.contains("setUpdatesEnabled(binding, true, force)"));
+    }
+
+    @Test
     public void securityCenterUsesPassBlurAsPrismalInputAndReplacesVendorMaterial()
             throws Exception {
         String policy = Files.readString(
