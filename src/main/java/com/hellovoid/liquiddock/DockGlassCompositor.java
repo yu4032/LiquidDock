@@ -189,8 +189,22 @@ final class DockGlassCompositor {
             DockGlassSceneSnapshot scene, int framebufferWidth, int framebufferHeight) {
         PrismalHighlightProfile bodyHighlightProfile = dockBodyHighlightProfile != null
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
+        PrismalGeometry resolvedBody = dockBody;
+        View outputRoot = outputRootRef.get();
+        View visualHost = outputRoot != null && outputRoot.getParent() instanceof View
+                ? (View) outputRoot.getParent() : ownershipRootRef.get();
+        if (dockBody != null && visualHost != null
+                && visualHost.getWidth() > 0 && visualHost.getHeight() > 0) {
+            float bodyWidth = visualHost.getWidth();
+            float bodyHeight = visualHost.getHeight();
+            float bodyRadius = Math.min(dockBody.cornerRadius, Math.max(1f, bodyHeight * 0.44f));
+            resolvedBody = new PrismalGeometry(
+                    framebufferWidth, framebufferHeight,
+                    dockBody.centerX, dockBody.centerY,
+                    bodyWidth, bodyHeight, bodyRadius);
+        }
         renderer.beginGlassFrame();
-        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        renderer.drawGlass(resolvedBody, params, bodyHighlightProfile);
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
