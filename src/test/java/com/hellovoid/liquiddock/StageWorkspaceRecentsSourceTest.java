@@ -2,6 +2,9 @@ package com.hellovoid.liquiddock;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
@@ -42,6 +45,41 @@ public class StageWorkspaceRecentsSourceTest {
     }
 
     @Test
+    public void modelPullReadsCurrentTaskListEachTime() {
+        FakeTask first = task(31, 0, "a.pkg");
+        FakeTask second = task(32, 0, "b.pkg");
+        FakeRecentsModel model = new FakeRecentsModel(List.of(first));
+
+        List<StageWorkspaceRecentsSource.Item> initial =
+                StageWorkspaceRecentsSource.fromModel(model, 8);
+        model.tasks = List.of(second);
+        List<StageWorkspaceRecentsSource.Item> updated =
+                StageWorkspaceRecentsSource.fromModel(model, 8);
+
+        assertEquals(2, model.calls);
+        assertSame(first, initial.get(0).vendorTask());
+        assertSame(second, updated.get(0).vendorTask());
+    }
+
+    @Test
+    public void unavailableModelMethodFailsClosed() {
+        assertTrue(StageWorkspaceRecentsSource.fromModel(new Object(), 8).isEmpty());
+    }
+
+    @Test
+    public void runtimeUsesVerifiedRecentsModelSurfaceWithoutPersistenceOrPolling() throws Exception {
+        String source = Files.readString(Paths.get(
+                "src/main/java/com/hellovoid/liquiddock/StageWorkspaceRecentsSource.java"),
+                StandardCharsets.UTF_8);
+        assertTrue(source.contains("com.miui.home.recents.RecentsModel"));
+        assertTrue(source.contains("getDeclaredMethod(\"getInstance\", Context.class)"));
+        assertTrue(source.contains("getDeclaredMethod(\"getTaskList\")"));
+        assertTrue(source.contains("current(Context context, ClassLoader classLoader, int maxCards)"));
+        assertTrue(!source.contains("SharedPreferences"));
+        assertTrue(!source.contains("postDelayed("));
+    }
+
+    @Test
     public void emptyOrNonPositiveLimitFailsClosed() {
         assertTrue(StageWorkspaceRecentsSource.fromVendorTasks(null, 8).isEmpty());
         assertTrue(StageWorkspaceRecentsSource.fromVendorTasks(List.of(task(1, 0, "a")), 0)
@@ -50,6 +88,20 @@ public class StageWorkspaceRecentsSourceTest {
 
     private static FakeTask task(int id, int userId, String packageName) {
         return new FakeTask(id, userId, packageName);
+    }
+
+    public static final class FakeRecentsModel {
+        List<?> tasks;
+        int calls;
+
+        FakeRecentsModel(List<?> tasks) {
+            this.tasks = tasks;
+        }
+
+        public List<?> getTaskList() {
+            calls++;
+            return tasks;
+        }
     }
 
     public static final class FakeTaskKey {
