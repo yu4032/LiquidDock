@@ -9,6 +9,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.widget.FrameLayout;
 
 import java.lang.ref.WeakReference;
 
@@ -18,6 +19,36 @@ final class SecurityCenterGlassSinkView extends TextureView
     // Prismal's outer edge shell reaches roughly 2.2 logical pixels beyond the SDF boundary.
     // Three pixels preserves that AA/highlight work area without changing the actual glass shape.
     private static final float OPTICAL_OUTSET_PX = 3f;
+
+    private static final class OverlayHost {
+        final ViewGroup parent;
+        final View anchor;
+
+        OverlayHost(ViewGroup parent, View anchor) {
+            this.parent = parent;
+            this.anchor = anchor;
+        }
+    }
+
+    private static final class Bounds {
+        final float left;
+        final float top;
+        final float right;
+        final float bottom;
+        final float horizontalScale;
+        final float verticalScale;
+
+        Bounds(
+                float left, float top, float right, float bottom,
+                float horizontalScale, float verticalScale) {
+            this.left = left;
+            this.top = top;
+            this.right = right;
+            this.bottom = bottom;
+            this.horizontalScale = horizontalScale;
+            this.verticalScale = verticalScale;
+        }
+    }
 
     private final WeakReference<View> materialRef;
     private final SecurityCenterGlassSession session;
@@ -48,7 +79,7 @@ final class SecurityCenterGlassSinkView extends TextureView
             }
 
             @Override public void onViewDetachedFromWindow(View v) {
-                // The parent can change during the vendor's dynamic All Apps lifecycle.
+                // The coordinator replaces this sink when a material carrier leaves its subtree.
             }
         };
         material.addOnAttachStateChangeListener(materialAttachListener);
@@ -62,19 +93,24 @@ final class SecurityCenterGlassSinkView extends TextureView
         setAlpha(1f);
     }
 
+    /**
+     * Attach outside the material's direct parent. Game Toolbox puts its material inside a
+     * LinearLayout; inserting a TextureView beside that material changes vendor measurement and
+     * physically shifts the toolbox. The first FrameLayout above the material subtree is the
+     * vendor overlay container, so the sink is inserted immediately below that subtree instead.
+     */
     static SecurityCenterGlassSinkView attachBefore(
             View material,
             SecurityCenterGlassSession session) {
         if (material == null || session == null || session.isShutdown()
-                || !(material.getParent() instanceof ViewGroup)) return null;
-        ViewGroup parent = (ViewGroup) material.getParent();
-        int index = parent.indexOfChild(material);
-        if (index < 0) return null;
+                || !material.isAttachedToWindow()) return null;
+        OverlayHost host = resolveOverlayHost(material);
+        if (host == null) return null;
         SecurityCenterGlassSinkView sink = new SecurityCenterGlassSinkView(
                 material.getContext(), material, session);
-        int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
-        int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
-        parent.addView(sink, index, new ViewGroup.LayoutParams(width, height));
+        int index = host.parent.indexOfChild(host.anchor);
+        if (index < 0) return null;
+        host.parent.addView(sink, index, new ViewGroup.LayoutParams(1, 1));
         sink.syncFromMaterial();
         return sink;
     }
@@ -90,28 +126,30 @@ final class SecurityCenterGlassSinkView extends TextureView
     boolean syncFromMaterial() {
         View material = materialRef.get();
         if (disposed || session.isShutdown() || material == null) return false;
-        Object materialParent = material.getParent();
-        Object sinkParent = getParent();
-        if (!(materialParent instanceof ViewGroup)) return false;
-        if (materialParent != sinkParent) {
-            scheduleParentRecovery("parent-mismatch");
+        OverlayHost host = resolveOverlayHost(material);
+        if (host == null) return false;
+        if (getParent() != host.parent) {
+            scheduleParentRecovery("overlay-host-mismatch");
             return true;
         }
 
         boolean changed = false;
-        int desiredVisibility = material.getVisibility();
+        float effectiveAlpha = effectiveMaterialAlpha(material, host.parent);
+        boolean materialVisible = effectiveAlpha >= 0.99f
+                && material.getWindowVisibility() == View.VISIBLE;
+        int desiredVisibility = materialVisible ? View.VISIBLE : View.INVISIBLE;
         if (getVisibility() != desiredVisibility) {
             setVisibility(desiredVisibility);
             changed = true;
         }
-        boolean materialVisible = desiredVisibility == View.VISIBLE;
         if (!SecurityCenterSinkPresentationState.shouldCompose(materialVisible)) {
             return setContentAlphaIfChanged(0f) || changed;
         }
 
-        changed |= setFloatIfChanged(getAlpha(), 1f, this::setAlpha);
-        int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
-        int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
+        Bounds bounds = mapBounds(material, host.parent);
+        if (bounds == null) return setContentAlphaIfChanged(0f) || changed;
+        int width = Math.max(1, (int) Math.ceil(bounds.right - bounds.left + OPTICAL_OUTSET_PX * 2f));
+        int height = Math.max(1, (int) Math.ceil(bounds.bottom - bounds.top + OPTICAL_OUTSET_PX * 2f));
         ViewGroup.LayoutParams params = getLayoutParams();
         if (params != null && (params.width != width || params.height != height)) {
             params.width = width;
@@ -120,19 +158,16 @@ final class SecurityCenterGlassSinkView extends TextureView
             changed = true;
         }
 
-        changed |= setFloatIfChanged(getX(), material.getX() - OPTICAL_OUTSET_PX, this::setX);
-        changed |= setFloatIfChanged(getY(), material.getY() - OPTICAL_OUTSET_PX, this::setY);
-        changed |= setFloatIfChanged(
-                getPivotX(), material.getPivotX() + OPTICAL_OUTSET_PX, this::setPivotX);
-        changed |= setFloatIfChanged(
-                getPivotY(), material.getPivotY() + OPTICAL_OUTSET_PX, this::setPivotY);
-        changed |= setFloatIfChanged(getScaleX(), material.getScaleX(), this::setScaleX);
-        changed |= setFloatIfChanged(getScaleY(), material.getScaleY(), this::setScaleY);
-        changed |= setFloatIfChanged(getRotation(), material.getRotation(), this::setRotation);
-        changed |= setFloatIfChanged(getZ(), material.getZ(), this::setZ);
+        changed |= setFloatIfChanged(getX(), bounds.left - OPTICAL_OUTSET_PX, this::setX);
+        changed |= setFloatIfChanged(getY(), bounds.top - OPTICAL_OUTSET_PX, this::setY);
+        changed |= setFloatIfChanged(getPivotX(), 0f, this::setPivotX);
+        changed |= setFloatIfChanged(getPivotY(), 0f, this::setPivotY);
+        changed |= setFloatIfChanged(getScaleX(), 1f, this::setScaleX);
+        changed |= setFloatIfChanged(getScaleY(), 1f, this::setScaleY);
+        changed |= setFloatIfChanged(getRotation(), 0f, this::setRotation);
 
         float desiredAlpha = SecurityCenterSinkPresentationState.contentAlpha(
-                true, authorizedVisible, material.getAlpha());
+                true, authorizedVisible, Math.min(1f, effectiveAlpha));
         changed |= setContentAlphaIfChanged(desiredAlpha);
         return changed;
     }
@@ -146,42 +181,14 @@ final class SecurityCenterGlassSinkView extends TextureView
                 || material.getWidth() <= 0 || material.getHeight() <= 0
                 || root.getWidth() <= 0 || root.getHeight() <= 0) return null;
         try {
-            Matrix sinkToGlobal = new Matrix();
-            transformMatrixToGlobal(sinkToGlobal);
-            Matrix rootToGlobal = new Matrix();
-            root.transformMatrixToGlobal(rootToGlobal);
-            Matrix globalToRoot = new Matrix();
-            if (!rootToGlobal.invert(globalToRoot)) return null;
-
-            float rightLocal = OPTICAL_OUTSET_PX + material.getWidth();
-            float bottomLocal = OPTICAL_OUTSET_PX + material.getHeight();
-            float[] points = new float[]{
-                    OPTICAL_OUTSET_PX, OPTICAL_OUTSET_PX,
-                    rightLocal, OPTICAL_OUTSET_PX,
-                    rightLocal, bottomLocal,
-                    OPTICAL_OUTSET_PX, bottomLocal
-            };
-            sinkToGlobal.mapPoints(points);
-            globalToRoot.mapPoints(points);
-
-            float left = min(points[0], points[2], points[4], points[6]);
-            float top = min(points[1], points[3], points[5], points[7]);
-            float right = max(points[0], points[2], points[4], points[6]);
-            float bottom = max(points[1], points[3], points[5], points[7]);
-            if (!finite(left) || !finite(top) || !finite(right) || !finite(bottom)
-                    || right <= left || bottom <= top) return null;
-
-            float horizontalScale = distance(points[0], points[1], points[2], points[3])
-                    / Math.max(1f, material.getWidth());
-            float verticalScale = distance(points[0], points[1], points[6], points[7])
-                    / Math.max(1f, material.getHeight());
-            float visualScale = Math.min(horizontalScale, verticalScale);
+            Bounds bounds = mapBounds(material, root);
+            if (bounds == null) return null;
+            float visualScale = Math.min(bounds.horizontalScale, bounds.verticalScale);
             if (!finite(visualScale) || visualScale <= 0f) return null;
-
             SecurityCenterGlassGeometry shape = SecurityCenterGlassGeometry.resolve(
                     root.getWidth(), root.getHeight(),
                     0f, 0f,
-                    left, top, right, bottom,
+                    bounds.left, bounds.top, bounds.right, bounds.bottom,
                     cornerRadiusPx * visualScale);
             return shape != null
                     ? shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)
@@ -207,12 +214,13 @@ final class SecurityCenterGlassSinkView extends TextureView
     boolean isPresentationReady() {
         if (disposed || session.isShutdown() || !isAttachedToWindow()
                 || !isHardwareAccelerated() || getWindowVisibility() != View.VISIBLE) return false;
+        View material = materialRef.get();
+        OverlayHost host = resolveOverlayHost(material);
+        if (material == null || host == null || getParent() != host.parent
+                || effectiveMaterialAlpha(material, host.parent) < 0.99f) return false;
         View current = this;
-        float effectiveAlpha = 1f;
         while (current != null) {
-            if (current.getVisibility() != View.VISIBLE) return false;
-            effectiveAlpha *= current.getAlpha();
-            if (!Float.isFinite(effectiveAlpha) || effectiveAlpha < 0.99f) return false;
+            if (current.getVisibility() != View.VISIBLE || current.getAlpha() < 0.99f) return false;
             ViewParent parent = current.getParent();
             current = parent instanceof View ? (View) parent : null;
         }
@@ -269,22 +277,81 @@ final class SecurityCenterGlassSinkView extends TextureView
     private void recoverParentNow(String reason) {
         if (disposed || session.isShutdown()) return;
         View material = materialRef.get();
-        if (material == null || !(material.getParent() instanceof ViewGroup)) return;
-        ViewGroup target = (ViewGroup) material.getParent();
+        OverlayHost host = resolveOverlayHost(material);
+        if (material == null || host == null) return;
         Object current = getParent();
-        if (current != target) {
+        if (current != host.parent) {
             if (current instanceof ViewGroup) ((ViewGroup) current).removeView(this);
-            int index = Math.max(0, target.indexOfChild(material));
-            int width = Math.max(1, material.getWidth()) + Math.round(OPTICAL_OUTSET_PX * 2f);
-            int height = Math.max(1, material.getHeight()) + Math.round(OPTICAL_OUTSET_PX * 2f);
-            target.addView(this, index, new ViewGroup.LayoutParams(width, height));
+            int index = Math.max(0, host.parent.indexOfChild(host.anchor));
+            host.parent.addView(this, index, new ViewGroup.LayoutParams(1, 1));
             try {
-                Api101Bridge.log("[DC][SecurityCenterGlass] sink parent recovered reason=" + reason
+                Api101Bridge.log("[DC][SecurityCenterGlass] sink overlay host recovered reason=" + reason
                         + " material=" + material.getClass().getSimpleName()
-                        + " parent=" + target.getClass().getSimpleName());
+                        + " host=" + host.parent.getClass().getSimpleName());
             } catch (Throwable ignored) {}
         }
         syncFromMaterial();
+    }
+
+    private static OverlayHost resolveOverlayHost(View material) {
+        if (material == null || !material.isAttachedToWindow()) return null;
+        View anchor = material;
+        ViewParent parent = material.getParent();
+        while (parent instanceof View) {
+            if (parent instanceof FrameLayout && parent instanceof ViewGroup) {
+                return new OverlayHost((ViewGroup) parent, anchor);
+            }
+            anchor = (View) parent;
+            parent = parent.getParent();
+        }
+        return null;
+    }
+
+    private static float effectiveMaterialAlpha(View material, ViewGroup stopParent) {
+        if (material == null || stopParent == null) return 0f;
+        float alpha = 1f;
+        View current = material;
+        while (current != null && current != stopParent) {
+            if (current.getVisibility() != View.VISIBLE) return 0f;
+            alpha *= current.getAlpha();
+            if (!finite(alpha) || alpha < 0.99f) return alpha;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return current == stopParent ? alpha : 0f;
+    }
+
+    private static Bounds mapBounds(View material, View target) {
+        if (material == null || target == null || material.getWidth() <= 0 || material.getHeight() <= 0) {
+            return null;
+        }
+        Matrix materialToGlobal = new Matrix();
+        material.transformMatrixToGlobal(materialToGlobal);
+        Matrix targetToGlobal = new Matrix();
+        target.transformMatrixToGlobal(targetToGlobal);
+        Matrix globalToTarget = new Matrix();
+        if (!targetToGlobal.invert(globalToTarget)) return null;
+        float[] points = new float[]{
+                0f, 0f,
+                material.getWidth(), 0f,
+                material.getWidth(), material.getHeight(),
+                0f, material.getHeight()
+        };
+        materialToGlobal.mapPoints(points);
+        globalToTarget.mapPoints(points);
+        float left = min(points[0], points[2], points[4], points[6]);
+        float top = min(points[1], points[3], points[5], points[7]);
+        float right = max(points[0], points[2], points[4], points[6]);
+        float bottom = max(points[1], points[3], points[5], points[7]);
+        if (!finite(left) || !finite(top) || !finite(right) || !finite(bottom)
+                || right <= left || bottom <= top) return null;
+        float horizontalScale = distance(points[0], points[1], points[2], points[3])
+                / Math.max(1f, material.getWidth());
+        float verticalScale = distance(points[0], points[1], points[6], points[7])
+                / Math.max(1f, material.getHeight());
+        if (!finite(horizontalScale) || !finite(verticalScale)
+                || horizontalScale <= 0f || verticalScale <= 0f) return null;
+        return new Bounds(left, top, right, bottom, horizontalScale, verticalScale);
     }
 
     @Override
