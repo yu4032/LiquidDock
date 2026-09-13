@@ -98,14 +98,6 @@ final class SecurityCenterGlassSinkView extends TextureView
         setAlpha(1f);
     }
 
-    /** Compatibility entry point until the coordinator is migrated to semantic material roles. */
-    static SecurityCenterGlassSinkView attachBefore(
-            View material,
-            SecurityCenterGlassSession session) {
-        return attachBefore(
-                material, session, SecurityCenterSinkOutputPolicy.MaterialRole.DOCK);
-    }
-
     /**
      * Attach outside the material's direct parent. Vendor toolbox material can live inside a
      * measuring layout, so inserting a TextureView beside it would alter vendor measurement.
