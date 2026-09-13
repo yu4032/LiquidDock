@@ -106,6 +106,19 @@ public class StageWorkspaceRuntimeContractTest {
     }
 
     @Test
+    public void overlayRuntimeOwnsCurrentRecentsSnapshotLifecycle() throws Exception {
+        String source = read(
+                "src/main/java/com/hellovoid/liquiddock/StageWorkspaceOverlayRuntime.java");
+        assertTrue(source.contains("StageWorkspaceOverlayContentState"));
+        assertTrue(source.contains("StageWorkspaceOverlayContentPolicy.shouldRefresh"));
+        assertTrue(source.contains("StageWorkspaceOverlayContentPolicy.shouldClear"));
+        assertTrue(source.contains("StageWorkspaceRecentsSource.current"));
+        assertTrue(source.contains("contentState.apply"));
+        assertFalse(source.contains("SharedPreferences"));
+        assertFalse(source.contains("postDelayed("));
+    }
+
+    @Test
     public void overlayHostIsStructuralAndNonInteractiveByDefault() throws Exception {
         String source = read(
                 "src/main/java/com/hellovoid/liquiddock/StageWorkspaceOverlayHostView.java");
