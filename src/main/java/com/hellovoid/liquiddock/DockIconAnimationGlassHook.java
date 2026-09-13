@@ -235,8 +235,11 @@ final class DockIconAnimationGlassHook {
                                                 proxyAlpha, drawIcon)
                                         : LauncherGlassProxyVisibility.isView2Visible(
                                                 proxyAlpha, drawIcon);
+                                boolean publishProxyGeometry =
+                                        LauncherGlassProxyVisibility.shouldPublishGeometry(
+                                                closeToHome, proxyVisible);
 
-                                if (!proxyVisible) {
+                                if (!publishProxyGeometry) {
                                     DockGlassItemRegistry.holdProxyHidden(dockTarget);
                                 } else {
                                     RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
