@@ -91,10 +91,8 @@ final class SecurityCenterGlassRuntimeState {
                 || previousAuthority.equals(currentAuthority)) return;
         Owner currentOwner = owner;
         if (currentOwner instanceof SecurityCenterGlassCoordinator) {
-            SecurityCenterSourceAuthorityController.rollover(
-                    (SecurityCenterGlassCoordinator) currentOwner,
-                    previousAuthority,
-                    currentAuthority);
+            ((SecurityCenterGlassCoordinator) currentOwner)
+                    .onSourceAuthorityChanged(previousAuthority, currentAuthority);
         }
     }
 
