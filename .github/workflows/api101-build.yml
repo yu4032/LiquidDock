@@ -35,11 +35,10 @@ jobs:
           if s.count(old) != 1:
               raise SystemExit(f'C1 render block match count={s.count(old)}')
           s = s.replace(old, new, 1)
-
           marker = '''    private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {'''
           if s.count(marker) != 1:
               raise SystemExit(f'C1 insertion marker count={s.count(marker)}')
-          method = '''    private boolean renderDirectOesPass(BackdropSnapshot mapping) {\n        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);\n        GLES20.glViewport(0, 0, mapping.visibleWidth, mapping.visibleHeight);\n        GLES20.glDisable(GLES20.GL_BLEND);\n        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);\n\n        if (mapping.coverage == Miuix307BackdropMapping.Coverage.OUTSIDE\n                || mapping.validDockRight <= mapping.validDockLeft\n                || mapping.validDockTop <= mapping.validDockBottom) {\n            if (hasPresentedFrame) return false;\n            GLES20.glClearColor(0f, 0f, 0f, 0f);\n            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);\n            return true;\n        }\n\n        GLES20.glClearColor(0f, 0f, 0f, 0f);\n        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);\n        if (mapping.coverage == Miuix307BackdropMapping.Coverage.PARTIAL) {\n            int left = Math.max(0, Math.round(mapping.validDockLeft * mapping.visibleWidth));\n            int bottom = Math.max(0, Math.round(mapping.validDockBottom * mapping.visibleHeight));\n            int right = Math.min(mapping.visibleWidth,\n                    Math.round(mapping.validDockRight * mapping.visibleWidth));\n            int top = Math.min(mapping.visibleHeight,\n                    Math.round(mapping.validDockTop * mapping.visibleHeight));\n            GLES20.glEnable(GLES20.GL_SCISSOR_TEST);\n            GLES20.glScissor(left, bottom, Math.max(0, right - left), Math.max(0, top - bottom));\n        }\n\n        // backdropRect describes the larger overscan sample. Project its visible Dock sub-rect\n        // directly into this Dock-sized output so C1 uses the exact same Stage-B authority.\n        float visibleBackdropX = mapping.backdropX + mapping.dockUvLeft * mapping.backdropW;\n        float visibleBackdropY = mapping.backdropY + mapping.dockUvBottom * mapping.backdropH;\n        float visibleBackdropW = mapping.dockUvWidth * mapping.backdropW;\n        float visibleBackdropH = mapping.dockUvHeight * mapping.backdropH;\n\n        GLES20.glUseProgram(normalizeProgram);\n        bindQuad(normalizeProgram);\n        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);\n        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);\n        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);\n        GLES20.glUniformMatrix4fv(\n                requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);\n        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),\n                visibleBackdropX, visibleBackdropY, visibleBackdropW, visibleBackdropH);\n        GLES20.glUniform1i(\n                requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);\n        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),\n                mapping.validDockLeft, mapping.validDockBottom,\n                mapping.validDockRight, mapping.validDockTop);\n        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);\n        unbindQuad(normalizeProgram);\n        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);\n        return true;\n    }\n\n'''
+          method = '''    private boolean renderDirectOesPass(BackdropSnapshot mapping) {\n        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);\n        GLES20.glViewport(0, 0, mapping.visibleWidth, mapping.visibleHeight);\n        GLES20.glDisable(GLES20.GL_BLEND);\n        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);\n\n        if (mapping.coverage == Miuix307BackdropMapping.Coverage.OUTSIDE\n                || mapping.validDockRight <= mapping.validDockLeft\n                || mapping.validDockTop <= mapping.validDockBottom) {\n            if (hasPresentedFrame) return false;\n            GLES20.glClearColor(0f, 0f, 0f, 0f);\n            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);\n            return true;\n        }\n\n        GLES20.glClearColor(0f, 0f, 0f, 0f);\n        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);\n        if (mapping.coverage == Miuix307BackdropMapping.Coverage.PARTIAL) {\n            int left = Math.max(0, Math.round(mapping.validDockLeft * mapping.visibleWidth));\n            int bottom = Math.max(0, Math.round(mapping.validDockBottom * mapping.visibleHeight));\n            int right = Math.min(mapping.visibleWidth,\n                    Math.round(mapping.validDockRight * mapping.visibleWidth));\n            int top = Math.min(mapping.visibleHeight,\n                    Math.round(mapping.validDockTop * mapping.visibleHeight));\n            GLES20.glEnable(GLES20.GL_SCISSOR_TEST);\n            GLES20.glScissor(left, bottom, Math.max(0, right - left), Math.max(0, top - bottom));\n        }\n\n        float visibleBackdropX = mapping.backdropX + mapping.dockUvLeft * mapping.backdropW;\n        float visibleBackdropY = mapping.backdropY + mapping.dockUvBottom * mapping.backdropH;\n        float visibleBackdropW = mapping.dockUvWidth * mapping.backdropW;\n        float visibleBackdropH = mapping.dockUvHeight * mapping.backdropH;\n\n        GLES20.glUseProgram(normalizeProgram);\n        bindQuad(normalizeProgram);\n        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);\n        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);\n        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);\n        GLES20.glUniformMatrix4fv(\n                requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);\n        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),\n                visibleBackdropX, visibleBackdropY, visibleBackdropW, visibleBackdropH);\n        GLES20.glUniform1i(\n                requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);\n        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),\n                mapping.validDockLeft, mapping.validDockBottom,\n                mapping.validDockRight, mapping.validDockTop);\n        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);\n        unbindQuad(normalizeProgram);\n        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);\n        return true;\n    }\n\n'''
           s = s.replace(marker, method + marker, 1)
           s = s.replace('material=prismal-module-official', 'material=latency-probe-raw-oes', 1)
           s = s.replace('blur=official-two-pass-0.5x', 'blur=disabled', 1)
@@ -68,6 +67,28 @@ jobs:
           if 'renderDirectOesPass(mapping)' not in body:
               raise SystemExit('C1 direct OES call missing')
           print('C1 render-path audit OK')
+          PY
+      - name: Mark production Prismal contracts N/A for probe
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          targets = [
+              (Path('src/test/java/com/hellovoid/liquiddock/DockGlassShapeOwnershipContractTest.java'),
+               'public void dockBodyUsesConfiguredLargeSurfaceHighlightProfile()'),
+              (Path('src/test/java/com/hellovoid/liquiddock/PrismalModuleBoundaryContractTest.java'),
+               'public void liquidDockAdapterOwnsOesNormalizationMappingLogAndFinalCrop()'),
+          ]
+          for p, sig in targets:
+              s = p.read_text()
+              if 'import org.junit.Ignore;' not in s:
+                  s = s.replace('import org.junit.Test;\n', 'import org.junit.Ignore;\nimport org.junit.Test;\n', 1)
+              needle = '    @Test\n    ' + sig
+              repl = '    @Ignore("latency probe intentionally bypasses production Prismal path")\n    @Test\n    ' + sig
+              if needle not in s:
+                  raise SystemExit(f'probe ignore marker missing: {p.name} {sig}')
+              s = s.replace(needle, repl, 1)
+              p.write_text(s)
           PY
       - name: Audit Security Center zero-copy constraints
         shell: bash
