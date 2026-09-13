@@ -174,7 +174,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         SecurityCenterGlassGeometry presentation = frameGeometry.presentationGeometry();
         if (root == null || presentation.rootWidth != root.getWidth()
                 || presentation.rootHeight != root.getHeight()) return;
-        sourceBackend.reconcileRoot();
+        if (sourceBackend.reconcileRoot()) cachedSourceFrame = null;
         SecurityCenterGlassSinkView[] snapshot = sinks.clone();
         for (SecurityCenterGlassSinkView sink : snapshot) {
             if (sink == null || sink.isDisposed()) return;
@@ -302,16 +302,24 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     private void requestCachedPresentation(long generation) {
         RootPassBlurFrame cached = cachedSourceFrame;
-        if (!canReuseCachedFrame(cached, generation)) return;
+        if (!hasCachedFrameForGeneration(cached, generation)) return;
+        if (!sourceBackend.hasBinding() || sourceBackend.isRebindPending()) {
+            cachedSourceFrame = null;
+            return;
+        }
         sourceBackend.postToRenderThread(() -> {
             RootPassBlurFrame currentFrame = cachedSourceFrame;
-            if (!canReuseCachedFrame(currentFrame, generation)
+            if (!hasCachedFrameForGeneration(currentFrame, generation)
                     || currentFrame != cached
+                    || !sourceBackend.hasBinding()
+                    || sourceBackend.isRebindPending()
                     || currentFrame.normalizedTextureId == 0
                     || !GLES20.glIsTexture(currentFrame.normalizedTextureId)) return;
 
             View root = rootRef.get();
             if (root == null || !root.isAttachedToWindow()
+                    || currentFrame.logicalWidth != root.getWidth()
+                    || currentFrame.logicalHeight != root.getHeight()
                     || currentFrame.logicalWidth != sourceBackend.logicalWidth()
                     || currentFrame.logicalHeight != sourceBackend.logicalHeight()
                     || currentFrame.rotation != sourceBackend.currentRotation()) return;
@@ -331,13 +339,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         });
     }
 
-    private boolean canReuseCachedFrame(RootPassBlurFrame frame, long generation) {
-        return !shuttingDown
-                && frame != null
-                && frame.generation == generation
-                && sourceBackend.hasFreshFrame(generation)
-                && sourceBackend.hasBinding()
-                && !sourceBackend.isRebindPending();
+    private static boolean hasCachedFrameForGeneration(RootPassBlurFrame frame, long generation) {
+        return frame != null && frame.generation == generation;
     }
 
     private void renderAcceptedFrame(RootPassBlurFrame frame, FrameRequest request) {
