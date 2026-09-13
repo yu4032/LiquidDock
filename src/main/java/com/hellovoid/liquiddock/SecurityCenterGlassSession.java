@@ -79,6 +79,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile boolean shuttingDown;
     private final Object pipelineLock = new Object();
+    private final Object cachedReplayLock = new Object();
+    private boolean cachedReplayQueued;
     private volatile FrameRequest frameRequest;
     private volatile FrameRequest inFlight;
     private volatile OutputState[] inFlightOutputs;
@@ -307,36 +309,57 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             cachedSourceFrame = null;
             return;
         }
-        sourceBackend.postToRenderThread(() -> {
-            RootPassBlurFrame currentFrame = cachedSourceFrame;
-            if (!hasCachedFrameForGeneration(currentFrame, generation)
-                    || currentFrame != cached
-                    || !sourceBackend.hasBinding()
-                    || sourceBackend.isRebindPending()
-                    || currentFrame.normalizedTextureId == 0
-                    || !GLES20.glIsTexture(currentFrame.normalizedTextureId)) return;
-
-            View root = rootRef.get();
-            if (root == null || !root.isAttachedToWindow()
-                    || currentFrame.logicalWidth != root.getWidth()
-                    || currentFrame.logicalHeight != root.getHeight()
-                    || currentFrame.logicalWidth != sourceBackend.logicalWidth()
-                    || currentFrame.logicalHeight != sourceBackend.logicalHeight()
-                    || currentFrame.rotation != sourceBackend.currentRotation()) return;
-
-            FrameRequest request;
-            SecurityCenterFramePipelineState.Submission submission;
-            synchronized (pipelineLock) {
-                request = frameRequest;
-                if (request == null || request.generation != generation) return;
-                submission = framePipeline.onCachedSource(generation);
-                if (!submission.accepted
-                        || submission.serial != request.serial
-                        || submission.generation != request.generation) return;
-                inFlight = request;
+        synchronized (cachedReplayLock) {
+            if (cachedReplayQueued) return;
+            cachedReplayQueued = true;
+        }
+        boolean queued = sourceBackend.postToRenderThread(() -> {
+            try {
+                drainCachedPresentation();
+            } finally {
+                synchronized (cachedReplayLock) {
+                    cachedReplayQueued = false;
+                }
             }
-            renderAcceptedFrame(currentFrame, request);
         });
+        if (!queued) {
+            synchronized (cachedReplayLock) {
+                cachedReplayQueued = false;
+            }
+        }
+    }
+
+    /** Render-thread drain; one queued task always consumes the latest geometry/cache state. */
+    private void drainCachedPresentation() {
+        RootPassBlurFrame currentFrame = cachedSourceFrame;
+        FrameRequest observed = frameRequest;
+        if (observed == null
+                || !hasCachedFrameForGeneration(currentFrame, observed.generation)
+                || !sourceBackend.hasBinding()
+                || sourceBackend.isRebindPending()
+                || currentFrame.normalizedTextureId == 0
+                || !GLES20.glIsTexture(currentFrame.normalizedTextureId)) return;
+
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()
+                || currentFrame.logicalWidth != root.getWidth()
+                || currentFrame.logicalHeight != root.getHeight()
+                || currentFrame.logicalWidth != sourceBackend.logicalWidth()
+                || currentFrame.logicalHeight != sourceBackend.logicalHeight()
+                || currentFrame.rotation != sourceBackend.currentRotation()) return;
+
+        FrameRequest request;
+        SecurityCenterFramePipelineState.Submission submission;
+        synchronized (pipelineLock) {
+            request = frameRequest;
+            if (request == null || request.generation != currentFrame.generation) return;
+            submission = framePipeline.onCachedSource(request.generation);
+            if (!submission.accepted
+                    || submission.serial != request.serial
+                    || submission.generation != request.generation) return;
+            inFlight = request;
+        }
+        renderAcceptedFrame(currentFrame, request);
     }
 
     private static boolean hasCachedFrameForGeneration(RootPassBlurFrame frame, long generation) {
