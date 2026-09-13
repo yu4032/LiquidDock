@@ -72,24 +72,29 @@ public class SecurityCenterPassBlurOwnershipContractTest {
     }
 
     @Test
-    public void realSidebarBinderLifecycleRevokesStaleCustomPresentation() throws Exception {
+    public void sidebarBinderLifecycleIsObservationNotMaterialAuthority() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(
                 MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
-        assertTrue("the stable AIDL binder show/hide lifecycle must be hooked",
+        assertTrue("the stable AIDL binder show/hide lifecycle may still be observed",
                 hook.contains("sidebarLifecycle.show()")
                         && hook.contains("sidebarLifecycle.hideImmediate()")
                         && hook.contains("sidebarLifecycle.hideAnimated()"));
-        assertTrue("an immediate vendor hide must terminate on the next main-loop turn",
-                coordinator.contains("immediate sidebar hide terminal")
-                        && coordinator.contains("mainHandler.post(immediateTerminal)"));
-        assertTrue("animated teardown must wait for the semantic terminal-cleanup authority",
-                coordinator.contains("animated sidebar hide awaiting semantic terminal cleanup")
+        assertTrue("binder show/hide must not tear down a live material subtree",
+                coordinator.contains("void onSidebarShowRequested() {}")
+                        && coordinator.contains("void onSidebarHideRequested(boolean animated) {}"));
+        assertTrue("semantic vendor terminal cleanup remains an explicit teardown authority",
+                coordinator.contains("onVendorPanelTerminal(View turboLayout)")
+                        && coordinator.contains("releasePanel(turboLayout, \"vendor terminal cleanup\")")
                         && hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
-        assertFalse("animated teardown must not invent a fixed-delay terminal fallback",
+        assertTrue("real Turbo/root detach remains a fail-safe teardown authority",
+                coordinator.contains("panel detached fallback")
+                        && coordinator.contains("releaseForRootDetach()"));
+        assertFalse("binder lifecycle must not schedule synthetic immediate teardown",
+                coordinator.contains("immediate sidebar hide terminal")
+                        || coordinator.contains("sidebar show revoked stale presentation"));
+        assertFalse("teardown must not invent a fixed-delay terminal fallback",
                 coordinator.contains("postDelayed("));
-        assertTrue("a new show must revoke a stale previous presentation before rebinding",
-                coordinator.contains("sidebar show revoked stale presentation"));
     }
 }
