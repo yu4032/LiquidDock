@@ -99,10 +99,13 @@ public class SecurityCenterGlassGeometryTest {
     }
 
     @Test
-    public void geometryChangesNeverAdvanceSceneContentGeneration() {
-        SecurityCenterGlassSceneState scene = new SecurityCenterGlassSceneState();
-        scene.onRootAttached();
-        long generation = scene.generation();
+    public void geometryChangesNeverAdvanceMaterialEpoch() {
+        SecurityCenterMaterialEpochState epoch = new SecurityCenterMaterialEpochState();
+        Object turbo = new Object();
+        Object dock = new Object();
+        assertFalse("unbound epoch starts at zero", epoch.generation() != 0L);
+        epoch.bindAssistant(turbo, dock, null, 4);
+        long generation = epoch.generation();
 
         SecurityCenterGlassGeometry first = SecurityCenterGlassGeometry.resolve(
                 1000, 1600, 0f, 0f, 0f, 0f, 320f, 1600f, 24f);
@@ -111,6 +114,7 @@ public class SecurityCenterGlassGeometryTest {
         assertNotNull(first);
         assertNotNull(second);
         assertFalse(first.sameAs(second));
-        assertEquals(generation, scene.generation());
+        assertEquals("geometry is presentation data, not a carrier lifetime boundary",
+                generation, epoch.generation());
     }
 }
