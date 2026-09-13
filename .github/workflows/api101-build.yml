@@ -25,14 +25,24 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
           cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
           cache-cleanup: never
       - run: chmod +x ./gradlew
+      - name: Apply experiment A - EGL swap interval 0
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java')
+          s = p.read_text()
+          old = '''            makeCurrent();\n            queryMaxTextureSize();'''
+          new = '''            makeCurrent();\n            boolean swap0 = EGL14.eglSwapInterval(eglDisplay, 0);\n            MainHook.log(TAG + " [LatencyExpA] eglSwapInterval(0)=" + swap0\n                    + " error=0x" + Integer.toHexString(EGL14.eglGetError()));\n            queryMaxTextureSize();'''
+          if old not in s:
+              raise SystemExit('experiment A patch point not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          grep -n 'LatencyExpA' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
@@ -49,13 +59,13 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-expA-swap0-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-build-source
+          name: LiquidDock-expA-source
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
