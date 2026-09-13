@@ -61,6 +61,12 @@ final class StageWorkspaceActivation {
         return Result.active(plan.changed());
     }
 
+    boolean refreshMappedTarget(Collection<HomeGridItemPosition> settled) {
+        StageWorkspaceMigration.PlanResult validation =
+                StageWorkspaceMigration.plan(settled, true);
+        return validation.success() && store.saveTarget(validation.positions());
+    }
+
     private static boolean matches(Collection<HomeGridItemPosition> current,
                                    Collection<HomeGridItemPosition> target) {
         if (current == null || target == null || current.size() != target.size()) return false;
