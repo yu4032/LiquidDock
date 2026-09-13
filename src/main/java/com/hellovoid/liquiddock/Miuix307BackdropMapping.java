@@ -34,11 +34,71 @@ final class Miuix307BackdropMapping {
         }
     }
 
+    /**
+     * During Launcher transform animations getLocationOnScreen() may describe the transformed
+     * origin while callers still pass the untransformed layout width/height. This immutable
+     * override maps that local rectangle domain into the actual transformed screen rectangle.
+     */
+    private static final class TransformOverride {
+        final float baseLeft;
+        final float baseTop;
+        final float baseWidth;
+        final float baseHeight;
+        final float transformedLeft;
+        final float transformedTop;
+        final float scaleX;
+        final float scaleY;
+
+        TransformOverride(
+                float baseLeft, float baseTop, float baseWidth, float baseHeight,
+                float transformedLeft, float transformedTop,
+                float transformedWidth, float transformedHeight) {
+            this.baseLeft = baseLeft;
+            this.baseTop = baseTop;
+            this.baseWidth = Math.max(1f, baseWidth);
+            this.baseHeight = Math.max(1f, baseHeight);
+            this.transformedLeft = transformedLeft;
+            this.transformedTop = transformedTop;
+            this.scaleX = Math.max(0.0001f, transformedWidth / this.baseWidth);
+            this.scaleY = Math.max(0.0001f, transformedHeight / this.baseHeight);
+        }
+    }
+
+    private static volatile TransformOverride transformOverride;
+
     private Miuix307BackdropMapping() {}
+
+    static void setTransformOverride(
+            float baseLeft, float baseTop, float baseWidth, float baseHeight,
+            float transformedLeft, float transformedTop,
+            float transformedWidth, float transformedHeight) {
+        if (baseWidth <= 0f || baseHeight <= 0f
+                || transformedWidth <= 0f || transformedHeight <= 0f) {
+            transformOverride = null;
+            return;
+        }
+        transformOverride = new TransformOverride(
+                baseLeft, baseTop, baseWidth, baseHeight,
+                transformedLeft, transformedTop, transformedWidth, transformedHeight);
+    }
+
+    static void clearTransformOverride() {
+        transformOverride = null;
+    }
 
     static Result compute(
             float hostLeft, float hostTop, float hostWidth, float hostHeight,
             float frameLeft, float frameTop, float frameWidth, float frameHeight) {
+        TransformOverride override = transformOverride;
+        if (override != null) {
+            hostLeft = override.transformedLeft
+                    + (hostLeft - override.baseLeft) * override.scaleX;
+            hostTop = override.transformedTop
+                    + (hostTop - override.baseTop) * override.scaleY;
+            hostWidth *= override.scaleX;
+            hostHeight *= override.scaleY;
+        }
+
         if (hostWidth <= 0f || hostHeight <= 0f || frameWidth <= 0f || frameHeight <= 0f) {
             return outside();
         }
