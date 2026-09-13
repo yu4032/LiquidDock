@@ -92,6 +92,9 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.divider.enabled);
             DockMirrorShortcutHook.install(classLoader);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
+            LauncherIconSizeHook.install(classLoader,
+                    runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
+                    runtimeConfig.grid.iconSizePercent);
             new MainHook().install(classLoader);
 
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(

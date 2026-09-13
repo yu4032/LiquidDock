@@ -57,6 +57,11 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_ADAPTATION = bool(
                 "grid_widget_adaptation", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> ICON_SIZE_ENABLED = bool(
+                "launcher_icon_size_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ICON_SIZE_PERCENT = integer(
+                "launcher_icon_size_percent", 100, 100, 100, 80, 120,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> MARGINS_DP = bool(
                 "grid_margins_dp", true, false, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> MARGINS_OFFSET = bool(
