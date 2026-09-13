@@ -794,6 +794,7 @@ final class SecurityCenterGlassCoordinator
     }
 
     private void clearFrameState() {
+        materialEpoch.reset();
         rootRef = new WeakReference<>(null);
         currentFrame = null;
         assistantType = ASSISTANT_GLOBAL_DOCK;
