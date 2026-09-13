@@ -117,6 +117,18 @@ public class StageWorkspaceRuntimeContractTest {
         assertFalse(source.contains("setBackgroundColor"));
     }
 
+    @Test
+    public void recentsSourceUsesVerifiedCurrentModelWithoutPersistenceOrPolling() throws Exception {
+        String source = read(
+                "src/main/java/com/hellovoid/liquiddock/StageWorkspaceRecentsSource.java");
+        assertTrue(source.contains("com.miui.home.recents.RecentsModel"));
+        assertTrue(source.contains("getDeclaredMethod(\"getInstance\", Context.class)"));
+        assertTrue(source.contains("getDeclaredMethod(\"getTaskList\")"));
+        assertTrue(source.contains("current(Context context, ClassLoader classLoader, int maxCards)"));
+        assertFalse(source.contains("SharedPreferences"));
+        assertFalse(source.contains("postDelayed("));
+    }
+
     private static String read(String path) throws Exception {
         return Files.readString(Paths.get(path), StandardCharsets.UTF_8);
     }
