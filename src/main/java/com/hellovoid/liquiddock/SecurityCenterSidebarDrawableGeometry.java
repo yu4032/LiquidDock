@@ -119,7 +119,8 @@ final class SecurityCenterSidebarDrawableGeometry {
             View previousRoot = rootRef.get();
             View previousOwner = drawableOwnerRef.get();
             if (previousDock != dock || previousRoot != root || previousOwner != owner) {
-                LIVE.clear();
+                LIVE.beginAnimationEpoch();
+                DRAWABLE_OWNERS.clear();
             }
             dockRef = new WeakReference<>(dock);
             rootRef = new WeakReference<>(root);
@@ -152,7 +153,7 @@ final class SecurityCenterSidebarDrawableGeometry {
         return true;
     }
 
-    /** Clear live ownership when Security Center returns the material to the vendor. */
+    /** Clear live ownership when Security Center switches away from the Global Dock material. */
     static void clearRuntime() {
         synchronized (LOCK) {
             LIVE.clear();
@@ -204,15 +205,37 @@ final class SecurityCenterSidebarDrawableGeometry {
         return mapRectToRoot(owner, root, local.left, local.top, local.right, local.bottom);
     }
 
+    /**
+     * The hook is installed once per runtime class, while MIUI may replace the drawable instance
+     * between animations without rebuilding TurboLayout or re-running configure(). Accept a new
+     * instance only when it is currently installed on the already-verified sidebar_background View.
+     * That exact replacement is also the animation-epoch boundary for live Rect ownership.
+     */
     private static void publish(Object drawable, RectF rect) {
-        if (drawable == null || rect == null) return;
+        if (!(drawable instanceof Drawable) || rect == null) return;
         View owner;
+        boolean adoptedReplacement = false;
         synchronized (LOCK) {
+            View currentOwner = drawableOwnerRef.get();
             WeakReference<View> ownerRef = DRAWABLE_OWNERS.get(drawable);
             owner = ownerRef != null ? ownerRef.get() : null;
-            if (owner == null || owner != drawableOwnerRef.get()) return;
+
+            if (owner == null && currentOwner != null && currentOwner.isAttachedToWindow()) {
+                Drawable currentDrawable = resolveMorphDrawable(currentOwner);
+                if (currentDrawable == drawable) {
+                    LIVE.beginAnimationEpoch();
+                    DRAWABLE_OWNERS.clear();
+                    DRAWABLE_OWNERS.put(drawable, new WeakReference<>(currentOwner));
+                    owner = currentOwner;
+                    adoptedReplacement = true;
+                }
+            }
+            if (owner == null || owner != currentOwner) return;
         }
         if (!owner.isAttachedToWindow() || owner.getRootView() != rootRef.get()) return;
+        if (adoptedReplacement) {
+            log("sidebar drawable instance rollover class=" + drawable.getClass().getName(), null);
+        }
         LIVE.update(rect.left, rect.top, rect.right, rect.bottom);
     }
 
