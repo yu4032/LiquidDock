@@ -1,17 +1,12 @@
-name: API101 migration build
+name: Dock latency probe C1 raw OES
 
 on:
-  push:
-    branches:
-      - main
-      - api101-migration
-      - refactor/modular-architecture
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 concurrency:
-  group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: dock-latency-c1-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,14 +20,55 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
-          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
+          cache-read-only: false
           cache-cleanup: never
       - run: chmod +x ./gradlew
+      - name: Apply C1 direct OES render probe
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java')
+          s = p.read_text()
+          old = '''            ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight);\n            renderNormalizationPass(mapping);\n            PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);\n            prismalRenderer.prepareBackdrop(\n                    rawTexture, mapping.sampleWidth, mapping.sampleHeight, mapping.prismalParams);\n            DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();\n            dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,\n                    dockBodyHighlightProfile, dockScene,\n                    mapping.sampleWidth, mapping.sampleHeight);\n            int prismalTexture = prismalRenderer.outputTexture();\n            if (!renderCompositePass(prismalTexture, mapping)) return;'''
+          new = '''            // C1 latency probe: one GPU pass from the PassBlur external-OES texture directly\n            // into the TextureView EGL window. No intermediate FBO, 2D composite or Prismal.\n            PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);\n            if (!renderDirectOesPass(mapping)) return;'''
+          if s.count(old) != 1:
+              raise SystemExit(f'C1 render block match count={s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          marker = '''    private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {'''
+          if s.count(marker) != 1:
+              raise SystemExit(f'C1 insertion marker count={s.count(marker)}')
+          method = '''    private boolean renderDirectOesPass(BackdropSnapshot mapping) {\n        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);\n        GLES20.glViewport(0, 0, mapping.visibleWidth, mapping.visibleHeight);\n        GLES20.glDisable(GLES20.GL_BLEND);\n        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);\n\n        if (mapping.coverage == Miuix307BackdropMapping.Coverage.OUTSIDE\n                || mapping.validDockRight <= mapping.validDockLeft\n                || mapping.validDockTop <= mapping.validDockBottom) {\n            if (hasPresentedFrame) return false;\n            GLES20.glClearColor(0f, 0f, 0f, 0f);\n            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);\n            return true;\n        }\n\n        GLES20.glClearColor(0f, 0f, 0f, 0f);\n        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);\n        if (mapping.coverage == Miuix307BackdropMapping.Coverage.PARTIAL) {\n            int left = Math.max(0, Math.round(mapping.validDockLeft * mapping.visibleWidth));\n            int bottom = Math.max(0, Math.round(mapping.validDockBottom * mapping.visibleHeight));\n            int right = Math.min(mapping.visibleWidth,\n                    Math.round(mapping.validDockRight * mapping.visibleWidth));\n            int top = Math.min(mapping.visibleHeight,\n                    Math.round(mapping.validDockTop * mapping.visibleHeight));\n            GLES20.glEnable(GLES20.GL_SCISSOR_TEST);\n            GLES20.glScissor(left, bottom, Math.max(0, right - left), Math.max(0, top - bottom));\n        }\n\n        // backdropRect describes the larger overscan sample. Project its visible Dock sub-rect\n        // directly into this Dock-sized output so C1 uses the exact same Stage-B authority.\n        float visibleBackdropX = mapping.backdropX + mapping.dockUvLeft * mapping.backdropW;\n        float visibleBackdropY = mapping.backdropY + mapping.dockUvBottom * mapping.backdropH;\n        float visibleBackdropW = mapping.dockUvWidth * mapping.backdropW;\n        float visibleBackdropH = mapping.dockUvHeight * mapping.backdropH;\n\n        GLES20.glUseProgram(normalizeProgram);\n        bindQuad(normalizeProgram);\n        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);\n        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);\n        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);\n        GLES20.glUniformMatrix4fv(\n                requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);\n        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),\n                visibleBackdropX, visibleBackdropY, visibleBackdropW, visibleBackdropH);\n        GLES20.glUniform1i(\n                requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);\n        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),\n                mapping.validDockLeft, mapping.validDockBottom,\n                mapping.validDockRight, mapping.validDockTop);\n        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);\n        unbindQuad(normalizeProgram);\n        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);\n        return true;\n    }\n\n'''
+          s = s.replace(marker, method + marker, 1)
+          s = s.replace('material=prismal-module-official', 'material=latency-probe-raw-oes', 1)
+          s = s.replace('blur=official-two-pass-0.5x', 'blur=disabled', 1)
+          p.write_text(s)
+          PY
+          grep -nE 'C1 latency probe|renderDirectOesPass|latency-probe-raw-oes' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java
+      - name: Audit C1 direct path
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java').read_text()
+          start = s.index('private void drawLatestFrame')
+          end = s.index('private void maybeLogPowerStats', start)
+          body = s[start:end]
+          forbidden = [
+              'ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight)',
+              'renderNormalizationPass(mapping)',
+              'prismalRenderer.prepareBackdrop(',
+              'dockCompositor.drawFrame(',
+              'renderCompositePass('
+          ]
+          bad = [x for x in forbidden if x in body]
+          if bad:
+              raise SystemExit('C1 still executes staged render path: ' + ', '.join(bad))
+          if 'renderDirectOesPass(mapping)' not in body:
+              raise SystemExit('C1 direct OES call missing')
+          print('C1 render-path audit OK')
+          PY
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
@@ -49,13 +85,13 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-expC1-raw-oes-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-build-source
+          name: LiquidDock-expC1-source
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
