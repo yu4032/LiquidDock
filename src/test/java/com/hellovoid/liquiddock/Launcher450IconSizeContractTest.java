@@ -106,6 +106,12 @@ public class Launcher450IconSizeContractTest {
                 "src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java"));
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String config = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java"));
+        String registry = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/DockGlassItemRegistry.java"));
+        String compositor = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java"));
         String ui = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
@@ -115,6 +121,12 @@ public class Launcher450IconSizeContractTest {
         assertTrue(state.contains("isAnyIconEnabled"));
         assertTrue(staticHook.contains("Launcher450DockFunctionalIconRegistry.isFunctional"));
         assertTrue(staticHook.contains("isAnyIconEnabled"));
+        assertTrue("Dock registry must remain live when functional-only mode is the sole icon mode",
+                registry.contains("GlassRuntimeState.isAnyIconEnabled()"));
+        assertTrue("Dock compositor must accept the union-enabled icon style",
+                config.contains("resolvedIconEnabled || functionalDockIconEnabled"));
+        assertTrue("Dock compositor must not independently require the broad icon switch",
+                !compositor.contains("GlassRuntimeState.isIconEnabled()"));
         assertTrue(ui.contains("仅 Dock 功能图标玻璃"));
         assertTrue(ui.contains("搜索、小爱"));
     }
