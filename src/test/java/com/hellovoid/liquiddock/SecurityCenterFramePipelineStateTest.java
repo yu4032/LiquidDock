@@ -161,4 +161,46 @@ public class SecurityCenterFramePipelineStateTest {
         assertTrue(current.accepted);
         assertEquals(2L, current.serial);
     }
+
+    @Test
+    public void confirmedGenerationNeverFreezesBehindMissingSteadyStateTextureAck() {
+        SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
+
+        assertTrue(state.offer(1L, 44L).requestSource);
+        SecurityCenterFramePipelineState.Submission handoff = state.onFreshSource(44L);
+        assertTrue(handoff.accepted);
+        assertTrue("the first frame of a generation still needs physical presentation proof",
+                handoff.awaitPresentationAck);
+        assertTrue(state.onPresented(1L, 44L).acceptedCurrentGeneration);
+
+        state.offer(2L, 44L);
+        SecurityCenterFramePipelineState.Submission middle = state.onCachedSource(44L);
+        assertTrue(middle.accepted);
+        assertFalse("after handoff, geometry replay must not make TextureView ACK a liveness gate",
+                middle.awaitPresentationAck);
+
+        // Simulate the device failure: serial 2 never receives onSurfaceTextureUpdated().
+        state.offer(3L, 44L);
+        SecurityCenterFramePipelineState.Submission latest = state.onCachedSource(44L);
+        assertTrue("latest same-generation geometry must supersede an unacknowledged steady frame",
+                latest.accepted);
+        assertEquals(3L, latest.serial);
+        assertFalse(latest.awaitPresentationAck);
+    }
+
+    @Test
+    public void outputReplacementRearmsPhysicalAckWithinConfirmedGeneration() {
+        SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
+
+        assertTrue(state.offer(1L, 50L).requestSource);
+        assertTrue(state.onFreshSource(50L).awaitPresentationAck);
+        assertTrue(state.onPresented(1L, 50L).acceptedCurrentGeneration);
+
+        state.invalidatePresentationConfirmation();
+        state.offer(2L, 50L);
+        SecurityCenterFramePipelineState.Submission replacement = state.onCachedSource(50L);
+        assertTrue(replacement.accepted);
+        assertTrue("a new TextureView/EGL output must prove one physical frame before steady replay",
+                replacement.awaitPresentationAck);
+    }
 }
