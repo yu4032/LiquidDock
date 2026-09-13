@@ -36,4 +36,13 @@ public class LauncherIconSizeHookContractTest {
         assertFalse(source.contains("setScaleX("));
         assertFalse(source.contains("setScaleY("));
     }
+
+    @Test
+    public void shortcutSizingIsLimitedToWorkspaceAndDockAfterAttachment() throws Exception {
+        String source = Files.readString(MAIN.resolve("LauncherIconSizeHook.java"));
+        assertTrue(source.contains("LauncherGlassHierarchy.classify"));
+        assertTrue(source.contains("LauncherGlassHierarchy.Domain.WORKSPACE"));
+        assertTrue(source.contains("LauncherGlassHierarchy.Domain.DOCK"));
+        assertTrue(source.contains("View.OnAttachStateChangeListener"));
+    }
 }
