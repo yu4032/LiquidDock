@@ -52,4 +52,16 @@ public class Launcher450IconSizeContractTest {
         assertFalse("4.50 implementation must not hook OS4/native Flutter paths",
                 source.contains("libapp_launcher.so") || source.contains("Flutter"));
     }
+
+    @Test
+    public void openFolderShortcutIconsJoinTheSameMeasureTransaction() throws Exception {
+        Path hookPath = Path.of("src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java");
+        assertTrue("Launcher 4.50 hook must exist", Files.exists(hookPath));
+        String source = Files.readString(hookPath);
+
+        assertTrue("4.50 Folder inner icons are ShortcutIcon children of FolderGridView",
+                source.contains("com.miui.home.launcher.FolderGridView"));
+        assertTrue("folder inner ShortcutIcon must have an explicit measure domain",
+                source.contains("MeasureDomain.FOLDER_CONTENT"));
+    }
 }
