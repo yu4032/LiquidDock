@@ -13,6 +13,10 @@ final class PassBlurBindPolicy {
     private PassBlurBindPolicy() {}
 
     static float nativeScale(PassBlurDomain domain, float requestedScale) {
+        // The native scale participates in producer geometry, not only sampling quality. LiquidDock
+        // consumes a full-size SurfaceTexture, so Security Center must keep the same full-size 1.0
+        // producer contract as the other caller-owned PassBlur domains. Vendor-owned 0.25 writes
+        // belong to the vendor Surface and are isolated by SecurityCenterPassBlurContinuousAuthority.
         return PassBlurQualityPolicy.bridgeScale(
                 domain == PassBlurDomain.LAUNCHER_WORKSPACE,
                 Math.round(requestedScale * 100f));

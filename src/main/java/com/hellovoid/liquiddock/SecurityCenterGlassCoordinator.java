@@ -11,7 +11,7 @@ import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
 
-/** Coordinates one root-wide Security Center assistant / All Apps glass session. */
+/** Coordinates one root-wide Security Center session from live vendor material carriers. */
 final class SecurityCenterGlassCoordinator
         implements SecurityCenterGlassRuntimeState.Owner, SecurityCenterGlassSession.Listener {
     static final class BindDecision {
@@ -34,7 +34,7 @@ final class SecurityCenterGlassCoordinator
         }
     }
 
-    /** Android-free identity authority used by queued callback and root replacement gates. */
+    /** Root identity remains session authority; material identity is handled separately. */
     static final class Policy {
         private Object currentRoot;
         private Object currentSession;
@@ -92,11 +92,8 @@ final class SecurityCenterGlassCoordinator
     private static final int ASSISTANT_GLOBAL_DOCK = 4;
 
     private final Policy policy = new Policy();
-    private final SecurityCenterGlassSceneState scene = new SecurityCenterGlassSceneState();
     private final SecurityCenterMaterialOwnershipState ownership =
             new SecurityCenterMaterialOwnershipState();
-    private final SecurityCenterAllAppsSettleState allAppsSettle =
-            new SecurityCenterAllAppsSettleState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final LiquidDockConfig.Glass glassConfig;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
@@ -109,22 +106,21 @@ final class SecurityCenterGlassCoordinator
     private WeakReference<View> appsRef = new WeakReference<>(null);
     private WeakReference<View> rootRef = new WeakReference<>(null);
     private WeakReference<View> customOwnerTurboRef = new WeakReference<>(null);
-    private SecurityCenterGlassSceneState.Target targetKind =
-            SecurityCenterGlassSceneState.Target.DOCK;
     private int assistantType = ASSISTANT_GLOBAL_DOCK;
     private SecurityCenterGlassFrameGeometry currentFrame;
     private SecurityCenterGlassSession session;
     private SecurityCenterGlassSinkView dockSink;
     private SecurityCenterGlassSinkView boxSink;
     private SecurityCenterGlassSinkView appsSink;
+    private long generation;
     private long renderedGeneration = -1L;
     private long requestedGeneration = -1L;
     private boolean handoffPending;
+    private boolean appsLive;
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
     private View attachObservedTurbo;
     private View attachedRoot;
-    private long sidebarLifecycleEpoch;
 
     private final View.OnAttachStateChangeListener turboAttachListener =
             new View.OnAttachStateChangeListener() {
@@ -133,7 +129,6 @@ final class SecurityCenterGlassCoordinator
                 }
 
                 @Override public void onViewDetachedFromWindow(View v) {
-                    // Fallback only. The semantically resolved manager teardown hooks revoke first.
                     mainHandler.post(() -> {
                         if (v == turboRef.get() && !v.isAttachedToWindow()) {
                             releasePanel(v, "panel detached fallback");
@@ -185,160 +180,107 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassRuntimeState.setOwner(this);
     }
 
-    /** Compatibility entry used by the existing Global Dock lifecycle. */
     void bindGlobalDock(View turboLayout, View dockLayout) {
         bindAssistant(turboLayout, dockLayout, null, ASSISTANT_GLOBAL_DOCK);
     }
 
-    /** Binds one semantically resolved assistant panel; Dock, Game, Video and Global Dock share one root session. */
+    /**
+     * Each vendor configure creates a new material subtree even when TurboLayout/root are reused.
+     * Keep the root PassBlur session, but advance the material generation whenever Dock/Box
+     * carrier identity changes so stale sinks and in-flight presentations cannot survive reuse.
+     */
     void bindAssistant(View turboLayout, View dockLayout, View boxLayout, int type) {
         if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return;
+
         View previousTurbo = turboRef.get();
         if (previousTurbo != null && previousTurbo != turboLayout) {
-            releasePanel(previousTurbo, "panel replaced");
+            releasePanel(previousTurbo, "TurboLayout replaced");
+            previousTurbo = null;
         }
-        boolean replacingLiveNodes = previousTurbo == turboLayout
-                && ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR;
+        View previousDock = dockRef.get();
+        View previousBox = boxRef.get();
+        boolean materialChanged = previousTurbo != turboLayout
+                || previousDock != dockLayout
+                || previousBox != boxLayout
+                || assistantType != type;
+
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
         boxRef = new WeakReference<>(boxLayout);
         appsRef = new WeakReference<>(null);
         assistantType = type;
-        targetKind = SecurityCenterGlassSceneState.Target.DOCK;
-        currentFrame = null;
-        allAppsSettle.reset();
+        appsLive = false;
         observeTurboAttach(turboLayout);
+
         if (!SecurityCenterGlassRuntimeState.isEnabled()) {
             releaseAll();
             return;
         }
 
-        if (turboLayout.isAttachedToWindow()) bindAttachedRoot(turboLayout);
-        if (replacingLiveNodes) {
-            reconcileSinks();
-            syncSinksFromMaterials();
-            if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR
-                    && ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING) {
-                handoffPending = true;
-            }
+        if (materialChanged) {
+            advanceMaterialGeneration("assistant subtree", dockLayout, boxLayout);
         }
+        if (turboLayout.isAttachedToWindow()) bindAttachedRoot(turboLayout);
         log("assistant bound type=" + type
-                + " box=" + (boxLayout != null ? boxLayout.getClass().getName() : "none"), null);
+                + " generation=" + generation
+                + " turbo@" + identity(turboLayout)
+                + " dock@" + identity(dockLayout)
+                + " box@" + identity(boxLayout), null);
     }
 
     void updateAllAppsLayout(View turboLayout, View appsLayout) {
-        if (!isCurrentTurbo(turboLayout) || appsLayout == null) return;
+        if (!isCurrentTurbo(turboLayout) || appsLayout == null || !appsLayout.isAttachedToWindow()) {
+            return;
+        }
+        View previous = appsRef.get();
         appsRef = new WeakReference<>(appsLayout);
+        if (previous != appsLayout || !appsLive) {
+            appsLive = true;
+            advanceMaterialGeneration("All Apps attached", dockRef.get(), boxRef.get());
+        }
         reconcileSinks();
         syncSinksFromMaterials();
+        refreshCurrentFrame(true);
+        log("All Apps carrier attached generation=" + generation
+                + " apps@" + identity(appsLayout), null);
     }
 
+    // Compatibility surface for the existing semantic motion hooks. Material attach/remove is the
+    // authority now; these methods no longer synthesize a parallel page-scene lifecycle.
     long onAllAppsToggleStarted(View turboLayout) {
-        if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()) return -1L;
-        SecurityCenterGlassSceneState.Decision decision = scene.onTransitionStarted();
-        applyDecision(decision, null);
-        if (decision.invalidateGeneration) {
-            allAppsSettle.onTransitionStarted(decision.generation);
-        }
-        if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM) {
-            handoffPending = true;
-        }
-        return decision.invalidateGeneration ? decision.generation : -1L;
+        return isCurrentTurbo(turboLayout) ? generation : -1L;
     }
 
     void onAllAppsToggleTargetResolved(
             View turboLayout, boolean allAppsPresent, long transitionGeneration) {
-        if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()) return;
-        allAppsSettle.onTargetResolved(transitionGeneration, allAppsPresent);
-        log("All Apps target resolved present=" + allAppsPresent
-                + " generation=" + transitionGeneration, null);
-        trySettlePresentedAllAppsTransition(renderedGeneration, currentFrame);
+        if (!isCurrentTurbo(turboLayout)) return;
+        refreshCurrentFrame(true);
     }
 
     void refreshTransitionFrame(View turboLayout) {
-        if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()
-                || scene.scene() != SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
-        reconcileSinks();
-        syncSinksFromMaterials();
-        SecurityCenterGlassFrameGeometry observed = captureFrame(true);
-        if (observed == null) return;
-        boolean changed = currentFrame == null || !currentFrame.sameAs(observed);
-        currentFrame = observed;
-        if (!changed) return;
-        requestCurrentGeneration(observed);
+        if (isCurrentTurbo(turboLayout)) refreshCurrentFrame(true);
     }
 
     void onAllAppsToggleSettled(
             View turboLayout, boolean allAppsPresent, long transitionGeneration) {
-        if (!isCurrentTurbo(turboLayout) || !SecurityCenterGlassRuntimeState.isEnabled()) return;
-        SecurityCenterGlassSceneState.Target nextKind = allAppsPresent
-                ? SecurityCenterGlassSceneState.Target.ALL_APPS
-                : SecurityCenterGlassSceneState.Target.DOCK;
-        reconcileSinks();
-        syncSinksFromMaterials();
-        SecurityCenterGlassFrameGeometry frame = captureFrame(allAppsPresent);
-        if (frame == null) {
-            log("settled frame unavailable target=" + nextKind
-                    + " generation=" + transitionGeneration, null);
-            return;
-        }
-        SecurityCenterGlassSceneState.Decision settled =
-                scene.onGeometrySettled(nextKind, transitionGeneration);
-        if (!settled.requestFresh) {
-            log("stale settle ignored target=" + nextKind
-                    + " generation=" + transitionGeneration
-                    + " currentGeneration=" + scene.generation(), null);
-            return;
-        }
-        targetKind = nextKind;
-        currentFrame = frame;
-        applyDecision(settled, frame);
+        if (isCurrentTurbo(turboLayout)) refreshCurrentFrame(true);
     }
 
+    // Legacy semantic teardown callbacks remain available to old callers, but current hooks do not
+    // use them as lifetime authority. Real root/Turbo detach and runtime disable are terminal.
     void onVendorPanelClosing(View turboLayout) {
         if (!isCurrentTurbo(turboLayout)) return;
         ownership.onVendorClosing();
         handoffPending = false;
-        log("vendor panel closing; retaining presentation ownership until terminal cleanup", null);
     }
 
     void onVendorPanelTerminal(View turboLayout) {
-        releasePanel(turboLayout, "vendor panel terminal cleanup");
+        if (isCurrentTurbo(turboLayout)) releasePanel(turboLayout, "vendor terminal cleanup");
     }
 
-    void onSidebarShowRequested() {
-        sidebarLifecycleEpoch++;
-        View staleTurbo = turboRef.get();
-        if (staleTurbo != null) {
-            releasePanel(staleTurbo, "sidebar show revoked stale presentation");
-        }
-        log("sidebar show requested epoch=" + sidebarLifecycleEpoch, null);
-    }
-
-    void onSidebarHideRequested(boolean animated) {
-        View closingTurbo = turboRef.get();
-        final long epoch = ++sidebarLifecycleEpoch;
-        if (closingTurbo == null) {
-            log("sidebar hide requested without custom presentation epoch=" + epoch, null);
-            return;
-        }
-        onVendorPanelClosing(closingTurbo);
-        if (!animated) {
-            Runnable immediateTerminal = () -> {
-                if (epoch == sidebarLifecycleEpoch && closingTurbo == turboRef.get()) {
-                    releasePanel(closingTurbo, "immediate sidebar hide terminal");
-                }
-            };
-            // The vendor binder posts its immediate hide to the same main Looper before this callback.
-            mainHandler.post(immediateTerminal);
-        } else {
-            // Animated teardown is authoritative only at the semantically resolved terminal cleanup.
-            // Detach, runtime disable, and the next show remain independent fail-safe release paths.
-            log("animated sidebar hide awaiting semantic terminal cleanup epoch=" + epoch, null);
-        }
-        log("sidebar hide requested animated=" + animated + " epoch=" + epoch, null);
-    }
+    void onSidebarShowRequested() {}
+    void onSidebarHideRequested(boolean animated) {}
 
     @Override
     public void releaseAll() {
@@ -349,9 +291,6 @@ final class SecurityCenterGlassCoordinator
             return;
         }
         ReleaseDecision release = policy.releaseAll();
-        if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) {
-            scene.onRuntimeDisabled();
-        }
         hideAndRestoreVendor();
         cleanupViewObservers(true);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
@@ -359,6 +298,23 @@ final class SecurityCenterGlassCoordinator
         session = null;
         if (old != null) old.shutdown();
         clearFrameState();
+    }
+
+    /** Optional activity/source hint: rebind producer without changing material lifetime. */
+    boolean onSourceAuthorityChanged(Object previousAuthority, Object currentAuthority) {
+        if (!SecurityCenterGlassRuntimeState.isEnabled()
+                || previousAuthority == null || currentAuthority == null
+                || previousAuthority.equals(currentAuthority)
+                || turboRef.get() == null || session == null || session.isShutdown()) return false;
+        advanceMaterialGeneration("source authority", dockRef.get(), boxRef.get());
+        hideAndRestoreVendor();
+        prepareCustomOwnershipForPresentation();
+        boolean accepted = session.requestSourceRebind("security-center-source-authority");
+        refreshCurrentFrame(true);
+        log("source authority rollover generation=" + generation
+                + " previous=" + previousAuthority + " current=" + currentAuthority
+                + " rebindAccepted=" + accepted, null);
+        return true;
     }
 
     @Override
@@ -370,42 +326,22 @@ final class SecurityCenterGlassCoordinator
                 || callbackSession.isShutdown() || sink == null || sink != dockSink
                 || root == null || !root.isAttachedToWindow()
                 || policy.currentRoot() != root
-                || policy.currentSession() != callbackSession) {
-            return;
-        }
+                || policy.currentSession() != callbackSession) return;
 
-        SecurityCenterMaterialOwnershipState.Owner owner = ownership.owner();
-        if (owner == SecurityCenterMaterialOwnershipState.Owner.VENDOR
-                || owner == SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING) {
-            return;
-        }
-
-        SecurityCenterGlassSceneState.Decision decision =
-                scene.onSourceAuthorityChanged(targetKind);
-        if (!decision.invalidateGeneration) return;
-
-        reconcileSinks();
-        syncSinksFromMaterials();
-        SecurityCenterGlassFrameGeometry frame = captureFrame(
-                targetKind == SecurityCenterGlassSceneState.Target.ALL_APPS);
-
-        // Window visibility restoration can preserve every Java View while replacing the
-        // underlying ViewRoot/BLAST producer. Return to vendor fallback before rebuilding the
-        // zero-copy source; only a fresh TextureView presentation ACK may hand ownership back.
-        applyDecision(decision, null);
-        currentFrame = frame;
+        advanceMaterialGeneration("window visibility restored", dockRef.get(), boxRef.get());
+        hideAndRestoreVendor();
+        prepareCustomOwnershipForPresentation();
         boolean recoveryAccepted = callbackSession.recoverSourceAfterWindowVisibilityRestored();
-        if (frame != null) requestCurrentGeneration(frame);
-        log("window visibility restored; refreshing source generation=" + decision.generation
-                + " target=" + targetKind
+        refreshCurrentFrame(true);
+        log("window visibility restored generation=" + generation
                 + " recoveryAccepted=" + recoveryAccepted, null);
     }
 
     @Override
-    public void onFrameRendered(SecurityCenterGlassSession callbackSession, long generation) {
+    public void onFrameRendered(SecurityCenterGlassSession callbackSession, long rendered) {
         View root = rootRef.get();
         if (!policy.acceptsCallback(
-                root, callbackSession, generation, scene.generation(),
+                root, callbackSession, rendered, generation,
                 SecurityCenterGlassRuntimeState.isEnabled())) return;
         if (callbackSession != session || callbackSession.isShutdown()
                 || root == null || !root.isAttachedToWindow()) return;
@@ -418,54 +354,29 @@ final class SecurityCenterGlassCoordinator
             return;
         }
 
-        boolean transitioning = scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING;
-        SecurityCenterGlassSceneState.Decision decision = transitioning
-                ? null : scene.onFreshFrameRendered(generation);
-        if (!transitioning && (decision == null || !decision.revealCustom)
-                && owner == SecurityCenterMaterialOwnershipState.Owner.CUSTOM_PREPARING) return;
-
         setAuthorizedSinksForFrame(currentFrame);
         if (owner == SecurityCenterMaterialOwnershipState.Owner.CUSTOM_PREPARING || handoffPending) {
-            if (!completePresentationHandoff(generation, transitioning ? "transition" : "scene")) {
-                return;
-            }
+            if (!completePresentationHandoff(rendered, "material")) return;
         }
-        renderedGeneration = generation;
-        log("current-generation frame presented generation=" + generation
-                + " scene=" + scene.scene()
+        renderedGeneration = rendered;
+        log("current-generation frame presented generation=" + rendered
                 + " owner=" + ownership.owner()
                 + " nodes=" + (currentFrame != null ? currentFrame.nodeCount() : 0), null);
-        trySettlePresentedAllAppsTransition(generation, currentFrame);
     }
 
     @Override
     public void onTerminalFailure(
-            SecurityCenterGlassSession callbackSession, long generation, Throwable error) {
+            SecurityCenterGlassSession callbackSession, long failedGeneration, Throwable error) {
         View root = rootRef.get();
         if (!policy.acceptsCallback(
-                root, callbackSession, generation, scene.generation(),
+                root, callbackSession, failedGeneration, generation,
                 SecurityCenterGlassRuntimeState.isEnabled())) return;
         if (callbackSession != session || callbackSession.isShutdown()
                 || root == null || !root.isAttachedToWindow()) return;
-        scene.onTerminalFailure();
         View turbo = turboRef.get();
         if (turbo != null) releasePanel(turbo, "terminal failure");
         else releaseAll();
-        log("failed closed generation=" + generation, error);
-    }
-
-    private void trySettlePresentedAllAppsTransition(
-            long generation, SecurityCenterGlassFrameGeometry frame) {
-        View turbo = turboRef.get();
-        if (turbo == null || frame == null
-                || scene.scene() != SecurityCenterGlassSceneState.Scene.TRANSITIONING) return;
-        SecurityCenterAllAppsSettleState.Decision settled =
-                allAppsSettle.onFramePresented(generation, frame.appsGeometry() != null);
-        if (!settled.settle) return;
-        log("All Apps presented composition matched target present=" + settled.allAppsPresent
-                + " generation=" + settled.generation
-                + " nodes=" + frame.nodeCount(), null);
-        onAllAppsToggleSettled(turbo, settled.allAppsPresent, settled.generation);
+        log("failed closed generation=" + failedGeneration, error);
     }
 
     private void bindAttachedRoot(View turboLayout) {
@@ -477,8 +388,15 @@ final class SecurityCenterGlassCoordinator
 
         BindDecision bind = policy.bindRoot(root);
         if (bind.reuseSession) {
+            rootRef = new WeakReference<>(root);
+            attachRootListener(root);
             reconcileSinks();
             installRootObserver(root);
+            if (ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.VENDOR) {
+                prepareCustomOwnershipForPresentation();
+            } else if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING) {
+                handoffPending = true;
+            }
             refreshCurrentFrame(true);
             return;
         }
@@ -490,9 +408,6 @@ final class SecurityCenterGlassCoordinator
         disposeSinks();
         if (old != null) old.shutdown();
         cleanupRootObserverOnly();
-        if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) {
-            scene.onRootDetached();
-        }
 
         session = new SecurityCenterGlassSession(root, glassConfig, this);
         if (!policy.onSessionCreated(root, session)) {
@@ -504,15 +419,23 @@ final class SecurityCenterGlassCoordinator
         attachRootListener(root);
         reconcileSinks();
         installRootObserver(root);
+        prepareCustomOwnershipForPresentation();
+        refreshCurrentFrame(true);
+    }
 
-        SecurityCenterGlassSceneState.Decision attached = scene.onRootAttached();
-        applyDecision(attached, null);
-        SecurityCenterGlassFrameGeometry frame = captureFrame(false);
-        if (frame != null) {
-            currentFrame = frame;
+    private void advanceMaterialGeneration(String reason, View dock, View box) {
+        generation++;
+        currentFrame = null;
+        renderedGeneration = -1L;
+        requestedGeneration = -1L;
+        if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR
+                && ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING) {
+            handoffPending = true;
         }
-        applyDecision(
-                scene.onGeometrySettled(SecurityCenterGlassSceneState.Target.DOCK), frame);
+        log("material generation advanced generation=" + generation
+                + " reason=" + reason
+                + " dock@" + identity(dock)
+                + " box@" + identity(box), null);
     }
 
     private void reconcileSinks() {
@@ -520,25 +443,33 @@ final class SecurityCenterGlassCoordinator
         if (live == null || live.isShutdown()) return;
         dockSink = reconcileSink(dockSink, dockRef.get(), live);
         boxSink = reconcileSink(boxSink, boxRef.get(), live);
-        appsSink = reconcileSink(appsSink, appsRef.get(), live);
+        appsSink = reconcileSink(appsSink, liveAppsView(), live);
     }
 
     private SecurityCenterGlassSinkView reconcileSink(
             SecurityCenterGlassSinkView current,
             View material,
             SecurityCenterGlassSession live) {
-        if (material == null || !(material.getParent() instanceof ViewGroup)
-                || !material.isAttachedToWindow()) {
+        if (material == null || !material.isAttachedToWindow()) {
             if (current != null) current.dispose();
             return null;
         }
-        if (current != null && current.ownsMaterial(material)
-                && current.getParent() == material.getParent()) {
+        if (current != null && current.ownsMaterial(material)) {
             current.syncFromMaterial();
             return current;
         }
         if (current != null) current.dispose();
-        return SecurityCenterGlassSinkView.attachBefore(material, live);
+        SecurityCenterGlassSinkView next = SecurityCenterGlassSinkView.attachBefore(material, live);
+        if (next != null) {
+            log("sink bound material=" + material.getClass().getSimpleName()
+                    + "@" + identity(material), null);
+        }
+        return next;
+    }
+
+    private View liveAppsView() {
+        View apps = appsRef.get();
+        return apps != null && apps.isAttachedToWindow() ? apps : null;
     }
 
     private float resolveLiveDockCornerRadius() {
@@ -590,27 +521,6 @@ final class SecurityCenterGlassCoordinator
         }
     }
 
-    private void applyDecision(
-            SecurityCenterGlassSceneState.Decision decision,
-            SecurityCenterGlassFrameGeometry frame) {
-        if (decision == null) return;
-        if (decision.hideCustom || decision.releaseCustomOwnership) hideAndRestoreVendor();
-
-        if (decision.claimCustomOwnership && decision.generation == scene.generation()) {
-            prepareCustomOwnershipForPresentation();
-        }
-        if (decision.requestFresh && frame != null && decision.generation == scene.generation()) {
-            requestCurrentGeneration(frame);
-        }
-        if (decision.shutdownSession) {
-            ReleaseDecision release = policy.releaseAll();
-            SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
-                    ? (SecurityCenterGlassSession) release.sessionToShutdown : session;
-            session = null;
-            if (old != null) old.shutdown();
-        }
-    }
-
     private void prepareCustomOwnershipForPresentation() {
         if (ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR) return;
         View turbo = turboRef.get();
@@ -621,10 +531,7 @@ final class SecurityCenterGlassCoordinator
             return;
         }
         try {
-            // Latch the currently visible vendor material without clearing it. Any vendor clear
-            // that races the PassBlur/TextureView presentation is recorded for later replay but
-            // suppressed on-screen until the custom frame has a real presentation ACK.
-            vendorMaterialBridge.protectVendorFallback(turbo, dock, boxRef.get(), appsRef.get());
+            vendorMaterialBridge.protectVendorFallback(turbo, dock, boxRef.get(), liveAppsView());
         } catch (Throwable error) {
             log("vendor fallback latch failed closed", error);
             return;
@@ -635,12 +542,11 @@ final class SecurityCenterGlassCoordinator
         customOwnerTurboRef = new WeakReference<>(turbo);
         renderedGeneration = -1L;
         requestedGeneration = -1L;
-        log("custom presentation preparing; vendor fallback latched generation="
-                + scene.generation(), null);
+        log("custom presentation preparing generation=" + generation, null);
     }
 
-    private boolean completePresentationHandoff(long generation, String reason) {
-        if (generation != scene.generation()
+    private boolean completePresentationHandoff(long rendered, String reason) {
+        if (rendered != generation
                 || ownership.owner() == SecurityCenterMaterialOwnershipState.Owner.CUSTOM_CLOSING) {
             handoffPending = false;
             return false;
@@ -654,9 +560,9 @@ final class SecurityCenterGlassCoordinator
             return false;
         }
         View box = frame.boxGeometry() != null ? boxRef.get() : null;
-        View apps = frame.appsGeometry() != null ? appsRef.get() : null;
+        View apps = frame.appsGeometry() != null ? liveAppsView() : null;
         boolean firstHandoff = !ownership.hasSuppressedVendor();
-        renderedGeneration = generation;
+        renderedGeneration = rendered;
         try {
             if (firstHandoff) ownership.onCustomPresented();
             bridge.claimCustom(turbo, dock, box, apps);
@@ -666,7 +572,7 @@ final class SecurityCenterGlassCoordinator
             }
             customOwnerTurboRef = new WeakReference<>(turbo);
             handoffPending = false;
-            log("current-generation presentation handed off generation=" + generation
+            log("current-generation presentation handed off generation=" + rendered
                     + " " + reason + " nodes=" + frame.nodeCount(), null);
             return true;
         } catch (Throwable error) {
@@ -677,7 +583,6 @@ final class SecurityCenterGlassCoordinator
             renderedGeneration = -1L;
             customOwnerTurboRef = new WeakReference<>(null);
             handoffPending = false;
-            scene.onTerminalFailure();
             releasePanel(turbo, "custom handoff failed");
             log("presentation handoff failed closed", error);
             return false;
@@ -687,7 +592,6 @@ final class SecurityCenterGlassCoordinator
     private void requestCurrentGeneration(SecurityCenterGlassFrameGeometry frame) {
         SecurityCenterGlassSession live = session;
         View root = rootRef.get();
-        long generation = scene.generation();
         if (live == null || live.isShutdown() || root == null
                 || policy.currentSession() != live || policy.currentRoot() != root
                 || frame == null || dockSink == null || !dockSink.isPresentationReady()) return;
@@ -710,20 +614,28 @@ final class SecurityCenterGlassCoordinator
     }
 
     private void refreshCurrentFrame(boolean requestIfChanged) {
-        if (!SecurityCenterGlassRuntimeState.isEnabled()
-                || scene.scene() == SecurityCenterGlassSceneState.Scene.DETACHED) return;
-        if (scene.scene() == SecurityCenterGlassSceneState.Scene.TRANSITIONING) {
-            refreshTransitionFrame(turboRef.get());
+        if (!SecurityCenterGlassRuntimeState.isEnabled() || session == null || session.isShutdown()) {
             return;
         }
+
+        View apps = appsRef.get();
+        boolean nextAppsLive = apps != null && apps.isAttachedToWindow()
+                && apps.getVisibility() == View.VISIBLE;
+        if (nextAppsLive != appsLive) {
+            appsLive = nextAppsLive;
+            if (!nextAppsLive) appsRef = new WeakReference<>(null);
+            advanceMaterialGeneration(
+                    nextAppsLive ? "All Apps became visible" : "All Apps removed",
+                    dockRef.get(), boxRef.get());
+        }
+
         reconcileSinks();
         boolean transformChanged = syncSinksFromMaterials();
-        boolean includeApps = targetKind == SecurityCenterGlassSceneState.Target.ALL_APPS;
-        SecurityCenterGlassFrameGeometry observed = captureFrame(includeApps);
+        SecurityCenterGlassFrameGeometry observed = captureFrame(true);
         if (observed == null) return;
         boolean changed = transformChanged || currentFrame == null || !currentFrame.sameAs(observed);
         currentFrame = observed;
-        if (requestIfChanged && (changed || requestedGeneration != scene.generation())) {
+        if (requestIfChanged && (changed || requestedGeneration != generation)) {
             requestCurrentGeneration(observed);
         }
     }
@@ -751,16 +663,13 @@ final class SecurityCenterGlassCoordinator
         }
 
         SecurityCenterGlassGeometry apps = null;
-        if (includeAppsIfAvailable) {
-            View appsView = appsRef.get();
-            if (appsView != null && appsView.isAttachedToWindow()
-                    && appsView.getVisibility() == View.VISIBLE) {
-                if (appsSink == null || !appsSink.isPresentationReady()) return null;
-                float appsRadius = resolveStaticCornerRadius(appsView, allAppsCornerRadiusResId);
-                if (!Float.isFinite(appsRadius) || appsRadius <= 0f) return null;
-                apps = appsSink.captureGeometry(root, appsRadius);
-                if (apps == null) return null;
-            }
+        View appsView = includeAppsIfAvailable ? liveAppsView() : null;
+        if (appsView != null && appsView.getVisibility() == View.VISIBLE) {
+            if (appsSink == null || !appsSink.isPresentationReady()) return null;
+            float appsRadius = resolveStaticCornerRadius(appsView, allAppsCornerRadiusResId);
+            if (!Float.isFinite(appsRadius) || appsRadius <= 0f) return null;
+            apps = appsSink.captureGeometry(root, appsRadius);
+            if (apps == null) return null;
         }
         try {
             return SecurityCenterGlassFrameGeometry.compose(dock, box, apps);
@@ -846,7 +755,6 @@ final class SecurityCenterGlassCoordinator
     private void releasePanel(View turboLayout, String reason) {
         if (turboLayout == null || turboLayout != turboRef.get()) return;
         ReleaseDecision release = policy.releaseAll();
-        if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) scene.onRootDetached();
         hideAndRestoreVendor();
         cleanupViewObservers(true);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
@@ -859,7 +767,6 @@ final class SecurityCenterGlassCoordinator
 
     private void releaseForRootDetach() {
         ReleaseDecision release = policy.releaseAll();
-        if (scene.scene() != SecurityCenterGlassSceneState.Scene.DETACHED) scene.onRootDetached();
         hideAndRestoreVendor();
         cleanupViewObservers(true);
         SecurityCenterGlassSession old = release.sessionToShutdown instanceof SecurityCenterGlassSession
@@ -873,12 +780,12 @@ final class SecurityCenterGlassCoordinator
     private void clearFrameState() {
         rootRef = new WeakReference<>(null);
         currentFrame = null;
-        targetKind = SecurityCenterGlassSceneState.Target.DOCK;
         assistantType = ASSISTANT_GLOBAL_DOCK;
         handoffPending = false;
+        appsLive = false;
+        generation = 0L;
         renderedGeneration = -1L;
         requestedGeneration = -1L;
-        allAppsSettle.reset();
     }
 
     private void disposeSinks() {
@@ -921,6 +828,10 @@ final class SecurityCenterGlassCoordinator
             try { if (observer.isAlive()) observer.removeOnPreDrawListener(listener); }
             catch (Throwable ignored) {}
         }
+    }
+
+    private static String identity(View view) {
+        return view == null ? "none" : Integer.toHexString(System.identityHashCode(view));
     }
 
     private static void log(String message, Throwable error) {
