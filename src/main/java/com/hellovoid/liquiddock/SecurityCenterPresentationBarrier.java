@@ -23,12 +23,16 @@ final class SecurityCenterPresentationBarrier {
         serial = nextSerial;
         required = nextRequired;
         acknowledged.clear();
+        SecurityCenterGlassMorphProbe.submitted(nextSerial, outputs);
     }
 
     synchronized boolean acknowledge(long candidateSerial, Object output) {
         if (candidateSerial != serial || output == null || !required.contains(output)) return false;
         acknowledged.add(output);
-        return acknowledged.size() == required.size();
+        boolean complete = acknowledged.size() == required.size();
+        SecurityCenterGlassMorphProbe.surfaceAck(
+                candidateSerial, output, acknowledged.size(), required.size(), complete);
+        return complete;
     }
 
     synchronized boolean isCurrent(long candidateSerial) {

@@ -87,6 +87,7 @@ final class SecurityCenterFramePipelineState {
             }
         }
 
+        SecurityCenterGlassMorphProbe.bindLatestFrame(latestGeneration, latestSerial);
         return new Offer(request, false, -1L,
                 request ? sourceGeneration : -1L);
     }
@@ -103,6 +104,7 @@ final class SecurityCenterFramePipelineState {
         sourceGeneration = -1L;
         inFlightSerial = latestSerial;
         inFlightGeneration = latestGeneration;
+        SecurityCenterGlassMorphProbe.sourceAccepted(inFlightGeneration, inFlightSerial);
         return new Submission(true, inFlightSerial, inFlightGeneration);
     }
 
@@ -131,6 +133,8 @@ final class SecurityCenterFramePipelineState {
             request = true;
             nextGeneration = sourceGeneration;
         }
+        SecurityCenterGlassMorphProbe.frameAck(
+                serial, generation, current, request, nextGeneration);
         return new Presentation(current, request, nextGeneration);
     }
 
@@ -139,6 +143,7 @@ final class SecurityCenterFramePipelineState {
         if (serial < 0L || serial != inFlightSerial) {
             return new Presentation(false, false, -1L);
         }
+        SecurityCenterGlassMorphProbe.presentationCancelled(serial, "output-invalidated");
         inFlightSerial = -1L;
         inFlightGeneration = -1L;
         boolean request = false;

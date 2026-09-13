@@ -23,17 +23,22 @@ final class SecurityCenterMaterialOwnershipState {
         if (owner != Owner.VENDOR) return;
         owner = Owner.CUSTOM_PREPARING;
         vendorSuppressed = false;
+        probe("CUSTOM_PREPARING");
     }
 
     void onCustomPresented() {
         if (owner == Owner.CUSTOM_PREPARING) {
             owner = Owner.CUSTOM;
             vendorSuppressed = true;
+            probe("CUSTOM");
         }
     }
 
     void onVendorClosing() {
-        if (owner != Owner.VENDOR) owner = Owner.CUSTOM_CLOSING;
+        if (owner != Owner.VENDOR) {
+            owner = Owner.CUSTOM_CLOSING;
+            probe("CUSTOM_CLOSING");
+        }
     }
 
     boolean hasSuppressedVendor() {
@@ -43,6 +48,12 @@ final class SecurityCenterMaterialOwnershipState {
     void releaseToVendor() {
         owner = Owner.VENDOR;
         vendorSuppressed = false;
+        probe("VENDOR");
+    }
+
+    private void probe(String transition) {
+        SecurityCenterGlassMorphProbe.ownership(
+                transition, owner.name(), vendorSuppressed);
     }
 
     Owner owner() {

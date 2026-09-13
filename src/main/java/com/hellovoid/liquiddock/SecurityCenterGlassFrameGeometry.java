@@ -52,6 +52,7 @@ final class SecurityCenterGlassFrameGeometry {
                 throw new IllegalArgumentException("Security Center frame nodes use different roots");
             }
         }
+        SecurityCenterGlassMorphProbe.stageFrame(dock, effectiveBox, apps);
         return new SecurityCenterGlassFrameGeometry(dock, effectiveBox, apps, presentation);
     }
 
