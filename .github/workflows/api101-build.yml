@@ -25,14 +25,49 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
           cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
           cache-cleanup: never
       - run: chmod +x ./gradlew
+      - name: Apply experiment B - direct SurfaceView EGL output
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java')
+          s = p.read_text()
+
+          def one(old, new, label):
+              global s
+              if old not in s:
+                  raise SystemExit(f'experiment B patch point missing: {label}')
+              s = s.replace(old, new, 1)
+
+          one('import android.graphics.Point;\n', 'import android.graphics.Point;\nimport android.graphics.PixelFormat;\n', 'PixelFormat import')
+          one('import android.view.Surface;\n', 'import android.view.Surface;\nimport android.view.SurfaceHolder;\nimport android.view.SurfaceView;\n', 'SurfaceView imports')
+          one('''final class Miuix307PassBlurTextureView extends TextureView\n        implements TextureView.SurfaceTextureListener {''',
+              '''final class Miuix307PassBlurTextureView extends SurfaceView\n        implements SurfaceHolder.Callback {''', 'class declaration')
+          one('''        setOpaque(false);\n        setSurfaceTextureListener(this);\n        setClickable(false);''',
+              '''        setZOrderMediaOverlay(true);\n        getHolder().setFormat(PixelFormat.TRANSLUCENT);\n        getHolder().addCallback(this);\n        setClickable(false);''', 'constructor output setup')
+          one('''        if (isAvailable() && getSurfaceTexture() != null && outputWindowSurface == null) {\n            onSurfaceTextureAvailable(getSurfaceTexture(), getWidth(), getHeight());\n        }''',
+              '''        Surface holderSurface = getHolder().getSurface();\n        if (holderSurface != null && holderSurface.isValid() && outputWindowSurface == null) {\n            surfaceCreated(getHolder());\n        }''', 'attached callback')
+
+          start = s.index('''    @Override\n    public void onSurfaceTextureAvailable''')
+          end_marker = '''    private void attachOutputWindow'''
+          end = s.index(end_marker, start)
+          lifecycle = '''    @Override\n    public void surfaceCreated(SurfaceHolder holder) {\n        Surface surface = holder != null ? holder.getSurface() : null;\n        if (shuttingDown || surface == null || !surface.isValid()) return;\n        outputWidth = Math.max(1, getWidth());\n        outputHeight = Math.max(1, getHeight());\n        hasPresentedFrame = false;\n        updateBackdropMapping();\n        Surface stale = outputWindowSurface;\n        outputWindowSurface = surface;\n        MainHook.log(TAG + " [LatencyExpB] SurfaceView surfaceCreated size="\n                + outputWidth + "x" + outputHeight);\n        renderHandler.post(() -> attachOutputWindow(stale, surface, outputWidth, outputHeight));\n    }\n\n    @Override\n    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {\n        if (shuttingDown || holder == null || holder.getSurface() != outputWindowSurface) return;\n        outputWidth = Math.max(1, width);\n        outputHeight = Math.max(1, height);\n        hasPresentedFrame = false;\n        updateBackdropMapping();\n        renderHandler.post(() -> {\n            if (eglWindowSurface == EGL14.EGL_NO_SURFACE) return;\n            try {\n                makeCurrent();\n                ensureFboSize(outputWidth, outputHeight);\n                drawLatestFrame(false);\n            } catch (Throwable error) {\n                fail("output resize", error);\n            }\n        });\n    }\n\n    @Override\n    public void surfaceDestroyed(SurfaceHolder holder) {\n        Surface stale = outputWindowSurface;\n        outputWindowSurface = null;\n        outputWidth = 0;\n        outputHeight = 0;\n        if (stale != null) renderHandler.post(() -> destroyOutputWindow(stale));\n    }\n\n'''
+          s = s[:start] + lifecycle + s[end:]
+
+          old_destroy = '''    private void destroyOutputWindow(Surface stale) {\n        try {\n            destroyEglWindowSurfaceOnly();\n        } catch (Throwable error) {\n            MainHook.log(TAG + " output EGL surface destroy failed: " + error);\n        }\n        try {\n            if (stale != null) stale.release();\n        } catch (Throwable ignored) {}\n    }'''
+          new_destroy = '''    private void destroyOutputWindow(Surface stale) {\n        try {\n            destroyEglWindowSurfaceOnly();\n        } catch (Throwable error) {\n            MainHook.log(TAG + " output EGL surface destroy failed: " + error);\n        }\n        // SurfaceView owns holder.getSurface(); do not release the managed Surface object here.\n    }'''
+          one(old_destroy, new_destroy, 'managed Surface destroy')
+
+          # Keep the render producer unthrottled in the SurfaceView probe as well.
+          one('''            makeCurrent();\n            queryMaxTextureSize();''',
+              '''            makeCurrent();\n            boolean swap0 = EGL14.eglSwapInterval(eglDisplay, 0);\n            MainHook.log(TAG + " [LatencyExpB] eglSwapInterval(0)=" + swap0);\n            queryMaxTextureSize();''', 'swap interval')
+
+          p.write_text(s)
+          PY
+          grep -nE 'LatencyExpB|extends SurfaceView|surfaceCreated' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java | head -20
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
@@ -49,13 +84,13 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-expB-surfaceview-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-build-source
+          name: LiquidDock-expB-source
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
