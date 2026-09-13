@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 
 import java.lang.ref.WeakReference;
+import java.util.Collections;
 
 /**
  * Keeps a transparent Stage host aligned with the reserved first two columns of the live 8x4 HOME
@@ -17,9 +18,12 @@ final class StageWorkspaceOverlayRuntime {
     private static final String TAG = "[DC][StageOverlay]";
     private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
     private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
+    private static final int MAX_TASK_CARDS = 8;
 
     private static final StageWorkspaceOverlayState overlayState =
             new StageWorkspaceOverlayState();
+    private static final StageWorkspaceOverlayContentState contentState =
+            new StageWorkspaceOverlayContentState();
 
     private static volatile boolean installed;
     private static volatile HomeGridProfile profile;
@@ -257,14 +261,22 @@ final class StageWorkspaceOverlayRuntime {
                                            int width,
                                            int height) {
         if (action == StageWorkspaceOverlayState.Action.IGNORE) return;
-        if (action == StageWorkspaceOverlayState.Action.HIDE) {
+        if (StageWorkspaceOverlayContentPolicy.shouldClear(action)) {
+            contentState.apply(action, Collections.emptyList());
             if (host != null) host.setVisibility(View.GONE);
             return;
         }
-        if (action != StageWorkspaceOverlayState.Action.SHOW
+        if (!StageWorkspaceOverlayContentPolicy.shouldRefresh(action)
                 || host == null || width <= 0 || height <= 0) {
             return;
         }
+
+        contentState.apply(
+                action,
+                StageWorkspaceRecentsSource.current(
+                        host.getContext(),
+                        host.getContext().getClassLoader(),
+                        MAX_TASK_CARDS));
         applyGeometry(host, left, top, width, height);
         host.setVisibility(View.VISIBLE);
         host.bringToFront();
@@ -323,6 +335,7 @@ final class StageWorkspaceOverlayRuntime {
     }
 
     private static void hideHost() {
+        contentState.apply(StageWorkspaceOverlayState.Action.HIDE, Collections.emptyList());
         StageWorkspaceOverlayHostView host = hostRef.get();
         if (host != null) host.setVisibility(View.GONE);
     }
