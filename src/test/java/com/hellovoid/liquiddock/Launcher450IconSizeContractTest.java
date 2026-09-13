@@ -64,4 +64,18 @@ public class Launcher450IconSizeContractTest {
         assertTrue("folder inner ShortcutIcon must have an explicit measure domain",
                 source.contains("MeasureDomain.FOLDER_CONTENT"));
     }
+
+    @Test
+    public void workstationAppPageShortcutIconsJoinTheSameMeasureTransaction() throws Exception {
+        Path hookPath = Path.of("src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java");
+        assertTrue("Launcher 4.50 hook must exist", Files.exists(hookPath));
+        String source = Files.readString(hookPath);
+
+        assertTrue("4.50 workstation app page is the laptop launchpad AllAppsWorkspace",
+                source.contains("com.miui.home.launcher.laptop.launchpad.AllAppsWorkspace"));
+        assertTrue("workstation app-page ShortcutIcon must have an explicit measure domain",
+                source.contains("MeasureDomain.WORKSTATION_APPS"));
+        assertFalse("ordinary drawer/search All Apps must remain vendor-sized",
+                source.contains("com.miui.home.launcher.allapps.AllAppsContainerView"));
+    }
 }
