@@ -21,17 +21,22 @@ final class StageWorkspaceRecentsTaskAdapter {
             long lastActiveTime = readLongField(key, "lastActiveTime");
             if (taskId < 0) return null;
 
-            Object packageValue = invokeRequired(task, "getPackageName");
+            Object packageValue = invokeRequired(key, "getPackageName");
             Object multipleValue = invokeRequired(task, "hasMultipleTasks");
-            Object partnerValue = invokeRequired(task, "getAnotherMultiTaskId");
             if (!(packageValue == null || packageValue instanceof String)
-                    || !(multipleValue instanceof Boolean)
-                    || !(partnerValue instanceof Number)) {
+                    || !(multipleValue instanceof Boolean)) {
                 return null;
             }
 
             boolean grouped = (Boolean) multipleValue;
-            int partnerTaskId = grouped ? ((Number) partnerValue).intValue() : -1;
+            int partnerTaskId = -1;
+            if (grouped) {
+                Object partnerValue = invokeRequired(task, "getAnotherMultiTaskId",
+                        new Class<?>[]{int.class}, taskId);
+                if (!(partnerValue instanceof Number)) return null;
+                partnerTaskId = ((Number) partnerValue).intValue();
+            }
+
             return new StageWorkspaceTaskModel.TaskEntry(
                     taskId,
                     userId,
@@ -75,16 +80,25 @@ final class StageWorkspaceRecentsTaskAdapter {
     }
 
     private static Object invokeRequired(Object owner, String name) throws Exception {
-        Method method = findNoArgMethod(owner.getClass(), name);
-        if (!method.canAccess(owner)) method.setAccessible(true);
-        return method.invoke(owner);
+        return invokeRequired(owner, name, new Class<?>[0]);
     }
 
-    private static Method findNoArgMethod(Class<?> type, String name) throws NoSuchMethodException {
+    private static Object invokeRequired(Object owner,
+                                         String name,
+                                         Class<?>[] parameterTypes,
+                                         Object... args) throws Exception {
+        Method method = findMethod(owner.getClass(), name, parameterTypes);
+        if (!method.canAccess(owner)) method.setAccessible(true);
+        return method.invoke(owner, args);
+    }
+
+    private static Method findMethod(Class<?> type,
+                                     String name,
+                                     Class<?>[] parameterTypes) throws NoSuchMethodException {
         Class<?> current = type;
         while (current != null) {
             try {
-                return current.getDeclaredMethod(name);
+                return current.getDeclaredMethod(name, parameterTypes);
             } catch (NoSuchMethodException ignored) {
                 current = current.getSuperclass();
             }
