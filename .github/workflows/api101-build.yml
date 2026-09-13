@@ -1,17 +1,12 @@
-name: API101 migration build
+name: Dock latency probe C2 normalization-only
 
 on:
-  push:
-    branches:
-      - main
-      - api101-migration
-      - refactor/modular-architecture
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 concurrency:
-  group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: dock-latency-c2-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,14 +20,26 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
-          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
+          cache-read-only: false
           cache-cleanup: never
       - run: chmod +x ./gradlew
+      - name: Apply C2 normalization-only render probe
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java')
+          s = p.read_text()
+          old = '''            ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight);\n            renderNormalizationPass(mapping);\n            PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);\n            prismalRenderer.prepareBackdrop(\n                    rawTexture, mapping.sampleWidth, mapping.sampleHeight, mapping.prismalParams);\n            DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();\n            dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,\n                    dockBodyHighlightProfile, dockScene,\n                    mapping.sampleWidth, mapping.sampleHeight);\n            int prismalTexture = prismalRenderer.outputTexture();\n            if (!renderCompositePass(prismalTexture, mapping)) return;'''
+          new = '''            // C2 latency probe: retain the exact producer normalization + overscan FBO and\n            // final crop/composite, but bypass Prismal blur/refraction/highlight entirely.\n            ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight);\n            renderNormalizationPass(mapping);\n            PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);\n            if (!renderCompositePass(rawTexture, mapping)) return;'''
+          if s.count(old) != 1:
+              raise SystemExit(f'C2 render block match count={s.count(old)}')
+          s = s.replace(old, new, 1)
+          s = s.replace('material=prismal-module-official', 'material=latency-probe-normalization-only', 1)
+          s = s.replace('blur=official-two-pass-0.5x', 'blur=disabled', 1)
+          p.write_text(s)
+          PY
+          grep -nE 'C2 latency probe|latency-probe-normalization-only|renderCompositePass\(rawTexture' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
@@ -45,17 +52,34 @@ jobs:
             echo "Forbidden Security Center/root PassBlur regression detected" >&2
             exit 1
           fi
+      - name: Verify probe excludes Prismal draw path
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java').read_text()
+          start = s.index('private void drawLatestFrame')
+          end = s.index('private void maybeLogPowerStats', start)
+          body = s[start:end]
+          forbidden = ['prismalRenderer.prepareBackdrop(', 'dockCompositor.drawFrame(']
+          bad = [x for x in forbidden if x in body]
+          if bad:
+              raise SystemExit('C2 still executes Prismal path: ' + ', '.join(bad))
+          if 'renderCompositePass(rawTexture, mapping)' not in body:
+              raise SystemExit('C2 rawTexture composite missing')
+          print('C2 render-path audit OK')
+          PY
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-expC2-normalization-only-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-build-source
+          name: LiquidDock-expC2-source
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
