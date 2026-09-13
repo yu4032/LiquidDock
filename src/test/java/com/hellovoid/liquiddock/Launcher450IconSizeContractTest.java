@@ -11,7 +11,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Device-targeted contract for HyperOS Launcher 4.50 icon sizing. */
+/** Device-targeted contracts for HyperOS Launcher 4.50 icon sizing and Dock icon ownership. */
 public class Launcher450IconSizeContractTest {
     @Test
     public void policyClampsToSupportedPercentRange() throws Exception {
@@ -77,5 +77,45 @@ public class Launcher450IconSizeContractTest {
                 source.contains("MeasureDomain.WORKSTATION_APPS"));
         assertFalse("ordinary drawer/search All Apps must remain vendor-sized",
                 source.contains("com.miui.home.launcher.allapps.AllAppsContainerView"));
+    }
+
+    @Test
+    public void functionalDockGlassUsesVendorAdapterViewTypesNotLabelsOrPositions() throws Exception {
+        Path registryPath = Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Launcher450DockFunctionalIconRegistry.java");
+        assertTrue("Launcher 4.50 functional Dock registry must exist", Files.exists(registryPath));
+        String registry = Files.readString(registryPath);
+
+        assertTrue(registry.contains("com.miui.home.launcher.hotseats.HotSeatsListContentAdapter"));
+        assertTrue(registry.contains("onBindViewHolder"));
+        assertTrue(registry.contains("VIEW_TYPE_SEARCH"));
+        assertTrue(registry.contains("VIEW_TYPE_XIAOAI"));
+        assertTrue(registry.contains("VIEW_TYPE_ALL_APPS"));
+        assertTrue(registry.contains("VIEW_TYPE_RECENTS"));
+        assertTrue(registry.contains("VIEW_TYPE_HOME"));
+        assertTrue(registry.contains("VIEW_TYPE_PHONE"));
+        assertFalse("functional classification must not depend on localized descriptions",
+                registry.contains("getContentDescription"));
+    }
+
+    @Test
+    public void functionalOnlyModeGatesStaticDockGlassWithoutEnablingAllIcons() throws Exception {
+        String staticHook = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/MiuixLauncherStaticGlassHook.java"));
+        String state = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/GlassRuntimeState.java"));
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String ui = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        assertTrue(schema.contains("FUNCTIONAL_DOCK_ICON_GLASS"));
+        assertTrue(schema.contains("liquid_functional_dock_icon_glass"));
+        assertTrue(state.contains("isFunctionalDockIconEnabled"));
+        assertTrue(state.contains("isAnyIconEnabled"));
+        assertTrue(staticHook.contains("Launcher450DockFunctionalIconRegistry.isFunctional"));
+        assertTrue(staticHook.contains("isAnyIconEnabled"));
+        assertTrue(ui.contains("仅 Dock 功能图标玻璃"));
+        assertTrue(ui.contains("搜索、小爱"));
     }
 }
