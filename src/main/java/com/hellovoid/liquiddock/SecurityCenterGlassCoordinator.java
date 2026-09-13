@@ -75,6 +75,23 @@ final class SecurityCenterGlassCoordinator
                     && renderedGeneration == currentGeneration;
         }
 
+        synchronized boolean acceptsOutputReady(
+                Object root,
+                Object session,
+                Object sink,
+                Object dockSink,
+                Object boxSink,
+                Object appsSink,
+                boolean runtimeEnabled) {
+            return runtimeEnabled
+                    && root != null
+                    && session != null
+                    && sink != null
+                    && root == currentRoot
+                    && session == currentSession
+                    && (sink == dockSink || sink == boxSink || sink == appsSink);
+        }
+
         synchronized ReleaseDecision releaseAll() {
             Object old = currentSession;
             currentRoot = null;
@@ -310,6 +327,25 @@ final class SecurityCenterGlassCoordinator
                 + " previous=" + previousAuthority + " current=" + currentAuthority
                 + " rebindAccepted=" + accepted, null);
         return true;
+    }
+
+    @Override
+    public void onOutputReady(
+            SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
+        View root = rootRef.get();
+        if (!policy.acceptsOutputReady(
+                root, callbackSession, sink, dockSink, boxSink, appsSink,
+                SecurityCenterGlassRuntimeState.isEnabled())) return;
+        if (callbackSession != session || callbackSession.isShutdown()
+                || sink.isDisposed() || !sink.isPresentationReady()
+                || root == null || !root.isAttachedToWindow()) return;
+
+        // The logical scene may never have been captured while this TextureView had no EGL output.
+        // Force the current generation to be offered again now that the physical sink is renderable.
+        requestedGeneration = -1L;
+        refreshCurrentFrame(true);
+        log("output ready; recaptured current scene generation=" + generation
+                + " role=" + sink.materialRole(), null);
     }
 
     @Override
