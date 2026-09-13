@@ -39,6 +39,8 @@ final class WorkspaceDropRuleHook {
                         int cellY = (Integer) yValue;
                         int spanX = (Integer) spanXValue;
                         int spanY = (Integer) spanYValue;
+                        boolean stageEnabled =
+                                StageWorkspaceRuntime.isActiveForOrdinaryPlacement();
                         HookUtil.InvocationResult<Object> columnsResult =
                                 HookUtil.tryInvokeStatic(deviceConfig, "getCellCountX");
                         HookUtil.InvocationResult<Object> rowsResult =
@@ -51,8 +53,14 @@ final class WorkspaceDropRuleHook {
                             if (selectedProfile.matchesCounts(columns, rows)) {
                                 return HomeGridDropLegalityPolicy.isLegal(
                                         selectedProfile, columns, rows,
-                                        cellX, cellY, spanX, spanY);
+                                        cellX, cellY, spanX, spanY, stageEnabled);
                             }
+                        }
+
+                        if (stageEnabled
+                                && !StageWorkspacePolicy.isOrdinaryPhysicalPlacementLegal(
+                                        cellX, spanX)) {
+                            return false;
                         }
 
                         // During a transient count mismatch, preserve the only transform-critical
