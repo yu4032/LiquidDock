@@ -64,7 +64,8 @@ final class LiquidDockConfig {
     }
 
     static final class Grid {
-        final boolean enabled, widgetAdaptation, dp, offsets;
+        final boolean enabled, widgetAdaptation, iconSizeEnabled, dp, offsets;
+        final int iconSizePercent;
         final float landscapeHorizontal, landscapeTop, landscapeBottom, landscapeRowGap;
         final float portraitHorizontal, portraitTop, portraitBottom, portraitRowGap;
         final float landscapeIndicatorY, portraitIndicatorY;
@@ -74,6 +75,12 @@ final class LiquidDockConfig {
                     ConfigSchema.Grid.ENABLED.runtimeFallback());
             widgetAdaptation = c.b(ConfigSchema.Grid.WIDGET_ADAPTATION.name(),
                     ConfigSchema.Grid.WIDGET_ADAPTATION.runtimeFallback());
+            iconSizeEnabled = c.b(ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+                    ConfigSchema.Grid.ICON_SIZE_ENABLED.runtimeFallback());
+            iconSizePercent = Math.max(Launcher450IconSizePolicy.MIN_PERCENT,
+                    Math.min(Launcher450IconSizePolicy.MAX_PERCENT, c.i(
+                            ConfigSchema.Grid.ICON_SIZE_PERCENT.name(),
+                            ConfigSchema.Grid.ICON_SIZE_PERCENT.runtimeFallback())));
             dp = c.b(ConfigSchema.Grid.MARGINS_DP.name(),
                     ConfigSchema.Grid.MARGINS_DP.runtimeFallback());
             offsets = c.b(ConfigSchema.Grid.MARGINS_OFFSET.name(),
