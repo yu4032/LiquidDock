@@ -212,9 +212,14 @@ final class SecurityCenterFramePipelineState {
                 || generation != confirmedGeneration) {
             return -1L;
         }
+        // Do not regress completion if an older steady render finishes after a newer one. This is
+        // mostly defensive because rendering is serialized, but keeps the state latest-wins.
+        if (presentedGeneration == generation && serial < presentedSerial) {
+            return requestLatestSourceIfIdle();
+        }
         presentedSerial = serial;
         presentedGeneration = generation;
-        presentedRevision = revision;
+        presentedRevision = Math.max(presentedRevision, revision);
         return requestLatestSourceIfIdle();
     }
 
