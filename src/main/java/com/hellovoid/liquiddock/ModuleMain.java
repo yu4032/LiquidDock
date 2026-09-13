@@ -79,6 +79,7 @@ public final class ModuleMain extends XposedModule {
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
                     runtimeConfig.glass.iconEnabled,
+                    runtimeConfig.glass.functionalDockIconEnabled,
                     runtimeConfig.glass.widgetEnabled,
                     runtimeConfig.glass.widgetDarkContent,
                     runtimeConfig.glass.smallFolderStyle.enabled,
@@ -95,6 +96,7 @@ public final class ModuleMain extends XposedModule {
             Launcher450IconSizeHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
                     runtimeConfig.grid.iconSizePercent);
+            Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
 
             HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
