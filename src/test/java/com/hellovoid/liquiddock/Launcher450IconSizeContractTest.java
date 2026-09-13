@@ -88,12 +88,8 @@ public class Launcher450IconSizeContractTest {
 
         assertTrue(registry.contains("com.miui.home.launcher.hotseats.HotSeatsListContentAdapter"));
         assertTrue(registry.contains("onBindViewHolder"));
-        assertTrue(registry.contains("VIEW_TYPE_SEARCH"));
-        assertTrue(registry.contains("VIEW_TYPE_XIAOAI"));
-        assertTrue(registry.contains("VIEW_TYPE_ALL_APPS"));
-        assertTrue(registry.contains("VIEW_TYPE_RECENTS"));
-        assertTrue(registry.contains("VIEW_TYPE_HOME"));
-        assertTrue(registry.contains("VIEW_TYPE_PHONE"));
+        assertTrue("adapter viewType classification must use the centralized 4.50 policy",
+                registry.contains("Launcher450DockFunctionalIconPolicy.isFunctionalViewType"));
         assertFalse("functional classification must not depend on localized descriptions",
                 registry.contains("getContentDescription"));
     }
