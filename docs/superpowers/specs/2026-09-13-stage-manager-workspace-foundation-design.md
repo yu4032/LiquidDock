@@ -2,212 +2,261 @@
 
 ## Status
 
-Approved direction for the first implementation stage of a macOS/iPadOS-style Stage Manager area on the Launcher workspace.
+Approved first-stage architecture for a macOS/iPadOS-style Stage Manager area on the Launcher workspace.
 
 ## Goal
 
-Keep Launcher internally on LiquidDock's existing 8×4 physical grid, reserve columns 0 and 1 as a persistent left-side stage region, and keep columns 2–7 as the normal 6×4 desktop area. The stage region must remain fixed while Workspace pages scroll and must not participate in Launcher item occupancy.
+Keep LiquidDock's existing 8×4 physical home grid, turn columns 0–1 into a new persistent Stage region, and map the ordinary desktop into columns 2–7. Existing 6-column desktop content is shifted right by exactly two logical cells, so the visible result is a fixed 2×4 Stage region plus a normal 6×4 desktop.
+
+## Core Model
+
+The physical grid remains 8×4:
+
+```text
+column:   0   1 | 2   3   4   5   6   7
+          Stage | ordinary desktop 6×4
+```
+
+The left two columns are not empty desktop cells and are not ordinary Launcher occupancy. They are a new Stage domain.
+
+Ordinary desktop coordinates use a logical 6-column domain and are projected into the physical 8-column grid:
+
+```text
+physicalCellX = logicalDesktopX + 2
+logicalDesktopX = physicalCellX - 2
+```
+
+Therefore an existing ordinary item at physical/legacy desktop column `x` in the previous 6-column logical layout maps as:
+
+```text
+0 -> 2
+1 -> 3
+2 -> 4
+3 -> 5
+4 -> 6
+5 -> 7
+```
+
+The mapping must preserve `cellY`, `spanX`, `spanY`, `screenId`, item identity, and page membership. Widgets/folders/icons move as grid items; no pixel translation is used.
 
 ## Scope
 
-This spec covers only the workspace foundation required by Stage Manager:
+This foundation stage implements:
 
-1. Reserve the first two columns of the existing 8×4 home grid from ordinary icon, folder, and widget placement.
-2. Preserve the existing 8×4 cell size, gaps, coordinate arrays, rotation handling, and widget sizing.
-3. Add a fixed Stage Manager overlay host whose bounds are derived from columns 0–1 of the same 8×4 geometry.
-4. Keep the overlay outside every `CellLayout`, so it does not move with individual pages and does not create `ItemInfo` or Launcher database records.
-5. Define lifecycle and visibility rules for HOME/Workspace attachment, rotation, workstation mode, and feature disable.
+1. a pure 6→8 horizontal mapping policy with a fixed Stage prefix of two columns;
+2. deterministic migration of ordinary existing home items into columns 2–7;
+3. drop/restore/orientation legality that treats columns 0–1 as outside the ordinary desktop domain;
+4. a fixed Stage overlay host whose bounds come from physical columns 0–1;
+5. one Stage host per Workspace/root, independent of page scrolling;
+6. lifecycle/rotation rules required to keep the two domains stable.
 
-The following are intentionally deferred to a later spec:
+Deferred to a later stage:
 
 - recent-task acquisition;
-- task snapshot/live thumbnail rendering;
-- task launch/switch/close gestures;
-- visual card styling and animation;
-- multi-window/freeform integration.
+- snapshot/live thumbnail rendering;
+- task switching/closing gestures;
+- Stage card visuals and animations;
+- freeform/multi-window control.
 
 ## Existing Authorities
 
 ### Grid geometry
 
-`HomeGridHook` remains the sole authority for custom home-grid geometry. The physical grid stays 8×4. This feature must not translate the entire `Workspace` View and must not introduce a second set of cell coordinates.
+`HomeGridHook` remains the sole authority for physical 8×4 CellLayout geometry. The feature must not translate the whole `Workspace`, shrink the CellLayout to 6×4, or create a second pixel-coordinate system.
 
-The stage bounds are derived from the established 8×4 `CellLayout` geometry:
+`mXs`, `mYs`, `mCellWidth`, `mCellHeight`, and gap values remain physical 8×4 coordinates.
 
-- stage start: logical column 0;
-- stage end: logical column 2;
-- desktop start: logical column 2;
-- desktop end: logical column 8.
+### Ordinary desktop mapping
 
-The implementation may derive the left stage width from `mXs`, `mCellWidth`, and `mWidthGap`, but must not mutate those arrays solely for Stage Manager.
+A new pure `StageWorkspacePolicy` owns the logical/physical horizontal mapping.
 
-### Placement legality
+For the 8×4 profile in supported HOME landscape mode:
 
-`HomeGridDropLegalityPolicy` remains the pure legality authority consumed by `WorkspaceDropRuleHook` and orientation/restore logic. Stage reservation is expressed as an additional policy constraint rather than a View translation.
+- `STAGE_COLUMNS = 2`;
+- logical ordinary desktop width = 6;
+- physical ordinary desktop range = `[2, 8)`;
+- Stage range = `[0, 2)`.
 
-For an ordinary workspace item with `(cellX, spanX)`, placement is legal only when its occupied horizontal range is entirely inside columns 2–7:
+An ordinary item with logical desktop coordinate `(x, spanX)` is mappable only when:
+
+```text
+x >= 0
+x + spanX <= 6
+```
+
+Its physical coordinate is `x + 2`.
+
+A physical ordinary item is legal only when:
 
 ```text
 cellX >= 2
 cellX + spanX <= 8
 ```
 
-Existing 2×2 macroblock constraints remain in force after this stage-reservation constraint.
+### Placement legality
+
+`HomeGridDropLegalityPolicy` remains the pure legality authority consumed by `WorkspaceDropRuleHook` and orientation/restore logic. When Stage mode is active, ordinary placements touching columns 0–1 are illegal. Existing span bounds and 2×2 macroblock constraints continue to apply after projection into physical coordinates.
 
 ### Native occupancy
 
-Launcher still owns the real occupancy matrix and collision resolution. LiquidDock only marks the reserved columns as illegal placement targets through its legality policy and corresponding hooks. The Stage Manager overlay itself never creates an occupied Launcher cell.
-
-## Stage Overlay Host
-
-Create one Launcher-root/Workspace-level overlay host, not one host per `CellLayout` page.
-
-Properties:
-
-- fixed in screen/workspace-root coordinates;
-- bounds correspond to logical columns 0–1 of the current 8×4 geometry;
-- does not scroll horizontally with Workspace pages;
-- does not intercept touch while empty in this foundation stage;
-- no `ItemInfo`, database row, drag target, or Launcher occupancy entry;
-- recreated/rebound only when the Launcher/Workspace authority changes;
-- geometry refreshed after valid Workspace layout and after rotation/configuration changes.
-
-The host must be a sibling/overlay of the scrolling page content. It must not be inserted into a `CellLayout`, because page-local ancestry would make it scroll with the page and pollute layout/drag assumptions.
-
-## Geometry Contract
-
-The overlay uses the same 8×4 grid as the desktop rather than a hand-tuned dp width.
-
-Given a valid `CellLayout` with:
-
-- `mXs[0]` = first column x;
-- `mXs[2]` = third column x;
-- `mCellWidth` = current cell width;
-
-preferred stage horizontal bounds are:
-
-```text
-left  = mXs[0]
-right = mXs[2]
-```
-
-This includes the gap between columns 1 and 2 in the same way Launcher already defines its grid. If `mXs[2]` is unavailable during early layout, the host remains non-presentable until stable geometry is available; no fixed-delay fallback is allowed.
-
-Vertical bounds initially follow the workspace content region rather than the full display. Stage-card visual insets are a later concern.
-
-## Orientation and Mode Rules
-
-### Landscape
-
-Stage reservation is enabled when the selected home profile is 8×4 and the Stage Manager foundation feature is enabled.
-
-### Portrait
-
-The first implementation keeps the same logical reservation semantics only if the active home profile remains 8×4 in portrait. The overlay host may be hidden in portrait until a separate portrait UI is designed, but ordinary placement must not silently reinterpret saved stage-reserved coordinates.
-
-### Workstation/Laptop mode
-
-Existing workstation-specific Workspace and All Apps geometry remains authoritative. This foundation must fail closed rather than reusing the stage reservation inside dedicated laptop All Apps `CellLayout` instances. Normal HOME Workspace pages may use the reservation only when the feature is explicitly active for that mode.
+Launcher still owns the actual occupancy matrix and collision resolution. LiquidDock does not create fake occupied cells for Stage. Instead, ordinary item legality excludes physical columns 0–1 and the fixed Stage overlay remains outside every `CellLayout`.
 
 ## Existing Item Migration
 
-The feature must not destructively rewrite the Launcher database on first enable.
+Enabling Stage mode explicitly migrates ordinary desktop items right by two physical columns.
 
-If existing ordinary items occupy columns 0–1, the first foundation version must detect the conflict and leave the Stage overlay non-active for that page/session until a deterministic migration policy is implemented. It must not silently overlap the stage host on top of existing icons/widgets and must not delete or relocate items without an explicit migration contract.
+Migration contract:
 
-A later migration task may shift compatible 6×4 layouts by +2 columns when every item can fit safely, but that behavior is outside this spec.
+- input ordinary coordinates are interpreted in the prior 6-column desktop domain;
+- output coordinate is `cellX + 2`;
+- `cellY`, spans, screen/page, rank, and item identity are unchanged;
+- an item that cannot fit the 6-column logical domain is rejected before mutation;
+- migration is planned for the whole page/layout first and then committed; partial per-item migration is forbidden;
+- migration is idempotent: content already recognized as Stage-mapped must not be shifted again on Launcher recreation, rotation, or process restart;
+- disabling or temporarily hiding the Stage overlay does not implicitly migrate content back left.
+
+Idempotence must come from explicit layout-state/mapping authority, not from guessing `cellX >= 2`, because valid legacy layouts can already contain items in those columns.
+
+The first implementation may keep Stage mode enabled only after a complete migration plan succeeds. If preflight fails, preserve the original layout and leave Stage inactive.
+
+## Stage Overlay Host
+
+Create one Launcher-root/Workspace-level overlay host, never one host per CellLayout page.
+
+Properties:
+
+- fixed relative to Workspace/root while pages scroll underneath/right of it;
+- horizontal bounds equal physical Stage columns 0–1;
+- empty foundation host does not intercept touch;
+- no `ItemInfo`, database row, drag target, or occupancy entry;
+- rebound only when Launcher/Workspace authority changes;
+- geometry refreshed from stable 8×4 layout callbacks, including rotation.
+
+The host must not be inserted into a `CellLayout`, because page-local ancestry would make Stage scroll with the page.
+
+## Geometry Contract
+
+Given valid 8×4 physical coordinates:
+
+```text
+stageLeft  = mXs[0]
+stageRight = mXs[2]
+```
+
+No fixed dp stage width and no fixed-delay geometry retry are allowed. If `mXs[2]` is not yet available, Stage remains non-presentable until a normal layout/lifecycle callback supplies valid geometry.
+
+Vertical bounds initially follow the Workspace content region. Visual insets belong to the later Stage-card design.
+
+## Orientation and Mode Rules
+
+### Landscape HOME
+
+The first implementation targets the 8×4 HOME landscape profile. The Stage domain is active only when the feature is enabled and the current Workspace is the normal HOME Workspace.
+
+### Portrait
+
+Portrait Stage UI is not part of the first implementation. Rotation must not reapply the +2 migration. Existing orientation-memory/restore logic must preserve item identity and avoid treating Stage columns as ordinary drop targets when returning to the Stage-enabled landscape layout.
+
+### Workstation/Laptop mode
+
+Dedicated laptop All Apps and workstation-specific grid geometry are excluded from this first Stage implementation. Existing workstation authorities remain unchanged.
 
 ## Lifecycle
 
-The Stage host follows Launcher/Workspace authority, not page authority:
+1. Launcher setup/resume resolves current Workspace/root.
+2. Stage mode preflights the ordinary-layout migration once for the authoritative layout state.
+3. After successful migration/state recognition, ordinary placements are constrained to physical columns 2–7.
+4. Stable 8×4 CellLayout geometry supplies Stage bounds.
+5. Attach/update one fixed overlay host under Workspace/root authority.
+6. Workspace page scroll does not recreate or translate the host.
+7. Rotation invalidates geometry only; it does not repeat migration.
+8. Workspace/root replacement detaches the old host and binds a new one from persisted/authoritative mapped state.
 
-1. Launcher setup/resume resolves the current Workspace root.
-2. When a valid 8×4 `CellLayout` geometry is available, compute stage bounds.
-3. Attach or update one fixed overlay host under the Launcher/Workspace root authority.
-4. Page scroll changes do not recreate or translate the stage host.
-5. Rotation/configuration changes invalidate geometry and recompute from the new stable grid.
-6. Workspace/root replacement detaches the old host and clears its references.
-7. Feature disable removes the host and restores normal placement legality.
-
-No timer or delayed settle callback is an authority boundary.
+No timer is an authority boundary.
 
 ## Proposed Components
 
 ### `StageWorkspacePolicy`
 
-Pure policy. Owns:
+Pure policy, no Android View dependency. Owns:
 
-- whether a profile/mode supports the reserved stage region;
-- reserved column count (`2`);
-- placement legality helper for ordinary items;
-- stage bounds calculation from pure grid coordinates.
+- `STAGE_COLUMNS = 2`;
+- profile/mode support;
+- logical 6-column ↔ physical 8-column mapping;
+- ordinary placement legality in Stage mode;
+- stage horizontal bounds from physical grid coordinates;
+- migration preflight helpers.
 
-No Android `View` dependency.
+### `StageWorkspaceMigration`
+
+Pure migration planner. Consumes item positions and produces an all-or-nothing mapped snapshot/plan. It must not mutate Launcher objects directly and must expose enough state for idempotence.
 
 ### `StageWorkspaceHost`
 
-Android runtime owner for the fixed overlay container. Owns:
-
-- one weakly-bound Launcher/Workspace host;
-- attach/detach;
-- geometry updates;
-- visibility;
-- non-intercepting empty container for the foundation stage.
-
-It does not source recent tasks.
+Android runtime owner of the fixed overlay container. Owns attach/detach, root binding, stable-grid geometry, visibility, and empty non-intercepting Stage container.
 
 ### `HomeGridDropLegalityPolicy`
 
-Extended to consume Stage reservation policy when active. Existing macroblock rules remain unchanged.
+Extended so Stage-enabled ordinary placements exclude physical columns 0–1 while retaining existing span and macroblock rules.
 
 ### `WorkspaceDropRuleHook`
 
-Continues to bridge MIUI's drop legality callback to the pure policy. It must not duplicate Stage column arithmetic.
+Continues to bridge MIUI's native drop callback to the pure legality policy. It must not duplicate `+2` arithmetic.
 
 ### `HomeGridHook`
 
-Continues to own 8×4 geometry. It exposes/forwards stable grid geometry to `StageWorkspaceHost` after valid `CellLayout` layout; it does not translate Workspace or shrink the grid to 6×4.
+Continues to own 8×4 physical geometry and provides stable geometry callbacks to `StageWorkspaceHost`. It does not translate Workspace or recalculate a separate 6×4 pixel grid.
 
 ## Failure Behavior
 
-- Unsupported or transient grid count: do not activate the Stage host.
-- Missing stable geometry: keep the Stage host hidden and retry only on normal layout/lifecycle callbacks.
-- Existing item conflict in reserved columns: keep Stage host inactive for that page/session; preserve user content.
-- Reflection/API mismatch: log and fail closed; native Launcher behavior remains usable.
-- Workstation All Apps: never apply HOME stage reservation.
+- unsupported/transient grid: do not activate Stage;
+- incomplete migration preflight: no partial moves; preserve current desktop and keep Stage inactive;
+- missing stable geometry: host hidden until normal layout callback;
+- reflection/API mismatch: log and fail closed;
+- workstation All Apps: never apply HOME Stage mapping;
+- repeated Launcher setup/rotation: recognize mapped state and never apply +2 twice.
 
-## Testing
+## TDD Requirements
 
-### Pure tests
+### Pure mapping tests
 
-- 8×4 reservation rejects ordinary placements touching columns 0–1.
-- placements wholly inside columns 2–7 remain legal.
-- spans crossing from column 2 into 8 are rejected.
-- existing 2×2 macroblock legality still applies.
-- stage bounds equal `[mXs[0], mXs[2])` for representative grid coordinates.
-- non-8×4 profiles do not activate reservation.
+- `logical x=0 -> physical x=2`;
+- `logical x=5 -> physical x=7` for a 1×1 item;
+- 2-wide item at logical `x=4 -> physical x=6` and fits exactly;
+- item whose logical `x + spanX > 6` is rejected;
+- physical ordinary placement at x=0 or x=1 is illegal;
+- physical placement fully within x=2..7 is legal;
+- non-8×4/unsupported modes do not activate Stage mapping.
 
-### Hook/contract tests
+### Migration tests
 
-- `WorkspaceDropRuleHook` delegates reservation decisions to the pure policy.
-- `HomeGridHook` does not translate the Workspace View for Stage Manager.
-- stage host is attached outside `CellLayout` page ancestry.
-- stage host is one-per-Workspace/root, not one-per-page.
-- workstation All Apps is excluded.
+- a full legacy 6×4 arrangement maps every item by +2 with all non-X fields unchanged;
+- mixed icons/folders/widgets preserve spans and page IDs;
+- preflight failure yields no partial result;
+- applying migration to a layout already marked mapped is a no-op;
+- recreation/rotation does not shift a mapped layout from x=2..7 to x=4..9.
 
-### CI/device checks
+### Geometry/host tests
 
-- existing 8×4 icon/widget sizing tests remain green;
-- rotation tests remain green;
-- drag/drop into columns 0–1 is rejected;
-- drag/drop inside columns 2–7 remains native;
-- page swiping moves only the 6-column desktop content; empty stage host remains fixed;
-- disabling the feature restores full 8×4 placement.
+- Stage bounds equal `[mXs[0], mXs[2])`;
+- host is one-per-Workspace/root;
+- host ancestry is outside CellLayout;
+- page scrolling does not alter host x;
+- empty foundation host does not intercept touches.
+
+### Integration checks
+
+- existing 8×4 sizing and widget tests remain green;
+- enabling Stage shifts existing ordinary desktop content right once;
+- drag/drop rejects Stage columns and accepts ordinary columns;
+- page swipe moves only ordinary desktop pages;
+- rotation does not duplicate migration;
+- Stage overlay lifecycle does not disturb Dock/Workspace glass.
 
 ## Non-goals
 
-- No recent-task UI in this foundation commit.
-- No fake widget occupying 2×4 cells.
-- No Workspace `translationX` workaround.
-- No Launcher database migration in the first stage.
-- No fixed-delay geometry retries.
+- no fake 2×4 widget;
+- no Workspace `translationX`;
+- no fixed-delay migration or geometry retry;
+- no recent-task UI in the foundation stage;
+- no automatic reverse migration on feature disable in the first stage.
