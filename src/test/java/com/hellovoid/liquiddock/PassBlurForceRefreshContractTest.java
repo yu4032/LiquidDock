@@ -1,24 +1,19 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertTrue;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
+import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-/** Contract derived from HyperOS libgui/libsurfaceflinger PassBlur state machine. */
+/** Typed contract derived from HyperOS libgui/libsurfaceflinger PassBlur state machine. */
 public class PassBlurForceRefreshContractTest {
-    private static final Path BRIDGE = Path.of(
-            "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java");
+    @Test
+    public void dockGetsSixtySecondForceRefreshWindow() {
+        assertEquals(60_000, PassBlurForceRefreshPolicy.timeoutMs(PassBlurDomain.DOCK));
+    }
 
     @Test
-    public void dockBindArmsVendorForceRefreshWindow() throws Exception {
-        String source = Files.readString(BRIDGE);
-        assertTrue(source.contains("setForceRefresh"));
-        assertTrue(source.contains("PASSBLUR_FORCE_REFRESH_MS"));
-        assertTrue(source.contains("domain == PassBlurDomain.DOCK"));
-        assertTrue(source.contains("setForceRefresh.invoke("));
-        assertTrue(source.contains("Integer.valueOf(PASSBLUR_FORCE_REFRESH_MS)"));
+    public void otherDomainsAreNotForceRefreshedByThisProbe() {
+        assertEquals(-1, PassBlurForceRefreshPolicy.timeoutMs(PassBlurDomain.LAUNCHER_WORKSPACE));
+        assertEquals(-1, PassBlurForceRefreshPolicy.timeoutMs(PassBlurDomain.SECURITY_CENTER));
     }
 }
