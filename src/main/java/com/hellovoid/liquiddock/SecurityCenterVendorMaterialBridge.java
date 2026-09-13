@@ -80,9 +80,6 @@ final class SecurityCenterVendorMaterialBridge {
         if (previousOwner != null && previousOwner != turboLayout) {
             releaseClaimInternal(previousOwner);
         }
-        // Bind the visible Global Dock morph authority before the first custom frame. The vendor
-        // material View is already at final size here, while sidebar_background continues to morph.
-        SecurityCenterSidebarDrawableGeometry.bindDock(dockLayout);
         // Vendor hooks already record intent before ownership is claimed. PREPARING intentionally
         // leaves those writes visible until a current-generation custom frame has been presented.
         return SecurityCenterMaterialModePolicy.prepareBind(turboLayout);
