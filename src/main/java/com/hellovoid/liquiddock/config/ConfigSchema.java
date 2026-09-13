@@ -549,6 +549,7 @@ public final class ConfigSchema {
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SETTINGS_PAGE);
         add(keys, Grid.ENABLED, Grid.PROFILE, Grid.WIDGET_ADAPTATION,
+                Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
                 Grid.MARGINS_DP, Grid.MARGINS_OFFSET,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
