@@ -34,6 +34,35 @@ public class SecurityCenterPassBlurOwnershipContractTest {
     }
 
     @Test
+    public void securityCenterOwnsPassBlurSurfaceContinuouslyAcrossVendorTransactions()
+            throws Exception {
+        Path authorityPath = MAIN.resolve("SecurityCenterPassBlurContinuousAuthority.java");
+        assertTrue("Security Center must keep a root-level native producer authority",
+                Files.exists(authorityPath));
+
+        String authority = Files.readString(authorityPath);
+        String moduleMain = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String passBlur = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue("Security Center startup must install continuous PassBlur authority",
+                moduleMain.contains("SecurityCenterPassBlurContinuousAuthority.install()"));
+        assertTrue("vendor SetPassBlurSurface writes must be intercepted while our root is claimed",
+                authority.contains("SetPassBlurSurface")
+                        && authority.contains("args[1] = claim.surface"));
+        assertTrue("vendor update flag/scale writes must preserve live LiquidDock updates",
+                authority.contains("setUpdateTextureFlag")
+                        && authority.contains("args[1] = Boolean.TRUE")
+                        && authority.contains("args[2] = Float.valueOf(claim.scale)"));
+        assertTrue("Security Center bind must claim the caller-owned producer Surface",
+                passBlur.contains("SecurityCenterPassBlurContinuousAuthority.claim("));
+        assertTrue("Security Center unbind must release that exact producer claim",
+                passBlur.contains("SecurityCenterPassBlurContinuousAuthority.release("));
+        assertTrue("Security Center resume must force the native update contract even when Java state is already true",
+                passBlur.contains("boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER")
+                        && passBlur.contains("setUpdatesEnabled(binding, true, force)"));
+    }
+
+    @Test
     public void securityCenterUsesPassBlurAsPrismalInputAndReplacesVendorMaterial()
             throws Exception {
         String policy = Files.readString(
@@ -72,24 +101,25 @@ public class SecurityCenterPassBlurOwnershipContractTest {
     }
 
     @Test
-    public void realSidebarBinderLifecycleRevokesStaleCustomPresentation() throws Exception {
+    public void sidebarAndSyntheticTerminalLifecycleAreObservationOnly() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(
                 MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
-        assertTrue("the stable AIDL binder show/hide lifecycle must be hooked",
+        assertTrue("the stable AIDL binder show/hide methods remain hooked only as pass-through observation points",
                 hook.contains("sidebarLifecycle.show()")
                         && hook.contains("sidebarLifecycle.hideImmediate()")
                         && hook.contains("sidebarLifecycle.hideAnimated()"));
-        assertTrue("an immediate vendor hide must terminate on the next main-loop turn",
-                coordinator.contains("immediate sidebar hide terminal")
-                        && coordinator.contains("mainHandler.post(immediateTerminal)"));
-        assertTrue("animated teardown must wait for the semantic terminal-cleanup authority",
-                coordinator.contains("animated sidebar hide awaiting semantic terminal cleanup")
-                        && hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
-        assertFalse("animated teardown must not invent a fixed-delay terminal fallback",
+        assertTrue("binder callbacks must remain no-op in the coordinator",
+                coordinator.contains("void onSidebarShowRequested() {}")
+                        && coordinator.contains("void onSidebarHideRequested(boolean animated) {}"));
+        assertFalse("reachable synthetic terminal hooks must not release a TurboLayout that the vendor can reuse",
+                hook.contains("notifyVendorPanelClosing(chain.getArgs(), contract)")
+                        || hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
+        assertTrue("real Turbo/root detach remains the fail-safe teardown authority",
+                coordinator.contains("panel detached fallback")
+                        && coordinator.contains("releaseForRootDetach()"));
+        assertFalse("teardown must not invent a fixed-delay terminal fallback",
                 coordinator.contains("postDelayed("));
-        assertTrue("a new show must revoke a stale previous presentation before rebinding",
-                coordinator.contains("sidebar show revoked stale presentation"));
     }
 }

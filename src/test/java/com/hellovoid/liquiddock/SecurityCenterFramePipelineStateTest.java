@@ -41,7 +41,7 @@ public class SecurityCenterFramePipelineStateTest {
     }
 
     @Test
-    public void firstPresentationAlwaysArmsExactlyOnePostHandoffRefresh() {
+    public void currentGenerationContinuouslyRequestsSourceAfterEveryPresentationAck() {
         SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
 
         SecurityCenterFramePipelineState.Offer first = state.offer(1L, 13L);
@@ -53,19 +53,28 @@ public class SecurityCenterFramePipelineStateTest {
         SecurityCenterFramePipelineState.Presentation firstPresented =
                 state.onPresented(1L, 13L);
         assertTrue(firstPresented.acceptedCurrentGeneration);
-        assertTrue("the material handoff producer rebind must always have one accepted fresh source",
+        assertTrue("a live Security Center material must request the next source after every ACK",
                 firstPresented.requestSource);
         assertEquals(13L, firstPresented.nextGeneration);
 
-        SecurityCenterFramePipelineState.Submission refreshed = state.onFreshSource(13L);
-        assertTrue(refreshed.accepted);
-        assertEquals(1L, refreshed.serial);
+        SecurityCenterFramePipelineState.Submission second = state.onFreshSource(13L);
+        assertTrue(second.accepted);
+        assertEquals(1L, second.serial);
 
-        SecurityCenterFramePipelineState.Presentation refreshedPresented =
+        SecurityCenterFramePipelineState.Presentation secondPresented =
                 state.onPresented(1L, 13L);
-        assertTrue(refreshedPresented.acceptedCurrentGeneration);
-        assertFalse("the post-handoff refresh must be one-shot for the generation",
-                refreshedPresented.requestSource);
+        assertTrue(secondPresented.acceptedCurrentGeneration);
+        assertTrue("the source loop must remain live after the post-handoff frame",
+                secondPresented.requestSource);
+        assertEquals(13L, secondPresented.nextGeneration);
+
+        SecurityCenterFramePipelineState.Submission third = state.onFreshSource(13L);
+        assertTrue(third.accepted);
+        SecurityCenterFramePipelineState.Presentation thirdPresented =
+                state.onPresented(1L, 13L);
+        assertTrue(thirdPresented.acceptedCurrentGeneration);
+        assertTrue("RootPassBlurBackend owns FPS gating; pipeline must not turn live glass into a snapshot",
+                thirdPresented.requestSource);
     }
 
     @Test

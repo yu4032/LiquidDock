@@ -112,6 +112,14 @@ final class SecurityCenterGlassGeometry {
                 cropLeft, cropTop, cropRight - cropLeft, cropBottom - cropTop);
     }
 
+    /** Preserves the animated shape while presenting it from a full-root screen-space crop. */
+    SecurityCenterGlassGeometry withRootCrop() {
+        return new SecurityCenterGlassGeometry(
+                rootWidth, rootHeight,
+                left, top, width, height, cornerRadius,
+                0f, 0f, rootWidth, rootHeight);
+    }
+
     /** Exact root-local union used only as an output/crop region; node radii remain on the nodes. */
     static SecurityCenterGlassGeometry covering(
             SecurityCenterGlassGeometry first,

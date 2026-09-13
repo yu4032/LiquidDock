@@ -48,11 +48,19 @@ public final class ModuleMain extends XposedModule {
                         runtimeConfig.enabled,
                         runtimeConfig.glass.enabled,
                         runtimeConfig.glass.securityCenterEnabled);
-                if (!SecurityCenterVendorMaterialState.install()
-                        || !SecurityCenterSourceAuthorityHook.install(classLoader)) {
+                if (!SecurityCenterPassBlurContinuousAuthority.install()) {
                     Api101Bridge.log(
-                            "[DC][SecurityCenterGlass] required material/source authority unavailable; fail closed");
+                            "[DC][SecurityCenterGlass] continuous PassBlur authority unavailable; fail closed");
                     return;
+                }
+                if (!SecurityCenterVendorMaterialState.install()) {
+                    Api101Bridge.log(
+                            "[DC][SecurityCenterGlass] vendor material interception unavailable; fail closed");
+                    return;
+                }
+                if (!SecurityCenterSourceAuthorityHook.install(classLoader)) {
+                    Api101Bridge.log(
+                            "[DC][SecurityCenterGlass] activity authority unavailable; continuing with vendor-hosted lifecycle");
                 }
                 SecurityCenterGlassHook.install(classLoader, runtimeConfig);
             } catch (Throwable error) {

@@ -25,15 +25,15 @@ public class SecurityCenterFrameworkDockContractTest {
     }
 
     @Test
-    public void customGlassReadinessRequiresShaderSourceAuthority() throws Exception {
+    public void customGlassReadinessUsesCarrierLifecycleNotActivityAuthority() throws Exception {
         String runtime = Files.readString(MAIN.resolve("SecurityCenterGlassRuntimeState.java"));
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
 
         assertTrue("custom glass keeps a config-only material gate",
                 runtime.contains("static boolean isMaterialEnabled()"));
-        assertTrue("custom glass readiness must include live shader source authority",
+        assertFalse("activity/source authority is only a producer rollover hint, not a runtime gate",
                 runtime.contains("return isMaterialEnabled() && sourceAuthorityAvailable;"));
-        assertTrue("deferred Dock preparation must use the custom session gate",
+        assertTrue("deferred Dock preparation must use the material-carrier runtime gate",
                 prepare.contains("SecurityCenterGlassRuntimeState.isEnabled()"));
     }
 
@@ -59,7 +59,7 @@ public class SecurityCenterFrameworkDockContractTest {
         assertTrue("CUSTOM_PREPARING must expose a non-destructive vendor fallback latch",
                 bridge.contains("void protectVendorFallback("));
         assertTrue("the coordinator must protect the current vendor material before waiting for ACK",
-                coordinator.contains("vendorMaterialBridge.protectVendorFallback("));
+                coordinator.contains("bridge.protectVendorFallback("));
         assertTrue("destructive vendor clearing must remain a separate presentation handoff",
                 bridge.contains("void claimCustom(")
                         && bridge.contains("clearVendorTarget(dockLayout)"));

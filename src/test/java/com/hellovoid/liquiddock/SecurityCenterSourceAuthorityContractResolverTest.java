@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -49,10 +48,10 @@ public class SecurityCenterSourceAuthorityContractResolverTest {
     }
 
     @Test
-    public void customGlassStaysDisabledUntilLiveSourceAuthorityIsInstalled() {
+    public void materialRuntimeDoesNotWaitForActivityAuthorityInstallation() {
         try {
             SecurityCenterGlassRuntimeState.initialize(null, true, true, true);
-            assertFalse(SecurityCenterGlassRuntimeState.isEnabled());
+            assertTrue(SecurityCenterGlassRuntimeState.isEnabled());
             SecurityCenterGlassRuntimeState.onSourceAuthorityAvailable();
             assertTrue(SecurityCenterGlassRuntimeState.isEnabled());
         } finally {
