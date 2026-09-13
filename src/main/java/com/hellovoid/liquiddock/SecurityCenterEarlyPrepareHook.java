@@ -63,11 +63,13 @@ final class SecurityCenterEarlyPrepareHook {
 
     private static boolean tryBindWhenReady(PendingPrepare pending) {
         View turbo = pending.turboRef.get();
-        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()) return false;
+        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()
+                || !turbo.isAttachedToWindow()) return false;
         try {
             Object dockObject = invoke(pending.contract.dockGetter(), turbo);
             if (!(dockObject instanceof View)) return false;
             View dock = (View) dockObject;
+            if (!isLiveCarrier(turbo, dock)) return false;
 
             View boxMaterial = resolveBoxMaterial(
                     turbo,
@@ -75,17 +77,41 @@ final class SecurityCenterEarlyPrepareHook {
                     pending.contract,
                     pending.videoMainContentResId);
             if ((pending.type == ASSISTANT_GAME || pending.type == ASSISTANT_VIDEO)
-                    && boxMaterial == null) {
+                    && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
             SecurityCenterGlassRuntimeState.bindAssistant(
                     turbo, dock, boxMaterial, pending.type);
-            log("deferred prepare bound type=" + pending.type, null);
+            log("deferred prepare bound type=" + pending.type
+                    + " turbo@" + identity(turbo)
+                    + " dock@" + identity(dock)
+                    + " box@" + identity(boxMaterial), null);
             return true;
         } catch (Throwable error) {
             log("deferred prepare not ready", error);
             return false;
         }
+    }
+
+    /**
+     * A vendor configure call can run before its replacement children are built. Getters may then
+     * temporarily expose objects from the detached previous subtree. Only attached descendants of
+     * the current TurboLayout are authoritative material carriers.
+     */
+    private static boolean isLiveCarrier(View turbo, View carrier) {
+        return turbo != null
+                && carrier != null
+                && turbo.isAttachedToWindow()
+                && carrier.isAttachedToWindow()
+                && carrier.getRootView() == turbo.getRootView()
+                && SecurityCenterCarrierLineage.belongsTo(
+                        turbo,
+                        carrier,
+                        node -> node instanceof View ? ((View) node).getParent() : null);
+    }
+
+    private static String identity(View view) {
+        return view == null ? "none" : Integer.toHexString(System.identityHashCode(view));
     }
 
     private static int assistantType(
