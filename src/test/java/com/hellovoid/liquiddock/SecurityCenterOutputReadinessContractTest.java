@@ -24,6 +24,12 @@ public class SecurityCenterOutputReadinessContractTest {
                         + "                notifyOutputReady(sink, next);"));
         assertTrue("the live session must notify its coordinator at physical output readiness",
                 session.contains("currentListener.onOutputReady(this, sink);"));
+        int readinessStart = session.indexOf("private void notifyOutputReady(");
+        int retry = session.indexOf("retryPendingSourceAfterOutputReady();", readinessStart);
+        int callback = session.indexOf("currentListener.onOutputReady(this, sink);", readinessStart);
+        assertTrue("an already-pending source must be retried before recapture creates a new logical "
+                        + "request for the same generation",
+                readinessStart >= 0 && retry > readinessStart && callback > retry);
         assertTrue("the coordinator must expose the output-readiness listener boundary",
                 coordinator.contains("public void onOutputReady("));
         assertTrue("a newly renderable output must force the current generation to be re-offered",
