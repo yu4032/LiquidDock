@@ -121,6 +121,8 @@ public final class ModuleMain extends XposedModule {
                     customGridEnabled, selectedProfile);
             StageWorkspaceRuntime.install(classLoader,
                     customGridEnabled, selectedProfile);
+            StageWorkspaceOverlayRuntime.install(classLoader,
+                    customGridEnabled, selectedProfile);
             HomeGridOrientationMemoryHook.install(classLoader,
                     customGridEnabled, selectedProfile);
             HomeGridMutationCaptureHook.install(classLoader,
