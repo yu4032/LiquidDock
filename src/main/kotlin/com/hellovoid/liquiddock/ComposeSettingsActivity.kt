@@ -234,6 +234,13 @@ private fun optionSummary(key: String): String = when (key) {
     else -> "调整此功能的数值"
 }
 
+private val launcher450IconSizeSpec = IntSpec(
+    ConfigSchema.Grid.ICON_SIZE_PERCENT,
+    "图标大小",
+    "%",
+    summary = "Launcher 4.50：工作区、Dock 与小文件夹共用；100% 为系统默认",
+)
+
 private val gridSpecs = listOf(
     IntSpec(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, "横屏水平距离偏移"),
     IntSpec(ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE, "横屏顶部距离偏移"),
@@ -513,6 +520,12 @@ private fun AnimationPage(
 @Composable
 private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
     var customGrid by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Grid.ENABLED.name(), ConfigSchema.Grid.ENABLED.uiDefault())) }
+    var launcher450IconSizeEnabled by remember {
+        mutableStateOf(prefs.getBoolean(
+            ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+            ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
+        ))
+    }
     val profileLabels = stringArrayResource(R.array.home_grid_profile_entries)
     val profileValues = stringArrayResource(R.array.home_grid_profile_values)
     val profileOptions = profileLabels.zip(profileValues)
@@ -530,6 +543,23 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     enabled = masterEnabled && customGrid,
                 )
                 BooleanSetting(prefs, ConfigSchema.Grid.WIDGET_ADAPTATION, stringResource(R.string.enable_widget_adaptation), stringResource(R.string.enable_widget_adaptation_summary), masterEnabled && customGrid)
+            }
+        }
+        item { SmallTitle("图标大小 · Launcher 4.50") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
+                    "自定义图标大小",
+                    "仅作用于工作区、Dock 与小文件夹；重启桌面后生效",
+                    masterEnabled,
+                ) { launcher450IconSizeEnabled = it }
+                IntSetting(
+                    prefs,
+                    launcher450IconSizeSpec,
+                    masterEnabled && launcher450IconSizeEnabled,
+                )
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }
