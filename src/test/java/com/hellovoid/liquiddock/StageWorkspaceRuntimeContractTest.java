@@ -142,6 +142,20 @@ public class StageWorkspaceRuntimeContractTest {
         assertFalse(source.contains("postDelayed("));
     }
 
+    @Test
+    public void thumbnailBridgeUsesRecentsAuthorityWithoutScreenshotFallback() throws Exception {
+        String source = read(
+                "src/main/java/com/hellovoid/liquiddock/StageWorkspaceThumbnailBridge.java");
+        assertTrue(source.contains("com.android.systemui.shared.recents.system.ActivityManagerWrapper"));
+        assertTrue(source.contains("getDeclaredMethod(\"getInstance\")"));
+        assertTrue(source.contains("getTaskThumbnail"));
+        assertTrue(source.contains("thumbnail"));
+        assertFalse(source.contains("ScreenCapture"));
+        assertFalse(source.contains("PixelCopy"));
+        assertFalse(source.contains("Bitmap.createBitmap"));
+        assertFalse(source.contains("takeTaskSnapshot"));
+    }
+
     private static String read(String path) throws Exception {
         return Files.readString(Paths.get(path), StandardCharsets.UTF_8);
     }
