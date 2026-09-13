@@ -99,6 +99,13 @@ final class Miuix307BackdropMapping {
             hostHeight *= override.scaleY;
         }
 
+        // Runtime producer cadence follows the canonical mapping geometry. The helper is a no-op
+        // unless the zero-copy Dock renderer is installed, so pure unit geometry semantics remain
+        // unchanged while device builds can keep SurfaceFlinger's PassBlur source current.
+        DockBackdropProducerMotionRuntime.observeMapping(
+                hostLeft, hostTop, hostWidth, hostHeight,
+                frameLeft, frameTop, frameWidth, frameHeight);
+
         if (hostWidth <= 0f || hostHeight <= 0f || frameWidth <= 0f || frameHeight <= 0f) {
             return outside();
         }
