@@ -18,9 +18,13 @@ final class StageWorkspaceOverlayRuntime {
     private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
     private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
 
+    private static final StageWorkspaceOverlayState overlayState =
+            new StageWorkspaceOverlayState();
+
     private static volatile boolean installed;
     private static volatile HomeGridProfile profile;
     private static volatile Class<?> cellLayoutClass;
+    private static volatile long boundGeneration;
     private static WeakReference<View> workspaceRef = new WeakReference<>(null);
     private static WeakReference<ViewGroup> contentRootRef = new WeakReference<>(null);
     private static WeakReference<StageWorkspaceOverlayHostView> hostRef =
@@ -106,16 +110,22 @@ final class StageWorkspaceOverlayRuntime {
             hideHost();
             return;
         }
+
+        long generation = overlayState.bind(contentRoot, workspace);
+        boundGeneration = generation;
         workspaceRef = new WeakReference<>(workspace);
         contentRootRef = new WeakReference<>(contentRoot);
 
         // Reconcile after all setupViews interceptors have returned. This avoids depending on hook
         // registration nesting while still using lifecycle state rather than a settle timer.
         workspace.post(() -> {
-            if (workspaceRef.get() != workspace) return;
+            if (workspaceRef.get() != workspace || contentRootRef.get() != contentRoot) return;
             View cellLayout = findCellLayout(workspace);
-            if (cellLayout != null) reconcileFromCellLayout(cellLayout);
-            else hideHost();
+            if (cellLayout != null) {
+                reconcileFromCellLayout(cellLayout, generation, contentRoot, workspace);
+            } else {
+                applyOverlayAction(StageWorkspaceOverlayState.Action.HIDE, host, 0, 0, 0, 0);
+            }
         });
     }
 
@@ -142,20 +152,35 @@ final class StageWorkspaceOverlayRuntime {
     private static void reconcileFromCellLayout(View cellLayout) {
         View workspace = workspaceRef.get();
         ViewGroup contentRoot = contentRootRef.get();
-        StageWorkspaceOverlayHostView host = hostRef.get();
-        if (workspace == null || contentRoot == null || host == null
-                || host.getParent() != contentRoot
-                || !isDescendantOf(cellLayout, workspace)
-                || !StageWorkspaceRuntime.isActiveForOrdinaryPlacement()) {
-            hideHost();
-            return;
-        }
+        if (workspace == null || contentRoot == null) return;
+        reconcileFromCellLayout(cellLayout, boundGeneration, contentRoot, workspace);
+    }
 
-        Configuration configuration = cellLayout.getResources().getConfiguration();
-        if (configuration == null
-                || configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
-                || MainHook.isWorkstationMode()) {
-            hideHost();
+    private static void reconcileFromCellLayout(View cellLayout,
+                                                long generation,
+                                                ViewGroup contentRoot,
+                                                View workspace) {
+        StageWorkspaceOverlayHostView host = hostRef.get();
+        if (host == null || host.getParent() != contentRoot) return;
+
+        boolean belongsToWorkspace = isDescendantOf(cellLayout, workspace);
+        boolean stageActive = StageWorkspaceRuntime.isActiveForOrdinaryPlacement();
+        Configuration configuration = cellLayout == null
+                ? null : cellLayout.getResources().getConfiguration();
+        boolean landscapeHome = configuration != null
+                && configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                && !MainHook.isWorkstationMode();
+
+        if (!belongsToWorkspace || !stageActive || !landscapeHome) {
+            StageWorkspaceOverlayState.Action action = overlayState.evaluate(
+                    generation,
+                    contentRoot,
+                    workspace,
+                    belongsToWorkspace,
+                    stageActive,
+                    landscapeHome,
+                    false);
+            applyOverlayAction(action, host, 0, 0, 0, 0);
             return;
         }
 
@@ -163,15 +188,16 @@ final class StageWorkspaceOverlayRuntime {
             int columns = HookUtil.getIntField(cellLayout, "mHCells");
             int rows = HookUtil.getIntField(cellLayout, "mVCells");
             Object xsValue = HookUtil.getField(cellLayout, "mXs");
-            if (!(xsValue instanceof int[])) {
-                hideHost();
+            if (!(xsValue instanceof int[])
+                    || cellLayout.getWidth() <= 0
+                    || cellLayout.getHeight() <= 0) {
+                StageWorkspaceOverlayState.Action action = overlayState.evaluate(
+                        generation, contentRoot, workspace,
+                        true, true, true, false);
+                applyOverlayAction(action, host, 0, 0, 0, 0);
                 return;
             }
             int[] physicalXs = ((int[]) xsValue).clone();
-            if (cellLayout.getWidth() <= 0 || cellLayout.getHeight() <= 0) {
-                hideHost();
-                return;
-            }
 
             int[] cellLocation = new int[2];
             int[] rootLocation = new int[2];
@@ -189,19 +215,59 @@ final class StageWorkspaceOverlayRuntime {
                             physicalXs,
                             top,
                             bottom);
+            StageWorkspaceOverlayState.Action action = overlayState.evaluate(
+                    generation,
+                    contentRoot,
+                    workspace,
+                    true,
+                    true,
+                    true,
+                    geometry != null);
             if (geometry == null) {
-                hideHost();
+                applyOverlayAction(action, host, 0, 0, 0, 0);
                 return;
             }
 
             int left = cellLocation[0] - rootLocation[0] + geometry.left();
-            applyGeometry(host, left, geometry.top(), geometry.width(), geometry.height());
-            host.setVisibility(View.VISIBLE);
-            host.bringToFront();
+            applyOverlayAction(
+                    action,
+                    host,
+                    left,
+                    geometry.top(),
+                    geometry.width(),
+                    geometry.height());
         } catch (Throwable error) {
-            hideHost();
+            StageWorkspaceOverlayState.Action action = overlayState.evaluate(
+                    generation,
+                    contentRoot,
+                    workspace,
+                    true,
+                    true,
+                    true,
+                    false);
+            applyOverlayAction(action, host, 0, 0, 0, 0);
             MainHook.log(TAG + " geometry reconcile failed: " + error);
         }
+    }
+
+    private static void applyOverlayAction(StageWorkspaceOverlayState.Action action,
+                                           StageWorkspaceOverlayHostView host,
+                                           int left,
+                                           int top,
+                                           int width,
+                                           int height) {
+        if (action == StageWorkspaceOverlayState.Action.IGNORE) return;
+        if (action == StageWorkspaceOverlayState.Action.HIDE) {
+            if (host != null) host.setVisibility(View.GONE);
+            return;
+        }
+        if (action != StageWorkspaceOverlayState.Action.SHOW
+                || host == null || width <= 0 || height <= 0) {
+            return;
+        }
+        applyGeometry(host, left, top, width, height);
+        host.setVisibility(View.VISIBLE);
+        host.bringToFront();
     }
 
     private static void applyGeometry(StageWorkspaceOverlayHostView host,
@@ -209,10 +275,6 @@ final class StageWorkspaceOverlayRuntime {
                                       int top,
                                       int width,
                                       int height) {
-        if (host == null || width <= 0 || height <= 0) {
-            hideHost();
-            return;
-        }
         ViewGroup.LayoutParams layoutParams = host.getLayoutParams();
         if (layoutParams == null) {
             layoutParams = new ViewGroup.LayoutParams(width, height);
