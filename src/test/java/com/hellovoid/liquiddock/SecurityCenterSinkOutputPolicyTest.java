@@ -4,6 +4,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import android.view.View;
+
 import java.lang.reflect.Method;
 
 import org.junit.Test;
@@ -36,5 +38,17 @@ public class SecurityCenterSinkOutputPolicyTest {
         assertFalse((Boolean) method.invoke(null, toolbox));
         assertTrue((Boolean) method.invoke(null, allApps));
         assertFalse((Boolean) method.invoke(null, new Object[]{null}));
+    }
+
+    @Test
+    public void sinkAcceptsSemanticRoleForOutputSpace() throws Exception {
+        Class<?> role = Class.forName(
+                "com.hellovoid.liquiddock.SecurityCenterSinkOutputPolicy$MaterialRole");
+        try {
+            SecurityCenterGlassSinkView.class.getDeclaredMethod(
+                    "attachBefore", View.class, SecurityCenterGlassSession.class, role);
+        } catch (NoSuchMethodException missing) {
+            fail("sink attachment must receive the semantic material role explicitly");
+        }
     }
 }
