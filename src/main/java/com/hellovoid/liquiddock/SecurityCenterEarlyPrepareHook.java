@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
@@ -63,11 +64,13 @@ final class SecurityCenterEarlyPrepareHook {
 
     private static boolean tryBindWhenReady(PendingPrepare pending) {
         View turbo = pending.turboRef.get();
-        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()) return false;
+        if (turbo == null || !SecurityCenterGlassRuntimeState.isEnabled()
+                || !turbo.isAttachedToWindow()) return false;
         try {
             Object dockObject = invoke(pending.contract.dockGetter(), turbo);
             if (!(dockObject instanceof View)) return false;
             View dock = (View) dockObject;
+            if (!isLiveCarrier(turbo, dock)) return false;
 
             View boxMaterial = resolveBoxMaterial(
                     turbo,
@@ -75,17 +78,40 @@ final class SecurityCenterEarlyPrepareHook {
                     pending.contract,
                     pending.videoMainContentResId);
             if ((pending.type == ASSISTANT_GAME || pending.type == ASSISTANT_VIDEO)
-                    && boxMaterial == null) {
+                    && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
             SecurityCenterGlassRuntimeState.bindAssistant(
                     turbo, dock, boxMaterial, pending.type);
-            log("deferred prepare bound type=" + pending.type, null);
+            log("deferred prepare bound type=" + pending.type
+                    + " turbo@" + identity(turbo)
+                    + " dock@" + identity(dock)
+                    + " box@" + identity(boxMaterial), null);
             return true;
         } catch (Throwable error) {
             log("deferred prepare not ready", error);
             return false;
         }
+    }
+
+    /**
+     * TurboLayout.V(...) runs before the vendor rebuilds its children. After removeAllViews(),
+     * public getters can still temporarily expose the detached previous subtree. A material is
+     * authoritative only after it is attached beneath the current TurboLayout and shares its root.
+     */
+    private static boolean isLiveCarrier(View turbo, View carrier) {
+        if (turbo == null || carrier == null || !carrier.isAttachedToWindow()
+                || carrier.getRootView() != turbo.getRootView()) return false;
+        ViewParent parent = carrier.getParent();
+        while (parent instanceof View) {
+            if (parent == turbo) return true;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
+    private static String identity(View view) {
+        return view == null ? "none" : Integer.toHexString(System.identityHashCode(view));
     }
 
     private static int assistantType(
