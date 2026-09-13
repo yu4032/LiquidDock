@@ -24,6 +24,8 @@ import java.util.WeakHashMap;
 final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onFrameRendered(SecurityCenterGlassSession session, long generation);
+        void onOutputReady(
+                SecurityCenterGlassSession session, SecurityCenterGlassSinkView sink);
         void onWindowVisibilityRestored(
                 SecurityCenterGlassSession session, SecurityCenterGlassSinkView sink);
         void onTerminalFailure(
@@ -220,7 +222,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 outputs.put(sink, next);
-                requestLatestFrameAfterOutputMutation();
+                notifyOutputReady(sink, next);
             } catch (Throwable error) {
                 surface.release();
                 throw error;
@@ -259,7 +261,28 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     /**
-     * Output creation/resize is exceptional. Re-offer the latest logical frame through the same
+     * A TextureView only becomes a valid presentation target after its EGL window surface exists.
+     * Notify the coordinator on the main thread at that physical readiness edge so it can recapture
+     * the current material scene even when no logical frame request existed while the sink was
+     * still being created. A late callback is ignored if the output was replaced before delivery.
+     */
+    private void notifyOutputReady(SecurityCenterGlassSinkView sink, OutputState expected) {
+        mainHandler.post(() -> {
+            if (shuttingDown || sink == null || sink.isDisposed() || outputs.get(sink) != expected) {
+                return;
+            }
+            Listener currentListener = listener;
+            if (currentListener != null) {
+                currentListener.onOutputReady(this, sink);
+            } else {
+                requestLatestFrameAfterOutputMutation();
+            }
+            retryPendingSourceAfterOutputReady();
+        });
+    }
+
+    /**
+     * Output resize is exceptional. Re-offer the latest logical frame through the same
      * back-pressure state instead of bypassing it with a raw RootPassBlurBackend request.
      */
     private void requestLatestFrameAfterOutputMutation() {
