@@ -11,6 +11,6 @@ final class SecurityCenterSinkOutputPolicy {
     private SecurityCenterSinkOutputPolicy() {}
 
     static boolean usesRootSpaceOutput(MaterialRole role) {
-        return role == MaterialRole.ALL_APPS;
+        return role == MaterialRole.TOOLBOX || role == MaterialRole.ALL_APPS;
     }
 }
