@@ -22,6 +22,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final Handler mainHandler;
     private Surface outputSurface;
     private boolean disposed;
+    private long unfocusedPresentationCount;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -119,6 +120,16 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 .start();
     }
 
+    @Override public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (hasWindowFocus) unfocusedPresentationCount = 0L;
+        View root = rootRef.get();
+        MainHook.log("[DC][LauncherGlassProbe] window focus=" + hasWindowFocus
+                + " root=" + (root != null ? root.getClass().getSimpleName() : "released")
+                + " attached=" + (root != null && root.isAttachedToWindow())
+                + " alpha=" + getAlpha());
+    }
+
     void dispose() {
         if (disposed) return;
         session.resetWorkspaceScrollProjection();
@@ -158,5 +169,16 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {
         // The presented root-wide surface is intentionally never transformed after swap. The
         // backdrop stays root-anchored while the renderer late-projects glass geometry itself.
+        View root = rootRef.get();
+        if (root != null && !root.hasWindowFocus()) {
+            long count = ++unfocusedPresentationCount;
+            if (count == 1L || count % 10L == 0L) {
+                MainHook.log("[DC][LauncherGlassProbe] unfocused static presentations=" + count
+                        + " attached=" + root.isAttachedToWindow()
+                        + " alpha=" + getAlpha());
+            }
+        } else {
+            unfocusedPresentationCount = 0L;
+        }
     }
 }
