@@ -1,10 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,17 +15,8 @@ public class LauncherIconSizeHookContractTest {
 
     @Test
     public void hookUsesItemIconBindBoundaryForWorkspaceDockAndSmallFolder() throws Exception {
-        Class<?> type;
-        try {
-            type = Class.forName("com.hellovoid.liquiddock.LauncherIconSizeHook");
-        } catch (ClassNotFoundException missing) {
-            assertTrue("LauncherIconSizeHook must exist", false);
-            return;
-        }
-        Method install = type.getDeclaredMethod("install", ClassLoader.class, boolean.class, int.class);
-        assertNotNull(install);
-
         String source = Files.readString(MAIN.resolve("LauncherIconSizeHook.java"));
+        assertTrue(source.contains("static boolean install(ClassLoader classLoader, boolean iconSizeEnabled, int iconSizePercent)"));
         assertTrue(source.contains("com.miui.home.launcher.ItemIcon"));
         assertTrue(source.contains("setIconImageView"));
         assertTrue(source.contains("ShortcutIcon"));
