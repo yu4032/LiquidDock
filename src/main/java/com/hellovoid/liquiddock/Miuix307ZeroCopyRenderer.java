@@ -12,6 +12,8 @@ import java.lang.reflect.Method;
 /** Builds the feedback-safe HyperOS 307 PassBlur -> OES -> TextureView material composition. */
 final class Miuix307ZeroCopyRenderer {
     private static final String TAG = "[DC][ZC]";
+    private static final String LATENCY_TAG = "[DC][BackdropLatency]";
+    private static final long LATENCY_TRACE_RESET_NS = 2_000_000_000L;
 
     private static WeakReference<Miuix307PassBlurTextureView> gpuBackdropRef =
             new WeakReference<>(null);
@@ -26,6 +28,8 @@ final class Miuix307ZeroCopyRenderer {
     private static boolean producerUpdatesPolicyEnabled = true;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
+    private static long latencyTraceEpochNs;
+    private static long latencyTraceFrame;
 
     private Miuix307ZeroCopyRenderer() {}
 
@@ -64,6 +68,8 @@ final class Miuix307ZeroCopyRenderer {
         producerUpdatesPolicyEnabled = true;
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
+        latencyTraceEpochNs = 0L;
+        latencyTraceFrame = 0L;
         HOME_FRESHNESS.reset();
         Miuix307BackdropMapping.clearTransformOverride();
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
@@ -180,6 +186,69 @@ final class Miuix307ZeroCopyRenderer {
         }
     }
 
+    private static long readOutputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {
+        try {
+            SurfaceTexture output = gpuBackdrop.getSurfaceTexture();
+            return output != null ? output.getTimestamp() : 0L;
+        } catch (Throwable ignored) {
+            return 0L;
+        }
+    }
+
+    private static long readLongField(Miuix307PassBlurTextureView gpuBackdrop, String fieldName) {
+        try {
+            Object value = HookUtil.getField(gpuBackdrop, fieldName);
+            return value instanceof Number ? ((Number) value).longValue() : -1L;
+        } catch (Throwable ignored) {
+            return -1L;
+        }
+    }
+
+    private static double ageMs(long nowNs, long timestampNs) {
+        if (timestampNs <= 0L) return Double.NaN;
+        return (nowNs - timestampNs) / 1_000_000.0;
+    }
+
+    private static void traceBackdropLatency(
+            Miuix307PassBlurTextureView gpuBackdrop, String phase) {
+        if (gpuBackdrop == null || !gpuBackdrop.isAttachedToWindow()) return;
+        long nowNs = System.nanoTime();
+        if (latencyTraceEpochNs <= 0L || nowNs - latencyTraceEpochNs > LATENCY_TRACE_RESET_NS) {
+            latencyTraceEpochNs = nowNs;
+            latencyTraceFrame = 0L;
+        }
+        long frame = ++latencyTraceFrame;
+        long inputTimestamp = readInputTimestamp(gpuBackdrop);
+        long outputTimestamp = readOutputTimestamp(gpuBackdrop);
+        long producerFrames = readLongField(gpuBackdrop, "producerFrameCount");
+        long renderedFrames = readLongField(gpuBackdrop, "renderedFrameCount");
+        int[] backdropScreen = new int[2];
+        gpuBackdrop.getLocationOnScreen(backdropScreen);
+        View materialHost = materialHostRef.get();
+        int[] hostScreen = new int[]{Integer.MIN_VALUE, Integer.MIN_VALUE};
+        if (materialHost != null && materialHost.isAttachedToWindow()) {
+            materialHost.getLocationOnScreen(hostScreen);
+        }
+        float refreshRate = gpuBackdrop.getDisplay() != null
+                ? gpuBackdrop.getDisplay().getRefreshRate() : 0f;
+        MainHook.log(LATENCY_TAG
+                + " f=" + frame
+                + " phase=" + phase
+                + " nowNs=" + nowNs
+                + " inputTs=" + inputTimestamp
+                + " inputAgeMs=" + ageMs(nowNs, inputTimestamp)
+                + " outputTs=" + outputTimestamp
+                + " outputAgeMs=" + ageMs(nowNs, outputTimestamp)
+                + " producerFrames=" + producerFrames
+                + " renderedFrames=" + renderedFrames
+                + " refreshHz=" + refreshRate
+                + " backdropXY=[" + backdropScreen[0] + "," + backdropScreen[1] + "]"
+                + " hostXY=[" + hostScreen[0] + "," + hostScreen[1] + "]"
+                + " viewScale=[" + gpuBackdrop.getScaleX() + "," + gpuBackdrop.getScaleY() + "]"
+                + " viewTranslation=[" + gpuBackdrop.getTranslationX() + ","
+                + gpuBackdrop.getTranslationY() + "]");
+    }
+
     static void requestDockSceneRefresh() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null) {
@@ -203,6 +272,7 @@ final class Miuix307ZeroCopyRenderer {
         if (decision.refreshMappingNow) {
             syncBackdropMappingForMotion(gpuBackdrop);
         }
+        traceBackdropLatency(gpuBackdrop, "vendor-motion");
         if (!decision.scheduleContinuation) return;
 
         DockAnimationTrace.rendererEvent("anim-frame-request");
@@ -210,12 +280,14 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdrop.postOnAnimation(() -> {
             if (gpuBackdropRef.get() != gpuBackdrop) return;
             DockAnimationTrace.rendererEvent("anim-frame-vsync");
+            traceBackdropLatency(gpuBackdrop, "continuation-vsync");
             MOTION_SYNC.onContinuationVsync();
             if (DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
             } else {
                 Miuix307BackdropMapping.clearTransformOverride();
                 syncBackdropMappingForMotion(gpuBackdrop);
+                traceBackdropLatency(gpuBackdrop, "animation-end");
             }
         });
     }
@@ -303,6 +375,8 @@ final class Miuix307ZeroCopyRenderer {
         producerUpdatesPolicyEnabled = true;
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
+        latencyTraceEpochNs = 0L;
+        latencyTraceFrame = 0L;
         HOME_FRESHNESS.reset();
         Miuix307BackdropMapping.clearTransformOverride();
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
