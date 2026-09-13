@@ -1,17 +1,12 @@
-name: API101 migration build
+name: Dock PassBlur force-refresh probe
 
 on:
-  push:
-    branches:
-      - main
-      - api101-migration
-      - refactor/modular-architecture
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 concurrency:
-  group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: dock-force-refresh-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,14 +20,35 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
-          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
+          cache-read-only: false
           cache-cleanup: never
       - run: chmod +x ./gradlew
+      - name: Apply E1 native force-refresh probe
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java')
+          s = p.read_text()
+          old = '''            Method setMiBlurWinExc = transactionClass.getMethod(\n                    "setMiBlurWinExc", SurfaceControl.class, String[].class);\n'''
+          new = '''            Method setMiBlurWinExc = transactionClass.getMethod(\n                    "setMiBlurWinExc", SurfaceControl.class, String[].class);\n            Method setForceRefresh = null;\n            try {\n                setForceRefresh = transactionClass.getMethod(\n                        "setForceRefresh", SurfaceControl.class, Integer.TYPE);\n            } catch (NoSuchMethodException unavailable) {\n                MainHook.log(TAG + " vendor setForceRefresh unavailable");\n            }\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'force-refresh method insertion match count={s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          old2 = '''                setUpdateTextureFlag.invoke(\n                        transaction, rootSurface, Boolean.TRUE, Float.valueOf(scale));\n                transaction.apply();\n'''
+          new2 = '''                setUpdateTextureFlag.invoke(\n                        transaction, rootSurface, Boolean.TRUE, Float.valueOf(scale));\n                int forceRefreshMs = PassBlurForceRefreshPolicy.timeoutMs(domain);\n                if (forceRefreshMs >= 0 && setForceRefresh != null) {\n                    try {\n                        setForceRefresh.invoke(\n                                transaction, rootSurface, Integer.valueOf(forceRefreshMs));\n                        MainHook.log(TAG + " PassBlur force-refresh armed ms=" + forceRefreshMs\n                                + " domain=" + domain);\n                    } catch (Throwable forceError) {\n                        MainHook.log(TAG + " PassBlur force-refresh unavailable: " + forceError);\n                    }\n                }\n                transaction.apply();\n'''
+          if s.count(old2) != 1:
+              raise SystemExit(f'force-refresh transaction insertion match count={s.count(old2)}')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+          PY
+      - name: Audit force-refresh probe shape
+        shell: bash
+        run: |
+          grep -n 'setForceRefresh' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java
+          grep -n 'PassBlurForceRefreshPolicy.timeoutMs(domain)' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java
+          grep -n 'Integer.valueOf(forceRefreshMs)' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
@@ -49,13 +65,13 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-expE1-force-refresh-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-build-source
+          name: LiquidDock-expE1-source
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
