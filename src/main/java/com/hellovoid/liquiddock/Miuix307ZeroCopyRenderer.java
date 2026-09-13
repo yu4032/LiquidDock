@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,9 +36,6 @@ final class Miuix307ZeroCopyRenderer {
         if (materialHost == null || host == null || glassConfig == null
                 || workstationConfig == null) return false;
 
-        // This is the first zero-copy boundary that owns a real Launcher View. Install the
-        // app-to-home icon handoff hooks here so they use the target Launcher ClassLoader rather
-        // than being skipped by MainHook's successful 307 early return.
         LiquidDockConfig runtimeConfig = LiquidDockConfig.load();
         boolean animationHookInstalled = DockIconAnimationGlassHook.install(
                 materialHost.getClass().getClassLoader(), runtimeConfig);
@@ -45,10 +43,6 @@ final class Miuix307ZeroCopyRenderer {
                 + " iconEnabled=" + GlassRuntimeState.isIconEnabled()
                 + " host=" + materialHost.getClass().getSimpleName());
 
-        // The current zero-copy backend binds SurfaceFlinger's PassBlur producer directly to the
-        // Floating Dock root through SetPassBlurSurface. It does not depend on the themed
-        // BlurBackground2#setBackgroundBlur path, so both supported HotSeats material owners must
-        // reach the same TextureView renderer.
         Miuix307PassBlurTextureView gpuBackdrop = new Miuix307PassBlurTextureView(
                 materialHost.getContext(), materialHost);
         gpuBackdrop.setGlassConfig(glassConfig);
@@ -56,9 +50,9 @@ final class Miuix307ZeroCopyRenderer {
                 workstationConfig.dockIconGlassCornerRadius);
         gpuBackdrop.setId(View.generateViewId());
 
-        // Prismal optics are evaluated in Dock-local UV space over the zero-copy OES backdrop.
-        // The shell's safe foreground stroke may remain above the TextureView because it does not
-        // alter producer geometry or backdrop sampling.
+        // Keep the output View exactly Dock-sized. Motion corrections belong in mapping space;
+        // resizing/moving this TextureView changes the EGL output geometry and Prismal coordinate
+        // domain, which was the cause of the failed oversized world-lock experiment.
         host.removeAllViews();
         host.addView(gpuBackdrop, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -71,6 +65,7 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
+        Miuix307BackdropMapping.clearTransformOverride();
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -126,11 +121,6 @@ final class Miuix307ZeroCopyRenderer {
                 + (homeProducerOverride ? "/home-refresh-override" : ""));
     }
 
-    /**
-     * HOME authority starts the refresh immediately. Keep the already-presented Dock visible, but
-     * temporarily force the PassBlur producer live so the first desktop/wallpaper buffer replaces
-     * the App buffer as soon as SurfaceFlinger produces it. No alpha/visibility barrier is used.
-     */
     static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
@@ -147,7 +137,6 @@ final class Miuix307ZeroCopyRenderer {
                 + " inputTimestampBaseline=" + inputTimestampBaseline);
     }
 
-    /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
     static void onHomeOpeningFinished() {
         if (homeFreshnessSerial <= 0L) return;
         HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
@@ -200,15 +189,16 @@ final class Miuix307ZeroCopyRenderer {
     }
 
     /**
-     * FloatingIcon update arrives after the vendor has applied this frame's animation state. Read
-     * the Dock's final screen position immediately and publish a matching mapping generation before
-     * coalescing the continuation VSYNC. Otherwise a pending continuation suppresses this vendor
-     * frame and the independent EGL surface visibly trails the Dock by one or more frames.
+     * FloatingIcon update arrives after Launcher has applied the current transform. Capture the
+     * complete View/ancestor matrix before publishing this mapping generation. getLocationOnScreen
+     * alone is insufficient because the old path paired the transformed origin with untransformed
+     * layout width/height, so scaled Dock frames sampled the wrong screen rectangle.
      */
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
 
+        updateBackdropTransformOverride(gpuBackdrop);
         DockBackdropMotionSyncState.Decision decision = MOTION_SYNC.onVendorMotionFrame();
         if (decision.refreshMappingNow) {
             syncBackdropMappingForMotion(gpuBackdrop);
@@ -223,8 +213,69 @@ final class Miuix307ZeroCopyRenderer {
             MOTION_SYNC.onContinuationVsync();
             if (DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
+            } else {
+                Miuix307BackdropMapping.clearTransformOverride();
+                syncBackdropMappingForMotion(gpuBackdrop);
             }
         });
+    }
+
+    private static void updateBackdropTransformOverride(Miuix307PassBlurTextureView gpuBackdrop) {
+        int width = gpuBackdrop.getWidth();
+        int height = gpuBackdrop.getHeight();
+        if (width <= 0 || height <= 0 || !gpuBackdrop.isAttachedToWindow()) {
+            Miuix307BackdropMapping.clearTransformOverride();
+            return;
+        }
+        try {
+            int[] baseScreen = new int[2];
+            gpuBackdrop.getLocationOnScreen(baseScreen);
+
+            Matrix global = new Matrix();
+            gpuBackdrop.transformMatrixToGlobal(global);
+            float[] points = new float[]{
+                    0f, 0f,
+                    width, 0f,
+                    0f, height,
+                    width, height
+            };
+            global.mapPoints(points);
+
+            // transformMatrixToGlobal() and mWinFrameInScreen can differ by the root/window origin
+            // on vendor builds. Reconcile through the root rather than through the animated Dock,
+            // preserving the Dock's actual transform while moving the coordinate system to screen.
+            View root = gpuBackdrop.getRootView();
+            float offsetX = 0f;
+            float offsetY = 0f;
+            if (root != null) {
+                Matrix rootGlobal = new Matrix();
+                root.transformMatrixToGlobal(rootGlobal);
+                float[] rootOrigin = new float[]{0f, 0f};
+                rootGlobal.mapPoints(rootOrigin);
+                int[] rootScreen = new int[2];
+                root.getLocationOnScreen(rootScreen);
+                offsetX = rootScreen[0] - rootOrigin[0];
+                offsetY = rootScreen[1] - rootOrigin[1];
+            }
+            for (int i = 0; i < points.length; i += 2) {
+                points[i] += offsetX;
+                points[i + 1] += offsetY;
+            }
+
+            DockBackdropTransformedGeometry.Bounds bounds =
+                    DockBackdropTransformedGeometry.fromQuad(
+                            points[0], points[1],
+                            points[2], points[3],
+                            points[4], points[5],
+                            points[6], points[7],
+                            width, height);
+            Miuix307BackdropMapping.setTransformOverride(
+                    baseScreen[0], baseScreen[1], width, height,
+                    bounds.left, bounds.top, bounds.width, bounds.height);
+        } catch (Throwable error) {
+            Miuix307BackdropMapping.clearTransformOverride();
+            MainHook.log(TAG + " transformed Dock geometry unavailable: " + error);
+        }
     }
 
     private static void syncBackdropMappingForMotion(Miuix307PassBlurTextureView gpuBackdrop) {
@@ -253,6 +304,7 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
+        Miuix307BackdropMapping.clearTransformOverride();
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }
