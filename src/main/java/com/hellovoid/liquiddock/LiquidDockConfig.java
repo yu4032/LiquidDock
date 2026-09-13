@@ -235,7 +235,7 @@ final class LiquidDockConfig {
 
     static final class Glass {
         final boolean enabled, securityCenterEnabled, folderEnabled, widgetEnabled,
-                widgetDarkContent, iconEnabled;
+                widgetDarkContent, iconEnabled, functionalDockIconEnabled;
         final float folderCornerRadiusDp;
         final GlassComponentStyle iconStyle;
         final GlassComponentStyle widgetStyle;
@@ -271,6 +271,9 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.FOLDER_CORNER_RADIUS.runtimeFallback());
             boolean resolvedIconEnabled = c.b(ConfigSchema.Glass.ICON_GLASS.name(),
                     ConfigSchema.Glass.ICON_GLASS.runtimeFallback());
+            functionalDockIconEnabled = c.b(
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.runtimeFallback());
             boolean resolvedWidgetEnabled = c.b(ConfigSchema.Glass.WIDGET_GLASS.name(),
                     ConfigSchema.Glass.WIDGET_GLASS.runtimeFallback());
             widgetDarkContent = c.b(ConfigSchema.Glass.WIDGET_DARK_CONTENT.name(),
