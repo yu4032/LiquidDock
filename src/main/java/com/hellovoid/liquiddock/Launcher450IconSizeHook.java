@@ -51,14 +51,29 @@ final class Launcher450IconSizeHook {
             HookUtil.hook(shortcutMeasure, chain -> {
                 Object owner = chain.getThisObject();
                 MeasureDomain domain = owner instanceof View ? shortcutDomain((View) owner) : null;
-                return proceedInDomain(chain, domain);
+                MeasureDomain previous = ACTIVE_DOMAIN.get();
+                if (domain != null) ACTIVE_DOMAIN.set(domain);
+                try {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                } finally {
+                    if (previous == null) ACTIVE_DOMAIN.remove();
+                    else ACTIVE_DOMAIN.set(previous);
+                }
             });
             HookUtil.hook(folderMeasure, chain -> {
                 Object owner = chain.getThisObject();
                 MeasureDomain domain = owner instanceof View
+                        && enabled
                         && LauncherGlassHierarchy.isWorkspace((View) owner)
                         ? MeasureDomain.FOLDER : null;
-                return proceedInDomain(chain, domain);
+                MeasureDomain previous = ACTIVE_DOMAIN.get();
+                if (domain != null) ACTIVE_DOMAIN.set(domain);
+                try {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                } finally {
+                    if (previous == null) ACTIVE_DOMAIN.remove();
+                    else ACTIVE_DOMAIN.set(previous);
+                }
             });
             HookUtil.hook(getIconSize, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -97,25 +112,5 @@ final class Launcher450IconSizeHook {
         if (domain == LauncherGlassHierarchy.Domain.WORKSPACE) return MeasureDomain.WORKSPACE;
         if (domain == LauncherGlassHierarchy.Domain.DOCK) return MeasureDomain.DOCK;
         return null;
-    }
-
-    private static Object proceedInDomain(
-            io.github.libxposed.api.XposedInterface.BeforeHookCallback chain,
-            MeasureDomain domain) throws Throwable {
-        // This overload is intentionally unused; libxposed intercept callbacks are not BeforeHookCallback.
-        return null;
-    }
-
-    private static Object proceedInDomain(
-            io.github.libxposed.api.XposedInterface.Hooker.Chain chain,
-            MeasureDomain domain) throws Throwable {
-        MeasureDomain previous = ACTIVE_DOMAIN.get();
-        if (domain != null) ACTIVE_DOMAIN.set(domain);
-        try {
-            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-        } finally {
-            if (previous == null) ACTIVE_DOMAIN.remove();
-            else ACTIVE_DOMAIN.set(previous);
-        }
     }
 }
