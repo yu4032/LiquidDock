@@ -78,18 +78,23 @@ public class SecurityCenterFramePipelineStateTest {
     }
 
     @Test
-    public void newerGenerationSupersedesOldPresentationButOldGenerationCannotReveal() {
+    public void newerGenerationWaitsForSubmittedPresentationAckBeforeArmingReplacement() {
         SecurityCenterFramePipelineState state = new SecurityCenterFramePipelineState();
         assertTrue(state.offer(1L, 5L).requestSource);
         assertEquals(1L, state.onFreshSource(5L).serial);
 
         SecurityCenterFramePipelineState.Offer newer = state.offer(2L, 6L);
-        assertTrue(newer.cancelPresentation);
-        assertEquals(1L, newer.cancelledSerial);
-        assertTrue(newer.requestSource);
+        assertFalse("a frame already submitted to TextureView cannot be logically cancelled; "
+                        + "its Surface update could otherwise acknowledge the replacement serial",
+                newer.cancelPresentation);
+        assertFalse("the replacement source must wait until the submitted Surface update is consumed",
+                newer.requestSource);
 
         SecurityCenterFramePipelineState.Presentation stale = state.onPresented(1L, 5L);
         assertFalse(stale.acceptedCurrentGeneration);
+        assertTrue("after consuming the stale physical presentation, request the latest generation",
+                stale.requestSource);
+        assertEquals(6L, stale.nextGeneration);
 
         SecurityCenterFramePipelineState.Submission current = state.onFreshSource(6L);
         assertTrue(current.accepted);
