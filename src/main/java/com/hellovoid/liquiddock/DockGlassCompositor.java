@@ -55,7 +55,7 @@ final class DockGlassCompositor {
         if (!iconStyle.enabled) latestScene = DockGlassSceneSnapshot.EMPTY;
     }
 
-    void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
+    void setWorkstationIconCornerRadiusDp(float radiusDp) {
         workstationIconCornerRadiusDp = Math.max(0f, radiusDp);
         seenRevision = -1L;
         lastFingerprint = Long.MIN_VALUE;
@@ -84,7 +84,7 @@ final class DockGlassCompositor {
             seenRevision = -1L;
         }
         float resolvedRadiusDp = WorkstationDockIconRadiusPolicy.resolve(
-                iconStyle.cornerRadiusDp, workstationDockIconCornerRadiusDp, 1f,
+                iconStyle.cornerRadiusDp, workstationIconCornerRadiusDp, 1f,
                 workstationMode);
         GlassComponentStyle resolvedStyle = new GlassComponentStyle(
                 iconStyle.enabled, iconStyle.sizeOffsetDp, resolvedRadiusDp);
