@@ -150,6 +150,11 @@ final class HomeGridOrientationMemoryHook {
                                       HomeGridOrientation targetOrientation,
                                       HomeGridOrientationRuntime active,
                                       boolean finalAttempt) {
+        boolean stageActive = StageWorkspaceRuntime.isActiveForOrdinaryPlacement();
+        if (!StageWorkspacePolicy.orientationMemoryOwnsTarget(targetOrientation, stageActive)) {
+            return;
+        }
+
         List<HomeGridItemPosition> current = collectPositions(workspace);
         if (current == null) return;
         HomeGridLayoutSnapshot remembered = active.rememberedTarget(targetOrientation, current);
