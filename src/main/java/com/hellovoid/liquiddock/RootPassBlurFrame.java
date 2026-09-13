@@ -1,6 +1,10 @@
 package com.hellovoid.liquiddock;
 
-/** One normalized root PassBlur frame. Texture ownership never leaves the backend render callback. */
+/**
+ * One normalized root PassBlur frame. The texture remains backend-owned; consumers may retain this
+ * metadata only while rendering through the same backend GL context and must reject it after source
+ * rebind/geometry invalidation or texture destruction.
+ */
 final class RootPassBlurFrame {
     final long generation;
     final int normalizedTextureId;
