@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** One Security Center frame: one root backdrop, Dock + optional Toolbox + optional All Apps. */
+/** One Security Center frame: one root backdrop, Dock + optional Toolbox or All Apps. */
 final class SecurityCenterGlassFrameGeometry {
     private final SecurityCenterGlassGeometry dock;
     private final SecurityCenterGlassGeometry box;
@@ -33,9 +33,15 @@ final class SecurityCenterGlassFrameGeometry {
             SecurityCenterGlassGeometry box,
             SecurityCenterGlassGeometry apps) {
         if (dock == null) throw new IllegalArgumentException("dock == null");
+
+        // All Apps is a sibling material carrier in the same TurboLayout. While it is present it
+        // owns the toolbox material slot: the vendor moves the normal toolbox away instead of
+        // presenting three simultaneous material panes. Keep the shared root backdrop, but never
+        // ask Prismal to render Toolbox and All Apps in one frame.
+        SecurityCenterGlassGeometry effectiveBox = apps != null ? null : box;
         SecurityCenterGlassGeometry presentation = dock;
-        if (box != null) {
-            presentation = SecurityCenterGlassGeometry.covering(presentation, box);
+        if (effectiveBox != null) {
+            presentation = SecurityCenterGlassGeometry.covering(presentation, effectiveBox);
             if (presentation == null) {
                 throw new IllegalArgumentException("Security Center frame nodes use different roots");
             }
@@ -46,7 +52,7 @@ final class SecurityCenterGlassFrameGeometry {
                 throw new IllegalArgumentException("Security Center frame nodes use different roots");
             }
         }
-        return new SecurityCenterGlassFrameGeometry(dock, box, apps, presentation);
+        return new SecurityCenterGlassFrameGeometry(dock, effectiveBox, apps, presentation);
     }
 
     int nodeCount() {
