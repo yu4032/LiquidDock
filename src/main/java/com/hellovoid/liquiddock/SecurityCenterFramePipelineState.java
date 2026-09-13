@@ -107,10 +107,12 @@ final class SecurityCenterFramePipelineState {
     }
 
     /**
-     * Consume exactly the serial that was submitted to TextureView. If newer geometry arrived while
-     * it was awaiting the Surface update, the old pixels are acknowledged only as a completed
-     * physical submission; they are not current enough to reveal/authorize custom material. The
-     * latest logical geometry then receives exactly one new source request.
+     * Consume exactly the serial that was submitted to TextureView. A physically presented frame
+     * from the still-current generation is immediately eligible to reveal custom glass, even when
+     * a newer geometry serial arrived while it was awaiting the Surface update. Serial freshness
+     * only controls whether another source frame is needed; it must not keep vendor material visible
+     * throughout a continuously changing animation. A frame from an obsolete generation is consumed
+     * but never allowed to reveal.
      */
     synchronized Presentation onPresented(long serial, long generation) {
         if (serial < 0L || generation < 0L
@@ -119,7 +121,7 @@ final class SecurityCenterFramePipelineState {
         }
         inFlightSerial = -1L;
         inFlightGeneration = -1L;
-        boolean current = generation == latestGeneration && serial == latestSerial;
+        boolean current = generation == latestGeneration;
 
         boolean request = false;
         long nextGeneration = -1L;
