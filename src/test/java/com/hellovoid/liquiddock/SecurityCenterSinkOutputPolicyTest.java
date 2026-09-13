@@ -8,26 +8,33 @@ import java.lang.reflect.Method;
 
 import org.junit.Test;
 
-/** Root-space output is reserved for the animated All Apps material carrier. */
+/** Root-space output is reserved for the semantic All Apps material role. */
 public class SecurityCenterSinkOutputPolicyTest {
     @Test
-    public void onlyAllAppsUsesRootSpaceOutput() throws Exception {
+    public void onlyAllAppsRoleUsesRootSpaceOutput() throws Exception {
         Class<?> policy;
+        Class<?> role;
         try {
             policy = Class.forName("com.hellovoid.liquiddock.SecurityCenterSinkOutputPolicy");
+            role = Class.forName(
+                    "com.hellovoid.liquiddock.SecurityCenterSinkOutputPolicy$MaterialRole");
         } catch (ClassNotFoundException missing) {
-            fail("SecurityCenterSinkOutputPolicy is required to make output-space selection typed");
+            fail("typed sink output policy and semantic material roles are required");
             return;
         }
-        Method method = policy.getDeclaredMethod("usesRootSpaceOutput", String.class);
+        Method method = policy.getDeclaredMethod("usesRootSpaceOutput", role);
         method.setAccessible(true);
 
-        assertTrue((Boolean) method.invoke(null, "com.miui.dock.allapps.w"));
-        assertTrue((Boolean) method.invoke(null, "com.miui.dock.allapps.SomeFutureCarrier"));
-        assertFalse((Boolean) method.invoke(null,
-                "com.miui.gamebooster.windowmanager.newbox.y1"));
-        assertFalse((Boolean) method.invoke(null,
-                "com.miui.gamebooster.windowmanager.newbox.o0"));
-        assertFalse((Boolean) method.invoke(null, (Object) null));
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Object dock = Enum.valueOf((Class<? extends Enum>) role, "DOCK");
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Object toolbox = Enum.valueOf((Class<? extends Enum>) role, "TOOLBOX");
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Object allApps = Enum.valueOf((Class<? extends Enum>) role, "ALL_APPS");
+
+        assertFalse((Boolean) method.invoke(null, dock));
+        assertFalse((Boolean) method.invoke(null, toolbox));
+        assertTrue((Boolean) method.invoke(null, allApps));
+        assertFalse((Boolean) method.invoke(null, new Object[]{null}));
     }
 }
