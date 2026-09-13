@@ -50,6 +50,21 @@ public class StageWorkspaceRuntimeContractTest {
         assertTrue(source.contains("stageEnabled"));
     }
 
+    @Test
+    public void orientationMemoryDefersLandscapeTargetToActiveStage() throws Exception {
+        String source = read(
+                "src/main/java/com/hellovoid/liquiddock/HomeGridOrientationMemoryHook.java");
+        assertTrue(source.contains("StageWorkspacePolicy.orientationMemoryOwnsTarget"));
+        assertTrue(source.contains("StageWorkspaceRuntime.isActiveForOrdinaryPlacement()"));
+    }
+
+    @Test
+    public void settledMutationRefreshesStageMappedTarget() throws Exception {
+        String source = read(
+                "src/main/java/com/hellovoid/liquiddock/HomeGridMutationCaptureHook.java");
+        assertTrue(source.contains("StageWorkspaceRuntime.recordSettledOrdinaryLayout"));
+    }
+
     private static String read(String path) throws Exception {
         return Files.readString(Paths.get(path), StandardCharsets.UTF_8);
     }
