@@ -30,6 +30,12 @@ final class StageWorkspacePolicy {
         return (long) physicalX + spanX <= PHYSICAL_COLUMNS;
     }
 
+    static boolean orientationMemoryOwnsTarget(HomeGridOrientation target,
+                                               boolean stageActive) {
+        if (target == null) return false;
+        return !stageActive || target != HomeGridOrientation.LANDSCAPE;
+    }
+
     static int[] stageBounds(int[] physicalXs) {
         if (physicalXs == null || physicalXs.length <= STAGE_COLUMNS) {
             throw new IllegalArgumentException("stable third grid coordinate required");
