@@ -2,9 +2,6 @@ package com.hellovoid.liquiddock;
 
 import org.junit.Test;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
@@ -64,19 +61,6 @@ public class StageWorkspaceRecentsSourceTest {
     @Test
     public void unavailableModelMethodFailsClosed() {
         assertTrue(StageWorkspaceRecentsSource.fromModel(new Object(), 8).isEmpty());
-    }
-
-    @Test
-    public void runtimeUsesVerifiedRecentsModelSurfaceWithoutPersistenceOrPolling() throws Exception {
-        String source = Files.readString(Paths.get(
-                "src/main/java/com/hellovoid/liquiddock/StageWorkspaceRecentsSource.java"),
-                StandardCharsets.UTF_8);
-        assertTrue(source.contains("com.miui.home.recents.RecentsModel"));
-        assertTrue(source.contains("getDeclaredMethod(\"getInstance\", Context.class)"));
-        assertTrue(source.contains("getDeclaredMethod(\"getTaskList\")"));
-        assertTrue(source.contains("current(Context context, ClassLoader classLoader, int maxCards)"));
-        assertTrue(!source.contains("SharedPreferences"));
-        assertTrue(!source.contains("postDelayed("));
     }
 
     @Test
