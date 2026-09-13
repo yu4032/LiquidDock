@@ -51,6 +51,28 @@ final class StageWorkspaceRuntime {
         return activeForOrdinaryPlacement && !MainHook.isWorkstationMode();
     }
 
+    static boolean recordSettledOrdinaryLayout(
+            HomeGridOrientation orientation,
+            Collection<HomeGridItemPosition> positions) {
+        if (orientation != HomeGridOrientation.LANDSCAPE
+                || positions == null
+                || !isActiveForOrdinaryPlacement()) {
+            return false;
+        }
+        StageWorkspaceActivation current = activation;
+        if (current == null) return false;
+        try {
+            boolean saved = current.refreshMappedTarget(positions);
+            if (saved) {
+                MainHook.log(TAG + " refreshed mapped target items=" + positions.size());
+            }
+            return saved;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " mapped target refresh failed: " + error);
+            return false;
+        }
+    }
+
     private static void installSetupViewsHook(Class<?> launcher) {
         HookUtil.hookMethod(launcher, "setupViews", new Class<?>[0], chain -> {
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
