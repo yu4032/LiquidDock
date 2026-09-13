@@ -112,6 +112,19 @@ final class SecurityCenterGlassGeometry {
                 cropLeft, cropTop, cropRight - cropLeft, cropBottom - cropTop);
     }
 
+    /**
+     * Keeps the current animated glass shape but presents it from a full-root crop. This is used
+     * by All Apps so the TextureView surface can stay root-sized while the vendor material scales;
+     * screen-space backdrop sampling therefore remains 1:1 instead of being stretched by an
+     * asynchronous SurfaceTexture resize during the zoom animation.
+     */
+    SecurityCenterGlassGeometry withRootCrop() {
+        return new SecurityCenterGlassGeometry(
+                rootWidth, rootHeight,
+                left, top, width, height, cornerRadius,
+                0f, 0f, rootWidth, rootHeight);
+    }
+
     /** Exact root-local union used only as an output/crop region; node radii remain on the nodes. */
     static SecurityCenterGlassGeometry covering(
             SecurityCenterGlassGeometry first,
