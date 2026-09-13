@@ -22,6 +22,7 @@ final class Miuix307PassBlurBridge {
 
     static final class Binding {
         final SurfaceControl rootSurface;
+        final Surface producerSurface;
         final Method setPassBlurSurface;
         final Method setUpdateTextureFlag;
         final Method setMiBlurWinExc;
@@ -36,6 +37,7 @@ final class Miuix307PassBlurBridge {
 
         Binding(
                 SurfaceControl rootSurface,
+                Surface producerSurface,
                 Method setPassBlurSurface,
                 Method setUpdateTextureFlag,
                 Method setMiBlurWinExc,
@@ -46,6 +48,7 @@ final class Miuix307PassBlurBridge {
                 int rootLayerId,
                 PassBlurDomain domain) {
             this.rootSurface = rootSurface;
+            this.producerSurface = producerSurface;
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
@@ -70,6 +73,8 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock presentation");
             return null;
         }
+        SurfaceControl rootSurface = null;
+        boolean securityCenterClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -86,7 +91,7 @@ final class Miuix307PassBlurBridge {
                 MainHook.log(TAG + " PassBlur bind unavailable: root SurfaceControl missing");
                 return null;
             }
-            SurfaceControl rootSurface = (SurfaceControl) rootValue;
+            rootSurface = (SurfaceControl) rootValue;
             if (!rootSurface.isValid()) {
                 MainHook.log(TAG + " PassBlur bind unavailable: invalid root surface");
                 return null;
@@ -107,6 +112,12 @@ final class Miuix307PassBlurBridge {
             String[] exclusions = PassBlurBindPolicy.exclusions(
                     rootName, request.extraExclusions());
             float scale = request.nativeScale();
+
+            if (domain == PassBlurDomain.SECURITY_CENTER) {
+                SecurityCenterPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
+                securityCenterClaimed = true;
+            }
+
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
@@ -117,6 +128,7 @@ final class Miuix307PassBlurBridge {
 
             Binding binding = new Binding(
                     rootSurface,
+                    producerSurface,
                     setPassBlurSurface,
                     setUpdateTextureFlag,
                     setMiBlurWinExc,
@@ -139,6 +151,9 @@ final class Miuix307PassBlurBridge {
                     + " exclusions=" + Arrays.toString(exclusions));
             return binding;
         } catch (Throwable error) {
+            if (securityCenterClaimed && rootSurface != null) {
+                SecurityCenterPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
             MainHook.log(TAG + " PassBlur bind unavailable: " + error);
             return null;
         }
@@ -165,12 +180,6 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
-        // Security Center owns the same root SurfaceControl that the vendor material pipeline
-        // mutates while switching Toolbox / All Apps pages. Those vendor transactions can turn
-        // updateTextureFlag off behind our Java-side Binding state, leaving updatesEnabled=true
-        // here while SurfaceFlinger has already entered snapshot mode. Re-assert TRUE for every
-        // Security Center fresh-frame request so we inherit the vendor host lifecycle without
-        // inheriting its snapshot/freeze output policy. Launcher/Dock keep the cached fast path.
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER;
         setUpdatesEnabled(binding, true, force);
     }
@@ -215,6 +224,10 @@ final class Miuix307PassBlurBridge {
 
     static void unbind(Binding binding) {
         if (binding == null || !binding.bound) return;
+        if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
+            SecurityCenterPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
         try {
             if (!binding.rootSurface.isValid()) {
                 binding.bound = false;
