@@ -60,6 +60,7 @@ final class LauncherGlassHomePresentationHook {
                 HomeTransitionAuthorityState.Decision decision =
                         HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
                 if (decision.releaseBarrier) {
+                    Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
                     releaseHomeBarrier(decision.releaseWidgetBarrier);
                     MainHook.log(TAG + " APP HOME barrier released by Launcher fallback");
                 } else if (decision.waitForSystemUi) {
@@ -104,6 +105,7 @@ final class LauncherGlassHomePresentationHook {
                 HOME_AUTHORITY.onSystemUiFinished(homeVisible, serial, eventTimeNanos);
         if (!decision.releaseBarrier) return;
 
+        Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
         releaseHomeBarrier(decision.releaseWidgetBarrier);
         MainHook.log(TAG + " SystemUI HOME FINISH authority serial=" + serial
                 + " t=" + eventTimeNanos + " aborted=" + aborted);
@@ -111,6 +113,7 @@ final class LauncherGlassHomePresentationHook {
 
     private static void applyHomeStartDecision(HomeTransitionAuthorityState.Decision decision) {
         if (decision == null || !decision.freezeBarrier) return;
+        Miuix307ZeroCopyRenderer.onHomeOpeningStarted();
         LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
         LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
     }
