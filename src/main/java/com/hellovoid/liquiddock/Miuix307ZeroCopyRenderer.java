@@ -120,44 +120,36 @@ final class Miuix307ZeroCopyRenderer {
         if (gpuBackdrop == null) return;
         boolean effective = producerUpdatesPolicyEnabled || homeProducerOverride;
         gpuBackdrop.setProducerUpdatesEnabled(effective, reason
-                + (homeProducerOverride ? "/home-freshness-override" : ""));
-    }
-
-    /** Mark the current producer content stale without disturbing the vendor return animation. */
-    static void onHomeOpeningStarted() {
-        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null) return;
-        long serial = ++homeFreshnessSerial;
-        DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
-        boolean hadOverride = homeProducerOverride;
-        homeProducerOverride = false;
-        if (hadOverride) applyProducerUpdatesPolicy("home-freshness-restarted");
-        if (decision.blockPresentation) {
-            MainHook.log(TAG + " HOME backdrop marked stale serial=" + serial);
-        }
+                + (homeProducerOverride ? "/home-refresh-override" : ""));
     }
 
     /**
-     * The vendor may enter static-Dock snapshot mode at HOME and pause PassBlur updates. At the
-     * accepted HOME FINISH boundary, stop exposing the stale App texture and temporarily override
-     * that power policy until an input buffer newer than FINISH is consumed. Cross one UI VSYNC
-     * before exposing the TextureView again, then restore the vendor-requested policy. No fixed
-     * timing assumption is used.
+     * HOME authority starts the refresh immediately. Keep the already-presented Dock visible, but
+     * temporarily force the PassBlur producer live so the first desktop/wallpaper buffer replaces
+     * the App buffer as soon as SurfaceFlinger produces it. No alpha/visibility barrier is used.
      */
-    static void onHomeOpeningFinished() {
+    static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null || homeFreshnessSerial <= 0L) return;
-        final long serial = homeFreshnessSerial;
-        DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeFinished(serial);
+        if (gpuBackdrop == null) return;
+
+        final long serial = ++homeFreshnessSerial;
+        DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
         if (!decision.forceProducerUpdates) return;
 
         final long inputTimestampBaseline = readInputTimestamp(gpuBackdrop);
-        gpuBackdrop.setAlpha(0f);
         homeProducerOverride = true;
-        applyProducerUpdatesPolicy("home-freshness-finish");
+        applyProducerUpdatesPolicy("home-refresh-start");
         awaitFreshHomeInput(gpuBackdrop, serial, inputTimestampBaseline);
-        MainHook.log(TAG + " HOME backdrop fresh frame armed serial=" + serial
+        MainHook.log(TAG + " HOME backdrop refresh armed serial=" + serial
                 + " inputTimestampBaseline=" + inputTimestampBaseline);
+    }
+
+    /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
+    static void onHomeOpeningFinished() {
+        if (homeFreshnessSerial <= 0L) return;
+        HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
+        MainHook.log(TAG + " HOME finish observed without presentation barrier serial="
+                + homeFreshnessSerial);
     }
 
     private static void awaitFreshHomeInput(
@@ -171,11 +163,14 @@ final class Miuix307ZeroCopyRenderer {
 
         long inputTimestamp = readInputTimestamp(gpuBackdrop);
         if (inputTimestamp > 0L && inputTimestamp != inputTimestampBaseline) {
-            // input.getTimestamp() changes only after drawLatestFrame() consumes updateTexImage().
-            // Publish on the next UI VSYNC so that render-thread normalization/composition and the
-            // corresponding EGL swap can complete before stale presentation is made visible again.
-            gpuBackdrop.postOnAnimation(() -> publishFreshHomeBackdrop(
-                    gpuBackdrop, serial, inputTimestamp));
+            DockHomeBackdropFreshnessState.Decision decision =
+                    HOME_FRESHNESS.onProducerFrameAvailable();
+            if (decision.releaseProducerOverride) {
+                homeProducerOverride = false;
+                applyProducerUpdatesPolicy("home-refresh-frame-arrived");
+                MainHook.log(TAG + " HOME backdrop refreshed serial=" + serial
+                        + " inputTimestamp=" + inputTimestamp);
+            }
             return;
         }
 
@@ -183,31 +178,12 @@ final class Miuix307ZeroCopyRenderer {
                 gpuBackdrop, serial, inputTimestampBaseline));
     }
 
-    private static void publishFreshHomeBackdrop(
-            Miuix307PassBlurTextureView gpuBackdrop, long serial, long inputTimestamp) {
-        if (gpuBackdropRef.get() != gpuBackdrop || serial != homeFreshnessSerial
-                || !gpuBackdrop.isAttachedToWindow()) {
-            return;
-        }
-        DockHomeBackdropFreshnessState.Decision decision =
-                HOME_FRESHNESS.onProducerFrameAvailable();
-        if (decision.releasePresentation) {
-            gpuBackdrop.setAlpha(1f);
-            MainHook.log(TAG + " HOME backdrop fresh frame published serial=" + serial
-                    + " inputTimestamp=" + inputTimestamp);
-        }
-        if (decision.releaseProducerOverride) {
-            homeProducerOverride = false;
-            applyProducerUpdatesPolicy("home-freshness-complete");
-        }
-    }
-
     private static long readInputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {
         try {
             Object value = HookUtil.getField(gpuBackdrop, "inputSurfaceTexture");
             return value instanceof SurfaceTexture ? ((SurfaceTexture) value).getTimestamp() : 0L;
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME freshness input timestamp unavailable: " + error);
+            MainHook.log(TAG + " HOME refresh input timestamp unavailable: " + error);
             return 0L;
         }
     }
