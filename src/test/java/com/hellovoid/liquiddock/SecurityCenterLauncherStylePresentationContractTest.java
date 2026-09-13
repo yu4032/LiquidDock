@@ -161,9 +161,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
 
         assertTrue("All Apps attach must be observed at the helper's public attach boundary",
                 hook.contains("HookUtil.hook(allAppsMotion.attach()"));
-        assertTrue("Normal hide must start from the vendor helper's public dismiss boundary",
+        assertTrue("Normal hide must be observed at the helper's public dismiss boundary",
                 hook.contains("HookUtil.hook(allAppsMotion.dismiss()"));
-        assertTrue("Point-target hide must start from the vendor helper's public dismiss boundary",
+        assertTrue("Point-target hide must be observed at the helper's public dismiss boundary",
                 hook.contains("HookUtil.hook(allAppsMotion.dismissToPoint()"));
         assertFalse("Private animation methods cannot remain lifecycle authority",
                 hook.contains("findDeclared(candidate,"));
@@ -187,7 +187,7 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 session.contains("onOutputPresented("));
     }
 
-    @Test public void windowVisibilityRestoreForcesProducerRecoveryWithoutRequiringOldBinding() throws Exception {
+    @Test public void windowVisibilityRestoreUsesDirectPresentationFreshnessAuthority() throws Exception {
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
@@ -200,12 +200,15 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 session.contains("requestRebind(\"security-center-window-visible\")"));
         assertFalse("unlock recovery must not require the stale binding to still be valid",
                 session.contains("if (shuttingDown || !sourceBackend.hasBinding()) return false;"));
-        assertTrue("coordinator must return to vendor fallback before awaiting a fresh unlock frame",
-                coordinator.contains("window visibility restored; refreshing source generation")
-                        && coordinator.contains("scene.onSourceAuthorityChanged(targetKind)"));
+        assertTrue("window restoration must invalidate presentation freshness directly",
+                coordinator.contains("advancePresentationGeneration(\"window visibility restored\")"));
+        assertTrue("window restoration must rebuild the source before custom ownership returns",
+                coordinator.contains("recoverSourceAfterWindowVisibilityRestored()"));
+        assertFalse("page-scene state must not own source freshness",
+                coordinator.contains("scene.onSourceAuthorityChanged"));
     }
 
-    @Test public void allAppsSettleUsesMotionTargetAndMatchingPresentedComposition() throws Exception {
+    @Test public void allAppsLifetimeUsesMaterialCarrierInsteadOfSyntheticSettleState() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
 
@@ -213,14 +216,16 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 hook.contains("contract.toggleAllApps()"));
         assertFalse("private page-presence fields must not define target state",
                 hook.contains("contract.allAppsPresent()"));
-        assertTrue("motion semantic must carry target state directly",
-                hook.contains("boolean targetPresent"));
-        assertTrue("motion target and generation must reach the existing settle gate",
-                hook.contains("live.onAllAppsToggleTargetResolved(turbo, targetPresent, generation)"));
-        assertTrue("Settlement must be retried from real TextureView presentation acknowledgement",
+        assertTrue("All Apps carrier attach must advance the material epoch",
+                coordinator.contains("materialEpoch.attachAllApps("));
+        assertTrue("All Apps carrier removal must retire the material epoch",
+                coordinator.contains("materialEpoch.detachAllApps("));
+        assertFalse("a synthetic All Apps settle state must not remain lifecycle authority",
+                coordinator.contains("SecurityCenterAllAppsSettleState"));
+        assertFalse("presented-frame matching must not synthesize a second page lifecycle",
                 coordinator.contains("trySettlePresentedAllAppsTransition("));
-        assertTrue("A target can settle only when the presented frame has matching All Apps nodes",
-                coordinator.contains("frame.appsGeometry() != null"));
+        assertFalse("cached page target must not shadow live carrier presence",
+                coordinator.contains("targetKind"));
         assertFalse("Vendor transforming/postDelayed timing must stay non-authoritative",
                 hook.contains("contract.transforming()"));
     }
