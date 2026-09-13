@@ -31,13 +31,16 @@ public class SecurityCenterFramePipelineStateTest {
         assertFalse(whilePresented.cancelPresentation);
 
         SecurityCenterFramePipelineState.Presentation presented = state.onPresented(7L, 39L);
-        assertTrue(presented.acceptedCurrentGeneration);
+        assertFalse("serial 7 is physically consumed but cannot reveal after serial 9 became latest",
+                presented.acceptedCurrentGeneration);
         assertTrue("after ACK the latest pending geometry gets exactly one new source request",
                 presented.requestSource);
 
         SecurityCenterFramePipelineState.Submission next = state.onFreshSource(39L);
         assertTrue(next.accepted);
         assertEquals(9L, next.serial);
+        SecurityCenterFramePipelineState.Presentation latest = state.onPresented(9L, 39L);
+        assertTrue(latest.acceptedCurrentGeneration);
     }
 
     @Test
