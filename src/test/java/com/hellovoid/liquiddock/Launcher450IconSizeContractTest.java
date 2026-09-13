@@ -37,10 +37,12 @@ public class Launcher450IconSizeContractTest {
         String source = Files.readString(hookPath);
 
         assertTrue(source.contains("com.miui.home.launcher.ShortcutIcon"));
-        assertTrue(source.contains("com.miui.home.launcher.FolderIcon1x1"));
+        assertTrue(source.contains("com.miui.home.launcher.folder.FolderIcon1x1"));
+        assertTrue(source.contains("com.miui.home.launcher.grid.GridConfig"));
         assertTrue(source.contains("onMeasure"));
-        assertTrue(source.contains("mGridConfig"));
-        assertTrue(source.contains("iconSize"));
+        assertTrue(source.contains("getIconSize"));
+        assertTrue(source.contains("getDockIconWidth"));
+        assertTrue(source.contains("ThreadLocal"));
         assertTrue(source.contains("finally"));
 
         assertFalse("4.50 implementation must not use the failed drawable-bind experiment",
