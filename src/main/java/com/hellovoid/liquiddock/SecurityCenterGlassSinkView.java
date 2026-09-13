@@ -134,15 +134,15 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
 
         boolean changed = false;
-        float effectiveAlpha = effectiveMaterialAlpha(material, host.parent);
-        boolean materialVisible = effectiveAlpha >= 0.99f
+        boolean structurallyVisible = isStructurallyVisible(material, host.parent)
                 && material.getWindowVisibility() == View.VISIBLE;
-        int desiredVisibility = materialVisible ? View.VISIBLE : View.INVISIBLE;
+        float effectiveAlpha = effectiveMaterialAlpha(material, host.parent);
+        int desiredVisibility = structurallyVisible ? View.VISIBLE : View.INVISIBLE;
         if (getVisibility() != desiredVisibility) {
             setVisibility(desiredVisibility);
             changed = true;
         }
-        if (!SecurityCenterSinkPresentationState.shouldCompose(materialVisible)) {
+        if (!SecurityCenterSinkPresentationState.shouldCompose(structurallyVisible)) {
             return setContentAlphaIfChanged(0f) || changed;
         }
 
@@ -217,14 +217,14 @@ final class SecurityCenterGlassSinkView extends TextureView
         View material = materialRef.get();
         OverlayHost host = resolveOverlayHost(material);
         if (material == null || host == null || getParent() != host.parent
-                || effectiveMaterialAlpha(material, host.parent) < 0.99f) return false;
+                || !isStructurallyVisible(material, host.parent)) return false;
         View current = this;
         while (current != null) {
-            if (current.getVisibility() != View.VISIBLE || current.getAlpha() < 0.99f) return false;
+            if (current.getVisibility() != View.VISIBLE) return false;
             ViewParent parent = current.getParent();
             current = parent instanceof View ? (View) parent : null;
         }
-        return true;
+        return outputSurface != null;
     }
 
     void requestPresentationDraw() {
@@ -307,6 +307,17 @@ final class SecurityCenterGlassSinkView extends TextureView
         return null;
     }
 
+    private static boolean isStructurallyVisible(View material, ViewGroup stopParent) {
+        if (material == null || stopParent == null) return false;
+        View current = material;
+        while (current != null && current != stopParent) {
+            if (current.getVisibility() != View.VISIBLE) return false;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return current == stopParent;
+    }
+
     private static float effectiveMaterialAlpha(View material, ViewGroup stopParent) {
         if (material == null || stopParent == null) return 0f;
         float alpha = 1f;
@@ -314,11 +325,11 @@ final class SecurityCenterGlassSinkView extends TextureView
         while (current != null && current != stopParent) {
             if (current.getVisibility() != View.VISIBLE) return 0f;
             alpha *= current.getAlpha();
-            if (!finite(alpha) || alpha < 0.99f) return alpha;
+            if (!finite(alpha)) return 0f;
             ViewParent parent = current.getParent();
             current = parent instanceof View ? (View) parent : null;
         }
-        return current == stopParent ? alpha : 0f;
+        return current == stopParent ? Math.max(0f, Math.min(1f, alpha)) : 0f;
     }
 
     private static Bounds mapBounds(View material, View target) {
