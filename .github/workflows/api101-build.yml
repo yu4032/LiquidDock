@@ -61,13 +61,25 @@ jobs:
           new_destroy = '''    private void destroyOutputWindow(Surface stale) {\n        try {\n            destroyEglWindowSurfaceOnly();\n        } catch (Throwable error) {\n            MainHook.log(TAG + " output EGL surface destroy failed: " + error);\n        }\n        // SurfaceView owns holder.getSurface(); do not release the managed Surface object here.\n    }'''
           one(old_destroy, new_destroy, 'managed Surface destroy')
 
-          # Keep the render producer unthrottled in the SurfaceView probe as well.
           one('''            makeCurrent();\n            queryMaxTextureSize();''',
               '''            makeCurrent();\n            boolean swap0 = EGL14.eglSwapInterval(eglDisplay, 0);\n            MainHook.log(TAG + " [LatencyExpB] eglSwapInterval(0)=" + swap0);\n            queryMaxTextureSize();''', 'swap interval')
 
+          one('''                || !isAttachedToWindow() || !isAvailable()''',
+              '''                || !isAttachedToWindow() || getHolder().getSurface() == null\n                || !getHolder().getSurface().isValid()''', 'SurfaceView availability gate')
+
           p.write_text(s)
+
+          z = Path('src/main/java/com/hellovoid/liquiddock/Miuix307ZeroCopyRenderer.java')
+          zs = z.read_text()
+          old = '''    private static long readOutputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {\n        try {\n            SurfaceTexture output = gpuBackdrop.getSurfaceTexture();\n            return output != null ? output.getTimestamp() : 0L;\n        } catch (Throwable ignored) {\n            return 0L;\n        }\n    }'''
+          new = '''    private static long readOutputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {\n        // SurfaceView has no consumer SurfaceTexture timestamp; experiment B intentionally\n        // bypasses that consumer stage, so output timestamp tracing is unavailable here.\n        return 0L;\n    }'''
+          if old not in zs:
+              raise SystemExit('experiment B ZeroCopyRenderer timestamp patch point missing')
+          z.write_text(zs.replace(old, new, 1))
           PY
-          grep -nE 'LatencyExpB|extends SurfaceView|surfaceCreated' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java | head -20
+          grep -nE 'LatencyExpB|extends SurfaceView|surfaceCreated|SurfaceView has no consumer' \
+            src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java \
+            src/main/java/com/hellovoid/liquiddock/Miuix307ZeroCopyRenderer.java | head -30
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
