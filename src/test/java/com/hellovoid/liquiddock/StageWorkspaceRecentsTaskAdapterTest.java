@@ -26,13 +26,14 @@ public class StageWorkspaceRecentsTaskAdapterTest {
     }
 
     @Test
-    public void preservesGroupedPartnerIdentity() {
+    public void preservesGroupedPartnerIdentityUsingCurrentTaskId() {
         FakeTask task = new FakeTask(40, 10, 700L, "com.example.video", true, 41);
 
         StageWorkspaceTaskModel.TaskEntry entry = StageWorkspaceRecentsTaskAdapter.fromTask(task);
 
         assertTrue(entry.grouped());
         assertEquals(41, entry.partnerTaskId());
+        assertEquals(40, task.lastPartnerLookupTaskId);
         assertEquals(10, entry.userId());
     }
 
@@ -54,7 +55,7 @@ public class StageWorkspaceRecentsTaskAdapterTest {
     @Test
     public void absentRequiredRuntimeMethodFailsClosed() {
         class IncompleteTask {
-            public final FakeTaskKey key = new FakeTaskKey(9, 0, 1L);
+            public final FakeTaskKey key = new FakeTaskKey(9, 0, 1L, "com.example");
         }
 
         assertNull(StageWorkspaceRecentsTaskAdapter.fromTask(new IncompleteTask()));
@@ -64,19 +65,25 @@ public class StageWorkspaceRecentsTaskAdapterTest {
         public final int id;
         public final int userId;
         public final long lastActiveTime;
+        private final String packageName;
 
-        FakeTaskKey(int id, int userId, long lastActiveTime) {
+        FakeTaskKey(int id, int userId, long lastActiveTime, String packageName) {
             this.id = id;
             this.userId = userId;
             this.lastActiveTime = lastActiveTime;
+            this.packageName = packageName;
+        }
+
+        public String getPackageName() {
+            return packageName;
         }
     }
 
     public static final class FakeTask {
         public FakeTaskKey key;
-        private final String packageName;
         private final boolean multiple;
         private final int partnerTaskId;
+        int lastPartnerLookupTaskId = Integer.MIN_VALUE;
 
         FakeTask(int id,
                  int userId,
@@ -84,21 +91,17 @@ public class StageWorkspaceRecentsTaskAdapterTest {
                  String packageName,
                  boolean multiple,
                  int partnerTaskId) {
-            key = new FakeTaskKey(id, userId, lastActiveTime);
-            this.packageName = packageName;
+            key = new FakeTaskKey(id, userId, lastActiveTime, packageName);
             this.multiple = multiple;
             this.partnerTaskId = partnerTaskId;
-        }
-
-        public String getPackageName() {
-            return packageName;
         }
 
         public boolean hasMultipleTasks() {
             return multiple;
         }
 
-        public int getAnotherMultiTaskId() {
+        public int getAnotherMultiTaskId(int taskId) {
+            lastPartnerLookupTaskId = taskId;
             return partnerTaskId;
         }
     }
