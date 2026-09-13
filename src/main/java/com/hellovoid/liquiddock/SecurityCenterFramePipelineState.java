@@ -150,11 +150,11 @@ final class SecurityCenterFramePipelineState {
         return beginSubmission(cachedRevision, false);
     }
 
-    private Submission beginSubmission(long revision, boolean freshSource) {
+    private Submission beginSubmission(long revision, boolean backdropUpdated) {
         inFlightSerial = latestSerial;
         inFlightGeneration = latestGeneration;
         inFlightRevision = revision;
-        return new Submission(true, freshSource, inFlightSerial, inFlightGeneration);
+        return new Submission(true, backdropUpdated, inFlightSerial, inFlightGeneration);
     }
 
     /**
