@@ -69,14 +69,17 @@ final class SecurityCenterGlassRuntimeState {
         sourceAuthorityAvailable = true;
     }
 
-    /** Config-only gate for the Security Center material feature. */
+    /** Config gate for the Security Center material feature. */
     static boolean isMaterialEnabled() {
         return coreEnabled && glassEnabled && securityCenterEnabled;
     }
 
-    /** Custom shader/session gate; source authority must be live before binding. */
+    /**
+     * Material-carrier/root lifecycle is the presentation authority. Activity/source authority is
+     * only an optional producer-rollover hint and must not gate replacement output creation.
+     */
     static boolean isEnabled() {
-        return isMaterialEnabled() && sourceAuthorityAvailable;
+        return isMaterialEnabled();
     }
 
     static void bindAssistant(View turbo, View dock, View box, int type) {
@@ -91,10 +94,8 @@ final class SecurityCenterGlassRuntimeState {
                 || previousAuthority.equals(currentAuthority)) return;
         Owner currentOwner = owner;
         if (currentOwner instanceof SecurityCenterGlassCoordinator) {
-            SecurityCenterSourceAuthorityController.rollover(
-                    (SecurityCenterGlassCoordinator) currentOwner,
-                    previousAuthority,
-                    currentAuthority);
+            ((SecurityCenterGlassCoordinator) currentOwner)
+                    .onSourceAuthorityChanged(previousAuthority, currentAuthority);
         }
     }
 

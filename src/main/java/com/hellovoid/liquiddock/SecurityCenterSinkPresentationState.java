@@ -1,11 +1,24 @@
 package com.hellovoid.liquiddock;
 
-/** Allocation-free visibility policy for a Security Center TextureView sink. */
+/** Allocation-free visibility/readiness policy for a Security Center TextureView sink. */
 final class SecurityCenterSinkPresentationState {
     private SecurityCenterSinkPresentationState() {}
 
     static boolean shouldCompose(boolean materialVisible) {
         return materialVisible;
+    }
+
+    static boolean isPresentationReady(
+            boolean attached,
+            boolean hardwareAccelerated,
+            boolean windowVisible,
+            boolean structurallyVisible,
+            boolean surfaceAvailable) {
+        return attached
+                && hardwareAccelerated
+                && windowVisible
+                && structurallyVisible
+                && surfaceAvailable;
     }
 
     static float contentAlpha(boolean materialVisible, boolean authorized, float materialAlpha) {

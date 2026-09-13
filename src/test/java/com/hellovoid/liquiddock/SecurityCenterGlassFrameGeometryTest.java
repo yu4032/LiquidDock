@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 
@@ -57,7 +58,7 @@ public class SecurityCenterGlassFrameGeometryTest {
     }
 
     @Test
-    public void toolboxFrameComposesDockBoxAndAllAppsOnOneBackdrop() throws Exception {
+    public void allAppsSuppressesToolboxOnSharedBackdrop() throws Exception {
         SecurityCenterGlassGeometry dock = SecurityCenterGlassGeometry.resolve(
                 3008, 1880, 0f, 0f, 34f, 261f, 240f, 1724f, 40f);
         SecurityCenterGlassGeometry box = SecurityCenterGlassGeometry.resolve(
@@ -71,16 +72,18 @@ public class SecurityCenterGlassFrameGeometryTest {
         SecurityCenterGlassFrameGeometry frame =
                 (SecurityCenterGlassFrameGeometry) method.invoke(null, dock, box, apps);
 
-        assertEquals(3, frame.nodeCount());
+        assertEquals("All Apps owns the toolbox material slot while present", 2, frame.nodeCount());
         assertSame(dock, frame.nodeAt(0));
-        assertSame(box, frame.nodeAt(1));
-        assertSame(apps, frame.nodeAt(2));
+        assertSame(apps, frame.nodeAt(1));
+        assertNull("toolbox must not remain in an All Apps frame", frame.boxGeometry());
+        assertSame(apps, frame.appsGeometry());
         SecurityCenterGlassGeometry presentation = frame.presentationGeometry();
         assertEquals(34f, presentation.left, 0.001f);
         assertEquals(261f, presentation.top, 0.001f);
         assertEquals(2054f, presentation.width, 0.001f);
         assertEquals(1463f, presentation.height, 0.001f);
     }
+
     @Test
     public void liveRadiusChangeCreatesFreshPresentationGeometry() {
         float firstLiveRadius = 18f;
