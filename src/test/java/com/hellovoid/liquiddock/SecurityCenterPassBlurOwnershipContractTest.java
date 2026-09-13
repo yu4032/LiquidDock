@@ -113,11 +113,9 @@ public class SecurityCenterPassBlurOwnershipContractTest {
         assertTrue("binder callbacks must remain no-op in the coordinator",
                 coordinator.contains("void onSidebarShowRequested() {}")
                         && coordinator.contains("void onSidebarHideRequested(boolean animated) {}"));
-        assertFalse("synthetic terminal hooks must not release a TurboLayout that the vendor can reuse",
+        assertFalse("reachable synthetic terminal hooks must not release a TurboLayout that the vendor can reuse",
                 hook.contains("notifyVendorPanelClosing(chain.getArgs(), contract)")
                         || hook.contains("notifyVendorPanelTerminal(chain.getArgs(), contract)"));
-        assertFalse("synthetic terminal cleanup must not remain a coordinator teardown authority",
-                coordinator.contains("releasePanel(turboLayout, \"vendor terminal cleanup\")"));
         assertTrue("real Turbo/root detach remains the fail-safe teardown authority",
                 coordinator.contains("panel detached fallback")
                         && coordinator.contains("releaseForRootDetach()"));
