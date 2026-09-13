@@ -1,17 +1,12 @@
-name: API101 migration build
+name: Dock producer probe D2 reassert Surface
 
 on:
-  push:
-    branches:
-      - main
-      - api101-migration
-      - refactor/modular-architecture
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
 concurrency:
-  group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: dock-producer-d2-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,14 +20,39 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
-          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
+          cache-read-only: false
           cache-cleanup: never
       - run: chmod +x ./gradlew
+      - name: Apply D2 producer reassert probe
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          bridge = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java')
+          s = bridge.read_text()
+          marker = '''    /** Workspace idle suspension and vendor-snapshot Dock suspension. */\n    static void pauseUpdates(Binding binding) {'''
+          method = '''    /** D2 latency probe: reassert the same producer Surface and live-update flag per UI pre-draw. */\n    static void reassertLiveProducer(Binding binding) {\n        if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;\n        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {\n            binding.setPassBlurSurface.invoke(\n                    transaction, binding.rootSurface, binding.producerSurface);\n            binding.setUpdateTextureFlag.invoke(\n                    transaction, binding.rootSurface, Boolean.TRUE, Float.valueOf(binding.scale));\n            transaction.apply();\n            binding.updatesEnabled = true;\n        } catch (Throwable error) {\n            MainHook.log(TAG + \" PassBlur producer reassert failed: \" + error);\n        }\n    }\n\n'''
+          if s.count(marker) != 1:
+              raise SystemExit(f'D2 bridge marker count={s.count(marker)}')
+          s = s.replace(marker, method + marker, 1)
+          bridge.write_text(s)
+
+          view = Path('src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java')
+          s = view.read_text()
+          old = '''        ViewTreeObserver.OnPreDrawListener listener = () -> {\n            refreshProducerGeometryInPlace();\n            updateBackdropMapping();\n            return true;\n        };'''
+          new = '''        ViewTreeObserver.OnPreDrawListener listener = () -> {\n            refreshProducerGeometryInPlace();\n            updateBackdropMapping();\n            Miuix307PassBlurBridge.reassertLiveProducer(binding);\n            return true;\n        };'''
+          if s.count(old) != 1:
+              raise SystemExit(f'D2 preDraw block count={s.count(old)}')
+          s = s.replace(old, new, 1)
+          view.write_text(s)
+          PY
+      - name: Audit D2 probe shape
+        shell: bash
+        run: |
+          grep -n 'reassertLiveProducer(binding)' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java
+          grep -n 'binding.setPassBlurSurface.invoke' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java
+          grep -n 'binding.setUpdateTextureFlag.invoke' src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java
       - name: Audit Security Center zero-copy constraints
         shell: bash
         run: |
@@ -49,13 +69,13 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-expD2-reassert-surface-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock-build-source
+          name: LiquidDock-expD2-source
           path: |
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
