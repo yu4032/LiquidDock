@@ -94,6 +94,18 @@ public class StageWorkspaceRuntimeContractTest {
     }
 
     @Test
+    public void overlayRuntimeConsumesGenerationAuthority() throws Exception {
+        String source = read(
+                "src/main/java/com/hellovoid/liquiddock/StageWorkspaceOverlayRuntime.java");
+        assertTrue(source.contains("StageWorkspaceOverlayState"));
+        assertTrue(source.contains("overlayState.bind"));
+        assertTrue(source.contains("overlayState.evaluate"));
+        assertTrue(source.contains("StageWorkspaceOverlayState.Action.IGNORE"));
+        assertTrue(source.contains("StageWorkspaceOverlayState.Action.HIDE"));
+        assertTrue(source.contains("StageWorkspaceOverlayState.Action.SHOW"));
+    }
+
+    @Test
     public void overlayHostIsStructuralAndNonInteractiveByDefault() throws Exception {
         String source = read(
                 "src/main/java/com/hellovoid/liquiddock/StageWorkspaceOverlayHostView.java");
