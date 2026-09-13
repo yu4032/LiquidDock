@@ -145,6 +145,24 @@ public class SecurityCenterMaterialAuthorityDesignTest {
         assertTrue("sink needs a typed overlay-host resolver", hasResolver);
     }
 
+    @Test
+    public void sinkAttachmentRequiresExplicitSemanticMaterialRole() {
+        Method[] methods = SecurityCenterGlassSinkView.class.getDeclaredMethods();
+        boolean hasLegacyAttach = Arrays.stream(methods)
+                .anyMatch(method -> method.getName().equals("attachBefore")
+                        && method.getParameterCount() == 2);
+        boolean hasTypedAttach = Arrays.stream(methods)
+                .anyMatch(method -> method.getName().equals("attachBefore")
+                        && method.getParameterCount() == 3
+                        && method.getParameterTypes()[2]
+                                == SecurityCenterSinkOutputPolicy.MaterialRole.class);
+
+        assertFalse("every sink must declare Dock/Toolbox/All Apps semantics explicitly",
+                hasLegacyAttach);
+        assertTrue("typed material-role attachment is the only supported sink boundary",
+                hasTypedAttach);
+    }
+
     private static Object newMaterialEpochState() throws Exception {
         final Class<?> type;
         try {
