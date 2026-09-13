@@ -123,7 +123,7 @@ final class Miuix307ZeroCopyRenderer {
                 + (homeProducerOverride ? "/home-freshness-override" : ""));
     }
 
-    /** HOME presentation may not expose a TextureView still containing the foreground app. */
+    /** Mark the current producer content stale without disturbing the vendor return animation. */
     static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
@@ -133,16 +133,16 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         if (hadOverride) applyProducerUpdatesPolicy("home-freshness-restarted");
         if (decision.blockPresentation) {
-            gpuBackdrop.setAlpha(0f);
-            MainHook.log(TAG + " HOME backdrop presentation blocked serial=" + serial);
+            MainHook.log(TAG + " HOME backdrop marked stale serial=" + serial);
         }
     }
 
     /**
-     * The vendor may enter static-Dock snapshot mode at HOME and pause PassBlur updates. Temporarily
-     * override that power policy until an input buffer newer than the accepted HOME FINISH is
-     * consumed, then cross one UI VSYNC before exposing the TextureView and restoring the vendor
-     * policy. No fixed timing assumption is used.
+     * The vendor may enter static-Dock snapshot mode at HOME and pause PassBlur updates. At the
+     * accepted HOME FINISH boundary, stop exposing the stale App texture and temporarily override
+     * that power policy until an input buffer newer than FINISH is consumed. Cross one UI VSYNC
+     * before exposing the TextureView again, then restore the vendor-requested policy. No fixed
+     * timing assumption is used.
      */
     static void onHomeOpeningFinished() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
@@ -152,6 +152,7 @@ final class Miuix307ZeroCopyRenderer {
         if (!decision.forceProducerUpdates) return;
 
         final long inputTimestampBaseline = readInputTimestamp(gpuBackdrop);
+        gpuBackdrop.setAlpha(0f);
         homeProducerOverride = true;
         applyProducerUpdatesPolicy("home-freshness-finish");
         awaitFreshHomeInput(gpuBackdrop, serial, inputTimestampBaseline);
