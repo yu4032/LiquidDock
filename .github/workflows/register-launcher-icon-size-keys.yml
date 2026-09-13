@@ -1,0 +1,33 @@
+name: Register launcher icon size keys
+
+on:
+  push:
+    branches:
+      - feature/launcher-icon-size
+    paths:
+      - .github/workflows/register-launcher-icon-size-keys.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/launcher-icon-size
+      - name: Register icon size keys
+        run: python3 .github/scripts/register_launcher_icon_size_keys.py
+      - name: Commit registration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java
+          if git diff --cached --quiet; then
+            echo "Nothing to patch"
+            exit 0
+          fi
+          git diff --cached --check
+          git commit -m "fix: register launcher icon size config keys"
+          git push origin HEAD:feature/launcher-icon-size
