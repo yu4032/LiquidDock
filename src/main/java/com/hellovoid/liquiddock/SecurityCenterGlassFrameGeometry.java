@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** One Security Center frame: one root backdrop, Dock + optional Toolbox + optional All Apps. */
+/** One Security Center frame: one root backdrop, Dock + optional Toolbox or All Apps. */
 final class SecurityCenterGlassFrameGeometry {
     private final SecurityCenterGlassGeometry dock;
     private final SecurityCenterGlassGeometry box;
@@ -33,9 +33,18 @@ final class SecurityCenterGlassFrameGeometry {
             SecurityCenterGlassGeometry box,
             SecurityCenterGlassGeometry apps) {
         if (dock == null) throw new IllegalArgumentException("dock == null");
+
+        // All Apps is a distinct vendor presentation surface. During its transition the game
+        // toolbox material can remain attached/VISIBLE while being translated or faded out by
+        // its parent. Treating that stale box as a third live node couples its transform into the
+        // shared frame and reproduces the first-open freeze/displacement path seen on-device.
+        // Once an All Apps geometry exists, compose Dock + All Apps only; the toolbox box rejoins
+        // automatically when All Apps disappears.
+        SecurityCenterGlassGeometry effectiveBox = apps != null ? null : box;
+
         SecurityCenterGlassGeometry presentation = dock;
-        if (box != null) {
-            presentation = SecurityCenterGlassGeometry.covering(presentation, box);
+        if (effectiveBox != null) {
+            presentation = SecurityCenterGlassGeometry.covering(presentation, effectiveBox);
             if (presentation == null) {
                 throw new IllegalArgumentException("Security Center frame nodes use different roots");
             }
@@ -46,7 +55,7 @@ final class SecurityCenterGlassFrameGeometry {
                 throw new IllegalArgumentException("Security Center frame nodes use different roots");
             }
         }
-        return new SecurityCenterGlassFrameGeometry(dock, box, apps, presentation);
+        return new SecurityCenterGlassFrameGeometry(dock, effectiveBox, apps, presentation);
     }
 
     int nodeCount() {
