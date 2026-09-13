@@ -110,10 +110,7 @@ final class SecurityCenterVendorMaterialBridge {
     private synchronized void releaseClaimInternal() {
         Object owner = claimedOwner.get();
         if (owner != null) releaseClaimInternal(owner);
-        else {
-            SecurityCenterSidebarDrawableGeometry.clearRuntime();
-            SecurityCenterMaterialModePolicy.resetLifecycle();
-        }
+        else SecurityCenterMaterialModePolicy.resetLifecycle();
     }
 
     private synchronized void releaseClaimInternal(Object owner) {
@@ -122,7 +119,6 @@ final class SecurityCenterVendorMaterialBridge {
         if (claimedOwner.get() == owner) {
             claimedOwner = new WeakReference<>(null);
         }
-        SecurityCenterSidebarDrawableGeometry.clearRuntime();
         SecurityCenterMaterialModePolicy.resetLifecycle();
     }
 
