@@ -57,11 +57,12 @@ public class SecurityCenterSidebarDrawableGeometryContractTest {
     @Test
     public void productionDockGeometryConsultsLiveSidebarDrawableAuthority() throws Exception {
         String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
-        String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
+        String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String spec = Files.readString(MAIN.resolve("SecurityCenterHookSpec.java"));
 
         assertTrue(geometry.contains("SecurityCenterSidebarDrawableGeometry.overrideForCandidate("));
-        assertTrue(bridge.contains("SecurityCenterSidebarDrawableGeometry.bindDock("));
+        assertTrue(prepare.contains("pending.type == ASSISTANT_GLOBAL_DOCK"));
+        assertTrue(prepare.contains("SecurityCenterSidebarDrawableGeometry.bindDock(dock)"));
         assertTrue(spec.contains("SIDEBAR_BACKGROUND_RESOURCE"));
     }
 }
