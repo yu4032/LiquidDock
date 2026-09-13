@@ -33,6 +33,25 @@ final class DockGlassItemRegistry {
         DockAnimationTrace.animationRegistry("registry-state-change", view, progress);
         Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
     }
+    static synchronized void holdProxyHidden(View view) {
+        if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
+        if (ANIMATION.holdProxyHidden(view)) {
+            Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
+        }
+    }
+    static synchronized void updateProxyGeometry(View view, float left, float top,
+            float right, float bottom) {
+        if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
+        if (ANIMATION.updateProxyGeometry(view, new float[]{left, top, right, bottom})) {
+            Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
+        }
+    }
+    static synchronized void endProxyGeometry(View view) {
+        if (view == null) return;
+        if (ANIMATION.endProxyGeometry(view)) {
+            Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
+        }
+    }
     static synchronized void endLaunchAnimation(View view) {
         if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
         DockAnimationTrace.animationRegistry("registry-end-pre", view, Float.NaN);

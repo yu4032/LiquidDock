@@ -58,7 +58,66 @@ final class DockGlassItemNode {
         hash = mix(hash, Float.floatToIntBits(dockRoot.getAlpha()));
         return hash;
     }
+
     LauncherGlassGeometry.Snapshot capture(View ownershipRoot, Matrix outputInverse,
+            int framebufferWidth, int framebufferHeight,
+            float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
+        return captureStatic(ownershipRoot, outputInverse, framebufferWidth, framebufferHeight,
+                sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
+    }
+
+    LauncherGlassGeometry.Snapshot captureProxy(float[] proxyRect, Matrix outputInverse,
+            int framebufferWidth, int framebufferHeight,
+            float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
+        View view = viewRef.get();
+        if (view == null || proxyRect == null || proxyRect.length != 4 || outputInverse == null
+                || style == null || !style.enabled || view.getRootView() == null) return null;
+        float proxyWidth = proxyRect[2] - proxyRect[0];
+        float proxyHeight = proxyRect[3] - proxyRect[1];
+        if (!Float.isFinite(proxyWidth) || !Float.isFinite(proxyHeight)
+                || proxyWidth <= 0f || proxyHeight <= 0f) return null;
+
+        // FloatingIconView2/FloatingIconLayer2 publish their icon rectangle in Launcher-root space.
+        // Convert that exact vendor rectangle into this TextureView's output-local coordinates.
+        float[] points = new float[]{
+                proxyRect[0], proxyRect[1], proxyRect[2], proxyRect[1],
+                proxyRect[0], proxyRect[3], proxyRect[2], proxyRect[3]};
+        Matrix rootToGlobal = new Matrix();
+        view.getRootView().transformMatrixToGlobal(rootToGlobal);
+        rootToGlobal.mapPoints(points);
+        outputInverse.mapPoints(points);
+
+        float left = min4(points[0], points[2], points[4], points[6]);
+        float top = min4(points[1], points[3], points[5], points[7]);
+        float right = max4(points[0], points[2], points[4], points[6]);
+        float bottom = max4(points[1], points[3], points[5], points[7]);
+        float width = Math.max(1f, (right - left) * scaleX);
+        float height = Math.max(1f, (bottom - top) * scaleY);
+        float x = sampleInsetLeft + left * scaleX;
+        float y = sampleInsetTop + top * scaleY;
+
+        float density = view.getResources().getDisplayMetrics().density;
+        LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(view);
+        float referenceWidth = icon != null && icon.width() > 0f ? icon.width()
+                : Math.max(1f, view.getWidth());
+        float referenceHeight = icon != null && icon.height() > 0f ? icon.height()
+                : Math.max(1f, view.getHeight());
+        Drawable drawable = iconDrawable(view);
+        float radius;
+        if (style.cornerRadiusDp > 0f) {
+            float radiusScale = Math.max(0.01f, Math.min(
+                    proxyWidth / referenceWidth, proxyHeight / referenceHeight));
+            radius = style.cornerRadiusDp * density * Math.min(scaleX, scaleY) * radiusScale;
+        } else {
+            radius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                    drawable, width, height, Math.min(width, height) * 0.22f);
+        }
+        return LauncherGlassGeometry.resolve(framebufferWidth, framebufferHeight,
+                x, y, x + width, y + height,
+                LauncherGlassBoundsPolicy.capRadius(radius, width, height));
+    }
+
+    private LauncherGlassGeometry.Snapshot captureStatic(View ownershipRoot, Matrix outputInverse,
             int framebufferWidth, int framebufferHeight,
             float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
         View view = viewRef.get();
@@ -82,11 +141,7 @@ final class DockGlassItemNode {
         float height = Math.max(1f, (points[3] - points[1]) * scaleY);
         float x = sampleInsetLeft + points[0] * scaleX;
         float y = sampleInsetTop + points[1] * scaleY;
-        Drawable drawable = null;
-        if (view instanceof TextView) {
-            Drawable[] drawables = ((TextView) view).getCompoundDrawables();
-            if (drawables.length > 1) drawable = drawables[1];
-        }
+        Drawable drawable = iconDrawable(view);
         float fallback = Math.min(width, height) * 0.22f;
         float radius = style.cornerRadiusDp > 0f
                 ? style.cornerRadiusDp * density * Math.min(scaleX, scaleY)
@@ -94,6 +149,19 @@ final class DockGlassItemNode {
         return LauncherGlassGeometry.resolve(framebufferWidth, framebufferHeight,
                 x, y, x + width, y + height,
                 LauncherGlassBoundsPolicy.capRadius(radius, width, height));
+    }
+
+    private static Drawable iconDrawable(View view) {
+        if (!(view instanceof TextView)) return null;
+        Drawable[] drawables = ((TextView) view).getCompoundDrawables();
+        return drawables.length > 1 ? drawables[1] : null;
+    }
+
+    private static float min4(float a, float b, float c, float d) {
+        return Math.min(Math.min(a, b), Math.min(c, d));
+    }
+    private static float max4(float a, float b, float c, float d) {
+        return Math.max(Math.max(a, b), Math.max(c, d));
     }
     private static long mix(long h, long v) { return (h ^ v) * 0x100000001b3L; }
 }

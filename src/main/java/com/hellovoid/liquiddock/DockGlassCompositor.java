@@ -18,6 +18,7 @@ final class DockGlassCompositor {
     private static final class CachedItem {
         final DockGlassItemNode node;
         long uiFingerprint = Long.MIN_VALUE;
+        long proxyFingerprint = Long.MIN_VALUE;
         LauncherGlassGeometry.Snapshot geometry;
 
         CachedItem(DockGlassItemNode node) {
@@ -64,7 +65,10 @@ final class DockGlassCompositor {
     void invalidateUiScene() {
         lastFingerprint = Long.MIN_VALUE;
         lastOutputFingerprint = Long.MIN_VALUE;
-        for (CachedItem item : cached) item.uiFingerprint = Long.MIN_VALUE;
+        for (CachedItem item : cached) {
+            item.uiFingerprint = Long.MIN_VALUE;
+            item.proxyFingerprint = Long.MIN_VALUE;
+        }
     }
 
     void refreshUiSceneIfNeeded(int framebufferWidth, int framebufferHeight,
@@ -111,6 +115,7 @@ final class DockGlassCompositor {
         long fingerprint = HASH_SEED;
         long outputFingerprint = mixOutputRoot(HASH_SEED, outputRoot);
         long[] uiFingerprints = new long[cached.size()];
+        long[] proxyFingerprints = new long[cached.size()];
         DockIconAnimationState.Sample[] animationSamples =
                 new DockIconAnimationState.Sample[cached.size()];
         for (int i = 0; i < cached.size(); i++) {
@@ -118,9 +123,12 @@ final class DockGlassCompositor {
             DockGlassItemNode item = cachedItem.node;
             long uiFingerprint = item.uiFingerprint(ownershipRoot);
             DockIconAnimationState.Sample animationSample = item.animationSample(nowMs);
+            long proxyFingerprint = proxyFingerprint(animationSample);
             uiFingerprints[i] = uiFingerprint;
+            proxyFingerprints[i] = proxyFingerprint;
             animationSamples[i] = animationSample;
             fingerprint = mix(fingerprint, uiFingerprint);
+            fingerprint = mix(fingerprint, proxyFingerprint);
             fingerprint = mix(fingerprint, Float.floatToIntBits(animationSample.opacity));
         }
         fingerprint = mix(fingerprint, outputFingerprint);
@@ -136,7 +144,9 @@ final class DockGlassCompositor {
         boolean anyGeometryChanged = geometryMappingChanged;
         if (!anyGeometryChanged) {
             for (int i = 0; i < cached.size(); i++) {
-                if (cached.get(i).uiFingerprint != uiFingerprints[i]) {
+                CachedItem item = cached.get(i);
+                if (item.uiFingerprint != uiFingerprints[i]
+                        || item.proxyFingerprint != proxyFingerprints[i]) {
                     anyGeometryChanged = true;
                     break;
                 }
@@ -159,13 +169,24 @@ final class DockGlassCompositor {
             CachedItem cachedItem = cached.get(i);
             DockGlassItemNode item = cachedItem.node;
             long uiFingerprint = uiFingerprints[i];
+            long proxyFingerprint = proxyFingerprints[i];
             DockIconAnimationState.Sample animationSample = animationSamples[i];
-            if (geometryMappingChanged || cachedItem.uiFingerprint != uiFingerprint) {
-                cachedItem.geometry = item.capture(
-                        ownershipRoot, outputInverse,
-                        framebufferWidth, framebufferHeight,
-                        sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
+            if (geometryMappingChanged || cachedItem.uiFingerprint != uiFingerprint
+                    || cachedItem.proxyFingerprint != proxyFingerprint) {
+                if (animationSample.proxyActive) {
+                    cachedItem.geometry = animationSample.proxyRect != null
+                            ? item.captureProxy(animationSample.proxyRect, outputInverse,
+                                    framebufferWidth, framebufferHeight,
+                                    sampleInsetLeft, sampleInsetTop, scaleX, scaleY)
+                            : null;
+                } else {
+                    cachedItem.geometry = item.capture(
+                            ownershipRoot, outputInverse,
+                            framebufferWidth, framebufferHeight,
+                            sampleInsetLeft, sampleInsetTop, scaleX, scaleY);
+                }
                 cachedItem.uiFingerprint = uiFingerprint;
+                cachedItem.proxyFingerprint = proxyFingerprint;
             }
             if (animationSample.opacity <= 0f || cachedItem.geometry == null) continue;
             out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, animationSample.opacity));
@@ -199,6 +220,15 @@ final class DockGlassCompositor {
                     geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
         }
         return stable.size();
+    }
+
+    private static long proxyFingerprint(DockIconAnimationState.Sample sample) {
+        if (sample == null || !sample.proxyActive) return 0L;
+        long hash = mix(HASH_SEED, 1L);
+        float[] rect = sample.proxyRect;
+        if (rect == null || rect.length != 4) return mix(hash, 0L);
+        for (float value : rect) hash = mix(hash, Float.floatToIntBits(value));
+        return hash;
     }
 
     private static long mix(long hash, long value) {

@@ -9,12 +9,14 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Coordinates Dock icon glass and the native CLOSE_TO_HOME source/proxy handoff. */
+/** Coordinates Dock icon glass and the native FloatingIcon source/proxy handoff. */
 final class DockIconAnimationGlassHook {
     private static final String TAG = "[DC][DockIconAnimationGlass]";
     private static final long FRAME_COMMIT_FALLBACK_MS = 96L;
 
-    private static final Map<View, View> CLOSE_TO_HOME_TARGETS =
+    private static final Map<View, View> PROXY_TARGETS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, Boolean> PROXY_CLOSE_TO_HOME =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, PendingHandoff> PENDING_BY_PROXY =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -35,9 +37,9 @@ final class DockIconAnimationGlassHook {
         boolean backStop = installBackAnimStopHandoffGuard(classLoader);
         boolean finish = installFloatingViewFinishHandoffHook(classLoader);
         boolean view2 = installFloatingProxyHook(classLoader,
-                "com.miui.home.recents.views.FloatingIconView2");
+                "com.miui.home.recents.views.FloatingIconView2", false);
         boolean layer2 = installFloatingProxyHook(classLoader,
-                "com.miui.home.recents.views.FloatingIconLayer2");
+                "com.miui.home.recents.views.FloatingIconLayer2", true);
         installed = shortcut && backStop && finish && view2;
         if (installed) {
             MainHook.log(TAG + " hooks installed frameCommitHandoff=true"
@@ -145,16 +147,22 @@ final class DockIconAnimationGlassHook {
                         View proxy = owner instanceof View ? (View) owner : null;
                         boolean recycleSynchronously = args.length > 0
                                 && args[0] instanceof Boolean && (Boolean) args[0];
-                        View target = proxy != null ? closeToHomeTarget(proxy) : null;
+                        View target = proxy != null ? proxyTarget(proxy) : null;
                         if (proxy == null || target == null
                                 || !LauncherGlassHierarchy.isDock(target)) {
                             return chain.proceed(args);
                         }
 
-                        if (beginFrameCommitHandoff(proxy, target, recycleSynchronously)) {
-                            return null;
+                        if (isCloseToHomeProxy(proxy)) {
+                            if (beginFrameCommitHandoff(proxy, target, recycleSynchronously)) {
+                                return null;
+                            }
                         }
-                        return chain.proceed(args);
+
+                        Object result = chain.proceed(args);
+                        DockGlassItemRegistry.endProxyGeometry(target);
+                        forgetProxyTarget(proxy);
+                        return result;
                     }, boolean.class);
             return true;
         } catch (Throwable error) {
@@ -163,26 +171,27 @@ final class DockIconAnimationGlassHook {
         }
     }
 
-    private static boolean installFloatingProxyHook(ClassLoader classLoader, String className) {
+    private static boolean installFloatingProxyHook(
+            ClassLoader classLoader, String className, boolean useRotationRect) {
         try {
             HookUtil.hookMethod(classLoader, className, "update",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         View proxy = chain.getThisObject() instanceof View
                                 ? (View) chain.getThisObject() : null;
-                        boolean closeToHome = args.length == 10
+                        boolean validFrame = args.length == 10
                                 && args[0] instanceof RectF
                                 && args[1] instanceof RectF
                                 && args[2] instanceof Number
                                 && args[3] instanceof Number
-                                && args[6] instanceof Boolean
-                                && !((Boolean) args[6]);
-                        float proxyAlpha = closeToHome
+                                && args[6] instanceof Boolean;
+                        boolean closeToHome = validFrame && !((Boolean) args[6]);
+                        float proxyAlpha = validFrame
                                 ? ((Number) args[2]).floatValue() : Float.NaN;
-                        float progress = closeToHome
+                        float progress = validFrame
                                 ? ((Number) args[3]).floatValue() : Float.NaN;
 
-                        HookUtil.InvocationResult<Object> targetBeforeResult = closeToHome
+                        HookUtil.InvocationResult<Object> targetBeforeResult = validFrame
                                 ? HookUtil.tryInvoke(chain.getThisObject(), "getAnimTarget") : null;
                         Object targetBefore = targetBeforeResult != null && targetBeforeResult.succeeded()
                                 ? targetBeforeResult.value() : null;
@@ -194,7 +203,7 @@ final class DockIconAnimationGlassHook {
 
                         Object result = chain.proceed(args);
 
-                        if (closeToHome) {
+                        if (validFrame) {
                             HookUtil.InvocationResult<Object> targetResult =
                                     HookUtil.tryInvoke(chain.getThisObject(), "getAnimTarget");
                             Object target = targetResult.succeeded() ? targetResult.value() : null;
@@ -204,15 +213,49 @@ final class DockIconAnimationGlassHook {
                                 DockAnimationTrace.proxyFrame(
                                         "proxy-post", proxy, dockTarget, proxyAlpha, progress);
                                 if (proxy != null) {
-                                    rememberCloseToHomeTarget(proxy, dockTarget);
-                                    if (proxyAlpha <= 0.1f && proxy.getAlpha() < 1.0f) {
-                                        proxy.setAlpha(1.0f);
-                                        DockAnimationTrace.proxyFrame(
-                                                "proxy-tail-held", proxy, dockTarget,
-                                                proxyAlpha, progress);
-                                    }
+                                    rememberProxyTarget(proxy, dockTarget, closeToHome);
                                 }
-                                if (GlassRuntimeState.isAnyIconEnabled()) {
+
+                                boolean drawIcon;
+                                if (useRotationRect) {
+                                    try {
+                                        drawIcon = HookUtil.getBooleanField(
+                                                chain.getThisObject(), "mIsDrawIcon");
+                                    } catch (Throwable ignored) {
+                                        drawIcon = false;
+                                    }
+                                } else {
+                                    HookUtil.InvocationResult<Object> drawResult =
+                                            HookUtil.tryInvoke(chain.getThisObject(), "isDrawIcon");
+                                    Object draw = drawResult.succeeded() ? drawResult.value() : null;
+                                    drawIcon = draw instanceof Boolean && ((Boolean) draw);
+                                }
+                                boolean proxyVisible = useRotationRect
+                                        ? LauncherGlassProxyVisibility.isLayer2Visible(
+                                                proxyAlpha, drawIcon)
+                                        : LauncherGlassProxyVisibility.isView2Visible(
+                                                proxyAlpha, drawIcon);
+                                boolean publishProxyGeometry =
+                                        LauncherGlassProxyVisibility.shouldPublishGeometry(
+                                                closeToHome, proxyVisible);
+
+                                if (!publishProxyGeometry) {
+                                    DockGlassItemRegistry.holdProxyHidden(dockTarget);
+                                } else {
+                                    RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
+                                    DockGlassItemRegistry.updateProxyGeometry(
+                                            dockTarget, proxyRect.left, proxyRect.top,
+                                            proxyRect.right, proxyRect.bottom);
+                                }
+
+                                if (closeToHome && proxy != null
+                                        && proxyAlpha <= 0.1f && proxy.getAlpha() < 1.0f) {
+                                    proxy.setAlpha(1.0f);
+                                    DockAnimationTrace.proxyFrame(
+                                            "proxy-tail-held", proxy, dockTarget,
+                                            proxyAlpha, progress);
+                                }
+                                if (closeToHome && GlassRuntimeState.isAnyIconEnabled()) {
                                     DockGlassItemRegistry.observeLaunchAnimationFrame(
                                             dockTarget, progress);
                                 }
@@ -276,7 +319,8 @@ final class DockIconAnimationGlassHook {
             pending.completed = true;
         }
         forgetPending(pending);
-        forgetCloseToHomeTarget(pending.proxy);
+        DockGlassItemRegistry.endProxyGeometry(pending.source);
+        forgetProxyTarget(pending.proxy);
         DockAnimationTrace.sourceEvent("handoff-complete-" + reason, pending.source, View.VISIBLE);
 
         try {
@@ -299,21 +343,33 @@ final class DockIconAnimationGlassHook {
         }
     }
 
-    private static void rememberCloseToHomeTarget(View proxy, View target) {
-        synchronized (CLOSE_TO_HOME_TARGETS) {
-            CLOSE_TO_HOME_TARGETS.put(proxy, target);
+    private static void rememberProxyTarget(View proxy, View target, boolean closeToHome) {
+        synchronized (PROXY_TARGETS) {
+            PROXY_TARGETS.put(proxy, target);
+        }
+        synchronized (PROXY_CLOSE_TO_HOME) {
+            PROXY_CLOSE_TO_HOME.put(proxy, closeToHome);
         }
     }
 
-    private static View closeToHomeTarget(View proxy) {
-        synchronized (CLOSE_TO_HOME_TARGETS) {
-            return CLOSE_TO_HOME_TARGETS.get(proxy);
+    private static View proxyTarget(View proxy) {
+        synchronized (PROXY_TARGETS) {
+            return PROXY_TARGETS.get(proxy);
         }
     }
 
-    private static void forgetCloseToHomeTarget(View proxy) {
-        synchronized (CLOSE_TO_HOME_TARGETS) {
-            CLOSE_TO_HOME_TARGETS.remove(proxy);
+    private static boolean isCloseToHomeProxy(View proxy) {
+        synchronized (PROXY_CLOSE_TO_HOME) {
+            return Boolean.TRUE.equals(PROXY_CLOSE_TO_HOME.get(proxy));
+        }
+    }
+
+    private static void forgetProxyTarget(View proxy) {
+        synchronized (PROXY_TARGETS) {
+            PROXY_TARGETS.remove(proxy);
+        }
+        synchronized (PROXY_CLOSE_TO_HOME) {
+            PROXY_CLOSE_TO_HOME.remove(proxy);
         }
     }
 
