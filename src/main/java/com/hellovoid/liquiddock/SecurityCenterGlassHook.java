@@ -150,36 +150,21 @@ final class SecurityCenterGlassHook {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
-            HookUtil.hook(sidebarLifecycle.show(), chain -> {
-                if (ACTIVATION.allowsMutation()) notifySidebarShowRequested(contract);
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-            HookUtil.hook(sidebarLifecycle.hideImmediate(), chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (ACTIVATION.allowsMutation()) {
-                    notifySidebarHideRequested(contract, false);
-                }
-                return result;
-            });
-            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (ACTIVATION.allowsMutation()) {
-                    notifySidebarHideRequested(contract, true);
-                }
-                return result;
-            });
+            // Keep the native host authoritative for lifetime. A Security Center sidebar can reuse
+            // the same TurboLayout across hide/show cycles without re-running configure(). The old
+            // synthetic show/hide/terminal callbacks destroyed our session in that gap, so the
+            // second pull had no binding event with which to recreate the replacement. Observe the
+            // methods for compatibility only; attach/detach/root replacement now perform teardown.
+            HookUtil.hook(sidebarLifecycle.show(), chain ->
+                    chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(sidebarLifecycle.hideImmediate(), chain ->
+                    chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain ->
+                    chain.proceed(chain.getArgs().toArray(new Object[0])));
 
             for (Method terminalMethod : terminalCleanup.methods()) {
-                HookUtil.hook(terminalMethod, chain -> {
-                    if (ACTIVATION.allowsMutation()) {
-                        notifyVendorPanelClosing(chain.getArgs(), contract);
-                    }
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    if (ACTIVATION.allowsMutation()) {
-                        notifyVendorPanelTerminal(chain.getArgs(), contract);
-                    }
-                    return result;
-                });
+                HookUtil.hook(terminalMethod, chain ->
+                        chain.proceed(chain.getArgs().toArray(new Object[0])));
             }
 
             ACTIVATION.onCallbacksRegistered();
@@ -225,69 +210,6 @@ final class SecurityCenterGlassHook {
             live.onAllAppsToggleTargetResolved(turbo, targetPresent, generation);
         }
         live.refreshTransitionFrame(turbo);
-    }
-
-    private static void notifyVendorPanelClosing(
-            java.util.List<?> args,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        try {
-            View turbo = resolveTurboFromTerminalArgs(args, contract);
-            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-            if (live != null && turbo != null) live.onVendorPanelClosing(turbo);
-        } catch (Throwable error) {
-            log("vendor panel close observation failed", error);
-        }
-    }
-
-    private static void notifySidebarShowRequested(
-            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        try {
-            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-            if (live != null) live.onSidebarShowRequested();
-        } catch (Throwable error) {
-            log("sidebar show lifecycle observation failed", error);
-        }
-    }
-
-    private static void notifySidebarHideRequested(
-            SecurityCenterSemanticContractResolver.ResolvedContract contract,
-            boolean animated) {
-        try {
-            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-            if (live != null) live.onSidebarHideRequested(animated);
-        } catch (Throwable error) {
-            log("sidebar hide lifecycle observation failed", error);
-        }
-    }
-
-    private static void notifyVendorPanelTerminal(
-            java.util.List<?> args,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        try {
-            View turbo = resolveTurboFromTerminalArgs(args, contract);
-            if (turbo == null) {
-                throw new IllegalStateException("terminal cleanup missing TurboLayout arg");
-            }
-            SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-            if (live != null) live.onVendorPanelTerminal(turbo);
-        } catch (Throwable error) {
-            log("vendor panel terminal observation failed", error);
-        }
-    }
-
-    private static View resolveTurboFromTerminalArgs(
-            java.util.List<?> args,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        if (args == null || contract == null) return null;
-        View turbo = null;
-        for (Object arg : args) {
-            if (!contract.turboClass().isInstance(arg) || !(arg instanceof View)) continue;
-            if (turbo != null && turbo != arg) {
-                throw new IllegalStateException("terminal cleanup exposed multiple TurboLayout args");
-            }
-            turbo = (View) arg;
-        }
-        return turbo;
     }
 
     private static SecurityCenterGlassCoordinator currentCoordinator(

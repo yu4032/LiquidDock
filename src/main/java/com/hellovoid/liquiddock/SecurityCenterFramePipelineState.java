@@ -53,13 +53,6 @@ final class SecurityCenterFramePipelineState {
     private long sourceGeneration = -1L;
     private long inFlightSerial = -1L;
     private long inFlightGeneration = -1L;
-    /**
-     * The first successful presentation of each generation causes the coordinator to replace the
-     * vendor material and roll the PassBlur producer. That rollover must have one pipeline-owned
-     * fresh source waiting for it even when all same-generation output mutations were already
-     * coalesced before the first source arrived.
-     */
-    private long postHandoffRefreshGeneration = -1L;
 
     synchronized Offer offer(long serial, long generation) {
         if (serial < 0L || generation < 0L) return noneOffer();
@@ -76,7 +69,6 @@ final class SecurityCenterFramePipelineState {
             }
             sourceRequested = false;
             sourceGeneration = -1L;
-            postHandoffRefreshGeneration = -1L;
             latestGeneration = generation;
             latestSerial = serial;
         } else {
@@ -109,6 +101,12 @@ final class SecurityCenterFramePipelineState {
         return new Submission(true, inFlightSerial, inFlightGeneration);
     }
 
+    /**
+     * A vendor-hosted Security Center material is a live surface, not a one-shot snapshot.
+     * Once the current generation reaches presentation, immediately arm the next source frame.
+     * RootPassBlurBackend remains responsible for FPS gating, so this keeps the replacement output
+     * live without introducing a timer or an independent lifecycle loop.
+     */
     synchronized Presentation onPresented(long serial, long generation) {
         if (serial < 0L || generation < 0L
                 || serial != inFlightSerial || generation != inFlightGeneration) {
@@ -120,17 +118,10 @@ final class SecurityCenterFramePipelineState {
         boolean request = false;
         long nextGeneration = -1L;
         if (current && !sourceRequested) {
-            boolean pendingNewerGeometry = latestSerial != serial;
-            boolean needsPostHandoffRefresh = postHandoffRefreshGeneration != generation;
-            if (pendingNewerGeometry || needsPostHandoffRefresh) {
-                sourceRequested = true;
-                sourceGeneration = latestGeneration;
-                request = true;
-                nextGeneration = sourceGeneration;
-                if (needsPostHandoffRefresh) {
-                    postHandoffRefreshGeneration = generation;
-                }
-            }
+            sourceRequested = true;
+            sourceGeneration = latestGeneration;
+            request = true;
+            nextGeneration = sourceGeneration;
         }
         return new Presentation(current, request, nextGeneration);
     }
@@ -165,7 +156,6 @@ final class SecurityCenterFramePipelineState {
         sourceGeneration = -1L;
         inFlightSerial = -1L;
         inFlightGeneration = -1L;
-        postHandoffRefreshGeneration = -1L;
     }
 
     private static Offer noneOffer() {
