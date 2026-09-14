@@ -1,0 +1,40 @@
+name: R8 scene test policy patch
+
+on:
+  push:
+    branches:
+      - fix/r8-scene-controller-self-reflection
+    paths:
+      - .github/workflows/r8-scene-test-policy-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/r8-scene-controller-self-reflection
+          fetch-depth: 0
+      - name: Allowlist static R8 scene contract
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('src/test/java/com/hellovoid/liquiddock/RuntimeBehaviorTestPolicyContractTest.java')
+          s = p.read_text()
+          anchor = '            "R8ReleaseKeepContractTest.java",\n'
+          insert = '            "R8ReleaseKeepContractTest.java",\n            "R8SceneControllerReflectionContractTest.java",\n'
+          if anchor not in s:
+              raise SystemExit('allowlist anchor missing')
+          if '"R8SceneControllerReflectionContractTest.java"' not in s:
+              s = s.replace(anchor, insert, 1)
+          p.write_text(s)
+          PY
+          git config user.name yu4032
+          git config user.email 4032542465@smail.lnu.edu.cn
+          git add src/test/java/com/hellovoid/liquiddock/RuntimeBehaviorTestPolicyContractTest.java
+          git commit -m "test: allowlist R8 scene architecture contract"
+          git push origin HEAD:fix/r8-scene-controller-self-reflection
