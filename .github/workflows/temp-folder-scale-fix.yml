@@ -1,12 +1,15 @@
 name: temp folder scale fix
+
 on:
   push:
-    branches: [fix/folder-drag-workspace-glass]
+    branches:
+      - fix/folder-drag-workspace-glass
+
 permissions:
   contents: write
+
 jobs:
   patch:
-    if: github.event.head_commit.message != 'fix: keep folder scale math in scaled icon domain'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +22,8 @@ jobs:
           from pathlib import Path
           p=Path('src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java')
           s=p.read_text()
+          if 'BASE_PROGRESS_SHORTCUT_ICON' in s:
+              raise SystemExit(0)
           def r(a,b):
               global s
               if a not in s: raise SystemExit('missing anchor: '+a[:80])
@@ -29,8 +34,9 @@ jobs:
           r('    private static MeasureDomain shortcutDomain(View view) {\n', '''    private interface DomainAction { Object run() throws Throwable; }\n\n    private static Object withMeasureDomain(MeasureDomain domain, DomainAction action) throws Throwable {\n        MeasureDomain previous = ACTIVE_DOMAIN.get();\n        if (domain != null) ACTIVE_DOMAIN.set(domain);\n        try { return action.run(); }\n        finally {\n            if (previous == null) ACTIVE_DOMAIN.remove();\n            else ACTIVE_DOMAIN.set(previous);\n        }\n    }\n\n    private static void installFolderScaleTransactions(\n            Class<?> shortcutIcon, Class<?> baseProgressShortcutIcon) throws NoSuchMethodException {\n        installFolderScaleTransaction(shortcutIcon);\n        installFolderScaleTransaction(baseProgressShortcutIcon);\n    }\n\n    private static void installFolderScaleTransaction(Class<?> ownerType) throws NoSuchMethodException {\n        Method scaleDown = HookUtil.findMethodExact(\n                ownerType, "scaleDownToFolder", new Class<?>[]{boolean.class});\n        HookUtil.hook(scaleDown, chain -> {\n            Object owner = chain.getThisObject();\n            MeasureDomain domain = owner instanceof View ? shortcutDomain((View) owner) : null;\n            if (domain == null) domain = MeasureDomain.WORKSPACE;\n            final MeasureDomain active = domain;\n            return withMeasureDomain(active,\n                    () -> chain.proceed(chain.getArgs().toArray(new Object[0])));\n        });\n    }\n\n    private static MeasureDomain shortcutDomain(View view) {\n''')
           p.write_text(s)
           PY
-      - name: Commit
+      - name: Commit if needed
         run: |
+          if git diff --quiet; then exit 0; fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java
