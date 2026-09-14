@@ -20,6 +20,8 @@ import java.util.WeakHashMap;
 final class LauncherGlassDragOverlay {
     private static final String TAG = "[DC][DragGlass]";
     private static final WeakHashMap<View, LauncherGlassDragOverlay> BY_ROOT = new WeakHashMap<>();
+    private static final WeakHashMap<View, LauncherGlassDragOverlay> CLEAN_CAPTURE_BY_DRAG_VIEW =
+            new WeakHashMap<>();
 
     private final WeakReference<View> rootRef;
     private final LiquidDockConfig.Glass glassConfig;
@@ -37,6 +39,11 @@ final class LauncherGlassDragOverlay {
     private LauncherDragSourceOverlay sourceOverlay;
     private LauncherGlassSession sourceSession;
     private boolean sourceAttachPending;
+    private WeakReference<View> cleanCaptureDragRef = new WeakReference<>(null);
+    private boolean cleanCaptureRequested;
+    private boolean cleanCaptureInFlight;
+    private boolean cleanCapturePresentationGated;
+    private float cleanCaptureOriginalAlpha = 1f;
     private WeakReference<ViewGroup> hostRef = new WeakReference<>(null);
     private float activeCornerRadiusPx;
     private LauncherGlassNodeKind activeNodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
@@ -76,6 +83,43 @@ final class LauncherGlassDragOverlay {
         carrier.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         carrier.setVisibility(View.INVISIBLE);
         root.addOnAttachStateChangeListener(rootAttachListener);
+    }
+
+    static LauncherGlassDragOverlay prepareCleanCapture(
+            View source, LiquidDockConfig.Glass glassConfig) {
+        if (!GlassRuntimeState.isEnabled() || source == null) return null;
+        LauncherGlassDragOverlay overlay = acquire(source, glassConfig);
+        if (overlay == null || overlay.released) return null;
+        overlay.ensureWorkspaceSource();
+        return overlay;
+    }
+
+    void armCleanCapture(View dragView) {
+        if (released || dragView == null) return;
+        cleanCaptureDragRef = new WeakReference<>(dragView);
+        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {
+            CLEAN_CAPTURE_BY_DRAG_VIEW.put(dragView, this);
+        }
+    }
+
+    static void gateCleanDragPresentation(View dragView) {
+        LauncherGlassDragOverlay overlay = cleanCaptureOwner(dragView);
+        if (overlay == null || overlay.released || dragView == null) return;
+        overlay.cleanCaptureOriginalAlpha = dragView.getAlpha();
+        overlay.cleanCapturePresentationGated = true;
+        dragView.setAlpha(0f);
+    }
+
+    static void requestCleanBackdropAndReveal(View dragView) {
+        LauncherGlassDragOverlay overlay = cleanCaptureOwner(dragView);
+        if (overlay != null) overlay.requestCleanBackdropAndRevealInternal(dragView);
+    }
+
+    private static LauncherGlassDragOverlay cleanCaptureOwner(View dragView) {
+        if (dragView == null) return null;
+        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {
+            return CLEAN_CAPTURE_BY_DRAG_VIEW.get(dragView);
+        }
     }
 
     static boolean begin(
@@ -273,8 +317,13 @@ final class LauncherGlassDragOverlay {
                         LauncherGlassSession session = new LauncherGlassSession(
                                 sourceOverlay, glassConfig,
                                 PassBlurBindRequest.dragOverlay(sourceOverlay));
-                        session.freezeAfterNextFreshFrame();
                         sourceSession = session;
+                        View pendingDrag = cleanCaptureDragRef.get();
+                        if (cleanCaptureRequested && pendingDrag != null) {
+                            requestCleanBackdropAndRevealInternal(pendingDrag);
+                        } else if (tracking) {
+                            session.freezeAfterNextFreshFrame();
+                        }
                         if (tracking) syncFromSource();
                     }
 
@@ -287,7 +336,41 @@ final class LauncherGlassDragOverlay {
         else sourceOverlay = created;
     }
 
+    private void requestCleanBackdropAndRevealInternal(View dragView) {
+        if (released || dragView == null || cleanCaptureDragRef.get() != dragView) return;
+        cleanCaptureRequested = true;
+        ensureWorkspaceSource();
+        LauncherGlassSession session = sourceSession;
+        if (session == null || session.isShutdown() || cleanCaptureInFlight) return;
+        cleanCaptureInFlight = true;
+        session.freezeAfterNextFreshFrame(
+                () -> restoreCleanDragPresentation(dragView, "fresh-workspace"),
+                () -> restoreCleanDragPresentation(dragView, "source-failure"));
+    }
+
+    private void restoreCleanDragPresentation(View dragView, String reason) {
+        if (dragView == null || cleanCaptureDragRef.get() != dragView) return;
+        cleanCaptureInFlight = false;
+        cleanCaptureRequested = false;
+        if (cleanCapturePresentationGated) {
+            dragView.setAlpha(cleanCaptureOriginalAlpha);
+            dragView.invalidate();
+        }
+        cleanCapturePresentationGated = false;
+        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {
+            if (CLEAN_CAPTURE_BY_DRAG_VIEW.get(dragView) == this) {
+                CLEAN_CAPTURE_BY_DRAG_VIEW.remove(dragView);
+            }
+        }
+        cleanCaptureDragRef = new WeakReference<>(null);
+        MainHook.log(TAG + " clean workspace capture released presentation reason=" + reason);
+    }
+
     private void releaseDragSource() {
+        View cleanDrag = cleanCaptureDragRef.get();
+        if (cleanDrag != null && cleanCapturePresentationGated) {
+            restoreCleanDragPresentation(cleanDrag, "release");
+        }
         if (sink != null) {
             sink.dispose();
             sink = null;
@@ -341,6 +424,17 @@ final class LauncherGlassDragOverlay {
         sink.setNativeCornerRadiusPx(LauncherGlassBoundsPolicy.capRadius(
                 activeCornerRadiusPx * radiusScale,
                 geometry.visualWidth(), geometry.visualHeight()));
+        publishFrameGeometry();
+    }
+
+    private void publishFrameGeometry() {
+        LauncherGlassSinkView liveSink = sink;
+        LauncherGlassSession authority = sourceSession;
+        View authorityRoot = sourceOverlay;
+        if (liveSink == null || authority == null || authority.isShutdown()
+                || authorityRoot == null || !authorityRoot.isAttachedToWindow()) return;
+        LauncherGlassGeometry.Snapshot geometry = liveSink.captureGeometry(authorityRoot);
+        if (geometry != null) authority.publishDragGeometry(liveSink, geometry);
     }
 
     private LauncherGlassDragCarrierGeometry.Snapshot resolveCarrierGeometry(

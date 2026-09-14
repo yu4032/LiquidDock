@@ -19,6 +19,10 @@ import java.util.WeakHashMap;
 final class MiuixLauncherDragOverlayHook {
     private static final String TAG = "[DC][DragGlassHook]";
     private static final String DRAG_VIEW = "com.miui.home.launcher.DragView";
+    private static final String DRAG_CONTROLLER = "com.miui.home.launcher.DragController";
+    private static final String DRAG_SOURCE = "com.miui.home.launcher.DragSource";
+    private static final String DRAG_ANIM_FINISHED_LISTENER =
+            "com.miui.home.launcher.DragView$DragAnimFinishedListener";
     private static final int MAX_READY_ATTEMPTS = 4;
     private static final Map<View, DragRecord> ACTIVE =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -86,6 +90,44 @@ final class MiuixLauncherDragOverlayHook {
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
+            Class<?> dragControllerClass = Class.forName(DRAG_CONTROLLER, false, classLoader);
+            Class<?> dragViewClass = Class.forName(DRAG_VIEW, false, classLoader);
+            Class<?> dragSourceClass = Class.forName(DRAG_SOURCE, false, classLoader);
+            Class<?> dragAnimFinishedListenerClass = Class.forName(
+                    DRAG_ANIM_FINISHED_LISTENER, false, classLoader);
+
+            Method createDragView = HookUtil.findMethodExact(
+                    dragControllerClass, "createDragView",
+                    new Class<?>[]{View.class, int.class, int.class, boolean.class,
+                            int.class, dragSourceClass});
+            HookUtil.hook(createDragView, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                View source = args.length > 0 && args[0] instanceof View ? (View) args[0] : null;
+                int dragAction = args.length > 1 && args[1] instanceof Integer
+                        ? (Integer) args[1] : -1;
+                int dragCount = args.length > 4 && args[4] instanceof Integer
+                        ? (Integer) args[4] : 0;
+                LauncherGlassDragOverlay cleanCapture = dragAction == 0 && dragCount == 1
+                        ? LauncherGlassDragOverlay.prepareCleanCapture(source, glassConfig) : null;
+                Object result = chain.proceed(args);
+                if (cleanCapture != null && result instanceof View) {
+                    cleanCapture.armCleanCapture((View) result);
+                }
+                return result;
+            });
+
+            Method showWithAnim = HookUtil.findMethodExact(
+                    dragViewClass, "showWithAnim",
+                    new Class<?>[]{float.class, float.class, int.class, int.class,
+                            int.class, int.class, dragAnimFinishedListenerClass});
+            HookUtil.hook(showWithAnim, chain -> {
+                Object owner = chain.getThisObject();
+                View dragView = owner instanceof View ? (View) owner : null;
+                LauncherGlassDragOverlay.gateCleanDragPresentation(dragView);
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                LauncherGlassDragOverlay.requestCleanBackdropAndReveal(dragView);
+                return result;
+            });
             Method onViewAdded = ViewGroup.class.getDeclaredMethod("onViewAdded", View.class);
             onViewAdded.setAccessible(true);
             HookUtil.hook(onViewAdded, chain -> {
