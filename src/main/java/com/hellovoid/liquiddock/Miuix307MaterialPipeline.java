@@ -40,6 +40,11 @@ final class Miuix307MaterialPipeline {
     private static ViewTreeObserver.OnGlobalLayoutListener hierarchyRecoveryListener;
     // Log only once while one vendor instance is still in its startup placeholder geometry.
     private static WeakReference<View> geometryDeferredLoggedFor = new WeakReference<>(null);
+    // Temporary one-shot diagnostics for optimized Dock spacing ownership.
+    private static boolean r8SpacingInstallLogged;
+    private static boolean r8SpacingHookReadyLogged;
+    private static boolean r8SpacingOffsetsLogged;
+    private static boolean r8SpacingBackgroundLogged;
 
     private Miuix307MaterialPipeline() {}
 
@@ -272,10 +277,21 @@ final class Miuix307MaterialPipeline {
     private static void installDockCustomizationCompatibility(
             ClassLoader classLoader, LiquidDockConfig config) {
         LiquidDockConfig.Dock dock = config.dock;
-        if (dock == null || !dock.enabled) return;
         float density = android.content.res.Resources.getSystem().getDisplayMetrics().density;
-        float dimensionScale = dock.dimensionsDp ? density : 1f;
-        int spacing = Math.round(dock.spacing * dimensionScale);
+        boolean dockEnabled = dock != null && dock.enabled;
+        float rawSpacing = dock != null ? dock.spacing : 0f;
+        boolean dimensionsDp = dock != null && dock.dimensionsDp;
+        float dimensionScale = dimensionsDp ? density : 1f;
+        int spacing = Math.round(rawSpacing * dimensionScale);
+        if (!r8SpacingInstallLogged) {
+            r8SpacingInstallLogged = true;
+            MainHook.log("[DC][R8DockSpacing] install dockEnabled=" + dockEnabled
+                    + " raw=" + rawSpacing + " dimensionsDp=" + dimensionsDp
+                    + " density=" + density + " px=" + spacing
+                    + " targetLoader=" + classLoader + "@"
+                    + Integer.toHexString(System.identityHashCode(classLoader)));
+        }
+        if (!dockEnabled) return;
 
         if (spacing != 0) {
             try {
@@ -288,10 +304,17 @@ final class Miuix307MaterialPipeline {
                         "getItemOffsets",
                         chain -> {
                             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            if (MainHook.isWorkstationMode()) return result;
+                            boolean workstation = MainHook.isWorkstationMode();
                             android.graphics.Rect out = (android.graphics.Rect) chain.getArgs().get(0);
+                            if (!r8SpacingOffsetsLogged) {
+                                r8SpacingOffsetsLogged = true;
+                                MainHook.log("[DC][R8DockSpacing] getItemOffsets fired workstation="
+                                        + workstation + " spacing=" + spacing + " before=" + out);
+                            }
+                            if (workstation) return result;
                             out.left += spacing;
                             out.right += spacing;
+                            MainHook.log("[DC][R8DockSpacing] getItemOffsets applied once after=" + out);
                             return result;
                         }, android.graphics.Rect.class, View.class, recyclerView, recyclerState);
 
@@ -301,18 +324,42 @@ final class Miuix307MaterialPipeline {
                 HookUtil.hookMethod(layoutManager, "updateBackgroundView",
                         new Class<?>[]{android.widget.FrameLayout.class, int.class, int.class, float.class},
                         chain -> {
-                            if (MainHook.isWorkstationMode()) {
-                                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                            boolean workstation = MainHook.isWorkstationMode();
+                            Object[] args = chain.getArgs().toArray(new Object[0]);
+                            int originalWidth = args.length > 1 && args[1] instanceof Integer
+                                    ? (Integer) args[1] : Integer.MIN_VALUE;
+                            if (workstation) {
+                                if (!r8SpacingBackgroundLogged) {
+                                    r8SpacingBackgroundLogged = true;
+                                    MainHook.log("[DC][R8DockSpacing] updateBackgroundView fired workstation=true"
+                                            + " width=" + originalWidth);
+                                }
+                                return chain.proceed(args);
                             }
                             int itemCount = (Integer) HookUtil.requireInvoke(
                                     chain.getThisObject(), "getItemCount");
-                            Object[] args = chain.getArgs().toArray(new Object[0]);
                             if (itemCount > 0) args[1] = (Integer) args[1] + spacing * 2 * itemCount;
+                            if (!r8SpacingBackgroundLogged) {
+                                r8SpacingBackgroundLogged = true;
+                                MainHook.log("[DC][R8DockSpacing] updateBackgroundView fired workstation=false"
+                                        + " itemCount=" + itemCount + " spacing=" + spacing
+                                        + " width=" + originalWidth + " -> " + args[1]);
+                            }
                             return chain.proceed(args);
                         });
+                if (!r8SpacingHookReadyLogged) {
+                    r8SpacingHookReadyLogged = true;
+                    MainHook.log("[DC][R8DockSpacing] hooks installed recyclerLoader="
+                            + recyclerView.getClassLoader() + " stateLoader="
+                            + recyclerState.getClassLoader() + " layoutLoader="
+                            + layoutManager.getClassLoader());
+                }
             } catch (Throwable error) {
+                MainHook.log("[DC][R8DockSpacing] hook install FAILED: " + error);
                 MainHook.log("[DC] MiuiX 307 spacing hook unavailable: " + error);
             }
+        } else {
+            MainHook.log("[DC][R8DockSpacing] spacing resolved to zero; hooks intentionally skipped");
         }
     }
 
