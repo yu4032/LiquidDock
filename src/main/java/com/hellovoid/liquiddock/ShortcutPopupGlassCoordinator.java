@@ -44,9 +44,7 @@ final class ShortcutPopupGlassCoordinator {
                     sourceRoot,
                     state.glassConfig,
                     new ShortcutPopupGlassSession.Listener() {
-                        @Override public void onPresented() {
-                            onPresented(state);
-                        }
+                        @Override public void onPresented() { onPresented(state); }
 
                         @Override public void onFailure(Throwable error) {
                             MainHook.log(TAG + " session failed: " + error);
@@ -63,14 +61,11 @@ final class ShortcutPopupGlassCoordinator {
         });
     }
 
-    static synchronized boolean bindPopup(
-            View decorView, View popupView, View contentView) {
+    static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
         if (state == null || state.released || state.decorRef.get() != decorView
                 || state.session == null || popupView == null || contentView == null
-                || !(decorView instanceof ViewGroup)) {
-            return false;
-        }
+                || !(decorView instanceof ViewGroup)) return false;
         ViewGroup decorGroup = (ViewGroup) decorView;
         int popupIndex = decorGroup.indexOfChild(popupView);
         if (popupIndex < 0) return false;
@@ -82,6 +77,16 @@ final class ShortcutPopupGlassCoordinator {
         state.layer = layer;
         state.popupRef = new WeakReference<>(popupView);
         state.contentRef = new WeakReference<>(contentView);
+
+        View.OnAttachStateChangeListener detachListener = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) {}
+
+            @Override public void onViewDetachedFromWindow(View v) {
+                release(state, "popup-detached");
+            }
+        };
+        state.popupDetachListener = detachListener;
+        popupView.addOnAttachStateChangeListener(detachListener);
 
         ViewTreeObserver observer = decorView.getViewTreeObserver();
         ViewTreeObserver.OnPreDrawListener listener = () -> {
@@ -111,10 +116,10 @@ final class ShortcutPopupGlassCoordinator {
         decor.getLocationOnScreen(root);
         LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
                 root[0], root[1], rect.left, rect.top, rect.right, rect.bottom);
-        float radius = resolveShortcutMenuCornerRadius(content);
         LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
                 decor.getWidth(), decor.getHeight(),
-                bounds.left, bounds.top, bounds.right, bounds.bottom, radius);
+                bounds.left, bounds.top, bounds.right, bounds.bottom,
+                resolveShortcutMenuCornerRadius(content));
         if (geometry != null) session.updateGeometry(geometry);
     }
 
@@ -140,11 +145,10 @@ final class ShortcutPopupGlassCoordinator {
         }
     }
 
-    static synchronized void releasePopup(View decorView) {
+    static synchronized void releasePopupIfDetached(View decorView, View popupView) {
         State state = current;
-        if (state == null || decorView == null || state.decorRef.get() == decorView) {
-            releaseLocked("popup-dismiss");
-        }
+        if (state == null || state.decorRef.get() != decorView) return;
+        if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
 
     private static void release(State expected, String reason) {
@@ -159,6 +163,11 @@ final class ShortcutPopupGlassCoordinator {
         current = null;
         if (state == null || state.released) return;
         state.released = true;
+        View popup = state.popupRef.get();
+        if (popup != null && state.popupDetachListener != null) {
+            try { popup.removeOnAttachStateChangeListener(state.popupDetachListener); }
+            catch (Throwable ignored) {}
+        }
         if (state.observer != null && state.preDrawListener != null) {
             try {
                 if (state.observer.isAlive()) {
@@ -199,6 +208,7 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassLayer layer;
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
+        View.OnAttachStateChangeListener popupDetachListener;
         boolean materialClaimed;
         boolean released;
 
