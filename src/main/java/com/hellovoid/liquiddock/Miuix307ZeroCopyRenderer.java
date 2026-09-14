@@ -10,6 +10,7 @@ import java.lang.ref.WeakReference;
 /** Builds the feedback-safe HyperOS 307 PassBlur -> OES -> TextureView material composition. */
 final class Miuix307ZeroCopyRenderer {
     private static final String TAG = "[DC][ZC]";
+    private static final int MAX_HOME_FRESH_WAIT_FRAMES = 120;
 
     private static WeakReference<Miuix307PassBlurTextureView> gpuBackdropRef =
             new WeakReference<>(null);
@@ -126,7 +127,8 @@ final class Miuix307ZeroCopyRenderer {
     /**
      * HOME authority starts the refresh immediately. Keep the already-presented Dock visible, but
      * temporarily force the PassBlur producer live so the first desktop/wallpaper buffer replaces
-     * the App buffer as soon as SurfaceFlinger produces it. No alpha/visibility barrier is used.
+     * the App buffer as soon as the TextureView presents a new frame. No alpha/visibility barrier
+     * is used.
      */
     static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
@@ -136,12 +138,12 @@ final class Miuix307ZeroCopyRenderer {
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
         if (!decision.forceProducerUpdates) return;
 
-        final long inputTimestampBaseline = readInputTimestamp(gpuBackdrop);
+        final long outputTimestampBaseline = readOutputTimestamp(gpuBackdrop);
         homeProducerOverride = true;
         applyProducerUpdatesPolicy("home-refresh-start");
-        awaitFreshHomeInput(gpuBackdrop, serial, inputTimestampBaseline);
+        awaitFreshHomeOutput(gpuBackdrop, serial, outputTimestampBaseline, 0);
         MainHook.log(TAG + " HOME backdrop refresh armed serial=" + serial
-                + " inputTimestampBaseline=" + inputTimestampBaseline);
+                + " outputTimestampBaseline=" + outputTimestampBaseline);
     }
 
     /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
@@ -152,40 +154,44 @@ final class Miuix307ZeroCopyRenderer {
                 + homeFreshnessSerial);
     }
 
-    private static void awaitFreshHomeInput(
+    private static void awaitFreshHomeOutput(
             Miuix307PassBlurTextureView gpuBackdrop,
             long serial,
-            long inputTimestampBaseline) {
+            long outputTimestampBaseline,
+            int attempt) {
         if (gpuBackdropRef.get() != gpuBackdrop || serial != homeFreshnessSerial
                 || !gpuBackdrop.isAttachedToWindow()) {
             return;
         }
 
-        long inputTimestamp = readInputTimestamp(gpuBackdrop);
-        if (inputTimestamp > 0L && inputTimestamp != inputTimestampBaseline) {
+        long outputTimestamp = readOutputTimestamp(gpuBackdrop);
+        if (outputTimestamp > 0L && outputTimestamp != outputTimestampBaseline) {
             DockHomeBackdropFreshnessState.Decision decision =
                     HOME_FRESHNESS.onProducerFrameAvailable();
             if (decision.releaseProducerOverride) {
                 homeProducerOverride = false;
                 applyProducerUpdatesPolicy("home-refresh-frame-arrived");
                 MainHook.log(TAG + " HOME backdrop refreshed serial=" + serial
-                        + " inputTimestamp=" + inputTimestamp);
+                        + " outputTimestamp=" + outputTimestamp);
             }
             return;
         }
 
-        gpuBackdrop.postOnAnimation(() -> awaitFreshHomeInput(
-                gpuBackdrop, serial, inputTimestampBaseline));
+        if (attempt >= MAX_HOME_FRESH_WAIT_FRAMES) {
+            HOME_FRESHNESS.reset();
+            homeProducerOverride = false;
+            applyProducerUpdatesPolicy("home-refresh-wait-exhausted");
+            MainHook.log(TAG + " HOME backdrop refresh wait exhausted serial=" + serial);
+            return;
+        }
+
+        gpuBackdrop.postOnAnimation(() -> awaitFreshHomeOutput(
+                gpuBackdrop, serial, outputTimestampBaseline, attempt + 1));
     }
 
-    private static long readInputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {
-        try {
-            Object value = HookUtil.getField(gpuBackdrop, "inputSurfaceTexture");
-            return value instanceof SurfaceTexture ? ((SurfaceTexture) value).getTimestamp() : 0L;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " HOME refresh input timestamp unavailable: " + error);
-            return 0L;
-        }
+    private static long readOutputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {
+        SurfaceTexture output = gpuBackdrop.getSurfaceTexture();
+        return output != null ? output.getTimestamp() : 0L;
     }
 
     static void requestDockSceneRefresh() {
