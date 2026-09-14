@@ -55,6 +55,33 @@ public class SecurityCenterGlassCoordinatorPolicyTest {
     }
 
     @Test
+    public void outputReadyBelongsOnlyToCurrentSessionAndCurrentSink() {
+        SecurityCenterGlassCoordinator.Policy policy = new SecurityCenterGlassCoordinator.Policy();
+        Object root = new Object();
+        Object session = new Object();
+        Object dock = new Object();
+        Object box = new Object();
+        Object apps = new Object();
+        Object stale = new Object();
+
+        policy.bindRoot(root);
+        assertTrue(policy.onSessionCreated(root, session));
+
+        assertTrue("physical Dock output readiness must be allowed to recapture the current scene",
+                policy.acceptsOutputReady(root, session, dock, dock, box, apps, true));
+        assertTrue("physical toolbox output readiness must be allowed to recapture the current scene",
+                policy.acceptsOutputReady(root, session, box, dock, box, apps, true));
+        assertTrue("physical All Apps output readiness must be allowed to recapture the current scene",
+                policy.acceptsOutputReady(root, session, apps, dock, box, apps, true));
+        assertFalse("a replaced TextureView must not revive an obsolete material epoch",
+                policy.acceptsOutputReady(root, session, stale, dock, box, apps, true));
+        assertFalse("an obsolete session must not use a late SurfaceTexture callback",
+                policy.acceptsOutputReady(root, new Object(), dock, dock, box, apps, true));
+        assertFalse("disabled runtime must reject late output readiness",
+                policy.acceptsOutputReady(root, session, dock, dock, box, apps, false));
+    }
+
+    @Test
     public void releaseAllRevokesQueuedCallbacksAndIsIdempotent() {
         SecurityCenterGlassCoordinator.Policy policy = new SecurityCenterGlassCoordinator.Policy();
         Object root = new Object();
