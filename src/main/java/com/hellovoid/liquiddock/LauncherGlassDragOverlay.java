@@ -34,6 +34,9 @@ final class LauncherGlassDragOverlay {
     private final Matrix globalToHost = new Matrix();
     private WeakReference<View> sourceRef = new WeakReference<>(null);
     private LauncherGlassSinkView sink;
+    private LauncherDragSourceOverlay sourceOverlay;
+    private LauncherGlassSession sourceSession;
+    private boolean sourceAttachPending;
     private WeakReference<ViewGroup> hostRef = new WeakReference<>(null);
     private float activeCornerRadiusPx;
     private LauncherGlassNodeKind activeNodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
@@ -174,6 +177,7 @@ final class LauncherGlassDragOverlay {
                 activeVisualRight - activeVisualLeft,
                 activeVisualBottom - activeVisualTop);
         sourceRef = new WeakReference<>(source);
+        ensureWorkspaceSource();
         if (!coordinator.begin(token, kind, bounds, activeCornerRadiusPx)) return false;
         tracking = true;
         Choreographer.getInstance().removeFrameCallback(frameCallback);
@@ -190,10 +194,10 @@ final class LauncherGlassDragOverlay {
         Choreographer.getInstance().removeFrameCallback(frameCallback);
         sourceRef = new WeakReference<>(null);
         carrier.setVisibility(View.INVISIBLE);
-        if (sink != null) {
-            sink.setVisibility(View.GONE);
-            sink.requestLifecycleRefresh();
-        }
+        if (sink != null) sink.setVisibility(View.GONE);
+        mainHandler.post(() -> {
+            if (!tracking && !released) releaseDragSource();
+        });
         MainHook.log(TAG + " end");
     }
 
@@ -238,12 +242,61 @@ final class LauncherGlassDragOverlay {
             if (!carrier.isAttachedToWindow() || carrier.getWidth() <= 0 || carrier.getHeight() <= 0) {
                 return false;
             }
-            sink = LauncherGlassSinkView.attachToMaterial(
-                    carrier, activeCornerRadiusPx, glassConfig);
+            LauncherGlassSession authority = sourceSession;
+            if (authority == null || authority.isShutdown()) {
+                ensureWorkspaceSource();
+                return false;
+            }
+            sink = LauncherGlassSinkView.attachToExternalMaterial(
+                    carrier, authority, activeCornerRadiusPx, glassConfig);
             if (sink == null) return false;
             sink.setNodeKind(activeNodeKind);
         }
         return true;
+    }
+
+    private void ensureWorkspaceSource() {
+        if (released || sourceAttachPending) return;
+        if (sourceSession != null && !sourceSession.isShutdown()) return;
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow() || root.getWindowToken() == null) return;
+        sourceAttachPending = true;
+        LauncherDragSourceOverlay created = LauncherDragSourceOverlay.attach(
+                root, new LauncherDragSourceOverlay.Listener() {
+                    @Override public void onAttached(LauncherDragSourceOverlay overlay) {
+                        sourceAttachPending = false;
+                        if (released) {
+                            overlay.dispose();
+                            return;
+                        }
+                        sourceOverlay = overlay;
+                        LauncherGlassSession session = new LauncherGlassSession(sourceOverlay, glassConfig);
+                        session.freezeAfterNextFreshFrame();
+                        sourceSession = session;
+                        if (tracking) syncFromSource();
+                    }
+
+                    @Override public void onAttachFailed(Throwable error) {
+                        sourceAttachPending = false;
+                        MainHook.log(TAG + " upper workspace source attach failed: " + error);
+                    }
+                });
+        if (created == null) sourceAttachPending = false;
+        else sourceOverlay = created;
+    }
+
+    private void releaseDragSource() {
+        if (sink != null) {
+            sink.dispose();
+            sink = null;
+        }
+        LauncherGlassSession session = sourceSession;
+        sourceSession = null;
+        if (session != null) session.shutdown();
+        LauncherDragSourceOverlay overlay = sourceOverlay;
+        sourceOverlay = null;
+        sourceAttachPending = false;
+        if (overlay != null) overlay.dispose();
     }
 
     private void applyCarrierGeometry(View source) {
@@ -353,10 +406,7 @@ final class LauncherGlassDragOverlay {
             if (BY_ROOT.get(root) == this) BY_ROOT.remove(root);
         }
 
-        if (sink != null) {
-            sink.dispose();
-            sink = null;
-        }
+        releaseDragSource();
         Object parent = carrier.getParent();
         if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(carrier);
         hostRef = new WeakReference<>(null);
