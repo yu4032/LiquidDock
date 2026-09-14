@@ -5,23 +5,21 @@ import android.os.Handler;
 import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 
 import java.lang.ref.WeakReference;
 import java.util.WeakHashMap;
 
 /**
- * One persistent launcher drag-glass carrier per stable Launcher root.
+ * One live upper-window drag presentation per stable Launcher root.
  *
- * <p>The carrier is placed immediately below MIUI's DragContainer and owns exactly one
- * LauncherGlassSinkView. Folder, widget and icon adapters only feed source geometry into this
- * object; they never create their own drag TextureView or PassBlur producer.</p>
+ * <p>MIUI's DragView remains the logic authority inside Launcher. LiquidDock renders both the
+ * glass and a draw-only mirror in an excluded application-panel window above Launcher, so the
+ * PassBlur producer can continuously sample the real workspace without recursively capturing the
+ * drag visual or the glass output itself.</p>
  */
 final class LauncherGlassDragOverlay {
     private static final String TAG = "[DC][DragGlass]";
     private static final WeakHashMap<View, LauncherGlassDragOverlay> BY_ROOT = new WeakHashMap<>();
-    private static final WeakHashMap<View, LauncherGlassDragOverlay> CLEAN_CAPTURE_BY_DRAG_VIEW =
-            new WeakHashMap<>();
 
     private final WeakReference<View> rootRef;
     private final LiquidDockConfig.Glass glassConfig;
@@ -34,17 +32,15 @@ final class LauncherGlassDragOverlay {
     private final Matrix sourceToGlobal = new Matrix();
     private final Matrix hostToGlobal = new Matrix();
     private final Matrix globalToHost = new Matrix();
+
     private WeakReference<View> sourceRef = new WeakReference<>(null);
     private LauncherGlassSinkView sink;
+    private LauncherDragVisualMirror mirror;
     private LauncherDragSourceOverlay sourceOverlay;
     private LauncherGlassSession sourceSession;
     private boolean sourceAttachPending;
-    private WeakReference<View> cleanCaptureDragRef = new WeakReference<>(null);
-    private boolean cleanCaptureRequested;
-    private boolean cleanCaptureInFlight;
-    private boolean cleanCapturePresentationGated;
-    private float cleanCaptureOriginalAlpha = 1f;
-    private WeakReference<ViewGroup> hostRef = new WeakReference<>(null);
+    private boolean presentationClaimed;
+    private float vendorPresentationAlpha = 1f;
     private float activeCornerRadiusPx;
     private LauncherGlassNodeKind activeNodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
     private float activeVisualLeft;
@@ -83,6 +79,7 @@ final class LauncherGlassDragOverlay {
         root.addOnAttachStateChangeListener(rootAttachListener);
     }
 
+    /** Compatibility prewarm for the existing 4.50 createDragView hook; no snapshot is taken. */
     static LauncherGlassDragOverlay prepareCleanCapture(
             View source, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || source == null) return null;
@@ -92,33 +89,14 @@ final class LauncherGlassDragOverlay {
         return overlay;
     }
 
-    void armCleanCapture(View dragView) {
-        if (released || dragView == null) return;
-        cleanCaptureDragRef = new WeakReference<>(dragView);
-        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {
-            CLEAN_CAPTURE_BY_DRAG_VIEW.put(dragView, this);
-        }
-    }
+    /** Compatibility no-op: live mode does not arm a frozen capture. */
+    void armCleanCapture(View dragView) {}
 
-    static void gateCleanDragPresentation(View dragView) {
-        LauncherGlassDragOverlay overlay = cleanCaptureOwner(dragView);
-        if (overlay == null || overlay.released || dragView == null) return;
-        overlay.cleanCaptureOriginalAlpha = dragView.getAlpha();
-        overlay.cleanCapturePresentationGated = true;
-        dragView.setAlpha(0f);
-    }
+    /** Compatibility no-op: vendor DragView stays visible until upper presentation is ready. */
+    static void gateCleanDragPresentation(View dragView) {}
 
-    static void requestCleanBackdropAndReveal(View dragView) {
-        LauncherGlassDragOverlay overlay = cleanCaptureOwner(dragView);
-        if (overlay != null) overlay.requestCleanBackdropAndRevealInternal(dragView);
-    }
-
-    private static LauncherGlassDragOverlay cleanCaptureOwner(View dragView) {
-        if (dragView == null) return null;
-        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {
-            return CLEAN_CAPTURE_BY_DRAG_VIEW.get(dragView);
-        }
-    }
+    /** Compatibility no-op: the dedicated drag producer stays live for the whole drag. */
+    static void requestCleanBackdropAndReveal(View dragView) {}
 
     static boolean begin(
             View source,
@@ -190,7 +168,6 @@ final class LauncherGlassDragOverlay {
         if (bounds == null) return false;
         if (style == null) style = new GlassComponentStyle(true, 0f, 0f);
         activeNodeKind = nodeKind != null ? nodeKind : LauncherGlassNodeKind.LARGE_FOLDER;
-        if (sink != null) sink.setNodeKind(activeNodeKind);
         float left = 0f;
         float top = 0f;
         float right = Math.max(1f, source.getWidth());
@@ -225,7 +202,7 @@ final class LauncherGlassDragOverlay {
         Choreographer.getInstance().removeFrameCallback(frameCallback);
         Choreographer.getInstance().postFrameCallback(frameCallback);
         syncFromSource();
-        MainHook.log(TAG + " begin kind=" + kind + " source="
+        MainHook.log(TAG + " live begin kind=" + kind + " source="
                 + source.getClass().getSimpleName());
         return true;
     }
@@ -234,13 +211,14 @@ final class LauncherGlassDragOverlay {
         if (released || !coordinator.end(token)) return;
         tracking = false;
         Choreographer.getInstance().removeFrameCallback(frameCallback);
+        restoreVendorPresentation("drag-end");
         sourceRef = new WeakReference<>(null);
         carrier.setVisibility(View.INVISIBLE);
         if (sink != null) sink.setVisibility(View.GONE);
         mainHandler.post(() -> {
             if (!tracking && !released) releaseDragSource();
         });
-        MainHook.log(TAG + " end");
+        MainHook.log(TAG + " live end");
     }
 
     private boolean owns(Object token) {
@@ -260,39 +238,45 @@ final class LauncherGlassDragOverlay {
         if (bounds == null) return;
         coordinator.update(state.token, bounds,
                 source.getScaleX(), source.getRotation(), 1f);
-        if (!ensureCarrier(source)) return;
+        ensureWorkspaceSource();
+        if (!ensureUpperPresentation(source)) return;
         applyCarrierGeometry(source);
+        if (mirror != null && sourceOverlay != null) {
+            mirror.syncFromDragView(source, sourceOverlay);
+        }
+        LauncherGlassSession session = sourceSession;
+        if (session != null && !LauncherLiveDragSessionBridge.hasPreparedBackdrop(session)) {
+            LauncherLiveDragSessionBridge.ensureLive(session);
+        }
+        claimVendorPresentation(source);
+        if (presentationClaimed && source.getAlpha() != 0f) source.setAlpha(0f);
     }
 
-    private boolean ensureCarrier(View source) {
-        if (released) return false;
-        if (carrier.getParent() == null) {
-            View dragContainer = findDragContainerAncestor(source);
-            if (dragContainer == null || !(dragContainer.getParent() instanceof ViewGroup)) {
-                return false;
-            }
-            ViewGroup host = (ViewGroup) dragContainer.getParent();
-            int index = Math.max(0, host.indexOfChild(dragContainer));
+    private boolean ensureUpperPresentation(View source) {
+        if (released || source == null) return false;
+        LauncherDragSourceOverlay overlay = sourceOverlay;
+        LauncherGlassSession authority = sourceSession;
+        if (overlay == null || authority == null || authority.isShutdown()
+                || !overlay.isAttachedToWindow()) return false;
+
+        ViewGroup glassHost = overlay.glassHost();
+        if (carrier.getParent() != glassHost) {
+            Object oldParent = carrier.getParent();
+            if (oldParent instanceof ViewGroup) ((ViewGroup) oldParent).removeView(carrier);
             int width = Math.max(1, source.getWidth());
             int height = Math.max(1, source.getHeight());
-            host.addView(carrier, index, new ViewGroup.LayoutParams(width, height));
+            glassHost.addView(carrier, new ViewGroup.LayoutParams(width, height));
             carrier.layout(0, 0, width, height);
-            hostRef = new WeakReference<>(host);
-            MainHook.log(TAG + " attached below " + dragContainer.getClass().getSimpleName());
         }
         if (sink == null) {
-            if (!carrier.isAttachedToWindow() || carrier.getWidth() <= 0 || carrier.getHeight() <= 0) {
-                return false;
-            }
-            LauncherGlassSession authority = sourceSession;
-            if (authority == null || authority.isShutdown()) {
-                ensureWorkspaceSource();
-                return false;
-            }
             sink = LauncherGlassSinkView.attachToExternalMaterial(
                     carrier, authority, activeCornerRadiusPx, glassConfig);
             if (sink == null) return false;
             sink.setNodeKind(activeNodeKind);
+        }
+        if (mirror == null) {
+            mirror = LauncherDragVisualMirror.attach(source, overlay.mirrorHost());
+            if (mirror == null) return false;
         }
         return true;
     }
@@ -316,63 +300,57 @@ final class LauncherGlassDragOverlay {
                                 sourceOverlay, glassConfig,
                                 PassBlurBindRequest.dragOverlay(sourceOverlay));
                         sourceSession = session;
-                        View pendingDrag = cleanCaptureDragRef.get();
-                        if (cleanCaptureRequested && pendingDrag != null) {
-                            requestCleanBackdropAndRevealInternal(pendingDrag);
-                        } else if (tracking) {
-                            session.freezeAfterNextFreshFrame();
-                        }
+                        LauncherLiveDragSessionBridge.ensureLive(session);
                         if (tracking) syncFromSource();
                     }
 
                     @Override public void onAttachFailed(Throwable error) {
                         sourceAttachPending = false;
-                        MainHook.log(TAG + " upper workspace source attach failed: " + error);
+                        restoreVendorPresentation("source-attach-failed");
+                        MainHook.log(TAG + " upper live source attach failed: " + error);
                     }
                 });
         if (created == null) sourceAttachPending = false;
         else sourceOverlay = created;
     }
 
-    private void requestCleanBackdropAndRevealInternal(View dragView) {
-        if (released || dragView == null || cleanCaptureDragRef.get() != dragView) return;
-        cleanCaptureRequested = true;
-        ensureWorkspaceSource();
-        LauncherGlassSession session = sourceSession;
-        if (session == null || session.isShutdown() || cleanCaptureInFlight) return;
-        cleanCaptureInFlight = true;
-        session.freezeAfterNextFreshFrame(
-                () -> restoreCleanDragPresentation(dragView, "fresh-workspace"),
-                () -> restoreCleanDragPresentation(dragView, "source-failure"));
+    private void claimVendorPresentation(View source) {
+        if (presentationClaimed || source == null || source != sourceRef.get()
+                || mirror == null || sink == null || sourceSession == null) return;
+        if (!mirror.isReadyForPresentation() || !sink.isAvailable()
+                || !LauncherLiveDragSessionBridge.hasPreparedBackdrop(sourceSession)) return;
+        vendorPresentationAlpha = source.getAlpha();
+        mirror.showForPresentation(vendorPresentationAlpha);
+        source.setAlpha(0f);
+        source.invalidate();
+        presentationClaimed = true;
+        MainHook.log(TAG + " live upper presentation claimed");
     }
 
-    private void restoreCleanDragPresentation(View dragView, String reason) {
-        if (dragView == null || cleanCaptureDragRef.get() != dragView) return;
-        cleanCaptureInFlight = false;
-        cleanCaptureRequested = false;
-        if (cleanCapturePresentationGated) {
-            dragView.setAlpha(cleanCaptureOriginalAlpha);
-            dragView.invalidate();
+    private void restoreVendorPresentation(String reason) {
+        View source = sourceRef.get();
+        if (presentationClaimed && source != null) {
+            source.setAlpha(vendorPresentationAlpha);
+            source.invalidate();
         }
-        cleanCapturePresentationGated = false;
-        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {
-            if (CLEAN_CAPTURE_BY_DRAG_VIEW.get(dragView) == this) {
-                CLEAN_CAPTURE_BY_DRAG_VIEW.remove(dragView);
-            }
-        }
-        cleanCaptureDragRef = new WeakReference<>(null);
-        MainHook.log(TAG + " clean workspace capture released presentation reason=" + reason);
+        if (mirror != null) mirror.hidePresentation();
+        if (presentationClaimed) MainHook.log(TAG + " vendor presentation restored reason=" + reason);
+        presentationClaimed = false;
+        vendorPresentationAlpha = 1f;
     }
 
     private void releaseDragSource() {
-        View cleanDrag = cleanCaptureDragRef.get();
-        if (cleanDrag != null && cleanCapturePresentationGated) {
-            restoreCleanDragPresentation(cleanDrag, "release");
+        restoreVendorPresentation("release");
+        if (mirror != null) {
+            mirror.dispose();
+            mirror = null;
         }
         if (sink != null) {
             sink.dispose();
             sink = null;
         }
+        Object carrierParent = carrier.getParent();
+        if (carrierParent instanceof ViewGroup) ((ViewGroup) carrierParent).removeView(carrier);
         LauncherGlassSession session = sourceSession;
         sourceSession = null;
         if (session != null) session.shutdown();
@@ -383,9 +361,10 @@ final class LauncherGlassDragOverlay {
     }
 
     private void applyCarrierGeometry(View source) {
-        ViewGroup host = hostRef.get();
-        if (released || host == null || carrier.getParent() != host) return;
-        LauncherGlassDragCarrierGeometry.Snapshot geometry = resolveCarrierGeometry(source, host);
+        LauncherDragSourceOverlay overlay = sourceOverlay;
+        if (released || overlay == null || carrier.getParent() != overlay.glassHost()) return;
+        LauncherGlassDragCarrierGeometry.Snapshot geometry =
+                resolveCarrierGeometry(source, overlay.glassHost());
         if (geometry == null) return;
 
         int width = Math.max(1, (int) Math.ceil(geometry.carrierWidth()));
@@ -491,6 +470,7 @@ final class LauncherGlassDragOverlay {
         Choreographer.getInstance().removeFrameCallback(frameCallback);
         LauncherGlassDragState state = coordinator.current();
         if (state != null) coordinator.cancel(state.token);
+        restoreVendorPresentation("root-detached");
         sourceRef = new WeakReference<>(null);
 
         synchronized (BY_ROOT) {
@@ -498,25 +478,8 @@ final class LauncherGlassDragOverlay {
         }
 
         releaseDragSource();
-        Object parent = carrier.getParent();
-        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(carrier);
-        hostRef = new WeakReference<>(null);
         try { root.removeOnAttachStateChangeListener(rootAttachListener); }
         catch (Throwable ignored) {}
         MainHook.log(TAG + " released detached root");
-    }
-
-    private static View findDragContainerAncestor(View source) {
-        Object cursor = source;
-        while (cursor instanceof View) {
-            ViewParent parent = ((View) cursor).getParent();
-            if (parent == null) return null;
-            if (parent instanceof View
-                    && parent.getClass().getName().contains("DragContainer")) {
-                return (View) parent;
-            }
-            cursor = parent;
-        }
-        return null;
     }
 }
