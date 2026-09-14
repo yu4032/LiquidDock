@@ -141,6 +141,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // Launcher-specific Shell rotation settle policy intentionally stays above the root backend.
     private volatile long rotationSettleSerial;
     private volatile boolean rotationSettlePending;
+    private volatile boolean freezeAfterNextFreshFrame;
     private volatile int rotationSettleTargetRotation = -1;
 
     // Render-thread only Launcher output objects.
@@ -361,6 +362,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             clearWallpaperRequestLocked();
             return token;
         }
+    }
+
+    void freezeAfterNextFreshFrame() {
+        if (shuttingDown) return;
+        freezeAfterNextFreshFrame = true;
+        sourceBackend.setUpdatesEnabled(true, "launcher-drag-capture");
+        sourceBackend.requestFresh(sceneGeneration, true);
     }
 
     void requestSceneRedraw() {
@@ -763,6 +771,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     params);
             backdropPrepared = true;
             renderOutputs(true, true);
+            if (freezeAfterNextFreshFrame) {
+                freezeAfterNextFreshFrame = false;
+                sourceBackend.setUpdatesEnabled(false, "launcher-drag-frozen");
+            }
             WallpaperFrameToken wallpaperFrame = takeWallpaperFrameToken(frame.generation);
             boolean renderedStaticOutput = staticOutput != null;
             long renderedGeneration = frame.generation;
