@@ -1,0 +1,103 @@
+name: temp fix folder preview and drag domain
+
+on:
+  push:
+    branches:
+      - fix/folder-drag-workspace-glass
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/folder-drag-workspace-glass
+          fetch-depth: 0
+      - name: Apply production patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1) Folder 1x1 preview container owns its own scaled remeasure domain.
+          p = Path('src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java')
+          s = p.read_text()
+          if 'FOLDER_PREVIEW_CONTAINER_1X1' not in s:
+              s = s.replace(
+                  '    private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";\n',
+                  '    private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";\n'
+                  '    private static final String FOLDER_PREVIEW_CONTAINER_1X1 =\n'
+                  '            "com.miui.home.launcher.folder.FolderIconPreviewContainer1X1";\n', 1)
+              s = s.replace(
+                  '            Class<?> smallFolder = Class.forName(SMALL_FOLDER, false, classLoader);\n',
+                  '            Class<?> smallFolder = Class.forName(SMALL_FOLDER, false, classLoader);\n'
+                  '            Class<?> folderPreviewContainer = Class.forName(\n'
+                  '                    FOLDER_PREVIEW_CONTAINER_1X1, false, classLoader);\n', 1)
+              s = s.replace(
+                  '            installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);\n',
+                  '            installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);\n'
+                  '            installFolderPreviewMeasureTransaction(folderPreviewContainer);\n', 1)
+              anchor = '    private static void installFolderScaleTransactions(\n'
+              helper = '''    private static void installFolderPreviewMeasureTransaction(\n            Class<?> folderPreviewContainer) throws NoSuchMethodException {\n        Method onMeasure = HookUtil.findMethodExact(\n                folderPreviewContainer, "onMeasure", new Class<?>[]{int.class, int.class});\n        HookUtil.hook(onMeasure, chain -> withMeasureDomain(\n                MeasureDomain.FOLDER,\n                () -> chain.proceed(chain.getArgs().toArray(new Object[0]))));\n    }\n\n'''
+              s = s.replace(anchor, helper + anchor, 1)
+              p.write_text(s)
+
+          # 2) Dedicated drag upper-window PassBlur domain.
+          p = Path('src/main/java/com/hellovoid/liquiddock/PassBlurDomain.java')
+          s = p.read_text()
+          if 'DRAG_OVERLAY' not in s:
+              s = s.replace('    SHORTCUT_POPUP,\n', '    SHORTCUT_POPUP,\n    DRAG_OVERLAY,\n', 1)
+              p.write_text(s)
+
+          p = Path('src/main/java/com/hellovoid/liquiddock/PassBlurBindRequest.java')
+          s = p.read_text()
+          if 'dragOverlay(View authoritativeRoot)' not in s:
+              anchor = '''    static PassBlurBindRequest shortcutPopup(View authoritativeRoot) {\n        return new PassBlurBindRequest(\n                authoritativeRoot,\n                PassBlurDomain.SHORTCUT_POPUP,\n                1.0f,\n                NO_EXTRA_EXCLUSIONS);\n    }\n\n'''
+              replacement = anchor + '''    static PassBlurBindRequest dragOverlay(View authoritativeRoot) {\n        return new PassBlurBindRequest(\n                authoritativeRoot,\n                PassBlurDomain.DRAG_OVERLAY,\n                1.0f,\n                NO_EXTRA_EXCLUSIONS);\n    }\n\n'''
+              if anchor not in s:
+                  raise SystemExit('missing shortcutPopup anchor')
+              s = s.replace(anchor, replacement, 1)
+              p.write_text(s)
+
+          # 3) LauncherGlassSession accepts explicit authority request for non-workspace roots.
+          p = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java')
+          s = p.read_text()
+          old_ctor = '''    LauncherGlassSession(View root, LiquidDockConfig.Glass glassConfig) {\n        rootRef = new WeakReference<>(root);\n'''
+          if 'PassBlurBindRequest bindRequest' not in s:
+              if old_ctor not in s:
+                  raise SystemExit('missing LauncherGlassSession ctor anchor')
+              new_ctor = '''    LauncherGlassSession(View root, LiquidDockConfig.Glass glassConfig) {\n        this(root, glassConfig, PassBlurBindRequest.launcherWorkspace(root, 1.0f));\n    }\n\n    LauncherGlassSession(\n            View root, LiquidDockConfig.Glass glassConfig, PassBlurBindRequest bindRequest) {\n        if (bindRequest == null) throw new IllegalArgumentException("bindRequest == null");\n        rootRef = new WeakReference<>(root);\n'''
+              s = s.replace(old_ctor, new_ctor, 1)
+              old_backend = '''        sourceBackend = new RootPassBlurBackend(\n                root,\n                PassBlurBindRequest.launcherWorkspace(root, 1.0f),\n                passBlurCaptureScalePercent,\n'''
+              new_backend = '''        sourceBackend = new RootPassBlurBackend(\n                root,\n                bindRequest,\n                passBlurCaptureScalePercent,\n'''
+              if old_backend not in s:
+                  raise SystemExit('missing backend request anchor')
+              s = s.replace(old_backend, new_backend, 1)
+              s = s.replace(
+                  '                + " created source=RootPassBlurBackend domain=LAUNCHER_WORKSPACE");\n',
+                  '                + " created source=RootPassBlurBackend domain=" + bindRequest.domain());\n', 1)
+              p.write_text(s)
+
+          # 4) Drag overlay uses the dedicated ungated authority request.
+          p = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java')
+          s = p.read_text()
+          old = '                        LauncherGlassSession session = new LauncherGlassSession(sourceOverlay, glassConfig);\n'
+          new = '''                        LauncherGlassSession session = new LauncherGlassSession(\n                                sourceOverlay, glassConfig,\n                                PassBlurBindRequest.dragOverlay(sourceOverlay));\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+          PY
+      - name: Commit if needed
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java \
+                  src/main/java/com/hellovoid/liquiddock/PassBlurDomain.java \
+                  src/main/java/com/hellovoid/liquiddock/PassBlurBindRequest.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java
+          git commit -m 'fix: preserve folder preview scale and ungate drag backdrop source'
+          git push origin HEAD:fix/folder-drag-workspace-glass
