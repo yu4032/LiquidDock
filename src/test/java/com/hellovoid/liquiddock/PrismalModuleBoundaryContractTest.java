@@ -71,7 +71,9 @@ public class PrismalModuleBoundaryContractTest {
         assertTrue(view.contains("createPrismalGeometry(mapping)"));
         assertTrue(view.contains("private volatile BackdropSnapshot backdropSnapshot"));
         assertTrue(view.contains("BackdropSnapshot mapping = backdropSnapshot"));
-        assertTrue(view.contains("ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight)"));
+        assertTrue(view.contains("DockPassBlurRenderPlan.resolve(")
+                && view.contains("ensureFboSizeExact(renderPlan.physicalWidth, renderPlan.physicalHeight)"));
+        assertTrue(view.contains("renderPlan.logicalWidth, renderPlan.logicalHeight"));
         assertTrue(view.contains("renderNormalizationPass(mapping)"));
         assertTrue(view.contains("[DC][PRISMAL-MAP]"));
         assertTrue(view.contains("renderCompositePass(prismalTexture, mapping)"));

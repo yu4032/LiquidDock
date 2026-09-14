@@ -201,6 +201,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile int bottomSamplingExtraPx;
     private volatile int leftSamplingExtraPx;
     private volatile int rightSamplingExtraPx;
+    private volatile int passBlurCaptureScalePercent =
+            PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
 
     // Stage A samples a real overscan ring around the visible Dock. The sample-valid
     // rectangle is used only by the normalization mirror guard; Dock validity remains separate
@@ -302,6 +304,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         bottomSamplingExtraPx = glassConfig.samplingExtraBottomPx;
         leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
+        passBlurCaptureScalePercent = glassConfig.passBlurCaptureScalePercent;
         updateBackdropMapping();
         if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
     }
@@ -649,9 +652,11 @@ final class Miuix307PassBlurTextureView extends TextureView
                     + width + "x" + height + " max=" + maxTextureSize);
         }
         SamplingInsets insets = resolveSamplingInsets(width, height);
-        ensureFboSizeExact(
-                Math.max(1, width + insets.left + insets.right),
-                Math.max(1, height + insets.top + insets.bottom));
+        int logicalWidth = Math.max(1, width + insets.left + insets.right);
+        int logicalHeight = Math.max(1, height + insets.top + insets.bottom);
+        DockPassBlurRenderPlan plan = DockPassBlurRenderPlan.resolve(
+                logicalWidth, logicalHeight, passBlurCaptureScalePercent);
+        ensureFboSizeExact(plan.physicalWidth, plan.physicalHeight);
     }
 
     private void ensureFboSizeExact(int nextWidth, int nextHeight) {
@@ -707,15 +712,20 @@ final class Miuix307PassBlurTextureView extends TextureView
                         + " stage=normalize-only configRot=" + mapping.configRotation);
             }
 
-            ensureFboSizeExact(mapping.sampleWidth, mapping.sampleHeight);
+            DockPassBlurRenderPlan renderPlan = DockPassBlurRenderPlan.resolve(
+                    mapping.sampleWidth, mapping.sampleHeight, passBlurCaptureScalePercent);
+            ensureFboSizeExact(renderPlan.physicalWidth, renderPlan.physicalHeight);
             renderNormalizationPass(mapping);
             PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);
             prismalRenderer.prepareBackdrop(
-                    rawTexture, mapping.sampleWidth, mapping.sampleHeight, mapping.prismalParams);
+                    rawTexture,
+                    renderPlan.physicalWidth, renderPlan.physicalHeight,
+                    renderPlan.logicalWidth, renderPlan.logicalHeight,
+                    mapping.prismalParams);
             DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
             dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
                     dockBodyHighlightProfile, dockScene,
-                    mapping.sampleWidth, mapping.sampleHeight);
+                    renderPlan.logicalWidth, renderPlan.logicalHeight);
             int prismalTexture = prismalRenderer.outputTexture();
             if (!renderCompositePass(prismalTexture, mapping)) return;
 
@@ -749,6 +759,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                         + " material=prismal-module-official"
                         + " blur=official-two-pass-0.5x"
                         + " coverage=" + mapping.coverage
+                        + " backdropPhysical=" + renderPlan.physicalWidth + "x" + renderPlan.physicalHeight
+                        + " backdropLogical=" + renderPlan.logicalWidth + "x" + renderPlan.logicalHeight
                         + " backdropRect=[" + mapping.backdropX + "," + mapping.backdropY + ","
                         + mapping.backdropW + "," + mapping.backdropH + "]"
                         + " validDockRect=[" + mapping.validDockLeft + "," + mapping.validDockBottom + ","
@@ -901,7 +913,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + " textureMatrix=" + formatTextureMatrix(textureMatrix));
         MainHook.log("[DC][PRISMAL-MAP] normalized output="
                 + mapping.visibleWidth + "x" + mapping.visibleHeight
-                + " rawFbo=" + mapping.sampleWidth + "x" + mapping.sampleHeight
+                + " rawFbo=" + fboWidth + "x" + fboHeight
+                + " logicalSample=" + mapping.sampleWidth + "x" + mapping.sampleHeight
                 + " dockUvRect=[" + left + "," + bottom + ","
                 + mapping.dockUvWidth + "," + mapping.dockUvHeight + "]"
                 + " validDockRect=[" + mapping.validDockLeft + "," + mapping.validDockBottom + ","
