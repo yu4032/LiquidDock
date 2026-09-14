@@ -52,19 +52,24 @@ public class ShortcutSecondaryGlassContractTest {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
 
-        int fade = hook.indexOf("ShortcutPopupGlassCoordinator.beginDismissFade(menu)");
-        int proceed = hook.indexOf("chain.proceed", hook.indexOf("SHORTCUT_MENU, \"dismiss\""));
-        assertTrue(fade >= 0);
-        assertTrue(proceed >= 0);
-        assertTrue(fade < proceed);
+        assertTrue(hook.contains(
+                "Object menu = chain.getThisObject();\n"
+                        + "                ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
+                        + "                Object result = chain.proceed"));
         assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
         assertTrue(coordinator.contains("layer.fadeOutFast()"));
-        assertTrue(layer.contains("void fadeOutFast()"));
-        assertTrue(layer.contains("animate().cancel()"));
-        assertTrue(layer.contains(".alpha(0f)"));
-        assertFalse(layer.substring(layer.indexOf("void fadeOutFast()"),
-                layer.indexOf("void dispose()")) .contains("dispose()"));
-        assertFalse(layer.substring(layer.indexOf("void fadeOutFast()"),
-                layer.indexOf("void dispose()")) .contains("session.shutdown()"));
+        assertTrue(layer.contains("private static final long FAST_DISMISS_FADE_MS = 90L"));
+        assertTrue(layer.contains(
+                "void fadeOutFast() {\n"
+                        + "        if (disposed) return;\n"
+                        + "        animate().cancel();\n"
+                        + "        animate()\n"
+                        + "                .alpha(0f)\n"
+                        + "                .setDuration(FAST_DISMISS_FADE_MS)\n"
+                        + "                .setInterpolator(new DecelerateInterpolator())\n"
+                        + "                .start();\n"
+                        + "    }"));
+        assertFalse(layer.contains("fadeOutFast();\n        dispose()"));
+        assertFalse(layer.contains("fadeOutFast();\n        session.shutdown()"));
     }
 }
