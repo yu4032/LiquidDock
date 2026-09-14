@@ -1,0 +1,43 @@
+name: temp shortcut toggle registration patch
+
+on:
+  push:
+    branches:
+      - feat/shortcut-secondary-glass
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/shortcut-secondary-glass
+          fetch-depth: 0
+      - name: Register shortcut popup glass config key
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java')
+          text = p.read_text()
+          old = 'add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,'
+          new = 'add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS,\n                Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,'
+          if 'Glass.SHORTCUT_POPUP_GLASS,\n                Glass.FOLDER_GLASS' not in text:
+              if old not in text:
+                  raise SystemExit('registration anchor missing')
+              text = text.replace(old, new, 1)
+              p.write_text(text)
+          PY
+      - name: Commit registration if needed
+        run: |
+          if git diff --quiet; then
+            echo "no registration change needed"
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java
+          git commit -m 'fix: register shortcut popup glass config key'
+          git push origin HEAD:feat/shortcut-secondary-glass
