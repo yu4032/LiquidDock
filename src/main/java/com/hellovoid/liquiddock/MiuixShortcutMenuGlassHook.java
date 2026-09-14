@@ -26,15 +26,20 @@ final class MiuixShortcutMenuGlassHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object itemInfo = args.length > 0 ? args[0] : null;
                 Object owner = chain.getThisObject();
-                if (itemInfo != null && owner instanceof View) {
-                    ShortcutPopupGlassCoordinator.prepare((View) owner, glassConfig);
+                if (owner instanceof View) {
+                    View ownerView = (View) owner;
+                    View launcherRoot = ownerView.getRootView();
+                    if (itemInfo != null) {
+                        ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
+                    }
+                    Object result = chain.proceed(args);
+                    if (itemInfo == null) {
+                        launcherRoot.postOnAnimation(
+                                () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
+                    }
+                    return result;
                 }
-                Object result = chain.proceed(args);
-                if (itemInfo == null && owner instanceof View) {
-                    View decor = (View) owner;
-                    decor.postOnAnimation(() -> ShortcutPopupGlassCoordinator.cancelPending(decor));
-                }
-                return result;
+                return chain.proceed(args);
             }, ITEM_INFO);
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
