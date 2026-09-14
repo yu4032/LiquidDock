@@ -224,11 +224,7 @@ final class LauncherWidgetTransitionCoordinator {
         // coherent, but cancel the fade immediately for return-to-widget: stale pixels must not be
         // exposed while HOME early-reveal is showing the previous StaticLayer generation.
         node.setSuppressedByDrag(true);
-        HookUtil.InvocationResult<Object> immediateResult =
-                HookUtil.tryInvoke(node, "hideImmediately");
-        if (!immediateResult.succeeded()) {
-            MainHook.log(TAG + " immediate hide unavailable: " + immediateResult.failure());
-        }
+        node.hideImmediately();
         node.requestLifecycleRefresh();
     }
 
