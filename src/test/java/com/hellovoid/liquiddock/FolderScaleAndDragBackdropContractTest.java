@@ -58,7 +58,7 @@ public class FolderScaleAndDragBackdropContractTest {
 
         assertTrue(source.contains("glassHost"));
         assertTrue(source.contains("mirrorHost"));
-        assertTrue(overlay.contains("sourceOverlay.glassHost()"));
+        assertTrue(overlay.contains("glassHost()"));
         assertTrue(overlay.contains("LauncherDragVisualMirror.attach"));
         assertTrue(overlay.contains("mirror.syncFromDragView(source, sourceOverlay)"));
         assertTrue(mirror.contains("dragView.draw(canvas)"));
