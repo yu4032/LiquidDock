@@ -64,11 +64,7 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.released || state.captureRootRef.get() != liveRoot
                 || state.session == null || popupView == null || contentView == null
                 || !(decorView instanceof ViewGroup)) return false;
-        if (!state.session.hasFrozenBackdrop()) {
-            MainHook.log(TAG + " pre-show backdrop not ready; stock material retained");
-            releaseLocked("pre-show-backdrop-not-ready");
-            return false;
-        }
+
         ViewGroup decorGroup = (ViewGroup) decorView;
         int popupIndex = decorGroup.indexOfChild(popupView);
         if (popupIndex < 0) return false;
@@ -103,7 +99,8 @@ final class ShortcutPopupGlassCoordinator {
             state.preDrawListener = listener;
         }
         updateGeometry(state);
-        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex);
+        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
+                + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
 
