@@ -42,10 +42,13 @@ public class FolderScaleAndDragBackdropContractTest {
 
     @Test public void liveDragPathNeverFreezesTheWorkspaceBackdrop() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
         String bridge = Files.readString(MAIN.resolve("LauncherLiveDragSessionBridge.java"));
 
         assertFalse(overlay.contains("freezeAfterNextFreshFrame"));
         assertFalse(overlay.contains("launcher-drag-frozen"));
+        assertFalse(session.contains("freezeAfterNextFreshFrame"));
+        assertFalse(session.contains("launcher-drag-frozen"));
         assertTrue(bridge.contains("launcher-drag-live"));
         assertTrue(bridge.contains("setUpdatesEnabled(true"));
         assertTrue(bridge.contains("requestFreshBackdrop"));
