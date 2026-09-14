@@ -31,6 +31,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private boolean workspaceScrollInitialized;
     private volatile LauncherGlassSession session;
     private final LiquidDockConfig.Glass glassConfig;
+    private final boolean externalSessionAuthority;
     private volatile float nativeCornerRadiusPx;
     private volatile float localVisualLeft = Float.NaN;
     private volatile float localVisualTop = Float.NaN;
@@ -49,11 +50,12 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     private LauncherGlassSinkView(
             Context context, View materialHost, LauncherGlassSession session, float cornerRadiusPx,
-            LiquidDockConfig.Glass glassConfig) {
+            LiquidDockConfig.Glass glassConfig, boolean externalSessionAuthority) {
         super(context);
         this.materialRef = new WeakReference<>(materialHost);
         this.session = session;
         this.glassConfig = glassConfig;
+        this.externalSessionAuthority = externalSessionAuthority;
         this.nativeCornerRadiusPx = Math.max(0f, cornerRadiusPx);
         this.materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
@@ -94,7 +96,42 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         LauncherGlassSession shared = LauncherGlassSessionRegistry.acquire(materialHost, glassConfig);
         if (shared == null) return null;
         LauncherGlassSinkView sink = new LauncherGlassSinkView(
-                materialHost.getContext(), materialHost, shared, cornerRadiusPx, glassConfig);
+                materialHost.getContext(), materialHost, shared, cornerRadiusPx, glassConfig, false);
+        int index = Math.max(0, parent.indexOfChild(materialHost));
+        parent.addView(sink, index, new ViewGroup.LayoutParams(
+                Math.max(1, materialHost.getWidth()), Math.max(1, materialHost.getHeight())));
+        BY_MATERIAL.put(materialHost, new WeakReference<>(sink));
+        sink.syncFromMaterial();
+        shared.registerSink(sink);
+        return sink;
+    }
+
+    /**
+     * Attach an output sink hosted in another ViewRoot while keeping the supplied Launcher session
+     * as the sole PassBlur producer authority. The sink must never acquire a producer from the
+     * popup/material ViewRoot when the authoritative Launcher session goes away.
+     */
+    static LauncherGlassSinkView attachToExternalMaterial(
+            View materialHost, LauncherGlassSession shared, float cornerRadiusPx,
+            LiquidDockConfig.Glass glassConfig) {
+        if (materialHost == null || shared == null || shared.isShutdown()
+                || !(materialHost.getParent() instanceof ViewGroup)) return null;
+        ViewGroup parent = (ViewGroup) materialHost.getParent();
+        WeakReference<LauncherGlassSinkView> reference = BY_MATERIAL.get(materialHost);
+        LauncherGlassSinkView existing = reference != null ? reference.get() : null;
+        if (existing != null && !existing.disposed) {
+            if (existing.externalSessionAuthority && existing.session == shared) {
+                if (existing.getParent() != parent) {
+                    existing.scheduleParentRecovery("attach-external-existing");
+                }
+                existing.setNativeCornerRadiusPx(cornerRadiusPx);
+                existing.syncFromMaterial();
+                return existing;
+            }
+            existing.dispose();
+        }
+        LauncherGlassSinkView sink = new LauncherGlassSinkView(
+                materialHost.getContext(), materialHost, shared, cornerRadiusPx, glassConfig, true);
         int index = Math.max(0, parent.indexOfChild(materialHost));
         parent.addView(sink, index, new ViewGroup.LayoutParams(
                 Math.max(1, materialHost.getWidth()), Math.max(1, materialHost.getHeight())));
@@ -442,8 +479,11 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     private LauncherGlassSession ensureLiveSession() {
         if (disposed) return null;
-        View material = materialRef.get();
         LauncherGlassSession current = session;
+        if (externalSessionAuthority) {
+            return current != null && !current.isShutdown() ? current : null;
+        }
+        View material = materialRef.get();
         View stableRoot = LauncherGlassSessionRegistry.resolveStableRoot(material);
         if (stableRoot == null) return null;
         if (current != null && !current.isShutdown() && current.ownsRoot(stableRoot)) return current;
