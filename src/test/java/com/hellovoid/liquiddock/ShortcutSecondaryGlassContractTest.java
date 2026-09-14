@@ -16,7 +16,6 @@ public class ShortcutSecondaryGlassContractTest {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
-        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
         assertTrue(hook.contains("com.miui.home.launcher.ShortcutMenuLayer"));
@@ -25,9 +24,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
         assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
+        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("state.session.hasFrozenBackdrop()"));
         assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
-        assertTrue(layer.contains("MATCH_PARENT"));
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
         assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
         assertFalse(hook.contains("attachToExternalMaterial"));
