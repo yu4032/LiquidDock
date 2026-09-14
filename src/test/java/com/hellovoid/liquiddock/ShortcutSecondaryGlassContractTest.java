@@ -12,7 +12,7 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuUsesAsyncPreShowSourceAndShowTimeStableOutput() throws Exception {
+    @Test public void shortcutMenuRendezvousDoesNotRequireSourceSessionBeforeShow() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
@@ -24,12 +24,15 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ownerView.getRootView()"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
+        assertTrue(coordinator.contains("ensurePopupOutput(state)"));
+        assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
         assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
         assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
         assertTrue(coordinator.contains("private static void onPresented(State state)"));
         assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
         assertFalse(coordinator.contains("if (!state.session.hasFrozenBackdrop())"));
         assertFalse(coordinator.contains("pre-show-backdrop-not-ready"));
+        assertFalse(coordinator.contains("|| state.session == null || popupView == null"));
         assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
