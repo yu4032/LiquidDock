@@ -1,2 +1,10 @@
 # Project-owned lifecycle access is typed package-private API now.
 # Keep this file for future narrowly scoped vendor/private reflection rules.
+
+# These AndroidX type names are resolved through the Launcher ClassLoader by the
+# API101/307 Dock spacing hooks in both Miuix307MaterialPipeline and MainHook.
+# R8 must not adapt the reflective strings to LiquidDock's own obfuscated names
+# (for example RecyclerView$State -> RecyclerView$a), because com.miui.home uses
+# the original binary names.
+-keepnames class androidx.recyclerview.widget.RecyclerView
+-keepnames class androidx.recyclerview.widget.RecyclerView$State

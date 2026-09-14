@@ -39,5 +39,11 @@ public class R8ReleaseKeepContractTest {
                 "com.hellovoid.liquiddock.Miuix307PassBlurBridge$Binding binding;"));
         assertFalse(reflectionRules.contains("void rebindProducer();"));
         assertFalse(reflectionRules.contains("LauncherGlassSession"));
+        assertTrue("RecyclerView name crosses into Launcher ClassLoader and must remain stable",
+                reflectionRules.contains(
+                        "-keepnames class androidx.recyclerview.widget.RecyclerView"));
+        assertTrue("RecyclerView.State name crosses into Launcher ClassLoader and must remain stable",
+                reflectionRules.contains(
+                        "-keepnames class androidx.recyclerview.widget.RecyclerView$State"));
     }
 }
