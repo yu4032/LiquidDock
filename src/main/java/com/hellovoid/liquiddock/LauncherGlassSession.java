@@ -169,6 +169,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             };
 
     LauncherGlassSession(View root, LiquidDockConfig.Glass glassConfig) {
+        this(root, glassConfig, PassBlurBindRequest.launcherWorkspace(root, 1.0f));
+    }
+
+    LauncherGlassSession(
+            View root, LiquidDockConfig.Glass glassConfig, PassBlurBindRequest bindRequest) {
+        if (bindRequest == null) throw new IllegalArgumentException("bindRequest == null");
         rootRef = new WeakReference<>(root);
         rootWidth = Math.max(0, root.getWidth());
         rootHeight = Math.max(0, root.getHeight());
@@ -180,7 +186,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         applyGlassConfig(glassConfig);
         sourceBackend = new RootPassBlurBackend(
                 root,
-                PassBlurBindRequest.launcherWorkspace(root, 1.0f),
+                bindRequest,
                 passBlurCaptureScalePercent,
                 passBlurRenderFps,
                 this,
@@ -188,7 +194,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         root.addOnAttachStateChangeListener(rootAttachListener);
         installRootObserver();
         MainHook.log(TAG + " " + debugLabel()
-                + " created source=RootPassBlurBackend domain=LAUNCHER_WORKSPACE");
+                + " created source=RootPassBlurBackend domain=" + bindRequest.domain());
     }
 
     boolean isShutdown() {
@@ -369,6 +375,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void requestDragRedraw() {
         scheduleOutputRender(false, true);
+    }
+
+    void publishDragGeometry(
+            LauncherGlassSinkView sink, LauncherGlassGeometry.Snapshot geometry) {
+        if (sink == null || geometry == null || shuttingDown) return;
+        synchronized (nodes) {
+            NodeState node = nodes.get(sink);
+            if (node == null) return;
+            LauncherGlassGeometry.Snapshot old = node.geometry;
+            if (old != null && old.sameAs(geometry)) return;
+            node.geometry = geometry;
+        }
+        requestDragRedraw();
     }
 
     void requestStaticRedraw() {
@@ -582,7 +601,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (sink == null) continue;
             boolean localChanged = sink.syncFromMaterial();
             dragChanged |= localChanged;
-            if (!rootGeometryChanged && !localChanged) continue;
+            if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
             LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = node.geometry;
             if ((old == null) != (observed == null)
