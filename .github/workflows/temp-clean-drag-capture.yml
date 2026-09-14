@@ -1,0 +1,146 @@
+name: temp clean drag capture
+
+on:
+  push:
+    branches:
+      - fix/folder-drag-workspace-glass
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/folder-drag-workspace-glass
+          fetch-depth: 0
+      - name: Apply clean capture and frame geometry patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Hook the exact Launcher 4.50 clean interval: createDragView removes the desktop
+          # source before showWithAnim inserts the DragView into DragContainer.
+          p = Path('src/main/java/com/hellovoid/liquiddock/MiuixLauncherDragOverlayHook.java')
+          s = p.read_text()
+          if 'DRAG_CONTROLLER' not in s:
+              s = s.replace(
+                  '    private static final String DRAG_VIEW = "com.miui.home.launcher.DragView";\n',
+                  '    private static final String DRAG_VIEW = "com.miui.home.launcher.DragView";\n'
+                  '    private static final String DRAG_CONTROLLER = "com.miui.home.launcher.DragController";\n'
+                  '    private static final String DRAG_SOURCE = "com.miui.home.launcher.DragSource";\n'
+                  '    private static final String DRAG_ANIM_FINISHED_LISTENER =\n'
+                  '            "com.miui.home.launcher.DragView$DragAnimFinishedListener";\n', 1)
+
+              anchor = '        LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;\n        try {\n'
+              insert = '''        LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;\n        try {\n            Class<?> dragControllerClass = Class.forName(DRAG_CONTROLLER, false, classLoader);\n            Class<?> dragViewClass = Class.forName(DRAG_VIEW, false, classLoader);\n            Class<?> dragSourceClass = Class.forName(DRAG_SOURCE, false, classLoader);\n            Class<?> dragAnimFinishedListenerClass = Class.forName(\n                    DRAG_ANIM_FINISHED_LISTENER, false, classLoader);\n\n            Method createDragView = HookUtil.findMethodExact(\n                    dragControllerClass, "createDragView",\n                    new Class<?>[]{View.class, int.class, int.class, boolean.class,\n                            int.class, dragSourceClass});\n            HookUtil.hook(createDragView, chain -> {\n                Object[] args = chain.getArgs().toArray(new Object[0]);\n                View source = args.length > 0 && args[0] instanceof View ? (View) args[0] : null;\n                int dragAction = args.length > 1 && args[1] instanceof Integer\n                        ? (Integer) args[1] : -1;\n                int dragCount = args.length > 4 && args[4] instanceof Integer\n                        ? (Integer) args[4] : 0;\n                LauncherGlassDragOverlay cleanCapture = dragAction == 0 && dragCount == 1\n                        ? LauncherGlassDragOverlay.prepareCleanCapture(source, glassConfig) : null;\n                Object result = chain.proceed(args);\n                if (cleanCapture != null && result instanceof View) {\n                    cleanCapture.armCleanCapture((View) result);\n                }\n                return result;\n            });\n\n            Method showWithAnim = HookUtil.findMethodExact(\n                    dragViewClass, "showWithAnim",\n                    new Class<?>[]{float.class, float.class, int.class, int.class,\n                            int.class, int.class, dragAnimFinishedListenerClass});\n            HookUtil.hook(showWithAnim, chain -> {\n                Object owner = chain.getThisObject();\n                View dragView = owner instanceof View ? (View) owner : null;\n                LauncherGlassDragOverlay.gateCleanDragPresentation(dragView);\n                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));\n                LauncherGlassDragOverlay.requestCleanBackdropAndReveal(dragView);\n                return result;\n            });\n'''
+              if anchor not in s:
+                  raise SystemExit('hook install anchor missing')
+              s = s.replace(anchor, insert, 1)
+              p.write_text(s)
+
+          # Session: callback-driven one-shot freeze and direct per-frame drag geometry authority.
+          p = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java')
+          s = p.read_text()
+          if 'freezeAfterNextFreshFrameCallback' not in s:
+              s = s.replace(
+                  '    private volatile boolean freezeAfterNextFreshFrame;\n',
+                  '    private volatile boolean freezeAfterNextFreshFrame;\n'
+                  '    private volatile Runnable freezeAfterNextFreshFrameCallback;\n'
+                  '    private volatile Runnable freezeAfterNextFreshFrameFailureCallback;\n', 1)
+
+              old = '''    void freezeAfterNextFreshFrame() {\n        if (shuttingDown) return;\n        freezeAfterNextFreshFrame = true;\n        sourceBackend.setUpdatesEnabled(true, "launcher-drag-capture");\n        sourceBackend.requestFresh(sceneGeneration, true);\n    }\n'''
+              new = '''    void freezeAfterNextFreshFrame() {\n        freezeAfterNextFreshFrame(null, null);\n    }\n\n    void freezeAfterNextFreshFrame(Runnable onReady, Runnable onFailure) {\n        if (shuttingDown) {\n            if (onFailure != null) mainHandler.post(onFailure);\n            return;\n        }\n        freezeAfterNextFreshFrameCallback = onReady;\n        freezeAfterNextFreshFrameFailureCallback = onFailure;\n        freezeAfterNextFreshFrame = true;\n        sourceBackend.setUpdatesEnabled(true, "launcher-drag-capture");\n        sourceBackend.requestFresh(sceneGeneration, true);\n    }\n'''
+              if old not in s:
+                  raise SystemExit('freeze method anchor missing')
+              s = s.replace(old, new, 1)
+
+              anchor = '''    void requestDragRedraw() {\n        scheduleOutputRender(false, true);\n    }\n'''
+              addition = anchor + '''\n    void publishDragGeometry(\n            LauncherGlassSinkView sink, LauncherGlassGeometry.Snapshot geometry) {\n        if (sink == null || geometry == null || shuttingDown) return;\n        synchronized (nodes) {\n            NodeState node = nodes.get(sink);\n            if (node == null) return;\n            LauncherGlassGeometry.Snapshot old = node.geometry;\n            if (old != null && old.sameAs(geometry)) return;\n            node.geometry = geometry;\n        }\n        requestDragRedraw();\n    }\n'''
+              if anchor not in s:
+                  raise SystemExit('drag redraw anchor missing')
+              s = s.replace(anchor, addition, 1)
+
+              oldfresh = '''            if (freezeAfterNextFreshFrame) {\n                freezeAfterNextFreshFrame = false;\n                sourceBackend.setUpdatesEnabled(false, "launcher-drag-frozen");\n            }\n'''
+              newfresh = '''            if (freezeAfterNextFreshFrame) {\n                freezeAfterNextFreshFrame = false;\n                sourceBackend.setUpdatesEnabled(false, "launcher-drag-frozen");\n                Runnable ready = freezeAfterNextFreshFrameCallback;\n                freezeAfterNextFreshFrameCallback = null;\n                freezeAfterNextFreshFrameFailureCallback = null;\n                if (ready != null) mainHandler.post(ready);\n            }\n'''
+              if oldfresh not in s:
+                  raise SystemExit('fresh freeze anchor missing')
+              s = s.replace(oldfresh, newfresh, 1)
+
+              oldfail = '''    @Override\n    public void onTerminalFailure(long generation, Throwable error) {\n        if (shuttingDown || generation != sceneGeneration) return;\n        MainHook.log(TAG + " source backend failed closed " + debugLabel()\n                + " generation=" + generation + ": " + error);\n    }\n'''
+              newfail = '''    @Override\n    public void onTerminalFailure(long generation, Throwable error) {\n        if (shuttingDown || generation != sceneGeneration) return;\n        Runnable failure = freezeAfterNextFreshFrameFailureCallback;\n        freezeAfterNextFreshFrame = false;\n        freezeAfterNextFreshFrameCallback = null;\n        freezeAfterNextFreshFrameFailureCallback = null;\n        if (failure != null) mainHandler.post(failure);\n        MainHook.log(TAG + " source backend failed closed " + debugLabel()\n                + " generation=" + generation + ": " + error);\n    }\n'''
+              if oldfail not in s:
+                  raise SystemExit('terminal failure anchor missing')
+              s = s.replace(oldfail, newfail, 1)
+              p.write_text(s)
+
+          # Overlay: prepare upper source before source removal, gate DragView presentation until
+          # the post-removal fresh frame is frozen, and publish crop geometry from each drag frame.
+          p = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java')
+          s = p.read_text()
+          if 'CLEAN_CAPTURE_BY_DRAG_VIEW' not in s:
+              s = s.replace(
+                  '    private static final WeakHashMap<View, LauncherGlassDragOverlay> BY_ROOT = new WeakHashMap<>();\n',
+                  '    private static final WeakHashMap<View, LauncherGlassDragOverlay> BY_ROOT = new WeakHashMap<>();\n'
+                  '    private static final WeakHashMap<View, LauncherGlassDragOverlay> CLEAN_CAPTURE_BY_DRAG_VIEW =\n'
+                  '            new WeakHashMap<>();\n', 1)
+              s = s.replace(
+                  '    private boolean sourceAttachPending;\n',
+                  '    private boolean sourceAttachPending;\n'
+                  '    private WeakReference<View> cleanCaptureDragRef = new WeakReference<>(null);\n'
+                  '    private boolean cleanCaptureRequested;\n'
+                  '    private boolean cleanCaptureInFlight;\n'
+                  '    private boolean cleanCapturePresentationGated;\n'
+                  '    private float cleanCaptureOriginalAlpha = 1f;\n', 1)
+
+              anchor = '''    static boolean begin(\n            View source,\n            LiquidDockConfig.Glass glassConfig,\n'''
+              helpers = '''    static LauncherGlassDragOverlay prepareCleanCapture(\n            View source, LiquidDockConfig.Glass glassConfig) {\n        if (!GlassRuntimeState.isEnabled() || source == null) return null;\n        LauncherGlassDragOverlay overlay = acquire(source, glassConfig);\n        if (overlay == null || overlay.released) return null;\n        overlay.ensureWorkspaceSource();\n        return overlay;\n    }\n\n    void armCleanCapture(View dragView) {\n        if (released || dragView == null) return;\n        cleanCaptureDragRef = new WeakReference<>(dragView);\n        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {\n            CLEAN_CAPTURE_BY_DRAG_VIEW.put(dragView, this);\n        }\n    }\n\n    static void gateCleanDragPresentation(View dragView) {\n        LauncherGlassDragOverlay overlay = cleanCaptureOwner(dragView);\n        if (overlay == null || overlay.released || dragView == null) return;\n        overlay.cleanCaptureOriginalAlpha = dragView.getAlpha();\n        overlay.cleanCapturePresentationGated = true;\n        dragView.setAlpha(0f);\n    }\n\n    static void requestCleanBackdropAndReveal(View dragView) {\n        LauncherGlassDragOverlay overlay = cleanCaptureOwner(dragView);\n        if (overlay != null) overlay.requestCleanBackdropAndRevealInternal(dragView);\n    }\n\n    private static LauncherGlassDragOverlay cleanCaptureOwner(View dragView) {\n        if (dragView == null) return null;\n        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {\n            return CLEAN_CAPTURE_BY_DRAG_VIEW.get(dragView);\n        }\n    }\n\n'''
+              if anchor not in s:
+                  raise SystemExit('overlay begin anchor missing')
+              s = s.replace(anchor, helpers + anchor, 1)
+
+              # Do not freeze at overlay attachment; clean capture is explicitly requested only
+              # after showWithAnim has inserted an alpha-zero DragView.
+              oldattach = '''                        LauncherGlassSession session = new LauncherGlassSession(\n                                sourceOverlay, glassConfig,\n                                PassBlurBindRequest.dragOverlay(sourceOverlay));\n                        session.freezeAfterNextFreshFrame();\n                        sourceSession = session;\n                        if (tracking) syncFromSource();\n'''
+              newattach = '''                        LauncherGlassSession session = new LauncherGlassSession(\n                                sourceOverlay, glassConfig,\n                                PassBlurBindRequest.dragOverlay(sourceOverlay));\n                        sourceSession = session;\n                        View pendingDrag = cleanCaptureDragRef.get();\n                        if (cleanCaptureRequested && pendingDrag != null) {\n                            requestCleanBackdropAndRevealInternal(pendingDrag);\n                        } else if (tracking) {\n                            session.freezeAfterNextFreshFrame();\n                        }\n                        if (tracking) syncFromSource();\n'''
+              if oldattach not in s:
+                  raise SystemExit('overlay source attach anchor missing')
+              s = s.replace(oldattach, newattach, 1)
+
+              # Add callback-driven clean capture methods before releaseDragSource.
+              anchor2 = '    private void releaseDragSource() {\n'
+              methods = '''    private void requestCleanBackdropAndRevealInternal(View dragView) {\n        if (released || dragView == null || cleanCaptureDragRef.get() != dragView) return;\n        cleanCaptureRequested = true;\n        ensureWorkspaceSource();\n        LauncherGlassSession session = sourceSession;\n        if (session == null || session.isShutdown() || cleanCaptureInFlight) return;\n        cleanCaptureInFlight = true;\n        session.freezeAfterNextFreshFrame(\n                () -> restoreCleanDragPresentation(dragView, "fresh-workspace"),\n                () -> restoreCleanDragPresentation(dragView, "source-failure"));\n    }\n\n    private void restoreCleanDragPresentation(View dragView, String reason) {\n        if (dragView == null || cleanCaptureDragRef.get() != dragView) return;\n        cleanCaptureInFlight = false;\n        cleanCaptureRequested = false;\n        if (cleanCapturePresentationGated) {\n            dragView.setAlpha(cleanCaptureOriginalAlpha);\n            dragView.invalidate();\n        }\n        cleanCapturePresentationGated = false;\n        synchronized (CLEAN_CAPTURE_BY_DRAG_VIEW) {\n            if (CLEAN_CAPTURE_BY_DRAG_VIEW.get(dragView) == this) {\n                CLEAN_CAPTURE_BY_DRAG_VIEW.remove(dragView);\n            }\n        }\n        cleanCaptureDragRef = new WeakReference<>(null);\n        MainHook.log(TAG + " clean workspace capture released presentation reason=" + reason);\n    }\n\n'''
+              if anchor2 not in s:
+                  raise SystemExit('release drag source anchor missing')
+              s = s.replace(anchor2, methods + anchor2, 1)
+
+              # Restore a gated DragView before tearing down a failed/cancelled drag source.
+              s = s.replace(
+                  '    private void releaseDragSource() {\n        if (sink != null) {\n',
+                  '    private void releaseDragSource() {\n'
+                  '        View cleanDrag = cleanCaptureDragRef.get();\n'
+                  '        if (cleanDrag != null && cleanCapturePresentationGated) {\n'
+                  '            restoreCleanDragPresentation(cleanDrag, "release");\n'
+                  '        }\n'
+                  '        if (sink != null) {\n', 1)
+
+              # Publish geometry directly from the Choreographer-driven carrier update.
+              oldend = '''        sink.setNativeCornerRadiusPx(LauncherGlassBoundsPolicy.capRadius(\n                activeCornerRadiusPx * radiusScale,\n                geometry.visualWidth(), geometry.visualHeight()));\n    }\n'''
+              newend = '''        sink.setNativeCornerRadiusPx(LauncherGlassBoundsPolicy.capRadius(\n                activeCornerRadiusPx * radiusScale,\n                geometry.visualWidth(), geometry.visualHeight()));\n        publishFrameGeometry();\n    }\n\n    private void publishFrameGeometry() {\n        LauncherGlassSinkView liveSink = sink;\n        LauncherGlassSession authority = sourceSession;\n        View authorityRoot = sourceOverlay;\n        if (liveSink == null || authority == null || authority.isShutdown()\n                || authorityRoot == null || !authorityRoot.isAttachedToWindow()) return;\n        LauncherGlassGeometry.Snapshot geometry = liveSink.captureGeometry(authorityRoot);\n        if (geometry != null) authority.publishDragGeometry(liveSink, geometry);\n    }\n'''
+              if oldend not in s:
+                  raise SystemExit('carrier geometry end anchor missing')
+              s = s.replace(oldend, newend, 1)
+              p.write_text(s)
+          PY
+      - name: Commit if needed
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/MiuixLauncherDragOverlayHook.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassDragOverlay.java \
+                  src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java
+          git commit -m 'fix: capture clean workspace before drag presentation'
+          git push origin HEAD:fix/folder-drag-workspace-glass
