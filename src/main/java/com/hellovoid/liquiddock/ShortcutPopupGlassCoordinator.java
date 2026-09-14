@@ -44,7 +44,9 @@ final class ShortcutPopupGlassCoordinator {
                     sourceRoot,
                     state.glassConfig,
                     new ShortcutPopupGlassSession.Listener() {
-                        @Override public void onPresented() { onPresented(state); }
+                        @Override public void onPresented() {
+                            ShortcutPopupGlassCoordinator.onPresented(state);
+                        }
 
                         @Override public void onFailure(Throwable error) {
                             MainHook.log(TAG + " session failed: " + error);
