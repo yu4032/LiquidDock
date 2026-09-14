@@ -1,0 +1,35 @@
+name: R8 Dock spacing dexdump
+
+on:
+  push:
+    branches:
+      - audit/r8-dock-customization
+    paths:
+      - .github/workflows/r8-dock-dexdump.yml
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x ./gradlew
+      - run: ./gradlew assembleDebug
+      - name: Dump optimized spacing bytecode
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find build/outputs/apk/debug -name '*.apk' | head -1)
+          unzip -p "$APK" classes.dex > /tmp/classes.dex
+          MAP=build/outputs/mapping/debug/mapping.txt
+          echo '=== mapping ==='
+          grep -E '^com\.hellovoid\.liquiddock\.Miuix307MaterialPipeline|^androidx\.recyclerview\.widget\.RecyclerView(\$State)? ' "$MAP" || true
+          DEXDUMP=$(ls -1 "$ANDROID_HOME"/build-tools/*/dexdump 2>/dev/null | tail -1)
+          echo "dexdump=$DEXDUMP"
+          "$DEXDUMP" -d /tmp/classes.dex > /tmp/dexdump.txt
+          echo '=== RecyclerView references with bytecode context ==='
+          grep -n -B18 -A28 -E 'androidx/recyclerview/widget/RecyclerView|HotSeatsListContentLayoutManager|OffsetDecoration|getItemOffsets|updateBackgroundView|MiuiX 307 spacing' /tmp/dexdump.txt | head -800 || true
