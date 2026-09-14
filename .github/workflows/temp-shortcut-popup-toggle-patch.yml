@@ -17,7 +17,7 @@ jobs:
           ref: feat/shortcut-secondary-glass
           fetch-depth: 0
       - name: Apply shortcut popup toggle patch
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
 
