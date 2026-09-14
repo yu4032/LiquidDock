@@ -165,6 +165,24 @@ final class ShortcutPopupGlassCoordinator {
         }
     }
 
+    static synchronized void beginDismissFade(Object menu) {
+        State state = current;
+        if (state == null || state.released || menu == null) return;
+        try {
+            Object popupObject = HookUtil.getField(menu, "mPopupView");
+            View popup = state.popupRef.get();
+            if (popup == null || popupObject != popup) return;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " dismiss fade owner check failed: " + error);
+            return;
+        }
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (layer != null) {
+            layer.fadeOutFast();
+            MainHook.log(TAG + " fast dismiss fade started");
+        }
+    }
+
     static synchronized void cancelPending(View captureRoot) {
         State state = current;
         if (state != null && state.captureRootRef.get() == captureRoot
