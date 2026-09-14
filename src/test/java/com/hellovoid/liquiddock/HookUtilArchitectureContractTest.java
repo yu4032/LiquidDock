@@ -41,6 +41,25 @@ public class HookUtilArchitectureContractTest {
         assertTrue("legacy silent reflection call sites remain: " + offenders, offenders.isEmpty());
     }
 
+    @Test public void staticNodeInternalCallsUseTypedJavaInsteadOfReflection() throws Exception {
+        String source = Files.readString(MAIN.resolve("LauncherWidgetTransitionCoordinator.java"));
+        assertFalse("LauncherGlassStaticNode is project-owned; reflective hide breaks under R8",
+                source.contains("HookUtil.tryInvoke(node, \"hideImmediately\")"));
+        assertTrue("widget transition must call the project-owned StaticNode API directly",
+                source.contains("node.hideImmediately();"));
+    }
+
+    @Test public void passBlurHomeFreshnessDoesNotReflectProjectOwnedInputField()
+            throws Exception {
+        String source = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        assertFalse("Miuix307PassBlurTextureView is project-owned; reflected field names break under R8",
+                source.contains("HookUtil.getField(gpuBackdrop, \"inputSurfaceTexture\")"));
+        assertTrue("HOME freshness must use the TextureView output SurfaceTexture through typed API",
+                source.contains("gpuBackdrop.getSurfaceTexture()"));
+        assertTrue("HOME freshness polling must be bounded instead of posting forever on failure",
+                source.contains("MAX_HOME_FRESH_WAIT_FRAMES"));
+    }
+
     @Test public void genericStaticClassNameInvocationApiIsRemoved() throws Exception {
         String source = Files.readString(MAIN.resolve("HookUtil.java"));
         assertFalse("generic String class-name static invocation can bypass the target process "
