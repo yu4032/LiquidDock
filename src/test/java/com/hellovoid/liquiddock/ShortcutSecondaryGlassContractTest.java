@@ -20,10 +20,12 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("com.miui.home.launcher.shortcuts.ShortcutMenu"));
         assertTrue(hook.contains("\"show\""));
         assertTrue(hook.contains("\"dismiss\""));
+        assertTrue(hook.contains("com.miui.home.launcher.EditStateChangeReason"));
         assertTrue(hook.contains("mDecorView"));
         assertTrue(hook.contains("mPopupView"));
         assertTrue(hook.contains("getContentView"));
-        assertTrue(hook.contains("LauncherGlassSessionRegistry.acquire(decorView, glassConfig)"));
+        assertTrue(hook.contains("LauncherGlassSessionRegistry.acquire("));
+        assertTrue(hook.contains("decorView, binding.glassConfig"));
         assertTrue(hook.contains("LauncherGlassSinkView.attachToExternalMaterial"));
         assertTrue(sink.contains("attachToExternalMaterial"));
         assertTrue(sink.contains("externalSessionAuthority"));
