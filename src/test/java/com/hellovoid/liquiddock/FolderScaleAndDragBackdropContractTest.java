@@ -82,4 +82,10 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(session.contains("node.geometry = geometry"));
         assertTrue(session.contains("requestDragRedraw()"));
     }
+
+    @Test public void dragTextureViewSynchronizesWithCarrierOnEveryDragFrame() throws Exception {
+        String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+
+        assertTrue(overlay.contains("sink.syncFromMaterial();\n        publishFrameGeometry();"));
+    }
 }
