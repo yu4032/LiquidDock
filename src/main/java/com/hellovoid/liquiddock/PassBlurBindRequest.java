@@ -41,6 +41,14 @@ final class PassBlurBindRequest {
                 NO_EXTRA_EXCLUSIONS);
     }
 
+    static PassBlurBindRequest dragOverlay(View authoritativeRoot) {
+        return new PassBlurBindRequest(
+                authoritativeRoot,
+                PassBlurDomain.DRAG_OVERLAY,
+                1.0f,
+                NO_EXTRA_EXCLUSIONS);
+    }
+
     static PassBlurBindRequest dock(View host, float requestedScale) {
         return new PassBlurBindRequest(
                 host,
