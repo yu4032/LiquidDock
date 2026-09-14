@@ -21,6 +21,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("com.miui.home.launcher.ShortcutMenuLayer"));
         assertTrue(hook.contains("\"setRequestingItemInfo\""));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
+        assertTrue(hook.contains("ownerView.getRootView()"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
         assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
