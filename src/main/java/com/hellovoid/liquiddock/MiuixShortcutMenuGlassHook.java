@@ -19,6 +19,7 @@ import java.util.WeakHashMap;
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
+    private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
     private static final Map<Object, Binding> ACTIVE =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static boolean installed;
@@ -41,7 +42,7 @@ final class MiuixShortcutMenuGlassHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 releaseIfDetached(chain.getThisObject());
                 return result;
-            });
+            }, EDIT_STATE_CHANGE_REASON);
             installed = true;
             MainHook.log(TAG + " ShortcutMenu popup hook installed");
             return true;
