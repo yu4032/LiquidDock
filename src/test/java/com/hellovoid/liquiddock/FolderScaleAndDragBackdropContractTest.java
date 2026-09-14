@@ -41,4 +41,12 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(session.contains("PassBlurBindRequest bindRequest"));
         assertTrue(session.contains("source=RootPassBlurBackend domain="));
     }
+
+    @Test public void newlyRegisteredDragSinkAlwaysCapturesInitialGeometry() throws Exception {
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(session.contains(
+                "if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;"));
+        assertTrue(session.contains("LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);"));
+    }
 }
