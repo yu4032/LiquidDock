@@ -1,0 +1,48 @@
+name: R8 live drag self-reflection patch
+
+on:
+  push:
+    branches:
+      - fix/r8-live-drag-self-reflection
+    paths:
+      - .github/workflows/r8-live-drag-self-reflection-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/r8-live-drag-self-reflection
+          fetch-depth: 0
+      - name: Replace project-owned reflection with typed APIs
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          session_path = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java')
+          text = session_path.read_text()
+          text = text.replace(
+              '    private boolean backdropPrepared;\n',
+              '    private volatile boolean backdropPrepared;\n',
+              1,
+          )
+          anchor = '''    boolean isShutdown() {\n        return shuttingDown;\n    }\n'''
+          typed = '''    boolean isShutdown() {\n        return shuttingDown;\n    }\n\n    boolean ensureLiveDragSource() {\n        if (shuttingDown) return false;\n        sourceBackend.setUpdatesEnabled(true, "launcher-drag-live");\n        if (!backdropPrepared) requestFreshBackdrop(sceneGeneration);\n        return true;\n    }\n\n    boolean hasPreparedBackdrop() {\n        return !shuttingDown && backdropPrepared;\n    }\n'''
+          if anchor not in text:
+              raise SystemExit('LauncherGlassSession isShutdown anchor not found')
+          text = text.replace(anchor, typed, 1)
+          session_path.write_text(text)
+
+          bridge_path = Path('src/main/java/com/hellovoid/liquiddock/LauncherLiveDragSessionBridge.java')
+          bridge_path.write_text('''package com.hellovoid.liquiddock;\n\n/** Small package-local bridge for the dedicated drag session's live producer lifecycle. */\nfinal class LauncherLiveDragSessionBridge {\n    private LauncherLiveDragSessionBridge() {}\n\n    static boolean ensureLive(LauncherGlassSession session) {\n        return session != null && session.ensureLiveDragSource();\n    }\n\n    static boolean hasPreparedBackdrop(LauncherGlassSession session) {\n        return session != null && session.hasPreparedBackdrop();\n    }\n}\n''')
+          PY
+          git config user.name yu4032
+          git config user.email 4032542465@smail.lnu.edu.cn
+          git add src/main/java/com/hellovoid/liquiddock/LauncherGlassSession.java src/main/java/com/hellovoid/liquiddock/LauncherLiveDragSessionBridge.java
+          git commit -m "fix: remove live drag self-reflection"
+          git push origin HEAD:fix/r8-live-drag-self-reflection
