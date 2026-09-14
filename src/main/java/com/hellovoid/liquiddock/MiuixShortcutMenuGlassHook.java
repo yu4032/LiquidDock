@@ -1,29 +1,16 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Color;
 import android.view.View;
-import android.view.ViewGroup;
 
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.Map;
-import java.util.WeakHashMap;
 
-/**
- * Replaces the HyperOS Launcher ShortcutMenu PopupView material with a LiquidDock glass sink.
- *
- * <p>HyperOS 4.50 PopupView is added directly to ShortcutMenu.mDecorView, so it shares the
- * Launcher ViewRoot and producer authority. The sink lives inside PopupView's SmoothFrameLayout2
- * content background layer so MiuiX owns the popup bounds animation exactly once; we do not chase
- * that animation from an external sibling.
- */
+/** HyperOS 4.50 ShortcutMenu glass backed by a pre-show workspace capture window. */
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
+    private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
+    private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
     private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
-    private static final Map<Object, Binding> ACTIVE =
-            Collections.synchronizedMap(new WeakHashMap<>());
     private static boolean installed;
 
     private MiuixShortcutMenuGlassHook() {}
@@ -35,18 +22,36 @@ final class MiuixShortcutMenuGlassHook {
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
+            HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object itemInfo = args.length > 0 ? args[0] : null;
+                Object owner = chain.getThisObject();
+                if (itemInfo != null && owner instanceof View) {
+                    ShortcutPopupGlassCoordinator.prepare((View) owner, glassConfig);
+                }
+                Object result = chain.proceed(args);
+                if (itemInfo == null && owner instanceof View) {
+                    View decor = (View) owner;
+                    decor.postOnAnimation(() -> ShortcutPopupGlassCoordinator.cancelPending(decor));
+                }
+                return result;
+            }, ITEM_INFO);
+
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                onShown(chain.getThisObject(), glassConfig);
+                bindShownPopup(chain.getThisObject());
                 return result;
             });
+
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
+                Object menu = chain.getThisObject();
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                releaseIfDetached(chain.getThisObject());
+                releaseIfAlreadyDetached(menu);
                 return result;
             }, EDIT_STATE_CHANGE_REASON);
+
             installed = true;
-            MainHook.log(TAG + " ShortcutMenu popup hook installed");
+            MainHook.log(TAG + " pre-show workspace capture hook installed");
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -54,183 +59,36 @@ final class MiuixShortcutMenuGlassHook {
         }
     }
 
-    private static void onShown(Object menu, LiquidDockConfig.Glass glassConfig) {
-        release(menu);
-        if (menu == null || glassConfig == null || !GlassRuntimeState.isEnabled()) return;
+    private static void bindShownPopup(Object menu) {
+        if (menu == null || !GlassRuntimeState.isEnabled()) return;
         try {
             Object decorObject = HookUtil.getField(menu, "mDecorView");
             Object popupObject = HookUtil.getField(menu, "mPopupView");
-            if (!(decorObject instanceof View) || popupObject == null) return;
-            View decorView = (View) decorObject;
+            if (!(decorObject instanceof View) || !(popupObject instanceof View)) return;
             Method getContentView = popupObject.getClass().getMethod("getContentView");
             Object contentObject = getContentView.invoke(popupObject);
             if (!(contentObject instanceof View)) return;
-            View contentView = (View) contentObject;
-            Binding binding = new Binding(contentView, decorView, glassConfig);
-            ACTIVE.put(menu, binding);
-            if (contentView.isAttachedToWindow() && contentView.getParent() instanceof ViewGroup) {
-                bindNow(menu, binding);
-                return;
+            boolean bound = ShortcutPopupGlassCoordinator.bindPopup(
+                    (View) decorObject, (View) popupObject, (View) contentObject);
+            if (!bound) {
+                MainHook.log(TAG + " pre-show source unavailable; stock material retained");
             }
-            WeakReference<Object> menuRef = new WeakReference<>(menu);
-            View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
-                @Override public void onViewAttachedToWindow(View v) {
-                    v.removeOnAttachStateChangeListener(this);
-                    Object owner = menuRef.get();
-                    if (owner != null) bindNow(owner, binding);
-                }
-
-                @Override public void onViewDetachedFromWindow(View v) {}
-            };
-            binding.pendingAttachListener = listener;
-            contentView.addOnAttachStateChangeListener(listener);
         } catch (Throwable error) {
-            MainHook.log(TAG + " popup discovery failed; stock material retained: " + error);
-            release(menu);
+            MainHook.log(TAG + " popup bind failed; stock material retained: " + error);
         }
     }
 
-    private static void bindNow(Object menu, Binding binding) {
-        if (menu == null || binding == null || ACTIVE.get(menu) != binding) return;
-        View contentView = binding.contentRef.get();
-        View decorView = binding.decorRef.get();
-        if (!(contentView instanceof ViewGroup) || decorView == null
-                || !(contentView.getParent() instanceof ViewGroup)) {
-            MainHook.log(TAG + " content root is not a ViewGroup; stock material retained");
-            release(menu);
-            return;
-        }
-        if (binding.pendingAttachListener != null) {
-            contentView.removeOnAttachStateChangeListener(binding.pendingAttachListener);
-            binding.pendingAttachListener = null;
-        }
-        LauncherGlassSession shared = LauncherGlassSessionRegistry.acquire(
-                decorView, binding.glassConfig);
-        boolean sharedSessionLive = shared != null && !shared.isShutdown();
-        if (!sharedSessionLive) {
-            MainHook.log(TAG + " no Launcher producer session; stock material retained");
-            release(menu);
-            return;
-        }
-
-        ViewGroup contentGroup = (ViewGroup) contentView;
-        int anchorWidth = resolveFinalContentExtent(contentView, true);
-        int anchorHeight = resolveFinalContentExtent(contentView, false);
-        View backgroundAnchor = new View(contentView.getContext());
-        backgroundAnchor.setBackgroundColor(Color.TRANSPARENT);
-        backgroundAnchor.setClickable(false);
-        backgroundAnchor.setFocusable(false);
-        backgroundAnchor.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        contentGroup.addView(backgroundAnchor, 0, new ViewGroup.LayoutParams(
-                anchorWidth, anchorHeight));
-        // showWithAnchor() has already written the final popup width/height into LayoutParams, but
-        // PopupAnimHelper's first pre-draw may not have laid out this new child yet. Seed the final
-        // stable background geometry now. MiuiX then clips this layer through the animated
-        // SmoothFrameLayout2 bounds instead of us following those bounds frame by frame.
-        backgroundAnchor.layout(0, 0, anchorWidth, anchorHeight);
-        binding.backgroundAnchor = backgroundAnchor;
-
-        float cornerRadiusPx = resolveShortcutMenuCornerRadius(contentView);
-        LauncherGlassSinkView glassSink = LauncherGlassSinkView.attachToMaterial(
-                backgroundAnchor, cornerRadiusPx, binding.glassConfig);
-        boolean sinkAttached = glassSink != null;
-        if (!ShortcutPopupMaterialHandoffPolicy.mayReplaceVendorMaterial(
-                sharedSessionLive, sinkAttached)) {
-            if (glassSink != null) glassSink.dispose();
-            contentGroup.removeView(backgroundAnchor);
-            binding.backgroundAnchor = null;
-            MainHook.log(TAG + " internal background sink unavailable; stock material retained");
-            release(menu);
-            return;
-        }
-        binding.sink = glassSink;
-        View.OnAttachStateChangeListener detachListener = new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View v) {}
-
-            @Override public void onViewDetachedFromWindow(View v) {
-                release(menu);
-            }
-        };
-        binding.detachListener = detachListener;
-        contentView.addOnAttachStateChangeListener(detachListener);
-
-        clearVendorPopupMaterial(contentView);
-        glassSink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
-        glassSink.requestLifecycleRefresh();
-        MainHook.log(TAG + " bound internal PopupView background sink to " + shared.debugLabel()
-                + " size=" + anchorWidth + "x" + anchorHeight);
-    }
-
-    private static int resolveFinalContentExtent(View contentView, boolean width) {
-        ViewGroup.LayoutParams lp = contentView != null ? contentView.getLayoutParams() : null;
-        int fromLayout = lp != null ? (width ? lp.width : lp.height) : 0;
-        if (fromLayout > 0) return fromLayout;
-        int measured = contentView != null
-                ? (width ? contentView.getMeasuredWidth() : contentView.getMeasuredHeight()) : 0;
-        if (measured > 0) return measured;
-        int laidOut = contentView != null ? (width ? contentView.getWidth() : contentView.getHeight()) : 0;
-        return Math.max(1, laidOut);
-    }
-
-    private static void clearVendorPopupMaterial(View contentView) {
-        if (contentView == null) return;
-        MiBlurBridge.clearContentBlur(contentView);
-        contentView.setBackgroundColor(Color.TRANSPARENT);
-        contentView.setElevation(0f);
-    }
-
-    private static float resolveShortcutMenuCornerRadius(View contentView) {
-        if (contentView == null) return 0f;
-        try {
-            int id = contentView.getResources().getIdentifier(
-                    "shortcut_menu_angle_radius", "dimen", "com.miui.home");
-            if (id != 0) return contentView.getResources().getDimension(id);
-        } catch (Throwable ignored) {}
-        return 16f * contentView.getResources().getDisplayMetrics().density;
-    }
-
-    private static void releaseIfDetached(Object menu) {
-        Binding binding = ACTIVE.get(menu);
-        View content = binding != null ? binding.contentRef.get() : null;
-        if (content == null || !content.isAttachedToWindow()) release(menu);
-    }
-
-    private static void release(Object menu) {
+    private static void releaseIfAlreadyDetached(Object menu) {
         if (menu == null) return;
-        Binding binding = ACTIVE.remove(menu);
-        if (binding == null) return;
-        View content = binding.contentRef.get();
-        if (content != null) {
-            if (binding.pendingAttachListener != null) {
-                content.removeOnAttachStateChangeListener(binding.pendingAttachListener);
+        try {
+            Object decorObject = HookUtil.getField(menu, "mDecorView");
+            Object popupObject = HookUtil.getField(menu, "mPopupView");
+            if (decorObject instanceof View) {
+                ShortcutPopupGlassCoordinator.releasePopupIfDetached(
+                        (View) decorObject, popupObject instanceof View ? (View) popupObject : null);
             }
-            if (binding.detachListener != null) {
-                content.removeOnAttachStateChangeListener(binding.detachListener);
-            }
-        }
-        LauncherGlassSinkView sink = binding.sink;
-        binding.sink = null;
-        if (sink != null) sink.dispose();
-        View backgroundAnchor = binding.backgroundAnchor;
-        binding.backgroundAnchor = null;
-        if (backgroundAnchor != null && backgroundAnchor.getParent() instanceof ViewGroup) {
-            ((ViewGroup) backgroundAnchor.getParent()).removeView(backgroundAnchor);
-        }
-    }
-
-    private static final class Binding {
-        final WeakReference<View> contentRef;
-        final WeakReference<View> decorRef;
-        final LiquidDockConfig.Glass glassConfig;
-        LauncherGlassSinkView sink;
-        View backgroundAnchor;
-        View.OnAttachStateChangeListener pendingAttachListener;
-        View.OnAttachStateChangeListener detachListener;
-
-        Binding(View content, View decor, LiquidDockConfig.Glass glassConfig) {
-            contentRef = new WeakReference<>(content);
-            decorRef = new WeakReference<>(decor);
-            this.glassConfig = glassConfig;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " dismiss cleanup deferred: " + error);
         }
     }
 }
