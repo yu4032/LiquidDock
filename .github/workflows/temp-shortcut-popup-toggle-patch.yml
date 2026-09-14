@@ -5,8 +5,67 @@ on:
     branches:
       - feat/shortcut-secondary-glass
 
+permissions:
+  contents: write
+
 jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - run: echo temp-workflow-ok
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/shortcut-secondary-glass
+          fetch-depth: 0
+      - name: Apply shortcut popup toggle patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          schema = Path('src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java')
+          if 'SHORTCUT_POPUP_GLASS = bool(' in schema.read_text():
+              print('shortcut popup toggle already patched')
+              raise SystemExit(0)
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'missing patch anchor in {path}: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java',
+              '''        public static final ConfigKey<Boolean> SECURITY_CENTER_GLASS = bool(\n                "liquid_security_center_glass", false, false, false,\n                ConfigKey.ExportMode.ALWAYS);\n''',
+              '''        public static final ConfigKey<Boolean> SECURITY_CENTER_GLASS = bool(\n                "liquid_security_center_glass", false, false, false,\n                ConfigKey.ExportMode.ALWAYS);\n        public static final ConfigKey<Boolean> SHORTCUT_POPUP_GLASS = bool(\n                "liquid_shortcut_popup_glass", true, true, true,\n                ConfigKey.ExportMode.ALWAYS);\n''')
+
+          replace(
+              'src/main/java/com/hellovoid/liquiddock/MiuixShortcutMenuGlassHook.java',
+              '''        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {\n            return false;\n        }\n        LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;\n''',
+              '''        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {\n            return false;\n        }\n        ConfigReader preferences = ConfigReader.load();\n        if (!preferences.b(\n                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),\n                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.runtimeFallback())) {\n            MainHook.log(TAG + " disabled by shortcut popup replacement setting");\n            return false;\n        }\n        LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;\n''')
+
+          replace(
+              'src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt',
+              '''        BooleanSetting(\n            prefs,\n            ConfigSchema.Glass.SECURITY_CENTER_GLASS,\n            stringResource(R.string.liquid_security_center_glass_enable),\n            stringResource(R.string.liquid_security_center_glass_enable_summary),\n            masterEnabled && liquidGlass,\n        )\n''',
+              '''        BooleanSetting(\n            prefs,\n            ConfigSchema.Glass.SECURITY_CENTER_GLASS,\n            stringResource(R.string.liquid_security_center_glass_enable),\n            stringResource(R.string.liquid_security_center_glass_enable_summary),\n            masterEnabled && liquidGlass,\n        )\n        BooleanSetting(\n            prefs,\n            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,\n            "桌面快捷菜单玻璃背景",\n            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",\n            masterEnabled && liquidGlass,\n        )\n''')
+
+          p = Path('src/test/java/com/hellovoid/liquiddock/ShortcutSecondaryGlassContractTest.java')
+          text = p.read_text()
+          start = text.index('    @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting()')
+          end = text.index('\n    }\n}', start) + len('\n    }')
+          replacement = '''    @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting() throws Exception {\n        String schema = Files.readString(Path.of(\n                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));\n        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));\n        String settings = Files.readString(Path.of(\n                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));\n\n        assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));\n        assertTrue(schema.contains("\\\"liquid_shortcut_popup_glass\\\", true, true, true"));\n        assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));\n        assertTrue(hook.contains("disabled by shortcut popup replacement setting"));\n        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));\n        assertTrue(settings.contains("桌面快捷菜单玻璃背景"));\n        assertTrue(settings.contains("重启桌面后生效"));\n    }'''
+          p.write_text(text[:start] + replacement + text[end:])
+          PY
+      - name: Commit patch if needed
+        run: |
+          if git diff --quiet; then
+            echo "no patch changes"
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java \
+                  src/main/java/com/hellovoid/liquiddock/MiuixShortcutMenuGlassHook.java \
+                  src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt \
+                  src/test/java/com/hellovoid/liquiddock/ShortcutSecondaryGlassContractTest.java
+          git commit -m 'feat: add shortcut popup replacement toggle'
+          git push origin HEAD:feat/shortcut-secondary-glass
