@@ -141,9 +141,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // Launcher-specific Shell rotation settle policy intentionally stays above the root backend.
     private volatile long rotationSettleSerial;
     private volatile boolean rotationSettlePending;
-    private volatile boolean freezeAfterNextFreshFrame;
-    private volatile Runnable freezeAfterNextFreshFrameCallback;
-    private volatile Runnable freezeAfterNextFreshFrameFailureCallback;
     private volatile int rotationSettleTargetRotation = -1;
 
     // Render-thread only Launcher output objects.
@@ -370,22 +367,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             clearWallpaperRequestLocked();
             return token;
         }
-    }
-
-    void freezeAfterNextFreshFrame() {
-        freezeAfterNextFreshFrame(null, null);
-    }
-
-    void freezeAfterNextFreshFrame(Runnable onReady, Runnable onFailure) {
-        if (shuttingDown) {
-            if (onFailure != null) mainHandler.post(onFailure);
-            return;
-        }
-        freezeAfterNextFreshFrameCallback = onReady;
-        freezeAfterNextFreshFrameFailureCallback = onFailure;
-        freezeAfterNextFreshFrame = true;
-        sourceBackend.setUpdatesEnabled(true, "launcher-drag-capture");
-        sourceBackend.requestFresh(sceneGeneration, true);
     }
 
     void requestSceneRedraw() {
@@ -801,14 +782,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     params);
             backdropPrepared = true;
             renderOutputs(true, true);
-            if (freezeAfterNextFreshFrame) {
-                freezeAfterNextFreshFrame = false;
-                sourceBackend.setUpdatesEnabled(false, "launcher-drag-frozen");
-                Runnable ready = freezeAfterNextFreshFrameCallback;
-                freezeAfterNextFreshFrameCallback = null;
-                freezeAfterNextFreshFrameFailureCallback = null;
-                if (ready != null) mainHandler.post(ready);
-            }
             WallpaperFrameToken wallpaperFrame = takeWallpaperFrameToken(frame.generation);
             boolean renderedStaticOutput = staticOutput != null;
             long renderedGeneration = frame.generation;
@@ -843,11 +816,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
         if (shuttingDown || generation != sceneGeneration) return;
-        Runnable failure = freezeAfterNextFreshFrameFailureCallback;
-        freezeAfterNextFreshFrame = false;
-        freezeAfterNextFreshFrameCallback = null;
-        freezeAfterNextFreshFrameFailureCallback = null;
-        if (failure != null) mainHandler.post(failure);
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
     }
