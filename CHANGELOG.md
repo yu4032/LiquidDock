@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.4.1 (2026-09-14)
+
+### R8 compatibility
+
+- 保留 Dock spacing 与 live-drag 运行时反射所需的类名，修复启用 R8 后 Dock 图标间距配置失效的问题
+
 ## Unreleased / main (2026-09-07)
 
 ### Security Center Global Dock / All Apps Liquid Glass
