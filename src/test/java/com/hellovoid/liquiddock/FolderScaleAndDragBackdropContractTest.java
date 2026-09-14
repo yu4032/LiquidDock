@@ -49,6 +49,9 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(overlay.contains("launcher-drag-frozen"));
         assertFalse(session.contains("freezeAfterNextFreshFrame"));
         assertFalse(session.contains("launcher-drag-frozen"));
+        assertTrue(overlay.contains("prewarmLiveSource"));
+        assertFalse(overlay.contains("gateCleanDragPresentation"));
+        assertFalse(overlay.contains("requestCleanBackdropAndReveal"));
         assertTrue(bridge.contains("launcher-drag-live"));
         assertTrue(bridge.contains("setUpdatesEnabled(true"));
         assertTrue(bridge.contains("requestFreshBackdrop"));
