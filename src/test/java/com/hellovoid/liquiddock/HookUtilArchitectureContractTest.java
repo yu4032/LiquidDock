@@ -49,6 +49,15 @@ public class HookUtilArchitectureContractTest {
                 source.contains("node.hideImmediately();"));
     }
 
+    @Test public void passBlurHomeFreshnessUsesTypedProjectApiInsteadOfFieldReflection()
+            throws Exception {
+        String source = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        assertFalse("Miuix307PassBlurTextureView is project-owned; reflected field names break under R8",
+                source.contains("HookUtil.getField(gpuBackdrop, \"inputSurfaceTexture\")"));
+        assertTrue("HOME freshness must read the project-owned producer frame serial directly",
+                source.contains("gpuBackdrop.inputFrameSerial()"));
+    }
+
     @Test public void genericStaticClassNameInvocationApiIsRemoved() throws Exception {
         String source = Files.readString(MAIN.resolve("HookUtil.java"));
         assertFalse("generic String class-name static invocation can bypass the target process "
