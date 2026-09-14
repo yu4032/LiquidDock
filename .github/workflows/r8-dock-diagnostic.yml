@@ -1,0 +1,42 @@
+name: R8 Dock customization diagnostic
+
+on:
+  push:
+    branches:
+      - audit/r8-dock-customization
+    paths:
+      - .github/workflows/r8-dock-diagnostic.yml
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x ./gradlew
+      - name: Build optimized debug APK
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Inspect R8 mapping and Dock literals
+        shell: bash
+        run: |
+          set -euxo pipefail
+          MAP=build/outputs/mapping/debug/mapping.txt
+          APK=$(find build/outputs/apk/debug -name '*.apk' | head -1)
+          echo '=== mapping: MaterialPipeline / RecyclerView ==='
+          grep -E 'Miuix307MaterialPipeline|androidx\.recyclerview\.widget\.RecyclerView(\$State)? ->' "$MAP" | head -80 || true
+          echo '=== APK strings: spacing targets ==='
+          unzip -p "$APK" classes.dex > /tmp/classes.dex
+          strings /tmp/classes.dex | grep -E 'RecyclerView\$State|HotSeatsListContentLayoutManager|OffsetDecoration|getItemOffsets|updateBackgroundView|MiuiX 307 spacing' | head -80 || true
+          echo '=== available Android dex tools ==='
+          find "${ANDROID_HOME:-/opt/android-sdk}" -type f \( -name apkanalyzer -o -name dexdump -o -name dexlist \) -print 2>/dev/null | head -50 || true
+          APKA=$(find "${ANDROID_HOME:-/opt/android-sdk}" -type f -name apkanalyzer 2>/dev/null | head -1 || true)
+          if [ -n "$APKA" ]; then
+            echo '=== apkanalyzer dex packages relevant rows ==='
+            "$APKA" dex packages "$APK" | grep -E 'Miuix307MaterialPipeline|RecyclerView' | head -80 || true
+            echo '=== apkanalyzer dex code MaterialPipeline ==='
+            "$APKA" dex code --class com.hellovoid.liquiddock.Miuix307MaterialPipeline "$APK" | grep -A25 -B10 -E 'RecyclerView|OffsetDecoration|getItemOffsets|updateBackgroundView|ClassLoader|loadClass|forName' | head -300 || true
+          fi
