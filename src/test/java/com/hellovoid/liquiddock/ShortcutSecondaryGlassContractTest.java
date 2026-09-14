@@ -46,4 +46,25 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("private static void postDismissCleanup(State state)"));
         assertTrue(coordinator.contains("decor.post(() -> release(state, \"popup-detached\"))"));
     }
+
+    @Test public void dismissStartsFastFadeWithoutDestroyingGlassResources() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
+        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+
+        int fade = hook.indexOf("ShortcutPopupGlassCoordinator.beginDismissFade(menu)");
+        int proceed = hook.indexOf("chain.proceed", hook.indexOf("SHORTCUT_MENU, \"dismiss\""));
+        assertTrue(fade >= 0);
+        assertTrue(proceed >= 0);
+        assertTrue(fade < proceed);
+        assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
+        assertTrue(coordinator.contains("layer.fadeOutFast()"));
+        assertTrue(layer.contains("void fadeOutFast()"));
+        assertTrue(layer.contains("animate().cancel()"));
+        assertTrue(layer.contains(".alpha(0f)"));
+        assertFalse(layer.substring(layer.indexOf("void fadeOutFast()"),
+                layer.indexOf("void dispose()")) .contains("dispose()"));
+        assertFalse(layer.substring(layer.indexOf("void fadeOutFast()"),
+                layer.indexOf("void dispose()")) .contains("session.shutdown()"));
+    }
 }
