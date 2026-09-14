@@ -1,6 +1,6 @@
 # LiquidDock TODO
 
-当前主线为 **v2.4.0 / HyperOS 3.0.308+ / MiuiX PassBlur + OES/GLES zero-copy**。
+当前主线为 **v2.4.1 / HyperOS 3.0.308+ / MiuiX PassBlur + OES/GLES zero-copy**。
 本文件只记录当前 `main` 尚未完成、仍需结构收口或仍需真机验收的事项。
 
 剩余工作：
