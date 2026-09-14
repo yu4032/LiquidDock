@@ -652,6 +652,13 @@ private fun LiquidPage(
             stringResource(R.string.liquid_security_center_glass_enable_summary),
             masterEnabled && liquidGlass,
         )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
+            "桌面快捷菜单玻璃背景",
+            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
+            masterEnabled && liquidGlass,
+        )
         BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
         BooleanSetting(
             prefs,
