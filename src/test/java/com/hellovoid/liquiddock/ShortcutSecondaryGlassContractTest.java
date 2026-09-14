@@ -72,4 +72,28 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(layer.contains("fadeOutFast();\n        dispose()"));
         assertFalse(layer.contains("fadeOutFast();\n        session.shutdown()"));
     }
+
+    @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting() throws Exception {
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String config = Files.readString(MAIN.resolve("LiquidDockConfig.java"));
+        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String settings = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String strings = Files.readString(Path.of("src/main/res/values/strings.xml"));
+        String stringsZh = Files.readString(Path.of("src/main/res/values-zh-rCN/strings.xml"));
+
+        assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));
+        assertTrue(schema.contains("\"liquid_shortcut_popup_glass\", true, true, true"));
+        assertTrue(config.contains("shortcutPopupEnabled"));
+        assertTrue(config.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
+        assertTrue(hook.contains("!runtimeConfig.glass.shortcutPopupEnabled"));
+        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
+        assertTrue(settings.contains("R.string.liquid_shortcut_popup_glass_enable"));
+        assertTrue(settings.contains("R.string.liquid_shortcut_popup_glass_enable_summary"));
+        assertTrue(strings.contains("name=\"liquid_shortcut_popup_glass_enable\""));
+        assertTrue(strings.contains("name=\"liquid_shortcut_popup_glass_enable_summary\""));
+        assertTrue(stringsZh.contains("name=\"liquid_shortcut_popup_glass_enable\""));
+        assertTrue(stringsZh.contains("name=\"liquid_shortcut_popup_glass_enable_summary\""));
+    }
 }
