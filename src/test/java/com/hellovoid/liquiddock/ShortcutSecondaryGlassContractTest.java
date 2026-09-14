@@ -39,4 +39,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
         assertFalse(hook.contains("attachToExternalMaterial"));
     }
+
+    @Test public void popupDetachDefersCleanupOutsideVendorRemoveViewTraversal() throws Exception {
+        String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
+        assertTrue(coordinator.contains("postDismissCleanup(state)"));
+        assertTrue(coordinator.contains("private static void postDismissCleanup(State state)"));
+        assertTrue(coordinator.contains("decor.post(() -> release(state, \"popup-detached\"))"));
+    }
 }
