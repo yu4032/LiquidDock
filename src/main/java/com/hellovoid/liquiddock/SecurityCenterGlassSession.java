@@ -81,8 +81,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile boolean shuttingDown;
     private final Object pipelineLock = new Object();
-    private final Object cachedReplayLock = new Object();
-    private boolean cachedReplayQueued;
+    private final SecurityCenterCachedReplayQueueState cachedReplayQueue =
+            new SecurityCenterCachedReplayQueueState();
     private volatile FrameRequest frameRequest;
     /** Only an unconfirmed handoff/output epoch occupies the physical presentation slot. */
     private volatile FrameRequest inFlight;
@@ -336,34 +336,28 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             cachedSourceFrame = null;
             return;
         }
-        synchronized (cachedReplayLock) {
-            if (cachedReplayQueued) return;
-            cachedReplayQueued = true;
-        }
-        boolean queued = sourceBackend.postToRenderThread(() -> {
-            try {
-                while (drainCachedPresentation()) {
-                    // Keep consuming the newest cached geometry until caught up. This is event-
-                    // driven latest-wins replay, not polling; onCachedSource returns false once the
-                    // last successfully submitted serial/revision matches current state.
-                }
-            } finally {
-                synchronized (cachedReplayLock) {
-                    cachedReplayQueued = false;
-                }
-            }
-        });
-        if (!queued) {
-            synchronized (cachedReplayLock) {
-                cachedReplayQueued = false;
-            }
-        }
+        if (!cachedReplayQueue.request()) return;
+        if (!postCachedReplayTurn()) cachedReplayQueue.cancelQueued();
     }
 
     /**
-     * Render-thread drain. Returns true only after a steady-state submission so the same queued
-     * task can immediately consume geometry that arrived while EGL work was in progress.
+     * Posts exactly one cached replay turn. Continuous animation may reserve one tail repost, but
+     * never drains inline, so output detach/resize/release tasks get a queue turn between frames.
      */
+    private boolean postCachedReplayTurn() {
+        return sourceBackend.postToRenderThread(() -> {
+            try {
+                drainCachedPresentation();
+            } finally {
+                boolean repost = cachedReplayQueue.complete();
+                if (repost && (shuttingDown || !postCachedReplayTurn())) {
+                    cachedReplayQueue.cancelQueued();
+                }
+            }
+        });
+    }
+
+    /** One render-thread turn consumes at most one cached presentation. */
     private boolean drainCachedPresentation() {
         RootPassBlurFrame currentFrame = cachedSourceFrame;
         FrameRequest observed = frameRequest;
@@ -612,6 +606,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
         presentationBarrier.reset();
+        cachedReplayQueue.reset();
         log("session shutdown");
         boolean queued = sourceBackend.postToRenderThread(() -> {
             releaseGl();
