@@ -17,8 +17,8 @@ jobs:
           ref: feat/shortcut-secondary-glass
           fetch-depth: 0
       - name: Apply shortcut popup toggle patch
-        shell: python {0}
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           def replace(path, old, new):
@@ -49,6 +49,7 @@ jobs:
           end = text.index('\n    }\n}', start) + len('\n    }')
           replacement = '''    @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting() throws Exception {\n        String schema = Files.readString(Path.of(\n                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));\n        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));\n        String settings = Files.readString(Path.of(\n                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));\n\n        assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));\n        assertTrue(schema.contains("\\\"liquid_shortcut_popup_glass\\\", true, true, true"));\n        assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));\n        assertTrue(hook.contains("disabled by shortcut popup replacement setting"));\n        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));\n        assertTrue(settings.contains("桌面快捷菜单玻璃背景"));\n        assertTrue(settings.contains("重启桌面后生效"));\n    }'''
           p.write_text(text[:start] + replacement + text[end:])
+          PY
       - name: Commit patch
         run: |
           git config user.name github-actions[bot]
