@@ -49,4 +49,37 @@ public class FolderScaleAndDragBackdropContractTest {
                 "if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;"));
         assertTrue(session.contains("LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);"));
     }
+
+    @Test public void desktopSingleDragCapturesAfterSourceRemovalBeforeDragViewPresentation()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherDragOverlayHook.java"));
+        String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(hook.contains("DRAG_CONTROLLER"));
+        assertTrue(hook.contains("\"createDragView\""));
+        assertTrue(hook.contains("dragAction == 0 && dragCount == 1"));
+        assertTrue(hook.contains("prepareCleanCapture"));
+        assertTrue(hook.contains("armCleanCapture"));
+        assertTrue(hook.contains("\"showWithAnim\""));
+        assertTrue(hook.contains("gateCleanDragPresentation"));
+        assertTrue(hook.contains("requestCleanBackdropAndReveal"));
+        assertTrue(overlay.contains("dragView.setAlpha(0f)"));
+        assertTrue(overlay.contains("session.freezeAfterNextFreshFrame("));
+        assertTrue(overlay.contains("restoreCleanDragPresentation"));
+        assertTrue(session.contains("freezeAfterNextFreshFrameCallback"));
+        assertTrue(session.contains("freezeAfterNextFreshFrameFailureCallback"));
+    }
+
+    @Test public void dragMovementPublishesCropGeometryFromTheChoreographerFrame() throws Exception {
+        String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertTrue(overlay.contains("publishFrameGeometry"));
+        assertTrue(overlay.contains("sink.captureGeometry(authorityRoot)"));
+        assertTrue(overlay.contains("authority.publishDragGeometry(sink, geometry)"));
+        assertTrue(session.contains("void publishDragGeometry("));
+        assertTrue(session.contains("node.geometry = geometry"));
+        assertTrue(session.contains("requestDragRedraw()"));
+    }
 }
