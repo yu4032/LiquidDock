@@ -60,6 +60,22 @@ public class HookUtilArchitectureContractTest {
                 source.contains("MAX_HOME_FRESH_WAIT_FRAMES"));
     }
 
+    @Test public void liveDragBridgeDoesNotReflectProjectOwnedLauncherSession() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("LauncherLiveDragSessionBridge.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        assertFalse("LauncherGlassSession is project-owned; reflected fields break under R8",
+                bridge.contains("HookUtil.getField(session"));
+        assertTrue("live drag activation must use a typed LauncherGlassSession API",
+                bridge.contains("session.ensureLiveDragSource()"));
+        assertTrue("live drag readiness must use a typed LauncherGlassSession API",
+                bridge.contains("session.hasPreparedBackdrop()"));
+        assertTrue("typed live-drag producer API must live on LauncherGlassSession",
+                session.contains("boolean ensureLiveDragSource()"));
+        assertTrue("typed backdrop readiness API must live on LauncherGlassSession",
+                session.contains("boolean hasPreparedBackdrop()"));
+    }
+
     @Test public void genericStaticClassNameInvocationApiIsRemoved() throws Exception {
         String source = Files.readString(MAIN.resolve("HookUtil.java"));
         assertFalse("generic String class-name static invocation can bypass the target process "

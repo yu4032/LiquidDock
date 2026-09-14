@@ -52,9 +52,10 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(overlay.contains("prewarmLiveSource"));
         assertFalse(overlay.contains("gateCleanDragPresentation"));
         assertFalse(overlay.contains("requestCleanBackdropAndReveal"));
-        assertTrue(bridge.contains("launcher-drag-live"));
-        assertTrue(bridge.contains("setUpdatesEnabled(true"));
-        assertTrue(bridge.contains("requestFreshBackdrop"));
+        assertTrue(session.contains("launcher-drag-live"));
+        assertTrue(session.contains("setUpdatesEnabled(true"));
+        assertTrue(session.contains("requestFreshBackdrop"));
+        assertTrue(bridge.contains("session.ensureLiveDragSource()"));
     }
 
     @Test public void dragUpperWindowHostsBothLiveGlassAndVisualMirror() throws Exception {

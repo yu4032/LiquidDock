@@ -147,7 +147,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private OutputState staticOutput;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
-    private boolean backdropPrepared;
+    private volatile boolean backdropPrepared;
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
     private boolean outputRenderQueued;
@@ -199,6 +199,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     boolean isShutdown() {
         return shuttingDown;
+    }
+
+    boolean ensureLiveDragSource() {
+        if (shuttingDown) return false;
+        sourceBackend.setUpdatesEnabled(true, "launcher-drag-live");
+        if (!backdropPrepared) requestFreshBackdrop(sceneGeneration);
+        return true;
+    }
+
+    boolean hasPreparedBackdrop() {
+        return !shuttingDown && backdropPrepared;
     }
 
     String diagnosticSessionId() {
