@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
@@ -11,23 +12,24 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuPopupUsesSharedLauncherRootAndInternalBackgroundAnchor() throws Exception {
-        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+    @Test public void shortcutMenuUsesPreShowOverlaySourceAndStableFullscreenOutput() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
+        String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
+        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+        String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
-        assertTrue(module.contains("MiuixShortcutMenuGlassHook.install(classLoader, runtimeConfig)"));
-        assertTrue(hook.contains("com.miui.home.launcher.shortcuts.ShortcutMenu"));
-        assertTrue(hook.contains("\"show\""));
-        assertTrue(hook.contains("\"dismiss\""));
-        assertTrue(hook.contains("com.miui.home.launcher.EditStateChangeReason"));
-        assertTrue(hook.contains("mDecorView"));
-        assertTrue(hook.contains("mPopupView"));
-        assertTrue(hook.contains("getContentView"));
-        assertTrue(hook.contains("LauncherGlassSessionRegistry.acquire("));
-        assertTrue(hook.contains("decorView, binding.glassConfig"));
-        assertTrue(hook.contains("new View(contentView.getContext())"));
-        assertTrue(hook.contains("contentGroup.addView(backgroundAnchor, 0"));
-        assertTrue(hook.contains("LauncherGlassSinkView.attachToMaterial(\n                backgroundAnchor"));
-        assertTrue(hook.contains("SmoothFrameLayout2"));
+        assertTrue(hook.contains("com.miui.home.launcher.ShortcutMenuLayer"));
+        assertTrue(hook.contains("\"setRequestingItemInfo\""));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
+        assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
+        assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
+        assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
+        assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
+        assertTrue(layer.contains("MATCH_PARENT"));
+        assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
+        assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
+        assertFalse(hook.contains("attachToExternalMaterial"));
     }
 }
