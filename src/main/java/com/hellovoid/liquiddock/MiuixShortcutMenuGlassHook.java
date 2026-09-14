@@ -50,6 +50,7 @@ final class MiuixShortcutMenuGlassHook {
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
                 Object menu = chain.getThisObject();
+                ShortcutPopupGlassCoordinator.beginDismissFade(menu);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 releaseIfAlreadyDetached(menu);
                 return result;
