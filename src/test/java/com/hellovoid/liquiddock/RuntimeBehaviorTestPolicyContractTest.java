@@ -55,6 +55,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "SecurityCenterNoNameAnchorContractTest.java",
             "SecurityCenterPassBlurOwnershipContractTest.java",
             "SecurityCenterScopeContractTest.java",
+            "ShortcutSecondaryGlassContractTest.java",
             "SystemUiHomeTransitionWiringContractTest.java",
             "UserFacingPreferenceSchemaTest.java",
             "WidgetRemoteViewsRootBackgroundContractTest.java",
