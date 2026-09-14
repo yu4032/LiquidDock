@@ -41,15 +41,14 @@ public class FolderScaleAndDragBackdropContractTest {
     }
 
     @Test public void liveDragPathNeverFreezesTheWorkspaceBackdrop() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixLauncherDragOverlayHook.java"));
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+        String bridge = Files.readString(MAIN.resolve("LauncherLiveDragSessionBridge.java"));
 
         assertFalse(overlay.contains("freezeAfterNextFreshFrame"));
-        assertFalse(overlay.contains("cleanCapture"));
         assertFalse(overlay.contains("launcher-drag-frozen"));
-        assertFalse(hook.contains("prepareCleanCapture"));
-        assertFalse(hook.contains("gateCleanDragPresentation"));
-        assertFalse(hook.contains("requestCleanBackdropAndReveal"));
+        assertTrue(bridge.contains("launcher-drag-live"));
+        assertTrue(bridge.contains("setUpdatesEnabled(true"));
+        assertTrue(bridge.contains("requestFreshBackdrop"));
     }
 
     @Test public void dragUpperWindowHostsBothLiveGlassAndVisualMirror() throws Exception {
@@ -61,7 +60,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(source.contains("mirrorHost"));
         assertTrue(overlay.contains("sourceOverlay.glassHost()"));
         assertTrue(overlay.contains("LauncherDragVisualMirror.attach"));
-        assertTrue(overlay.contains("mirror.syncFromDragView"));
+        assertTrue(overlay.contains("mirror.syncFromDragView(source, sourceOverlay)"));
         assertTrue(mirror.contains("dragView.draw(canvas)"));
         assertTrue(mirror.contains("setWillNotDraw(false)"));
     }
@@ -86,6 +85,8 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(overlay.contains("claimVendorPresentation"));
         assertTrue(overlay.contains("restoreVendorPresentation"));
         assertTrue(overlay.contains("source.setAlpha(0f)"));
+        assertTrue(overlay.contains("hasPreparedBackdrop"));
+        assertTrue(overlay.contains("sink.isAvailable()"));
         assertTrue(mirror.contains("isReadyForPresentation"));
     }
 }
