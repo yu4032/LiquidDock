@@ -54,7 +54,8 @@ final class ShortcutPopupGlassCoordinator {
                         }
                     });
             state.session.requestInitialCapture();
-            MainHook.log(TAG + " pre-show workspace capture requested");
+            boolean outputReady = ensurePopupOutput(state);
+            MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
         }
     }
 
@@ -62,42 +63,64 @@ final class ShortcutPopupGlassCoordinator {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
         if (state == null || state.released || state.captureRootRef.get() != liveRoot
-                || state.session == null || popupView == null || contentView == null
-                || !(decorView instanceof ViewGroup)) return false;
+                || popupView == null || contentView == null || !(decorView instanceof ViewGroup)) {
+            return false;
+        }
 
-        ViewGroup decorGroup = (ViewGroup) decorView;
-        int popupIndex = decorGroup.indexOfChild(popupView);
-        if (popupIndex < 0) return false;
-
-        ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
-                decorView.getContext(), state.session);
-        decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.popupDecorRef = new WeakReference<>(decorView);
-        state.layer = layer;
         state.popupRef = new WeakReference<>(popupView);
         state.contentRef = new WeakReference<>(contentView);
 
-        View.OnAttachStateChangeListener detachListener = new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View v) {}
+        if (state.popupDetachListener == null) {
+            View.OnAttachStateChangeListener detachListener = new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {}
 
-            @Override public void onViewDetachedFromWindow(View v) {
-                release(state, "popup-detached");
-            }
-        };
-        state.popupDetachListener = detachListener;
-        popupView.addOnAttachStateChangeListener(detachListener);
-
-        ViewTreeObserver observer = decorView.getViewTreeObserver();
-        ViewTreeObserver.OnPreDrawListener listener = () -> {
-            updateGeometry(state);
-            return true;
-        };
-        if (observer.isAlive()) {
-            observer.addOnPreDrawListener(listener);
-            state.observer = observer;
-            state.preDrawListener = listener;
+                @Override public void onViewDetachedFromWindow(View v) {
+                    release(state, "popup-detached");
+                }
+            };
+            state.popupDetachListener = detachListener;
+            popupView.addOnAttachStateChangeListener(detachListener);
         }
+
+        if (state.preDrawListener == null) {
+            ViewTreeObserver observer = decorView.getViewTreeObserver();
+            ViewTreeObserver.OnPreDrawListener listener = () -> {
+                updateGeometry(state);
+                return true;
+            };
+            if (observer.isAlive()) {
+                observer.addOnPreDrawListener(listener);
+                state.observer = observer;
+                state.preDrawListener = listener;
+            }
+        }
+
+        boolean outputReady = ensurePopupOutput(state);
+        updateGeometry(state);
+        MainHook.log(TAG + " popup accepted outputReady=" + outputReady
+                + " sessionReady=" + (state.session != null));
+        return true;
+    }
+
+    private static boolean ensurePopupOutput(State state) {
+        if (state == null || state.released || state.layer != null || state.session == null) {
+            return state != null && state.layer != null;
+        }
+        View decor = state.popupDecorRef.get();
+        View popup = state.popupRef.get();
+        if (!(decor instanceof ViewGroup) || popup == null || !popup.isAttachedToWindow()) {
+            return false;
+        }
+        ViewGroup decorGroup = (ViewGroup) decor;
+        int popupIndex = decorGroup.indexOfChild(popup);
+        if (popupIndex < 0) return false;
+
+        ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
+                decor.getContext(), state.session);
+        decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        state.layer = layer;
         updateGeometry(state);
         MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
