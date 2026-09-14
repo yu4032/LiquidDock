@@ -70,8 +70,6 @@ final class LauncherGlassDragOverlay {
             @Override public void onViewAttachedToWindow(View v) {}
 
             @Override public void onViewDetachedFromWindow(View v) {
-                // Match LauncherGlassSession: allow a transient root reattach during the same
-                // main-loop turn, but release the overlay tree if this root is actually gone.
                 mainHandler.post(() -> {
                     if (!v.isAttachedToWindow()) releaseRoot(v);
                 });
@@ -401,10 +399,6 @@ final class LauncherGlassDragOverlay {
 
         carrier.setX(geometry.carrierLeft);
         carrier.setY(geometry.carrierTop);
-        // sourceToGlobal already contains DragView and ancestor transforms. The carrier is a
-        // sibling below DragContainer, so reapplying source transform here would double scale/
-        // pivot displacement and would miss ancestor transforms. Keep the carrier in final host
-        // space with an identity local transform.
         carrier.setPivotX(0f);
         carrier.setPivotY(0f);
         carrier.setScaleX(1f);
@@ -424,6 +418,7 @@ final class LauncherGlassDragOverlay {
         sink.setNativeCornerRadiusPx(LauncherGlassBoundsPolicy.capRadius(
                 activeCornerRadiusPx * radiusScale,
                 geometry.visualWidth(), geometry.visualHeight()));
+        sink.syncFromMaterial();
         publishFrameGeometry();
     }
 
