@@ -51,14 +51,9 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
+            state.session.requestInitialCapture();
+            MainHook.log(TAG + " pre-show workspace capture requested");
         }
-        sourceRoot.postOnAnimation(() -> {
-            synchronized (ShortcutPopupGlassCoordinator.class) {
-                if (current != state || state.released || state.session == null) return;
-                state.session.requestInitialCapture();
-                MainHook.log(TAG + " pre-show workspace capture requested");
-            }
-        });
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
@@ -66,6 +61,11 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.released || state.decorRef.get() != decorView
                 || state.session == null || popupView == null || contentView == null
                 || !(decorView instanceof ViewGroup)) return false;
+        if (!state.session.hasFrozenBackdrop()) {
+            MainHook.log(TAG + " pre-show backdrop not ready; stock material retained");
+            releaseLocked("pre-show-backdrop-not-ready");
+            return false;
+        }
         ViewGroup decorGroup = (ViewGroup) decorView;
         int popupIndex = decorGroup.indexOfChild(popupView);
         if (popupIndex < 0) return false;
