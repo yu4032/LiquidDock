@@ -270,7 +270,9 @@ final class LauncherGlassDragOverlay {
                             return;
                         }
                         sourceOverlay = overlay;
-                        LauncherGlassSession session = new LauncherGlassSession(sourceOverlay, glassConfig);
+                        LauncherGlassSession session = new LauncherGlassSession(
+                                sourceOverlay, glassConfig,
+                                PassBlurBindRequest.dragOverlay(sourceOverlay));
                         session.freezeAfterNextFreshFrame();
                         sourceSession = session;
                         if (tracking) syncFromSource();

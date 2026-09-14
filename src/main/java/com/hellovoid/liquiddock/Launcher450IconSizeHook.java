@@ -17,6 +17,8 @@ final class Launcher450IconSizeHook {
     private static final String TAG = "[DC][IconSize450]";
     private static final String SHORTCUT_ICON = "com.miui.home.launcher.ShortcutIcon";
     private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";
+    private static final String FOLDER_PREVIEW_CONTAINER_1X1 =
+            "com.miui.home.launcher.folder.FolderIconPreviewContainer1X1";
     private static final String BASE_PROGRESS_SHORTCUT_ICON =
             "com.miui.home.launcher.BaseProgressShortcutIcon";
     private static final String FOLDER_GRID_VIEW = "com.miui.home.launcher.FolderGridView";
@@ -45,6 +47,8 @@ final class Launcher450IconSizeHook {
         try {
             Class<?> shortcutIcon = Class.forName(SHORTCUT_ICON, false, classLoader);
             Class<?> smallFolder = Class.forName(SMALL_FOLDER, false, classLoader);
+            Class<?> folderPreviewContainer = Class.forName(
+                    FOLDER_PREVIEW_CONTAINER_1X1, false, classLoader);
             Class<?> baseProgressShortcutIcon = Class.forName(
                     BASE_PROGRESS_SHORTCUT_ICON, false, classLoader);
             Class<?> gridConfig = Class.forName(GRID_CONFIG, false, classLoader);
@@ -86,6 +90,7 @@ final class Launcher450IconSizeHook {
                 }
             });
             installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);
+            installFolderPreviewMeasureTransaction(folderPreviewContainer);
 
             HookUtil.hook(getIconSize, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -128,6 +133,15 @@ final class Launcher450IconSizeHook {
             if (previous == null) ACTIVE_DOMAIN.remove();
             else ACTIVE_DOMAIN.set(previous);
         }
+    }
+
+    private static void installFolderPreviewMeasureTransaction(
+            Class<?> folderPreviewContainer) throws NoSuchMethodException {
+        Method onMeasure = HookUtil.findMethodExact(
+                folderPreviewContainer, "onMeasure", new Class<?>[]{int.class, int.class});
+        HookUtil.hook(onMeasure, chain -> withMeasureDomain(
+                MeasureDomain.FOLDER,
+                () -> chain.proceed(chain.getArgs().toArray(new Object[0]))));
     }
 
     private static void installFolderScaleTransactions(

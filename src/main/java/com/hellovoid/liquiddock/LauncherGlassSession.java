@@ -170,6 +170,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             };
 
     LauncherGlassSession(View root, LiquidDockConfig.Glass glassConfig) {
+        this(root, glassConfig, PassBlurBindRequest.launcherWorkspace(root, 1.0f));
+    }
+
+    LauncherGlassSession(
+            View root, LiquidDockConfig.Glass glassConfig, PassBlurBindRequest bindRequest) {
+        if (bindRequest == null) throw new IllegalArgumentException("bindRequest == null");
         rootRef = new WeakReference<>(root);
         rootWidth = Math.max(0, root.getWidth());
         rootHeight = Math.max(0, root.getHeight());
@@ -181,7 +187,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         applyGlassConfig(glassConfig);
         sourceBackend = new RootPassBlurBackend(
                 root,
-                PassBlurBindRequest.launcherWorkspace(root, 1.0f),
+                bindRequest,
                 passBlurCaptureScalePercent,
                 passBlurRenderFps,
                 this,
@@ -189,7 +195,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         root.addOnAttachStateChangeListener(rootAttachListener);
         installRootObserver();
         MainHook.log(TAG + " " + debugLabel()
-                + " created source=RootPassBlurBackend domain=LAUNCHER_WORKSPACE");
+                + " created source=RootPassBlurBackend domain=" + bindRequest.domain());
     }
 
     boolean isShutdown() {
