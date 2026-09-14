@@ -15,14 +15,14 @@ final class ShortcutPopupGlassCoordinator {
 
     private ShortcutPopupGlassCoordinator() {}
 
-    static synchronized void prepare(View decorView, LiquidDockConfig.Glass glassConfig) {
+    static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
         releaseLocked("prepare-replace");
-        if (decorView == null || glassConfig == null || !GlassRuntimeState.isEnabled()
-                || !decorView.isAttachedToWindow()) return;
-        State state = new State(decorView, glassConfig);
+        if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
+                || !captureRoot.isAttachedToWindow()) return;
+        State state = new State(captureRoot, glassConfig);
         current = state;
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
-                decorView,
+                captureRoot,
                 new ShortcutPopupSourceOverlay.Listener() {
                     @Override public void onAttached(ShortcutPopupSourceOverlay attached) {
                         startSession(state, attached);
@@ -60,7 +60,8 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
-        if (state == null || state.released || state.decorRef.get() != decorView
+        View liveRoot = decorView != null ? decorView.getRootView() : null;
+        if (state == null || state.released || state.captureRootRef.get() != liveRoot
                 || state.session == null || popupView == null || contentView == null
                 || !(decorView instanceof ViewGroup)) return false;
         if (!state.session.hasFrozenBackdrop()) {
@@ -76,6 +77,7 @@ final class ShortcutPopupGlassCoordinator {
                 decorView.getContext(), state.session);
         decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        state.popupDecorRef = new WeakReference<>(decorView);
         state.layer = layer;
         state.popupRef = new WeakReference<>(popupView);
         state.contentRef = new WeakReference<>(contentView);
@@ -107,7 +109,7 @@ final class ShortcutPopupGlassCoordinator {
 
     private static void updateGeometry(State state) {
         if (state == null || state.released) return;
-        View decor = state.decorRef.get();
+        View decor = state.popupDecorRef.get();
         View content = state.contentRef.get();
         ShortcutPopupGlassSession session = state.session;
         if (decor == null || content == null || session == null || decor.getWidth() <= 0
@@ -140,16 +142,18 @@ final class ShortcutPopupGlassCoordinator {
         }
     }
 
-    static synchronized void cancelPending(View decorView) {
+    static synchronized void cancelPending(View captureRoot) {
         State state = current;
-        if (state != null && state.decorRef.get() == decorView && state.contentRef.get() == null) {
+        if (state != null && state.captureRootRef.get() == captureRoot
+                && state.contentRef.get() == null) {
             releaseLocked("query-cancelled");
         }
     }
 
     static synchronized void releasePopupIfDetached(View decorView, View popupView) {
         State state = current;
-        if (state == null || state.decorRef.get() != decorView) return;
+        View liveRoot = decorView != null ? decorView.getRootView() : null;
+        if (state == null || state.captureRootRef.get() != liveRoot) return;
         if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
 
@@ -201,8 +205,9 @@ final class ShortcutPopupGlassCoordinator {
     }
 
     private static final class State {
-        final WeakReference<View> decorRef;
+        final WeakReference<View> captureRootRef;
         final LiquidDockConfig.Glass glassConfig;
+        WeakReference<View> popupDecorRef = new WeakReference<>(null);
         WeakReference<View> popupRef = new WeakReference<>(null);
         WeakReference<View> contentRef = new WeakReference<>(null);
         ShortcutPopupSourceOverlay sourceOverlay;
@@ -214,8 +219,8 @@ final class ShortcutPopupGlassCoordinator {
         boolean materialClaimed;
         boolean released;
 
-        State(View decorView, LiquidDockConfig.Glass glassConfig) {
-            decorRef = new WeakReference<>(decorView);
+        State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+            captureRootRef = new WeakReference<>(captureRoot);
             this.glassConfig = glassConfig;
         }
     }
