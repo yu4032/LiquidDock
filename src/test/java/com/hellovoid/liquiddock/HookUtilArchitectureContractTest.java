@@ -41,6 +41,14 @@ public class HookUtilArchitectureContractTest {
         assertTrue("legacy silent reflection call sites remain: " + offenders, offenders.isEmpty());
     }
 
+    @Test public void staticNodeInternalCallsUseTypedJavaInsteadOfReflection() throws Exception {
+        String source = Files.readString(MAIN.resolve("LauncherWidgetTransitionCoordinator.java"));
+        assertFalse("LauncherGlassStaticNode is project-owned; reflective hide breaks under R8",
+                source.contains("HookUtil.tryInvoke(node, \"hideImmediately\")"));
+        assertTrue("widget transition must call the project-owned StaticNode API directly",
+                source.contains("node.hideImmediately();"));
+    }
+
     @Test public void genericStaticClassNameInvocationApiIsRemoved() throws Exception {
         String source = Files.readString(MAIN.resolve("HookUtil.java"));
         assertFalse("generic String class-name static invocation can bypass the target process "
