@@ -232,18 +232,11 @@ final class LauncherWidgetTransitionCoordinator {
         try {
             LauncherGlassSceneController controller = LauncherGlassSceneController.find(material);
             if (controller == null) return null;
-            Object stateMachine = HookUtil.getField(controller, "state");
-            HookUtil.InvocationResult<Object> generationResult =
-                    HookUtil.tryInvoke(stateMachine, "generation");
-            HookUtil.InvocationResult<Object> stateResult =
-                    HookUtil.tryInvoke(stateMachine, "state");
-            if (!generationResult.succeeded() || !stateResult.succeeded()) return null;
-            Object generationValue = generationResult.value();
-            Object stateValue = stateResult.value();
-            long generation = generationValue instanceof Number
-                    ? ((Number) generationValue).longValue() : -1L;
-            boolean homePending = HookUtil.getBooleanField(controller, "homeTransitionPending");
-            return new SceneSnapshot(generation, String.valueOf(stateValue), homePending);
+            long generation = controller.widgetTransitionSceneGeneration();
+            LauncherGlassSceneController.State state = controller.widgetTransitionSceneState();
+            boolean homePending = controller.isHomeTransitionPending();
+            return new SceneSnapshot(
+                    generation, state != null ? state.name() : null, homePending);
         } catch (Throwable error) {
             return null;
         }
