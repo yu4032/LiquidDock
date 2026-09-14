@@ -103,6 +103,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
     }
 
+    boolean hasFrozenBackdrop() {
+        return !shuttingDown && backdropPrepared && sourceFrozen;
+    }
+
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
         if (shuttingDown || next == null) return;
         LauncherGlassGeometry.Snapshot old = geometry;
