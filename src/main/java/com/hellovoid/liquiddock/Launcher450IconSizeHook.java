@@ -17,6 +17,8 @@ final class Launcher450IconSizeHook {
     private static final String TAG = "[DC][IconSize450]";
     private static final String SHORTCUT_ICON = "com.miui.home.launcher.ShortcutIcon";
     private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";
+    private static final String BASE_PROGRESS_SHORTCUT_ICON =
+            "com.miui.home.launcher.BaseProgressShortcutIcon";
     private static final String FOLDER_GRID_VIEW = "com.miui.home.launcher.FolderGridView";
     private static final String WORKSTATION_ALL_APPS_WORKSPACE =
             "com.miui.home.launcher.laptop.launchpad.AllAppsWorkspace";
@@ -43,6 +45,8 @@ final class Launcher450IconSizeHook {
         try {
             Class<?> shortcutIcon = Class.forName(SHORTCUT_ICON, false, classLoader);
             Class<?> smallFolder = Class.forName(SMALL_FOLDER, false, classLoader);
+            Class<?> baseProgressShortcutIcon = Class.forName(
+                    BASE_PROGRESS_SHORTCUT_ICON, false, classLoader);
             Class<?> gridConfig = Class.forName(GRID_CONFIG, false, classLoader);
 
             Method shortcutMeasure = HookUtil.findMethodExact(
@@ -81,6 +85,8 @@ final class Launcher450IconSizeHook {
                     else ACTIVE_DOMAIN.set(previous);
                 }
             });
+            installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);
+
             HookUtil.hook(getIconSize, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
@@ -110,6 +116,37 @@ final class Launcher450IconSizeHook {
             MainHook.log(TAG + " unavailable on target Launcher: " + error);
             return false;
         }
+    }
+
+    private interface DomainAction { Object run() throws Throwable; }
+
+    private static Object withMeasureDomain(MeasureDomain domain, DomainAction action) throws Throwable {
+        MeasureDomain previous = ACTIVE_DOMAIN.get();
+        if (domain != null) ACTIVE_DOMAIN.set(domain);
+        try { return action.run(); }
+        finally {
+            if (previous == null) ACTIVE_DOMAIN.remove();
+            else ACTIVE_DOMAIN.set(previous);
+        }
+    }
+
+    private static void installFolderScaleTransactions(
+            Class<?> shortcutIcon, Class<?> baseProgressShortcutIcon) throws NoSuchMethodException {
+        installFolderScaleTransaction(shortcutIcon);
+        installFolderScaleTransaction(baseProgressShortcutIcon);
+    }
+
+    private static void installFolderScaleTransaction(Class<?> ownerType) throws NoSuchMethodException {
+        Method scaleDown = HookUtil.findMethodExact(
+                ownerType, "scaleDownToFolder", new Class<?>[]{boolean.class});
+        HookUtil.hook(scaleDown, chain -> {
+            Object owner = chain.getThisObject();
+            MeasureDomain domain = owner instanceof View ? shortcutDomain((View) owner) : null;
+            if (domain == null) domain = MeasureDomain.WORKSPACE;
+            final MeasureDomain active = domain;
+            return withMeasureDomain(active,
+                    () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
+        });
     }
 
     private static MeasureDomain shortcutDomain(View view) {
