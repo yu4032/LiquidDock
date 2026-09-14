@@ -76,8 +76,8 @@ public class FolderScaleAndDragBackdropContractTest {
         String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
 
         assertTrue(overlay.contains("publishFrameGeometry"));
-        assertTrue(overlay.contains("sink.captureGeometry(authorityRoot)"));
-        assertTrue(overlay.contains("authority.publishDragGeometry(sink, geometry)"));
+        assertTrue(overlay.contains("liveSink.captureGeometry(authorityRoot)"));
+        assertTrue(overlay.contains("authority.publishDragGeometry(liveSink, geometry)"));
         assertTrue(session.contains("void publishDragGeometry("));
         assertTrue(session.contains("node.geometry = geometry"));
         assertTrue(session.contains("requestDragRedraw()"));
