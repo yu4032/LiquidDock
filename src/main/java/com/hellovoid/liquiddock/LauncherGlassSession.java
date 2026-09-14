@@ -596,7 +596,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (sink == null) continue;
             boolean localChanged = sink.syncFromMaterial();
             dragChanged |= localChanged;
-            if (!rootGeometryChanged && !localChanged) continue;
+            if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
             LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
             LauncherGlassGeometry.Snapshot old = node.geometry;
             if ((old == null) != (observed == null)
