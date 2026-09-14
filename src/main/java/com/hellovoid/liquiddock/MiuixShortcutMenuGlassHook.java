@@ -15,6 +15,8 @@ import java.util.WeakHashMap;
  *
  * <p>The popup owns a separate ViewRoot, but never owns a PassBlur producer. Its TextureView is
  * bound to the shared session acquired from ShortcutMenu.mDecorView in the main Launcher root.
+ * The sink lives inside PopupView's SmoothFrameLayout2 content background layer so MiuiX owns the
+ * popup bounds animation exactly once; we do not chase that animation from an external sibling.
  */
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
@@ -92,8 +94,9 @@ final class MiuixShortcutMenuGlassHook {
         if (menu == null || binding == null || ACTIVE.get(menu) != binding) return;
         View contentView = binding.contentRef.get();
         View decorView = binding.decorRef.get();
-        if (contentView == null || decorView == null
+        if (!(contentView instanceof ViewGroup) || decorView == null
                 || !(contentView.getParent() instanceof ViewGroup)) {
+            MainHook.log(TAG + " content root is not a ViewGroup; stock material retained");
             release(menu);
             return;
         }
@@ -109,14 +112,34 @@ final class MiuixShortcutMenuGlassHook {
             release(menu);
             return;
         }
+
+        ViewGroup contentGroup = (ViewGroup) contentView;
+        int anchorWidth = resolveFinalContentExtent(contentView, true);
+        int anchorHeight = resolveFinalContentExtent(contentView, false);
+        View backgroundAnchor = new View(contentView.getContext());
+        backgroundAnchor.setBackgroundColor(Color.TRANSPARENT);
+        backgroundAnchor.setClickable(false);
+        backgroundAnchor.setFocusable(false);
+        backgroundAnchor.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        contentGroup.addView(backgroundAnchor, 0, new ViewGroup.LayoutParams(
+                anchorWidth, anchorHeight));
+        // showWithAnchor() has already written the final popup width/height into LayoutParams, but
+        // PopupAnimHelper's first pre-draw may not have laid out this new child yet. Seed the final
+        // stable background geometry now. MiuiX then clips this layer through the animated
+        // SmoothFrameLayout2 bounds instead of us following those bounds frame by frame.
+        backgroundAnchor.layout(0, 0, anchorWidth, anchorHeight);
+        binding.backgroundAnchor = backgroundAnchor;
+
         float cornerRadiusPx = resolveShortcutMenuCornerRadius(contentView);
         LauncherGlassSinkView glassSink = LauncherGlassSinkView.attachToExternalMaterial(
-                contentView, shared, cornerRadiusPx, binding.glassConfig);
+                backgroundAnchor, shared, cornerRadiusPx, binding.glassConfig);
         boolean sinkAttached = glassSink != null;
         if (!ShortcutPopupMaterialHandoffPolicy.mayReplaceVendorMaterial(
                 sharedSessionLive, sinkAttached)) {
             if (glassSink != null) glassSink.dispose();
-            MainHook.log(TAG + " external sink unavailable; stock material retained");
+            contentGroup.removeView(backgroundAnchor);
+            binding.backgroundAnchor = null;
+            MainHook.log(TAG + " internal background sink unavailable; stock material retained");
             release(menu);
             return;
         }
@@ -134,7 +157,19 @@ final class MiuixShortcutMenuGlassHook {
         clearVendorPopupMaterial(contentView);
         glassSink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
         glassSink.requestLifecycleRefresh();
-        MainHook.log(TAG + " bound PopupView sink to " + shared.debugLabel());
+        MainHook.log(TAG + " bound internal PopupView background sink to " + shared.debugLabel()
+                + " size=" + anchorWidth + "x" + anchorHeight);
+    }
+
+    private static int resolveFinalContentExtent(View contentView, boolean width) {
+        ViewGroup.LayoutParams lp = contentView != null ? contentView.getLayoutParams() : null;
+        int fromLayout = lp != null ? (width ? lp.width : lp.height) : 0;
+        if (fromLayout > 0) return fromLayout;
+        int measured = contentView != null
+                ? (width ? contentView.getMeasuredWidth() : contentView.getMeasuredHeight()) : 0;
+        if (measured > 0) return measured;
+        int laidOut = contentView != null ? (width ? contentView.getWidth() : contentView.getHeight()) : 0;
+        return Math.max(1, laidOut);
     }
 
     private static void clearVendorPopupMaterial(View contentView) {
@@ -176,6 +211,11 @@ final class MiuixShortcutMenuGlassHook {
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
         if (sink != null) sink.dispose();
+        View backgroundAnchor = binding.backgroundAnchor;
+        binding.backgroundAnchor = null;
+        if (backgroundAnchor != null && backgroundAnchor.getParent() instanceof ViewGroup) {
+            ((ViewGroup) backgroundAnchor.getParent()).removeView(backgroundAnchor);
+        }
     }
 
     private static final class Binding {
@@ -183,6 +223,7 @@ final class MiuixShortcutMenuGlassHook {
         final WeakReference<View> decorRef;
         final LiquidDockConfig.Glass glassConfig;
         LauncherGlassSinkView sink;
+        View backgroundAnchor;
         View.OnAttachStateChangeListener pendingAttachListener;
         View.OnAttachStateChangeListener detachListener;
 
