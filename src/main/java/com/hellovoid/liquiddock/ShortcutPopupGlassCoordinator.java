@@ -76,7 +76,10 @@ final class ShortcutPopupGlassCoordinator {
                 @Override public void onViewAttachedToWindow(View v) {}
 
                 @Override public void onViewDetachedFromWindow(View v) {
-                    release(state, "popup-detached");
+                    // HyperOS 4.50 PopupView dismisses by calling decor.removeView(popup) from the
+                    // animation-end callback. Do not synchronously remove our sibling layer/window
+                    // from inside that ViewGroup removal traversal; finish vendor removal first.
+                    postDismissCleanup(state);
                 }
             };
             state.popupDetachListener = detachListener;
@@ -177,6 +180,22 @@ final class ShortcutPopupGlassCoordinator {
         if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
 
+    private static void postDismissCleanup(State state) {
+        if (state == null || state.released || state.dismissCleanupPosted) return;
+        state.dismissCleanupPosted = true;
+        View decor = state.popupDecorRef.get();
+        if (decor != null) {
+            decor.post(() -> release(state, "popup-detached"));
+            return;
+        }
+        View captureRoot = state.captureRootRef.get();
+        if (captureRoot != null) {
+            captureRoot.post(() -> release(state, "popup-detached"));
+            return;
+        }
+        release(state, "popup-detached-no-root");
+    }
+
     private static void release(State expected, String reason) {
         synchronized (ShortcutPopupGlassCoordinator.class) {
             if (current != expected) return;
@@ -237,6 +256,7 @@ final class ShortcutPopupGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;
         boolean materialClaimed;
+        boolean dismissCleanupPosted;
         boolean released;
 
         State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
