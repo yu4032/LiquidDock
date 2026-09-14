@@ -20,6 +20,13 @@ final class MiuixShortcutMenuGlassHook {
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
+        ConfigReader preferences = ConfigReader.load();
+        if (!preferences.b(
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.runtimeFallback())) {
+            MainHook.log(TAG + " disabled by shortcut popup replacement setting");
+            return false;
+        }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
