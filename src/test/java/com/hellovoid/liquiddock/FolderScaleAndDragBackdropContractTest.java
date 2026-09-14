@@ -36,45 +36,41 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(domain.contains("DRAG_OVERLAY"));
         assertTrue(request.contains("static PassBlurBindRequest dragOverlay(View authoritativeRoot)"));
         assertTrue(overlay.contains("PassBlurBindRequest.dragOverlay(sourceOverlay)"));
-        assertTrue(overlay.contains("LauncherGlassSinkView.attachToExternalMaterial"));
-        assertFalse(overlay.contains("LauncherGlassSinkView.attachToMaterial(\n                    carrier"));
         assertTrue(session.contains("PassBlurBindRequest bindRequest"));
         assertTrue(session.contains("source=RootPassBlurBackend domain="));
     }
 
-    @Test public void newlyRegisteredDragSinkAlwaysCapturesInitialGeometry() throws Exception {
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
-
-        assertTrue(session.contains(
-                "if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;"));
-        assertTrue(session.contains("LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);"));
-    }
-
-    @Test public void desktopSingleDragCapturesAfterSourceRemovalBeforeDragViewPresentation()
-            throws Exception {
+    @Test public void liveDragPathNeverFreezesTheWorkspaceBackdrop() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherDragOverlayHook.java"));
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
 
-        assertTrue(hook.contains("DRAG_CONTROLLER"));
-        assertTrue(hook.contains("\"createDragView\""));
-        assertTrue(hook.contains("dragAction == 0 && dragCount == 1"));
-        assertTrue(hook.contains("prepareCleanCapture"));
-        assertTrue(hook.contains("armCleanCapture"));
-        assertTrue(hook.contains("\"showWithAnim\""));
-        assertTrue(hook.contains("gateCleanDragPresentation"));
-        assertTrue(hook.contains("requestCleanBackdropAndReveal"));
-        assertTrue(overlay.contains("dragView.setAlpha(0f)"));
-        assertTrue(overlay.contains("session.freezeAfterNextFreshFrame("));
-        assertTrue(overlay.contains("restoreCleanDragPresentation"));
-        assertTrue(session.contains("freezeAfterNextFreshFrameCallback"));
-        assertTrue(session.contains("freezeAfterNextFreshFrameFailureCallback"));
+        assertFalse(overlay.contains("freezeAfterNextFreshFrame"));
+        assertFalse(overlay.contains("cleanCapture"));
+        assertFalse(overlay.contains("launcher-drag-frozen"));
+        assertFalse(hook.contains("prepareCleanCapture"));
+        assertFalse(hook.contains("gateCleanDragPresentation"));
+        assertFalse(hook.contains("requestCleanBackdropAndReveal"));
     }
 
-    @Test public void dragMovementPublishesCropGeometryFromTheChoreographerFrame() throws Exception {
+    @Test public void dragUpperWindowHostsBothLiveGlassAndVisualMirror() throws Exception {
+        String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+        String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
+        String mirror = Files.readString(MAIN.resolve("LauncherDragVisualMirror.java"));
+
+        assertTrue(source.contains("glassHost"));
+        assertTrue(source.contains("mirrorHost"));
+        assertTrue(overlay.contains("sourceOverlay.glassHost()"));
+        assertTrue(overlay.contains("LauncherDragVisualMirror.attach"));
+        assertTrue(overlay.contains("mirror.syncFromDragView"));
+        assertTrue(mirror.contains("dragView.draw(canvas)"));
+        assertTrue(mirror.contains("setWillNotDraw(false)"));
+    }
+
+    @Test public void dragMovementPublishesGlassAndMirrorFromTheChoreographerFrame() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
 
+        assertTrue(overlay.contains("mirror.syncFromDragView(source, sourceOverlay)"));
         assertTrue(overlay.contains("publishFrameGeometry"));
         assertTrue(overlay.contains("liveSink.captureGeometry(authorityRoot)"));
         assertTrue(overlay.contains("authority.publishDragGeometry(liveSink, geometry)"));
@@ -83,9 +79,13 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(session.contains("requestDragRedraw()"));
     }
 
-    @Test public void dragTextureViewSynchronizesWithCarrierOnEveryDragFrame() throws Exception {
+    @Test public void vendorDragViewIsSuppressedOnlyAfterUpperPresentationIsReady() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
+        String mirror = Files.readString(MAIN.resolve("LauncherDragVisualMirror.java"));
 
-        assertTrue(overlay.contains("sink.syncFromMaterial();\n        publishFrameGeometry();"));
+        assertTrue(overlay.contains("claimVendorPresentation"));
+        assertTrue(overlay.contains("restoreVendorPresentation"));
+        assertTrue(overlay.contains("source.setAlpha(0f)"));
+        assertTrue(mirror.contains("isReadyForPresentation"));
     }
 }
