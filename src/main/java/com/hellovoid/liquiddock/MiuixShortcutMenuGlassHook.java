@@ -13,10 +13,10 @@ import java.util.WeakHashMap;
 /**
  * Replaces the HyperOS Launcher ShortcutMenu PopupView material with a LiquidDock glass sink.
  *
- * <p>The popup owns a separate ViewRoot, but never owns a PassBlur producer. Its TextureView is
- * bound to the shared session acquired from ShortcutMenu.mDecorView in the main Launcher root.
- * The sink lives inside PopupView's SmoothFrameLayout2 content background layer so MiuiX owns the
- * popup bounds animation exactly once; we do not chase that animation from an external sibling.
+ * <p>HyperOS 4.50 PopupView is added directly to ShortcutMenu.mDecorView, so it shares the
+ * Launcher ViewRoot and producer authority. The sink lives inside PopupView's SmoothFrameLayout2
+ * content background layer so MiuiX owns the popup bounds animation exactly once; we do not chase
+ * that animation from an external sibling.
  */
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
@@ -131,8 +131,8 @@ final class MiuixShortcutMenuGlassHook {
         binding.backgroundAnchor = backgroundAnchor;
 
         float cornerRadiusPx = resolveShortcutMenuCornerRadius(contentView);
-        LauncherGlassSinkView glassSink = LauncherGlassSinkView.attachToExternalMaterial(
-                backgroundAnchor, shared, cornerRadiusPx, binding.glassConfig);
+        LauncherGlassSinkView glassSink = LauncherGlassSinkView.attachToMaterial(
+                backgroundAnchor, cornerRadiusPx, binding.glassConfig);
         boolean sinkAttached = glassSink != null;
         if (!ShortcutPopupMaterialHandoffPolicy.mayReplaceVendorMaterial(
                 sharedSessionLive, sinkAttached)) {
