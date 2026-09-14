@@ -215,6 +215,18 @@ final class LauncherGlassSceneController {
         return vendorRecentsCovered;
     }
 
+    long widgetTransitionSceneGeneration() {
+        return state.generation();
+    }
+
+    State widgetTransitionSceneState() {
+        return state.state();
+    }
+
+    boolean isHomeTransitionPending() {
+        return homeTransitionPending;
+    }
+
     static void setWorkspaceCovered(View anyView, boolean covered) {
         LauncherGlassSceneController controller = find(anyView);
         if (controller != null) controller.setFolderCovered(covered);
