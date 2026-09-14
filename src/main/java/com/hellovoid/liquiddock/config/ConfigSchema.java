@@ -248,6 +248,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> SECURITY_CENTER_GLASS = bool(
                 "liquid_security_center_glass", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SHORTCUT_POPUP_GLASS = bool(
+                "liquid_shortcut_popup_glass", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FOLDER_GLASS = bool(
                 "liquid_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_GLASS = bool(
