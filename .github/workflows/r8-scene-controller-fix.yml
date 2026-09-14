@@ -1,0 +1,49 @@
+name: R8 scene controller self-reflection patch
+
+on:
+  push:
+    branches:
+      - fix/r8-scene-controller-self-reflection
+    paths:
+      - .github/workflows/r8-scene-controller-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/r8-scene-controller-self-reflection
+          fetch-depth: 0
+      - name: Replace scene self-reflection with typed APIs
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          controller_path = Path('src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java')
+          text = controller_path.read_text()
+          anchor = '''    static synchronized boolean isRecentsCoveredByVendor() {\n        return vendorRecentsCovered;\n    }\n'''
+          replacement = '''    static synchronized boolean isRecentsCoveredByVendor() {\n        return vendorRecentsCovered;\n    }\n\n    long widgetTransitionSceneGeneration() {\n        return state.generation();\n    }\n\n    State widgetTransitionSceneState() {\n        return state.state();\n    }\n\n    boolean isHomeTransitionPending() {\n        return homeTransitionPending;\n    }\n'''
+          if anchor not in text:
+              raise SystemExit('SceneController insertion anchor not found')
+          text = text.replace(anchor, replacement, 1)
+          controller_path.write_text(text)
+
+          coordinator_path = Path('src/main/java/com/hellovoid/liquiddock/LauncherWidgetTransitionCoordinator.java')
+          text = coordinator_path.read_text()
+          old = '''            Object stateMachine = HookUtil.getField(controller, "state");\n            HookUtil.InvocationResult<Object> generationResult =\n                    HookUtil.tryInvoke(stateMachine, "generation");\n            HookUtil.InvocationResult<Object> stateResult =\n                    HookUtil.tryInvoke(stateMachine, "state");\n            if (!generationResult.succeeded() || !stateResult.succeeded()) return null;\n            Object generationValue = generationResult.value();\n            Object stateValue = stateResult.value();\n            long generation = generationValue instanceof Number\n                    ? ((Number) generationValue).longValue() : -1L;\n            boolean homePending = HookUtil.getBooleanField(controller, "homeTransitionPending");\n            return new SceneSnapshot(generation, String.valueOf(stateValue), homePending);\n'''
+          new = '''            long generation = controller.widgetTransitionSceneGeneration();\n            LauncherGlassSceneController.State state = controller.widgetTransitionSceneState();\n            boolean homePending = controller.isHomeTransitionPending();\n            return new SceneSnapshot(\n                    generation, state != null ? state.name() : null, homePending);\n'''
+          if old not in text:
+              raise SystemExit('WidgetTransition reflective readScene block not found')
+          text = text.replace(old, new, 1)
+          coordinator_path.write_text(text)
+          PY
+          git config user.name yu4032
+          git config user.email 4032542465@smail.lnu.edu.cn
+          git add src/main/java/com/hellovoid/liquiddock/LauncherGlassSceneController.java src/main/java/com/hellovoid/liquiddock/LauncherWidgetTransitionCoordinator.java
+          git commit -m "fix: remove widget scene self-reflection"
+          git push origin HEAD:fix/r8-scene-controller-self-reflection
