@@ -11,9 +11,8 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuPopupUsesLauncherProducerAndInternalBackgroundAnchor() throws Exception {
+    @Test public void shortcutMenuPopupUsesSharedLauncherRootAndInternalBackgroundAnchor() throws Exception {
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        String sink = Files.readString(MAIN.resolve("LauncherGlassSinkView.java"));
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
 
         assertTrue(module.contains("MiuixShortcutMenuGlassHook.install(classLoader, runtimeConfig)"));
@@ -28,8 +27,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("decorView, binding.glassConfig"));
         assertTrue(hook.contains("new View(contentView.getContext())"));
         assertTrue(hook.contains("contentGroup.addView(backgroundAnchor, 0"));
-        assertTrue(hook.contains("LauncherGlassSinkView.attachToExternalMaterial(\n                backgroundAnchor"));
-        assertTrue(sink.contains("attachToExternalMaterial"));
-        assertTrue(sink.contains("externalSessionAuthority"));
+        assertTrue(hook.contains("LauncherGlassSinkView.attachToMaterial(\n                backgroundAnchor"));
+        assertTrue(hook.contains("SmoothFrameLayout2"));
     }
 }
