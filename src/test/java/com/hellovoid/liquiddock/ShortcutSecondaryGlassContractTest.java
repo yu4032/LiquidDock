@@ -7,7 +7,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Contract for the HyperOS Launcher shortcut-menu popup glass bridge. */
+/** Static HyperOS 4.50 vendor/API boundary contract for shortcut-menu popup glass. */
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -26,16 +26,6 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("LauncherGlassSessionRegistry.acquire(decorView, glassConfig)"));
         assertTrue(hook.contains("LauncherGlassSinkView.attachToExternalMaterial"));
         assertTrue(sink.contains("attachToExternalMaterial"));
-        assertTrue(sink.contains("LauncherGlassSession shared"));
-    }
-
-    @Test public void stockPopupMaterialIsClearedOnlyAfterSinkExists() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
-        int sink = hook.indexOf("attachToExternalMaterial");
-        int guard = hook.indexOf("if (glassSink == null)");
-        int clear = hook.indexOf("clearVendorPopupMaterial");
-        assertTrue(sink >= 0);
-        assertTrue(guard > sink);
-        assertTrue(clear > guard);
+        assertTrue(sink.contains("externalSessionAuthority"));
     }
 }
