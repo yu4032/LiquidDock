@@ -79,24 +79,11 @@ final class LauncherGlassDragOverlay {
         root.addOnAttachStateChangeListener(rootAttachListener);
     }
 
-    /** Compatibility prewarm for the existing 4.50 createDragView hook; no snapshot is taken. */
-    static LauncherGlassDragOverlay prepareCleanCapture(
-            View source, LiquidDockConfig.Glass glassConfig) {
-        if (!GlassRuntimeState.isEnabled() || source == null) return null;
+    static void prewarmLiveSource(View source, LiquidDockConfig.Glass glassConfig) {
+        if (!GlassRuntimeState.isEnabled() || source == null) return;
         LauncherGlassDragOverlay overlay = acquire(source, glassConfig);
-        if (overlay == null || overlay.released) return null;
-        overlay.ensureWorkspaceSource();
-        return overlay;
+        if (overlay != null && !overlay.released) overlay.ensureWorkspaceSource();
     }
-
-    /** Compatibility no-op: live mode does not arm a frozen capture. */
-    void armCleanCapture(View dragView) {}
-
-    /** Compatibility no-op: vendor DragView stays visible until upper presentation is ready. */
-    static void gateCleanDragPresentation(View dragView) {}
-
-    /** Compatibility no-op: the dedicated drag producer stays live for the whole drag. */
-    static void requestCleanBackdropAndReveal(View dragView) {}
 
     static boolean begin(
             View source,
