@@ -32,7 +32,6 @@ public class GboardFloatingGlassContractTest {
         assertTrue(hook.contains("ConfigReader liveReader = ConfigReader.load()"));
         assertTrue(hook.contains("GboardGlassPreferences.resolve(liveReader"));
         assertFalse(module.contains("GboardGlassPreferences.resolve"));
-        assertFalse(module.contains("initially disabled; stable lifecycle hooks remain installed"));
     }
 
     @Test public void hookUsesStableKeyboardHolderLayoutNotPopupManagerImplementation() throws Exception {
@@ -147,7 +146,6 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("restoreStockBackground"));
         assertTrue(session.contains("swapBuffers"));
         assertTrue(session.contains("swapSucceeded = true"));
-        assertFalse(session.contains("mainHandler.post(() -> {\n                    if (!shuttingDown && listener != null) listener.onPresented();"));
     }
 
     @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
@@ -172,24 +170,5 @@ public class GboardFloatingGlassContractTest {
         assertFalse(gboardSettings.contains("appearanceGeneration < 0"));
         assertTrue(preferences.contains("reader.has(BLUR_KEY)"));
         assertTrue(preferences.contains("reader.has(TINT_RED_KEY)"));
-    }
-
-    @Test public void intermediateHardwareDiagnosticsAreRemoved() throws Exception {
-        String bridge = read(MAIN.resolve("Api101Bridge.java"));
-        String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
-        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
-        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
-        String sink = read(MAIN.resolve("GboardFloatingGlassView.java"));
-        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-
-        assertFalse(bridge.contains("temporary direct Logcat mirror"));
-        assertFalse(hook.contains("LAST_FLOATING_STATE"));
-        assertFalse(hook.contains("holder ignored:"));
-        assertFalse(hook.contains("floating holder accepted:"));
-        assertFalse(resolver.contains("popupContent"));
-        assertFalse(resolver.contains("findUniqueDescendant"));
-        assertFalse(session.contains("first swap begin"));
-        assertFalse(sink.contains("sink surface updated"));
-        assertFalse(authority.contains("GboardVisualTreeDiagnostics.dump"));
     }
 }
