@@ -7,7 +7,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 
-/** TextureView output inserted as the first child of Gboard's floating keyboard area. */
+/** TextureView output placed below Gboard floating-keyboard content. */
 final class GboardFloatingGlassView extends TextureView
         implements TextureView.SurfaceTextureListener {
     private static final String TAG = "[DC][GboardFloatingGlass]";
@@ -85,6 +85,7 @@ final class GboardFloatingGlassView extends TextureView
     public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
         log("sink surface updated textureReleased=" + surfaceTexture.isReleased()
                 + " surfaceValid=" + (outputSurface != null && outputSurface.isValid()));
+        if (!disposed) session.onOutputPresented();
     }
 
     private static void log(String message) {
