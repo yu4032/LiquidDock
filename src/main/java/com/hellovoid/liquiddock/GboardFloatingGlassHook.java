@@ -1,10 +1,11 @@
 package com.hellovoid.liquiddock;
 
 import android.view.View;
+import android.widget.PopupWindow;
 
-import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
-/** Version-scoped hook for Gboard's popup floating-keyboard window only. */
+/** Hooks stable Android PopupWindow lifecycle and structurally recognizes Gboard floating keyboard. */
 final class GboardFloatingGlassHook {
     private static final String TAG = "[DC][GboardFloatingGlass]";
     private static boolean installed;
@@ -16,30 +17,36 @@ final class GboardFloatingGlassHook {
         if (classLoader == null || runtimeConfig == null
                 || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) return false;
         try {
-            GboardFloatingTargetResolver.Target target =
-                    GboardFloatingTargetResolver.resolve(classLoader);
-            HookUtil.hook(target.showMethod, chain -> {
+            int showHooks = 0;
+            for (Method method : PopupWindow.class.getDeclaredMethods()) {
+                String name = method.getName();
+                if (!"showAtLocation".equals(name) && !"showAsDropDown".equals(name)) continue;
+                if (method.getReturnType() != Void.TYPE) continue;
+                HookUtil.hook(method, chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object result = chain.proceed(args);
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof PopupWindow) {
+                        handleShown((PopupWindow) owner, classLoader, runtimeConfig);
+                    }
+                    return result;
+                });
+                showHooks++;
+            }
+            if (showHooks == 0) throw new NoSuchMethodException("PopupWindow show lifecycle missing");
+
+            Method dismiss = PopupWindow.class.getDeclaredMethod("dismiss");
+            HookUtil.hook(dismiss, chain -> {
                 Object owner = chain.getThisObject();
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                View popup = popupView(owner, target.popupViewField);
-                if (popup != null) {
-                    GboardFloatingGlassCoordinator.onShown(popup, runtimeConfig.glass);
-                }
-                return result;
-            });
-            HookUtil.hook(target.hideMethod, chain -> {
-                Object owner = chain.getThisObject();
-                View popup = popupView(owner, target.popupViewField);
-                if (popup != null) {
-                    GboardFloatingGlassCoordinator.onHidden(popup);
+                if (owner instanceof PopupWindow) {
+                    View content = ((PopupWindow) owner).getContentView();
+                    if (content != null) GboardFloatingGlassCoordinator.onHidden(content);
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
+
             installed = true;
-            log("hook installed provider=" + target.binaryName
-                    + " runtimeClass=" + target.providerClass.getName()
-                    + " popupField=" + target.popupViewField.getName(), null);
+            log("hook installed via PopupWindow lifecycle showHooks=" + showHooks, null);
             return true;
         } catch (Throwable error) {
             log("hook unavailable cause=" + failureSummary(error)
@@ -48,15 +55,17 @@ final class GboardFloatingGlassHook {
         }
     }
 
-    private static View popupView(Object owner, Field popupViewField) {
-        if (owner == null || popupViewField == null) return null;
-        try {
-            Object value = popupViewField.get(owner);
-            return value instanceof View ? (View) value : null;
-        } catch (Throwable error) {
-            log("popup root field unavailable cause=" + failureSummary(error), error);
-            return null;
-        }
+    private static void handleShown(
+            PopupWindow popupWindow,
+            ClassLoader classLoader,
+            LiquidDockConfig runtimeConfig) {
+        if (popupWindow == null) return;
+        View content = popupWindow.getContentView();
+        if (content == null) return;
+        GboardFloatingStructureResolver.Structure structure =
+                GboardFloatingStructureResolver.resolve(content, classLoader);
+        if (structure == null) return;
+        GboardFloatingGlassCoordinator.onShown(content, structure, runtimeConfig.glass);
     }
 
     private static String failureSummary(Throwable error) {
