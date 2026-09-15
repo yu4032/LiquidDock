@@ -102,7 +102,11 @@ final class GboardHandwritingCapsuleGlassHook {
             GboardHandwritingCapsuleGlassCoordinator.onHidden(host);
             return;
         }
-        GboardHandwritingCapsuleGlassCoordinator.onShown(host, liveConfig.glass, cornerRadiusPx);
+        GboardHandwritingCapsuleGlassCoordinator.onShown(
+                host,
+                liveConfig.glass,
+                cornerRadiusPx,
+                liveReader.snapshotHash());
     }
 
     private static float toolbarCornerRadiusPx(ViewGroup host) {
