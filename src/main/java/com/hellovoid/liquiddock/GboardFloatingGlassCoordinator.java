@@ -68,19 +68,18 @@ final class GboardFloatingGlassCoordinator {
             }
 
             @Override public void onViewDetachedFromWindow(View view) {
-                release(state, "popup-detached");
+                release(state);
             }
         };
         STATES.put(popup, state);
         popup.addOnAttachStateChangeListener(state.attachListener);
         if (popup.isAttachedToWindow()) attachNow(state);
-        else log("popup show observed before attach", null);
     }
 
     static synchronized void onHidden(View popup) {
         if (popup == null) return;
         State state = STATES.remove(popup);
-        if (state != null) release(state, "popup-hidden");
+        if (state != null) release(state);
     }
 
     private static synchronized void attachNow(State state) {
@@ -131,8 +130,6 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         syncGeometry(state);
-        log("floating popup bound structurally root=" + root.getClass().getSimpleName()
-                + " holders=" + state.structure.keyboardViewHolders.size(), null);
     }
 
     private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
@@ -143,7 +140,6 @@ final class GboardFloatingGlassCoordinator {
         try {
             host.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
             state.sinkHost = host;
-            log("glass inserted below keyboard content contentIndex=" + contentIndex, null);
             return true;
         } catch (Throwable error) {
             log("glass insertion failed", error);
@@ -247,16 +243,15 @@ final class GboardFloatingGlassCoordinator {
         }
         backgroundFrame.setAlpha(0f);
         state.stockHidden = true;
-        log("first TextureView-consumed Prismal frame presented; stock visuals hidden", null);
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {
         if (state == null || state.released) return;
         log(reason, error);
-        release(state, "fail-closed");
+        release(state);
     }
 
-    private static synchronized void release(State state, String reason) {
+    private static synchronized void release(State state) {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
@@ -296,7 +291,6 @@ final class GboardFloatingGlassCoordinator {
         if (session != null) {
             try { session.shutdown(); } catch (Throwable ignored) {}
         }
-        log("released reason=" + reason, null);
     }
 
     private static void restoreStockBackground(State state) {
