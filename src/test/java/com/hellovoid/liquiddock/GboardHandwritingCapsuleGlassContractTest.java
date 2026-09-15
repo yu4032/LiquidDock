@@ -38,7 +38,7 @@ public class GboardHandwritingCapsuleGlassContractTest {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(hook.contains("toolbarCornerRadiusPx(host)"));
         assertTrue(hook.contains("Math.min(host.getWidth(), host.getHeight()) * 0.5f"));
-        assertTrue(hook.contains("onShown(host, liveConfig.glass, cornerRadiusPx)"));
+        assertTrue(hook.contains("onShown(host, liveConfig.glass, cornerRadiusPx"));
         assertTrue(coordinator.contains("float nativeRadiusPx"));
         assertFalse(hook.contains("AttributeSet"));
         assertFalse(hook.contains("getIdentifier("));
@@ -78,11 +78,32 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(geometry.contains("cropHeight"));
     }
 
-    @Test public void toolbarSurfaceOutputPremultipliesStraightAlpha() throws Exception {
+    @Test public void toolbarRemovesOnlySemanticBodyBackgroundAfterPresentationAndRestoresIt() throws Exception {
+        String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
+        assertTrue(coordinator.contains(".widget-keyboard.keyboard-body-area"));
+        assertTrue(coordinator.contains("stockBodyBackground"));
+        assertTrue(coordinator.contains("findToolbarBody"));
+        assertTrue(coordinator.contains("bodyArea.setBackground(null)"));
+        assertTrue(coordinator.contains("bodyArea.setBackground(state.stockBodyBackground)"));
+        assertFalse(coordinator.contains("removeAllViews"));
+        assertFalse(coordinator.contains("findViewById"));
+    }
+
+    @Test public void toolbarRebuildsSessionWhenGuiConfigSnapshotChanges() throws Exception {
+        String reader = read("ConfigReader.java");
+        String hook = read("GboardHandwritingCapsuleGlassHook.java");
+        String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
+        assertTrue(reader.contains("snapshotHash()"));
+        assertTrue(hook.contains("liveReader.snapshotHash()"));
+        assertTrue(coordinator.contains("configSnapshotHash"));
+        assertTrue(coordinator.contains("existing.configSnapshotHash != configSnapshotHash"));
+        assertTrue(coordinator.contains("release(existing)"));
+    }
+
+    @Test public void toolbarDoesNotChangeValidatedFloatingCompositeAlphaContract() throws Exception {
         String composite = read("Miuix307PrismalCompositeShaders.java");
-        assertTrue(composite.contains("vec4 sample = texture2D(uTexture, uv)"));
-        assertTrue(composite.contains("vec4(sample.rgb * sample.a, sample.a)"));
-        assertFalse(composite.contains("gl_FragColor = texture2D(uTexture, uv)"));
+        assertTrue(composite.contains("gl_FragColor = texture2D(uTexture, uv)"));
+        assertFalse(composite.contains("sample.rgb * sample.a"));
     }
 
     @Test public void toolbarCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
@@ -91,7 +112,6 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(coordinator.contains("GboardFloatingGlassSession"));
         assertTrue(coordinator.contains("GboardFloatingGlassGeometry.captureTargetPadded"));
         assertFalse(coordinator.contains("removeAllViews"));
-        assertFalse(coordinator.contains("setBackground(null)"));
         assertFalse(coordinator.contains("findViewById"));
     }
 
