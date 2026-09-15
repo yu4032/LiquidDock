@@ -9,9 +9,8 @@ import java.util.WeakHashMap;
 
 /**
  * Keeps the LiquidDock-owned PassBlur producer authoritative while a Gboard floating popup is
- * active. This mirrors the proven Security Center/sidebar ownership model: the claimed producer
- * remains bound to the popup root and native texture updates remain continuously enabled until the
- * real popup/session teardown releases the claim.
+ * active. The claimed producer remains bound to the popup root and native texture updates stay
+ * enabled until the real popup/session teardown releases the claim.
  */
 final class GboardPassBlurContinuousAuthority {
     private static final String TAG = "[DC][GboardFloatingGlass]";
@@ -50,11 +49,7 @@ final class GboardPassBlurContinuousAuthority {
                     if (claim != null) {
                         Surface requested = args.length > 1 && args[1] instanceof Surface
                                 ? (Surface) args[1] : null;
-                        if (requested != claim.surface) {
-                            args[1] = claim.surface;
-                            log("preserved floating PassBlur surface against rebind layerId="
-                                    + Miuix307PassBlurBridge.surfaceLayerId(root));
-                        }
+                        if (requested != claim.surface) args[1] = claim.surface;
                     }
                     return chain.proceed(args);
                 });
@@ -65,28 +60,13 @@ final class GboardPassBlurContinuousAuthority {
                             ? (SurfaceControl) args[0] : null;
                     Claim claim = root != null ? claimFor(root) : null;
                     if (claim != null) {
-                        boolean requestedEnabled = args.length > 1 && args[1] instanceof Boolean
-                                && (Boolean) args[1];
-                        float requestedScale = args.length > 2 && args[2] instanceof Float
-                                ? (Float) args[2] : Float.NaN;
-                        boolean changed = !requestedEnabled
-                                || !Float.isFinite(requestedScale)
-                                || Float.compare(requestedScale, claim.scale) != 0;
                         args[1] = Boolean.TRUE;
                         args[2] = Float.valueOf(claim.scale);
-                        if (changed) {
-                            log("preserved floating PassBlur update contract layerId="
-                                    + Miuix307PassBlurBridge.surfaceLayerId(root)
-                                    + " requestedEnabled=" + requestedEnabled
-                                    + " requestedScale=" + requestedScale
-                                    + " replacementScale=" + claim.scale);
-                        }
                     }
                     return chain.proceed(args);
                 });
 
                 installed = true;
-                log("continuous PassBlur output authority installed");
                 return true;
             } catch (Throwable error) {
                 log("continuous PassBlur output authority unavailable cause="
@@ -101,23 +81,15 @@ final class GboardPassBlurContinuousAuthority {
         synchronized (LOCK) {
             ACTIVE_ROOTS.put(root, new Claim(surface, scale));
         }
-        log("claimed floating PassBlur output layerId="
-                + Miuix307PassBlurBridge.surfaceLayerId(root) + " scale=" + scale);
     }
 
     static void release(SurfaceControl root, Surface surface) {
         if (root == null) return;
-        boolean removed = false;
         synchronized (LOCK) {
             Claim current = ACTIVE_ROOTS.get(root);
             if (current != null && (surface == null || current.surface == surface)) {
                 ACTIVE_ROOTS.remove(root);
-                removed = true;
             }
-        }
-        if (removed) {
-            log("released floating PassBlur output layerId="
-                    + Miuix307PassBlurBridge.surfaceLayerId(root));
         }
     }
 
