@@ -60,12 +60,18 @@ final class GboardFloatingGlassHook {
             ClassLoader classLoader,
             LiquidDockConfig runtimeConfig) {
         if (popupWindow == null) return;
+        ConfigReader liveReader = ConfigReader.load();
+        LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
+        GboardGlassPreferences.Appearance liveAppearance =
+                GboardGlassPreferences.resolve(liveReader, liveConfig.glass);
+        if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) return;
+
         View content = popupWindow.getContentView();
         if (content == null) return;
         GboardFloatingStructureResolver.Structure structure =
                 GboardFloatingStructureResolver.resolve(content, classLoader);
         if (structure == null) return;
-        GboardFloatingGlassCoordinator.onShown(content, structure, runtimeConfig.glass);
+        GboardFloatingGlassCoordinator.onShown(content, structure, liveConfig.glass);
     }
 
     private static String failureSummary(Throwable error) {
