@@ -91,11 +91,11 @@ jobs:
           compose_path.write_text(compose)
 
           activity = activity_path.read_text()
-          replacement = '''    void restartPackageProcess(String packageName, String displayName) {
+          replacement = r'''    void restartPackageProcess(String packageName, String displayName) {
               // Third-party app descriptors provide trusted static process names. Validate the value
               // anyway so future entries cannot accidentally turn this shell command into an injection path.
               if (packageName == null || !packageName.matches("[A-Za-z0-9_.:]+")
-                      || displayName == null || displayName.isBlank()) {
+                      || displayName == null || displayName.trim().isEmpty()) {
                   Toast.makeText(this, "Invalid app restart target", Toast.LENGTH_SHORT).show();
                   return;
               }
@@ -108,8 +108,8 @@ jobs:
                               .start();
                       try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
                           os.writeBytes("PIDS=$(pidof " + packageName + "); "
-                                  + "if [ -z \\\"$PIDS\\\" ]; then exit 1; fi; "
-                                  + "kill -TERM $PIDS\\nexit\\n");
+                                  + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
+                                  + "kill -TERM $PIDS\nexit\n");
                           os.flush();
                       }
                       if (!p.waitFor(8, TimeUnit.SECONDS)) {
@@ -134,7 +134,7 @@ jobs:
 
           void restartSecurityCenter()'''
           pattern = re.compile(r'    void restartGboard\(\) \{.*?\n    \}\n\n    void restartSecurityCenter\(\)', re.S)
-          activity, count = pattern.subn(replacement, activity, count=1)
+          activity, count = pattern.subn(lambda _: replacement, activity, count=1)
           if count != 1:
               raise SystemExit(f'restartGboard block replacement count={count}')
           activity_path.write_text(activity)
@@ -162,8 +162,7 @@ jobs:
               raise SystemExit(f'legacy Gboard restart contract removal count={count}')
           legacy_test_path.write_text(legacy_test)
 
-          workflow = Path('.github/workflows/agent-third-party-restart-refactor.yml')
-          workflow.unlink()
+          Path('.github/workflows/agent-third-party-restart-refactor.yml').unlink()
       - name: Verify full debug build
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - name: Commit verified refactor
