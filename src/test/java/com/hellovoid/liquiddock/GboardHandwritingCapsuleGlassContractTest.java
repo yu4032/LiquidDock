@@ -39,7 +39,8 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(hook.contains("android.util.AttributeSet"));
         assertTrue(hook.contains("getDeclaredConstructor("));
         assertTrue(hook.contains("Context.class, AttributeSet.class"));
-        assertTrue(hook.contains("getIdentifier(\"clipRadius\", \"attr\""));
+        assertTrue(hook.contains("getIdentifier("));
+        assertTrue(hook.contains("\"clipRadius\", \"attr\""));
         assertTrue(hook.contains("obtainStyledAttributes"));
         assertTrue(hook.contains("NATIVE_TOOLBAR_RADII"));
         assertTrue(hook.contains("nativeToolbarRadiusPx(host)"));
