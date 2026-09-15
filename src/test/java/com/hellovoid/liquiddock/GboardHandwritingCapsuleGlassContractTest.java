@@ -38,7 +38,9 @@ public class GboardHandwritingCapsuleGlassContractTest {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(hook.contains("toolbarCornerRadiusPx(host)"));
         assertTrue(hook.contains("Math.min(host.getWidth(), host.getHeight()) * 0.5f"));
-        assertTrue(hook.contains("onShown(host, liveConfig.glass, cornerRadiusPx"));
+        assertTrue(hook.contains("GboardHandwritingCapsuleGlassCoordinator.onShown("));
+        assertTrue(hook.contains("liveConfig.glass"));
+        assertTrue(hook.contains("cornerRadiusPx"));
         assertTrue(coordinator.contains("float nativeRadiusPx"));
         assertFalse(hook.contains("AttributeSet"));
         assertFalse(hook.contains("getIdentifier("));
