@@ -1,8 +1,8 @@
-# LiquidDock 2.2 Hook 点总览
+# LiquidDock Hook / Listener Map
 
-本文档记录当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）安装的主要 libxposed Hook、Android listener、反射边界和 GPU 生命周期。
+本文档记录当前 `main` / **v2.4.1** 的主要 libxposed Hook、Android listener、vendor reflection 与 runtime ownership 边界。它描述的是当前生产代码，不是历史设计计划。
 
-当前注入范围：
+当前 Xposed scope：
 
 ```text
 com.miui.home
@@ -10,275 +10,359 @@ com.android.systemui
 com.miui.securitycenter
 ```
 
-其中 SystemUI 只提供时序源；Security Center 只在 `com.miui.securitycenter:ui` 的精确进程 gate 通过后安装专属 sidebar hook。旧的 ScreenCapture / SystemUI freeform capture / bitmap readback Hook 不属于当前主线。
+实际进程策略：Launcher 承载主要功能；SystemUI 只提供 HOME/keyguard 时序；Security Center 仅 `com.miui.securitycenter:ui` 进入对应初始化。
 
-## 1. 入口与安装边界
+---
 
-API 101 入口为 `ModuleMain`。Launcher 进程启动时主要完成：
+## 1. API101 entry point
 
-1. legacy preference migration；
-2. 读取 `LiquidDockConfig` snapshot；
-3. 初始化 `GlassRuntimeState` / `VisualRuntimeState` 等 live state；
-4. `MainHook.install(classLoader)`；
-5. 安装 Grid / Dock / Workstation / Recents / Liquid Glass 等模块。
+### `ModuleMain.onModuleLoaded`
 
-Security Center 分支不会执行 Launcher migration，也不会调用 `MainHook.install()`；它只读取 typed config，初始化 `SecurityCenterGlassRuntimeState`，然后安装 `SecurityCenterGlassHook`。
+- 初始化 `Api101Bridge`；
+- 保存当前 process name；
+- 记录 framework/API diagnostic。
 
-完整 master-switch 启停仍属于 restart-bound：运行中关闭可以释放已接管的视觉 ownership，但不能安全撤销所有安装期结构 Hook。
+### `ModuleMain.onPackageReady`
 
-## 2. Dock 与 MiuiX zero-copy glass
+按 package/process 分流：
 
-### Material owner
+| 进程 | 安装内容 |
+| --- | --- |
+| `com.android.systemui` | `SystemUiKeyguardGoneSource`, `SystemUiHomeTransitionSource` |
+| `com.miui.securitycenter:ui` | Security Center PassBlur authority、vendor material interception、source authority、semantic glass bootstrap |
+| `com.miui.home` | migration、runtime state、`MainHook`、Launcher/Dock/Grid/Glass/Recents/transition hooks |
 
-主要支持 HyperOS 3.0.307+ 的 Dock background / HotSeats material，包括 MiuiX blur background 路径。
+Security Center 不执行 Launcher migration，也不调用 `MainHook.install()`。
 
-### 主要 Hook
+---
 
-| 目标 | 方法/边界 | 作用 |
-|---|---|---|
-| `Launcher` | `setupViews()` | 解析 HotSeats / Workspace / Dock background，建立或刷新 glass 绑定 |
-| `Launcher` | `onResume()` | HOME/Workstation 恢复与 geometry/session reconcile |
-| `HotSeats` | attach / snapshot / live-blur 状态方法 | 同步 Dock producer 与 vendor material 生命周期 |
-| Dock background | width / height / radius 更新 | 同步 Dock geometry、stroke、shadow 与 glass scene |
-| `BlurUtilities` | `setBackgroundBlur(...)` | 在 live Dock customization/glass ownership 下接管对应 blur 参数 |
-| Dock layout manager | item offsets / background view update | 普通 Dock spacing、背景宽度补偿与工作台 icon offset |
+## 2. Launcher / Dock bootstrap
 
-### PassBlur 隐藏 API
+`MainHook.install(classLoader)` 仍负责一部分 Dock / Workstation / Grid composition。
 
-当前 zero-copy 路径会通过反射访问 HyperOS SurfaceControl / PassBlur 私有接口，把 vendor backdrop 输出接到 LiquidDock 的 producer `Surface`，再由 `SurfaceTexture` / OES 输入 GPU renderer。
+主要边界包括：
 
-典型数据流：
+- Workstation mode detection / width / layout backup；
+- `DockStrokeRenderer` native hook；
+- Workstation Dock / Divider / Grid-related hooks；
+- `HomeGridHook`；
+- whole-Dock shadow ownership；
+- 307+ `Miuix307MaterialPipeline`；
+- 不支持 307 zero-copy pipeline 时 fail closed，不恢复旧 screenshot glass。
+
+`ModuleMain` 另外独立安装更多已拆出的 feature hooks，因此判断当前 composition 时必须同时看 `ModuleMain` 和 `MainHook`，不能只看后者。
+
+---
+
+## 3. HyperOS 307+ Dock material pipeline
+
+`Miuix307MaterialPipeline` 支持：
+
+- `HotSeatsListContentMiuiXBlurBackground`；
+- `HotSeatsListContentBlurBackground2`（themed path）。
+
+主要 Hook：
+
+| Authority | Hook / callback | 作用 |
+| --- | --- | --- |
+| `Launcher` | `setupViews()` | 找到当前 HotSeats/background/workspace，建立 glass binding |
+| `HotSeats` | `onAttachedToWindow()` | background 替换/主题切换后的 recovery |
+| `HotSeats` | `setMingouStaticDockSnapshotMode(boolean)` | 镜像 vendor static-Dock snapshot power authority |
+| fallback | `setMingouStaticDockLiveBlurVisible(boolean)` | snapshot authority 不存在时的 live-blur power fallback |
+| `Launcher` | `onResume()` | Workstation fullscreen 返回时 producer recovery |
+| `BlurUtilities` | `setBackgroundBlur(View, int, ...)` | LiquidDock owning path 下抑制 vendor post-composition blur |
+| supported Dock backgrounds | width/height/radius setters | normal-Dock geometry + glass/stroke/shadow 同步 |
+
+`LauncherWallpaperFreshnessHook` 也由该 pipeline 安装。
+
+### Dock spacing
+
+307 主路径与备用 `MainHook` 路径都 Hook：
+
+- `HotSeatsListContentLayoutManager$OffsetDecoration.getItemOffsets(...)`；
+- `HotSeatsListContentLayoutManager.updateBackgroundView(...)`。
+
+精确签名需要 Launcher ClassLoader 解析的 `RecyclerView` / `RecyclerView$State`。这两个名称由 targeted R8 `-keepnames` 保护。
+
+---
+
+## 4. Launcher 4.50 icon-size hooks
+
+`Launcher450IconSizeHook` 用 `ThreadLocal<MeasureDomain>` 把 `GridConfig` getter override 限制在真实测量事务中。
+
+主要 Hook：
+
+| 目标 | 方法 | Domain |
+| --- | --- | --- |
+| `ShortcutIcon` | `onMeasure()` | Workspace / Dock / folder content / Workstation apps |
+| `FolderIcon1x1` | `onMeasure()` | Workspace small folder |
+| `FolderIconPreviewContainer1X1` | `onMeasure()` | small-folder preview independent remeasure |
+| `ShortcutIcon` / `BaseProgressShortcutIcon` | `scaleDownToFolder(boolean)` | folder transition sizing |
+| `GridConfig` | `getIconSize()` | only when a measure domain is active |
+| `GridConfig` | `getDockIconWidth()` | Dock domain only |
+
+共享 `GridConfig` 不被修改，因此普通 All Apps / Search 不会因为全局 mutation 被缩放。
+
+---
+
+## 5. Static Launcher glass
+
+`MiuixLauncherStaticGlassHook` discovers static hosts and binds them to the shared root session.
+
+### Host classes
+
+- `ShortcutIcon`;
+- `LauncherAppWidgetHostView`;
+- `MaMlHostView`.
+
+### Lifecycle hooks
+
+| Target | Hook | Purpose |
+| --- | --- | --- |
+| host constructors | constructor hooks | observe/bind new icon/widget hosts |
+| `LauncherAppWidgetHostView` | `updateAppWidget(RemoteViews)` | re-claim ownership after RemoteViews rebuild |
+| `MaMlHostView` | `onResume()`, `updateColor(int)` | re-run MAML material ownership after async updates |
+| `Workspace` | `setCurrentScreenInner(int)` | reconcile selected page after vendor commits page identity |
+| `Launcher` | `onResume()` | reconcile current Workspace page/geometry |
+| `ShortcutIcon` | `setAnimTargetVisibility(int)` | app-launch proxy ownership end boundary |
+| `FloatingIconView2` | `update(...)` | real close-to-home proxy geometry/visibility |
+| `FloatingIconLayer2` | `update(...)` | rotation-aware SurfaceControl proxy geometry/visibility |
+
+### Static drag suppression
+
+For material classes exposing `onDragContainerBgAnimAlpha(boolean, boolean)`, a class-scoped hook mirrors vendor drag ownership into the matching `LauncherGlassStaticNode`.
+
+---
+
+## 6. Live drag overlay
+
+`MiuixLauncherDragOverlayHook` keeps MIUI DragView authoritative.
+
+### Hook points
+
+- `DragController.createDragView(...)`: source prewarm only for normal single drag;
+- framework `ViewGroup.onViewAdded(View)`: begin when a real `DragView` enters the real DragContainer;
+- framework `ViewGroup.onViewRemoved(View)`: end/release when that DragView leaves.
+
+Metadata classification uses vendor View/tag/field structure once at drag begin. The per-frame path does not repeatedly reflect classification metadata.
+
+Actual presentation ownership:
+
+- upper non-touchable app-panel window;
+- live `LauncherGlassDragOverlay` output;
+- direct-draw `LauncherDragVisualMirror`;
+- MIUI DragView remains geometry and drag/drop logic authority.
+
+---
+
+## 7. Folder glass
+
+`MiuixFolderGlassHook` owns small/large folder material integration.
+
+Representative boundaries include:
+
+- `FolderIcon1x1` / larger folder host construction/bind;
+- folder open/close lifecycle;
+- folder blur/material helper interception;
+- vendor folder covered-state dispatch;
+- drag/press ownership;
+- large-folder draw/material suppression.
+
+Runtime small/large gates are independent; callbacks must re-check the matching component state before reclaiming material.
+
+---
+
+## 8. Shortcut popup
+
+`MiuixShortcutMenuGlassHook` has two independently configured behaviors under global Liquid Glass.
+
+### Popup glass
+
+| Target | Method | Purpose |
+| --- | --- | --- |
+| `ShortcutMenuLayer` | `setRequestingItemInfo(ItemInfo)` | prewarm/cancel popup source around request ownership |
+| `ShortcutMenu` | `show()` | original first, then bind real popup content |
+| `ShortcutMenu` | `dismiss(EditStateChangeReason)` | begin fast custom fade, then normal detach cleanup |
+
+`mDecorView` / `mPopupView` are vendor fields. `getContentView()` is called on the actual popup object. The glass session itself uses typed LiquidDock APIs.
+
+### Dark-mode content
+
+`ShortcutMenuDarkModeController` is listener-based, not an Xposed method hook:
+
+- recursively applies white text;
+- caches near-black drawable classification;
+- listens through `ViewTreeObserver.OnGlobalLayoutListener` for dynamically added menu content;
+- removes the listener on detach.
+
+No project-owned reflection is used.
+
+---
+
+## 9. Dock icon animation and HOME presentation
+
+`DockIconAnimationGlassHook` and `MiuixLauncherStaticGlassHook` cooperate with MIUI's floating icon owner so Dock/Workspace static nodes do not overlap launch/return proxies.
+
+`LauncherGlassHomePresentationHook` consumes typed SystemUI protocols and Launcher state to coordinate HOME presentation. `SystemUiKeyguardGoneRuntime` and `SystemUiHomeTransitionRuntime` are timing inputs, not glass producers.
+
+---
+
+## 10. Recents and wallpaper
+
+### `LauncherGlassRecentsHook`
+
+Uses semantic Recents dispatcher boundaries:
+
+- `onRecentViewShow()` -> mark Workspace glass covered;
+- `onRecentViewHide()` -> prepare return/recovery, then release covered authority.
+
+Workstation return may roll over a retired PassBlur producer even when the Java Surface still appears usable.
+
+### `LauncherWallpaperFreshnessHook`
+
+Tracks vendor wallpaper lifecycle and advances wallpaper-content authority. It is not a generic redraw hook and must not be replaced by `invalidate()`-based freshness.
+
+### `RecentsBackgroundBlurHook`
+
+Separately scales Launcher Recents background blur. This is not part of PassBlur backdrop selection.
+
+---
+
+## 11. Grid hooks
+
+Current grid composition is split across legacy `HomeGridHook` plus newer production hooks/policies:
+
+- `HomeGridProfileOverlayHook`;
+- `HomeGridOrientationMemoryHook`;
+- `HomeGridMutationCaptureHook`;
+- `HomeGridDeviceConfigCountHook`;
+- `HomeGridHorizontalCenteringHook`;
+- `HomeGridVerticalBoundsHook`;
+- `WorkspaceDropRuleHook`;
+- `HomeGridDragBoundsHook`.
+
+The split is incomplete; `HomeGridHook` still owns several runtime concerns.
+
+Grid hooks may change geometry/drop legality but must leave MIUI occupancy/placement authority intact.
+
+---
+
+## 12. Workstation / Divider
+
+Workstation hooks cover Dock width, icon offsets, Workspace offset, All Apps offsets/spacing, Divider, producer recovery and normal-layout restore.
+
+`DockDividerHook` snapshots the original View state before first mutation and restores it on live disable. Parent-height-dependent geometry may defer to a layout/pre-draw boundary rather than inventing a fallback height.
+
+See [DIVIDER.md](DIVIDER.md).
+
+---
+
+## 13. Security Center bootstrap
+
+Security Center uses a capability/semantic resolver, not a fixed obfuscated-member map.
+
+### Package/process gate
 
 ```text
-MiuiX PassBlur
-  -> Surface
-  -> SurfaceTexture / GL_TEXTURE_EXTERNAL_OES
-  -> normalization / overscan
-  -> Prismal renderer
-  -> Dock / Launcher / Security Center output
+package: com.miui.securitycenter
+process: com.miui.securitycenter:ui
 ```
 
-共享 `RootPassBlurBackend` 只持有 root producer/OES/freshness/EGL source lifecycle；系统私有 ViewRoot/SurfaceControl inspection 在 `RootPassBlurEndpointBridge`。Launcher、Dock、Security Center 通过显式 `PassBlurDomain` / `PassBlurBindRequest` 选择策略，不再由 View hierarchy 猜 domain。
+### Stable bootstrap anchor
 
-### Workspace source cadence / quality gate
+`DockWindowManagerService.onCreate()` is hooked first so LiquidDock gets the real Context/resources/package metadata before validating feature hooks.
 
-`LauncherGlassSession` 的 Workspace 路径把 producer、source drain 和昂贵 render 明确分开：
+### Semantic contract validation
 
-- `WorkstationProducerPolicy` 规定普通 HOME 不使用 single-frame pulse，消费 OES frame 后也不自动 pause；显式 coverage/presentation suspension 单独处理；
-- `Miuix307PassBlurBridge.bind(...)` 对 Workspace 使用 native scale `1.0`，保持 SurfaceTexture geometry / behind-content mapping 的权威性；
-- `PassBlurRenderDomain` 只计算本地 logical root 与 physical FBO 的 50%–100% 尺寸分离；
-- `PassBlurSourceFrameGate` 只对真实 `OnFrameAvailable` 决定是否触发 Prismal/output render，不创建 timer 或 Choreographer work；
-- 被 FPS gate 拒绝的 source frame 会走 source-only `updateTexImage()` drain，避免 BufferQueue 堵塞；
-- 当前 scene generation 的 freshness 优先于 render cap。
+`SecurityCenterSemanticContractResolver` resolves:
 
-分辨率变化只请求 backdrop rebuild，不因质量调整重建 native producer endpoint。
+- `TurboLayout` configure signature;
+- wrapper-to-Turbo relation;
+- manager terminal-cleanup relation;
+- assistant-type setter/getter discriminator;
+- named semantic getters;
+- All Apps motion helper by constructor/method structure;
+- sidebar AIDL implementation/lifecycle;
+- required resource capabilities.
 
-## 3. Launcher-wide static glass
+It rejects ambiguous matches. VersionCode is logged only as diagnostic evidence.
 
-`MiuixLauncherStaticGlassHook` 负责图标和部分 Widget 的 host 发现与重新绑定。
+### Current assistant/carrier types
 
-| 目标 | 方法/边界 | 作用 |
-|---|---|---|
-| `ShortcutIcon` | constructor / visual lifecycle | 注册 icon host、恢复 static node |
-| `LauncherAppWidgetHostView` | constructor | 注册 Widget host |
-| 同上 | `updateAppWidget(RemoteViews)` | RemoteViews 更新后重新声明 Widget material ownership |
-| `MaMlHostView` | constructor | 注册 MAML Widget |
-| 同上 | `onResume()` / `updateColor(int)` | MAML 异步生命周期后重新 reconcile |
-| `Workspace` | current-page/layout 变化 | 扫描当前页并恢复静态节点 |
-| `Launcher` | `onResume()` | HOME resume 后 reconcile 当前 Workspace |
+`SecurityCenterGlassCoordinator` supports:
 
-这些静态对象共享 root-wide `LauncherGlassSession`，不是每个 View 独立维护 producer。
+- Game type 1;
+- Video type 3;
+- Global Dock type 4;
+- All Apps carrier attached under the current Turbo root.
 
-## 4. 文件夹 glass
+### Continuous PassBlur authority
 
-`MiuixFolderGlassHook` 负责小/大文件夹的 material ownership。
+`SecurityCenterPassBlurContinuousAuthority` hooks hidden `SurfaceControl.Transaction` methods:
 
-| 目标 | 方法/边界 | 作用 |
-|---|---|---|
-| `FolderIcon1x1` / `FolderIcon2x2` | constructor / bind | 注册 small/large folder host |
-| `BlurUtilities` | folder blur 方法 | live-enabled 时接管 vendor folder blur；disabled 时透传 |
-| `FolderStatusServiceImpl` | folder open/close dispatch | 维护 folder covered 状态 |
-| `FolderIcon` / `Folder` | open/close 生命周期 | 隐藏/恢复桌面文件夹 glass |
-| `FolderIcon` | touch | 传递 interaction/press 信息 |
-| 大文件夹 draw 路径 | `drawChild(...)` 等 | 在 glass ownership 下抑制/恢复原生 drawable material |
+- `SetPassBlurSurface(SurfaceControl, Surface)`;
+- `setUpdateTextureFlag(SurfaceControl, boolean, float)`.
 
-v2.1.1 起 small/large folder 使用独立 live gate；关闭后只释放对应类型，不影响其它 glass。
+While LiquidDock owns a root, later vendor attempts to steal the output Surface or alter its update contract are rewritten back to the active claim.
 
-## 5. 拖拽与 launch proxy
+### Vendor material state
 
-`MiuixLauncherDragOverlayHook` 管理拖拽期间的移动 glass node。
+`SecurityCenterVendorMaterialState` hooks stable `View` material APIs such as background, pass-window blur, Mi blur/blend, bloom and shadow setters. It records vendor writes before/while a carrier is claimed, suppresses conflicting on-screen changes during ownership, then replays the latest recorded state on release.
 
-典型边界：
+This avoids depending on guessed private restore helpers.
 
-- DragView 加入容器 -> 创建移动节点；
-- DragView 移除 -> 释放节点；
-- vendor 原位置 material 的 drag alpha/lifecycle -> 抑制或恢复静态节点；
-- callback 执行前再次检查 icon/widget/folder 对应 live state。
+---
 
-Dock / Workspace app launch 的 floating icon proxy geometry 也会用于隐藏原静态 icon glass，并在动画结束后按配置时长恢复。
+## 14. Runtime states
 
-## 6. Recents scene
+### Launcher Glass
 
-`LauncherGlassRecentsHook` 使用 HyperOS semantic Recents dispatcher：
+`GlassRuntimeState` distributes live component changes. Disable order is publish false -> release ownership. Asynchronous callbacks must check current component state again before mutating presentation.
 
-| 目标 | 方法 | 作用 |
-|---|---|---|
-| `RecentsServiceDispatcher` | `onRecentViewShow()` | 将共享 Workspace static layer 标记为 Recents covered |
-| 同上 | `onRecentViewHide()` | 返回 HOME 前执行 Workstation producer recovery，再解除 covered |
+### Dock visual state
 
-### Workstation recovery
+`VisualRuntimeState` drives reversible Dock customization/stroke/shadow/Divider behavior.
 
-工作台可能复用同一个仍 valid 的 Launcher Surface，但旧 PassBlur BufferQueue producer 已停止回调。
+### Security Center
 
-当前返回路径：
+`SecurityCenterGlassRuntimeState` is process-local and has its own owner/release lifecycle.
+
+---
+
+## 15. Reflection and R8 boundaries
+
+### Allowed
+
+- Android framework private APIs;
+- HyperOS Launcher/SystemUI/Security Center private classes or vendor objects;
+- semantic structural reflection when the vendor contract requires it.
+
+### Forbidden pattern
+
+Do not access LiquidDock-owned fields/methods by string reflection. R8 is free to rename those members. Use typed package-private APIs.
+
+### Cross-ClassLoader string hazard
+
+Even a vendor-targeted `Class.forName(name, false, launcherClassLoader)` can be broken when `name` also denotes a class bundled by LiquidDock. R8 may adapt the string to the module's obfuscated binary name. Current Dock spacing therefore protects:
 
 ```text
-onRecentViewHide
-  -> LauncherGlassSessionRegistry.prepareWorkstationRecentsReturn()
-  -> shared producer rollover/rebind
-  -> LauncherGlassSceneController.setRecentsCoveredForAll(false)
-  -> 等待 fresh OES frame
-  -> static layer reveal
+androidx.recyclerview.widget.RecyclerView
+androidx.recyclerview.widget.RecyclerView$State
 ```
 
-不会直接强制显示旧 frame。
+with targeted `-keepnames`.
 
-## 7. Wallpaper freshness
+---
 
-`LauncherWallpaperFreshnessHook` 使用 Launcher wallpaper lifecycle 维护 wallpaper generation。其作用不是简单 invalidate，而是给 shared glass backdrop 一个内容新鲜度权威。
+## 16. Maintenance rules
 
-常见边界包括 wallpaper changed、first-frame、draw completion 等 vendor callback。
+New hooks should preserve these constraints:
 
-## 8. Runtime visual ownership
-
-### Glass
-
-`GlassRuntimeState` 监听：
-
-- global glass；
-- icon glass；
-- widget glass；
-- small-folder glass；
-- large-folder glass。
-
-true -> false 时先发布 flag，再 dispatch teardown；已排队 callback 因此无法在释放后重新 claim。
-
-Security Center 使用独立 `SecurityCenterGlassRuntimeState`，有效状态为 Core + global glass + Security Center component 三者同时开启；同样遵守先发布 false、后释放 ownership/session 的顺序。
-
-### Dock visuals
-
-`VisualRuntimeState` 监听：
-
-- Dock customization；
-- Dock stroke；
-- Dock shadow；
-- stroke-shadow gate；
-- Divider；
-- Squircle / Fill-Diff renderer refresh。
-
-对应 teardown 包括：
-
-- `MainHook.onRuntimeDockCustomizationDisabled()`；
-- `DockStrokeRenderer.onRuntimeStrokeDisabled()`；
-- `MainHook.onRuntimeDockShadowDisabled()`；
-- `DockStrokeRenderer.refreshInstalledFromCurrentConfig()`；
-- `DockDividerHook.onRuntimeDividerDisabled()`。
-
-## 9. Divider
-
-`DockDividerHook` 主要从 Workstation Dock line holder/bind 生命周期取得 divider View。
-
-首次修改前 snapshot：
-
-- width；
-- height；
-- margins；
-- background Drawable 副本。
-
-disable 时：
-
-- 取消 pending pre-draw geometry listener；
-- 恢复 layout params；
-- 恢复 background；
-- `requestLayout()`；
-- 释放 snapshot ownership。
-
-详见 [DIVIDER.md](DIVIDER.md)。
-
-## 10. Native Dock stroke / shadow
-
-`DockStrokeRenderer` 使用 foreground Drawable 持有描边，不再使用旧 overlay 作为默认实现。
-
-- stroke disable -> 恢复原 foreground；
-- Squircle / Fill-Diff -> 主动 refresh 已安装 renderer；
-- whole-Dock shadow 是独立 owner；
-- Dock customization 关闭后未来 vendor shadow 调用不再被继续抑制；
-- 未保存的 MIUI 原生 shadow 参数不会被构造。
-
-## 11. Workstation / Laptop
-
-工作台状态由 Launcher laptop/workstation vendor state 及对应 controller/hook 组合判断。
-
-当前相关 Hook 覆盖：
-
-- Workstation Dock width；
-- icon top/bottom offset；
-- Workspace grid offset；
-- All Apps offset；
-- Divider；
-- producer lifecycle；
-- Recents recovery；
-- 普通布局 backup/restore。
-
-整体仍属于实验性适配，结构配置保持 restart-bound。
-
-## 12. Grid
-
-`HomeGridHook` 仍覆盖：
-
-- cell count；
-- orientation-specific geometry；
-- Widget frame adaptation；
-- page indicator；
-- folder alignment；
-- rotation / refresh；
-- lazy/off-screen page preparation。
-
-`WorkspaceDropRuleHook` 只扩展 custom-grid 的合法坐标判定，不接管 MIUI occupancy matrix / placement。
-
-## 13. 多任务背景模糊
-
-`RecentsBackgroundBlurHook` 继续针对 Launcher 自身 Recents blur 方法缩放背景模糊强度。它与 Liquid Glass backdrop producer 是独立功能，不参与 zero-copy capture/source selection。
-
-## 14. Security Center Global Dock / All Apps
-
-`SecurityCenterGlassHook` 只在 `com.miui.securitycenter:ui` 且 package versionCode `40011320` 时安装版本专属 mutation hooks。对应 build label 为 `13.2.0-260806.0.1.pad`；未知 versionCode 只记录一次 diagnostic，不创建 producer、不修改 material。
-
-| 目标 | 精确方法/字段 | 作用 |
-|---|---|---|
-| `DockWindowManagerService` | `onCreate()` | original first，取得真实 `Context` 并读取 package versionCode，完成一次性 build validation |
-| `TurboLayout` | `M(com.miui.dock.sidebar.p, ja.a)` | original first；仅 `ja.a.f()==true` 的 type 4 获取 Dock/All Apps View 并绑定 coordinator |
-| `TurboLayout` | `d0()` | All Apps toggle；调用前读取 `f17943s`，vendor 已 transforming 时不启动 LiquidDock transition |
-| `TurboLayout` | `f17943s` | vendor transformation-in-progress authority；pre-draw 只在该字段变 false 后 settle |
-| `TurboLayout` | `f17941q` | settle 时读取最终 All Apps presence，决定目标 scene/geometry |
-| `gq.g` | static `l(View)` | 当前 generation Prismal 已完成后，reset Dock 的 HyperOS 4 vendor material |
-| `TurboLayout` | `U()` | 完整 vendor final-background restore；只在 CUSTOM + current generation 时 suppress |
-
-页面切换不靠固定 duration 或 frame count。`d0()` 后只安装一个 pre-draw observer，直到 `f17943s == false`；然后请求新 generation，等待真实 OES frame、Prismal render 与 output swap 完成才允许 custom claim/reveal。
-
-释放时先隐藏 custom 并把 material ownership 改回 VENDOR，再调用真实 `U()`。这样恢复调用不会被 LiquidDock 自己的 `U()` gate 拦截；LiquidDock 不调用私有 `S()`，不全局 hook material helper，也不重放猜测的 MiGlass/MaterialToken/blur/shadow 参数。
-
-Global Dock 与 All Apps 共用同一个 sidebar root，因此同一个 `RootPassBlurBackend` / native producer / `SecurityCenterGlassSession` 跨页复用。root/session/generation/runtime 任一不匹配时 callback 都 fail closed。
-
-HyperOS 3 capability 规则只允许普通 background blur；该规则用于未来 build 适配，不代表当前 v1 已支持未验证的 HOS3 Security Center。
-
-## 15. 维护原则
-
-新增 Hook 时优先保持：
-
-- vendor state ownership 明确；
-- runtime callback 可撤销；
-- stale async callback 必须重新检查 live state；
-- producer/content freshness 不依赖普通 redraw；
-- 不恢复 1.x ScreenCapture 或 bitmap pipeline；
-- Security Center 新 scene 必须复用 root-session/backend 架构，不复制 page-owned producer。
+- a concrete vendor/system authority must justify the hook point;
+- every visual owner needs an explicit release/restore path;
+- stale callbacks re-check live state/generation;
+- bind success does not mean fresh content;
+- no screenshot fallback for active Liquid Glass;
+- do not hide incompatibility behind broad R8 keep rules;
+- Security Center contracts should prefer semantic/structural capabilities over obfuscated member names;
+- tests for runtime behavior should call production-used typed state/policy objects rather than prove behavior by source-string ordering.
