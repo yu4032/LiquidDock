@@ -4,7 +4,7 @@ import android.view.View;
 
 import java.lang.reflect.Method;
 
-/** HyperOS 4.50 ShortcutMenu glass backed by a pre-show workspace capture window. */
+/** HyperOS 4.50 ShortcutMenu glass and optional dark-mode content adaptation. */
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
@@ -21,50 +21,59 @@ final class MiuixShortcutMenuGlassHook {
             return false;
         }
         ConfigReader preferences = ConfigReader.load();
-        if (!preferences.b(
+        boolean popupGlassEnabled = preferences.b(
                 com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
-                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.runtimeFallback())) {
-            MainHook.log(TAG + " disabled by shortcut popup replacement setting");
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.runtimeFallback());
+        boolean darkModeEnabled = preferences.b(
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name(),
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.runtimeFallback());
+        if (!popupGlassEnabled && !darkModeEnabled) {
+            MainHook.log(TAG + " disabled by shortcut popup settings");
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
-            HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object itemInfo = args.length > 0 ? args[0] : null;
-                Object owner = chain.getThisObject();
-                if (owner instanceof View) {
-                    View ownerView = (View) owner;
-                    View launcherRoot = ownerView.getRootView();
-                    if (itemInfo != null) {
-                        ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
+            if (popupGlassEnabled) {
+                HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object itemInfo = args.length > 0 ? args[0] : null;
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof View) {
+                        View ownerView = (View) owner;
+                        View launcherRoot = ownerView.getRootView();
+                        if (itemInfo != null) {
+                            ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
+                        }
+                        Object result = chain.proceed(args);
+                        if (itemInfo == null) {
+                            launcherRoot.postOnAnimation(
+                                    () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
+                        }
+                        return result;
                     }
-                    Object result = chain.proceed(args);
-                    if (itemInfo == null) {
-                        launcherRoot.postOnAnimation(
-                                () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
-                    }
-                    return result;
-                }
-                return chain.proceed(args);
-            }, ITEM_INFO);
+                    return chain.proceed(args);
+                }, ITEM_INFO);
+            }
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                bindShownPopup(chain.getThisObject());
+                bindShownPopup(chain.getThisObject(), popupGlassEnabled, darkModeEnabled);
                 return result;
             });
 
-            HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
-                Object menu = chain.getThisObject();
-                ShortcutPopupGlassCoordinator.beginDismissFade(menu);
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                releaseIfAlreadyDetached(menu);
-                return result;
-            }, EDIT_STATE_CHANGE_REASON);
+            if (popupGlassEnabled) {
+                HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
+                    Object menu = chain.getThisObject();
+                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    releaseIfAlreadyDetached(menu);
+                    return result;
+                }, EDIT_STATE_CHANGE_REASON);
+            }
 
             installed = true;
-            MainHook.log(TAG + " pre-show workspace capture hook installed");
+            MainHook.log(TAG + " hook installed popupGlass=" + popupGlassEnabled
+                    + " darkMode=" + darkModeEnabled);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -72,8 +81,9 @@ final class MiuixShortcutMenuGlassHook {
         }
     }
 
-    private static void bindShownPopup(Object menu) {
-        if (menu == null || !GlassRuntimeState.isEnabled()) return;
+    private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
+                                       boolean darkModeEnabled) {
+        if (menu == null) return;
         try {
             Object decorObject = HookUtil.getField(menu, "mDecorView");
             Object popupObject = HookUtil.getField(menu, "mPopupView");
@@ -81,8 +91,13 @@ final class MiuixShortcutMenuGlassHook {
             Method getContentView = popupObject.getClass().getMethod("getContentView");
             Object contentObject = getContentView.invoke(popupObject);
             if (!(contentObject instanceof View)) return;
+            View contentView = (View) contentObject;
+            if (darkModeEnabled) {
+                ShortcutMenuDarkModeController.attach(contentView);
+            }
+            if (!popupGlassEnabled || !GlassRuntimeState.isEnabled()) return;
             boolean bound = ShortcutPopupGlassCoordinator.bindPopup(
-                    (View) decorObject, (View) popupObject, (View) contentObject);
+                    (View) decorObject, (View) popupObject, contentView);
             if (!bound) {
                 MainHook.log(TAG + " pre-show source unavailable; stock material retained");
             }

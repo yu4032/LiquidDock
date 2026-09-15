@@ -54,8 +54,8 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertTrue(hook.contains(
                 "Object menu = chain.getThisObject();\n"
-                        + "                ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
-                        + "                Object result = chain.proceed"));
+                        + "                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
+                        + "                    Object result = chain.proceed"));
         assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
         assertTrue(coordinator.contains("layer.fadeOutFast()"));
         assertTrue(layer.contains("private static final long FAST_DISMISS_FADE_MS = 90L"));
@@ -83,9 +83,57 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_glass\", true, true, true"));
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
-        assertTrue(hook.contains("disabled by shortcut popup replacement setting"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
         assertTrue(settings.contains("桌面快捷菜单玻璃背景"));
         assertTrue(settings.contains("重启桌面后生效"));
+    }
+
+    @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingAfterGlassToggle() throws Exception {
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String settings = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        assertTrue(schema.contains("SHORTCUT_POPUP_DARK_TEXT = bool("));
+        assertTrue(schema.contains("\"liquid_shortcut_popup_dark_text\", false, false, false"));
+        assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(settings.contains("快捷菜单深色模式适配"));
+        assertTrue(settings.contains("将快捷菜单文字和图标统一改为白色"));
+        assertTrue(settings.contains(
+                "ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,\n"
+                        + "            \"桌面快捷菜单玻璃背景\",\n"
+                        + "            \"替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效\",\n"
+                        + "            masterEnabled && liquidGlass,\n"
+                        + "        )\n"
+                        + "        BooleanSetting(\n"
+                        + "            prefs,\n"
+                        + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
+    }
+
+    @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String controller = Files.readString(MAIN.resolve("ShortcutMenuDarkModeController.java"));
+
+        assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(hook.contains("ShortcutMenuDarkModeController.attach"));
+        assertTrue(controller.contains("TextView"));
+        assertTrue(controller.contains("setTextColor(Color.WHITE)"));
+        assertTrue(controller.contains("setCompoundDrawableTintList"));
+        assertTrue(controller.contains("ImageView"));
+        assertTrue(controller.contains("WeakHashMap<Drawable, Boolean>"));
+        assertTrue(controller.contains("shouldTintIcon(Drawable drawable)"));
+        assertTrue(controller.contains("Bitmap.createBitmap"));
+        assertTrue(controller.contains("Color.red"));
+        assertTrue(controller.contains("Color.green"));
+        assertTrue(controller.contains("Color.blue"));
+        assertTrue(controller.contains("setImageTintList(WHITE_TINT)"));
+        assertFalse(controller.contains("setImageTintList(null)"));
+        assertTrue(controller.contains("OnGlobalLayoutListener"));
+        assertFalse(controller.contains("if (view instanceof ImageView) {\n            ((ImageView) view).setImageTintList(WHITE_TINT);"));
+        assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
+        assertFalse(controller.contains("Class.forName("));
+        assertFalse(controller.contains("getDeclaredField("));
+        assertFalse(controller.contains("getDeclaredMethod("));
     }
 }
