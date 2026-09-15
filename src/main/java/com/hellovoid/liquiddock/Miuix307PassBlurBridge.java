@@ -75,6 +75,7 @@ final class Miuix307PassBlurBridge {
         }
         SurfaceControl rootSurface = null;
         boolean securityCenterClaimed = false;
+        boolean gboardClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -117,6 +118,10 @@ final class Miuix307PassBlurBridge {
                 SecurityCenterPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 securityCenterClaimed = true;
             }
+            if (domain == PassBlurDomain.GBOARD_FLOATING) {
+                GboardPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
+                gboardClaimed = true;
+            }
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -154,6 +159,9 @@ final class Miuix307PassBlurBridge {
             if (securityCenterClaimed && rootSurface != null) {
                 SecurityCenterPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
+            if (gboardClaimed && rootSurface != null) {
+                GboardPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
             MainHook.log(TAG + " PassBlur bind unavailable: " + error);
             return null;
         }
@@ -172,7 +180,7 @@ final class Miuix307PassBlurBridge {
         schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
     }
 
-    /** Persistent resume used by Dock and Security Center live capture. */
+    /** Persistent resume used by Dock and root-bound live-capture domains. */
     static void resumeUpdates(Binding binding) {
         if (binding == null) return;
         if (PassBlurBindPolicy.requiresUnlockGate(binding.domain)
@@ -180,7 +188,8 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
-        boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER;
+        boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
+                || binding.domain == PassBlurDomain.GBOARD_FLOATING;
         setUpdatesEnabled(binding, true, force);
     }
 
@@ -226,6 +235,10 @@ final class Miuix307PassBlurBridge {
         if (binding == null || !binding.bound) return;
         if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
             SecurityCenterPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
+            GboardPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         try {
