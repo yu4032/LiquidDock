@@ -450,6 +450,31 @@ public final class ConfigSchema {
         private Glass() {}
     }
 
+    public static final class Gboard {
+        public static final ConfigKey<Boolean> ENABLED = bool(
+                "liquid_gboard_floating_glass", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
+        // Appearance overrides are intentionally IF_PRESENT. Their absence means that Gboard
+        // inherits the current global Prismal material rather than freezing a copied default.
+        public static final ConfigKey<Integer> BLUR = integer(
+                "liquid_gboard_blur", 0, null, 0, 0, 60,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> TINT_RED = integer(
+                "liquid_gboard_tint_r", 0, null, 0, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> TINT_GREEN = integer(
+                "liquid_gboard_tint_g", 0, null, 0, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> TINT_BLUE = integer(
+                "liquid_gboard_tint_b", 255, null, 255, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> TINT_ALPHA = integer(
+                "liquid_gboard_tint_alpha", 35, null, 35, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+
+        private Gboard() {}
+    }
+
     public static final class LauncherHighlight {
         public static final ConfigKey<Boolean> SKY_HAZE = highlight("sky_haze");
         public static final ConfigKey<Boolean> SPECULAR = highlight("specular");
@@ -626,6 +651,8 @@ public final class ConfigSchema {
                 Glass.PRISMAL_SHADOW_SOFTNESS, Glass.PRISMAL_TRANSMITTANCE,
                 Glass.PRISMAL_BACKDROP_SCALE_X, Glass.PRISMAL_BACKDROP_SCALE_Y,
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
+        add(keys, Gboard.ENABLED, Gboard.BLUR, Gboard.TINT_RED, Gboard.TINT_GREEN,
+                Gboard.TINT_BLUE, Gboard.TINT_ALPHA);
         add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.SPECULAR,
                 LauncherHighlight.LIT_RIM, LauncherHighlight.OPPOSITE_RIM,
                 LauncherHighlight.CORNER_RIM, LauncherHighlight.FACE_SHEEN,

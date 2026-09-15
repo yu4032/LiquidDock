@@ -5,5 +5,6 @@ enum PassBlurDomain {
     SHORTCUT_POPUP,
     DRAG_OVERLAY,
     DOCK,
-    SECURITY_CENTER
+    SECURITY_CENTER,
+    GBOARD_FLOATING
 }
