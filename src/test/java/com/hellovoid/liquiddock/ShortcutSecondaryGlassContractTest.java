@@ -88,7 +88,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("重启桌面后生效"));
     }
 
-    @Test public void shortcutMenuWhiteTextHasDedicatedDefaultOffSettingAfterGlassToggle() throws Exception {
+    @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingAfterGlassToggle() throws Exception {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String settings = Files.readString(Path.of(
@@ -98,7 +98,8 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("\"liquid_shortcut_popup_dark_text\", false, false, false"));
         assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
-        assertTrue(settings.contains("快捷菜单深色模式文字"));
+        assertTrue(settings.contains("快捷菜单深色模式适配"));
+        assertTrue(settings.contains("将快捷菜单文字和图标统一改为白色"));
         assertTrue(settings.contains(
                 "ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,\n"
                         + "            \"桌面快捷菜单玻璃背景\",\n"
@@ -110,7 +111,7 @@ public class ShortcutSecondaryGlassContractTest {
                         + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
     }
 
-    @Test public void shortcutMenuWhiteTextUsesTypedAndroidViewApisWithoutProjectSelfReflection() throws Exception {
+    @Test public void shortcutMenuDarkModeUsesTypedAndroidViewApisWithoutProjectSelfReflection() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String controller = Files.readString(MAIN.resolve("ShortcutMenuTextColorController.java"));
 
@@ -118,6 +119,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ShortcutMenuTextColorController.attach"));
         assertTrue(controller.contains("TextView"));
         assertTrue(controller.contains("setTextColor(Color.WHITE)"));
+        assertTrue(controller.contains("setCompoundDrawableTintList"));
+        assertTrue(controller.contains("ImageView"));
+        assertTrue(controller.contains("setImageTintList"));
+        assertTrue(controller.contains("ColorStateList.valueOf(Color.WHITE)"));
         assertTrue(controller.contains("OnGlobalLayoutListener"));
         assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
         assertFalse(controller.contains("Class.forName("));
