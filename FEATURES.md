@@ -2,8 +2,6 @@
 
 本文档按当前 `main` / **v2.4.1** 的生产代码与设置页整理。Launcher 主验证基线为 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x**；Security Center 是独立进程、独立兼容边界。
 
-历史 1.x ScreenCapture / bitmap-readback glass 架构不属于当前 Launcher Liquid Glass 主线。当前 backdrop 由 MiuiX PassBlur + OES/GLES + Prismal 提供，失败时不回退到旧截图方案。
-
 ---
 
 ## 1. 桌面网格与图标大小
