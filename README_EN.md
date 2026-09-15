@@ -54,7 +54,7 @@ Workstation support is still being refined, so changing its options one at a tim
 
 ### Security Center sidebar
 
-LiquidDock can also add Liquid Glass to supported HyperOS Security Center sidebar pages, including Game Toolbox, Video Toolbox, Global Dock, and All Apps.
+LiquidDock can also add Liquid Glass to supported HyperOS 4 Security Center sidebar pages, including Game Toolbox, Video Toolbox, Global Dock, and All Apps.
 
 Security Center varies significantly between system versions. If a build is not compatible, LiquidDock leaves the original system interface in place.
 
