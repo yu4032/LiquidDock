@@ -27,13 +27,17 @@ public class ShortcutMenuWhiteTextContractTest {
     @Test public void shortcutMenuWhiteTextUsesTypedAndroidViewApisWithoutProjectSelfReflection() throws Exception {
         String hook = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/MiuixShortcutMenuGlassHook.java"));
+        String controller = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/ShortcutMenuTextColorController.java"));
 
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
-        assertTrue(hook.contains("TextView"));
-        assertTrue(hook.contains("setTextColor(Color.WHITE)"));
-        assertTrue(hook.contains("OnGlobalLayoutListener"));
+        assertTrue(hook.contains("ShortcutMenuTextColorController.attach"));
+        assertTrue(controller.contains("TextView"));
+        assertTrue(controller.contains("setTextColor(Color.WHITE)"));
+        assertTrue(controller.contains("OnGlobalLayoutListener"));
         assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
-        assertFalse(hook.contains("getDeclaredField(\""));
-        assertFalse(hook.contains("getDeclaredMethod(\""));
+        assertFalse(controller.contains("Class.forName("));
+        assertFalse(controller.contains("getDeclaredField("));
+        assertFalse(controller.contains("getDeclaredMethod("));
     }
 }
