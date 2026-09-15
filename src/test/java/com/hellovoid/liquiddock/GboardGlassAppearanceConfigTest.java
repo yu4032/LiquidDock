@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.hellovoid.liquiddock.config.ConfigCodec;
+import com.hellovoid.liquiddock.config.ConfigKey;
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.util.HashMap;
@@ -74,6 +76,40 @@ public class GboardGlassAppearanceConfigTest {
         assertFalse(appearance.enabled);
         assertTrue(appearance.hasAppearanceOverride);
         assertEquals(73f, appearance.blur, 0.001f);
+    }
+
+    @Test public void gboardSettingsParticipateInConfigBackupWithoutDestroyingInheritance() {
+        assertTrue(hasSchemaKey(GboardGlassPreferences.ENABLED_KEY));
+        assertTrue(hasSchemaKey(GboardGlassPreferences.BLUR_KEY));
+        assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_RED_KEY));
+        assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_GREEN_KEY));
+        assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_BLUE_KEY));
+        assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_ALPHA_KEY));
+
+        Map<String, Object> values = new HashMap<>();
+        values.put(GboardGlassPreferences.ENABLED_KEY, false);
+        Map<String, Object> exported = ConfigCodec.exportValues(values);
+        assertEquals(Boolean.FALSE, exported.get(GboardGlassPreferences.ENABLED_KEY));
+        assertFalse(exported.containsKey(GboardGlassPreferences.BLUR_KEY));
+        assertFalse(exported.containsKey(GboardGlassPreferences.TINT_RED_KEY));
+
+        values.put(GboardGlassPreferences.BLUR_KEY, 42);
+        values.put(GboardGlassPreferences.TINT_RED_KEY, 12);
+        exported = ConfigCodec.exportValues(values);
+        assertEquals(42, exported.get(GboardGlassPreferences.BLUR_KEY));
+        assertEquals(12, exported.get(GboardGlassPreferences.TINT_RED_KEY));
+
+        Map<String, Object> imported = ConfigCodec.importValues(exported);
+        assertEquals(Boolean.FALSE, imported.get(GboardGlassPreferences.ENABLED_KEY));
+        assertEquals(42, imported.get(GboardGlassPreferences.BLUR_KEY));
+        assertEquals(12, imported.get(GboardGlassPreferences.TINT_RED_KEY));
+    }
+
+    private static boolean hasSchemaKey(String name) {
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (name.equals(key.name())) return true;
+        }
+        return false;
     }
 
     private static Map<String, Object> globalValues() {
