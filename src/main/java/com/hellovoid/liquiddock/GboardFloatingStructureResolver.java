@@ -24,6 +24,7 @@ final class GboardFloatingStructureResolver {
     static final class Structure {
         final ViewGroup keyboardArea;
         final View stockBackground;
+        // Optional wrapper. Some Gboard layouts place KeyboardHolder directly under keyboardArea.
         final ViewGroup contentColumn;
         final ViewGroup keyboardHolder;
         final View bottomFrame;
@@ -56,54 +57,98 @@ final class GboardFloatingStructureResolver {
         try {
             Class<?> keyboardViewHolderClass = Class.forName(
                     KEYBOARD_VIEW_HOLDER_CLASS, false, classLoader);
-
             if (!(keyboardHolder.getParent() instanceof ViewGroup)) return null;
-            ViewGroup contentColumn = (ViewGroup) keyboardHolder.getParent();
-            if (!(contentColumn.getParent() instanceof ViewGroup)) return null;
-            ViewGroup keyboardArea = (ViewGroup) contentColumn.getParent();
 
-            int contentIndex = keyboardArea.indexOfChild(contentColumn);
-            int holderIndex = contentColumn.indexOfChild(keyboardHolder);
-            if (contentIndex <= 0 || holderIndex < 0) return null;
+            ViewGroup directParent = (ViewGroup) keyboardHolder.getParent();
 
-            View stockBackground = keyboardArea.getChildAt(contentIndex - 1);
-            if (stockBackground == null || stockBackground == contentColumn) return null;
-
-            View bottomFrame = findBottomSibling(contentColumn, keyboardHolder, holderIndex);
-            if (bottomFrame == null) return null;
-
-            ArrayList<ViewGroup> holders = new ArrayList<>();
-            View topEdge = null;
-            int firstKeyboardViewHolderIndex = -1;
-            for (int i = 0; i < keyboardHolder.getChildCount(); i++) {
-                View child = keyboardHolder.getChildAt(i);
-                if (child == null) continue;
-                if (keyboardViewHolderClass.isInstance(child) && child instanceof ViewGroup) {
-                    if (firstKeyboardViewHolderIndex < 0) firstKeyboardViewHolderIndex = i;
-                    holders.add((ViewGroup) child);
-                }
-            }
-            if (holders.size() < 2 || firstKeyboardViewHolderIndex <= 0) return null;
-            for (int i = firstKeyboardViewHolderIndex - 1; i >= 0; i--) {
-                View candidate = keyboardHolder.getChildAt(i);
-                if (candidate != null && !keyboardViewHolderClass.isInstance(candidate)) {
-                    topEdge = candidate;
-                    break;
-                }
-            }
-            if (topEdge == null) return null;
-
-            return new Structure(
-                    keyboardArea,
-                    stockBackground,
-                    contentColumn,
+            // First resolve direct KeyboardHolder topology:
+            // keyboardArea -> KeyboardHolder.
+            Structure direct = tryResolveTopology(
+                    directParent,
+                    null,
+                    directParent,
                     keyboardHolder,
-                    bottomFrame,
-                    topEdge,
-                    holders);
+                    keyboardViewHolderClass);
+            if (direct != null) return direct;
+
+            // Then resolve wrapped KeyboardHolder topology:
+            // keyboardArea -> contentColumn -> KeyboardHolder.
+            if (!(directParent.getParent() instanceof ViewGroup)) return null;
+            ViewGroup keyboardArea = (ViewGroup) directParent.getParent();
+            return tryResolveTopology(
+                    keyboardArea,
+                    directParent,
+                    directParent,
+                    keyboardHolder,
+                    keyboardViewHolderClass);
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static Structure tryResolveTopology(
+            ViewGroup keyboardArea,
+            ViewGroup contentColumn,
+            ViewGroup holderContainer,
+            ViewGroup keyboardHolder,
+            Class<?> keyboardViewHolderClass) {
+        if (keyboardArea == null || holderContainer == null || keyboardHolder == null
+                || keyboardViewHolderClass == null) return null;
+
+        int holderIndex = holderContainer.indexOfChild(keyboardHolder);
+        if (holderIndex < 0) return null;
+
+        View contentBranch = contentColumn != null ? contentColumn : keyboardHolder;
+        int contentIndex = keyboardArea.indexOfChild(contentBranch);
+        if (contentIndex < 0) return null;
+
+        View stockBackground = findStockBackground(keyboardArea, contentBranch, contentIndex);
+        if (stockBackground == null || stockBackground == contentBranch) return null;
+
+        View bottomFrame = findBottomSibling(holderContainer, keyboardHolder, holderIndex);
+        if (bottomFrame == null) return null;
+
+        ArrayList<ViewGroup> holders = new ArrayList<>();
+        View topEdge = null;
+        int firstKeyboardViewHolderIndex = -1;
+        for (int i = 0; i < keyboardHolder.getChildCount(); i++) {
+            View child = keyboardHolder.getChildAt(i);
+            if (child == null) continue;
+            if (keyboardViewHolderClass.isInstance(child) && child instanceof ViewGroup) {
+                if (firstKeyboardViewHolderIndex < 0) firstKeyboardViewHolderIndex = i;
+                holders.add((ViewGroup) child);
+            }
+        }
+        if (holders.size() < 2 || firstKeyboardViewHolderIndex <= 0) return null;
+        for (int i = firstKeyboardViewHolderIndex - 1; i >= 0; i--) {
+            View candidate = keyboardHolder.getChildAt(i);
+            if (candidate != null && !keyboardViewHolderClass.isInstance(candidate)) {
+                topEdge = candidate;
+                break;
+            }
+        }
+        if (topEdge == null) return null;
+
+        return new Structure(
+                keyboardArea,
+                stockBackground,
+                contentColumn,
+                keyboardHolder,
+                bottomFrame,
+                topEdge,
+                holders);
+    }
+
+    private static View findStockBackground(
+            ViewGroup keyboardArea, View contentBranch, int contentIndex) {
+        if (keyboardArea == null || contentBranch == null || contentIndex <= 0) return null;
+        // Preserve the validated ordering contract while allowing the content branch itself to be
+        // either the optional contentColumn wrapper or KeyboardHolder directly.
+        for (int i = contentIndex - 1; i >= 0; i--) {
+            View candidate = keyboardArea.getChildAt(i);
+            if (candidate != null && candidate != contentBranch) return candidate;
+        }
+        return null;
     }
 
     static boolean isFloatingGeometry(Structure structure) {
@@ -160,9 +205,9 @@ final class GboardFloatingStructureResolver {
     }
 
     private static View findBottomSibling(
-            ViewGroup contentColumn, ViewGroup keyboardHolder, int holderIndex) {
-        for (int i = holderIndex + 1; i < contentColumn.getChildCount(); i++) {
-            View candidate = contentColumn.getChildAt(i);
+            ViewGroup holderContainer, ViewGroup keyboardHolder, int holderIndex) {
+        for (int i = holderIndex + 1; i < holderContainer.getChildCount(); i++) {
+            View candidate = holderContainer.getChildAt(i);
             if (candidate instanceof ViewGroup && candidate != keyboardHolder) return candidate;
         }
         return null;
