@@ -14,8 +14,7 @@ final class GboardFloatingGlassHook {
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
-        if (classLoader == null || runtimeConfig == null
-                || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) return false;
+        if (classLoader == null || runtimeConfig == null) return false;
         try {
             int showHooks = 0;
             for (Method method : PopupWindow.class.getDeclaredMethods()) {
@@ -27,7 +26,7 @@ final class GboardFloatingGlassHook {
                     Object result = chain.proceed(args);
                     Object owner = chain.getThisObject();
                     if (owner instanceof PopupWindow) {
-                        handleShown((PopupWindow) owner, classLoader, runtimeConfig);
+                        handleShown((PopupWindow) owner, classLoader);
                     }
                     return result;
                 });
@@ -55,10 +54,7 @@ final class GboardFloatingGlassHook {
         }
     }
 
-    private static void handleShown(
-            PopupWindow popupWindow,
-            ClassLoader classLoader,
-            LiquidDockConfig runtimeConfig) {
+    private static void handleShown(PopupWindow popupWindow, ClassLoader classLoader) {
         if (popupWindow == null) return;
         ConfigReader liveReader = ConfigReader.load();
         LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
