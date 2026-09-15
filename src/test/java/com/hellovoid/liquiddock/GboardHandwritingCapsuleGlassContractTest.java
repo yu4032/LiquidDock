@@ -33,6 +33,20 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertFalse(hook.contains("postDelayed"));
     }
 
+    @Test public void toolbarUsesNativeClipRadiusFromConstructorAttributes() throws Exception {
+        String hook = read("GboardHandwritingCapsuleGlassHook.java");
+        String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
+        assertTrue(hook.contains("android.util.AttributeSet"));
+        assertTrue(hook.contains("getDeclaredConstructor(Context.class, AttributeSet.class)"));
+        assertTrue(hook.contains("getIdentifier(\"clipRadius\", \"attr\""));
+        assertTrue(hook.contains("obtainStyledAttributes"));
+        assertTrue(hook.contains("NATIVE_TOOLBAR_RADII"));
+        assertTrue(hook.contains("nativeToolbarRadiusPx(host)"));
+        assertTrue(coordinator.contains("onShown(host, liveConfig.glass, nativeRadiusPx)"));
+        assertFalse(hook.contains("100f"));
+        assertFalse(hook.contains("0x7f"));
+    }
+
     @Test public void toolbarCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(coordinator.contains("host.addView(sink, 0"));
