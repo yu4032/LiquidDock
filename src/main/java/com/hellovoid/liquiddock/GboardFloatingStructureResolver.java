@@ -61,7 +61,7 @@ final class GboardFloatingStructureResolver {
 
             ViewGroup directParent = (ViewGroup) keyboardHolder.getParent();
 
-            // First resolve direct KeyboardHolder topology:
+            // Candidate 1: resolve direct KeyboardHolder topology:
             // keyboardArea -> KeyboardHolder.
             Structure direct = tryResolveTopology(
                     directParent,
@@ -69,18 +69,34 @@ final class GboardFloatingStructureResolver {
                     directParent,
                     keyboardHolder,
                     keyboardViewHolderClass);
-            if (direct != null) return direct;
 
-            // Then resolve wrapped KeyboardHolder topology:
+            // Candidate 2: resolve wrapped KeyboardHolder topology:
             // keyboardArea -> contentColumn -> KeyboardHolder.
-            if (!(directParent.getParent() instanceof ViewGroup)) return null;
-            ViewGroup keyboardArea = (ViewGroup) directParent.getParent();
-            return tryResolveTopology(
-                    keyboardArea,
-                    directParent,
-                    directParent,
-                    keyboardHolder,
-                    keyboardViewHolderClass);
+            Structure wrapped = null;
+            if (directParent.getParent() instanceof ViewGroup) {
+                ViewGroup keyboardArea = (ViewGroup) directParent.getParent();
+                wrapped = tryResolveTopology(
+                        keyboardArea,
+                        directParent,
+                        directParent,
+                        keyboardHolder,
+                        keyboardViewHolderClass);
+            }
+
+            // Both topologies can be structurally plausible because the legacy contentColumn also
+            // contains siblings around KeyboardHolder. Choose the candidate whose outer surface
+            // actually has floating-keyboard geometry/outline authority. This avoids treating the
+            // legacy contentColumn itself as keyboardArea while still accepting OS4 direct layout.
+            boolean wrappedFloating = isFloatingGeometry(wrapped);
+            boolean directFloating = isFloatingGeometry(direct);
+            if (wrappedFloating != directFloating) {
+                return wrappedFloating ? wrapped : direct;
+            }
+
+            // If geometry is not authoritative yet during an early layout pass, preserve the
+            // previously validated wrapped topology when available. A later layout will re-resolve.
+            if (wrapped != null) return wrapped;
+            return direct;
         } catch (Throwable ignored) {
             return null;
         }
