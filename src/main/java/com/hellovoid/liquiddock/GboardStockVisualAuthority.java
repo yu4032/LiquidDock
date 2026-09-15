@@ -16,12 +16,27 @@ final class GboardStockVisualAuthority {
     private static final String TAG = "[DC][GboardFloatingGlass]";
     private static final Object LOCK = new Object();
 
+    // Verified from the supplied Gboard K9G.xml / pef.r() binding path. These are container-level
+    // views only; their child SoftKeyboardView/key drawables are intentionally left untouched.
+    private static final int KEYBOARD_HEADER_VIEW_HOLDER_ID = 0x7f0b0643;
+    private static final int MAIN_KEYBOARD_VIEW_HOLDER_ID = 0x7f0b061a;
+    private static final int AUX_KEYBOARD_VIEW_HOLDER_ID = 0x7f0b02f6;
+    private static final int KEYBOARD_HOLDER_ID = 0x7f0b0644;
+    private static final int[] CONTAINER_IDS = {
+            KEYBOARD_HEADER_VIEW_HOLDER_ID,
+            MAIN_KEYBOARD_VIEW_HOLDER_ID,
+            AUX_KEYBOARD_VIEW_HOLDER_ID,
+            KEYBOARD_HOLDER_ID
+    };
+
     private static final class Claim {
         final View baseArea;
         final View bottomFrame;
         final Drawable baseBackground;
         final Drawable bottomBackground;
         final float baseElevation;
+        final View[] containers;
+        final Drawable[] containerBackgrounds;
 
         Claim(View baseArea, View bottomFrame) {
             this.baseArea = baseArea;
@@ -29,6 +44,13 @@ final class GboardStockVisualAuthority {
             this.baseBackground = baseArea.getBackground();
             this.bottomBackground = bottomFrame.getBackground();
             this.baseElevation = baseArea.getElevation();
+            this.containers = new View[CONTAINER_IDS.length];
+            this.containerBackgrounds = new Drawable[CONTAINER_IDS.length];
+            for (int i = 0; i < CONTAINER_IDS.length; i++) {
+                View view = baseArea.findViewById(CONTAINER_IDS[i]);
+                containers[i] = view;
+                containerBackgrounds[i] = view != null ? view.getBackground() : null;
+            }
         }
     }
 
@@ -55,7 +77,7 @@ final class GboardStockVisualAuthority {
                     Claim claim = claimForBase(baseArea);
                     if (claim != null) {
                         applyClaim(claim);
-                        log("preserved transparent floating base against pef.j(int)");
+                        log("preserved transparent floating base/holders against pef.j(int)");
                     }
                     return result;
                 });
@@ -68,7 +90,7 @@ final class GboardStockVisualAuthority {
                     Claim claim = claimForBottom(bottomFrame);
                     if (claim != null) {
                         applyClaim(claim);
-                        log("preserved transparent floating bottom against pef.e(int)");
+                        log("preserved transparent floating bottom/holders against pef.e(int)");
                     }
                     return result;
                 });
@@ -97,7 +119,8 @@ final class GboardStockVisualAuthority {
             BY_BOTTOM.put(bottomFrame, claim);
         }
         applyClaim(claim);
-        log("claimed stock visuals baseElevation=" + claim.baseElevation);
+        log("claimed stock visuals baseElevation=" + claim.baseElevation
+                + " containerCount=" + presentContainerCount(claim));
         return true;
     }
 
@@ -116,6 +139,12 @@ final class GboardStockVisualAuthority {
         catch (Throwable ignored) {}
         try { claim.bottomFrame.setBackground(claim.bottomBackground); }
         catch (Throwable ignored) {}
+        for (int i = 0; i < claim.containers.length; i++) {
+            View view = claim.containers[i];
+            Drawable saved = claim.containerBackgrounds[i];
+            if (view == null) continue;
+            try { view.setBackground(saved); } catch (Throwable ignored) {}
+        }
         log("released stock visuals");
     }
 
@@ -124,6 +153,18 @@ final class GboardStockVisualAuthority {
         try { claim.baseArea.setBackground(null); } catch (Throwable ignored) {}
         try { claim.baseArea.setElevation(0f); } catch (Throwable ignored) {}
         try { claim.bottomFrame.setBackground(null); } catch (Throwable ignored) {}
+        for (View view : claim.containers) {
+            if (view == null) continue;
+            try { view.setBackground(null); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static int presentContainerCount(Claim claim) {
+        int count = 0;
+        if (claim != null) {
+            for (View view : claim.containers) if (view != null) count++;
+        }
+        return count;
     }
 
     private static Claim claimForBase(View baseArea) {
