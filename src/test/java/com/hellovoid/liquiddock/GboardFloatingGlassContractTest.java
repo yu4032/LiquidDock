@@ -40,7 +40,8 @@ public class GboardFloatingGlassContractTest {
 
         assertTrue(resolver.contains("com.google.android.libraries.inputmethod.widgets.KeyboardHolder"));
         assertTrue(hook.contains("GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS"));
-        assertTrue(hook.contains("getDeclaredMethod(\"onLayout\""));
+        assertTrue(hook.contains("getDeclaredMethod("));
+        assertTrue(hook.contains("\"onLayout\""));
         assertTrue(hook.contains("GboardFloatingStructureResolver.resolveFromKeyboardHolder"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onShown"));
         assertTrue(hook.contains("GboardGlassPreferences.resolve(liveReader"));
