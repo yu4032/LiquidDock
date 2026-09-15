@@ -107,6 +107,26 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("state.sinkHost"));
     }
 
+    @Test public void presentedGlassOwnsAllFloatingStockFillsAndRestoresThem() throws Exception {
+        String module = read(MAIN.resolve("ModuleMain.java"));
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(module.contains("GboardStockVisualAuthority.install(classLoader)"));
+        assertTrue(coordinator.contains("0x7f0b061b"));
+        assertTrue(coordinator.contains("GboardStockVisualAuthority.claim("));
+        assertTrue(coordinator.contains("GboardStockVisualAuthority.release("));
+        assertTrue(authority.contains("loadClass(\"pef\")"));
+        assertTrue(authority.contains("getDeclaredMethod(\"j\", Integer.TYPE)"));
+        assertTrue(authority.contains("getDeclaredMethod(\"e\", Integer.TYPE)"));
+        assertTrue(authority.contains("baseArea.setBackground(null)"));
+        assertTrue(authority.contains("baseArea.setElevation(0f)"));
+        assertTrue(authority.contains("bottomFrame.setBackground(null)"));
+        assertTrue(authority.contains("baseArea.setBackground(claim.baseBackground)"));
+        assertTrue(authority.contains("baseArea.setElevation(claim.baseElevation)"));
+        assertTrue(authority.contains("bottomFrame.setBackground(claim.bottomBackground)"));
+    }
+
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
