@@ -87,11 +87,6 @@ public final class ModuleMain extends XposedModule {
                             "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
                     return;
                 }
-                if (!GboardStockVisualAuthority.install(classLoader)) {
-                    Api101Bridge.log(
-                            "[DC][GboardFloatingGlass] stock visual authority unavailable; fail closed");
-                    return;
-                }
                 GboardFloatingGlassHook.install(classLoader, runtimeConfig);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][GboardFloatingGlass] init failed", error);
