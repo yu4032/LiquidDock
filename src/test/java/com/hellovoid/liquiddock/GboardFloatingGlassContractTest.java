@@ -139,6 +139,18 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("view.setBackground(saved)"));
     }
 
+    @Test public void headerCurrentContentBackgroundIsAuthoritativeAcrossKeyboardViewRebinds() throws Exception {
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(authority.contains("KeyboardViewHolder"));
+        assertTrue(authority.contains("findKeyboardViewBindMethod"));
+        assertTrue(authority.contains("claimForHeaderHolder"));
+        assertTrue(authority.contains("suppressHeaderContentBackground"));
+        assertTrue(authority.contains("headerContentBackgrounds"));
+        assertTrue(authority.contains("content.setBackground(null)"));
+        assertTrue(authority.contains("content.setBackground(saved)"));
+    }
+
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
