@@ -74,6 +74,7 @@ private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     Liquid(R.string.page_liquid),
+    ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
     Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
@@ -82,7 +83,8 @@ private enum class Page(val titleRes: Int) {
 }
 
 private fun parentPage(page: Page): Page = when (page) {
-    Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
+    Page.Gboard -> Page.ThirdPartyApps
+    Page.ThirdPartyApps, Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
     else -> Page.Home
 }
 
@@ -238,7 +240,7 @@ private val launcher450IconSizeSpec = IntSpec(
     ConfigSchema.Grid.ICON_SIZE_PERCENT,
     "图标大小",
     "%",
-    summary = "Launcher 4.50：工作区、Dock 与小文件夹共用；100% 为系统默认",
+    summary = "Launcher 4.50：工作区、Dock、小文件夹共用；100% 为系统默认",
 )
 
 private val gridSpecs = listOf(
@@ -457,7 +459,15 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     masterEnabled = masterEnabled,
                     openLauncherHighlights = { page = Page.LauncherHighlights },
                     openWidgetComponents = { page = Page.WidgetComponents },
+                    openThirdPartyApps = { page = Page.ThirdPartyApps },
                 )
+                Page.ThirdPartyApps -> ThirdPartyAppsPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                    openGboard = { page = Page.Gboard },
+                )
+                Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
@@ -623,6 +633,7 @@ private fun LiquidPage(
     masterEnabled: Boolean,
     openLauncherHighlights: () -> Unit,
     openWidgetComponents: () -> Unit,
+    openThirdPartyApps: () -> Unit,
 ) {
     var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
     var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
@@ -645,6 +656,12 @@ private fun LiquidPage(
             stringResource(R.string.liquid_enable_summary),
             masterEnabled,
         ) { liquidGlass = it }
+        ArrowPreference(
+            title = "第三方应用适配",
+            summary = "Gboard 等第三方应用的独立液态玻璃适配",
+            enabled = masterEnabled && liquidGlass,
+            onClick = openThirdPartyApps,
+        )
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.SECURITY_CENTER_GLASS,
@@ -941,7 +958,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
             ) { Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}") }
             Button(
                 onClick = { save(resetValue) },
-        enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
+                enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
                 minWidth = 56.dp,
                 minHeight = 32.dp,
                 insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
