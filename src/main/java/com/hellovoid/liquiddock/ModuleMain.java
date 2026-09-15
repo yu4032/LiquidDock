@@ -79,9 +79,12 @@ public final class ModuleMain extends XposedModule {
                         GboardGlassPreferences.resolve(configReader, runtimeConfig.glass);
                 if (!runtimeConfig.enabled || !runtimeConfig.glass.enabled
                         || !gboardAppearance.enabled) {
-                    Api101Bridge.log("[DC][GboardFloatingGlass] disabled by configuration; no hooks installed");
-                    return;
+                    Api101Bridge.log(
+                            "[DC][GboardFloatingGlass] initially disabled; stable lifecycle hooks remain installed");
                 }
+                // Install only inert lifecycle/SurfaceControl authorities here. Actual floating
+                // glass activation is live-gated from current preferences on every popup show,
+                // so enabling or disabling Gboard glass never requires restarting the IME process.
                 if (!GboardPassBlurContinuousAuthority.install()) {
                     Api101Bridge.log(
                             "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
