@@ -662,8 +662,8 @@ private fun LiquidPage(
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
-            "快捷菜单深色模式文字",
-            "将桌面快捷菜单文字改为白色；关闭后保留系统原生文字颜色，重启桌面后生效",
+            "快捷菜单深色模式适配",
+            "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
             masterEnabled && liquidGlass,
         )
         BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
