@@ -181,7 +181,6 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void syncGeometry(State state) {
         if (state == null || state.released || state.session == null
                 || state.keyboardArea == null || state.root == null) return;
-        syncSinkBounds(state);
         GboardFloatingGlassGeometry next = GboardFloatingGlassGeometry.capture(
                 state.root, state.keyboardArea, state.cornerRadiusPx);
         if (next == null) {
@@ -203,6 +202,7 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         state.geometryRetryCount = 0;
+        syncSinkBounds(state, next);
         state.session.updateGeometry(next);
         if (!state.captureRequested) {
             state.captureRequested = true;
@@ -210,11 +210,12 @@ final class GboardFloatingGlassCoordinator {
         }
     }
 
-    private static void syncSinkBounds(State state) {
-        if (state == null || state.keyboardArea == null || state.sinkHost == null
-                || state.sink == null) return;
-        int width = state.keyboardArea.getWidth();
-        int height = state.keyboardArea.getHeight();
+    private static void syncSinkBounds(
+            State state, GboardFloatingGlassGeometry geometry) {
+        if (state == null || geometry == null || state.keyboardArea == null
+                || state.sinkHost == null || state.sink == null) return;
+        int width = geometry.outputWidthPx();
+        int height = geometry.outputHeightPx();
         if (width <= 0 || height <= 0) return;
         ViewGroup.LayoutParams params = state.sink.getLayoutParams();
         if (params == null) return;
