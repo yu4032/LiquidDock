@@ -6,35 +6,36 @@
 
 - 保留 Dock spacing 与 live-drag 运行时反射所需的类名，修复启用 R8 后 Dock 图标间距配置失效的问题
 
-## Unreleased / main (2026-09-07)
+## Unreleased / main (2026-09-14)
 
-### Security Center Global Dock / All Apps Liquid Glass
+### Launcher 4.50 integration
 
-- 新增仅在 `com.miui.securitycenter:ui` 安装的安全中心侧边栏 Liquid Glass；首个支持 build 为 versionCode `40011320`（versionName `13.2.0-260806.0.1.pad`），仅接管 type-4 Global Dock 与其 All Apps 页面，type 1/3/5 保持 vendor-owned
-- 将 Launcher 中可复用的 root PassBlur producer、OES normalization、freshness、producer recovery 与 EGL source lifecycle 抽成 `RootPassBlurBackend`；Launcher 与 Security Center 都以显式 domain/request 使用它，native PassBlur scale 保持 `1.0`
-- Security Center Dock / All Apps 切换使用 scene generation + vendor `f17943s` authority；只有当前 generation 的真实 OES frame 完成 Prismal render 与 output swap 后才允许 material claim/reveal，旧 callback、bind/rebind 成功或普通 redraw 都不构成 freshness
-- HyperOS 4 vendor handoff 使用已验证的 `gq.g.l(View)` material reset 和 `TurboLayout.U()` 完整 final-background restore；unsupported build、reflection/producer/EGL failure 均 fail closed，不猜测 MiGlass/MaterialToken/blur/shadow 参数
-- 新增 `liquid_security_center_glass` typed setting 与三层 effective runtime gate（Core + Liquid Glass + Security Center component），并将 `com.miui.securitycenter` 加入 Xposed scope；Security Center 不运行 Launcher migration，也不进入 `MainHook.install()`
-- HyperOS 3 vendor capability 明确保持 background-blur-only；该规则仅用于未来兼容，不宣称当前 v1 已支持未分析的 HyperOS 3 Security Center
+- 新增 Launcher 4.50 图标大小缩放事务，覆盖 Workspace、Dock、小文件夹 preview、打开文件夹内容与 Workstation App 页，并避免普通 All Apps/Search 被共享 `GridConfig` 误缩放
+- Workspace 拖拽玻璃迁移为独立上层窗口 + 实时 Workspace PassBlur + MIUI DragView direct-draw mirror；DragView 继续保持 drag/drop 与移动几何权威
+- 新增长按桌面图标的 ShortcutMenu 专用 glass session，并增加独立深色模式适配；文字变白，独立图标只对白色化前判定为近黑/低色差的线条图标应用 tint，彩色第三方图标保持原样
+- 新增仅 Dock 系统功能入口的 icon glass gate，可与普通 icon glass 分开使用
 
-### Workspace continuous PassBlur
+### R8 / reflection hardening
 
-- Workspace HOME shared PassBlur 从消费后一帧暂停改为持续 update permission；显式 Recents/folder/presentation coverage 仍由既有生命周期决定是否 suspend
-- 真机验证 native PassBlur 为 source-driven：动态壁纸可持续产生实时 OES frame，静态壁纸即使保持 bound / updates-enabled 也会在内容静止时自然降到 0 个新 OES frame；未引入 Choreographer、vsync pump 或固定延迟轮询
+- 移除 Launcher glass 路径对 LiquidDock 自有私有成员的字符串 self-reflection，改为 typed package-private API
+- 修复 API101/307 Dock spacing 在 R8 后将跨 Launcher ClassLoader 的 `RecyclerView$State` 字符串改写为模块混淆名的问题；使用 targeted `-keepnames`，不扩大为整包 keep
+- Debug 与 Release 均继续经过 R8 optimization，用 debug CI 提前捕获 shrinker regression
 
-### Workspace quality controls and spatial correctness
+### Security Center semantic compatibility
 
-- 新增持久化 `liquid_passblur_capture_scale`（50%–100%，默认 100%）与 `liquid_passblur_render_fps`（0–60 FPS，默认 0 / Auto）
-- 修正首版分辨率控制的空间映射错误：HyperOS native PassBlur scale 固定为 `1.0`，不再把 vendor `setUpdateTextureFlag(..., scale)` 当作纯分辨率旋钮
-- 将降采样移动到 OES normalization 之后的本地 physical FBO；Prismal logical framebuffer 始终保持完整 Launcher root，使 50% / 75% / 100% 只改变像素密度，不改变 glass 对应的后方内容位置
-- `PrismalRenderer` 分离 logical `width/height` 与 physical `renderWidth/renderHeight`，并按 physical scale 换算 blur sigma
-- FPS 限流只跳过昂贵的 Prismal/output render；所有真实 OES source frame 仍被 drain，新的 scene generation 会越过限流以保持 freshness contract
-- 分辨率修改只 rebuild backdrop，不再为了质量设置重建 native PassBlur BufferQueue endpoint
+- Security Center glass 从固定 versionCode/混淆成员映射迁移为 capability-driven semantic contract：通过类关系、方法签名、公开语义 getter、资源能力和唯一结构关系解析兼容性
+- `com.miui.securitycenter:ui` 仍是唯一安装进程；能力缺失或歧义时 fail closed，并仅输出一次 unsupported 提示
+- 当前 coordinator 覆盖 Game、Video、Global Dock 与 All Apps carrier；root/session identity 与 material/carrier epoch 分离
+- 新增/强化 `SecurityCenterPassBlurContinuousAuthority` 与 `SecurityCenterVendorMaterialState`：保持 LiquidDock PassBlur output/scale 权威，记录并抑制被 claim carrier 的 vendor material writes，release 时重放最后观察到的 vendor state
 
-### Verification
+### Workspace source / quality correctness
 
-- 质量控制的空间映射修复已通过目标设备 50% / 75% / 100% 对位验证
-- 合并前正常 PR CI #4276 / run `34142764054` 通过 `testDebugUnitTest assembleDebug` 与 artifact upload
+- Workspace HOME shared PassBlur 保持 source-driven continuous update permission；静态 source 可自然无新 buffer，动态 source 持续更新，不创建固定 capture timer/vsync pump
+- native PassBlur spatial scale 与 local physical FBO quality scaling 分离；render FPS gate 不阻塞 OES drain，fresh generation 可越过普通限流
+
+### Documentation
+
+- 根文档按 2.4.1 当前生产代码重建，删除固定 Security Center build/混淆字段等过时说明，并补齐 R8、live drag、shortcut popup、图标缩放、Widget/功能 Dock 图标等当前行为
 
 ## v2.2.1 (2026-09-01)
 
