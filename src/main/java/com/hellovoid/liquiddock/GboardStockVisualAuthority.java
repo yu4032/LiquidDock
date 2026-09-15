@@ -9,21 +9,19 @@ import java.util.WeakHashMap;
 
 /**
  * Keeps Gboard's own floating-keyboard fills and shadow suppressed while LiquidDock glass is
- * presented. The audited Gboard build rewrites the base color through pef.j(int) and the bottom
- * frame through pef.e(int). Its header KeyboardViewHolder also swaps a content View through
- * KeyboardViewHolder.j(...), so the active header child's own background must remain authoritative
- * as well rather than only clearing the holder shell once.
+ * presented. Runtime visual-tree evidence for the audited Gboard build proves two additional
+ * opaque qzw layers: the 0x7f0b064f top-edge frame and the active main KeyboardViewHolder content.
+ * Both are therefore owned explicitly and restored on release; key drawables remain untouched.
  */
 final class GboardStockVisualAuthority {
     private static final String TAG = "[DC][GboardFloatingGlass]";
     private static final Object LOCK = new Object();
 
-    // Verified from the supplied Gboard K9G.xml / pef.r() binding path. These are container-level
-    // views only; their child key drawables are intentionally left untouched.
     private static final int KEYBOARD_HEADER_VIEW_HOLDER_ID = 0x7f0b0643;
     private static final int MAIN_KEYBOARD_VIEW_HOLDER_ID = 0x7f0b061a;
     private static final int AUX_KEYBOARD_VIEW_HOLDER_ID = 0x7f0b02f6;
     private static final int KEYBOARD_HOLDER_ID = 0x7f0b0644;
+    private static final int KEYBOARD_TOP_EDGE_FRAME_ID = 0x7f0b064f;
     private static final int[] CONTAINER_IDS = {
             KEYBOARD_HEADER_VIEW_HOLDER_ID,
             MAIN_KEYBOARD_VIEW_HOLDER_ID,
@@ -40,7 +38,12 @@ final class GboardStockVisualAuthority {
         final View[] containers;
         final Drawable[] containerBackgrounds;
         final View headerHolder;
-        final Map<View, Drawable> headerContentBackgrounds = new WeakHashMap<>();
+        final View mainHolder;
+        final View topEdge;
+        final Drawable topEdgeBackground;
+        final Map<View, Drawable> boundContentBackgrounds = new WeakHashMap<>();
+        // Alias retained for the original header-content regression contract.
+        final Map<View, Drawable> headerContentBackgrounds = boundContentBackgrounds;
 
         Claim(View baseArea, View bottomFrame) {
             this.baseArea = baseArea;
@@ -51,21 +54,27 @@ final class GboardStockVisualAuthority {
             this.containers = new View[CONTAINER_IDS.length];
             this.containerBackgrounds = new Drawable[CONTAINER_IDS.length];
             View resolvedHeaderHolder = null;
+            View resolvedMainHolder = null;
             for (int i = 0; i < CONTAINER_IDS.length; i++) {
                 View view = baseArea.findViewById(CONTAINER_IDS[i]);
                 containers[i] = view;
                 containerBackgrounds[i] = view != null ? view.getBackground() : null;
                 if (CONTAINER_IDS[i] == KEYBOARD_HEADER_VIEW_HOLDER_ID) {
                     resolvedHeaderHolder = view;
+                } else if (CONTAINER_IDS[i] == MAIN_KEYBOARD_VIEW_HOLDER_ID) {
+                    resolvedMainHolder = view;
                 }
             }
             this.headerHolder = resolvedHeaderHolder;
+            this.mainHolder = resolvedMainHolder;
+            this.topEdge = baseArea.findViewById(KEYBOARD_TOP_EDGE_FRAME_ID);
+            this.topEdgeBackground = topEdge != null ? topEdge.getBackground() : null;
         }
     }
 
     private static final Map<View, Claim> BY_BASE = new WeakHashMap<>();
     private static final Map<View, Claim> BY_BOTTOM = new WeakHashMap<>();
-    private static final Map<View, Claim> BY_HEADER_HOLDER = new WeakHashMap<>();
+    private static final Map<View, Claim> BY_DYNAMIC_HOLDER = new WeakHashMap<>();
     private static boolean installed;
 
     private GboardStockVisualAuthority() {}
@@ -90,7 +99,7 @@ final class GboardStockVisualAuthority {
                     Claim claim = claimForBase(baseArea);
                     if (claim != null) {
                         applyClaim(claim);
-                        log("preserved transparent floating base/holders against pef.j(int)");
+                        log("preserved transparent floating stock visuals against pef.j(int)");
                     }
                     return result;
                 });
@@ -103,7 +112,7 @@ final class GboardStockVisualAuthority {
                     Claim claim = claimForBottom(bottomFrame);
                     if (claim != null) {
                         applyClaim(claim);
-                        log("preserved transparent floating bottom/holders against pef.e(int)");
+                        log("preserved transparent floating stock visuals against pef.e(int)");
                     }
                     return result;
                 });
@@ -113,10 +122,11 @@ final class GboardStockVisualAuthority {
                     Object result = chain.proceed(args);
                     Object owner = chain.getThisObject();
                     View holder = owner instanceof View ? (View) owner : null;
-                    Claim claim = claimForHeaderHolder(holder);
+                    Claim claim = claimForDynamicHolder(holder);
                     if (claim != null) {
-                        suppressHeaderContentBackground(claim);
-                        log("preserved transparent header content against KeyboardViewHolder.j(...)");
+                        suppressBoundContentBackground(claim, holder);
+                        log("preserved transparent bound keyboard content against "
+                                + "KeyboardViewHolder.j(...)");
                     }
                     return result;
                 });
@@ -143,13 +153,15 @@ final class GboardStockVisualAuthority {
             claim = new Claim(baseArea, bottomFrame);
             BY_BASE.put(baseArea, claim);
             BY_BOTTOM.put(bottomFrame, claim);
-            if (claim.headerHolder != null) BY_HEADER_HOLDER.put(claim.headerHolder, claim);
+            if (claim.headerHolder != null) BY_DYNAMIC_HOLDER.put(claim.headerHolder, claim);
+            if (claim.mainHolder != null) BY_DYNAMIC_HOLDER.put(claim.mainHolder, claim);
         }
         applyClaim(claim);
         GboardVisualTreeDiagnostics.dump(baseArea);
         log("claimed stock visuals baseElevation=" + claim.baseElevation
                 + " containerCount=" + presentContainerCount(claim)
-                + " headerContentCount=" + claim.headerContentBackgrounds.size());
+                + " boundContentCount=" + claim.boundContentBackgrounds.size()
+                + " topEdge=" + (claim.topEdge != null));
         return true;
     }
 
@@ -161,7 +173,8 @@ final class GboardStockVisualAuthority {
             if (claim == null) return;
             BY_BASE.remove(claim.baseArea);
             BY_BOTTOM.remove(claim.bottomFrame);
-            if (claim.headerHolder != null) BY_HEADER_HOLDER.remove(claim.headerHolder);
+            if (claim.headerHolder != null) BY_DYNAMIC_HOLDER.remove(claim.headerHolder);
+            if (claim.mainHolder != null) BY_DYNAMIC_HOLDER.remove(claim.mainHolder);
         }
         try { claim.baseArea.setBackground(claim.baseBackground); }
         catch (Throwable ignored) {}
@@ -169,19 +182,23 @@ final class GboardStockVisualAuthority {
         catch (Throwable ignored) {}
         try { claim.bottomFrame.setBackground(claim.bottomBackground); }
         catch (Throwable ignored) {}
+        if (claim.topEdge != null) {
+            try { claim.topEdge.setBackground(claim.topEdgeBackground); }
+            catch (Throwable ignored) {}
+        }
         for (int i = 0; i < claim.containers.length; i++) {
             View view = claim.containers[i];
             Drawable saved = claim.containerBackgrounds[i];
             if (view == null) continue;
             try { view.setBackground(saved); } catch (Throwable ignored) {}
         }
-        for (Map.Entry<View, Drawable> entry : claim.headerContentBackgrounds.entrySet()) {
+        for (Map.Entry<View, Drawable> entry : claim.boundContentBackgrounds.entrySet()) {
             View content = entry.getKey();
             Drawable saved = entry.getValue();
             if (content == null) continue;
             try { content.setBackground(saved); } catch (Throwable ignored) {}
         }
-        claim.headerContentBackgrounds.clear();
+        claim.boundContentBackgrounds.clear();
         log("released stock visuals");
     }
 
@@ -190,20 +207,30 @@ final class GboardStockVisualAuthority {
         try { claim.baseArea.setBackground(null); } catch (Throwable ignored) {}
         try { claim.baseArea.setElevation(0f); } catch (Throwable ignored) {}
         try { claim.bottomFrame.setBackground(null); } catch (Throwable ignored) {}
+        View topEdge = claim.topEdge;
+        if (topEdge != null) {
+            try { topEdge.setBackground(null); } catch (Throwable ignored) {}
+        }
         for (View view : claim.containers) {
             if (view == null) continue;
             try { view.setBackground(null); } catch (Throwable ignored) {}
         }
         suppressHeaderContentBackground(claim);
+        suppressBoundContentBackground(claim, claim.mainHolder);
     }
 
     private static void suppressHeaderContentBackground(Claim claim) {
-        if (claim == null || claim.headerHolder == null) return;
-        View content = reflectedView(claim.headerHolder, "b");
+        if (claim == null) return;
+        suppressBoundContentBackground(claim, claim.headerHolder);
+    }
+
+    private static void suppressBoundContentBackground(Claim claim, View holder) {
+        if (claim == null || holder == null) return;
+        View content = reflectedView(holder, "b");
         if (content == null) return;
         synchronized (LOCK) {
-            if (!claim.headerContentBackgrounds.containsKey(content)) {
-                claim.headerContentBackgrounds.put(content, content.getBackground());
+            if (!claim.boundContentBackgrounds.containsKey(content)) {
+                claim.boundContentBackgrounds.put(content, content.getBackground());
             }
         }
         try { content.setBackground(null); } catch (Throwable ignored) {}
@@ -243,9 +270,13 @@ final class GboardStockVisualAuthority {
         synchronized (LOCK) { return BY_BOTTOM.get(bottomFrame); }
     }
 
+    private static Claim claimForDynamicHolder(View holder) {
+        if (holder == null) return null;
+        synchronized (LOCK) { return BY_DYNAMIC_HOLDER.get(holder); }
+    }
+
     private static Claim claimForHeaderHolder(View headerHolder) {
-        if (headerHolder == null) return null;
-        synchronized (LOCK) { return BY_HEADER_HOLDER.get(headerHolder); }
+        return claimForDynamicHolder(headerHolder);
     }
 
     private static View reflectedView(Object owner, String fieldName) {
