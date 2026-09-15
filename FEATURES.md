@@ -1,439 +1,336 @@
 # LiquidDock 功能手册
 
-本文档按当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）的实际实现整理。Launcher Liquid Glass 主线支持 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x / MiuiX PassBlur + OES/GLES zero-copy**；Security Center v1 另增加已验证 HyperOS 4 build 的 Global Dock / All Apps 支持。
+本文档按当前 `main` / **v2.4.1** 的生产代码与设置页整理。Launcher 主验证基线为 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x**；Security Center 是独立进程、独立兼容边界。
 
-旧的 ScreenCapture / bitmap readback / `DockLiquidGlassView` 捕获链只保留在 `archive/1.x`，不属于当前功能。
-
----
-
-## 桌面网格 (Grid)
-
-主开关 `home_grid_8x4` 启用后，桌面使用横屏 8×4 / 竖屏 4×8 的自定义网格，并保留 orientation-specific placement memory。
-
-| 参数 | 当前范围 | 说明 |
-|------|------:|------|
-| Widget adaptation | 开/关 | 独立控制 Widget frame 适配；关闭时保留 MIUI Widget 几何 |
-| 横屏水平距离偏移 | −600 ~ 600 dp | 调整横屏左右水平方向距离 |
-| 横屏顶部距离偏移 | −600 ~ 600 dp | 调整横屏顶部距离 |
-| 横屏底部距离偏移 | −600 ~ 600 dp | 调整横屏底部距离 |
-| 竖屏水平距离偏移 | −600 ~ 600 dp | 调整竖屏左右水平方向距离 |
-| 竖屏顶部距离偏移 | −600 ~ 600 dp | 调整竖屏顶部距离 |
-| 竖屏底部距离偏移 | −600 ~ 600 dp | 调整竖屏底部距离 |
-| 横屏行距偏移 | −200 ~ 400 dp | 调整横屏图标纵向行距 |
-| 竖屏行距偏移 | −200 ~ 400 dp | 调整竖屏图标纵向行距 |
-| 横屏页面指示器 Y | −160 ~ 160 dp | 横屏页面指示器垂直偏移 |
-| 竖屏页面指示器 Y | −160 ~ 160 dp | 竖屏页面指示器垂直偏移 |
-
-### Widget adaptation 当前边界
-
-当前活动实现：
-
-- 优先使用 `ItemInfo.isWidget()` 判断；
-- fallback item type：`4`、`5`、`19`；
-- 当前针对 `1×1`、`2×1`、`2×2`、`4×2` 做显式适配；
-- `setupLayoutParam()` 写入目标 allocation，`onLayout()` 后再次断言最终 frame；
-- lazy / off-screen page 在实际显示前也会准备几何；
-- 不修改 MIUI occupancy matrix / placement 所有权。
-
-Widget 类型和 span 规则目前仍有硬编码，后续计划迁移到 `WidgetClassifier` / `WidgetSpecRegistry`。
+历史 1.x ScreenCapture / bitmap-readback glass 架构不属于当前 Launcher Liquid Glass 主线。当前 backdrop 由 MiuiX PassBlur + OES/GLES + Prismal 提供，失败时不回退到旧截图方案。
 
 ---
 
-## Dock 外观
+## 1. 桌面网格与图标大小
 
-| 参数 | 当前范围 | 说明 |
-|------|------:|------|
-| Dock customization | 开/关 | 普通 Dock 几何/模糊自定义总开关；视觉 ownership 可即时释放 |
-| Dock resize animation | 开/关 | 是否保留 MIUI 原生 resize 动画；Hook 选择属于 restart-bound |
-| 平滑 resize animation | 开/关 | 原生 resize 被禁用时使用 LiquidDock 平滑过渡；Hook 选择属于 restart-bound |
-| 宽度偏移 | −80 ~ 80 dp | 相对系统 Dock 背景宽度增减 |
-| 高度偏移 | −80 ~ 80 dp | 相对系统 Dock 背景高度增减 |
-| 图标间距 | −8 ~ 12 dp | 调整相邻 Dock 图标间距，并补偿背景宽度 |
-| 底部偏移 | −30 ~ 40 dp | 调整 Dock 与屏幕底部距离 |
-| 原生模糊强度 | 0 ~ 400 | 原生 blur Dock 的模糊量 |
-| 描边圆角偏移 | −50 ~ 100 dp* | `corner_offset`；历史兼容语义由 typed config 保留 |
-| 内部模糊圆角偏移 | −50 ~ 100 dp | `blur_corner_offset` |
-| 方圆形 | 开/关 | 使用 squircle 轮廓；已安装描边会即时刷新 |
-| Fill-Diff | 开/关 | 使用 outer/inner 轮廓差形成描边 |
+### 网格 Profile
 
-关闭 Dock customization 后，LiquidDock 会停止继续修改 vendor Dock View，并在已保存原状态的路径上释放自己的视觉 ownership；不会伪造未知的 MIUI 原生 shadow 参数。
+启用自定义网格后可选择：
 
----
+| Profile | 横屏 | 竖屏 |
+| --- | --- | --- |
+| 8×4 | 8 列 × 4 行 | 4 列 × 8 行 |
+| 10×6 | 10 列 × 6 行 | 6 列 × 10 行 |
 
-## 描边 (Stroke)
+当前实现保留 MIUI placement / occupancy 权威；LiquidDock 修改 grid count、几何、合法 drop/drag bounds 与方向记忆，但不通过猜测 occupied matrix 接管原生 placement。
 
-当前描边由 `DockStrokeRenderer` 持有 foreground ownership。
+可调项包括：
 
-| 参数 | 当前范围 | 说明 |
-|------|------:|------|
-| 描边开关 | 开/关 | `dock_stroke`；关闭后立即恢复原 foreground |
-| 描边底色 R/G/B | 0 ~ 255 | RGB |
-| 描边透明度 | 0 ~ 255 | 与 renderer 内部 alpha 共同形成最终透明度 |
-| 方圆形控制点 | 40 ~ 80 | `sq_outer_cp` |
-| 方圆形描边宽度 | 1 ~ 10 dp | squircle 模式宽度 |
-| 方圆形外扩/内缩量 | 0 ~ 16 dp | `sq_stroke_off` |
-| Fill-Diff 描边宽度 | 1 ~ 6 dp | `stroke_w` |
-| 标准描边宽度 | 1 ~ 10 dp | `std_stroke_w` |
+- 横/竖屏水平距离；
+- 顶部/底部距离；
+- 行距；
+- 页面指示器 Y；
+- Widget adaptation。
 
-`SQUIRCLE` / `FILL_DIFF` 在运行中切换时会主动刷新已经安装的 renderer，不再等待下一次 Dock radius/config 更新。
+### Widget adaptation
 
-### 描边阴影
+当前显式覆盖常见 `1×1`、`2×1`、`2×2`、`4×2` 分配。适配目标是 pixel allocation / final frame，不修改 MIUI occupancy matrix。off-screen / lazy page 会在显示前准备对应方向的 geometry。
 
-历史 `stroke_shadow` / `shadow_radius` / `shadow_alpha` 配置仍保留兼容，但旧 overlay 描边阴影已经不再是当前 renderer 的正式实现。后续要么设计适配 foreground renderer 的新方案，要么正式标记为 deprecated。
+### Launcher 4.50 图标大小
+
+独立开关，范围 **80%–120%**，默认 100%。通过测量事务的 typed domain 控制，不修改共享 `GridConfig`。
+
+当前作用域：
+
+- Workspace ShortcutIcon；
+- Dock 图标；
+- 1×1 小文件夹及其 4×4 preview container；
+- 打开的文件夹内图标；
+- Workstation App 页。
+
+普通 All Apps / Search 不属于该缩放域。
 
 ---
 
-## 整体 Dock 阴影 (Dock Shadow)
+## 2. Dock 自定义
 
-这与历史“描边阴影”是独立功能。
+Dock customization 默认开启。当前 307+ 路径以实际 HotSeats MiuiX / themed background 为 vendor lifecycle owner，并在其上组合 LiquidDock geometry、Prismal、描边和阴影。
 
-| 参数 | 当前范围 | 说明 |
-|------|------:|------|
-| Dock 阴影开关 | 开/关 | 独立整个 Dock shadow；支持即时释放 |
-| 阴影柔和度 | 1 ~ 40 dp | `dock_shadow_radius` |
-| 阴影扩散 | 1 ~ 60 dp | `dock_shadow_size` |
-| 阴影浓度 | 0 ~ 200 | `dock_shadow_alpha` |
-| 阴影 Y 偏移 | −24 ~ 24 dp | `dock_shadow_y` |
+主要设置：
 
-LiquidDock 启用自定义 Dock shadow 时会抑制对应 HyperOS 原生 shadow target；关闭后不再继续拦截 vendor 调用。
+| 功能 | 范围/语义 |
+| --- | --- |
+| 隐藏手机互联图标 | 只隐藏 Dock 入口，不修改连接状态 |
+| Dock resize animation | 是否保留 MIUI resize 动画；安装选择需重启桌面 |
+| 平滑 resize | 原生 resize 关闭时使用 LiquidDock 平滑调整 |
+| 宽/高偏移 | −80 ~ 80 dp |
+| 图标间距 | −8 ~ 12 dp；同时补偿背景宽度 |
+| 底部偏移 | −30 ~ 40 dp |
+| 原生 Dock blur | 0 ~ 400 |
+| 圆角 / blur 圆角偏移 | 保留历史 unit/storage 兼容 |
+| Squircle / Fill-Diff | 可改变当前描边轮廓 |
+
+### Dock spacing 的 R8 注意点
+
+307 主路径和备用路径都需要在 **Launcher ClassLoader** 中解析 `RecyclerView` / `RecyclerView$State` 来 Hook `OffsetDecoration.getItemOffsets`。R8 会识别模块自身同名 AndroidX class，因此项目使用 targeted `-keepnames` 保持跨 ClassLoader 二进制名，不能删除这条规则。
 
 ---
 
-# Liquid Glass
+## 3. 描边、阴影与 Divider
 
-## 当前架构
+### Dock Stroke
 
-v2.x Liquid Glass 已完全迁移到 zero-copy 管线：
+`DockStrokeRenderer` 是当前 foreground owner。支持：
+
+- 开/关并恢复原 foreground；
+- 标准圆角、Squircle、Fill-Diff；
+- RGB / alpha；
+- 各模式线宽与 squircle control point；
+- 描边阴影。
+
+Squircle / Fill-Diff 在运行时切换会刷新已安装 renderer。
+
+### Whole-Dock Shadow
+
+整个 Dock 阴影与描边阴影是不同 owner，可独立调：
+
+- radius；
+- size；
+- alpha；
+- Y offset。
+
+关闭后移除 LiquidDock 自己的 shadow，并停止继续抑制未来 vendor shadow 调用；不会猜测未保存的原生参数。
+
+### Workstation Divider
+
+Divider 视觉开关可 live restore，参数包括宽度、相对高度、Y offset、RGBA。第一次接管前会 snapshot layout/background，关闭时精确恢复并释放 ownership。详细见 [DIVIDER.md](DIVIDER.md)。
+
+---
+
+# 4. Liquid Glass
+
+## 4.1 总开关与组件
+
+Global Liquid Glass 默认关闭。启用后可分别控制：
+
+- Security Center glass；
+- 桌面快捷菜单 glass；
+- 快捷菜单深色模式适配；
+- 图标 glass；
+- 仅 Dock 功能图标 glass；
+- Widget glass；
+- Widget 深色内容适配；
+- 小文件夹 glass；
+- 大文件夹 glass。
+
+图标、Widget、小/大文件夹都有独立 size offset / corner radius。普通 icon glass 关闭后，仍可单独开启“仅 Dock 功能图标玻璃”，当前 registry 覆盖搜索、小爱、全部应用、最近任务、Home、手机互联等 Launcher 系统入口。
+
+## 4.2 Launcher shared glass
+
+Workspace 图标、Widget、小/大文件夹的静态节点共享一个 root-wide `LauncherGlassSession` / PassBlur backdrop。静态对象本身不是 producer owner。
+
+典型 source 数据流：
 
 ```text
-HyperOS MiuiX PassBlur producer
-        ↓
-Surface / SurfaceTexture
-        ↓
-GL_TEXTURE_EXTERNAL_OES
-        ↓
-GPU normalization / overscan
-        ↓
-Prismal optical renderer
-        ↓
-Launcher / Dock / Security Center output surface
+MiuiX PassBlur
+ -> Surface / SurfaceTexture
+ -> OES texture
+ -> normalization / overscan
+ -> Prismal
+ -> per-node/static compositor output
 ```
 
-核心原则：
+当前原则：
 
-- **zero-copy only**；
-- 不使用 `ScreenCapture`、bitmap readback 或截图 fallback；
-- PassBlur producer / OES / EGL / Prismal 全部保持 GPU 路径；
-- vendor 私有接口不可用时 glass fail-closed，不退回 1.x 截图方案。
+- native PassBlur spatial mapping 保持 `1.0` scale；
+- local quality scaling 发生在 OES normalization 之后；
+- scene generation / wallpaper generation / producer generation 不互相冒充；
+- fresh output frame 才能解除 stale-frame barrier；
+- unavailable capability -> fail closed。
 
-`RootPassBlurBackend` 现负责可跨 Launcher root / Security Center root 复用的 producer、OES、normalization、freshness 与 EGL source 生命周期；各 domain 的 scene/material policy 留在自己的 coordinator/session。
+## 4.3 Workspace 实时性能
 
-## Workspace 实时采样与性能
+设置页“工作区实时捕获性能”目前实际含义是 zero-copy source/render 质量控制，不是截图循环：
 
-Launcher Workspace 的 shared PassBlur 在 HOME 激活时保持 continuous update permission。它不是 LiquidDock 主动驱动的固定 FPS 捕获循环，而是由 HyperOS backdrop 内容驱动：
+| 参数 | 语义 |
+| --- | --- |
+| 工作区渲染分辨率 | 降低 normalization 后 local physical FBO 像素密度；logical root 坐标不变 |
+| Prismal 实时渲染上限 | 只限制昂贵 render；source frame 仍 drain，fresh generation 可绕过限制 |
 
-- 静态壁纸且桌面内容不变时，producer 可以保持 bound / updates-enabled，但不持续产生新的 OES frame；
-- 动态壁纸或真实 backdrop 更新时，新的 PassBlur buffer 会实时进入 OES / Prismal 路径；
-- Recents、folder、presentation、rotation 等显式生命周期仍由 scene controller / producer policy suspend、rebind 或等待 fresh frame。
+PassBlur 是 source-driven：静态壁纸/静态 backdrop 可在 updates-enabled 状态下自然不产生新 buffer；动态壁纸或真实内容变化会继续产生 source frame。LiquidDock 不创建固定 FPS 的 Choreographer capture pump。
 
-设置页 `液态玻璃 -> 工作区实时捕获性能` 提供：
+## 4.4 图标与 App launch proxy
 
-| 参数 | 范围 | 当前语义 |
-|---|---:|---|
-| 工作区渲染分辨率 | 50%–100% | 只降低 OES normalization 之后的本地 normalized/Prismal physical FBO 像素密度；native PassBlur 始终为 `1.0`，logical root 不变 |
-| Prismal 实时渲染上限 | 0–60 FPS | `0 = Auto`，跟随真实 source frame；非 0 时只限昂贵合成，不阻塞 OES drain |
+`ShortcutIcon` 等静态 host 注册到共享 compositor。App 启动/返回 HOME 时，LiquidDock读取 `FloatingIconView2` / `FloatingIconLayer2` 的真实 proxy geometry 和 visibility owner，避免静态图标 glass 与 MIUI floating icon 重叠。
 
-因此 50% / 75% / 100% 的差异应只体现在采样/渲染清晰度与 GPU 成本，glass 在屏幕上的每个位置仍对应相同的后方内容。新的 scene generation 会无条件越过 FPS cap，避免性能设置破坏 freshness barrier。
+## 4.5 拖拽 glass
 
----
+当前拖拽不是 snapshot：
 
-## 支持的 Glass 对象
+- `DragController.createDragView()` 只用于预热正常单图标拖拽 source；
+- `ViewGroup.onViewAdded/onViewRemoved` 中真实 `DragView` 生命周期是 begin/end authority；
+- LiquidDock 建立不接收触摸的 `TYPE_APPLICATION_PANEL` 上层窗口；
+- glass 实时采样 Launcher Workspace；
+- MIUI DragView 通过 direct `draw(Canvas)` 镜像到上层；
+- 只有 mirror、glass output 与 fresh backdrop 都可用后才隐藏原 MIUI DragView presentation；
+- 失败/结束时先恢复 vendor DragView，再释放 LiquidDock overlay。
 
-当前支持：
+原 Workspace View 不作为移动几何源；移动 geometry 由实际 DragView 决定。
 
-- **Dock glass**：整个 Dock 背景；
-- **桌面图标 glass**：建议配合透明图标主题；
-- **Widget glass**：部分 Launcher Widget / MAML Widget；
-- **小文件夹 glass**；
-- **大文件夹 glass**；
-- **拖拽 / launch proxy glass**：在 Workspace drag / app launch 动画期间跟随代理几何；
-- **Security Center sidebar glass（v1）**：精确支持 build `40011320` 的 type-4 Global Dock 与 All Apps。
+## 4.6 Widget glass
 
-图标、Widget、文件夹的静态 glass 不再各自建立独立渲染器，而是共享一个 root-wide `LauncherGlassSession` / static compositor；拖拽输出继续使用同一 backdrop/source 生命周期。Security Center 使用独立进程内的一个 root-wide session，但复用同一个通用 `RootPassBlurBackend` 抽象。
+支持 `LauncherAppWidgetHostView` 和 MAML `MaMlHostView` 的共享 glass host。RemoteViews / MAML 生命周期变化后会重新 reconcile background ownership。
 
----
+### 深色内容适配
 
-## 核心光学
+- 深色、中性的文字可转为白色；
+- MAML 优先走原生深色变量/更新路径；
+- 不把图片和彩色内容当文字强制着色。
 
-当前 Prismal 光学模型支持：
+### Widget component hiding
 
-| 参数 | 说明 |
-|------|------|
-| Glass blur | GPU backdrop blur / optical blur 参数 |
-| Glass thickness | 虚拟玻璃厚度 |
-| IOR | 折射率 |
-| Normal strength | 法线强度 |
-| Dome / convexity | 穹顶凸起 |
-| Lens refraction | 边缘折射偏移 |
-| Chromatic dispersion | RGB 色散 |
-| Depth effect | 深度透镜效果 |
-| Brightness | 玻璃亮度 |
-| Tint RGB / alpha | 玻璃底色 |
-| Specular sharpness / strength | 镜面高光 |
-| Rim light | 边缘光 |
-| Caustics | 焦散 |
-| Edge band | Prismal 物理边缘带 |
-| Edge thickness | `liquid_highlight_width`，当前设置页语义为玻璃边缘厚度，50%–300% |
+设置页可进入组件页，基于一次性 discovery 的精确 owner/path/class/name selector 选择要隐藏的背景组件。当前方案强调可恢复 mutation，不提供任意脚本或通用表达式 DSL。
 
-`liquid_highlight_width` 不再额外绘制一圈独立 Canvas 描边，而是直接缩放 Prismal 的物理光学边缘带；边缘使用 derivative anti-aliasing（`fwidth`）。
+## 4.7 文件夹 glass
 
----
+小文件夹与大文件夹拥有独立开关与尺寸/圆角。文件夹打开/关闭、drag、press 等 lifecycle 与 vendor material suppression 分离；关闭某一类型只释放该类型，不破坏其它 static glass。
 
-## Highlight Profile
+## 4.8 桌面快捷菜单
 
-Launcher glass 支持按对象类型选择 highlight profile，使 Dock、普通 Launcher glass 和大面积 surface 可以使用不同的高光组合。
+### Glass background
 
-当前 shader / renderer 可以分别控制：
+“桌面快捷菜单玻璃背景”在 `ShortcutMenuLayer.setRequestingItemInfo` 阶段预热独立 source，在 `ShortcutMenu.show()` 后绑定 popup content。它有专用 `SHORTCUT_POPUP` PassBlur domain，并在 dismiss 时快速淡出，再按真实 detach 生命周期回收。
 
-- specular；
-- rim light；
-- caustics；
-- edge band / edge thickness。
+### 深色模式适配
 
-这套 profile 与共享 backdrop 分离，因此调整对象的 highlight 不需要建立新的 PassBlur producer。Security Center 大面积 sidebar 使用现有 `largeSurfaceHighlightProfile`，v1 不增加一套独立光学参数。
+可独立开启，但仍位于 global Liquid Glass 功能域内：
+
+- 所有菜单 `TextView` 文字变白；
+- TextView compound drawable 变白；
+- 独立 `ImageView` 不一刀切 tint；
+- 首次遇到 drawable 时渲染到 20×20 临时 Bitmap，只有近黑、低色差、以暗像素为主的线条图标才 tint 白色；
+- 彩色第三方应用图标完全不写 tint；
+- drawable 判定使用 `WeakHashMap` 缓存；动态 layout 只复用结果。
+
+该临时 Bitmap 仅用于菜单图标分类，不是 backdrop capture。
 
 ---
 
-## Zero-copy 采样与 Overscan
+## 5. Prismal 光学
 
-当前采样逻辑由 GPU overscan 和可见区域 coverage 分离：
+当前设置覆盖：
 
-- 固定 overscan 用于保证强折射时仍能访问 Dock / glass 边缘外的 backdrop 像素；
-- 上 / 下 / 左 / 右额外 overscan 可独立配置；
-- sample validity 与最终可见 coverage/scissor 分开计算；
-- 1.x 的 ScreenCapture resolution / capture FPS / black-frame threshold / capture cadence 已无活动实现；当前 `工作区渲染分辨率` 与 `Prismal 实时渲染上限` 是独立的 zero-copy 本地 FBO / render gate，不是旧截图参数的复活。
+- blur；
+- thickness；
+- IOR；
+- normal strength；
+- dome；
+- lens refraction；
+- chromatic dispersion；
+- tint / brightness；
+- specular / rim / caustics / edge band；
+- refraction inset / displacement / height transition / smoothing；
+- Fresnel、dispersion R/B、vibrancy；
+- OS4 reflection width/offset/strength/lighten；
+- directional light angle / intensity；
+- shadow color/softness/transmittance；
+- backdrop scale/parallax；
+- surface normals debug view。
 
-这样强折射靠近 Dock 边缘时，不会因为输出裁剪边界而提前截断输入采样。
+Launcher highlights 另有两套 component profile：
 
----
+- compact：图标、小文件夹、Dock 图标；
+- large surface：Widget、大文件夹等。
 
-## Freshness / Scene Lifecycle
-
-共享 Launcher glass 使用明确的 scene generation / wallpaper generation / fresh-frame barrier 管理内容新鲜度。
-
-### HOME / APP / Recents
-
-- 离开 HOME 或进入 Recents 时，static layer 可以隐藏或暂停 producer；
-- 返回 HOME 后先请求新的 backdrop；
-- **只有新的 OES frame 已经被消费并完成 static render，才允许重新显示 glass layer**；
-- 不会因为简单 `alpha=1` 或普通 redraw 而展示 stale Recents / APP frame。
-
-### Wallpaper freshness
-
-壁纸内容更新使用独立的 wallpaper generation token。scene generation 和 wallpaper generation 分离，避免几何刷新被错误当作壁纸内容刷新。
-
-### Rotation
-
-旋转期间会进入 settle barrier：
-
-- 旧 producer endpoint 暂停；
-- 等待 HyperOS / Shell rotation leash 完成；
-- settle 后 rollover producer；
-- 新 orientation endpoint 建立后才允许发布 fresh frame。
+可分别启停 sky haze、specular、lit/opposite/corner rim、face sheen、plain highlight、caustics、press glow。
 
 ---
 
-## Workstation Recents 恢复
+## 6. HOME / Recents / wallpaper freshness
 
-HyperOS Workstation 可能在进入 Recents 后保留同一个“仍然 valid”的 Launcher `SurfaceControl`，但实际退役其 PassBlur BufferQueue producer。
+Launcher shared glass 不把普通 `invalidate()` 当新内容证明。
 
-v2.1.1 对此增加专门恢复：
+- Recents show：覆盖/隐藏 Workspace static glass；
+- Recents hide：按当前 mode 做 producer recovery，再解除 covered；
+- HOME reveal：等待匹配 scene generation 的 fresh OES frame；
+- wallpaper change：独立 wallpaper generation；
+- rotation/root replacement：旧 endpoint 退役，新 endpoint 提交 fresh source 后再恢复；
+- SystemUI keyguard/HOME transition 只提供时序 authority，不渲染 Launcher glass。
 
-1. `onRecentViewHide` 返回 HOME；
-2. Workstation 模式下先 rollover shared Launcher glass producer；
-3. 再解除 Recents covered；
-4. static layer 继续等待新的 OES frame；
-5. fresh frame 到达后才重新显示整个 shared glass layer。
-
-这修复了“从多任务返回后整个 glass layer 消失、必须长按图标才能恢复”的共享 producer 生命周期问题。
-
-> 该路径仍属于工作台实验适配的一部分，需要继续真机回归。
+Workstation Recents 返回还会处理旧 PassBlur producer 被 SurfaceFlinger 退役、但 Launcher Surface 看起来仍 valid 的情况。
 
 ---
 
-## Glass Runtime Ownership
+## 7. Workstation / Laptop
 
-v2.1.1 起，以下组件开关使用 live runtime state：
+当前仍标记为实验性组合适配。设置包括：
 
-- icon glass；
-- widget glass；
-- small-folder glass；
-- large-folder glass；
-- Security Center sidebar glass（独立 `SecurityCenterGlassRuntimeState`）。
+- Dock width；
+- Dock icon top/bottom offset；
+- Dock icon glass corner radius；
+- Workspace grid horizontal offset；
+- All Apps 横/竖屏 horizontal / vertical / top / bottom spacing；
+- Divider。
 
-关闭组件时遵循：
-
-1. 先发布 live=false；
-2. 已排队的 `post` / `postOnAnimation` / RemoteViews / MAML / recovery callback 再执行时先看到 false；
-3. 主线程释放对应 static/drag/vendor-material ownership；
-4. 其它 glass 类型不受影响。
-
-因此关闭 icon glass 不会一起销毁 widget glass，关闭 small-folder 也不会释放 large-folder 的 material ownership。Security Center 的 effective state 是 Core、Liquid Glass master、Security Center component 三者的与；其中任一关闭都会隐藏 custom output、释放 vendor ownership 并 teardown sidebar session。
-
-重新开启时保留轻量 inert hooks，并通过对应 attach/lifecycle 重新取得 ownership；Launcher 的结构性 master/hook 安装边界仍遵循 restart-bound 说明。
+工作台同时涉及 Dock、Grid、All Apps、Recents、PassBlur、rotation、wallpaper 和 normal-layout restore，因此 composite structure 仍以 restart-bound 为主。
 
 ---
 
-## 动画时序
+## 8. Recents
 
-v2.1.1 支持多组可配置 glass 动画时序，包括：
-
-- Workspace glass 可见性过渡；
-- Dock icon launch / return glass 恢复；
-- 按压进入 / 退出；
-- Dock resize；
-- 设置页相关视觉过渡。
-
-文件夹打开/关闭期间，LiquidDock 会继续隐藏其已经接管的 vendor material，并用可逆 alpha transition 切换 Liquid Glass，降低 native background 闪现。
-
-Security Center Dock / All Apps 的页面完成不使用固定动画时长：vendor `f17943s` 是 transition-in-progress authority，pre-draw 等到它变为 false 后才读取最终页面状态并请求新 generation。
+`recents_background_blur_percent` 范围 0–100，独立缩放 Launcher Recents 的背景模糊强度。它与 Liquid Glass PassBlur backdrop source selection 是两条不同功能链。
 
 ---
 
-# Runtime 生效边界
+## 9. Security Center glass
 
-并不是所有开关都适合热切换。
+Xposed scope 包含 `com.miui.securitycenter`，但运行时只允许 **`com.miui.securitycenter:ui`** 初始化。
 
-## 可即时生效 / 释放 ownership
+当前兼容方式不是固定 versionCode 白名单，也不是依赖混淆成员名：
 
-当前包括：
+1. `DockWindowManagerService.onCreate()` 得到真实 Context；
+2. 校验 `TurboLayout`、sidebar AIDL implementation、相关关系型方法签名；
+3. 要求稳定语义 getter / resource capability 存在；
+4. 唯一解析出 assistant type / All Apps motion / terminal cleanup contract 后才提交 activation；
+5. 任何缺失或歧义都 fail closed，并只给一次 unsupported 提示。
+
+当前 coordinator 明确支持 assistant type：
+
+- Game (`1`)；
+- Video (`3`)；
+- Global Dock (`4`)；
+- Global Dock 下的 All Apps carrier。
+
+一个 root-wide `SecurityCenterGlassSession` 按 root identity 复用 source，material carrier identity 独立维护 epoch/sink。`SecurityCenterPassBlurContinuousAuthority` 防止 vendor 页面切换把 LiquidDock 已 claim 的 PassBlur output/scale 改回 vendor contract；`SecurityCenterVendorMaterialState` 记录并抑制被 claim View 后续 vendor material writes，release 时重放最后观察到的 vendor state。
+
+这条路径同样禁止 ScreenCapture / PixelCopy / backdrop Bitmap fallback。
+
+---
+
+## 10. Live 与 restart-bound
+
+### 可即时释放的视觉 ownership
+
+包括但不限于：
 
 - icon / widget / small-folder / large-folder glass；
-- Security Center sidebar glass component；
-- Dock customization 的视觉 ownership；
-- Dock stroke；
-- Dock shadow；
-- stroke-shadow renderer 状态；
-- Dock Divider；
-- squircle / Fill-Diff 已安装描边刷新。
+- widget dark-content；
+- Dock customization 已保存状态的视觉部分；
+- stroke / shadow / Divider；
+- Security Center component glass。
 
-## 需要重启 Launcher 的结构性选项
+### 需要重启桌面/进程的结构选择
 
-当前明确 restart-bound：
+包括：
 
-- LiquidDock **主开关的完整启用/停用**；
-- custom home grid 主开关；
-- widget grid adaptation；
-- Dock resize-animation hook selection；
-- LiquidDock smooth resize hook selection；
-- Workstation Dock customization；
-- 其它会改变 Grid / Cell / All Apps / Workstation 结构 Hook 安装方式的设置。
+- master switch 的完整 Hook 安装/卸载；
+- Grid 主结构/profile；
+- Launcher 4.50 icon-size Hook 安装；
+- Dock resize Hook 选择；
+- Workstation composite structure；
+- shortcut popup hook 安装等在进程启动时读取的配置。
 
-原因是这些选项在 Launcher 启动时决定 Hook 结构。运行中只释放一部分视觉状态会留下“视觉已恢复、结构 Hook 仍存在”的混合状态。
+“某个 View 已恢复 vendor 外观”不等于已卸载所有结构 Hook。
 
 ---
 
-# 工作台 / Laptop（实验性）
+## 11. 配置与兼容
 
-工作台目前已有：
+`ConfigSchema` 是 persisted key、类型、UI default、runtime fallback、export default、范围、storage mode 的唯一登记入口。历史 key 和 import alias 会继续保留以兼容旧备份；存在于 schema 不代表旧截图时代参数仍是当前 active rendering knob。
 
-- Workstation 状态检测；
-- 工作台 Dock width offset；
-- Dock icon top / bottom offset；
-- Grid horizontal offset；
-- All Apps 横/竖屏独立 horizontal / vertical offset；
-- Divider 自定义；
-- PassBlur producer suspend / single-frame pulse / rebind policy；
-- Recents shared-glass recovery；
-- 普通布局位置 backup / restore。
-
-相关参数：
-
-| 参数 | 当前范围 |
-|------|------:|
-| 工作台 Dock 长度偏移 | −240 ~ 240 dp |
-| 工作台桌面水平偏移 | −240 ~ 240 dp |
-| All Apps 横屏水平偏移 | −240 ~ 240 dp |
-| All Apps 横屏垂直偏移 | −240 ~ 240 dp |
-| All Apps 竖屏水平偏移 | −240 ~ 240 dp |
-| All Apps 竖屏垂直偏移 | −240 ~ 240 dp |
-| 工作台 Dock icon top offset | −48 ~ 48 dp |
-| 工作台 Dock icon bottom offset | −48 ~ 48 dp |
-
----
-
-## 工作台 Divider
-
-`DockDividerHook` 与普通 Dock dimension unit 独立。
-
-| 参数 | 持久化范围 | 运行时语义 |
-|------|------:|------|
-| Divider 开关 | 开/关 | live visual ownership；关闭后恢复原布局与背景 |
-| width | 0 ~ 160 | 历史 raw `0.1 dp` 整数；运行时除以 10 |
-| height scale | 0 ~ 100 | 相对父容器高度百分比 |
-| Y offset | −80 ~ 80 | 历史 raw `0.1 dp` 整数；运行时除以 10 |
-| R/G/B | 0 ~ 255 | Divider 颜色 |
-| Alpha | 0 ~ 255 | Divider alpha |
-
-第一次接管 Divider 时会保存 width、height、四边 margin 和 background；关闭时移除 pending layout listener 并恢复快照。Drawable background 会保存独立副本，避免 `setBackgroundColor()` 原地修改导致恢复值被污染。
-
-详见 [DIVIDER.md](DIVIDER.md)。
-
----
-
-# 多任务 (Recents)
-
-当前支持自定义 Recents 背景模糊度，并且 Liquid Glass scene 使用 HyperOS semantic Recents dispatcher 处理 HOME / Recents coverage，而不是依赖单个 View 的挂载状态猜测场景。
-
-Recents 与 Launcher static glass 的关系由 fresh-frame barrier 控制；Workstation 另有 shared producer rollover 恢复路径。
-
----
-
-# 安全中心侧边栏 Liquid Glass（v1）
-
-当前首版支持边界：
-
-- package：`com.miui.securitycenter`；
-- process：`com.miui.securitycenter:ui`；
-- Security Center versionCode：`40011320`；对应 versionName：`13.2.0-260806.0.1.pad`；
-- scene：仅 type-4 Global Dock 与其 All Apps 页面；
-- type 1/3/5 Game/Video/Conversation toolbox 不接管。
-
-设置项为 `liquid_security_center_glass`，默认关闭。它复用现有 Prismal 光学参数和 `largeSurfaceHighlightProfile`，不提供 Security Center 专属参数组。
-
-Global Dock 与 All Apps 共用同一个 sidebar Window/ViewRoot，因此只创建一个 root-wide `RootPassBlurBackend`、一个 native PassBlur producer/OES source 和一个 `SecurityCenterGlassSession`。页面切换只改变 scene generation、geometry/clipping 与 material ownership，正常 Dock -> All Apps -> Dock 不重建 native endpoint。
-
-首帧与每次页面切换均遵守 current-generation barrier：
-
-```text
-vendor visible
--> geometry settled
--> request generation
--> real OES frame
--> Prismal render
--> output swap
--> runtime/root/session/generation recheck
--> vendor material handoff
--> custom reveal
-```
-
-因此 bind/rebind 成功、普通 View redraw 或旧纹理都不能授权显示。transition completion 由 vendor `f17943s` 决定，不使用固定延迟。
-
-HyperOS 4 的 vendor material release 使用 `TurboLayout.U()` 作为完整恢复权威；LiquidDock 不猜 MiGlass/MaterialToken/blur/shadow 参数。unsupported build、reflection failure、producer/EGL failure 或 stale callback 都 fail closed，保持或恢复 vendor material。
-
-HyperOS 3 capability policy 始终为普通 background blur；这是未来版本适配约束，当前 v1 不宣称支持未分析 HOS3 Security Center，也不会把其 blur 描述为 soft-light glass。
-
----
-
-# 兼容性与失败模式
-
-Launcher Liquid Glass 依赖 HyperOS 3.0.307+ 的 vendor 私有接口，包括 MiuiX PassBlur、隐藏 Surface / SurfaceControl 行为和 Launcher 4.50.x.x 内部类。Security Center v1 另外依赖已验证的 HyperOS 4 build `40011320` 的精确 `M/d0/U` 与对应字段/材质 helper 语义。
-
-因此：
-
-- ROM / Launcher / Security Center 升级后若 vendor class 或私有 API 变化，相关 Hook fail-closed；
-- 未知 Security Center versionCode 不安装版本专属 mutation hook；
-- zero-copy glass 不会回退到 ScreenCapture；
-- Widget glass 仍只属于“部分支持”；
-- Workstation / Laptop 仍属于实验性适配；
-- 普通 Grid / Dock / Glass 的 restart-bound 与 live-runtime 边界以设置页说明为准。
+JSON 导入/导出应通过 `ConfigCodec` / `PresetManager` / migration 链处理，不应在功能 Hook 内直接解释历史 JSON。
