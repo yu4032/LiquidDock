@@ -121,8 +121,6 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             if (surface != null) surface.release();
             return;
         }
-        log("output attach requested size=" + width + "x" + height
-                + " surfaceValid=" + surface.isValid());
         if (!sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) {
                 surface.release();
@@ -134,8 +132,6 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 output = next;
-                log("output EGL surface created size=" + next.width + "x" + next.height
-                        + " surfaceValid=" + surface.isValid());
                 renderCurrent();
             } catch (Throwable error) {
                 surface.release();
@@ -151,24 +147,19 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             if (current == null) return;
             current.width = Math.max(1, width);
             current.height = Math.max(1, height);
-            log("output resized size=" + current.width + "x" + current.height
-                    + " surfaceValid=" + current.surface.isValid());
             renderCurrent();
         });
     }
 
     void detachOutput(Surface surface) {
         if (surface == null) return;
-        log("output detach requested surfaceValid=" + surface.isValid());
         if (shuttingDown || !sourceBackend.postToRenderThread(() -> {
             OutputState current = output;
             if (current != null && current.surface == surface) {
                 output = null;
                 releaseOutput(current);
-                log("output detached current");
             } else {
                 surface.release();
-                log("output detached stale");
             }
         })) surface.release();
     }
@@ -177,7 +168,6 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     void onOutputPresented() {
         if (shuttingDown || presentationSignaled || !swapSucceeded) return;
         presentationSignaled = true;
-        log("first TextureView update consumed swapped Prismal frame");
         if (listener != null) listener.onPresented();
     }
 
@@ -249,13 +239,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     prismalRenderer.outputTexture(),
                     currentGeometry.toCropUvRect(),
                     currentOutput);
-            if (!swapSucceeded) {
-                swapSucceeded = true;
-                log("first swap succeeded output=" + currentOutput.width + "x"
-                        + currentOutput.height + " surfaceValid="
-                        + currentOutput.surface.isValid()
-                        + "; waiting for TextureView update");
-            }
+            swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
         }
@@ -273,16 +257,6 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     private void presentCropped(int sceneTexture, float[] crop, OutputState current) {
         if (crop == null || crop.length != 4) return;
-        if (!swapSucceeded) {
-            View root = rootRef.get();
-            log("first swap begin output=" + current.width + "x" + current.height
-                    + " surfaceValid=" + current.surface.isValid()
-                    + " rootAttached=" + (root != null && root.isAttachedToWindow())
-                    + " rootHw=" + (root != null && root.isHardwareAccelerated())
-                    + " rootWinVis=" + (root != null ? root.getWindowVisibility() : -1)
-                    + " root=" + (root != null ? root.getWidth() + "x" + root.getHeight() : "null")
-                    + " logical=" + logicalWidth + "x" + logicalHeight);
-        }
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -329,11 +303,6 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         String message = error.getMessage();
         return error.getClass().getName()
                 + (message == null || message.isEmpty() ? "" : ": " + message);
-    }
-
-    private static void log(String message) {
-        try { Api101Bridge.log(TAG + " " + message); }
-        catch (Throwable ignored) {}
     }
 
     private void bindQuad(int program) {
