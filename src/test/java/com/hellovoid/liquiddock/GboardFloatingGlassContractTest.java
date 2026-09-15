@@ -105,15 +105,18 @@ public class GboardFloatingGlassContractTest {
         assertFalse(authority.contains("0x7f0b"));
     }
 
-    @Test public void sinkUsesStructuralContentBoundaryAndRealKeyboardBounds() throws Exception {
+    @Test public void sinkUsesStructuralContentBoundaryAndTransformedKeyboardBounds() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
 
         assertTrue(coordinator.contains("structure.contentColumn"));
         assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
         assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
         assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
-        assertTrue(coordinator.contains("state.keyboardArea.getWidth()"));
-        assertTrue(coordinator.contains("state.keyboardArea.getHeight()"));
+        assertTrue(coordinator.contains("syncSinkBounds(state, next)"));
+        assertTrue(coordinator.contains("geometry.outputWidthPx()"));
+        assertTrue(coordinator.contains("geometry.outputHeightPx()"));
+        assertTrue(geometry.contains("transformMatrixToGlobal"));
         assertTrue(coordinator.contains("resolveCornerRadiusPx"));
         assertTrue(coordinator.contains("Outline"));
     }
