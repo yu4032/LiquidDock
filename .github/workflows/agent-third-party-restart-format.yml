@@ -1,0 +1,57 @@
+name: One-shot third-party restart formatting
+
+on:
+  push:
+    branches: [ refactor/third-party-app-restart-descriptor ]
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/third-party-app-restart-descriptor
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-cleanup: never
+      - name: Normalize helper formatting
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/main/java/com/hellovoid/liquiddock/SettingsActivity.java')
+          text = path.read_text()
+          start = text.index('    void restartPackageProcess(String packageName, String displayName) {')
+          end = text.index('    void restartSecurityCenter()', start)
+          block = text[start:end]
+          lines = block.splitlines()
+          formatted = [lines[0]]
+          for line in lines[1:]:
+              if line:
+                  formatted.append('    ' + line)
+              else:
+                  formatted.append('')
+          replacement = '\n'.join(formatted) + '\n\n'
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text)
+
+          Path('.github/workflows/agent-third-party-restart-format.yml').unlink()
+      - name: Verify full debug build
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Commit verified formatting
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "style: normalize third-party restart helper formatting"
+          git push origin HEAD:refactor/third-party-app-restart-descriptor
