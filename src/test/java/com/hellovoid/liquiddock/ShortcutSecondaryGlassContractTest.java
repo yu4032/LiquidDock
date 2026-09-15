@@ -111,7 +111,7 @@ public class ShortcutSecondaryGlassContractTest {
                         + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
     }
 
-    @Test public void shortcutMenuDarkModeTintsOnlyLauncherSystemLineIcons() throws Exception {
+    @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String controller = Files.readString(MAIN.resolve("ShortcutMenuTextColorController.java"));
 
@@ -121,13 +121,16 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(controller.contains("setTextColor(Color.WHITE)"));
         assertTrue(controller.contains("setCompoundDrawableTintList"));
         assertTrue(controller.contains("ImageView"));
-        assertTrue(controller.contains("isLauncherSystemLineIcon(view)"));
-        assertTrue(controller.contains("\"system_shortcut_menu\""));
-        assertTrue(controller.contains("getResourceEntryName"));
-        assertTrue(controller.contains("setImageTintList"));
-        assertTrue(controller.contains("ColorStateList.valueOf(Color.WHITE)"));
+        assertTrue(controller.contains("WeakHashMap<Drawable, Boolean>"));
+        assertTrue(controller.contains("shouldTintIcon(Drawable drawable)"));
+        assertTrue(controller.contains("Bitmap.createBitmap"));
+        assertTrue(controller.contains("Color.red"));
+        assertTrue(controller.contains("Color.green"));
+        assertTrue(controller.contains("Color.blue"));
+        assertTrue(controller.contains("setImageTintList(WHITE_TINT)"));
+        assertTrue(controller.contains("setImageTintList(null)"));
         assertTrue(controller.contains("OnGlobalLayoutListener"));
-        assertFalse(controller.contains("if (view instanceof ImageView) {\n            ((ImageView) view).setImageTintList"));
+        assertFalse(controller.contains("if (view instanceof ImageView) {\n            ((ImageView) view).setImageTintList(WHITE_TINT);"));
         assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
         assertFalse(controller.contains("Class.forName("));
         assertFalse(controller.contains("getDeclaredField("));
