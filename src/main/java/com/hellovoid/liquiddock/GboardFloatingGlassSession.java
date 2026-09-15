@@ -57,6 +57,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile GboardFloatingGlassGeometry geometry;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
+    private volatile boolean swapSucceeded;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -172,6 +173,14 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         })) surface.release();
     }
 
+    /** Called on the UI thread only after TextureView consumed a swapped buffer. */
+    void onOutputPresented() {
+        if (shuttingDown || presentationSignaled || !swapSucceeded) return;
+        presentationSignaled = true;
+        log("first TextureView update consumed swapped Prismal frame");
+        if (listener != null) listener.onPresented();
+    }
+
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
@@ -240,14 +249,12 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     prismalRenderer.outputTexture(),
                     currentGeometry.toCropUvRect(),
                     currentOutput);
-            if (!presentationSignaled) {
-                presentationSignaled = true;
+            if (!swapSucceeded) {
+                swapSucceeded = true;
                 log("first swap succeeded output=" + currentOutput.width + "x"
                         + currentOutput.height + " surfaceValid="
-                        + currentOutput.surface.isValid());
-                mainHandler.post(() -> {
-                    if (!shuttingDown && listener != null) listener.onPresented();
-                });
+                        + currentOutput.surface.isValid()
+                        + "; waiting for TextureView update");
             }
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -266,7 +273,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     private void presentCropped(int sceneTexture, float[] crop, OutputState current) {
         if (crop == null || crop.length != 4) return;
-        if (!presentationSignaled) {
+        if (!swapSucceeded) {
             View root = rootRef.get();
             log("first swap begin output=" + current.width + "x" + current.height
                     + " surfaceValid=" + current.surface.isValid()
