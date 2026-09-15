@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Static contract for replacing only the Gboard handwriting companion capsule background. */
+/** Static contract for replacing only the Gboard handwriting toolbar background. */
 public class GboardHandwritingCapsuleGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
@@ -17,39 +17,37 @@ public class GboardHandwritingCapsuleGlassContractTest {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void gboardProcessInstallsStableCompanionWidgetHook() throws Exception {
+    @Test public void gboardProcessInstallsStableCompanionToolbarHook() throws Exception {
         String module = read("ModuleMain.java");
         String hook = read("GboardHandwritingCapsuleGlassHook.java");
         assertTrue(module.contains("GboardHandwritingCapsuleGlassHook.install(classLoader)"));
         assertTrue(hook.contains(
                 "com.google.android.libraries.inputmethod.companionwidget.widget.WidgetSoftKeyboardView"));
-        assertTrue(hook.contains(
-                "com.google.android.apps.inputmethod.libs.handwriting.keyboard.HandwritingOverlayView"));
         assertTrue(hook.contains("\"onLayout\""));
-        assertTrue(hook.contains("\"onDetachedFromWindow\""));
-        assertTrue(hook.contains("handwritingSceneActive"));
+        assertTrue(hook.contains("GboardHandwritingToolbarGeometryPolicy.isToolbar"));
         assertTrue(hook.contains("GboardGlassPreferences.resolve"));
+        assertFalse(hook.contains("HandwritingOverlayView"));
+        assertFalse(hook.contains("handwritingSceneActive"));
         assertFalse(hook.contains("0x7f"));
         assertFalse(hook.contains("findViewById"));
         assertFalse(hook.contains("postDelayed"));
     }
 
-    @Test public void capsuleCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
+    @Test public void toolbarCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(coordinator.contains("host.addView(sink, 0"));
         assertTrue(coordinator.contains("GboardFloatingGlassView"));
         assertTrue(coordinator.contains("GboardFloatingGlassSession"));
         assertTrue(coordinator.contains("GboardFloatingGlassGeometry.captureTarget"));
-        assertTrue(coordinator.contains("onHandwritingSceneEnded"));
         assertFalse(coordinator.contains("removeAllViews"));
         assertFalse(coordinator.contains("setBackground(null)"));
         assertFalse(coordinator.contains("findViewById"));
     }
 
-    @Test public void capsuleTargetIsSelectedByRuntimeGeometryAndFailsClosed() throws Exception {
+    @Test public void toolbarTargetUsesRuntimeGeometryAndFailsClosed() throws Exception {
         String hook = read("GboardHandwritingCapsuleGlassHook.java");
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
-        assertTrue(hook.contains("isSideCapsuleGeometry"));
+        assertTrue(hook.contains("isToolbarGeometry"));
         assertTrue(hook.contains("getRootView()"));
         assertTrue(hook.contains("getWidth()"));
         assertTrue(hook.contains("getHeight()"));
