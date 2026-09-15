@@ -31,7 +31,7 @@ public class ShortcutMenuWhiteTextContractTest {
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(hook.contains("TextView"));
         assertTrue(hook.contains("setTextColor(Color.WHITE)"));
-        assertTrue(hook.contains("OnHierarchyChangeListener"));
+        assertTrue(hook.contains("OnGlobalLayoutListener"));
         assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
         assertFalse(hook.contains("getDeclaredField(\""));
         assertFalse(hook.contains("getDeclaredMethod(\""));
