@@ -30,16 +30,14 @@ jobs:
           path = Path('src/main/java/com/hellovoid/liquiddock/SettingsActivity.java')
           text = path.read_text()
           start = text.index('    void restartPackageProcess(String packageName, String displayName) {')
-          end = text.index('    void restartSecurityCenter()', start)
+          next_sig = 'void restartSecurityCenter()'
+          end = text.index(next_sig, start)
           block = text[start:end]
           lines = block.splitlines()
           formatted = [lines[0]]
           for line in lines[1:]:
-              if line:
-                  formatted.append('    ' + line)
-              else:
-                  formatted.append('')
-          replacement = '\n'.join(formatted) + '\n\n'
+              formatted.append(('    ' + line) if line else '')
+          replacement = '\n'.join(formatted).rstrip() + '\n\n    '
           text = text[:start] + replacement + text[end:]
           path.write_text(text)
 
