@@ -4,7 +4,7 @@ import android.view.View;
 
 import java.lang.reflect.Method;
 
-/** HyperOS 4.50 ShortcutMenu glass and optional white-text adaptation. */
+/** HyperOS 4.50 ShortcutMenu glass and optional dark-mode content adaptation. */
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
@@ -24,10 +24,10 @@ final class MiuixShortcutMenuGlassHook {
         boolean popupGlassEnabled = preferences.b(
                 com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
                 com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.runtimeFallback());
-        boolean whiteTextEnabled = preferences.b(
+        boolean darkModeEnabled = preferences.b(
                 com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name(),
                 com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.runtimeFallback());
-        if (!popupGlassEnabled && !whiteTextEnabled) {
+        if (!popupGlassEnabled && !darkModeEnabled) {
             MainHook.log(TAG + " disabled by shortcut popup settings");
             return false;
         }
@@ -57,7 +57,7 @@ final class MiuixShortcutMenuGlassHook {
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                bindShownPopup(chain.getThisObject(), popupGlassEnabled, whiteTextEnabled);
+                bindShownPopup(chain.getThisObject(), popupGlassEnabled, darkModeEnabled);
                 return result;
             });
 
@@ -73,7 +73,7 @@ final class MiuixShortcutMenuGlassHook {
 
             installed = true;
             MainHook.log(TAG + " hook installed popupGlass=" + popupGlassEnabled
-                    + " whiteText=" + whiteTextEnabled);
+                    + " darkMode=" + darkModeEnabled);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -82,7 +82,7 @@ final class MiuixShortcutMenuGlassHook {
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
-                                       boolean whiteTextEnabled) {
+                                       boolean darkModeEnabled) {
         if (menu == null) return;
         try {
             Object decorObject = HookUtil.getField(menu, "mDecorView");
@@ -92,8 +92,8 @@ final class MiuixShortcutMenuGlassHook {
             Object contentObject = getContentView.invoke(popupObject);
             if (!(contentObject instanceof View)) return;
             View contentView = (View) contentObject;
-            if (whiteTextEnabled) {
-                ShortcutMenuTextColorController.attach(contentView);
+            if (darkModeEnabled) {
+                ShortcutMenuDarkModeController.attach(contentView);
             }
             if (!popupGlassEnabled || !GlassRuntimeState.isEnabled()) return;
             boolean bound = ShortcutPopupGlassCoordinator.bindPopup(
