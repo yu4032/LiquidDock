@@ -18,18 +18,25 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void sinkOutputFollowsResizedStockShellForShrinkAndGrow() throws Exception {
+    @Test public void sinkWidthUsesStockShellButHeightUsesVisualContentUnion() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
 
-        assertTrue(geometry.contains("shellView.transformMatrixToGlobal"));
-        assertTrue(geometry.contains("shellView.getWidth()"));
-        assertTrue(geometry.contains("shellView.getHeight()"));
-        assertTrue(coordinator.contains("state.root, state.backgroundFrame, state.cornerRadiusPx"));
-        assertTrue(coordinator.contains("int width = state.backgroundFrame.getWidth()"));
-        assertTrue(coordinator.contains("int height = state.backgroundFrame.getHeight()"));
-        assertTrue(coordinator.contains("state.backgroundFrame.getLocationInWindow(shellLocation)"));
-        assertFalse(coordinator.contains("int width = state.keyboardArea.getWidth()"));
+        assertTrue(geometry.contains("structure.stockBackground"));
+        assertTrue(geometry.contains("structure.topEdge"));
+        assertTrue(geometry.contains("structure.keyboardViewHolders"));
+        assertTrue(geometry.contains("structure.bottomFrame"));
+        assertTrue(geometry.contains("addVerticalAuthority"));
+        assertTrue(geometry.contains("sinkHost.transformMatrixToGlobal"));
+        assertTrue(geometry.contains("sinkWidthPx()"));
+        assertTrue(geometry.contains("sinkHeightPx()"));
+        assertTrue(coordinator.contains("state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
+        assertTrue(coordinator.contains("syncSinkBounds(state, next)"));
+        assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
+        assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
+        assertTrue(coordinator.contains("geometry.sinkLeft"));
+        assertTrue(coordinator.contains("geometry.sinkTop"));
+        assertFalse(coordinator.contains("int height = state.backgroundFrame.getHeight()"));
         assertFalse(coordinator.contains("int height = state.keyboardArea.getHeight()"));
     }
 
