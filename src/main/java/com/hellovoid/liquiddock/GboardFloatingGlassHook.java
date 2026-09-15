@@ -3,19 +3,17 @@ package com.hellovoid.liquiddock;
 import android.view.ViewGroup;
 
 import java.lang.reflect.Method;
-import java.util.WeakHashMap;
 
 /** Hooks stable KeyboardHolder layout and structurally recognizes Gboard floating keyboard. */
 final class GboardFloatingGlassHook {
     private static final String TAG = "[DC][GboardFloatingGlass]";
-    private static final WeakHashMap<ViewGroup, Boolean> LAST_FLOATING_STATE = new WeakHashMap<>();
     private static boolean installed;
 
     private GboardFloatingGlassHook() {}
 
-    static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
+    static boolean install(ClassLoader classLoader) {
         if (installed) return true;
-        if (classLoader == null || runtimeConfig == null) return false;
+        if (classLoader == null) return false;
         try {
             Class<?> keyboardHolderClass = Class.forName(
                     GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS,
@@ -39,7 +37,6 @@ final class GboardFloatingGlassHook {
             });
 
             installed = true;
-            log("hook installed via KeyboardHolder.onLayout", null);
             return true;
         } catch (Throwable error) {
             log("hook unavailable cause=" + failureSummary(error)
@@ -51,17 +48,9 @@ final class GboardFloatingGlassHook {
     private static void handleKeyboardHolderLayout(ViewGroup keyboardHolder, ClassLoader classLoader) {
         GboardFloatingStructureResolver.Structure structure =
                 GboardFloatingStructureResolver.resolveFromKeyboardHolder(keyboardHolder, classLoader);
-        if (structure == null) {
-            noteState(keyboardHolder, false, "holder topology rejected");
-            return;
-        }
+        if (structure == null) return;
 
-        boolean floating = GboardFloatingStructureResolver.isFloatingGeometry(structure);
-        noteState(keyboardHolder, floating,
-                "holder geometry " + structure.keyboardArea.getWidth() + "x"
-                        + structure.keyboardArea.getHeight()
-                        + " elevation=" + structure.keyboardArea.getElevation());
-        if (!floating) {
+        if (!GboardFloatingStructureResolver.isFloatingGeometry(structure)) {
             GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;
         }
@@ -79,16 +68,6 @@ final class GboardFloatingGlassHook {
                 structure.keyboardArea,
                 structure,
                 liveConfig.glass);
-    }
-
-    private static void noteState(ViewGroup holder, boolean floating, String detail) {
-        Boolean previous;
-        synchronized (LAST_FLOATING_STATE) {
-            previous = LAST_FLOATING_STATE.put(holder, floating);
-        }
-        if (previous == null || previous.booleanValue() != floating) {
-            log((floating ? "floating holder accepted: " : "holder ignored: ") + detail, null);
-        }
     }
 
     private static String failureSummary(Throwable error) {
