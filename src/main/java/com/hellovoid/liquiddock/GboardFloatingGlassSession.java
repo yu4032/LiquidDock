@@ -131,7 +131,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 renderCurrent();
             } catch (Throwable error) {
                 surface.release();
-                notifyFailure(error);
+                notifyFailure("output-attach", error);
             }
         })) surface.release();
     }
@@ -179,13 +179,13 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             backdropPrepared = true;
             renderCurrent();
         } catch (Throwable error) {
-            notifyFailure(error);
+            notifyFailure("fresh-frame", error);
         }
     }
 
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
-        if (!shuttingDown) notifyFailure(error);
+        if (!shuttingDown) notifyFailure("source-terminal", error);
     }
 
     void shutdown() {
@@ -235,7 +235,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 });
             }
         } catch (Throwable error) {
-            notifyFailure(error);
+            notifyFailure("render", error);
         }
     }
 
@@ -280,14 +280,23 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         try { current.surface.release(); } catch (Throwable ignored) {}
     }
 
-    private void notifyFailure(Throwable error) {
+    private void notifyFailure(String stage, Throwable error) {
         if (shuttingDown || failureSignaled) return;
         failureSignaled = true;
-        try { Api101Bridge.log(TAG + " session failure", error); }
-        catch (Throwable ignored) {}
+        try {
+            Api101Bridge.log(TAG + " session failure stage=" + stage
+                    + " cause=" + failureSummary(error));
+        } catch (Throwable ignored) {}
         mainHandler.post(() -> {
             if (!shuttingDown && listener != null) listener.onFailure(error);
         });
+    }
+
+    private static String failureSummary(Throwable error) {
+        if (error == null) return "unknown";
+        String message = error.getMessage();
+        return error.getClass().getName()
+                + (message == null || message.isEmpty() ? "" : ": " + message);
     }
 
     private void bindQuad(int program) {
