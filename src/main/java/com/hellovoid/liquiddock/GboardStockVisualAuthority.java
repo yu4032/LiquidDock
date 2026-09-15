@@ -14,7 +14,6 @@ import java.util.WeakHashMap;
  * any R8-obfuscated manager class, method or field name.
  */
 final class GboardStockVisualAuthority {
-    private static final String TAG = "[DC][GboardFloatingGlass]";
     private static final Object LOCK = new Object();
     private static final String SOFT_KEYBOARD_VIEW_CLASS =
             "com.google.android.libraries.inputmethod.widgets.SoftKeyboardView";
@@ -73,7 +72,6 @@ final class GboardStockVisualAuthority {
         }
         observer.addOnPreDrawListener(claim.preDrawListener);
         applyClaim(claim);
-        log("claimed structural stock visuals holders=" + structure.keyboardViewHolders.size());
         return true;
     }
 
@@ -99,7 +97,6 @@ final class GboardStockVisualAuthority {
         try { claim.structure.stockBackground.setAlpha(claim.stockAlpha); }
         catch (Throwable ignored) {}
         claim.backgrounds.clear();
-        log("released structural stock visuals");
     }
 
     private static void applyClaim(Claim claim) {
@@ -146,10 +143,5 @@ final class GboardStockVisualAuthority {
             if (!softKeyboard && !fillsHolder) continue;
             suppressBackground(claim, content);
         }
-    }
-
-    private static void log(String message) {
-        try { Api101Bridge.log(TAG + " " + message); }
-        catch (Throwable ignored) {}
     }
 }
