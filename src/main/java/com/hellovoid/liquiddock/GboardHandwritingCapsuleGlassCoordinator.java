@@ -1,10 +1,7 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Outline;
-import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 
 import java.util.WeakHashMap;
@@ -17,8 +14,8 @@ final class GboardHandwritingCapsuleGlassCoordinator {
     private static final class State {
         final ViewGroup host;
         final LiquidDockConfig.Glass glassConfig;
+        final float cornerRadiusPx;
         View root;
-        float cornerRadiusPx;
         GboardFloatingGlassSession session;
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
@@ -27,16 +24,21 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         boolean captureRequested;
         boolean released;
 
-        State(ViewGroup host, LiquidDockConfig.Glass glassConfig) {
+        State(ViewGroup host, LiquidDockConfig.Glass glassConfig, float cornerRadiusPx) {
             this.host = host;
             this.glassConfig = glassConfig;
+            this.cornerRadiusPx = cornerRadiusPx;
         }
     }
 
     private GboardHandwritingCapsuleGlassCoordinator() {}
 
-    static synchronized void onShown(ViewGroup host, LiquidDockConfig.Glass glassConfig) {
-        if (host == null || glassConfig == null) return;
+    static synchronized void onShown(
+            ViewGroup host,
+            LiquidDockConfig.Glass glassConfig,
+            float nativeRadiusPx) {
+        if (host == null || glassConfig == null || nativeRadiusPx <= 0f
+                || Float.isNaN(nativeRadiusPx) || Float.isInfinite(nativeRadiusPx)) return;
         State existing = STATES.get(host);
         if (existing != null && !existing.released) {
             if (existing.session == null && host.isAttachedToWindow()) attachNow(existing);
@@ -44,7 +46,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             return;
         }
 
-        State state = new State(host, glassConfig);
+        State state = new State(host, glassConfig, nativeRadiusPx);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attachNow(state);
@@ -73,14 +75,8 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             failClosed(state, "toolbar root unavailable", null);
             return;
         }
-        float cornerRadiusPx = resolveCornerRadiusPx(state.host);
-        if (cornerRadiusPx <= 0f) {
-            failClosed(state, "toolbar radius unavailable", null);
-            return;
-        }
 
         state.root = root;
-        state.cornerRadiusPx = cornerRadiusPx;
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
         state.host.addOnLayoutChangeListener(state.layoutListener);
@@ -140,34 +136,6 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             state.captureRequested = true;
             state.session.requestInitialCapture();
         }
-    }
-
-    private static float resolveCornerRadiusPx(View view) {
-        float radius = outlineRadius(view);
-        if (radius > 0f) return radius;
-        if (view == null || view.getWidth() <= 0 || view.getHeight() <= 0) return 0f;
-        return Math.min(view.getWidth(), view.getHeight()) * 0.5f;
-    }
-
-    private static float outlineRadius(View view) {
-        if (view == null) return 0f;
-        try {
-            Outline outline = new Outline();
-            ViewOutlineProvider provider = view.getOutlineProvider();
-            if (provider != null) {
-                provider.getOutline(view, outline);
-                if (outline.getRadius() > 0f) return outline.getRadius();
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Drawable background = view.getBackground();
-            if (background != null) {
-                Outline outline = new Outline();
-                background.getOutline(outline);
-                if (outline.getRadius() > 0f) return outline.getRadius();
-            }
-        } catch (Throwable ignored) {}
-        return 0f;
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {
