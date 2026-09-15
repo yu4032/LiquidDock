@@ -73,20 +73,26 @@ public final class ModuleMain extends XposedModule {
             try {
                 ClassLoader classLoader = param.getClassLoader();
                 if (classLoader == null) return;
-                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(ConfigReader.load());
-                if (runtimeConfig.enabled && runtimeConfig.glass.enabled) {
-                    if (!GboardPassBlurContinuousAuthority.install()) {
-                        Api101Bridge.log(
-                                "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
-                        return;
-                    }
-                    if (!GboardStockVisualAuthority.install(classLoader)) {
-                        Api101Bridge.log(
-                                "[DC][GboardFloatingGlass] stock visual authority unavailable; fail closed");
-                        return;
-                    }
-                    GboardFloatingGlassHook.install(classLoader, runtimeConfig);
+                ConfigReader configReader = ConfigReader.load();
+                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                GboardGlassPreferences.Appearance gboardAppearance =
+                        GboardGlassPreferences.resolve(configReader, runtimeConfig.glass);
+                if (!runtimeConfig.enabled || !runtimeConfig.glass.enabled
+                        || !gboardAppearance.enabled) {
+                    Api101Bridge.log("[DC][GboardFloatingGlass] disabled by configuration; no hooks installed");
+                    return;
                 }
+                if (!GboardPassBlurContinuousAuthority.install()) {
+                    Api101Bridge.log(
+                            "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
+                    return;
+                }
+                if (!GboardStockVisualAuthority.install(classLoader)) {
+                    Api101Bridge.log(
+                            "[DC][GboardFloatingGlass] stock visual authority unavailable; fail closed");
+                    return;
+                }
+                GboardFloatingGlassHook.install(classLoader, runtimeConfig);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][GboardFloatingGlass] init failed", error);
             }
