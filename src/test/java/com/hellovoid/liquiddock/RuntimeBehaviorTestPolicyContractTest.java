@@ -41,6 +41,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "FolderPressInteractionContractTest.java",
             "FolderScaleAndDragBackdropContractTest.java",
             "GboardFloatingGlassContractTest.java",
+            "GboardFloatingResizeAndHandlePolicyTest.java",
             "HookUtilArchitectureContractTest.java",
             "Launcher450IconSizeContractTest.java",
             "LauncherGlassStaticBoundaryTest.java",
