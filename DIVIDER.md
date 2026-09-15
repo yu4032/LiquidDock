@@ -1,114 +1,118 @@
 # LiquidDock Workstation Divider
 
-本文档描述当前 `main` / **v2.2.1**（含 `main` 上未单独提升版本号的已合入变更）的 `DockDividerHook` 行为。
+本文档描述当前 `main` / **v2.4.1** 的 `DockDividerHook` 行为。
 
-Divider 属于 Workstation/Laptop Dock 的实验性适配部分；参数可以使用，但工作台整体仍未视为完全支持。
+Divider 是 Workstation/Laptop 组合适配中的一个**独立、可逆视觉 owner**。它可以 live disable/restore，但工作台整体仍包含 Dock、Grid、All Apps、Recents、PassBlur 和 normal-layout restore，因此不能把 Divider 的热切换能力理解为完整 Workstation structure 可热卸载。
 
-Divider ownership 与 Workspace PassBlur 的渲染分辨率/FPS 控制彼此独立：质量控制不会改变 Divider 的 View geometry、snapshot 或 restore 语义；Workstation 场景切换仍由各自的 producer/coverage 生命周期负责。
+Divider 与 Workspace PassBlur 的 local render resolution / FPS gate 无关：质量控制不会改变 Divider View geometry、snapshot 或 restore 语义。
 
-## 1. 参数语义
+## 1. 参数与存储语义
 
-| 参数 | 持久化范围 | 运行时语义 |
-|---|---:|---|
-| Divider 开关 | 开/关 | live visual toggle |
-| width | 0 ~ 160 | 历史 raw `0.1 dp`；运行时除以 10 |
-| height scale | 0 ~ 100 | 相对父容器高度百分比 |
-| Y offset | −80 ~ 80 | 历史 raw `0.1 dp`；运行时除以 10 |
-| R / G / B | 0 ~ 255 | Divider background color |
-| Alpha | 0 ~ 255 | Divider alpha |
+| 参数 | Persisted range | Runtime meaning |
+| --- | ---: | --- |
+| Divider | on/off | live visual ownership gate |
+| width | 0 ~ 160 | 历史 raw `0.1 dp`，runtime 除以 10 |
+| height scale | 0 ~ 100 | parent height 百分比 |
+| Y offset | −80 ~ 80 | 历史 raw `0.1 dp`，runtime 除以 10 |
+| R / G / B | 0 ~ 255 | background color |
+| alpha | 0 ~ 255 | background alpha |
 
-Divider 的 width / Y offset 历史存储语义与普通 Dock dimension key 不同，不要统一成普通 `DP_TENTHS` sidecar 规则。
+Divider width / Y offset 是历史 direct integer contract，不等同于普通 `ConfigKey.StorageMode.DP_TENTHS` sidecar。不要为了统一存储格式擅自迁移它们。
 
-## 2. Hook 边界
+`LiquidDockConfig.Divider` 会在 runtime snapshot 中把历史值归一化成真实 dp / percent / color。
 
-`DockDividerHook` 从 Workstation Dock line holder/bind 生命周期取得 divider View，并在 View 已拥有有效父布局后应用：
+## 2. Hook / geometry boundary
+
+`DockDividerHook` 从 Workstation Dock line holder/bind 生命周期取得真实 divider View，在 parent geometry 有效后应用：
 
 - width；
 - height；
-- top/Y offset；
+- Y/top offset；
 - RGBA background。
 
-当父容器高度尚未有效时，不使用 divider 自身高度作为错误 fallback，而是等待后续 layout/pre-draw 再计算。
+如果 parent height 尚未有效，必须等待后续 layout/pre-draw；不能拿 divider 自身高度伪造 parent geometry。
 
-## 3. Runtime ownership
+## 3. Ownership lifecycle
 
-v2.1.1 起 Divider 开关使用 `VisualRuntimeState`。
+第一次修改一个 divider View 前，LiquidDock capture `OriginalState`。runtime disable 的顺序保持：
 
-关闭顺序：
+```text
+VisualRuntimeState publishes dividerEnabled=false
+        ↓
+pending callbacks observe disabled
+        ↓
+remove pending pre-draw listener
+        ↓
+restore layout + background
+        ↓
+requestLayout()
+        ↓
+release ownership snapshot
+```
 
-1. 先发布 `dividerEnabled=false`；
-2. 已排队的 geometry callback 执行时先看到 disabled；
-3. 取消 pending pre-draw listener；
-4. 恢复原始 layout/background；
-5. `requestLayout()`；
-6. 清除 ownership snapshot。
-
-因此关闭后不会出现 queued callback 再次把 Divider 改回 LiquidDock 样式的问题。
+这样 queued callback 不能在 teardown 后再次把 View 改回自定义状态。
 
 ## 4. OriginalState snapshot
 
-第一次修改某个 divider View 前，保存：
+当前 snapshot 包含：
 
 - `LayoutParams.width`；
 - `LayoutParams.height`；
-- `MarginLayoutParams.leftMargin`；
-- `topMargin`；
-- `rightMargin`；
-- `bottomMargin`；
-- 原始 background Drawable。
+- left/top/right/bottom margins；
+- original background Drawable。
 
-snapshot 按 View 弱引用持有，不延长 Launcher View 生命周期。
+snapshot 按 View 弱引用持有，不延长 Launcher View lifetime。
 
-### Drawable alias 防护
+### Drawable alias protection
 
-不能只保存：
+只保存：
 
 ```java
 Drawable original = view.getBackground();
 ```
 
-因为后续 `setBackgroundColor()` 可能原地修改同一个 `ColorDrawable`，导致“原始 background 引用”已经被污染。
+不够安全，因为后续 background mutation 可能原地改变同一 drawable 实例。
 
-当前实现优先通过 `Drawable.ConstantState.newDrawable(resources).mutate()` 创建独立 snapshot；无法复制时才退化为原引用。
-
-这保证常见 `ColorDrawable` 能恢复真正的 vendor 原色。
+当前实现优先通过 `Drawable.ConstantState.newDrawable(resources).mutate()` 生成独立 snapshot；无法复制时才退化为原引用。因此常见 `ColorDrawable` 可以恢复真实 vendor 颜色，而不是恢复被 LiquidDock 自己污染后的对象。
 
 ## 5. Disable / re-enable
 
-关闭 Divider 后会删除该 View 的 snapshot ownership。
+关闭后会释放该 View 的 snapshot。以后再次启用时，第一次 mutation 会重新捕获**当时**的 vendor state，而不是永远回到进程启动时的旧值。
 
-以后重新开启时，第一次 mutation 会重新捕获**当时**的 vendor layout/background，而不是永远恢复到进程启动时的旧状态。
+这对主题变化、Workstation 重建和 holder rebind 很重要。
 
-这很重要，因为 HyperOS 可能在主题、Workstation 切换或重新 bind 时更换 Divider View 或 background。
+## 6. 与其他 Workstation owner 的关系
 
-## 6. 与 Workstation 的关系
+Divider 不拥有：
 
-Divider 自身视觉开关可以 live disable/restore，但 Workstation composite customization 仍是 restart-bound。
-
-不要把“Divider 可即时恢复”理解为整个工作台 Dock 都支持完整热切换。工作台同时涉及：
-
-- Dock width；
-- icon offset；
-- Grid / All Apps offset；
-- producer lifecycle；
-- Recents；
+- Workstation Dock width；
+- Dock icon top/bottom offset；
+- Dock icon glass radius；
+- Workspace grid offset；
+- All Apps offsets/spacing；
+- PassBlur producer；
+- Recents recovery；
 - normal-layout backup/restore。
 
-## 7. 回归要求
+这些由各自 Hook/policy/session 管理。修改 Divider 时不要通过全局 Workstation restore 顺便重写其它 owner。
+
+## 7. Regression checklist
 
 修改 `DockDividerHook` 时至少验证：
 
 - 初次 bind 后 geometry 正确；
-- parent height 为 0 时会延迟而不是使用错误 fallback；
+- parent height 为 0 时 defer，而不是使用错误 fallback；
 - disable 精确恢复 width/height/margins/background；
-- pending callback 在 disable 后不能重新修改 View；
-- background snapshot 不受 `setBackgroundColor()` alias 污染；
-- re-enable 会重新捕获新的 vendor state；
-- 普通模式不受影响。
+- pending callback 在 disable 后不能重新 mutation；
+- Drawable snapshot 不受 alias 污染；
+- re-enable 重新 capture 新 vendor state；
+- 普通模式不受影响；
+- Workstation 进出与 holder replacement 不保留 stale snapshot。
 
 CI 基线：
 
 ```bash
-./gradlew testDebugUnitTest --stacktrace
-./gradlew assembleDebug --stacktrace
+./gradlew testDebugUnitTest assembleDebug --stacktrace
 ```
+
+真机 Workstation lifecycle 仍需要设备验证；CI 只验证代码/contract，不证明 vendor runtime 时序。

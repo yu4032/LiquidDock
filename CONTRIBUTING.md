@@ -1,17 +1,23 @@
 # Contributing
 
-本文档面向当前 `main` / **v2.2.1**（包含 `main` 上尚未发布到新版本号的已合入变更）。当前 Liquid Glass 主线为 HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES zero-copy；1.x ScreenCapture 代码只存在于 `archive/1.x`，不要把旧 capture 架构重新接回当前实现。
+本文档面向当前 `main` / **v2.4.1**。当前 Launcher Liquid Glass 主线为 HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES + Prismal；Security Center 使用独立的 `:ui` 进程和 capability-driven semantic contract。
 
-## 构建
+不要把 `docs/superpowers/plans` / `specs` 中的阶段性设计当作当前实现。开发基线始终是当前生产源码、ConfigSchema、build/CI 和根文档。
+
+---
+
+## 1. Build baseline
 
 要求：
 
-- Android SDK / compileSdk 37；
+- Android minSdk 33；
+- compileSdk / targetSdk 37；
 - JDK 17；
-- libxposed API 101；
-- Gradle 9.6.1 当前 wrapper。
+- Gradle 9.6.1；
+- Android Gradle Plugin 9.3.0；
+- libxposed API 101。
 
-Debug/CI 基线：
+本地最低验证：
 
 ```bash
 ./gradlew testDebugUnitTest --stacktrace
@@ -24,192 +30,330 @@ Release：
 ANDROID_HOME=/path/to/Android ./gradlew assembleRelease --no-daemon
 ```
 
-Debug 与 Release 都经过 AGP optimization / R8 路径。涉及反射入口时必须同时考虑 shrinker keep rule 与回归测试。
+Debug 与 Release **都启用 optimization / R8**。不要假设 debug APK 未混淆；CI debug build 就是 shrinker regression gate。
 
-## 分支规则
+主 CI 还会扫描 Security Center / RootPassBlur 源码，禁止重新引入 `ScreenCapture`、`PixelCopy`、backdrop `Bitmap.createBitmap` 和固定 `postDelayed` capture workaround。
 
-`main` 是当前开发主线。功能和修复从 `main` 创建独立分支；不要再从旧 `api101-migration` 文档假定当前架构边界。
+---
 
-`archive/1.x` 仅用于保存旧 ScreenCapture/bitmap-readback 实现，不作为新功能开发基线。
+## 2. Branch / scope rules
 
-## 配置规则
+- 从最新 `main` 建独立分支；
+- 一个 PR 聚焦一个问题或一个明确架构批次；
+- `archive/1.x` 只用于旧 screenshot-era 实现，不是新开发基线；
+- vendor 反编译产物不提交到普通源码树，只提交可复现 metadata / contract / derived findings；
+- 修改 HyperOS 私有行为时记录目标 build、真实调用边界和 fail-closed 条件。
 
-新增/修改配置时：
+---
 
-1. 先更新 `ConfigSchema`；
-2. 历史偏好升级放入 `ConfigMigration`；
-3. JSON shape / legacy alias 修改 `ConfigCodec` 并加 round-trip test；
-4. preset 修改 `PresetManager`；
-5. runtime 通过 `LiquidDockConfig` 读取 typed snapshot；
-6. live visual toggle 应进入对应 runtime state，而不是让 Hook 直接读 raw preference；
-7. 保持历史 key、`_tenths` 和 export/import 兼容，除非有明确 breaking migration。
+## 3. Configuration contract
 
-`uiDefault`、`runtimeFallback`、`exportDefault` 可以故意不同，不要为了表面一致而合并。
+新增/修改 persisted setting：
 
-## Hook / runtime ownership 规则
+1. `ConfigSchema` 先登记 key / type / UI default / runtime fallback / export default / range / storage mode；
+2. 历史 SharedPreferences 迁移放 `ConfigMigration` / `LegacyConfigMigration`；
+3. JSON shape/alias 由 `ConfigCodec` 负责；
+4. preset 由 `PresetManager` 负责；
+5. injected runtime 使用 `ConfigReader` -> immutable `LiquidDockConfig`；
+6. live visual toggle 进入相应 runtime state；
+7. 不在 feature Hook 内直接解释历史 JSON 或私自创建 persisted key。
 
-- 系统私有类与反射兼容放在 `*Hook` / `HookUtil` 边界；
-- `HookUtil` 仅用于 vendor/system private 边界；LiquidDock 自有类之间禁止通过 `HookUtil` 反射访问，必须使用 typed Java / package-private API；
-- optional vendor 调用使用 `tryInvoke*` 并显式检查 `succeeded()`；feature invariant 依赖的调用使用 `requireInvoke*`，禁止重新引入 silent-null facade；
-- 纯策略尽量 Android/Xposed-free；
-- 不要继续扩大 `MainHook` 的全局 mutable state；
-- 不要让 `LiquidDockConfig.load()` 产生跨模块副作用；
-- runtime disable 必须遵循“先 publish false，再 teardown ownership”；
-- 已排队 callback 在执行前必须再次检查 live state；
-- 只有保存过的 vendor state 才能被恢复；未知原生状态不要猜测或伪造。
+`uiDefault`、`runtimeFallback`、`exportDefault` 允许有意不同。不要为了“看起来统一”破坏兼容语义。
 
-## Zero-copy glass 规则
+历史 key 仍存在不等于历史实现仍 active；例如 screenshot-era quality keys 可能仅为 import/export compatibility。
 
-当前 glass backend 只有：
+---
+
+## 4. Process ownership
+
+### Launcher
+
+`com.miui.home` 承载主要 Dock/Grid/Glass/Recents/Workstation 功能。
+
+### SystemUI
+
+`com.android.systemui` 仅作为 HOME/keyguard timing source。不要把 Launcher renderer/session 搬入 SystemUI。
+
+### Security Center
+
+Xposed scope 是 package `com.miui.securitycenter`，但 runtime 必须通过 `SecurityCenterProcessPolicy` 限制为 `com.miui.securitycenter:ui`。
+
+Security Center 不运行 Launcher migration，不调用 `MainHook.install()`，也不共享 Launcher feature-level mutable state。
+
+---
+
+## 5. Reflection rule: project-owned code must be typed
+
+这是硬规则。
+
+### LiquidDock 自有对象
+
+禁止：
+
+```java
+HookUtil.getField(session, "privateField")
+getDeclaredMethod("projectOwnedMethod")
+Class.forName("com.hellovoid.liquiddock.SomeInternalClass")
+```
+
+只要对象和被访问成员都属于 LiquidDock，就应增加 typed Java / package-private API。
+
+原因不是代码风格，而是 R8 correctness：private field/method 可以被 rename/inline/merge，而字符串不会自动保持正确语义。
+
+不要用：
+
+```proguard
+-keep class com.hellovoid.liquiddock.** { *; }
+```
+
+来掩盖自反射设计问题。
+
+### Vendor/framework object
+
+Android/HyperOS 私有边界可以使用反射，但要区分：
+
+- optional capability -> `tryInvoke*` / explicit `succeeded()`；
+- feature invariant -> `requireInvoke*` / fail visibly；
+- 不重新引入 silent-null facade，让“调用失败”和“合法返回 null”不可区分。
+
+---
+
+## 6. R8 cross-ClassLoader string hazard
+
+这是与 project self-reflection 不同的第二类风险。
+
+若 LiquidDock 自己也打包某个类，而代码把该类的字符串名交给 **Launcher ClassLoader**：
+
+```java
+Class.forName("androidx.recyclerview.widget.RecyclerView$State", false, launcherClassLoader)
+```
+
+R8 可能把反射字符串适配成模块自身的混淆名（曾实际变成 `RecyclerView$a`）。该名称在 `com.miui.home` ClassLoader 中不存在，导致精确 Hook 安装失败。
+
+处理顺序：
+
+1. 先证明目标 ClassLoader / exact signature 确实需要字符串二进制名；
+2. 使用最窄的 `-keepnames`；
+3. 增加 `R8ReleaseKeepContractTest` 或同级静态 architecture contract；
+4. 用 R8-enabled debug APK 验证；
+5. 不扩大成整包 `-keep`。
+
+当前已有 targeted protection：
+
+```proguard
+-keepnames class androidx.recyclerview.widget.RecyclerView
+-keepnames class androidx.recyclerview.widget.RecyclerView$State
+```
+
+`runtime-reflection.keep` 应继续保持窄范围。
+
+---
+
+## 7. Zero-copy glass rules
+
+活动 backdrop pipeline：
 
 ```text
-MiuiX PassBlur -> SurfaceTexture/OES -> GLES -> Prismal renderer
+MiuiX PassBlur
+ -> Surface / SurfaceTexture
+ -> external OES texture
+ -> GPU normalization / overscan
+ -> Prismal
+ -> output surface
 ```
 
-禁止：
+禁止在 active glass source path 引入：
 
-- 恢复 `ScreenCapture` fallback；
-- 新增 bitmap readback；
-- 用普通 redraw 代替 fresh-frame barrier；
-- 在 Recents/HOME 返回时直接显示 stale static layer；
-- 把 geometry generation 当作 wallpaper content generation。
+- ScreenCapture fallback；
+- PixelCopy fallback；
+- CPU backdrop bitmap readback；
+- texture readback + re-upload；
+- fixed-delay “等一会再显示”代替 fresh-frame authority。
 
+小型 UI drawable 分析 Bitmap（例如快捷菜单图标 20×20 颜色分类）不属于 backdrop capture，但必须保持 bounded、可缓存且不能进入 render frame loop。
 
-Workspace PassBlur 质量/功耗修改还必须保持：
+---
 
-- HOME 默认是 continuous update permission / source-driven，而不是消费一帧后自动 pause；不要重新引入 single-frame pulse 作为普通 HOME 策略；
-- native PassBlur scale 固定 `1.0`，不要把 vendor scale 当作通用 resolution knob；
-- 分辨率优化只能在 authoritative OES normalization 之后降低本地 physical FBO，logical root / Prismal geometry 仍使用完整 Launcher 坐标；
-- FPS cap 只能限 Prismal/output render，不能阻止 `SurfaceTexture.updateTexImage()` drain，也不能额外创建 timer/vsync producer work；
-- fresh scene generation 必须绕过 render cap；rebind success 仍不等于 fresh content。
+## 8. Source, render and freshness are separate
 
-涉及 producer lifecycle 的修改必须覆盖：
+Workspace 规则：
 
-- HOME / APP；
+- native PassBlur spatial scale 保持 authority；
+- local physical FBO resolution 可以在 OES normalization 后调整；
+- `SurfaceTexture.updateTexImage()` drain 不能被 render FPS cap 阻断；
+- source-driven producer 不需要 LiquidDock 创建固定 Choreographer capture pump；
+- fresh scene generation 可以越过普通 render throttle；
+- producer bind/rebind success != fresh content；
+- redraw/invalidate != wallpaper/source freshness。
+
+涉及 source lifecycle 的修改至少覆盖：
+
+- HOME <-> APP；
 - Recents；
-- rotation；
-- wallpaper freshness；
+- keyguard/unlock；
+- rotation/root replacement；
+- wallpaper change；
 - Workstation；
-- producer suspend/rebind；
-- fresh OES frame 后才 reveal。
+- producer rollover/rebind；
+- fresh frame 后 reveal。
 
+---
 
-涉及 Workspace quality controls 时，真机至少比较 100% / 75% / 50% 的同位置背景特征，确认只有清晰度变化而没有缩放、漂移或偏移；同时覆盖静态壁纸 idle 与动态壁纸 live source。
+## 9. Shared Launcher glass rules
 
-## Launcher-wide glass 规则
+图标、Widget、小/大文件夹共享 root-wide source/session。不要给每个 material 建独立 PassBlur producer。
 
-图标、Widget、小/大文件夹共享 root-wide `LauncherGlassSession`。不要为每个 material 单独建立 PassBlur producer。
+每种节点必须保持：
 
-组件开关：
+- component-specific live gate；
+- independent static node geometry；
+- reversible vendor material ownership；
+- stale callback 重新检查 runtime state；
+- drag / app-launch proxy 不与静态 node 同时拥有可见 presentation。
 
-- icon glass；
-- widget glass；
-- small-folder glass；
-- large-folder glass。
+### Drag
 
-必须支持运行时 selective release，不能因为关闭一个组件而破坏其它 glass 类型。
+MIUI DragView 必须继续作为 drag/drop 逻辑和移动 geometry authority。LiquidDock overlay 只负责视觉 presentation；不能用原 Workspace View 猜 moving rect。
 
-RemoteViews、MAML、folder recovery、drag/launch proxy 等异步路径必须在重新声明 ownership 前检查 live state。
+### Shortcut popup
 
-## Grid / Widget 规则
+Popup source/session 与 ordinary static Workspace compositor 分离。dark-mode adapter 只能使用 Android typed View/Drawable API，不允许为了改文字/图标去反射 LiquidDock 自有成员。
 
-- 不修改 MIUI occupancy / placement 所有权；
-- 不 Hook `addOccupied()` / `transformToHVArray()` 猜 matrix 方向；
-- Widget adaptation 只修改 allocation/frame；
-- 当前显式适配 1×1、2×1、2×2、4×2；
-- Widget 泛化应走 `WidgetClassifier` / `WidgetSpecRegistry`，不要继续散落 `itemType == ...` 分支；
-- `HomeGridHook` 拆分时 rotation / refresh 最后处理。
+---
 
-## Workstation / Laptop 规则
+## 10. Widget rules
 
-工作台仍是**实验性、未完整支持**路径。
+- glass background ownership、dark-content adaptation、component hiding 是三条独立 concern；
+- RemoteViews update / MAML lifecycle 后要重新 reconcile；
+- component hiding 使用受约束 selector 和可恢复 mutation；
+- 不开放任意 script/method-call DSL；
+- discovery/selector failure 应有 bounded diagnostic，不 silently pretend success。
 
-修改工作台代码时至少考虑：
+Grid Widget adaptation 只改变 allocation/frame，不接管 occupancy matrix。
+
+---
+
+## 11. Grid rules
+
+- MIUI owns placement and occupancy；
+- 不 Hook `addOccupied()` / `transformToHVArray()` 来猜 matrix；
+- profile 支持 8×4 / 10×6，portrait 自动交换 rows/columns；
+- orientation memory 与 off-screen/lazy page preparation 必须保持；
+- `WorkspaceDropRuleHook` 可扩展合法坐标，但不变成 placement engine。
+
+Launcher 4.50 icon-size scaling必须继续使用 measure-domain transaction，不能直接修改共享 `GridConfig`。
+
+---
+
+## 12. Workstation rules
+
+Workstation 是 composite experimental path。修改任一子功能时至少考虑：
 
 - 进入/退出；
-- Dock geometry / icon offset；
-- Grid / All Apps；
+- Dock geometry；
+- icon top/bottom offset；
+- Workspace Grid；
+- All Apps；
 - Divider；
-- Recents 连续往返；
+- Recents 往返；
 - rotation；
 - wallpaper freshness；
-- PassBlur producer suspend/rebind；
-- 普通模式无回归。
+- producer endpoint lifetime；
+- normal-layout backup/restore。
 
-Workstation composite customization 当前保持 restart-bound。不要只恢复其中一个子模块而留下混合状态。
+单一 visual owner 可 live restore，不代表整体 Workstation structure 可热卸载。
 
-## Divider 规则
+---
 
-`DockDividerHook` 必须保持 exact restore：
+## 13. Security Center rules
 
-- 首次 mutation 前 snapshot width / height / margins / background；
-- background 使用独立 Drawable snapshot，避免 alias；
-- disable 时取消 pending pre-draw listener；
-- restore snapshot + `requestLayout()`；
-- restore 后释放 ownership，使下一次 enable 重新捕获当时的 vendor state。
+当前 compatibility contract 是 semantic/capability-driven，不是 fixed versionCode / obfuscated field map。
 
-详见 [DIVIDER.md](DIVIDER.md)。
+新增兼容时优先使用：
 
-## Stroke / Shadow 规则
+- stable class relation；
+- method signature；
+- public semantic getter；
+- resource capability；
+- unique structural relation；
+- explicit assistant-type discriminator。
 
-`DockStrokeRenderer` 是当前 foreground stroke owner。
+歧义必须 reject，不要“选第一个看起来像的”。
 
-- 禁止恢复 1.x overlay 作为默认路径；
-- disable stroke 时恢复原 foreground；
-- Squircle / Fill-Diff 运行时切换要刷新已安装 renderer；
-- whole-Dock shadow 与历史 stroke-shadow 是不同功能；
-- 不要伪造未知 MIUI shadow 参数。
+`SecurityCenterPassBlurContinuousAuthority` 和 `SecurityCenterVendorMaterialState` 是进入 feature hooks 前的基础 capability；如果它们不可用，应 fail closed。
 
-历史 stroke-shadow key 在最终方案确定前继续保留配置兼容。
+vendor material release 应重放已观察状态，不调用猜测的 private restore helper。
 
-## Runtime behavior 测试规则
+---
 
-涉及 ownership、freshness、animation、recovery、teardown、callback timing 或 lifecycle sequencing 的测试，必须驱动**生产代码实际使用的**纯 state / policy 对象，并对输入与输出做断言。
+## 14. Runtime ownership / restore
 
-禁止：
+通用要求：
 
-- 读取 `src/main/java` 后通过 `contains()` / `indexOf()` / method slicing 推断 runtime 行为；
-- 用 production source 中某几行的相对顺序代替状态转换测试；
-- 为了访问同包 package-private state/policy 而使用 Java reflection。
+- first mutation 前 snapshot 原 state；
+- disable 先 publish false；
+- pending callback 执行前重新检查；
+- remove listeners/observers；
+- restore snapshot；
+- release snapshot ownership；
+- re-enable 后重新捕获当时 vendor state。
 
-同包 package-private state/policy 应直接 typed 调用。新增的纯模型不能是 test-only 镜像，必须由 production runtime 真正消费。
+只恢复真正保存过的状态。不要构造“可能的默认 MIUI 参数”。
 
-静态 source/config inspection 只保留给以下场景：
+---
+
+## 15. Runtime tests vs static contracts
+
+Runtime ownership / freshness / animation / recovery 测试必须调用**生产 runtime 真正在用的** typed state/policy。
+
+禁止用以下方式证明 runtime behavior：
+
+- 读取 production source 后 `contains()` 猜状态转换；
+- `indexOf()` / `substring()` / `split()` 推断执行顺序；
+- 为了访问同包 package-private state 再用 Java reflection。
+
+`RuntimeBehaviorTestPolicyContractTest` default-deny production source readers。
+
+允许 source inspection 的典型场景：
 
 - R8 / keep rules；
-- Gradle / build configuration；
-- Android Manifest / Xposed scope；
-- 明确的 architecture/API 禁令，例如“不得使用某 API / 不得跨自有模块反射”。
+- Gradle / build config；
+- Manifest/Xposed scope；
+- 明确的 architecture/API 禁令；
+- vendor signature/static wiring contract。
 
-`RuntimeBehaviorTestPolicyContractTest` 会扫描**全部 Java tests**。任何新的 production source/config reader 默认失败；合法静态 reader 必须进入显式审计的 static allowlist，并且不能通过 `indexOf()` / `substring()` 做调用顺序或方法体切片证明。
+`LEGACY_SOURCE_DEBT` 当前仍有显式历史清单，只能减少，不能为新测试增加例外。
 
-本次迁移之外仍有少量历史 source-reader debt，由 gate 的 `LEGACY_SOURCE_DEBT` 精确列名。该清单只允许减少，不允许新增；尤其不得把 ownership、freshness、animation、recovery 的 runtime contract 放进 debt 清单绕过 typed-state 测试。
+---
 
-## 文档规则
+## 16. CI / verification
 
-当前权威文档：
-
-- [README.md](README.md) — 项目与兼容边界；
-- [FEATURES.md](FEATURES.md) — 用户功能与设置边界；
-- [ARCHITECTURE.md](ARCHITECTURE.md) — 当前 runtime 架构；
-- [HOOKS.md](HOOKS.md) — 主要 Hook 与 listener；
-- [DIVIDER.md](DIVIDER.md) — Divider ownership；
-- [TODO.md](TODO.md) — 后续开发优先级；
-- [CHANGELOG.md](CHANGELOG.md) — release 历史。
-
-`docs/superpowers/plans` / `specs` 是历史设计记录，不要求跟随每个 release 重写。
-
-## 提交前
-
-至少执行：
+PR 至少通过 `API101 migration build`：
 
 ```bash
-./gradlew testDebugUnitTest --stacktrace
-./gradlew assembleDebug --stacktrace
+./gradlew testDebugUnitTest assembleDebug --stacktrace
 ```
 
-高风险 Grid / Workstation / PassBlur producer lifecycle 改动除 CI 外还需要真机回归。
+并通过 Security Center/root PassBlur zero-copy audit。
 
-## 许可
+涉及真实 vendor lifecycle 的高风险修改还需要目标设备验证；CI green 不等于 MIUI private behavior 已在设备上验证。
 
-本项目基于 [GPL-3.0](LICENSE) 许可。
+---
+
+## 17. Documentation authority
+
+当前根文档：
+
+- [README.md](README.md) — 项目、安装、兼容边界
+- [FEATURES.md](FEATURES.md) — 用户功能/设置
+- [ARCHITECTURE.md](ARCHITECTURE.md) — runtime 架构/ownership
+- [HOOKS.md](HOOKS.md) — Hook/listener/reflection 边界
+- [DIVIDER.md](DIVIDER.md) — Divider contract
+- [TODO.md](TODO.md) — active debt
+- [CHANGELOG.md](CHANGELOG.md) — release history/current-main changes
+
+历史 plans/specs 不要求随 release 改写，也不能覆盖 production truth。
+
+## License
+
+本项目基于 [GPL-3.0](LICENSE)。

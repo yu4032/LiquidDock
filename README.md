@@ -11,154 +11,154 @@
   <a href="https://github.com/libxposed/api"><img alt="libxposed API 101" src="https://img.shields.io/badge/libxposed-API%20101-6f42c1"></a>
 </p>
 
-LiquidDock 是一个面向 **HyperOS 3 平板系统桌面** 的 LSPosed / libxposed API 101 模块，用于为系统桌面提供可自定义的 Liquid Glass 渲染，并扩展 Dock、桌面网格、小组件、文件夹、多任务界面与工作台布局。
-
-LiquidDock 主要针对 **HyperOS 3.0.307+** 与 **`com.miui.home` release-4.50.x.x** 开发和验证。
+LiquidDock 是面向 HyperOS 平板桌面的 LSPosed / libxposed API 101 模块。当前 `main` 版本为 **2.4.1**，主要针对 **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x** 开发和验证，并为 Security Center 侧边栏提供独立的、能力驱动的 Liquid Glass 适配。
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
 </p>
 
-## 主要功能
+## 当前功能
 
 ### Liquid Glass
 
-- 为 Dock、已适配小组件、文件夹和桌面图标提供 GPU 渲染的 Liquid Glass。
-- 基于 Prismal 光学模型实现折射、色散、模糊、镜面、高光、焦散和方向光等效果。
-- 支持调整玻璃尺寸、圆角、采样范围、模糊与高光等视觉参数。
-- 桌面图标玻璃可配合透明图标主题使用。
-- 支持动态壁纸和视频壁纸。
+- Dock、桌面图标、Dock 系统功能图标、支持的小组件、小/大文件夹使用 Prismal Liquid Glass。
+- Workspace 静态对象共享一个 root-wide PassBlur source/session，不为每个图标或小组件重复创建 producer。
+- 拖拽使用独立上层窗口进行**实时** Workspace 采样，并镜像 MIUI DragView 视觉；不是拖拽开始时的静态截图。
+- 桌面快捷菜单可选独立玻璃背景，并可开启深色模式适配：文字变白，独立图标只对近黑、低色差的线条图标做白色 tint，彩色第三方图标保持原样。
+- 小组件支持深色内容适配、背景 ownership 管理，以及用户可选择的组件隐藏规则。
+- Security Center `:ui` 进程支持能力驱动的 Game / Video / Global Dock / All Apps glass；不再依赖固定混淆字段名作为兼容契约。
+- 支持折射、色散、blur、厚度、IOR、法线、镜面、rim、caustics、方向光、highlight profile 等 Prismal 参数。
 
-### Launcher / Dock 自定义
+### Launcher / Dock
 
-- 新增 **8×4**、**10×6** 桌面布局。
-- 支持分别调整横屏 / 竖屏的边距、间距和页面指示器位置。
-- 支持调整 Dock 宽度、高度、底部偏移、图标间距、圆角和模糊参数。
-- 支持自定义 Dock 描边、透明度、阴影和分隔线。
-- 支持小组件背景隐藏 / 适配规则。
-- 支持工作台模式布局自定义，包括 8×4 桌面布局。
-- 支持调整多任务界面背景模糊度。
+- 自定义桌面网格：**8×4**、**10×6**，横竖屏独立几何与 placement memory。
+- Launcher 4.50 图标大小缩放（80%–120%），覆盖 Workspace、Dock、小文件夹预览、打开的文件夹内容与 Workstation App 页，同时避免普通 All Apps / Search 被误缩放。
+- Dock 宽高、底部位置、图标间距、模糊、圆角、squircle / Fill-Diff。
+- Dock 描边、描边阴影、整个 Dock 阴影、Workstation Divider。
+- 可隐藏 Dock 的手机互联入口，不改变系统连接能力。
+- Workstation / Laptop 的 Dock、Grid、All Apps 和图标位置适配仍属于实验性路径。
+- Recents 背景模糊比例可调。
+- Workspace、Dock 图标恢复、按压、Dock resize 和设置页切换动画时长可调。
 
 ## 渲染架构
 
-LiquidDock 使用 HyperOS 原生 PassBlur、OES / GLES 与 Prismal 组成 zero-copy 渲染链：
+Launcher Liquid Glass 的主路径是 GPU zero-copy：
 
 ```text
-HyperOS SurfaceFlinger PassBlur
+HyperOS MiuiX PassBlur
         ↓
-external OES texture
+Surface / SurfaceTexture
         ↓
-GLES normalization / local sampling
+GL_TEXTURE_EXTERNAL_OES
         ↓
-Prismal blur + optical rendering
+GPU normalization / overscan
         ↓
-TextureView composition
+Prismal optical renderer
+        ↓
+Dock / Launcher / popup / drag / Security Center output
 ```
 
-当前实现的主要特性：
+关键约束：
 
-- 背景帧保持在 GPU 路径中。
-- PassBlur 更新由内容源驱动，不需要通过固定轮询持续请求帧。
+- 活动 Liquid Glass backdrop 不使用 ScreenCapture、PixelCopy、CPU bitmap readback 或 texture re-upload 作为 fallback；
+- native PassBlur geometry 保持权威，Workspace 质量缩放发生在 OES normalization 之后；
+- source frame 与昂贵的 Prismal/output render 分离，FPS gate 不阻塞 `SurfaceTexture.updateTexImage()` drain；
+- scene / wallpaper / producer freshness 由 generation 与 fresh-frame barrier 管理，返回 HOME 不直接展示 stale frame；
+- vendor/private capability 不可用时 fail closed，保留或恢复系统材质。
+
+> `ShortcutMenuDarkModeController` 会把菜单小图标首次渲染到 20×20 临时 Bitmap 做颜色分类。这只是 UI 图标判定，不属于 glass backdrop 捕获链。
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
 </p>
 
-## 当前支持范围
+## 兼容边界
 
-| 项目 | 要求 |
+| 项目 | 当前边界 |
 | --- | --- |
-| ROM | HyperOS 3.0.307+ |
-| 系统桌面 | `com.miui.home` `release-4.50.x.x` |
-| Hook 环境 | LSPosed / libxposed API 101 |
-| 构建 JDK | JDK 17 |
-| Android SDK | compileSdk 37 |
+| LiquidDock | `main` / 2.4.1 |
+| Android | minSdk 33，targetSdk / compileSdk 37 |
+| Launcher | HyperOS 3.0.307+，`com.miui.home` release-4.50.x.x 为主要验证基线 |
+| Hook runtime | libxposed API 101 |
+| Build JDK | JDK 17 |
+| Security Center | `com.miui.securitycenter:ui`；运行时通过语义结构与资源能力验证，能力缺失或歧义时不接管 |
 
-### 使用前说明
+LiquidDock 依赖 HyperOS 私有 Launcher / SystemUI / Security Center 行为以及隐藏的 PassBlur / `SurfaceControl` API。系统组件升级后，即使包名不变，也可能因为私有结构变化暂时失效。
 
-LiquidDock 直接依赖 HyperOS Launcher / SystemUI 的内部实现，以及部分 vendor 私有类和隐藏的 `SurfaceControl.Transaction` PassBlur API。系统、桌面或 SystemUI 更新后，如果这些私有接口发生变化，相关功能可能暂时失效，直到项目完成适配。
-
-高度修改的第三方 ROM、修改较多的 Launcher / SystemUI，以及超出上述版本范围的环境不保证兼容。非玻璃功能同样依赖对应 HyperOS Launcher 类和方法存在。
-
-### LSPosed 作用域
+### Xposed scope
 
 ```text
 com.miui.home
 com.android.systemui
+com.miui.securitycenter
 ```
 
-`com.miui.home` 是主要注入目标；`com.android.systemui` 用于与 Launcher / SystemUI 的转场和状态协同。
+- `com.miui.home`：主要功能与 Launcher Liquid Glass。
+- `com.android.systemui`：只提供 HOME / keyguard 转场时序权威，不作为 Launcher glass renderer。
+- `com.miui.securitycenter`：仅在实际进程为 `com.miui.securitycenter:ui` 时进入 Security Center glass 初始化。
 
 ## 安装
 
-1. 从 [GitHub Releases](https://github.com/yu4032/LiquidDock/releases) 下载最新 APK。
-2. 在具备可用 LSPosed / libxposed 环境的设备上安装 APK。
-3. 在 LSPosed 中启用 **LiquidDock**。
-4. 启用以下作用域：
-   - 系统桌面 — `com.miui.home`
-   - 系统界面 — `com.android.systemui`
-5. 重启对应进程，或直接重启设备。
-6. 打开 LiquidDock，根据需要启用和调整功能。
+1. 从 [GitHub Releases](https://github.com/yu4032/LiquidDock/releases) 下载 APK。
+2. 在支持 libxposed API 101 的 LSPosed 环境安装并启用 LiquidDock。
+3. 勾选上述三个 scope；不需要 Security Center 功能时仍可关闭对应 Liquid Glass 开关。
+4. 重启受影响进程或设备。
+5. 在 LiquidDock 设置页启用需要的功能。
 
-提交兼容性问题前，请先确认当前 HyperOS 和 `com.miui.home` 版本仍处于支持范围内。
+结构性 Hook（例如 Grid 主结构、部分 Dock / Workstation 安装路径）通常需要重启桌面；部分视觉 ownership 开关可运行时释放。设置页会尽量明确提示生效边界。
 
 ## 从源码构建
 
-需要：
-
-- Android SDK / compileSdk 37
-- JDK 17
-- libxposed API 101
-- Gradle 自动解析 `io.github.libxposed:api` / `service` 依赖
-
-### Debug
+要求：Android SDK 37、JDK 17、Gradle 9.6.1、libxposed API 101。
 
 ```bash
 ./gradlew testDebugUnitTest --stacktrace
 ./gradlew assembleDebug --stacktrace
 ```
 
-### Release
+Release：
 
 ```bash
 ANDROID_HOME=/path/to/Android ./gradlew assembleRelease --no-daemon
 ```
 
-APK 输出位于：
+Debug 与 Release 都启用 Android optimization / R8。CI 的 debug APK 因此也会经过 shrinker，用来提前发现反射和 keep-rule 回归。
 
-```text
-build/outputs/apk/
-```
+## R8 与反射约束
 
-Debug 与 Release 均使用项目当前配置的 Android Gradle Plugin optimization / shrinker 路径。
+LiquidDock 自有类之间禁止用字符串反射访问字段/方法，使用 typed Java / package-private API。反射主要保留在 Android / HyperOS vendor 边界。
 
-## 反馈与贡献
+跨 ClassLoader 的类名也必须谨慎：例如 Dock spacing 需要用 Launcher ClassLoader 解析 `RecyclerView$State`，因此项目对 `RecyclerView` / `$State` 使用 targeted `-keepnames`，避免 R8 把字符串改成模块自身的混淆名。不要通过整包 `-keep` 掩盖自反射问题。
 
-欢迎提交 Issue 和 Pull Request。报告渲染或兼容性问题时，建议至少附带：
+## 文档
 
-- HyperOS 版本；
-- `com.miui.home` 版本；
-- 是否启用工作台模式；
-- 简短、稳定的复现步骤；
-- 可获取时提供 LiquidDock / Launcher 相关日志。
+- [FEATURES.md](FEATURES.md) — 功能、设置与生效边界
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 运行时架构、ownership 与 freshness
+- [HOOKS.md](HOOKS.md) — 当前 Hook / listener / reflection 边界
+- [CONTRIBUTING.md](CONTRIBUTING.md) — 开发、测试、R8 与兼容规则
+- [DIVIDER.md](DIVIDER.md) — Workstation Divider ownership
+- [TODO.md](TODO.md) — 当前剩余工程债务
+- [CHANGELOG.md](CHANGELOG.md) — 发布历史与 current-main 变更
 
-请尽量让每个 Pull Request 聚焦于单一问题，避免混入无关重构。
+`docs/superpowers/plans` 与 `docs/superpowers/specs` 是历史设计/实施记录；判断当前行为时应以生产代码和上述根文档为准。
+
+## 反馈
+
+报告兼容问题时建议附带：HyperOS 版本、Launcher 版本、是否启用 Workstation、相关设置、稳定复现步骤，以及 `[DC]` 日志。Security Center 问题还应说明实际 `com.miui.securitycenter` 版本和触发的是 Game / Video / Global Dock / All Apps 哪一条路径。
 
 ## 风险提示
 
 > [!WARNING]
-> LiquidDock 依赖 HyperOS 的私有接口，并会通过 LSPosed / libxposed Hook 系统桌面和 SystemUI。系统、桌面或 SystemUI 更新后可能出现兼容性问题。建议在使用前做好必要备份，并确保有可用的恢复方式。
+> LiquidDock Hook 系统 Launcher、SystemUI 和 Security Center 的私有实现。升级系统组件前请保留可用的恢复方式。本项目与 Xiaomi、LSPosed 或相关厂商/项目没有隶属关系。
 
-LiquidDock 是非官方社区项目，与 Xiaomi、LSPosed 等相关厂商或项目不存在隶属关系。“HyperOS”和“MIUI”等名称仅用于兼容性说明。
+项目按 GPL-3.0 “AS IS” 提供，风险与责任以 [LICENSE](LICENSE) 为准。
 
-本项目按现状（“AS IS”）提供，使用风险由使用者自行承担。许可与责任限制以 [GPL-3.0](LICENSE) 为准。
+## Credits
 
-## 感谢
+- **Prismal** — Liquid Glass 光学模型与 shader 参数参考
+- **LSPosed / libxposed** — Hook API 与模块运行时
+- **HyperCeiler** — HyperOS 模块工程实践与设置结构参考
 
-- **Prismal** — Liquid Glass 光学模型与 Shader 参数设计参考。
-- **LSPosed / libxposed** — Hook API 与模块运行框架。
-- **HyperCeiler** — HyperOS 模块工程实践与项目文档结构参考。
+## License
 
-## 开源许可
-
-LiquidDock 基于 [GNU General Public License v3.0](LICENSE) 开源。
+[GNU General Public License v3.0](LICENSE)
