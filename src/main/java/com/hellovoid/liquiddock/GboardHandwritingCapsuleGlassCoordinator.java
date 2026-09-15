@@ -22,6 +22,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         View.OnLayoutChangeListener layoutListener;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean captureRequested;
+        boolean presented;
         boolean released;
 
         State(ViewGroup host, LiquidDockConfig.Glass glassConfig, float cornerRadiusPx) {
@@ -67,6 +68,15 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         if (state != null) release(state);
     }
 
+    static synchronized boolean isActive(ViewGroup host) {
+        State state = host == null ? null : STATES.get(host);
+        return state != null
+                && !state.released
+                && state.presented
+                && state.session != null
+                && state.sink != null;
+    }
+
     private static synchronized void attachNow(State state) {
         if (state == null || state.released || state.session != null
                 || !state.host.isAttachedToWindow()) return;
@@ -92,7 +102,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
                 state.glassConfig,
                 new GboardFloatingGlassSession.Listener() {
                     @Override public void onPresented() {
-                        // Nothing to hide: the vendor material remains behind the transparent sink.
+                        markPresented(state);
                     }
 
                     @Override public void onFailure(Throwable error) {
@@ -104,14 +114,22 @@ final class GboardHandwritingCapsuleGlassCoordinator {
                 state.host.getContext(), session);
         state.sink = sink;
         try {
-            // The stock material is drawn by ShadowedSoftKeyboardView itself. Child index 0
-            // overlays only that material; all existing Gboard controls remain above Prismal.
+            // Child index 0 keeps Prismal below the existing controls. Once the first glass frame
+            // is presented, the draw hook bypasses ShadowedSoftKeyboardView's vendor path clip so
+            // Prismal becomes the sole background-shape owner.
             state.host.addView(sink, 0, new ViewGroup.LayoutParams(1, 1));
         } catch (Throwable error) {
             failClosed(state, "unable to insert toolbar glass below controls", error);
             return;
         }
         syncGeometry(state);
+    }
+
+    private static synchronized void markPresented(State state) {
+        if (state == null || state.released || state.presented
+                || STATES.get(state.host) != state) return;
+        state.presented = true;
+        state.host.invalidate();
     }
 
     private static synchronized void syncGeometry(State state) {
@@ -147,6 +165,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
     private static synchronized void release(State state) {
         if (state == null || state.released) return;
         state.released = true;
+        state.presented = false;
         if (STATES.get(state.host) == state) STATES.remove(state.host);
 
         if (state.attachListener != null) {
@@ -177,6 +196,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         if (session != null) {
             try { session.shutdown(); } catch (Throwable ignored) {}
         }
+        try { state.host.invalidate(); } catch (Throwable ignored) {}
     }
 
     private static void log(String message, Throwable error) {
