@@ -17,12 +17,15 @@ import org.junit.Test;
 public class GboardGlassAppearanceConfigTest {
     @Test public void gboardPreferenceKeysAndDefaultsAreStable() {
         assertEquals("liquid_gboard_floating_glass", GboardGlassPreferences.ENABLED_KEY);
+        assertEquals("liquid_gboard_auto_resize_after_handle_drag",
+                GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY);
         assertEquals("liquid_gboard_blur", GboardGlassPreferences.BLUR_KEY);
         assertEquals("liquid_gboard_tint_r", GboardGlassPreferences.TINT_RED_KEY);
         assertEquals("liquid_gboard_tint_g", GboardGlassPreferences.TINT_GREEN_KEY);
         assertEquals("liquid_gboard_tint_b", GboardGlassPreferences.TINT_BLUE_KEY);
         assertEquals("liquid_gboard_tint_alpha", GboardGlassPreferences.TINT_ALPHA_KEY);
         assertTrue(GboardGlassPreferences.ENABLED_DEFAULT);
+        assertTrue(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT);
     }
 
     @Test public void missingGboardAppearanceValuesInheritGlobalGlass() {
@@ -80,6 +83,7 @@ public class GboardGlassAppearanceConfigTest {
 
     @Test public void gboardSettingsParticipateInConfigBackupWithoutDestroyingInheritance() {
         assertTrue(hasSchemaKey(GboardGlassPreferences.ENABLED_KEY));
+        assertTrue(hasSchemaKey(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.BLUR_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_RED_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_GREEN_KEY));
@@ -88,8 +92,11 @@ public class GboardGlassAppearanceConfigTest {
 
         Map<String, Object> values = new HashMap<>();
         values.put(GboardGlassPreferences.ENABLED_KEY, false);
+        values.put(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY, false);
         Map<String, Object> exported = ConfigCodec.exportValues(values);
         assertEquals(Boolean.FALSE, exported.get(GboardGlassPreferences.ENABLED_KEY));
+        assertEquals(Boolean.FALSE,
+                exported.get(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY));
         assertFalse(exported.containsKey(GboardGlassPreferences.BLUR_KEY));
         assertFalse(exported.containsKey(GboardGlassPreferences.TINT_RED_KEY));
 
@@ -101,6 +108,8 @@ public class GboardGlassAppearanceConfigTest {
 
         Map<String, Object> imported = ConfigCodec.importValues(exported);
         assertEquals(Boolean.FALSE, imported.get(GboardGlassPreferences.ENABLED_KEY));
+        assertEquals(Boolean.FALSE,
+                imported.get(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY));
         assertEquals(42, imported.get(GboardGlassPreferences.BLUR_KEY));
         assertEquals(12, imported.get(GboardGlassPreferences.TINT_RED_KEY));
     }
