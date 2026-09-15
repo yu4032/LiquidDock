@@ -81,7 +81,7 @@ public class GboardFloatingGlassContractTest {
 
         assertTrue(coordinator.contains("0x7f0b0617"));
         assertTrue(coordinator.contains("0x7f0b0618"));
-        assertTrue(coordinator.contains("addView(sink, 0"));
+        assertTrue(coordinator.contains("insertSinkAboveStockBackground"));
         assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
         assertTrue(coordinator.contains("restoreStockBackground"));
         assertTrue(coordinator.contains("OnAttachStateChangeListener"));
@@ -95,6 +95,16 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("syncSinkBounds(state)"));
         assertTrue(coordinator.contains("state.keyboardArea.getWidth()"));
         assertTrue(coordinator.contains("state.keyboardArea.getHeight()"));
+    }
+
+    @Test public void sinkIsInsertedRelativeToTheStockBackgroundNotAtTreeBottom() throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+
+        assertFalse(coordinator.contains("addView(sink, 0"));
+        assertTrue(coordinator.contains("backgroundFrame.getParent()"));
+        assertTrue(coordinator.contains("indexOfChild(backgroundFrame)"));
+        assertTrue(coordinator.contains("backgroundIndex + 1"));
+        assertTrue(coordinator.contains("state.sinkHost"));
     }
 
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
