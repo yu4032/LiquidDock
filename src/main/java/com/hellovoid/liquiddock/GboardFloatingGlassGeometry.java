@@ -5,7 +5,7 @@ import android.view.View;
 
 import com.hellovoid.prismal.PrismalGeometry;
 
-/** Immutable root-local geometry and host-local sink bounds for the Gboard floating shell. */
+/** Immutable root-local geometry and host-local sink bounds for Gboard glass targets. */
 final class GboardFloatingGlassGeometry {
     final int rootWidth;
     final int rootHeight;
@@ -109,6 +109,57 @@ final class GboardFloatingGlassGeometry {
                     left, top, right - left, bottom - top,
                     cornerRadiusPx * horizontalScale,
                     sinkLeft, sinkTop, sinkRight - sinkLeft, sinkBottom - sinkTop);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    static GboardFloatingGlassGeometry captureTarget(
+            View root,
+            View sinkHost,
+            View target,
+            float cornerRadiusPx) {
+        if (root == null || sinkHost == null || target == null
+                || !root.isAttachedToWindow() || !sinkHost.isAttachedToWindow()
+                || !target.isAttachedToWindow()
+                || root.getWidth() <= 0 || root.getHeight() <= 0
+                || target.getWidth() <= 0 || target.getHeight() <= 0
+                || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f) return null;
+        try {
+            Matrix rootToGlobal = new Matrix();
+            root.transformMatrixToGlobal(rootToGlobal);
+            Matrix globalToRoot = new Matrix();
+            if (!rootToGlobal.invert(globalToRoot)) return null;
+
+            Matrix hostToGlobal = new Matrix();
+            sinkHost.transformMatrixToGlobal(hostToGlobal);
+            Matrix globalToHost = new Matrix();
+            if (!hostToGlobal.invert(globalToHost)) return null;
+
+            Bounds rootBounds = mapBounds(target, globalToRoot);
+            Bounds hostBounds = mapBounds(target, globalToHost);
+            if (rootBounds == null || hostBounds == null) return null;
+
+            float left = clamp(rootBounds.left, 0f, root.getWidth());
+            float right = clamp(rootBounds.right, 0f, root.getWidth());
+            float top = clamp(rootBounds.top, 0f, root.getHeight());
+            float bottom = clamp(rootBounds.bottom, 0f, root.getHeight());
+            if (right <= left || bottom <= top) return null;
+
+            float rootWidthScale = (rootBounds.right - rootBounds.left)
+                    / Math.max(1f, target.getWidth());
+            float rootHeightScale = (rootBounds.bottom - rootBounds.top)
+                    / Math.max(1f, target.getHeight());
+            float targetScale = Math.min(rootWidthScale, rootHeightScale);
+            if (!finite(targetScale) || targetScale <= 0f) return null;
+
+            return new GboardFloatingGlassGeometry(
+                    root.getWidth(), root.getHeight(),
+                    left, top, right - left, bottom - top,
+                    cornerRadiusPx * targetScale,
+                    hostBounds.left, hostBounds.top,
+                    hostBounds.right - hostBounds.left,
+                    hostBounds.bottom - hostBounds.top);
         } catch (Throwable ignored) {
             return null;
         }
