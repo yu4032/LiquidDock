@@ -180,9 +180,9 @@ final class GboardFloatingGlassCoordinator {
 
     private static synchronized void syncGeometry(State state) {
         if (state == null || state.released || state.session == null
-                || state.backgroundFrame == null || state.root == null) return;
+                || state.sinkHost == null || state.root == null) return;
         GboardFloatingGlassGeometry next = GboardFloatingGlassGeometry.capture(
-                state.root, state.backgroundFrame, state.cornerRadiusPx);
+                state.root, state.sinkHost, state.structure, state.cornerRadiusPx);
         if (next == null) {
             if (state.geometryRetryCount >= MAX_GEOMETRY_FRAME_RETRIES) {
                 failClosed(state, "floating geometry never became valid", null);
@@ -202,7 +202,7 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         state.geometryRetryCount = 0;
-        syncSinkBounds(state);
+        syncSinkBounds(state, next);
         state.session.updateGeometry(next);
         if (!state.captureRequested) {
             state.captureRequested = true;
@@ -210,11 +210,12 @@ final class GboardFloatingGlassCoordinator {
         }
     }
 
-    private static void syncSinkBounds(State state) {
-        if (state == null || state.backgroundFrame == null || state.sinkHost == null
+    private static void syncSinkBounds(
+            State state, GboardFloatingGlassGeometry geometry) {
+        if (state == null || geometry == null || state.sinkHost == null
                 || state.sink == null) return;
-        int width = state.backgroundFrame.getWidth();
-        int height = state.backgroundFrame.getHeight();
+        int width = geometry.sinkWidthPx();
+        int height = geometry.sinkHeightPx();
         if (width <= 0 || height <= 0) return;
         ViewGroup.LayoutParams params = state.sink.getLayoutParams();
         if (params == null) return;
@@ -223,14 +224,8 @@ final class GboardFloatingGlassCoordinator {
             params.height = height;
             state.sink.setLayoutParams(params);
         }
-        int[] shellLocation = new int[2];
-        int[] hostLocation = new int[2];
-        state.backgroundFrame.getLocationInWindow(shellLocation);
-        state.sinkHost.getLocationInWindow(hostLocation);
-        float desiredX = shellLocation[0] - hostLocation[0];
-        float desiredY = shellLocation[1] - hostLocation[1];
-        if (state.sink.getX() != desiredX) state.sink.setX(desiredX);
-        if (state.sink.getY() != desiredY) state.sink.setY(desiredY);
+        if (state.sink.getX() != geometry.sinkLeft) state.sink.setX(geometry.sinkLeft);
+        if (state.sink.getY() != geometry.sinkTop) state.sink.setY(geometry.sinkTop);
     }
 
     private static synchronized void onPresented(State state) {
