@@ -50,6 +50,17 @@ public class GboardFloatingGlassContractTest {
         assertTrue(hook.contains("error.getMessage()"));
     }
 
+    @Test public void sessionFailureIsDiagnosableThroughTheFilteredTagLine() throws Exception {
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+
+        assertTrue(session.contains("notifyFailure(\"output-attach\""));
+        assertTrue(session.contains("notifyFailure(\"fresh-frame\""));
+        assertTrue(session.contains("notifyFailure(\"source-terminal\""));
+        assertTrue(session.contains("notifyFailure(\"render\""));
+        assertTrue(session.contains("failureSummary(error)"));
+        assertTrue(session.contains("session failure stage="));
+    }
+
     @Test public void replacementUsesTheDecompiledKeyboardAreaAndBackgroundFrame() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
 
