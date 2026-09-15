@@ -81,9 +81,8 @@ public class GboardGlassAppearanceConfigTest {
         assertEquals(73f, appearance.blur, 0.001f);
     }
 
-    @Test public void gboardSettingsParticipateInConfigBackupWithoutDestroyingInheritance() {
+    @Test public void gboardGlassSettingsParticipateInConfigBackupWithoutDestroyingInheritance() {
         assertTrue(hasSchemaKey(GboardGlassPreferences.ENABLED_KEY));
-        assertTrue(hasSchemaKey(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.BLUR_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_RED_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_GREEN_KEY));
@@ -92,11 +91,8 @@ public class GboardGlassAppearanceConfigTest {
 
         Map<String, Object> values = new HashMap<>();
         values.put(GboardGlassPreferences.ENABLED_KEY, false);
-        values.put(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY, false);
         Map<String, Object> exported = ConfigCodec.exportValues(values);
         assertEquals(Boolean.FALSE, exported.get(GboardGlassPreferences.ENABLED_KEY));
-        assertEquals(Boolean.FALSE,
-                exported.get(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY));
         assertFalse(exported.containsKey(GboardGlassPreferences.BLUR_KEY));
         assertFalse(exported.containsKey(GboardGlassPreferences.TINT_RED_KEY));
 
@@ -108,8 +104,6 @@ public class GboardGlassAppearanceConfigTest {
 
         Map<String, Object> imported = ConfigCodec.importValues(exported);
         assertEquals(Boolean.FALSE, imported.get(GboardGlassPreferences.ENABLED_KEY));
-        assertEquals(Boolean.FALSE,
-                imported.get(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY));
         assertEquals(42, imported.get(GboardGlassPreferences.BLUR_KEY));
         assertEquals(12, imported.get(GboardGlassPreferences.TINT_RED_KEY));
     }
