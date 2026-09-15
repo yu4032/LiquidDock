@@ -79,6 +79,7 @@ public final class ModuleMain extends XposedModule {
                     return;
                 }
                 GboardFloatingGlassHook.install(classLoader);
+                GboardHandwritingCapsuleGlassHook.install(classLoader);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][GboardFloatingGlass] init failed", error);
             }
