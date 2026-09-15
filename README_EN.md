@@ -8,156 +8,119 @@
   <a href="https://github.com/yu4032/LiquidDock/actions/workflows/api101-build.yml"><img alt="Build" src="https://github.com/yu4032/LiquidDock/actions/workflows/api101-build.yml/badge.svg"></a>
   <a href="https://github.com/yu4032/LiquidDock/releases"><img alt="Release" src="https://img.shields.io/github/v/release/yu4032/LiquidDock"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
-  <a href="https://github.com/libxposed/api"><img alt="libxposed API 101" src="https://img.shields.io/badge/libxposed-API%20101-6f42c1"></a>
 </p>
 
-LiquidDock is an LSPosed / libxposed API 101 module for the HyperOS tablet launcher. Current `main` is **2.4.1**, developed primarily against **HyperOS 3.0.307+ / `com.miui.home` release-4.50.x.x**, with a separate capability-driven Liquid Glass integration for the Security Center sidebar process.
+LiquidDock is an LSPosed module for the **HyperOS tablet launcher**, focused on desktop layout, Dock customization, and Liquid Glass effects.
+
+It puts many launcher tweaks in one settings app, so you can adjust them directly without replacing launcher files, editing themes, or running commands every time.
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
 </p>
 
-## Current features
+## What it can do
 
 ### Liquid Glass
 
-- Prismal Liquid Glass for the Dock, workspace icons, selected Dock system actions, supported widgets, and small/large folders.
-- Workspace static items share one root-wide PassBlur source/session instead of creating one producer per item.
-- Workspace dragging uses a dedicated upper window with **live** Workspace sampling and a draw-only mirror of MIUI's DragView; it is not a frozen drag-start screenshot.
-- Shortcut menus can use an independent glass background and an optional dark-mode adaptation. Text becomes white; standalone icons are tinted only when a one-time scan classifies them as near-black, low-chroma line art, so colorful third-party app icons remain unchanged.
-- Widgets support dark-content adaptation, background ownership handling, and user-selectable component hiding.
-- Security Center `:ui` uses capability-driven Game / Video / Global Dock / All Apps glass contracts instead of treating obfuscated field names as compatibility authorities.
-- Prismal optics expose refraction, dispersion, blur, thickness, IOR, normals, specular/rim/caustics, directional lighting, and highlight profiles.
+Add a consistent Liquid Glass look to the Dock, workspace icons, widgets, and folders. Blur, refraction, highlights, dispersion, corner radius, and other visual details can be adjusted from the settings app.
 
-### Launcher / Dock
-
-- Custom **8×4** and **10×6** workspace profiles with orientation-specific geometry and placement memory.
-- Launcher 4.50 icon scaling from 80% to 120% for Workspace, Dock, small-folder previews, open-folder contents, and the Workstation app page while leaving normal All Apps/Search on vendor sizing.
-- Dock width, height, bottom offset, icon spacing, blur, corner geometry, squircle, and Fill-Diff controls.
-- Dock stroke, stroke shadow, whole-Dock shadow, and Workstation Divider controls.
-- Optional hiding of the phone-interconnect Dock entry without changing the underlying connection feature.
-- Experimental Workstation/Laptop Dock, Grid, All Apps, and icon-position adjustments.
-- Configurable Recents background blur.
-- Configurable timing for Workspace visibility, Dock-icon reveal, press in/out, Dock resize, and settings-page transitions.
-
-## Rendering architecture
-
-Launcher Liquid Glass uses a GPU zero-copy path:
-
-```text
-HyperOS MiuiX PassBlur
-        ↓
-Surface / SurfaceTexture
-        ↓
-GL_TEXTURE_EXTERNAL_OES
-        ↓
-GPU normalization / overscan
-        ↓
-Prismal optical renderer
-        ↓
-Dock / Launcher / popup / drag / Security Center output
-```
-
-Important invariants:
-
-- The active Liquid Glass backdrop pipeline does not use ScreenCapture, PixelCopy, CPU bitmap readback, or texture re-upload as a fallback.
-- Native PassBlur geometry remains authoritative; Workspace quality scaling happens after OES normalization.
-- Source draining is separated from expensive Prismal/output rendering, so an FPS cap never blocks `SurfaceTexture.updateTexImage()`.
-- Scene, wallpaper, and producer freshness use generations and fresh-frame barriers; returning HOME never authorizes a stale frame merely because a View became visible.
-- Missing vendor/private capabilities fail closed and preserve or restore vendor presentation.
-
-> `ShortcutMenuDarkModeController` renders a menu icon once into a tiny 20×20 bitmap for color classification. That bitmap is UI icon analysis only and is not part of the glass backdrop capture path.
+Glass also follows dragged icons and widgets. The long-press shortcut menu can use a glass background as well, with an optional white text and line-icon mode for dark backgrounds.
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
 </p>
 
-## Compatibility boundary
+### Home screen layout
 
-| Item | Current boundary |
+Choose between **8×4** and **10×6** workspace grids, with separate spacing and positioning controls for portrait and landscape.
+
+On Launcher 4.50, icon size can also be adjusted for the workspace, Dock, folders, and related launcher views without changing normal All Apps or Search sizing.
+
+### Dock
+
+Adjust Dock width, height, bottom position, icon spacing, corner radius, and blur. Stroke, shadow, and Workstation divider options are available too.
+
+The phone-interconnect shortcut can be hidden from the Dock without turning off the underlying system feature.
+
+### Widgets and folders
+
+Widgets can use glass backgrounds with an optional dark-content mode. Selected background parts of supported widgets can also be hidden from the settings app.
+
+Small and large folders can be configured separately, including their glass effect, size, and corner radius.
+
+### Recents and Workstation
+
+Recents background blur can be adjusted. LiquidDock also includes several layout options for HyperOS Workstation / Laptop mode, including Dock, workspace, and app-page positioning.
+
+Workstation support is still being refined, so changing its options one at a time is recommended.
+
+### Security Center sidebar
+
+LiquidDock can also add Liquid Glass to supported HyperOS Security Center sidebar pages, including Game Toolbox, Video Toolbox, Global Dock, and All Apps.
+
+Security Center varies significantly between system versions. If a build is not compatible, LiquidDock leaves the original system interface in place.
+
+## Compatibility
+
+The main development and test baseline is:
+
+| Item | Recommended version |
 | --- | --- |
-| LiquidDock | `main` / 2.4.1 |
-| Android | minSdk 33, targetSdk / compileSdk 37 |
-| Launcher | HyperOS 3.0.307+, `com.miui.home` release-4.50.x.x is the primary validated baseline |
-| Hook runtime | libxposed API 101 |
-| Build JDK | JDK 17 |
-| Security Center | `com.miui.securitycenter:ui`; runtime semantic/resource capabilities are validated before any material ownership is claimed |
+| HyperOS | 3.0.307 or newer |
+| System Launcher | `com.miui.home` release-4.50.x.x |
+| LSPosed | A version with libxposed API 101 support |
 
-LiquidDock relies on private HyperOS Launcher, SystemUI, Security Center, PassBlur, and `SurfaceControl` behavior. A component update may break a feature even when the package name stays the same.
-
-### Xposed scope
-
-```text
-com.miui.home
-com.android.systemui
-com.miui.securitycenter
-```
-
-- `com.miui.home`: primary Launcher functionality and Liquid Glass.
-- `com.android.systemui`: read-only HOME/keyguard transition timing authority; it is not the Launcher glass renderer.
-- `com.miui.securitycenter`: Security Center initialization proceeds only in the exact `com.miui.securitycenter:ui` process.
+Launcher and Security Center updates may temporarily affect compatibility. If something stops working after an update, check the installed launcher version first.
 
 ## Installation
 
-1. Download the APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
-2. Install it on an LSPosed environment supporting libxposed API 101.
-3. Enable LiquidDock and the three scopes above.
-4. Restart the affected processes or reboot.
-5. Enable the features you want in LiquidDock settings.
+1. Download the latest APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
+2. Install it and enable LiquidDock in LSPosed.
+3. Enable these scopes:
+   - System Launcher — `com.miui.home`
+   - System UI — `com.android.systemui`
+   - Security Center — `com.miui.securitycenter`
+4. Restart the affected processes or reboot the device.
+5. Open LiquidDock and enable the features you want.
 
-Structural hooks such as Grid layout and some Dock/Workstation installation choices remain restart-bound. A number of visual ownership switches can release state at runtime; the settings UI documents the intended boundary where practical.
+Some layout options require a launcher restart. The settings app indicates this where possible.
 
-## Build from source
+## Reporting issues
 
-Requirements: Android SDK 37, JDK 17, Gradle 9.6.1, libxposed API 101.
+When opening an issue, please include:
 
-```bash
-./gradlew testDebugUnitTest --stacktrace
-./gradlew assembleDebug --stacktrace
-```
+- HyperOS version;
+- System Launcher version;
+- the LiquidDock options that were enabled;
+- short, reliable reproduction steps;
+- relevant logs when available.
 
-Release:
+For Workstation or Security Center problems, also mention the page or mode where the issue occurs.
 
-```bash
-ANDROID_HOME=/path/to/Android ./gradlew assembleRelease --no-daemon
-```
+## More documentation
 
-Both Debug and Release use Android optimization / R8. CI debug APKs therefore exercise shrinker behavior as well.
+For a complete feature list, see [FEATURES.md](FEATURES.md).
 
-## R8 and reflection rules
+Development and implementation notes are kept in:
 
-Project-owned LiquidDock classes must not access one another through string reflection; use typed Java/package-private APIs. Reflection is reserved for Android/HyperOS vendor boundaries where needed.
-
-Cross-ClassLoader type names also require care. Dock spacing resolves `RecyclerView$State` through the Launcher ClassLoader, so the project uses targeted `-keepnames` for `RecyclerView` and `$State` to prevent R8 from adapting those strings to LiquidDock's own obfuscated binary names. Broad keep rules are not a substitute for removing project self-reflection.
-
-## Documentation
-
-- [FEATURES.md](FEATURES.md) — user-visible features, settings, and restart/live boundaries
-- [ARCHITECTURE.md](ARCHITECTURE.md) — runtime architecture, ownership, and freshness
-- [HOOKS.md](HOOKS.md) — current hooks, listeners, and reflection boundaries
-- [CONTRIBUTING.md](CONTRIBUTING.md) — development, testing, R8, and compatibility rules
-- [DIVIDER.md](DIVIDER.md) — Workstation Divider ownership
-- [TODO.md](TODO.md) — active engineering debt
-- [CHANGELOG.md](CHANGELOG.md) — release history and current-main changes
-
-`docs/superpowers/plans` and `docs/superpowers/specs` are historical design/implementation records. Current behavior is defined by production source and the root documentation above.
-
-## Feedback
-
-For compatibility reports, include the HyperOS version, Launcher version, Workstation state, relevant LiquidDock settings, reliable reproduction steps, and `[DC]` logs. For Security Center issues, also include the installed Security Center version and whether the failing path is Game, Video, Global Dock, or All Apps.
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [HOOKS.md](HOOKS.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [TODO.md](TODO.md)
+- [CHANGELOG.md](CHANGELOG.md)
 
 ## Risk notice
 
 > [!WARNING]
-> LiquidDock hooks private system Launcher, SystemUI, and Security Center behavior. Keep a working recovery method before updating system components. LiquidDock is an unofficial community project and is not affiliated with Xiaomi, LSPosed, or related vendors/projects.
+> LiquidDock changes parts of the system Launcher, System UI, and Security Center. System component updates may introduce compatibility issues, so keep a working recovery method available before updating.
 
-The project is provided “AS IS” under [GPL-3.0](LICENSE).
+LiquidDock is a community project and is not affiliated with Xiaomi, LSPosed, or related projects.
 
 ## Credits
 
-- **Prismal** — Liquid Glass optical model and shader parameter reference
-- **LSPosed / libxposed** — hooking API and module runtime
-- **HyperCeiler** — HyperOS module engineering and settings-structure reference
+- **Prismal** — Liquid Glass visual reference
+- **LSPosed / libxposed** — module runtime
+- **HyperCeiler** — HyperOS module development reference
 
 ## License
 
