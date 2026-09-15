@@ -1,4 +1,4 @@
-# LiquidDock TODO
+# LiquidDock TODO FOR AGENT
 
 当前主线：**v2.4.1 / HyperOS 3.0.307+ / MiuiX PassBlur + OES/GLES + Prismal / libxposed API 101**。
 
