@@ -13,6 +13,8 @@ public class GboardFloatingResizeAndHandlePolicyTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Path SETTINGS = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt");
+    private static final Path COMPOSE_SETTINGS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
 
     private static String read(Path path) throws Exception {
         return Files.exists(path) ? Files.readString(path) : "";
@@ -62,5 +64,18 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         assertFalse(policy.contains("\"peh\""));
         assertFalse(policy.contains("\"pcg\""));
         assertFalse(policy.contains("0x7f"));
+    }
+
+    @Test public void gboardPageRestartsGboardInsteadOfLauncher() throws Exception {
+        String compose = read(COMPOSE_SETTINGS);
+        String activity = read(MAIN.resolve("SettingsActivity.java"));
+
+        assertTrue(compose.contains("page == Page.Gboard"));
+        assertTrue(compose.contains("activity.restartGboard()"));
+        assertTrue(compose.contains("action_restart_gboard"));
+        assertTrue(activity.contains("void restartGboard()"));
+        assertTrue(activity.contains("pidof com.google.android.inputmethod.latin"));
+        assertTrue(activity.contains("kill -TERM $PIDS"));
+        assertFalse(activity.contains("am force-stop com.google.android.inputmethod.latin"));
     }
 }
