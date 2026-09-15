@@ -5,7 +5,7 @@ import android.view.View;
 
 import com.hellovoid.prismal.PrismalGeometry;
 
-/** Immutable root-local geometry and output crop for the Gboard floating keyboard body. */
+/** Immutable root-local geometry and output crop for the Gboard floating keyboard shell. */
 final class GboardFloatingGlassGeometry {
     final int rootWidth;
     final int rootHeight;
@@ -37,26 +37,26 @@ final class GboardFloatingGlassGeometry {
                 Math.min(cornerRadius, Math.min(width, height) * 0.5f));
     }
 
-    static GboardFloatingGlassGeometry capture(View root, View keyboardArea, float cornerRadiusPx) {
-        if (root == null || keyboardArea == null
-                || !root.isAttachedToWindow() || !keyboardArea.isAttachedToWindow()
+    static GboardFloatingGlassGeometry capture(View root, View shellView, float cornerRadiusPx) {
+        if (root == null || shellView == null
+                || !root.isAttachedToWindow() || !shellView.isAttachedToWindow()
                 || root.getWidth() <= 0 || root.getHeight() <= 0
-                || keyboardArea.getWidth() <= 0 || keyboardArea.getHeight() <= 0
+                || shellView.getWidth() <= 0 || shellView.getHeight() <= 0
                 || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f) return null;
         try {
-            Matrix areaToGlobal = new Matrix();
-            keyboardArea.transformMatrixToGlobal(areaToGlobal);
+            Matrix shellToGlobal = new Matrix();
+            shellView.transformMatrixToGlobal(shellToGlobal);
             Matrix rootToGlobal = new Matrix();
             root.transformMatrixToGlobal(rootToGlobal);
             Matrix globalToRoot = new Matrix();
             if (!rootToGlobal.invert(globalToRoot)) return null;
             float[] points = new float[]{
                     0f, 0f,
-                    keyboardArea.getWidth(), 0f,
-                    keyboardArea.getWidth(), keyboardArea.getHeight(),
-                    0f, keyboardArea.getHeight()
+                    shellView.getWidth(), 0f,
+                    shellView.getWidth(), shellView.getHeight(),
+                    0f, shellView.getHeight()
             };
-            areaToGlobal.mapPoints(points);
+            shellToGlobal.mapPoints(points);
             globalToRoot.mapPoints(points);
             float left = min(points[0], points[2], points[4], points[6]);
             float top = min(points[1], points[3], points[5], points[7]);
@@ -69,9 +69,9 @@ final class GboardFloatingGlassGeometry {
             bottom = clamp(bottom, 0f, root.getHeight());
             if (right <= left || bottom <= top) return null;
             float horizontalScale = distance(points[0], points[1], points[2], points[3])
-                    / Math.max(1f, keyboardArea.getWidth());
+                    / Math.max(1f, shellView.getWidth());
             float verticalScale = distance(points[0], points[1], points[6], points[7])
-                    / Math.max(1f, keyboardArea.getHeight());
+                    / Math.max(1f, shellView.getHeight());
             float visualScale = Math.min(horizontalScale, verticalScale);
             if (!finite(visualScale) || visualScale <= 0f) return null;
             return new GboardFloatingGlassGeometry(
@@ -81,14 +81,6 @@ final class GboardFloatingGlassGeometry {
         } catch (Throwable ignored) {
             return null;
         }
-    }
-
-    int outputWidthPx() {
-        return Math.max(1, (int) Math.ceil(width));
-    }
-
-    int outputHeightPx() {
-        return Math.max(1, (int) Math.ceil(height));
     }
 
     PrismalGeometry toPrismalGeometry() {
