@@ -128,7 +128,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(controller.contains("Color.green"));
         assertTrue(controller.contains("Color.blue"));
         assertTrue(controller.contains("setImageTintList(WHITE_TINT)"));
-        assertTrue(controller.contains("setImageTintList(null)"));
+        assertFalse(controller.contains("setImageTintList(null)"));
         assertTrue(controller.contains("OnGlobalLayoutListener"));
         assertFalse(controller.contains("if (view instanceof ImageView) {\n            ((ImageView) view).setImageTintList(WHITE_TINT);"));
         assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
