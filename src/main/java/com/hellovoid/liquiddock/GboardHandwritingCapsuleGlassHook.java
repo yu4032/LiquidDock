@@ -28,7 +28,7 @@ final class GboardHandwritingCapsuleGlassHook {
                 throw new IllegalStateException("Gboard toolbar shadow hierarchy changed");
             }
 
-            Method superDrawBridge = resolveSuperDrawBridge(shadowedWidgetClass);
+            Method dispatchDraw = resolveDispatchDraw();
             Method shadowedDraw = shadowedWidgetClass.getDeclaredMethod("draw", Canvas.class);
             HookUtil.hook(shadowedDraw, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
@@ -43,9 +43,12 @@ final class GboardHandwritingCapsuleGlassHook {
 
                 Canvas canvas = (Canvas) args[0];
                 try {
-                    return superDrawBridge.invoke(owner, canvas);
+                    // Draw only toolbar children. This deliberately skips both the ordinary View
+                    // background and ShadowedSoftKeyboardView's vendor material/clipPath so the
+                    // Prismal sibling is the sole owner of the toolbar silhouette.
+                    return dispatchDraw.invoke(owner, canvas);
                 } catch (Throwable error) {
-                    log("unable to bypass vendor toolbar clip; stock draw restored", unwrap(error));
+                    log("unable to bypass toolbar background; stock draw restored", unwrap(error));
                     return chain.proceed(args);
                 }
             });
@@ -73,24 +76,10 @@ final class GboardHandwritingCapsuleGlassHook {
         }
     }
 
-    private static Method resolveSuperDrawBridge(Class<?> shadowedWidgetClass) {
-        Method match = null;
-        for (Method candidate : shadowedWidgetClass.getDeclaredMethods()) {
-            Class<?>[] params = candidate.getParameterTypes();
-            if (!candidate.isSynthetic()
-                    || candidate.getReturnType() != Void.TYPE
-                    || params.length != 1
-                    || params[0] != Canvas.class) continue;
-            if (match != null) {
-                throw new IllegalStateException("ambiguous Gboard toolbar super-draw bridge");
-            }
-            candidate.setAccessible(true);
-            match = candidate;
-        }
-        if (match == null) {
-            throw new IllegalStateException("Gboard toolbar super-draw bridge unavailable");
-        }
-        return match;
+    private static Method resolveDispatchDraw() throws NoSuchMethodException {
+        Method method = ViewGroup.class.getDeclaredMethod("dispatchDraw", Canvas.class);
+        method.setAccessible(true);
+        return method;
     }
 
     private static void handleWidgetLayout(ViewGroup host) {
