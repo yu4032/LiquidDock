@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.util.WeakHashMap;
@@ -9,13 +10,29 @@ import java.util.WeakHashMap;
 /** Owns zero-copy Prismal output below one Gboard companion toolbar's controls. */
 final class GboardHandwritingCapsuleGlassCoordinator {
     private static final String TAG = "[DC][GboardToolbarGlass]";
+    // PrismalRasterGuardShader expands the procedural silhouette by two logical pixels per side.
+    // Keep the output domain large enough for that AA footprint instead of clipping at the toolbar.
+    private static final float RASTER_GUARD_PX = 2f;
     private static final WeakHashMap<ViewGroup, State> STATES = new WeakHashMap<>();
+
+    private static final class SinkPlacement {
+        final ViewGroup sinkHost;
+        final View branch;
+        final int branchIndex;
+
+        SinkPlacement(ViewGroup sinkHost, View branch, int branchIndex) {
+            this.sinkHost = sinkHost;
+            this.branch = branch;
+            this.branchIndex = branchIndex;
+        }
+    }
 
     private static final class State {
         final ViewGroup host;
         final LiquidDockConfig.Glass glassConfig;
         final float cornerRadiusPx;
         View root;
+        ViewGroup sinkHost;
         GboardFloatingGlassSession session;
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
@@ -74,7 +91,8 @@ final class GboardHandwritingCapsuleGlassCoordinator {
                 && !state.released
                 && state.presented
                 && state.session != null
-                && state.sink != null;
+                && state.sink != null
+                && state.sinkHost != null;
     }
 
     private static synchronized void attachNow(State state) {
@@ -85,8 +103,14 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             failClosed(state, "toolbar root unavailable", null);
             return;
         }
+        SinkPlacement placement = findUnclippedSinkHost(state.host, RASTER_GUARD_PX);
+        if (placement == null) {
+            failClosed(state, "unclipped toolbar sink host unavailable", null);
+            return;
+        }
 
         state.root = root;
+        state.sinkHost = placement.sinkHost;
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
         state.host.addOnLayoutChangeListener(state.layoutListener);
@@ -114,15 +138,38 @@ final class GboardHandwritingCapsuleGlassCoordinator {
                 state.host.getContext(), session);
         state.sink = sink;
         try {
-            // Child index 0 keeps Prismal below the existing controls. Once the first glass frame
-            // is presented, the draw hook bypasses ShadowedSoftKeyboardView's vendor path clip so
-            // Prismal becomes the sole background-shape owner.
-            state.host.addView(sink, 0, new ViewGroup.LayoutParams(1, 1));
+            // The glass is a sibling immediately below the toolbar branch, not a toolbar child.
+            // This escapes ShadowedSoftKeyboardView and KeyboardViewHolder rectangular clipping,
+            // while the later toolbar branch still draws all native controls above Prismal.
+            int branchIndex = placement.branchIndex;
+            ViewGroup sinkHost = placement.sinkHost;
+            sinkHost.addView(sink, branchIndex, 1, 1);
         } catch (Throwable error) {
-            failClosed(state, "unable to insert toolbar glass below controls", error);
+            failClosed(state, "unable to insert unclipped toolbar glass", error);
             return;
         }
         syncGeometry(state);
+    }
+
+    private static SinkPlacement findUnclippedSinkHost(ViewGroup host, float paddingPx) {
+        if (host == null || !host.isAttachedToWindow()) return null;
+        View branch = host;
+        ViewParent parent = host.getParent();
+        float requiredWidth = host.getWidth() + paddingPx * 2f;
+        float requiredHeight = host.getHeight() + paddingPx * 2f;
+        while (parent instanceof ViewGroup) {
+            ViewGroup candidate = (ViewGroup) parent;
+            int branchIndex = candidate.indexOfChild(branch);
+            if (branchIndex >= 0
+                    && candidate.isAttachedToWindow()
+                    && candidate.getWidth() >= requiredWidth
+                    && candidate.getHeight() >= requiredHeight) {
+                return new SinkPlacement(candidate, branch, branchIndex);
+            }
+            branch = candidate;
+            parent = candidate.getParent();
+        }
+        return null;
     }
 
     private static synchronized void markPresented(State state) {
@@ -134,9 +181,13 @@ final class GboardHandwritingCapsuleGlassCoordinator {
 
     private static synchronized void syncGeometry(State state) {
         if (state == null || state.released || state.session == null
-                || state.sink == null || state.root == null) return;
-        GboardFloatingGlassGeometry geometry = GboardFloatingGlassGeometry.captureTarget(
-                state.root, state.host, state.host, state.cornerRadiusPx);
+                || state.sink == null || state.root == null || state.sinkHost == null) return;
+        GboardFloatingGlassGeometry geometry = GboardFloatingGlassGeometry.captureTargetPadded(
+                state.root,
+                state.sinkHost,
+                state.host,
+                state.cornerRadiusPx,
+                RASTER_GUARD_PX);
         if (geometry == null) return; // stock remains visible; next pre-draw may become valid.
 
         int width = geometry.sinkWidthPx();
@@ -191,6 +242,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         if (sink != null) {
             try { sink.dispose(); } catch (Throwable ignored) {}
         }
+        state.sinkHost = null;
         GboardFloatingGlassSession session = state.session;
         state.session = null;
         if (session != null) {
