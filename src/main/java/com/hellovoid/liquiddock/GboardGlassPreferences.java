@@ -1,14 +1,16 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.liquiddock.config.ConfigSchema;
+
 /** Gboard-only persisted glass controls. Missing appearance values inherit global Prismal values. */
 final class GboardGlassPreferences {
-    static final String ENABLED_KEY = "liquid_gboard_floating_glass";
-    static final String BLUR_KEY = "liquid_gboard_blur";
-    static final String TINT_RED_KEY = "liquid_gboard_tint_r";
-    static final String TINT_GREEN_KEY = "liquid_gboard_tint_g";
-    static final String TINT_BLUE_KEY = "liquid_gboard_tint_b";
-    static final String TINT_ALPHA_KEY = "liquid_gboard_tint_alpha";
-    static final boolean ENABLED_DEFAULT = true;
+    static final String ENABLED_KEY = ConfigSchema.Gboard.ENABLED.name();
+    static final String BLUR_KEY = ConfigSchema.Gboard.BLUR.name();
+    static final String TINT_RED_KEY = ConfigSchema.Gboard.TINT_RED.name();
+    static final String TINT_GREEN_KEY = ConfigSchema.Gboard.TINT_GREEN.name();
+    static final String TINT_BLUE_KEY = ConfigSchema.Gboard.TINT_BLUE.name();
+    static final String TINT_ALPHA_KEY = ConfigSchema.Gboard.TINT_ALPHA.name();
+    static final boolean ENABLED_DEFAULT = ConfigSchema.Gboard.ENABLED.uiDefault();
 
     static final class Appearance {
         final boolean enabled;
