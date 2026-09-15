@@ -31,14 +31,13 @@ public class GboardFloatingGlassContractTest {
         String resolver = read(MAIN.resolve("GboardFloatingTargetResolver.java"));
 
         assertTrue(hook.contains("GboardFloatingTargetResolver.resolve(classLoader)"));
-        assertTrue(resolver.contains("\"pev\""));
-        assertTrue(resolver.contains("\"defpackage.pev\""));
+        assertTrue(resolver.contains("RUNTIME_PROVIDER = \"pev\""));
+        assertFalse(resolver.contains("defpackage.pev"));
         assertTrue(resolver.contains("\"b\""));
         assertTrue(resolver.contains("\"a\""));
         assertTrue(resolver.contains("View.class.isAssignableFrom"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onShown"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onHidden"));
-        assertFalse(hook.contains("POPUP_PROVIDER = \"defpackage.pev\""));
         assertFalse(hook.contains("LatinIME"));
         assertFalse(hook.contains("onCreateInputView"));
     }
