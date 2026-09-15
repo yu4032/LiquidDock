@@ -116,7 +116,7 @@ public class ShortcutSecondaryGlassContractTest {
         String controller = Files.readString(MAIN.resolve("ShortcutMenuDarkModeController.java"));
 
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
-        assertTrue(hook.contains("ShortcutMenuTextColorController.attach"));
+        assertTrue(hook.contains("ShortcutMenuDarkModeController.attach"));
         assertTrue(controller.contains("TextView"));
         assertTrue(controller.contains("setTextColor(Color.WHITE)"));
         assertTrue(controller.contains("setCompoundDrawableTintList"));
