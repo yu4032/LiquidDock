@@ -53,6 +53,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherWidgetBackgroundControllerContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",
             "Miuix307MaterialHandoffContractTest.java",
+            "QuickSearchBoxStableGlassContractTest.java",
             "R8ReleaseKeepContractTest.java",
             "R8SceneControllerReflectionContractTest.java",
             "RootPassBlurBackendBoundaryTest.java",
