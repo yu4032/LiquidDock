@@ -48,6 +48,21 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertFalse(hook.contains("0x7f"));
     }
 
+    @Test public void toolbarGlassOwnsSilhouetteInsteadOfVendorClipPath() throws Exception {
+        String hook = read("GboardHandwritingCapsuleGlassHook.java");
+        String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
+        assertTrue(hook.contains(
+                "com.google.android.libraries.inputmethod.widgets.ShadowedSoftKeyboardView"));
+        assertTrue(hook.contains("\"draw\""));
+        assertTrue(hook.contains("Canvas.class"));
+        assertTrue(hook.contains("isSynthetic()"));
+        assertTrue(hook.contains("GboardHandwritingCapsuleGlassCoordinator.isActive"));
+        assertTrue(hook.contains("superDrawBridge.invoke(owner, canvas)"));
+        assertFalse(hook.contains("getDeclaredMethod(\"m\""));
+        assertTrue(coordinator.contains("static synchronized boolean isActive"));
+        assertTrue(coordinator.contains("host.addView(sink, 0"));
+    }
+
     @Test public void toolbarCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(coordinator.contains("host.addView(sink, 0"));
