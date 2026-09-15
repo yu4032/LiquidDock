@@ -28,15 +28,27 @@ public class GboardFloatingGlassContractTest {
 
     @Test public void hookTargetsOnlyThePopupFloatingKeyboardLifecycle() throws Exception {
         String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
+        String resolver = read(MAIN.resolve("GboardFloatingTargetResolver.java"));
 
-        assertTrue(hook.contains("defpackage.pev"));
-        assertTrue(hook.contains("\"b\""));
-        assertTrue(hook.contains("\"a\""));
-        assertTrue(hook.contains("HookUtil.getField(owner, \"b\")"));
+        assertTrue(hook.contains("GboardFloatingTargetResolver.resolve(classLoader)"));
+        assertTrue(resolver.contains("\"pev\""));
+        assertTrue(resolver.contains("\"defpackage.pev\""));
+        assertTrue(resolver.contains("\"b\""));
+        assertTrue(resolver.contains("\"a\""));
+        assertTrue(resolver.contains("View.class.isAssignableFrom"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onShown"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onHidden"));
+        assertFalse(hook.contains("POPUP_PROVIDER = \"defpackage.pev\""));
         assertFalse(hook.contains("LatinIME"));
         assertFalse(hook.contains("onCreateInputView"));
+    }
+
+    @Test public void hookFailureIsDiagnosableThroughTheFilteredTagLine() throws Exception {
+        String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
+
+        assertTrue(hook.contains("failureSummary(error)"));
+        assertTrue(hook.contains("error.getClass().getName()"));
+        assertTrue(hook.contains("error.getMessage()"));
     }
 
     @Test public void replacementUsesTheDecompiledKeyboardAreaAndBackgroundFrame() throws Exception {
