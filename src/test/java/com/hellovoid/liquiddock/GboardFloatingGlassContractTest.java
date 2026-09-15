@@ -127,6 +127,18 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("bottomFrame.setBackground(claim.bottomBackground)"));
     }
 
+    @Test public void presentedGlassAlsoOwnsHeaderAndKeyboardContainerFills() throws Exception {
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(authority.contains("0x7f0b0643"));
+        assertTrue(authority.contains("0x7f0b061a"));
+        assertTrue(authority.contains("0x7f0b02f6"));
+        assertTrue(authority.contains("0x7f0b0644"));
+        assertTrue(authority.contains("containerBackgrounds"));
+        assertTrue(authority.contains("view.setBackground(null)"));
+        assertTrue(authority.contains("view.setBackground(saved)"));
+    }
+
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
