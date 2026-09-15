@@ -1,29 +1,26 @@
 package com.hellovoid.liquiddock;
 
-import android.content.res.Resources;
+import android.graphics.Outline;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
+import android.view.ViewOutlineProvider;
 
 import java.util.WeakHashMap;
 
-/** Owns only the bottom visual layer of Gboard's popup floating keyboard. */
+/** Owns one structurally identified Gboard floating-keyboard glass session. */
 final class GboardFloatingGlassCoordinator {
     private static final String TAG = "[DC][GboardFloatingGlass]";
-    private static final int KEYBOARD_AREA_ID = 0x7f0b0617;
-    private static final int KEYBOARD_BACKGROUND_FRAME_ID = 0x7f0b0618;
-    private static final int KEYBOARD_BOTTOM_FRAME_ID = 0x7f0b061b;
-    private static final int FLOATING_CORNER_RADIUS_DIMEN = 0x7f0701de;
     private static final int MAX_GEOMETRY_FRAME_RETRIES = 24;
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
 
     private static final class State {
         final View popup;
+        final GboardFloatingStructureResolver.Structure structure;
         final LiquidDockConfig.Glass glassConfig;
-        ViewGroup keyboardArea;
+        final ViewGroup keyboardArea;
         ViewGroup sinkHost;
         View backgroundFrame;
-        View bottomFrame;
         View root;
         float stockBackgroundAlpha = 1f;
         float cornerRadiusPx;
@@ -37,23 +34,32 @@ final class GboardFloatingGlassCoordinator {
         int geometryRetryCount;
         boolean released;
 
-        State(View popup, LiquidDockConfig.Glass glassConfig) {
+        State(
+                View popup,
+                GboardFloatingStructureResolver.Structure structure,
+                LiquidDockConfig.Glass glassConfig) {
             this.popup = popup;
+            this.structure = structure;
             this.glassConfig = glassConfig;
+            this.keyboardArea = structure.keyboardArea;
+            this.backgroundFrame = structure.stockBackground;
         }
     }
 
     private GboardFloatingGlassCoordinator() {}
 
-    static synchronized void onShown(View popup, LiquidDockConfig.Glass glassConfig) {
-        if (popup == null || glassConfig == null) return;
+    static synchronized void onShown(
+            View popup,
+            GboardFloatingStructureResolver.Structure structure,
+            LiquidDockConfig.Glass glassConfig) {
+        if (popup == null || structure == null || glassConfig == null) return;
         State existing = STATES.get(popup);
         if (existing != null && !existing.released) {
             if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
             else syncGeometry(existing);
             return;
         }
-        State state = new State(popup, glassConfig);
+        State state = new State(popup, structure, glassConfig);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attachNow(state);
@@ -78,41 +84,23 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void attachNow(State state) {
         if (state == null || state.released || state.session != null
                 || !state.popup.isAttachedToWindow()) return;
-        View areaCandidate = state.popup.findViewById(KEYBOARD_AREA_ID);
-        View backgroundFrame = state.popup.findViewById(KEYBOARD_BACKGROUND_FRAME_ID);
-        View bottomFrame = state.popup.findViewById(KEYBOARD_BOTTOM_FRAME_ID);
-        if (!(areaCandidate instanceof ViewGroup) || backgroundFrame == null || bottomFrame == null) {
-            failClosed(state, "decompiled floating keyboard anchors unavailable", null);
-            return;
-        }
-        ViewGroup keyboardArea = (ViewGroup) areaCandidate;
         View root = state.popup.getRootView();
         if (root == null || !root.isAttachedToWindow()) {
             failClosed(state, "popup root unavailable", null);
             return;
         }
-        final float cornerRadiusPx;
-        try {
-            cornerRadiusPx = keyboardArea.getResources()
-                    .getDimension(FLOATING_CORNER_RADIUS_DIMEN);
-        } catch (Resources.NotFoundException error) {
-            failClosed(state, "floating radius resource unavailable", error);
-            return;
-        }
+        float cornerRadiusPx = resolveCornerRadiusPx(state.structure);
         if (cornerRadiusPx <= 0f) {
-            failClosed(state, "floating radius is not positive", null);
+            failClosed(state, "floating radius unavailable from runtime outline", null);
             return;
         }
 
-        state.keyboardArea = keyboardArea;
-        state.backgroundFrame = backgroundFrame;
-        state.bottomFrame = bottomFrame;
-        state.stockBackgroundAlpha = backgroundFrame.getAlpha();
         state.root = root;
         state.cornerRadiusPx = cornerRadiusPx;
+        state.stockBackgroundAlpha = state.backgroundFrame.getAlpha();
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
-        keyboardArea.addOnLayoutChangeListener(state.layoutListener);
+        state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
 
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
                 root,
@@ -128,39 +116,64 @@ final class GboardFloatingGlassCoordinator {
                 });
         state.session = session;
         GboardFloatingGlassView sink = new GboardFloatingGlassView(
-                keyboardArea.getContext(), session);
+                state.keyboardArea.getContext(), session);
         state.sink = sink;
-        if (!insertSinkAboveStockBackground(state, sink, backgroundFrame)) {
-            failClosed(state, "unable to insert glass above stock background", null);
+        if (!insertSinkBelowKeyboardContent(state, sink)) {
+            failClosed(state, "unable to insert glass below keyboard content", null);
             return;
         }
         syncGeometry(state);
-        log("floating popup bound root=" + root.getClass().getSimpleName(), null);
+        log("floating popup bound structurally root=" + root.getClass().getSimpleName()
+                + " holders=" + state.structure.keyboardViewHolders.size(), null);
     }
 
-    private static boolean insertSinkAboveStockBackground(
-            State state, GboardFloatingGlassView sink, View backgroundFrame) {
-        if (state == null || sink == null || backgroundFrame == null) return false;
-        ViewParent parent = backgroundFrame.getParent();
-        if (!(parent instanceof ViewGroup)) return false;
-        ViewGroup host = (ViewGroup) parent;
-        int backgroundIndex = host.indexOfChild(backgroundFrame);
-        if (backgroundIndex < 0) return false;
+    private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
+        if (state == null || sink == null) return false;
+        ViewGroup host = state.keyboardArea;
+        int contentIndex = host.indexOfChild(state.structure.contentColumn);
+        if (contentIndex < 0) return false;
         try {
-            // Do not use MATCH_PARENT here. Gboard propagates 0x00ffffff as an internal
-            // unconstrained measurement sentinel, which would make TextureView request an
-            // impossible 16777215x16777215 GraphicBuffer. Start concrete, then track the
-            // keyboard area's real laid-out bounds in host-local coordinates.
-            host.addView(sink, backgroundIndex + 1, new ViewGroup.LayoutParams(1, 1));
+            // Gboard custom measurement can propagate 0x00ffffff for MATCH_PARENT. Start from a
+            // concrete 1x1 surface and promote to the authoritative laid-out keyboard bounds.
+            host.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
             state.sinkHost = host;
-            log("glass inserted above stock background host="
-                    + host.getClass().getSimpleName() + " backgroundIndex=" + backgroundIndex,
-                    null);
+            log("glass inserted below keyboard content contentIndex=" + contentIndex, null);
             return true;
         } catch (Throwable error) {
             log("glass insertion failed", error);
             return false;
         }
+    }
+
+    private static float resolveCornerRadiusPx(
+            GboardFloatingStructureResolver.Structure structure) {
+        if (structure == null) return 0f;
+        float radius = outlineRadius(structure.keyboardArea);
+        if (radius > 0f) return radius;
+        radius = outlineRadius(structure.stockBackground);
+        if (radius > 0f) return radius;
+        return 0f;
+    }
+
+    private static float outlineRadius(View view) {
+        if (view == null) return 0f;
+        try {
+            Outline outline = new Outline();
+            ViewOutlineProvider provider = view.getOutlineProvider();
+            if (provider != null) {
+                provider.getOutline(view, outline);
+                if (outline.getRadius() > 0f) return outline.getRadius();
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Drawable background = view.getBackground();
+            if (background != null) {
+                Outline outline = new Outline();
+                background.getOutline(outline);
+                if (outline.getRadius() > 0f) return outline.getRadius();
+            }
+        } catch (Throwable ignored) {}
+        return 0f;
     }
 
     private static synchronized void syncGeometry(State state) {
@@ -221,15 +234,14 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void onPresented(State state) {
         if (state == null || state.released || state.stockHidden) return;
         View backgroundFrame = state.backgroundFrame;
-        if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()
-                || state.keyboardArea == null || state.bottomFrame == null) return;
-        if (!GboardStockVisualAuthority.claim(state.keyboardArea, state.bottomFrame)) {
+        if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()) return;
+        if (!GboardStockVisualAuthority.claim(state.structure)) {
             failClosed(state, "unable to claim floating stock visuals", null);
             return;
         }
         backgroundFrame.setAlpha(0f);
         state.stockHidden = true;
-        log("first Prismal frame presented; all stock fills and shadow hidden", null);
+        log("first TextureView-consumed Prismal frame presented; stock visuals hidden", null);
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {
@@ -242,7 +254,7 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
-        GboardStockVisualAuthority.release(state.keyboardArea, state.bottomFrame);
+        GboardStockVisualAuthority.release(state.structure);
         restoreStockBackground(state);
         if (state.attachListener != null) {
             try { state.popup.removeOnAttachStateChangeListener(state.attachListener); }
