@@ -1,15 +1,18 @@
 package com.hellovoid.liquiddock;
 
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.util.WeakHashMap;
 
-/** Applies optional white text styling to shortcut-menu content without vendor listener replacement. */
+/** Applies optional white text/icon styling to shortcut-menu content without vendor listener replacement. */
 final class ShortcutMenuTextColorController {
+    private static final ColorStateList WHITE_TINT = ColorStateList.valueOf(Color.WHITE);
     private static final WeakHashMap<View, ViewTreeObserver.OnGlobalLayoutListener> LISTENERS =
             new WeakHashMap<>();
 
@@ -17,10 +20,10 @@ final class ShortcutMenuTextColorController {
 
     static synchronized void attach(View root) {
         if (root == null) return;
-        applyWhiteText(root);
+        applyDarkMode(root);
         if (LISTENERS.containsKey(root)) return;
 
-        ViewTreeObserver.OnGlobalLayoutListener listener = () -> applyWhiteText(root);
+        ViewTreeObserver.OnGlobalLayoutListener listener = () -> applyDarkMode(root);
         ViewTreeObserver observer = root.getViewTreeObserver();
         if (!observer.isAlive()) return;
         observer.addOnGlobalLayoutListener(listener);
@@ -44,14 +47,19 @@ final class ShortcutMenuTextColorController {
         }
     }
 
-    private static void applyWhiteText(View view) {
+    private static void applyDarkMode(View view) {
         if (view instanceof TextView) {
-            ((TextView) view).setTextColor(Color.WHITE);
+            TextView textView = (TextView) view;
+            textView.setTextColor(Color.WHITE);
+            textView.setCompoundDrawableTintList(WHITE_TINT);
+        }
+        if (view instanceof ImageView) {
+            ((ImageView) view).setImageTintList(WHITE_TINT);
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
         for (int i = 0; i < group.getChildCount(); i++) {
-            applyWhiteText(group.getChildAt(i));
+            applyDarkMode(group.getChildAt(i));
         }
     }
 }
