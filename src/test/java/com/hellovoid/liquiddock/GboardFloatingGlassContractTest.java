@@ -61,6 +61,21 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("session failure stage="));
     }
 
+    @Test public void gboardUsesSidebarStyleContinuousPassBlurOwnership() throws Exception {
+        String module = read(MAIN.resolve("ModuleMain.java"));
+        String authority = read(MAIN.resolve("GboardPassBlurContinuousAuthority.java"));
+        String bridge = read(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue(module.contains("GboardPassBlurContinuousAuthority.install()"));
+        assertTrue(authority.contains("SetPassBlurSurface"));
+        assertTrue(authority.contains("setUpdateTextureFlag"));
+        assertTrue(authority.contains("args[1] = claim.surface"));
+        assertTrue(authority.contains("args[1] = Boolean.TRUE"));
+        assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.claim("));
+        assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.release("));
+        assertTrue(bridge.contains("binding.domain == PassBlurDomain.GBOARD_FLOATING"));
+    }
+
     @Test public void replacementUsesTheDecompiledKeyboardAreaAndBackgroundFrame() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
 
