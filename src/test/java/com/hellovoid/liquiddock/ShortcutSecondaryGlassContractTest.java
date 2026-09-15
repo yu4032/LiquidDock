@@ -113,7 +113,7 @@ public class ShortcutSecondaryGlassContractTest {
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
-        String controller = Files.readString(MAIN.resolve("ShortcutMenuTextColorController.java"));
+        String controller = Files.readString(MAIN.resolve("ShortcutMenuDarkModeController.java"));
 
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(hook.contains("ShortcutMenuTextColorController.attach"));
