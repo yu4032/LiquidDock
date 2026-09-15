@@ -26,20 +26,18 @@ public final class Api101Bridge {
     }
 
     public static void log(String message) {
-        // Keep a temporary direct Logcat mirror while the Gboard structural migration is being
-        // validated on hardware. XposedModule.log() is a framework/module log channel and is not
-        // guaranteed to appear in adb logcat, which made an injection failure indistinguishable
-        // from a resolver miss during device diagnosis.
-        Log.i("LiquidDock", message);
         try {
             module().log(Log.INFO, "LiquidDock", message);
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+            Log.i("LiquidDock", message);
+        }
     }
 
     public static void log(String message, Throwable error) {
-        Log.e("LiquidDock", message, error);
         try {
             module().log(Log.ERROR, "LiquidDock", message, error);
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+            Log.e("LiquidDock", message, error);
+        }
     }
 }
