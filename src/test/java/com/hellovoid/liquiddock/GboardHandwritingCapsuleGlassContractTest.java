@@ -33,20 +33,17 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertFalse(hook.contains("postDelayed"));
     }
 
-    @Test public void toolbarUsesNativeClipRadiusFromConstructorAttributes() throws Exception {
+    @Test public void toolbarUsesCapsuleRadiusFromRuntimeGeometryNotResourceNames() throws Exception {
         String hook = read("GboardHandwritingCapsuleGlassHook.java");
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
-        assertTrue(hook.contains("android.util.AttributeSet"));
-        assertTrue(hook.contains("getDeclaredConstructor("));
-        assertTrue(hook.contains("Context.class, AttributeSet.class"));
-        assertTrue(hook.contains("getIdentifier("));
-        assertTrue(hook.contains("\"clipRadius\", \"attr\""));
-        assertTrue(hook.contains("obtainStyledAttributes"));
-        assertTrue(hook.contains("NATIVE_TOOLBAR_RADII"));
-        assertTrue(hook.contains("nativeToolbarRadiusPx(host)"));
-        assertTrue(hook.contains("onShown(host, liveConfig.glass, nativeRadiusPx)"));
+        assertTrue(hook.contains("toolbarCornerRadiusPx(host)"));
+        assertTrue(hook.contains("Math.min(host.getWidth(), host.getHeight()) * 0.5f"));
+        assertTrue(hook.contains("onShown(host, liveConfig.glass, cornerRadiusPx)"));
         assertTrue(coordinator.contains("float nativeRadiusPx"));
-        assertTrue(coordinator.contains("this.cornerRadiusPx = cornerRadiusPx"));
+        assertFalse(hook.contains("AttributeSet"));
+        assertFalse(hook.contains("getIdentifier("));
+        assertFalse(hook.contains("obtainStyledAttributes"));
+        assertFalse(hook.contains("NATIVE_TOOLBAR_RADII"));
         assertFalse(hook.contains("100f"));
         assertFalse(hook.contains("0x7f"));
     }
