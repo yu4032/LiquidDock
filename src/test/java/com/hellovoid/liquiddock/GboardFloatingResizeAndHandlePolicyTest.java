@@ -18,16 +18,17 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void sinkOutputFollowsTransformedGeometryForShrinkAndGrow() throws Exception {
+    @Test public void sinkOutputFollowsResizedStockShellForShrinkAndGrow() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
 
-        assertTrue(geometry.contains("outputWidthPx()"));
-        assertTrue(geometry.contains("outputHeightPx()"));
-        assertTrue(geometry.contains("transformMatrixToGlobal"));
-        assertTrue(coordinator.contains("syncSinkBounds(state, next)"));
-        assertTrue(coordinator.contains("geometry.outputWidthPx()"));
-        assertTrue(coordinator.contains("geometry.outputHeightPx()"));
+        assertTrue(geometry.contains("shellView.transformMatrixToGlobal"));
+        assertTrue(geometry.contains("shellView.getWidth()"));
+        assertTrue(geometry.contains("shellView.getHeight()"));
+        assertTrue(coordinator.contains("state.root, state.backgroundFrame, state.cornerRadiusPx"));
+        assertTrue(coordinator.contains("int width = state.backgroundFrame.getWidth()"));
+        assertTrue(coordinator.contains("int height = state.backgroundFrame.getHeight()"));
+        assertTrue(coordinator.contains("state.backgroundFrame.getLocationInWindow(shellLocation)"));
         assertFalse(coordinator.contains("int width = state.keyboardArea.getWidth()"));
         assertFalse(coordinator.contains("int height = state.keyboardArea.getHeight()"));
     }
