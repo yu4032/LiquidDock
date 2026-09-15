@@ -73,6 +73,30 @@ public class GboardFloatingGlassContractTest {
         assertFalse(coordinator.contains("findViewById"));
     }
 
+    @Test public void structureResolverAcceptsOptionalContentWrapperForDirectHolderTopology() throws Exception {
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        assertTrue(resolver.contains("tryResolveTopology"));
+        assertTrue(resolver.contains("contentColumn != null ? contentColumn : keyboardHolder"));
+        assertTrue(resolver.contains("ViewGroup holderContainer"));
+        assertTrue(resolver.contains("findStockBackground"));
+        assertTrue(resolver.contains("resolve direct KeyboardHolder topology"));
+        assertTrue(resolver.contains("resolve wrapped KeyboardHolder topology"));
+        assertTrue(coordinator.contains("structure.contentColumn != null"));
+        assertTrue(coordinator.contains("structure.keyboardHolder"));
+        assertFalse(resolver.contains("if (contentIndex <= 0 || holderIndex < 0) return null"));
+    }
+
+    @Test public void ambiguousTopologiesPreferTheCandidateWithFloatingSurfaceAuthority() throws Exception {
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
+        assertTrue(resolver.contains("Structure wrapped"));
+        assertTrue(resolver.contains("Structure direct"));
+        assertTrue(resolver.contains("boolean wrappedFloating = isFloatingGeometry(wrapped)"));
+        assertTrue(resolver.contains("boolean directFloating = isFloatingGeometry(direct)"));
+        assertTrue(resolver.contains("if (wrappedFloating != directFloating)"));
+        assertTrue(resolver.contains("return wrappedFloating ? wrapped : direct"));
+    }
+
     @Test public void coordinatorTracksMovementWithPredrawInsteadOfDelay() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         assertTrue(coordinator.contains("ViewTreeObserver.OnPreDrawListener"));
@@ -104,7 +128,6 @@ public class GboardFloatingGlassContractTest {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
         assertTrue(coordinator.contains("structure.contentColumn"));
-        assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
         assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
         assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
         assertTrue(coordinator.contains(
