@@ -301,9 +301,14 @@ public class SettingsActivity extends AppCompatActivity {
         }).start();
     }
 
-    void restartGboard() {
-        // Gboard reads API101 Remote Preferences when its process starts. Kill only the running
-        // IME process instead of force-stopping the package, so Android can recreate it normally.
+    void restartPackageProcess(String packageName, String displayName) {
+        // Third-party app descriptors provide trusted static process names. Validate the value
+        // anyway so future entries cannot accidentally turn this shell command into an injection path.
+        if (packageName == null || !packageName.matches("[A-Za-z0-9_.:]+")
+                || displayName == null || displayName.trim().isEmpty()) {
+            Toast.makeText(this, "Invalid app restart target", Toast.LENGTH_SHORT).show();
+            return;
+        }
         LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
         new Thread(() -> {
             try {
@@ -312,7 +317,7 @@ public class SettingsActivity extends AppCompatActivity {
                         .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
                         .start();
                 try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes("PIDS=$(pidof com.google.android.inputmethod.latin); "
+                    os.writeBytes("PIDS=$(pidof " + packageName + "); "
                             + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
                             + "kill -TERM $PIDS\nexit\n");
                     os.flush();
@@ -320,14 +325,16 @@ public class SettingsActivity extends AppCompatActivity {
                 if (!p.waitFor(8, TimeUnit.SECONDS)) {
                     p.destroy();
                     if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
-                    throw new IOException("su timed out while restarting Gboard");
+                    throw new IOException("su timed out while restarting " + displayName);
                 }
                 int exitCode = p.exitValue();
-                if (exitCode != 0) throw new IOException("Gboard process is not running");
+                if (exitCode != 0) {
+                    throw new IOException(displayName + " process is not running");
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 runOnUiThread(() -> Toast.makeText(this,
-                        "Gboard restart interrupted", Toast.LENGTH_SHORT).show());
+                        displayName + " restart interrupted", Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
                 runOnUiThread(() -> Toast.makeText(this,
                         "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
