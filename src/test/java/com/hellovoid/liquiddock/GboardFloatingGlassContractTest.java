@@ -8,161 +8,90 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Static contract for the version-scoped Gboard floating-keyboard Prismal replacement. */
+/** Static contract for version-independent Gboard floating-keyboard Prismal replacement. */
 public class GboardFloatingGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
+    private static final Path SETTINGS = Path.of(
+            "src/main/java/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
 
     private static String read(Path path) throws Exception {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void gboardPackageIsScopedAndRoutedWithoutLauncherInitialization() throws Exception {
+    @Test public void gboardPackageIsScopedAndMasterSwitchGatesAllHooks() throws Exception {
         String scope = read(Path.of("src/main/resources/META-INF/xposed/scope.list"));
         String module = read(MAIN.resolve("ModuleMain.java"));
 
         assertTrue(scope.contains("com.google.android.inputmethod.latin"));
         assertTrue(module.contains("GBOARD_PACKAGE = \"com.google.android.inputmethod.latin\""));
+        assertTrue(module.contains("GboardGlassPreferences.resolve"));
+        assertTrue(module.contains("!gboardAppearance.enabled"));
         assertTrue(module.contains("GboardFloatingGlassHook.install(classLoader, runtimeConfig)"));
-        assertTrue(module.contains("if (GBOARD_PACKAGE.equals(packageName))"));
     }
 
-    @Test public void hookTargetsOnlyThePopupFloatingKeyboardLifecycle() throws Exception {
+    @Test public void hookUsesStablePopupWindowLifecycleInsteadOfR8ProviderNames() throws Exception {
         String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
-        String resolver = read(MAIN.resolve("GboardFloatingTargetResolver.java"));
 
-        assertTrue(hook.contains("GboardFloatingTargetResolver.resolve(classLoader)"));
-        assertTrue(resolver.contains("RUNTIME_PROVIDER = \"pev\""));
-        assertFalse(resolver.contains("defpackage.pev"));
-        assertTrue(resolver.contains("\"b\""));
-        assertTrue(resolver.contains("\"a\""));
-        assertTrue(resolver.contains("View.class.isAssignableFrom"));
+        assertTrue(hook.contains("PopupWindow.class"));
+        assertTrue(hook.contains("showAtLocation"));
+        assertTrue(hook.contains("showAsDropDown"));
+        assertTrue(hook.contains("dismiss"));
+        assertTrue(hook.contains("getContentView()"));
+        assertTrue(hook.contains("GboardFloatingStructureResolver.resolve"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onShown"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onHidden"));
-        assertFalse(hook.contains("LatinIME"));
-        assertFalse(hook.contains("onCreateInputView"));
+        assertFalse(hook.contains("GboardFloatingTargetResolver"));
+        assertFalse(hook.contains("\"pev\""));
+        assertFalse(hook.contains("\"pfl\""));
     }
 
-    @Test public void hookFailureIsDiagnosableThroughTheFilteredTagLine() throws Exception {
-        String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
-
-        assertTrue(hook.contains("failureSummary(error)"));
-        assertTrue(hook.contains("error.getClass().getName()"));
-        assertTrue(hook.contains("error.getMessage()"));
-    }
-
-    @Test public void sessionFailureIsDiagnosableThroughTheFilteredTagLine() throws Exception {
-        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
-
-        assertTrue(session.contains("notifyFailure(\"output-attach\""));
-        assertTrue(session.contains("notifyFailure(\"fresh-frame\""));
-        assertTrue(session.contains("notifyFailure(\"source-terminal\""));
-        assertTrue(session.contains("notifyFailure(\"render\""));
-        assertTrue(session.contains("failureSummary(error)"));
-        assertTrue(session.contains("session failure stage="));
-    }
-
-    @Test public void gboardUsesSidebarStyleContinuousPassBlurOwnership() throws Exception {
-        String module = read(MAIN.resolve("ModuleMain.java"));
-        String authority = read(MAIN.resolve("GboardPassBlurContinuousAuthority.java"));
-        String bridge = read(MAIN.resolve("Miuix307PassBlurBridge.java"));
-
-        assertTrue(module.contains("GboardPassBlurContinuousAuthority.install()"));
-        assertTrue(authority.contains("SetPassBlurSurface"));
-        assertTrue(authority.contains("setUpdateTextureFlag"));
-        assertTrue(authority.contains("args[1] = claim.surface"));
-        assertTrue(authority.contains("args[1] = Boolean.TRUE"));
-        assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.claim("));
-        assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.release("));
-        assertTrue(bridge.contains("binding.domain == PassBlurDomain.GBOARD_FLOATING"));
-    }
-
-    @Test public void replacementUsesTheDecompiledKeyboardAreaAndBackgroundFrame() throws Exception {
+    @Test public void structureResolverUsesViewTopologyNotCompiledResourceIds() throws Exception {
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
 
-        assertTrue(coordinator.contains("0x7f0b0617"));
-        assertTrue(coordinator.contains("0x7f0b0618"));
-        assertTrue(coordinator.contains("insertSinkAboveStockBackground"));
-        assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
-        assertTrue(coordinator.contains("restoreStockBackground"));
-        assertTrue(coordinator.contains("OnAttachStateChangeListener"));
+        assertTrue(resolver.contains("KeyboardHolder"));
+        assertTrue(resolver.contains("KeyboardViewHolder"));
+        assertTrue(resolver.contains("getParent()"));
+        assertTrue(resolver.contains("getChildCount()"));
+        assertTrue(resolver.contains("indexOfChild"));
+        assertTrue(resolver.contains("stockBackground"));
+        assertTrue(resolver.contains("bottomFrame"));
+        assertFalse(resolver.contains("0x7f0b"));
+        assertFalse(resolver.contains("0x7f07"));
+        assertFalse(coordinator.contains("0x7f0b"));
+        assertFalse(coordinator.contains("0x7f07"));
+        assertFalse(coordinator.contains("findViewById"));
     }
 
-    @Test public void sinkUsesRealKeyboardBoundsInsteadOfGboardMatchParentSentinel() throws Exception {
+    @Test public void stockAuthorityUsesPredrawAndNoObfuscatedManagerMembers() throws Exception {
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(authority.contains("OnPreDrawListener"));
+        assertTrue(authority.contains("addOnPreDrawListener"));
+        assertTrue(authority.contains("removeOnPreDrawListener"));
+        assertTrue(authority.contains("suppressCurrentContentBackgrounds"));
+        assertTrue(authority.contains("baseArea.setBackground(null)"));
+        assertTrue(authority.contains("bottomFrame.setBackground(null)"));
+        assertTrue(authority.contains("topEdge.setBackground(null)"));
+        assertFalse(authority.contains("loadClass(\"pef\")"));
+        assertFalse(authority.contains("loadClass(\"pew\")"));
+        assertFalse(authority.contains("getDeclaredMethod(\"j\""));
+        assertFalse(authority.contains("getDeclaredMethod(\"e\""));
+        assertFalse(authority.contains("HookUtil.getField"));
+        assertFalse(authority.contains("0x7f0b"));
+    }
+
+    @Test public void sinkUsesStructuralContentBoundaryAndRealKeyboardBounds() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
 
-        assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT,\n                    ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("structure.contentColumn"));
+        assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
         assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
-        assertTrue(coordinator.contains("syncSinkBounds(state)"));
+        assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
         assertTrue(coordinator.contains("state.keyboardArea.getWidth()"));
         assertTrue(coordinator.contains("state.keyboardArea.getHeight()"));
-    }
-
-    @Test public void sinkIsInsertedRelativeToTheStockBackgroundNotAtTreeBottom() throws Exception {
-        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
-
-        assertFalse(coordinator.contains("addView(sink, 0"));
-        assertTrue(coordinator.contains("backgroundFrame.getParent()"));
-        assertTrue(coordinator.contains("indexOfChild(backgroundFrame)"));
-        assertTrue(coordinator.contains("backgroundIndex + 1"));
-        assertTrue(coordinator.contains("state.sinkHost"));
-    }
-
-    @Test public void presentedGlassOwnsAllFloatingStockFillsAndRestoresThem() throws Exception {
-        String module = read(MAIN.resolve("ModuleMain.java"));
-        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
-        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-
-        assertTrue(module.contains("GboardStockVisualAuthority.install(classLoader)"));
-        assertTrue(coordinator.contains("0x7f0b061b"));
-        assertTrue(coordinator.contains("GboardStockVisualAuthority.claim("));
-        assertTrue(coordinator.contains("GboardStockVisualAuthority.release("));
-        assertTrue(authority.contains("loadClass(\"pef\")"));
-        assertTrue(authority.contains("getDeclaredMethod(\"j\", Integer.TYPE)"));
-        assertTrue(authority.contains("getDeclaredMethod(\"e\", Integer.TYPE)"));
-        assertTrue(authority.contains("baseArea.setBackground(null)"));
-        assertTrue(authority.contains("baseArea.setElevation(0f)"));
-        assertTrue(authority.contains("bottomFrame.setBackground(null)"));
-        assertTrue(authority.contains("baseArea.setBackground(claim.baseBackground)"));
-        assertTrue(authority.contains("baseArea.setElevation(claim.baseElevation)"));
-        assertTrue(authority.contains("bottomFrame.setBackground(claim.bottomBackground)"));
-    }
-
-    @Test public void presentedGlassAlsoOwnsHeaderAndKeyboardContainerFills() throws Exception {
-        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-
-        assertTrue(authority.contains("0x7f0b0643"));
-        assertTrue(authority.contains("0x7f0b061a"));
-        assertTrue(authority.contains("0x7f0b02f6"));
-        assertTrue(authority.contains("0x7f0b0644"));
-        assertTrue(authority.contains("containerBackgrounds"));
-        assertTrue(authority.contains("view.setBackground(null)"));
-        assertTrue(authority.contains("view.setBackground(saved)"));
-    }
-
-    @Test public void headerCurrentContentBackgroundIsAuthoritativeAcrossKeyboardViewRebinds() throws Exception {
-        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-
-        assertTrue(authority.contains("KeyboardViewHolder"));
-        assertTrue(authority.contains("findKeyboardViewBindMethod"));
-        assertTrue(authority.contains("claimForHeaderHolder"));
-        assertTrue(authority.contains("suppressHeaderContentBackground"));
-        assertTrue(authority.contains("headerContentBackgrounds"));
-        assertTrue(authority.contains("content.setBackground(null)"));
-        assertTrue(authority.contains("content.setBackground(saved)"));
-    }
-
-    @Test public void runtimeProvenTopEdgeAndMainBodyBackgroundsAreOwned() throws Exception {
-        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-
-        assertTrue(authority.contains("0x7f0b064f"));
-        assertTrue(authority.contains("topEdgeBackground"));
-        assertTrue(authority.contains("topEdge.setBackground(null)"));
-        assertTrue(authority.contains("claim.topEdge.setBackground(claim.topEdgeBackground)"));
-        assertTrue(authority.contains("MAIN_KEYBOARD_VIEW_HOLDER_ID"));
-        assertTrue(authority.contains("BY_DYNAMIC_HOLDER"));
-        assertTrue(authority.contains("claimForDynamicHolder"));
-        assertTrue(authority.contains("suppressBoundContentBackground"));
-        assertTrue(authority.contains("boundContentBackgrounds"));
+        assertTrue(coordinator.contains("resolveCornerRadiusPx"));
+        assertTrue(coordinator.contains("Outline"));
     }
 
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
@@ -172,26 +101,48 @@ public class GboardFloatingGlassContractTest {
 
         assertTrue(domain.contains("GBOARD_FLOATING"));
         assertTrue(request.contains("static PassBlurBindRequest gboardFloating(View authoritativeRoot)"));
-        assertTrue(request.contains("PassBlurDomain.GBOARD_FLOATING"));
         assertTrue(session.contains("RootPassBlurBackend"));
         assertTrue(session.contains("PassBlurBindRequest.gboardFloating(root)"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("prepareBackdrop"));
-        assertTrue(session.contains("requestFresh(GENERATION)"));
-        assertFalse(session.contains("setUpdatesEnabled(false"));
         assertFalse(session.contains("ScreenCapture"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap.createBitmap"));
     }
 
-    @Test public void stockBackgroundIsOnlyHiddenAfterARealPresentedFrame() throws Exception {
+    @Test public void stockHidesOnlyAfterTextureViewConsumesFirstSwap() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String sink = read(MAIN.resolve("GboardFloatingGlassView.java"));
 
-        assertTrue(coordinator.contains("onPresented"));
+        assertTrue(session.contains("onOutputPresented"));
+        assertTrue(sink.contains("onSurfaceTextureUpdated"));
+        assertTrue(sink.contains("session.onOutputPresented()"));
         assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
         assertTrue(coordinator.contains("restoreStockBackground"));
-        assertTrue(session.contains("eglSwapBuffers") || session.contains("swapBuffers"));
-        assertTrue(session.contains("listener.onPresented()"));
+        assertTrue(session.contains("swapBuffers"));
+        assertFalse(session.contains("mainHandler.post(() -> {\n                    if (!shuttingDown && listener != null) listener.onPresented();"));
+    }
+
+    @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
+        String settings = read(SETTINGS);
+        String preferences = read(MAIN.resolve("GboardGlassPreferences.java"));
+
+        assertTrue(settings.contains("ThirdPartyApps"));
+        assertTrue(settings.contains("Gboard"));
+        assertTrue(settings.contains("第三方应用适配"));
+        assertTrue(settings.contains("启用悬浮键盘液态玻璃"));
+        assertTrue(settings.contains("GboardGlassPreferences.BLUR_KEY"));
+        assertTrue(settings.contains("GboardGlassPreferences.TINT_RED_KEY"));
+        assertTrue(settings.contains("GboardGlassPreferences.TINT_GREEN_KEY"));
+        assertTrue(settings.contains("GboardGlassPreferences.TINT_BLUE_KEY"));
+        assertTrue(settings.contains("GboardGlassPreferences.TINT_ALPHA_KEY"));
+        assertTrue(preferences.contains("reader.has(BLUR_KEY)"));
+        assertTrue(preferences.contains("reader.has(TINT_RED_KEY)"));
+    }
+
+    @Test public void temporaryVisualTreeDiagnosticsAreRemoved() throws Exception {
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+        assertFalse(authority.contains("GboardVisualTreeDiagnostics.dump"));
     }
 }
