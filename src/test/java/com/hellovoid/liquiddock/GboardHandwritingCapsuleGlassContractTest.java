@@ -23,7 +23,11 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(module.contains("GboardHandwritingCapsuleGlassHook.install(classLoader)"));
         assertTrue(hook.contains(
                 "com.google.android.libraries.inputmethod.companionwidget.widget.WidgetSoftKeyboardView"));
+        assertTrue(hook.contains(
+                "com.google.android.apps.inputmethod.libs.handwriting.keyboard.HandwritingOverlayView"));
         assertTrue(hook.contains("\"onLayout\""));
+        assertTrue(hook.contains("\"onDetachedFromWindow\""));
+        assertTrue(hook.contains("handwritingSceneActive"));
         assertTrue(hook.contains("GboardGlassPreferences.resolve"));
         assertFalse(hook.contains("0x7f"));
         assertFalse(hook.contains("findViewById"));
@@ -36,6 +40,7 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(coordinator.contains("GboardFloatingGlassView"));
         assertTrue(coordinator.contains("GboardFloatingGlassSession"));
         assertTrue(coordinator.contains("GboardFloatingGlassGeometry.captureTarget"));
+        assertTrue(coordinator.contains("onHandwritingSceneEnded"));
         assertFalse(coordinator.contains("removeAllViews"));
         assertFalse(coordinator.contains("setBackground(null)"));
         assertFalse(coordinator.contains("findViewById"));
