@@ -7,12 +7,11 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 
-import java.util.ArrayList;
 import java.util.WeakHashMap;
 
-/** Owns zero-copy Prismal output below one Gboard handwriting companion capsule's controls. */
+/** Owns zero-copy Prismal output below one Gboard companion toolbar's controls. */
 final class GboardHandwritingCapsuleGlassCoordinator {
-    private static final String TAG = "[DC][GboardHandwritingGlass]";
+    private static final String TAG = "[DC][GboardToolbarGlass]";
     private static final WeakHashMap<ViewGroup, State> STATES = new WeakHashMap<>();
 
     private static final class State {
@@ -66,23 +65,17 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         if (state != null) release(state);
     }
 
-    static synchronized void onHandwritingSceneEnded() {
-        ArrayList<State> active = new ArrayList<>(STATES.values());
-        STATES.clear();
-        for (State state : active) release(state);
-    }
-
     private static synchronized void attachNow(State state) {
         if (state == null || state.released || state.session != null
                 || !state.host.isAttachedToWindow()) return;
         View root = state.host.getRootView();
         if (root == null || !root.isAttachedToWindow()) {
-            failClosed(state, "capsule root unavailable", null);
+            failClosed(state, "toolbar root unavailable", null);
             return;
         }
         float cornerRadiusPx = resolveCornerRadiusPx(state.host);
         if (cornerRadiusPx <= 0f) {
-            failClosed(state, "capsule radius unavailable", null);
+            failClosed(state, "toolbar radius unavailable", null);
             return;
         }
 
@@ -119,7 +112,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             // overlays only that material; all existing Gboard controls remain above Prismal.
             state.host.addView(sink, 0, new ViewGroup.LayoutParams(1, 1));
         } catch (Throwable error) {
-            failClosed(state, "unable to insert capsule glass below controls", error);
+            failClosed(state, "unable to insert toolbar glass below controls", error);
             return;
         }
         syncGeometry(state);
