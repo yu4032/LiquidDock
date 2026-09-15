@@ -22,7 +22,6 @@ final class GboardFloatingStructureResolver {
             "com.google.android.libraries.inputmethod.keyboard.impl.KeyboardViewHolder";
 
     static final class Structure {
-        final View popupContent;
         final ViewGroup keyboardArea;
         final View stockBackground;
         final ViewGroup contentColumn;
@@ -32,7 +31,6 @@ final class GboardFloatingStructureResolver {
         final List<ViewGroup> keyboardViewHolders;
 
         Structure(
-                View popupContent,
                 ViewGroup keyboardArea,
                 View stockBackground,
                 ViewGroup contentColumn,
@@ -40,7 +38,6 @@ final class GboardFloatingStructureResolver {
                 View bottomFrame,
                 View topEdge,
                 List<ViewGroup> keyboardViewHolders) {
-            this.popupContent = popupContent;
             this.keyboardArea = keyboardArea;
             this.stockBackground = stockBackground;
             this.contentColumn = contentColumn;
@@ -53,19 +50,6 @@ final class GboardFloatingStructureResolver {
     }
 
     private GboardFloatingStructureResolver() {}
-
-    static Structure resolve(View popupContent, ClassLoader classLoader) {
-        if (popupContent == null || classLoader == null) return null;
-        try {
-            Class<?> keyboardHolderClass = Class.forName(
-                    KEYBOARD_HOLDER_CLASS, false, classLoader);
-            View holderCandidate = findUniqueDescendant(popupContent, keyboardHolderClass);
-            if (!(holderCandidate instanceof ViewGroup)) return null;
-            return resolveFromKeyboardHolder((ViewGroup) holderCandidate, classLoader);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
 
     static Structure resolveFromKeyboardHolder(ViewGroup keyboardHolder, ClassLoader classLoader) {
         if (keyboardHolder == null || classLoader == null) return null;
@@ -111,7 +95,6 @@ final class GboardFloatingStructureResolver {
 
             return new Structure(
                     keyboardArea,
-                    keyboardArea,
                     stockBackground,
                     contentColumn,
                     keyboardHolder,
@@ -151,7 +134,8 @@ final class GboardFloatingStructureResolver {
                 || hasRoundedOutline(keyboardArea)
                 || hasRoundedOutline(structure.stockBackground);
 
-        return compactWidth && raisedOrRounded && (offsetWithinRoot || root.getWidth() <= width + minimumInset);
+        return compactWidth && raisedOrRounded
+                && (offsetWithinRoot || root.getWidth() <= width + minimumInset);
     }
 
     private static boolean hasRoundedOutline(View view) {
@@ -173,26 +157,6 @@ final class GboardFloatingStructureResolver {
             }
         } catch (Throwable ignored) {}
         return false;
-    }
-
-    private static View findUniqueDescendant(View root, Class<?> targetClass) {
-        View[] match = new View[1];
-        if (!collectUnique(root, targetClass, match)) return null;
-        return match[0];
-    }
-
-    private static boolean collectUnique(View view, Class<?> targetClass, View[] match) {
-        if (view == null) return true;
-        if (targetClass.isInstance(view)) {
-            if (match[0] != null && match[0] != view) return false;
-            match[0] = view;
-        }
-        if (!(view instanceof ViewGroup)) return true;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            if (!collectUnique(group.getChildAt(i), targetClass, match)) return false;
-        }
-        return true;
     }
 
     private static View findBottomSibling(
