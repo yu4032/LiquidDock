@@ -125,9 +125,11 @@ final class GboardFloatingGlassCoordinator {
                 keyboardArea.getContext(), session);
         state.sink = sink;
         try {
-            keyboardArea.addView(sink, 0, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT));
+            // Gboard's floating keyboard parent uses 0x00ffffff as an internal unconstrained
+            // measurement sentinel. MATCH_PARENT propagates that sentinel into TextureView and
+            // causes EGL to attempt a 16777215x16777215 GraphicBuffer allocation. Insert at a
+            // harmless concrete size and promote to the keyboard area's real laid-out bounds below.
+            keyboardArea.addView(sink, 0, new ViewGroup.LayoutParams(1, 1));
         } catch (Throwable error) {
             failClosed(state, "unable to insert glass below keyboard content", error);
             return;
@@ -139,6 +141,7 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void syncGeometry(State state) {
         if (state == null || state.released || state.session == null
                 || state.keyboardArea == null || state.root == null) return;
+        syncSinkBounds(state);
         GboardFloatingGlassGeometry next = GboardFloatingGlassGeometry.capture(
                 state.root, state.keyboardArea, state.cornerRadiusPx);
         if (next == null) {
@@ -165,6 +168,22 @@ final class GboardFloatingGlassCoordinator {
             state.captureRequested = true;
             state.session.requestInitialCapture();
         }
+    }
+
+    private static void syncSinkBounds(State state) {
+        if (state == null || state.keyboardArea == null || state.sink == null) return;
+        int width = state.keyboardArea.getWidth();
+        int height = state.keyboardArea.getHeight();
+        if (width <= 0 || height <= 0) return;
+        ViewGroup.LayoutParams params = state.sink.getLayoutParams();
+        if (params == null) return;
+        if (params.width != width || params.height != height) {
+            params.width = width;
+            params.height = height;
+            state.sink.setLayoutParams(params);
+        }
+        if (state.sink.getX() != 0f) state.sink.setX(0f);
+        if (state.sink.getY() != 0f) state.sink.setY(0f);
     }
 
     private static synchronized void onPresented(State state) {
