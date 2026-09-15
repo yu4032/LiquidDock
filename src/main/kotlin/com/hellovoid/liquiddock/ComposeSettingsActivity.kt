@@ -184,7 +184,7 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_edge_refraction_falloff" -> "控制边缘折射向内部的衰减；越高越集中在边缘"
     "liquid_prismal_fresnel_reflect" -> "控制随观察角度增强的边缘反射强度"
     "liquid_prismal_dispersion_r" -> "红色通道相对色散倍率"
-    "liquid_prismal_dispersion_b" -> "蓝色通道相对色散倍率"
+    "liquid_prismal_dispersion_b" -> "蓝色散倍率"
     "liquid_prismal_vibrancy" -> "折射背景的色彩鲜艳度"
     "liquid_prismal_plain_highlight" -> "基础边缘高光"
     "liquid_os4_edge_width_px" -> "OS4 边缘带宽度，使用完整逻辑输出像素，不随下采样比例变化"
@@ -421,7 +421,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page == Page.Liquid) {
                         TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
                     }
-                    TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    if (page == Page.Gboard) {
+                        TextButton(text = stringResource(R.string.action_restart_gboard), onClick = { activity.restartGboard() })
+                    } else {
+                        TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    }
                     if (page == Page.Home) {
                         TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
                     }
