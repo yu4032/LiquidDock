@@ -65,6 +65,14 @@ final class PassBlurBindRequest {
                 NO_EXTRA_EXCLUSIONS);
     }
 
+    static PassBlurBindRequest gboardFloating(View authoritativeRoot) {
+        return new PassBlurBindRequest(
+                authoritativeRoot,
+                PassBlurDomain.GBOARD_FLOATING,
+                1.0f,
+                NO_EXTRA_EXCLUSIONS);
+    }
+
     View host() {
         return host;
     }

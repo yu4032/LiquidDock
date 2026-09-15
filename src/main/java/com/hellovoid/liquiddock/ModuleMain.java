@@ -13,6 +13,7 @@ import io.github.libxposed.api.XposedModule;
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
+    private static final String GBOARD_PACKAGE = "com.google.android.inputmethod.latin";
 
     private String loadedProcessName;
 
@@ -65,6 +66,21 @@ public final class ModuleMain extends XposedModule {
                 SecurityCenterGlassHook.install(classLoader, runtimeConfig);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] Security Center glass init failed", error);
+            }
+            return;
+        }
+        if (GBOARD_PACKAGE.equals(packageName)) {
+            try {
+                ClassLoader classLoader = param.getClassLoader();
+                if (classLoader == null) return;
+                if (!GboardPassBlurContinuousAuthority.install()) {
+                    Api101Bridge.log(
+                            "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
+                    return;
+                }
+                GboardFloatingGlassHook.install(classLoader);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][GboardFloatingGlass] init failed", error);
             }
             return;
         }

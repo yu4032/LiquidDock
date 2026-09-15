@@ -31,7 +31,8 @@ public class SecurityCenterScopeContractTest {
         assertEquals(List.of(
                 "com.miui.home",
                 "com.android.systemui",
-                "com.miui.securitycenter"), lines);
+                "com.miui.securitycenter",
+                "com.google.android.inputmethod.latin"), lines);
     }
 
     @Test

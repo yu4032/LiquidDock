@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="page_third_party_apps">第三方应用适配</string>
+    <string name="page_gboard">Gboard</string>
+</resources>
