@@ -143,7 +143,14 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             // while the later toolbar branch still draws all native controls above Prismal.
             int branchIndex = placement.branchIndex;
             ViewGroup sinkHost = placement.sinkHost;
-            sinkHost.addView(sink, branchIndex, 1, 1);
+            sinkHost.addView(sink, branchIndex);
+            ViewGroup.LayoutParams initial = sink.getLayoutParams();
+            if (initial == null) {
+                throw new IllegalStateException("toolbar glass layout params unavailable");
+            }
+            initial.width = 1;
+            initial.height = 1;
+            sink.setLayoutParams(initial);
         } catch (Throwable error) {
             failClosed(state, "unable to insert unclipped toolbar glass", error);
             return;
