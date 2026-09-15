@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -10,6 +11,7 @@ import java.util.WeakHashMap;
 /** Owns zero-copy Prismal output below one Gboard companion toolbar's controls. */
 final class GboardHandwritingCapsuleGlassCoordinator {
     private static final String TAG = "[DC][GboardToolbarGlass]";
+    private static final String TOOLBAR_BODY_TAG = ".widget-keyboard.keyboard-body-area";
     // PrismalRasterGuardShader expands the procedural silhouette by two logical pixels per side.
     // Keep the output domain large enough for that AA footprint instead of clipping at the toolbar.
     private static final float RASTER_GUARD_PX = 2f;
@@ -31,21 +33,30 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         final ViewGroup host;
         final LiquidDockConfig.Glass glassConfig;
         final float cornerRadiusPx;
+        final int configSnapshotHash;
         View root;
         ViewGroup sinkHost;
+        View bodyArea;
+        Drawable stockBodyBackground;
         GboardFloatingGlassSession session;
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
         View.OnLayoutChangeListener layoutListener;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean captureRequested;
+        boolean bodyBackgroundHidden;
         boolean presented;
         boolean released;
 
-        State(ViewGroup host, LiquidDockConfig.Glass glassConfig, float cornerRadiusPx) {
+        State(
+                ViewGroup host,
+                LiquidDockConfig.Glass glassConfig,
+                float cornerRadiusPx,
+                int configSnapshotHash) {
             this.host = host;
             this.glassConfig = glassConfig;
             this.cornerRadiusPx = cornerRadiusPx;
+            this.configSnapshotHash = configSnapshotHash;
         }
     }
 
@@ -54,17 +65,22 @@ final class GboardHandwritingCapsuleGlassCoordinator {
     static synchronized void onShown(
             ViewGroup host,
             LiquidDockConfig.Glass glassConfig,
-            float nativeRadiusPx) {
+            float nativeRadiusPx,
+            int configSnapshotHash) {
         if (host == null || glassConfig == null || nativeRadiusPx <= 0f
                 || Float.isNaN(nativeRadiusPx) || Float.isInfinite(nativeRadiusPx)) return;
         State existing = STATES.get(host);
         if (existing != null && !existing.released) {
-            if (existing.session == null && host.isAttachedToWindow()) attachNow(existing);
-            else syncGeometry(existing);
-            return;
+            if (existing.configSnapshotHash != configSnapshotHash) {
+                release(existing);
+            } else {
+                if (existing.session == null && host.isAttachedToWindow()) attachNow(existing);
+                else syncGeometry(existing);
+                return;
+            }
         }
 
-        State state = new State(host, glassConfig, nativeRadiusPx);
+        State state = new State(host, glassConfig, nativeRadiusPx, configSnapshotHash);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attachNow(state);
@@ -90,6 +106,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         return state != null
                 && !state.released
                 && state.presented
+                && state.bodyBackgroundHidden
                 && state.session != null
                 && state.sink != null
                 && state.sinkHost != null;
@@ -103,6 +120,11 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             failClosed(state, "toolbar root unavailable", null);
             return;
         }
+        View bodyArea = findToolbarBody(state.host);
+        if (bodyArea == null) {
+            failClosed(state, "semantic toolbar body unavailable", null);
+            return;
+        }
         SinkPlacement placement = findUnclippedSinkHost(state.host, RASTER_GUARD_PX);
         if (placement == null) {
             failClosed(state, "unclipped toolbar sink host unavailable", null);
@@ -111,6 +133,8 @@ final class GboardHandwritingCapsuleGlassCoordinator {
 
         state.root = root;
         state.sinkHost = placement.sinkHost;
+        state.bodyArea = bodyArea;
+        state.stockBodyBackground = bodyArea.getBackground();
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
         state.host.addOnLayoutChangeListener(state.layoutListener);
@@ -158,6 +182,19 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         syncGeometry(state);
     }
 
+    private static View findToolbarBody(ViewGroup host) {
+        if (host == null) return null;
+        for (int i = 0; i < host.getChildCount(); i++) {
+            View child = host.getChildAt(i);
+            if (child == null) continue;
+            Object tag = child.getTag();
+            if (tag instanceof CharSequence && TOOLBAR_BODY_TAG.contentEquals((CharSequence) tag)) {
+                return child;
+            }
+        }
+        return null;
+    }
+
     private static SinkPlacement findUnclippedSinkHost(ViewGroup host, float paddingPx) {
         if (host == null || !host.isAttachedToWindow()) return null;
         View branch = host;
@@ -182,6 +219,19 @@ final class GboardHandwritingCapsuleGlassCoordinator {
     private static synchronized void markPresented(State state) {
         if (state == null || state.released || state.presented
                 || STATES.get(state.host) != state) return;
+        View bodyArea = state.bodyArea;
+        if (bodyArea == null || !bodyArea.isAttachedToWindow()
+                || bodyArea.getParent() != state.host) {
+            failClosed(state, "toolbar body detached before presentation", null);
+            return;
+        }
+        try {
+            bodyArea.setBackground(null);
+            state.bodyBackgroundHidden = true;
+        } catch (Throwable error) {
+            failClosed(state, "unable to hide toolbar body background", error);
+            return;
+        }
         state.presented = true;
         state.host.invalidate();
     }
@@ -225,6 +275,15 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         state.released = true;
         state.presented = false;
         if (STATES.get(state.host) == state) STATES.remove(state.host);
+
+        View bodyArea = state.bodyArea;
+        if (bodyArea != null && state.bodyBackgroundHidden) {
+            try { bodyArea.setBackground(state.stockBodyBackground); }
+            catch (Throwable ignored) {}
+        }
+        state.bodyBackgroundHidden = false;
+        state.bodyArea = null;
+        state.stockBodyBackground = null;
 
         if (state.attachListener != null) {
             try { state.host.removeOnAttachStateChangeListener(state.attachListener); }
