@@ -20,6 +20,10 @@ final class GboardFloatingGlassGeometry {
     final float sinkTop;
     private final float sinkWidth;
     private final float sinkHeight;
+    private final float cropLeft;
+    private final float cropTop;
+    private final float cropWidth;
+    private final float cropHeight;
 
     private GboardFloatingGlassGeometry(
             int rootWidth,
@@ -33,6 +37,28 @@ final class GboardFloatingGlassGeometry {
             float sinkTop,
             float sinkWidth,
             float sinkHeight) {
+        this(rootWidth, rootHeight,
+                left, top, width, height, cornerRadius,
+                sinkLeft, sinkTop, sinkWidth, sinkHeight,
+                left, top, width, height);
+    }
+
+    private GboardFloatingGlassGeometry(
+            int rootWidth,
+            int rootHeight,
+            float left,
+            float top,
+            float width,
+            float height,
+            float cornerRadius,
+            float sinkLeft,
+            float sinkTop,
+            float sinkWidth,
+            float sinkHeight,
+            float cropLeft,
+            float cropTop,
+            float cropWidth,
+            float cropHeight) {
         this.rootWidth = rootWidth;
         this.rootHeight = rootHeight;
         this.left = left;
@@ -47,6 +73,10 @@ final class GboardFloatingGlassGeometry {
         this.sinkTop = sinkTop;
         this.sinkWidth = sinkWidth;
         this.sinkHeight = sinkHeight;
+        this.cropLeft = cropLeft;
+        this.cropTop = cropTop;
+        this.cropWidth = cropWidth;
+        this.cropHeight = cropHeight;
     }
 
     static GboardFloatingGlassGeometry capture(
@@ -119,12 +149,22 @@ final class GboardFloatingGlassGeometry {
             View sinkHost,
             View target,
             float cornerRadiusPx) {
+        return captureTargetPadded(root, sinkHost, target, cornerRadiusPx, 0f);
+    }
+
+    static GboardFloatingGlassGeometry captureTargetPadded(
+            View root,
+            View sinkHost,
+            View target,
+            float cornerRadiusPx,
+            float outputPaddingPx) {
         if (root == null || sinkHost == null || target == null
                 || !root.isAttachedToWindow() || !sinkHost.isAttachedToWindow()
                 || !target.isAttachedToWindow()
                 || root.getWidth() <= 0 || root.getHeight() <= 0
                 || target.getWidth() <= 0 || target.getHeight() <= 0
-                || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f) return null;
+                || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f
+                || !finite(outputPaddingPx) || outputPaddingPx < 0f) return null;
         try {
             Matrix rootToGlobal = new Matrix();
             root.transformMatrixToGlobal(rootToGlobal);
@@ -153,13 +193,36 @@ final class GboardFloatingGlassGeometry {
             float targetScale = Math.min(rootWidthScale, rootHeightScale);
             if (!finite(targetScale) || targetScale <= 0f) return null;
 
+            float rootSpanX = rootBounds.right - rootBounds.left;
+            float rootSpanY = rootBounds.bottom - rootBounds.top;
+            float hostSpanX = hostBounds.right - hostBounds.left;
+            float hostSpanY = hostBounds.bottom - hostBounds.top;
+            if (rootSpanX <= 0f || rootSpanY <= 0f || hostSpanX <= 0f || hostSpanY <= 0f) {
+                return null;
+            }
+
+            float cropLeft = clamp(left - outputPaddingPx, 0f, root.getWidth());
+            float cropTop = clamp(top - outputPaddingPx, 0f, root.getHeight());
+            float cropRight = clamp(right + outputPaddingPx, 0f, root.getWidth());
+            float cropBottom = clamp(bottom + outputPaddingPx, 0f, root.getHeight());
+            if (cropRight <= cropLeft || cropBottom <= cropTop) return null;
+
+            float hostPaddingX = outputPaddingPx * hostSpanX / rootSpanX;
+            float hostPaddingY = outputPaddingPx * hostSpanY / rootSpanY;
+            float sinkLeft = hostBounds.left - hostPaddingX;
+            float sinkTop = hostBounds.top - hostPaddingY;
+            float sinkRight = hostBounds.right + hostPaddingX;
+            float sinkBottom = hostBounds.bottom + hostPaddingY;
+            if (!finite(sinkLeft) || !finite(sinkTop)
+                    || !finite(sinkRight) || !finite(sinkBottom)
+                    || sinkRight <= sinkLeft || sinkBottom <= sinkTop) return null;
+
             return new GboardFloatingGlassGeometry(
                     root.getWidth(), root.getHeight(),
                     left, top, right - left, bottom - top,
                     cornerRadiusPx * targetScale,
-                    hostBounds.left, hostBounds.top,
-                    hostBounds.right - hostBounds.left,
-                    hostBounds.bottom - hostBounds.top);
+                    sinkLeft, sinkTop, sinkRight - sinkLeft, sinkBottom - sinkTop,
+                    cropLeft, cropTop, cropRight - cropLeft, cropBottom - cropTop);
         } catch (Throwable ignored) {
             return null;
         }
@@ -182,13 +245,13 @@ final class GboardFloatingGlassGeometry {
     }
 
     float[] toCropUvRect() {
-        float cropLeft = left / rootWidth;
-        float cropBottom = (rootHeight - (top + height)) / rootHeight;
+        float cropUvLeft = cropLeft / rootWidth;
+        float cropBottom = (rootHeight - (cropTop + cropHeight)) / rootHeight;
         return new float[]{
-                clamp(cropLeft, 0f, 1f),
+                clamp(cropUvLeft, 0f, 1f),
                 clamp(cropBottom, 0f, 1f),
-                clamp(width / rootWidth, 0f, 1f),
-                clamp(height / rootHeight, 0f, 1f)
+                clamp(cropWidth / rootWidth, 0f, 1f),
+                clamp(cropHeight / rootHeight, 0f, 1f)
         };
     }
 
@@ -204,7 +267,11 @@ final class GboardFloatingGlassGeometry {
                 && close(sinkLeft, other.sinkLeft)
                 && close(sinkTop, other.sinkTop)
                 && close(sinkWidth, other.sinkWidth)
-                && close(sinkHeight, other.sinkHeight);
+                && close(sinkHeight, other.sinkHeight)
+                && close(cropLeft, other.cropLeft)
+                && close(cropTop, other.cropTop)
+                && close(cropWidth, other.cropWidth)
+                && close(cropHeight, other.cropHeight);
     }
 
     private static void addVerticalAuthority(Bounds target, View view, Matrix globalToTarget) {
