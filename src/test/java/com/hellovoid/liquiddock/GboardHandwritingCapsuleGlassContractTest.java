@@ -48,27 +48,41 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertFalse(hook.contains("0x7f"));
     }
 
-    @Test public void toolbarGlassOwnsSilhouetteInsteadOfVendorClipPath() throws Exception {
+    @Test public void toolbarGlassOwnsSilhouetteWithoutVendorOrViewBackground() throws Exception {
         String hook = read("GboardHandwritingCapsuleGlassHook.java");
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(hook.contains(
                 "com.google.android.libraries.inputmethod.widgets.ShadowedSoftKeyboardView"));
         assertTrue(hook.contains("\"draw\""));
         assertTrue(hook.contains("Canvas.class"));
-        assertTrue(hook.contains("isSynthetic()"));
+        assertTrue(hook.contains("resolveDispatchDraw"));
+        assertTrue(hook.contains("dispatchDraw.invoke(owner, canvas)"));
         assertTrue(hook.contains("GboardHandwritingCapsuleGlassCoordinator.isActive"));
-        assertTrue(hook.contains("superDrawBridge.invoke(owner, canvas)"));
+        assertFalse(hook.contains("superDrawBridge"));
         assertFalse(hook.contains("getDeclaredMethod(\"m\""));
         assertTrue(coordinator.contains("static synchronized boolean isActive"));
-        assertTrue(coordinator.contains("host.addView(sink, 0"));
+    }
+
+    @Test public void toolbarGlassUsesUnclippedSiblingOutputWithRasterGuard() throws Exception {
+        String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
+        String geometry = read("GboardFloatingGlassGeometry.java");
+        assertTrue(coordinator.contains("findUnclippedSinkHost"));
+        assertTrue(coordinator.contains("sinkHost.addView(sink, branchIndex"));
+        assertFalse(coordinator.contains("state.host.addView(sink, 0"));
+        assertTrue(coordinator.contains("RASTER_GUARD_PX"));
+        assertTrue(coordinator.contains("captureTargetPadded"));
+        assertTrue(geometry.contains("captureTargetPadded"));
+        assertTrue(geometry.contains("cropLeft"));
+        assertTrue(geometry.contains("cropTop"));
+        assertTrue(geometry.contains("cropWidth"));
+        assertTrue(geometry.contains("cropHeight"));
     }
 
     @Test public void toolbarCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
-        assertTrue(coordinator.contains("host.addView(sink, 0"));
         assertTrue(coordinator.contains("GboardFloatingGlassView"));
         assertTrue(coordinator.contains("GboardFloatingGlassSession"));
-        assertTrue(coordinator.contains("GboardFloatingGlassGeometry.captureTarget"));
+        assertTrue(coordinator.contains("GboardFloatingGlassGeometry.captureTargetPadded"));
         assertFalse(coordinator.contains("removeAllViews"));
         assertFalse(coordinator.contains("setBackground(null)"));
         assertFalse(coordinator.contains("findViewById"));
