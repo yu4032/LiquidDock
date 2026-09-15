@@ -55,7 +55,7 @@ LiquidDock 是一个面向 **HyperOS 平板桌面** 的 LSPosed 模块，主要�
 
 ### 安全中心侧边栏
 
-LiquidDock 也可以为部分 HyperOS 安全中心侧边栏页面加入液态玻璃效果，包括游戏工具箱、视频工具箱、Global Dock 和 All Apps。
+LiquidDock 也可以为新版 HyperOS 4 安全中心侧边栏页面加入液态玻璃效果，包括游戏工具箱、视频工具箱、Global Dock 和 All Apps。
 
 不同系统版本的安全中心差异较大，如果当前版本不兼容，LiquidDock 会保留系统原来的界面。
 
