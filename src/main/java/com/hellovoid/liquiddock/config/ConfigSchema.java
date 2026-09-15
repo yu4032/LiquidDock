@@ -210,7 +210,7 @@ public final class ConfigSchema {
                 "dock_shadow_radius", 15, 42, 42, 1, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_SIZE = dp(
                 "dock_shadow_size", 18, 52, 52, 1, 60, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> SHADOW_ALPHA = dp(
+        public static final ConfigKey<Integer> SHADOW_ALPHA = integer(
                 "dock_shadow_alpha", 140, 140, 140, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_Y = dp(
                 "dock_shadow_y", 4, 12, 12, -24, 24, ConfigKey.ExportMode.ALWAYS);
@@ -219,6 +219,9 @@ public final class ConfigSchema {
     }
 
     public static final class Divider {
+        // Explicit-versus-legacy runtime defaults are conditional and deliberately not flattened.
+        // Divider width/Y are historical raw tenths-of-dp integers in JSON, not DP_TENTHS
+        // sidecar values; DIRECT preserves the old import clamps and export representation.
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "dock_divider_enabled", false, null, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> WIDTH_DP = integer(
@@ -349,6 +352,8 @@ public final class ConfigSchema {
                 "liquid_dynamic_hold_ms", 900, 900, 900, 0, 5000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> BLACK_THRESHOLD = integer(
                 "liquid_black_threshold", 10, 10, 10, 0, 64, ConfigKey.ExportMode.ALWAYS);
+        // Historical JSON export/import included this key in the _tenths round-trip list even
+        // though the current UI presents whole milliseconds. Preserve that storage contract.
         public static final ConfigKey<Integer> HOME_SETTLE_DELAY_MS = dp(
                 "liquid_home_settle_delay", 1200, 1200, 1200, 200, 3000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> HIGHLIGHT_WIDTH = integer(
@@ -377,6 +382,9 @@ public final class ConfigSchema {
                 "liquid_highlight_alpha", 100, 100, 100, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> RECENTS_PREARM_DISTANCE = dp(
                 "liquid_recents_prearm_distance", 8, 8, 0, 1, 48, ConfigKey.ExportMode.ALWAYS);
+
+        // Current Prismal upstream controls. Percent-like values use x100 storage;
+        // distance-valued controls use the existing DP_TENTHS representation.
         public static final ConfigKey<Integer> PRISMAL_REFRACTION_INSET = dp(
                 "liquid_prismal_refraction_inset", 20, 20, 5, 0, 80, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_DISPLACEMENT_SCALE = integer(
@@ -397,6 +405,8 @@ public final class ConfigSchema {
                 "liquid_prismal_vibrancy", 128, 128, 128, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_PLAIN_HIGHLIGHT = integer(
                 "liquid_prismal_plain_highlight", 8, 8, 8, 0, 100, ConfigKey.ExportMode.ALWAYS);
+        // Dedicated OS4 controls use logical output pixels, independent from backdrop downsampling.
+        // Keep the historical keys so existing user values become active again.
         public static final ConfigKey<Integer> OS4_EDGE_WIDTH_PX = integer(
                 "liquid_os4_edge_width_px", 6, 6, 6, 3, 64, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OS4_REFLECT_OFFSET_PX = integer(
@@ -444,9 +454,8 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_gboard_floating_glass", true, true, true,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Boolean> AUTO_RESIZE_AFTER_HANDLE_DRAG = bool(
-                "liquid_gboard_auto_resize_after_handle_drag", true, true, true,
-                ConfigKey.ExportMode.ALWAYS);
+        // Appearance overrides are intentionally IF_PRESENT. Their absence means that Gboard
+        // inherits the current global Prismal material rather than freezing a copied default.
         public static final ConfigKey<Integer> BLUR = integer(
                 "liquid_gboard_blur", 0, null, 0, 0, 60,
                 ConfigKey.ExportMode.IF_PRESENT);
@@ -476,6 +485,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> PLAIN_HIGHLIGHT = highlight("plain_highlight");
         public static final ConfigKey<Boolean> CAUSTICS = highlight("caustics");
         public static final ConfigKey<Boolean> PRESS_GLOW = highlight("press_glow");
+
         public static final ConfigKey<Boolean> LARGE_SKY_HAZE = largeHighlight("sky_haze");
         public static final ConfigKey<Boolean> LARGE_SPECULAR = largeHighlight("specular");
         public static final ConfigKey<Boolean> LARGE_LIT_RIM = largeHighlight("lit_rim");
@@ -485,6 +495,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> LARGE_PLAIN_HIGHLIGHT = largeHighlight("plain_highlight");
         public static final ConfigKey<Boolean> LARGE_CAUSTICS = largeHighlight("caustics");
         public static final ConfigKey<Boolean> LARGE_PRESS_GLOW = largeHighlight("press_glow");
+
         private LauncherHighlight() {}
     }
 
@@ -492,35 +503,53 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> DOCK_CUSTOMIZATION = bool(
                 "workstation_dock_customization", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_WIDTH_OFFSET = dp(
-                "workstation_dock_width_offset", 0, 0, 0, -240, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_dock_width_offset", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_GLASS_CORNER_RADIUS = dp(
-                "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100, ConfigKey.ExportMode.ALWAYS);
+                "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> GRID_HORIZONTAL_OFFSET = dp(
-                "workstation_grid_horizontal_offset", 0, 0, 0, -240, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_grid_horizontal_offset", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        // Merged vertical keys are retained for old configs/JSON only; current UI writes
+        // independent top/bottom spacing keys below.
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_VERTICAL_OFFSET = dp(
-                "workstation_all_apps_landscape_vertical_offset", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_landscape_vertical_offset", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_TOP_SPACING = dp(
-                "workstation_all_apps_landscape_top_spacing", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_landscape_top_spacing", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_BOTTOM_SPACING = dp(
-                "workstation_all_apps_landscape_bottom_spacing", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_landscape_bottom_spacing", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_portrait_horizontal_offset", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_portrait_horizontal_offset", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_VERTICAL_OFFSET = dp(
-                "workstation_all_apps_portrait_vertical_offset", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_portrait_vertical_offset", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_TOP_SPACING = dp(
-                "workstation_all_apps_portrait_top_spacing", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_portrait_top_spacing", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_BOTTOM_SPACING = dp(
-                "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, 0, 240, ConfigKey.ExportMode.ALWAYS);
+                "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_TOP_OFFSET = dp(
-                "workstation_dock_icon_top_offset", 0, 0, 0, -48, 48, ConfigKey.ExportMode.ALWAYS);
+                "workstation_dock_icon_top_offset", 0, 0, 0, -48, 48,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_BOTTOM_OFFSET = dp(
-                "workstation_dock_icon_bottom_offset", 0, 0, 0, -48, 48, ConfigKey.ExportMode.ALWAYS);
+                "workstation_dock_icon_bottom_offset", 0, 0, 0, -48, 48,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LEGACY_ALL_APPS_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_horizontal_offset", 0, 0, 0, null, null, ConfigKey.ExportMode.NEVER);
+                "workstation_all_apps_horizontal_offset", 0, 0, 0, null, null,
+                ConfigKey.ExportMode.NEVER);
         public static final ConfigKey<Integer> LEGACY_ALL_APPS_VERTICAL_OFFSET = dp(
-                "workstation_all_apps_vertical_offset", 0, 0, 0, null, null, ConfigKey.ExportMode.NEVER);
+                "workstation_all_apps_vertical_offset", 0, 0, 0, null, null,
+                ConfigKey.ExportMode.NEVER);
+
         private Workstation() {}
     }
 
@@ -528,12 +557,14 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> BACKGROUND_BLUR_PERCENT = integer(
                 "recents_background_blur_percent", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
+
         private Recents() {}
     }
 
     public static final class Debug {
         public static final ConfigKey<Boolean> LOGGING = bool(
                 "liquiddock_debug_log", false, false, false, ConfigKey.ExportMode.NEVER);
+
         private Debug() {}
     }
 
@@ -541,6 +572,7 @@ public final class ConfigSchema {
 
     private static final class AllHolder {
         private static final List<ConfigKey<?>> KEYS = createAll();
+
         private AllHolder() {}
     }
 
@@ -562,34 +594,40 @@ public final class ConfigSchema {
                 Grid.PORTRAIT_MARGIN_TOP, Grid.PORTRAIT_MARGIN_BOTTOM,
                 Grid.LANDSCAPE_ROW_GAP, Grid.PORTRAIT_ROW_GAP,
                 Grid.LANDSCAPE_INDICATOR_Y, Grid.PORTRAIT_INDICATOR_Y,
-                Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN, Grid.LEGACY_PORTRAIT_HORIZONTAL_MARGIN,
-                Grid.LEGACY_MARGIN_LEFT, Grid.LEGACY_MARGIN_RIGHT,
-                Grid.LEGACY_MARGIN_TOP, Grid.LEGACY_MARGIN_BOTTOM);
-        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT, Dock.RESIZE_ANIMATION,
-                Dock.SMOOTH_RESIZE_ANIMATION, Dock.DIMENSIONS_DP, Dock.WIDTH_OFFSET,
-                Dock.HEIGHT_OFFSET, Dock.SPACING, Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS,
-                Dock.CORNERS_DP, Dock.CORNER_OFFSET, Dock.BLUR_CORNER_OFFSET, Dock.SQUIRCLE,
-                Dock.FILL_DIFF, Dock.STROKE_ENABLED, Dock.SQUIRCLE_CONTROL_POINT,
-                Dock.SQUIRCLE_STROKE_WIDTH, Dock.SQUIRCLE_STROKE_OFFSET,
-                Dock.FILL_DIFF_STROKE_WIDTH, Dock.STANDARD_STROKE_WIDTH, Dock.STROKE_RED,
-                Dock.STROKE_GREEN, Dock.STROKE_BLUE, Dock.STROKE_ALPHA, Dock.STROKE_SHADOW,
+                Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN,
+                Grid.LEGACY_PORTRAIT_HORIZONTAL_MARGIN, Grid.LEGACY_MARGIN_LEFT,
+                Grid.LEGACY_MARGIN_RIGHT, Grid.LEGACY_MARGIN_TOP,
+                Grid.LEGACY_MARGIN_BOTTOM);
+        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT,
+                Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
+                Dock.DIMENSIONS_DP, Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
+                Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS, Dock.CORNERS_DP, Dock.CORNER_OFFSET,
+                Dock.BLUR_CORNER_OFFSET, Dock.SQUIRCLE, Dock.FILL_DIFF, Dock.STROKE_ENABLED,
+                Dock.SQUIRCLE_CONTROL_POINT, Dock.SQUIRCLE_STROKE_WIDTH,
+                Dock.SQUIRCLE_STROKE_OFFSET, Dock.FILL_DIFF_STROKE_WIDTH,
+                Dock.STANDARD_STROKE_WIDTH, Dock.STROKE_RED, Dock.STROKE_GREEN,
+                Dock.STROKE_BLUE, Dock.STROKE_ALPHA, Dock.STROKE_SHADOW,
                 Dock.STROKE_SHADOW_RADIUS, Dock.STROKE_SHADOW_ALPHA, Dock.SHADOW_ENABLED,
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
-        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS,
-                Glass.SHORTCUT_POPUP_DARK_TEXT, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
-                Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS, Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-                Glass.FOLDER_CORNER_RADIUS, Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
-                Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS, Glass.SMALL_FOLDER_GLASS,
-                Glass.SMALL_FOLDER_SIZE_OFFSET, Glass.SMALL_FOLDER_CORNER_RADIUS,
-                Glass.LARGE_FOLDER_GLASS, Glass.LARGE_FOLDER_SIZE_OFFSET,
-                Glass.LARGE_FOLDER_CORNER_RADIUS, Glass.DIMENSIONS_DP, Glass.BLUR_MODE,
-                Glass.MIUIX_307_PIPELINE, Glass.BLUR, Glass.CHROMATIC, Glass.TINT_ALPHA,
-                Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY, Glass.SAMPLING_EXTRA_TOP,
-                Glass.SAMPLING_EXTRA_BOTTOM, Glass.SAMPLING_EXTRA_LEFT, Glass.SAMPLING_EXTRA_RIGHT,
-                Glass.THICKNESS, Glass.IOR, Glass.NORMAL_STRENGTH, Glass.DOME,
-                Glass.LENS_REFRACTION, Glass.CAPTURE_SCALE, Glass.PASSBLUR_CAPTURE_SCALE,
+        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
+                Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
+                Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
+                Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+                Glass.FOLDER_CORNER_RADIUS,
+                Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
+                Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,
+                Glass.SMALL_FOLDER_GLASS, Glass.SMALL_FOLDER_SIZE_OFFSET,
+                Glass.SMALL_FOLDER_CORNER_RADIUS, Glass.LARGE_FOLDER_GLASS,
+                Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
+                Glass.DIMENSIONS_DP, Glass.BLUR_MODE, Glass.MIUIX_307_PIPELINE,
+                Glass.BLUR, Glass.CHROMATIC,
+                Glass.TINT_ALPHA, Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
+                Glass.SAMPLING_EXTRA_TOP, Glass.SAMPLING_EXTRA_BOTTOM,
+                Glass.SAMPLING_EXTRA_LEFT, Glass.SAMPLING_EXTRA_RIGHT, Glass.THICKNESS,
+                Glass.IOR, Glass.NORMAL_STRENGTH, Glass.DOME, Glass.LENS_REFRACTION,
+                Glass.CAPTURE_SCALE, Glass.PASSBLUR_CAPTURE_SCALE,
                 Glass.PASSBLUR_RENDER_FPS, Glass.DYNAMIC_APP_CAPTURE, Glass.FULLSCREEN_CAPTURE,
                 Glass.DYNAMIC_APP_PROBE_FPS, Glass.DYNAMIC_MOTION_THRESHOLD,
                 Glass.DYNAMIC_BIT_THRESHOLD, Glass.DYNAMIC_HOLD_MS, Glass.BLACK_THRESHOLD,
@@ -597,23 +635,23 @@ public final class ConfigSchema {
                 Glass.TINT_GREEN, Glass.TINT_BLUE, Glass.DEPTH_EFFECT, Glass.BRIGHTNESS,
                 Glass.SPECULAR_SHARPNESS, Glass.SPECULAR_STRENGTH, Glass.RIM_LIGHT,
                 Glass.CAUSTICS, Glass.EDGE_BAND, Glass.HIGHLIGHT_ALPHA,
-                Glass.RECENTS_PREARM_DISTANCE, Glass.PRISMAL_REFRACTION_INSET,
-                Glass.PRISMAL_DISPLACEMENT_SCALE, Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH,
-                Glass.PRISMAL_SMIN_SMOOTHING, Glass.PRISMAL_EDGE_REFRACTION_FALLOFF,
-                Glass.PRISMAL_FRESNEL_REFLECT, Glass.PRISMAL_DISPERSION_R,
-                Glass.PRISMAL_DISPERSION_B, Glass.PRISMAL_VIBRANCY,
-                Glass.PRISMAL_PLAIN_HIGHLIGHT, Glass.OS4_EDGE_WIDTH_PX,
-                Glass.OS4_REFLECT_OFFSET_PX, Glass.OS4_REFLECTION_STRENGTH,
-                Glass.OS4_REFLECTION_LIGHTEN, Glass.OS4_DIRECTIONAL_ANGLE_RANGE,
-                Glass.OS4_DIRECTIONAL_INTENSITY, Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
+                Glass.RECENTS_PREARM_DISTANCE,
+                Glass.PRISMAL_REFRACTION_INSET, Glass.PRISMAL_DISPLACEMENT_SCALE,
+                Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH, Glass.PRISMAL_SMIN_SMOOTHING,
+                Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, Glass.PRISMAL_FRESNEL_REFLECT,
+                Glass.PRISMAL_DISPERSION_R, Glass.PRISMAL_DISPERSION_B,
+                Glass.PRISMAL_VIBRANCY, Glass.PRISMAL_PLAIN_HIGHLIGHT,
+                Glass.OS4_EDGE_WIDTH_PX, Glass.OS4_REFLECT_OFFSET_PX,
+                Glass.OS4_REFLECTION_STRENGTH, Glass.OS4_REFLECTION_LIGHTEN,
+                Glass.OS4_DIRECTIONAL_ANGLE_RANGE, Glass.OS4_DIRECTIONAL_INTENSITY,
+                Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
                 Glass.PRISMAL_LIGHT_DIR_X, Glass.PRISMAL_LIGHT_DIR_Y,
                 Glass.PRISMAL_SHADOW_RED, Glass.PRISMAL_SHADOW_GREEN,
                 Glass.PRISMAL_SHADOW_BLUE, Glass.PRISMAL_SHADOW_ALPHA,
                 Glass.PRISMAL_SHADOW_SOFTNESS, Glass.PRISMAL_TRANSMITTANCE,
                 Glass.PRISMAL_BACKDROP_SCALE_X, Glass.PRISMAL_BACKDROP_SCALE_Y,
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
-        add(keys, Gboard.ENABLED, Gboard.AUTO_RESIZE_AFTER_HANDLE_DRAG,
-                Gboard.BLUR, Gboard.TINT_RED, Gboard.TINT_GREEN,
+        add(keys, Gboard.ENABLED, Gboard.BLUR, Gboard.TINT_RED, Gboard.TINT_GREEN,
                 Gboard.TINT_BLUE, Gboard.TINT_ALPHA);
         add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.SPECULAR,
                 LauncherHighlight.LIT_RIM, LauncherHighlight.OPPOSITE_RIM,
@@ -625,7 +663,8 @@ public final class ConfigSchema {
                 LauncherHighlight.LARGE_FACE_SHEEN, LauncherHighlight.LARGE_PLAIN_HIGHLIGHT,
                 LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.DOCK_WIDTH_OFFSET,
-                Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, Workstation.GRID_HORIZONTAL_OFFSET,
+                Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
+                Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
