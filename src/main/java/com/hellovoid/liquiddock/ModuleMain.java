@@ -75,6 +75,11 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(ConfigReader.load());
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled) {
+                    if (!GboardPassBlurContinuousAuthority.install()) {
+                        Api101Bridge.log(
+                                "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
+                        return;
+                    }
                     GboardFloatingGlassHook.install(classLoader, runtimeConfig);
                 }
             } catch (Throwable error) {
