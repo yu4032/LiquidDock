@@ -5,12 +5,16 @@ import com.hellovoid.liquiddock.config.ConfigSchema;
 /** Gboard-only persisted glass controls. Missing appearance values inherit global Prismal values. */
 final class GboardGlassPreferences {
     static final String ENABLED_KEY = ConfigSchema.Gboard.ENABLED.name();
+    static final String AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY =
+            ConfigSchema.Gboard.AUTO_RESIZE_AFTER_HANDLE_DRAG.name();
     static final String BLUR_KEY = ConfigSchema.Gboard.BLUR.name();
     static final String TINT_RED_KEY = ConfigSchema.Gboard.TINT_RED.name();
     static final String TINT_GREEN_KEY = ConfigSchema.Gboard.TINT_GREEN.name();
     static final String TINT_BLUE_KEY = ConfigSchema.Gboard.TINT_BLUE.name();
     static final String TINT_ALPHA_KEY = ConfigSchema.Gboard.TINT_ALPHA.name();
     static final boolean ENABLED_DEFAULT = ConfigSchema.Gboard.ENABLED.uiDefault();
+    static final boolean AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT =
+            ConfigSchema.Gboard.AUTO_RESIZE_AFTER_HANDLE_DRAG.uiDefault();
 
     static final class Appearance {
         final boolean enabled;
