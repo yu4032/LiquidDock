@@ -1,8 +1,10 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Canvas;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 /** Hooks the stable Gboard companion toolbar view without R8 implementation names. */
@@ -10,6 +12,8 @@ final class GboardHandwritingCapsuleGlassHook {
     private static final String TAG = "[DC][GboardToolbarGlass]";
     private static final String WIDGET_CLASS =
             "com.google.android.libraries.inputmethod.companionwidget.widget.WidgetSoftKeyboardView";
+    private static final String SHADOWED_WIDGET_CLASS =
+            "com.google.android.libraries.inputmethod.widgets.ShadowedSoftKeyboardView";
     private static boolean installed;
 
     private GboardHandwritingCapsuleGlassHook() {}
@@ -19,6 +23,33 @@ final class GboardHandwritingCapsuleGlassHook {
         if (classLoader == null) return false;
         try {
             Class<?> widgetClass = Class.forName(WIDGET_CLASS, false, classLoader);
+            Class<?> shadowedWidgetClass = Class.forName(SHADOWED_WIDGET_CLASS, false, classLoader);
+            if (!shadowedWidgetClass.isAssignableFrom(widgetClass)) {
+                throw new IllegalStateException("Gboard toolbar shadow hierarchy changed");
+            }
+
+            Method superDrawBridge = resolveSuperDrawBridge(shadowedWidgetClass);
+            Method shadowedDraw = shadowedWidgetClass.getDeclaredMethod("draw", Canvas.class);
+            HookUtil.hook(shadowedDraw, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object owner = chain.getThisObject();
+                if (!(owner instanceof ViewGroup)
+                        || !widgetClass.isInstance(owner)
+                        || args.length != 1
+                        || !(args[0] instanceof Canvas)
+                        || !GboardHandwritingCapsuleGlassCoordinator.isActive((ViewGroup) owner)) {
+                    return chain.proceed(args);
+                }
+
+                Canvas canvas = (Canvas) args[0];
+                try {
+                    return superDrawBridge.invoke(owner, canvas);
+                } catch (Throwable error) {
+                    log("unable to bypass vendor toolbar clip; stock draw restored", unwrap(error));
+                    return chain.proceed(args);
+                }
+            });
+
             Method widgetLayout = widgetClass.getDeclaredMethod(
                     "onLayout",
                     Boolean.TYPE,
@@ -40,6 +71,26 @@ final class GboardHandwritingCapsuleGlassHook {
             log("hook unavailable; stock Gboard toolbar retained", error);
             return false;
         }
+    }
+
+    private static Method resolveSuperDrawBridge(Class<?> shadowedWidgetClass) {
+        Method match = null;
+        for (Method candidate : shadowedWidgetClass.getDeclaredMethods()) {
+            Class<?>[] params = candidate.getParameterTypes();
+            if (!candidate.isSynthetic()
+                    || candidate.getReturnType() != Void.TYPE
+                    || params.length != 1
+                    || params[0] != Canvas.class) continue;
+            if (match != null) {
+                throw new IllegalStateException("ambiguous Gboard toolbar super-draw bridge");
+            }
+            candidate.setAccessible(true);
+            match = candidate;
+        }
+        if (match == null) {
+            throw new IllegalStateException("Gboard toolbar super-draw bridge unavailable");
+        }
+        return match;
     }
 
     private static void handleWidgetLayout(ViewGroup host) {
@@ -80,6 +131,14 @@ final class GboardHandwritingCapsuleGlassHook {
         if (density <= 0f) density = 1f;
         return GboardHandwritingToolbarGeometryPolicy.isToolbar(
                 host.getWidth(), host.getHeight(), density);
+    }
+
+    private static Throwable unwrap(Throwable error) {
+        if (error instanceof InvocationTargetException) {
+            Throwable cause = ((InvocationTargetException) error).getCause();
+            if (cause != null) return cause;
+        }
+        return error;
     }
 
     private static void log(String message, Throwable error) {
