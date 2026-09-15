@@ -4,6 +4,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
@@ -15,9 +16,10 @@ import java.util.WeakHashMap;
  */
 final class GboardFloatingHandlePolicy {
     private static final Object LOCK = new Object();
-    private static final WeakHashMap<View, View.OnTouchListener> VENDOR_LISTENERS =
+    private static final WeakHashMap<View, WeakReference<View.OnTouchListener>> VENDOR_LISTENERS =
             new WeakHashMap<>();
-    private static final WeakHashMap<View, DragReleaseListener> BOUND = new WeakHashMap<>();
+    private static final WeakHashMap<View, WeakReference<DragReleaseListener>> BOUND =
+            new WeakHashMap<>();
     private static boolean installed;
 
     private GboardFloatingHandlePolicy() {}
@@ -40,8 +42,8 @@ final class GboardFloatingHandlePolicy {
                                 VENDOR_LISTENERS.remove(view);
                                 BOUND.remove(view);
                             } else if (!(listener instanceof DragReleaseListener)) {
-                                VENDOR_LISTENERS.put(view, listener);
-                                DragReleaseListener wrapper = BOUND.get(view);
+                                VENDOR_LISTENERS.put(view, new WeakReference<>(listener));
+                                DragReleaseListener wrapper = dereference(BOUND.get(view));
                                 if (wrapper != null) {
                                     wrapper.setDelegate(listener);
                                     args[0] = wrapper;
@@ -63,12 +65,12 @@ final class GboardFloatingHandlePolicy {
         if (bottomFrame == null) return;
         DragReleaseListener wrapper;
         synchronized (LOCK) {
-            View.OnTouchListener vendor = VENDOR_LISTENERS.get(bottomFrame);
+            View.OnTouchListener vendor = dereference(VENDOR_LISTENERS.get(bottomFrame));
             if (vendor == null) return;
-            wrapper = BOUND.get(bottomFrame);
+            wrapper = dereference(BOUND.get(bottomFrame));
             if (wrapper == null) {
                 wrapper = new DragReleaseListener(bottomFrame, vendor);
-                BOUND.put(bottomFrame, wrapper);
+                BOUND.put(bottomFrame, new WeakReference<>(wrapper));
             } else {
                 wrapper.setDelegate(vendor);
             }
@@ -81,6 +83,10 @@ final class GboardFloatingHandlePolicy {
         return reader.b(
                 GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY,
                 GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT);
+    }
+
+    private static <T> T dereference(WeakReference<T> reference) {
+        return reference != null ? reference.get() : null;
     }
 
     private static final class DragReleaseListener implements View.OnTouchListener {
