@@ -54,6 +54,9 @@ public class ConfigReader {
 
     static ConfigReader load(SharedPreferences remote) { return new ConfigReader(remote); }
 
+    /** Content identity for deciding whether a long-lived injected runtime must refresh. */
+    int snapshotHash() { return prefs.hashCode(); }
+
     public boolean has(String key) { return prefs.containsKey(key); }
 
     public String s(String key, String def) {
