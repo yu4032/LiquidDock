@@ -37,12 +37,15 @@ public class GboardHandwritingCapsuleGlassContractTest {
         String hook = read("GboardHandwritingCapsuleGlassHook.java");
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(hook.contains("android.util.AttributeSet"));
-        assertTrue(hook.contains("getDeclaredConstructor(Context.class, AttributeSet.class)"));
+        assertTrue(hook.contains("getDeclaredConstructor("));
+        assertTrue(hook.contains("Context.class, AttributeSet.class"));
         assertTrue(hook.contains("getIdentifier(\"clipRadius\", \"attr\""));
         assertTrue(hook.contains("obtainStyledAttributes"));
         assertTrue(hook.contains("NATIVE_TOOLBAR_RADII"));
         assertTrue(hook.contains("nativeToolbarRadiusPx(host)"));
-        assertTrue(coordinator.contains("onShown(host, liveConfig.glass, nativeRadiusPx)"));
+        assertTrue(hook.contains("onShown(host, liveConfig.glass, nativeRadiusPx)"));
+        assertTrue(coordinator.contains("float nativeRadiusPx"));
+        assertTrue(coordinator.contains("this.cornerRadiusPx = cornerRadiusPx"));
         assertFalse(hook.contains("100f"));
         assertFalse(hook.contains("0x7f"));
     }
