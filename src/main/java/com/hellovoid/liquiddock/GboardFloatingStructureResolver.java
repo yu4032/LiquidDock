@@ -1,18 +1,22 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Outline;
+import android.graphics.drawable.Drawable;
+import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Resolves the floating keyboard from stable widget types and parent/child topology.
- * No R8 class/member names or aapt2 resource IDs are part of this contract.
+ * Resolves the floating keyboard from stable widget types, parent/child topology and runtime
+ * geometry. No R8 class/member names or aapt2 resource IDs are part of this contract.
  */
 final class GboardFloatingStructureResolver {
-    private static final String KEYBOARD_HOLDER_CLASS =
+    static final String KEYBOARD_HOLDER_CLASS =
             "com.google.android.libraries.inputmethod.widgets.KeyboardHolder";
     private static final String KEYBOARD_VIEW_HOLDER_CLASS =
             "com.google.android.libraries.inputmethod.keyboard.impl.KeyboardViewHolder";
@@ -55,11 +59,19 @@ final class GboardFloatingStructureResolver {
         try {
             Class<?> keyboardHolderClass = Class.forName(
                     KEYBOARD_HOLDER_CLASS, false, classLoader);
-            Class<?> keyboardViewHolderClass = Class.forName(
-                    KEYBOARD_VIEW_HOLDER_CLASS, false, classLoader);
             View holderCandidate = findUniqueDescendant(popupContent, keyboardHolderClass);
             if (!(holderCandidate instanceof ViewGroup)) return null;
-            ViewGroup keyboardHolder = (ViewGroup) holderCandidate;
+            return resolveFromKeyboardHolder((ViewGroup) holderCandidate, classLoader);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    static Structure resolveFromKeyboardHolder(ViewGroup keyboardHolder, ClassLoader classLoader) {
+        if (keyboardHolder == null || classLoader == null) return null;
+        try {
+            Class<?> keyboardViewHolderClass = Class.forName(
+                    KEYBOARD_VIEW_HOLDER_CLASS, false, classLoader);
 
             if (!(keyboardHolder.getParent() instanceof ViewGroup)) return null;
             ViewGroup contentColumn = (ViewGroup) keyboardHolder.getParent();
@@ -87,8 +99,6 @@ final class GboardFloatingStructureResolver {
                     holders.add((ViewGroup) child);
                 }
             }
-            // Both audited layouts contain aux/header/main holders. Require at least header+main
-            // so ordinary Gboard popups cannot be mistaken for the floating keyboard.
             if (holders.size() < 2 || firstKeyboardViewHolderIndex <= 0) return null;
             for (int i = firstKeyboardViewHolderIndex - 1; i >= 0; i--) {
                 View candidate = keyboardHolder.getChildAt(i);
@@ -100,7 +110,7 @@ final class GboardFloatingStructureResolver {
             if (topEdge == null) return null;
 
             return new Structure(
-                    popupContent,
+                    keyboardArea,
                     keyboardArea,
                     stockBackground,
                     contentColumn,
@@ -111,6 +121,58 @@ final class GboardFloatingStructureResolver {
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    static boolean isFloatingGeometry(Structure structure) {
+        if (structure == null || structure.keyboardArea == null) return false;
+        ViewGroup keyboardArea = structure.keyboardArea;
+        int width = keyboardArea.getWidth();
+        int height = keyboardArea.getHeight();
+        if (width <= 0 || height <= 0) return false;
+
+        View root = keyboardArea.getRootView();
+        if (root == null) return false;
+        int[] areaLocation = new int[2];
+        int[] rootLocation = new int[2];
+        keyboardArea.getLocationInWindow(areaLocation);
+        root.getLocationInWindow(rootLocation);
+
+        DisplayMetrics metrics = keyboardArea.getResources().getDisplayMetrics();
+        int displayWidth = metrics != null ? metrics.widthPixels : 0;
+        if (displayWidth <= 0) displayWidth = Math.max(root.getWidth(), width);
+        float density = metrics != null && metrics.density > 0f ? metrics.density : 1f;
+        int minimumInset = Math.max(Math.round(24f * density), displayWidth / 12);
+
+        boolean compactWidth = width <= displayWidth - (minimumInset * 2);
+        boolean offsetWithinRoot = areaLocation[0] - rootLocation[0] >= minimumInset
+                || (root.getWidth() > 0
+                && root.getWidth() - (areaLocation[0] - rootLocation[0]) - width >= minimumInset);
+        boolean raisedOrRounded = keyboardArea.getElevation() > 0f
+                || hasRoundedOutline(keyboardArea)
+                || hasRoundedOutline(structure.stockBackground);
+
+        return compactWidth && raisedOrRounded && (offsetWithinRoot || root.getWidth() <= width + minimumInset);
+    }
+
+    private static boolean hasRoundedOutline(View view) {
+        if (view == null) return false;
+        try {
+            Outline outline = new Outline();
+            ViewOutlineProvider provider = view.getOutlineProvider();
+            if (provider != null) {
+                provider.getOutline(view, outline);
+                if (outline.getRadius() > 0f) return true;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Drawable background = view.getBackground();
+            if (background != null) {
+                Outline outline = new Outline();
+                background.getOutline(outline);
+                return outline.getRadius() > 0f;
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static View findUniqueDescendant(View root, Class<?> targetClass) {
@@ -135,8 +197,6 @@ final class GboardFloatingStructureResolver {
 
     private static View findBottomSibling(
             ViewGroup contentColumn, ViewGroup keyboardHolder, int holderIndex) {
-        // The floating layout keeps the utility/navigation bottom frame after KeyboardHolder.
-        // Prefer the first ViewGroup after it; do not depend on its compiled ID or class name.
         for (int i = holderIndex + 1; i < contentColumn.getChildCount(); i++) {
             View candidate = contentColumn.getChildAt(i);
             if (candidate instanceof ViewGroup && candidate != keyboardHolder) return candidate;
