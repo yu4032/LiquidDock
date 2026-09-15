@@ -27,11 +27,12 @@ public class GboardFloatingGlassContractTest {
 
         assertTrue(scope.contains("com.google.android.inputmethod.latin"));
         assertTrue(module.contains("GBOARD_PACKAGE = \"com.google.android.inputmethod.latin\""));
-        assertTrue(module.contains("GboardGlassPreferences.resolve"));
-        assertTrue(module.contains("initially disabled; stable lifecycle hooks remain installed"));
-        assertTrue(module.contains("GboardFloatingGlassHook.install(classLoader, runtimeConfig)"));
-        assertFalse(module.contains("disabled by configuration; no hooks installed"));
-        assertFalse(hook.contains("|| !runtimeConfig.enabled || !runtimeConfig.glass.enabled"));
+        assertTrue(module.contains("GboardPassBlurContinuousAuthority.install()"));
+        assertTrue(module.contains("GboardFloatingGlassHook.install(classLoader)"));
+        assertTrue(hook.contains("ConfigReader liveReader = ConfigReader.load()"));
+        assertTrue(hook.contains("GboardGlassPreferences.resolve(liveReader"));
+        assertFalse(module.contains("GboardGlassPreferences.resolve"));
+        assertFalse(module.contains("initially disabled; stable lifecycle hooks remain installed"));
     }
 
     @Test public void hookUsesStableKeyboardHolderLayoutNotPopupManagerImplementation() throws Exception {
@@ -145,7 +146,7 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
         assertTrue(coordinator.contains("restoreStockBackground"));
         assertTrue(session.contains("swapBuffers"));
-        assertTrue(session.contains("waiting for TextureView update"));
+        assertTrue(session.contains("swapSucceeded = true"));
         assertFalse(session.contains("mainHandler.post(() -> {\n                    if (!shuttingDown && listener != null) listener.onPresented();"));
     }
 
@@ -173,8 +174,22 @@ public class GboardFloatingGlassContractTest {
         assertTrue(preferences.contains("reader.has(TINT_RED_KEY)"));
     }
 
-    @Test public void temporaryVisualTreeDiagnosticsAreRemoved() throws Exception {
+    @Test public void intermediateHardwareDiagnosticsAreRemoved() throws Exception {
+        String bridge = read(MAIN.resolve("Api101Bridge.java"));
+        String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String sink = read(MAIN.resolve("GboardFloatingGlassView.java"));
         String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertFalse(bridge.contains("temporary direct Logcat mirror"));
+        assertFalse(hook.contains("LAST_FLOATING_STATE"));
+        assertFalse(hook.contains("holder ignored:"));
+        assertFalse(hook.contains("floating holder accepted:"));
+        assertFalse(resolver.contains("popupContent"));
+        assertFalse(resolver.contains("findUniqueDescendant"));
+        assertFalse(session.contains("first swap begin"));
+        assertFalse(sink.contains("sink surface updated"));
         assertFalse(authority.contains("GboardVisualTreeDiagnostics.dump"));
     }
 }
