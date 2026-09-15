@@ -302,47 +302,47 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     void restartPackageProcess(String packageName, String displayName) {
-    // Third-party app descriptors provide trusted static process names. Validate the value
-    // anyway so future entries cannot accidentally turn this shell command into an injection path.
-    if (packageName == null || !packageName.matches("[A-Za-z0-9_.:]+")
-            || displayName == null || displayName.trim().isEmpty()) {
-        Toast.makeText(this, "Invalid app restart target", Toast.LENGTH_SHORT).show();
-        return;
-    }
-    LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
-    new Thread(() -> {
-        try {
-            Process p = new ProcessBuilder("su")
-                    .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                    .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                    .start();
-            try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                os.writeBytes("PIDS=$(pidof " + packageName + "); "
-                        + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
-                        + "kill -TERM $PIDS\nexit\n");
-                os.flush();
-            }
-            if (!p.waitFor(8, TimeUnit.SECONDS)) {
-                p.destroy();
-                if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
-                throw new IOException("su timed out while restarting " + displayName);
-            }
-            int exitCode = p.exitValue();
-            if (exitCode != 0) {
-                throw new IOException(displayName + " process is not running");
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            runOnUiThread(() -> Toast.makeText(this,
-                    displayName + " restart interrupted", Toast.LENGTH_SHORT).show());
-        } catch (Exception e) {
-            runOnUiThread(() -> Toast.makeText(this,
-                    "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+        // Third-party app descriptors provide trusted static process names. Validate the value
+        // anyway so future entries cannot accidentally turn this shell command into an injection path.
+        if (packageName == null || !packageName.matches("[A-Za-z0-9_.:]+")
+                || displayName == null || displayName.trim().isEmpty()) {
+            Toast.makeText(this, "Invalid app restart target", Toast.LENGTH_SHORT).show();
+            return;
         }
-    }).start();
-}
+        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
+        new Thread(() -> {
+            try {
+                Process p = new ProcessBuilder("su")
+                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .start();
+                try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
+                    os.writeBytes("PIDS=$(pidof " + packageName + "); "
+                            + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
+                            + "kill -TERM $PIDS\nexit\n");
+                    os.flush();
+                }
+                if (!p.waitFor(8, TimeUnit.SECONDS)) {
+                    p.destroy();
+                    if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
+                    throw new IOException("su timed out while restarting " + displayName);
+                }
+                int exitCode = p.exitValue();
+                if (exitCode != 0) {
+                    throw new IOException(displayName + " process is not running");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                runOnUiThread(() -> Toast.makeText(this,
+                        displayName + " restart interrupted", Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
 
-void restartSecurityCenter() {
+    void restartSecurityCenter() {
         // Restart only the Security Center :ui process that hosts the sidebar/toolbox hooks.
         // Do not force-stop the package: that would mark the whole app stopped and is broader
         // than the test/recovery action needs. Android will recreate :ui on the next sidebar use.
