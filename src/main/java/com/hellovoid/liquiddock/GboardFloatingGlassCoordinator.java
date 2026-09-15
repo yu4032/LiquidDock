@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.res.Resources;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 
 import java.util.WeakHashMap;
 
@@ -19,6 +20,7 @@ final class GboardFloatingGlassCoordinator {
         final View popup;
         final LiquidDockConfig.Glass glassConfig;
         ViewGroup keyboardArea;
+        ViewGroup sinkHost;
         View backgroundFrame;
         View root;
         float stockBackgroundAlpha = 1f;
@@ -124,18 +126,37 @@ final class GboardFloatingGlassCoordinator {
         GboardFloatingGlassView sink = new GboardFloatingGlassView(
                 keyboardArea.getContext(), session);
         state.sink = sink;
-        try {
-            // Gboard's floating keyboard parent uses 0x00ffffff as an internal unconstrained
-            // measurement sentinel. MATCH_PARENT propagates that sentinel into TextureView and
-            // causes EGL to attempt a 16777215x16777215 GraphicBuffer allocation. Insert at a
-            // harmless concrete size and promote to the keyboard area's real laid-out bounds below.
-            keyboardArea.addView(sink, 0, new ViewGroup.LayoutParams(1, 1));
-        } catch (Throwable error) {
-            failClosed(state, "unable to insert glass below keyboard content", error);
+        if (!insertSinkAboveStockBackground(state, sink, backgroundFrame)) {
+            failClosed(state, "unable to insert glass above stock background", null);
             return;
         }
         syncGeometry(state);
         log("floating popup bound root=" + root.getClass().getSimpleName(), null);
+    }
+
+    private static boolean insertSinkAboveStockBackground(
+            State state, GboardFloatingGlassView sink, View backgroundFrame) {
+        if (state == null || sink == null || backgroundFrame == null) return false;
+        ViewParent parent = backgroundFrame.getParent();
+        if (!(parent instanceof ViewGroup)) return false;
+        ViewGroup host = (ViewGroup) parent;
+        int backgroundIndex = host.indexOfChild(backgroundFrame);
+        if (backgroundIndex < 0) return false;
+        try {
+            // Do not use MATCH_PARENT here. Gboard propagates 0x00ffffff as an internal
+            // unconstrained measurement sentinel, which would make TextureView request an
+            // impossible 16777215x16777215 GraphicBuffer. Start concrete, then track the
+            // keyboard area's real laid-out bounds in host-local coordinates.
+            host.addView(sink, backgroundIndex + 1, new ViewGroup.LayoutParams(1, 1));
+            state.sinkHost = host;
+            log("glass inserted above stock background host="
+                    + host.getClass().getSimpleName() + " backgroundIndex=" + backgroundIndex,
+                    null);
+            return true;
+        } catch (Throwable error) {
+            log("glass insertion failed", error);
+            return false;
+        }
     }
 
     private static synchronized void syncGeometry(State state) {
@@ -171,7 +192,8 @@ final class GboardFloatingGlassCoordinator {
     }
 
     private static void syncSinkBounds(State state) {
-        if (state == null || state.keyboardArea == null || state.sink == null) return;
+        if (state == null || state.keyboardArea == null || state.sinkHost == null
+                || state.sink == null) return;
         int width = state.keyboardArea.getWidth();
         int height = state.keyboardArea.getHeight();
         if (width <= 0 || height <= 0) return;
@@ -182,8 +204,14 @@ final class GboardFloatingGlassCoordinator {
             params.height = height;
             state.sink.setLayoutParams(params);
         }
-        if (state.sink.getX() != 0f) state.sink.setX(0f);
-        if (state.sink.getY() != 0f) state.sink.setY(0f);
+        int[] areaLocation = new int[2];
+        int[] hostLocation = new int[2];
+        state.keyboardArea.getLocationInWindow(areaLocation);
+        state.sinkHost.getLocationInWindow(hostLocation);
+        float desiredX = areaLocation[0] - hostLocation[0];
+        float desiredY = areaLocation[1] - hostLocation[1];
+        if (state.sink.getX() != desiredX) state.sink.setX(desiredX);
+        if (state.sink.getY() != desiredY) state.sink.setY(desiredY);
     }
 
     private static synchronized void onPresented(State state) {
@@ -217,9 +245,16 @@ final class GboardFloatingGlassCoordinator {
             state.layoutListener = null;
         }
         GboardFloatingGlassView sink = state.sink;
+        ViewGroup sinkHost = state.sinkHost;
         state.sink = null;
+        state.sinkHost = null;
         if (sink != null) {
             try { sink.dispose(); } catch (Throwable ignored) {}
+            if (sinkHost != null) {
+                try {
+                    if (sink.getParent() == sinkHost) sinkHost.removeView(sink);
+                } catch (Throwable ignored) {}
+            }
         }
         GboardFloatingGlassSession session = state.session;
         state.session = null;
