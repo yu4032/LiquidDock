@@ -1,0 +1,47 @@
+name: temporary shortcut text patch
+on:
+  push:
+    branches:
+      - feat/shortcut-menu-white-text
+    paths:
+      - .github/workflows/_temp_shortcut_text_patch.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/shortcut-menu-white-text
+      - name: Patch config and settings
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          schema_path = Path('src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java')
+          schema = schema_path.read_text()
+          old = '''        public static final ConfigKey<Boolean> SHORTCUT_POPUP_GLASS = bool(\n                "liquid_shortcut_popup_glass", true, true, true,\n                ConfigKey.ExportMode.ALWAYS);\n'''
+          new = old + '''        public static final ConfigKey<Boolean> SHORTCUT_POPUP_DARK_TEXT = bool(\n                "liquid_shortcut_popup_dark_text", false, false, false,\n                ConfigKey.ExportMode.ALWAYS);\n'''
+          assert old in schema
+          schema = schema.replace(old, new, 1)
+          old_reg = '        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS,\n'
+          new_reg = '        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,\n'
+          assert old_reg in schema
+          schema = schema.replace(old_reg, new_reg, 1)
+          schema_path.write_text(schema)
+
+          settings_path = Path('src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt')
+          settings = settings_path.read_text()
+          old_setting = '''        BooleanSetting(\n            prefs,\n            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,\n            "桌面快捷菜单玻璃背景",\n            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",\n            masterEnabled && liquidGlass,\n        )\n'''
+          new_setting = old_setting + '''        BooleanSetting(\n            prefs,\n            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,\n            "快捷菜单深色模式文字",\n            "将桌面快捷菜单文字改为白色；关闭后保留系统原生文字颜色，重启桌面后生效",\n            masterEnabled && liquidGlass,\n        )\n'''
+          assert old_setting in settings
+          settings = settings.replace(old_setting, new_setting, 1)
+          settings_path.write_text(settings)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
+          git commit -m 'feat: add shortcut menu white text setting'
+          git push origin HEAD:feat/shortcut-menu-white-text
