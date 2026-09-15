@@ -12,6 +12,7 @@ final class GboardFloatingGlassCoordinator {
     private static final String TAG = "[DC][GboardFloatingGlass]";
     private static final int KEYBOARD_AREA_ID = 0x7f0b0617;
     private static final int KEYBOARD_BACKGROUND_FRAME_ID = 0x7f0b0618;
+    private static final int KEYBOARD_BOTTOM_FRAME_ID = 0x7f0b061b;
     private static final int FLOATING_CORNER_RADIUS_DIMEN = 0x7f0701de;
     private static final int MAX_GEOMETRY_FRAME_RETRIES = 24;
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
@@ -22,6 +23,7 @@ final class GboardFloatingGlassCoordinator {
         ViewGroup keyboardArea;
         ViewGroup sinkHost;
         View backgroundFrame;
+        View bottomFrame;
         View root;
         float stockBackgroundAlpha = 1f;
         float cornerRadiusPx;
@@ -78,7 +80,8 @@ final class GboardFloatingGlassCoordinator {
                 || !state.popup.isAttachedToWindow()) return;
         View areaCandidate = state.popup.findViewById(KEYBOARD_AREA_ID);
         View backgroundFrame = state.popup.findViewById(KEYBOARD_BACKGROUND_FRAME_ID);
-        if (!(areaCandidate instanceof ViewGroup) || backgroundFrame == null) {
+        View bottomFrame = state.popup.findViewById(KEYBOARD_BOTTOM_FRAME_ID);
+        if (!(areaCandidate instanceof ViewGroup) || backgroundFrame == null || bottomFrame == null) {
             failClosed(state, "decompiled floating keyboard anchors unavailable", null);
             return;
         }
@@ -103,6 +106,7 @@ final class GboardFloatingGlassCoordinator {
 
         state.keyboardArea = keyboardArea;
         state.backgroundFrame = backgroundFrame;
+        state.bottomFrame = bottomFrame;
         state.stockBackgroundAlpha = backgroundFrame.getAlpha();
         state.root = root;
         state.cornerRadiusPx = cornerRadiusPx;
@@ -217,10 +221,15 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void onPresented(State state) {
         if (state == null || state.released || state.stockHidden) return;
         View backgroundFrame = state.backgroundFrame;
-        if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()) return;
+        if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()
+                || state.keyboardArea == null || state.bottomFrame == null) return;
+        if (!GboardStockVisualAuthority.claim(state.keyboardArea, state.bottomFrame)) {
+            failClosed(state, "unable to claim floating stock visuals", null);
+            return;
+        }
         backgroundFrame.setAlpha(0f);
         state.stockHidden = true;
-        log("first Prismal frame presented; stock background hidden", null);
+        log("first Prismal frame presented; all stock fills and shadow hidden", null);
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {
@@ -233,6 +242,7 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
+        GboardStockVisualAuthority.release(state.keyboardArea, state.bottomFrame);
         restoreStockBackground(state);
         if (state.attachListener != null) {
             try { state.popup.removeOnAttachStateChangeListener(state.attachListener); }
