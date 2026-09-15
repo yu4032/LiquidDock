@@ -151,6 +151,20 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("content.setBackground(saved)"));
     }
 
+    @Test public void runtimeProvenTopEdgeAndMainBodyBackgroundsAreOwned() throws Exception {
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(authority.contains("0x7f0b064f"));
+        assertTrue(authority.contains("topEdgeBackground"));
+        assertTrue(authority.contains("topEdge.setBackground(null)"));
+        assertTrue(authority.contains("claim.topEdge.setBackground(claim.topEdgeBackground)"));
+        assertTrue(authority.contains("MAIN_KEYBOARD_VIEW_HOLDER_ID"));
+        assertTrue(authority.contains("BY_DYNAMIC_HOLDER"));
+        assertTrue(authority.contains("claimForDynamicHolder"));
+        assertTrue(authority.contains("suppressBoundContentBackground"));
+        assertTrue(authority.contains("boundContentBackgrounds"));
+    }
+
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
