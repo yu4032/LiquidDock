@@ -36,8 +36,10 @@ public class GboardFloatingGlassContractTest {
 
     @Test public void hookUsesStableKeyboardHolderLayoutNotPopupManagerImplementation() throws Exception {
         String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
 
-        assertTrue(hook.contains("com.google.android.libraries.inputmethod.widgets.KeyboardHolder"));
+        assertTrue(resolver.contains("com.google.android.libraries.inputmethod.widgets.KeyboardHolder"));
+        assertTrue(hook.contains("GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS"));
         assertTrue(hook.contains("getDeclaredMethod(\"onLayout\""));
         assertTrue(hook.contains("GboardFloatingStructureResolver.resolveFromKeyboardHolder"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onShown"));
