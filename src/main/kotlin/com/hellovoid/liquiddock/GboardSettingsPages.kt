@@ -74,6 +74,14 @@ internal fun GboardSettingsPage(
             ),
         )
     }
+    var autoResizeAfterHandleDrag by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY,
+                GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT,
+            ),
+        )
+    }
 
     fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
         prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
@@ -162,6 +170,18 @@ internal fun GboardSettingsPage(
                     title = "启用悬浮键盘液态玻璃",
                     summary = "关闭后保留 Gboard 原生悬浮键盘材质；已保存的独立外观参数不会丢失",
                     enabled = masterEnabled && liquidEnabled,
+                )
+                SwitchPreference(
+                    checked = autoResizeAfterHandleDrag,
+                    onCheckedChange = {
+                        autoResizeAfterHandleDrag = it
+                        prefs.edit()
+                            .putBoolean(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY, it)
+                            .apply()
+                    },
+                    title = "拖动后自动进入大小调整",
+                    summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
+                    enabled = masterEnabled,
                 )
             }
         }

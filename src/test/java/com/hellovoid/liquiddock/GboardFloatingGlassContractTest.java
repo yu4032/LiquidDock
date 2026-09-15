@@ -24,7 +24,6 @@ public class GboardFloatingGlassContractTest {
         String scope = read(Path.of("src/main/resources/META-INF/xposed/scope.list"));
         String module = read(MAIN.resolve("ModuleMain.java"));
         String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
-
         assertTrue(scope.contains("com.google.android.inputmethod.latin"));
         assertTrue(module.contains("GBOARD_PACKAGE = \"com.google.android.inputmethod.latin\""));
         assertTrue(module.contains("GboardPassBlurContinuousAuthority.install()"));
@@ -37,7 +36,6 @@ public class GboardFloatingGlassContractTest {
     @Test public void hookUsesStableKeyboardHolderLayoutNotPopupManagerImplementation() throws Exception {
         String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
         String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
-
         assertTrue(resolver.contains("com.google.android.libraries.inputmethod.widgets.KeyboardHolder"));
         assertTrue(hook.contains("GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS"));
         assertTrue(hook.contains("getDeclaredMethod("));
@@ -57,7 +55,6 @@ public class GboardFloatingGlassContractTest {
     @Test public void structureResolverUsesHolderTopologyAndRuntimeFloatingGeometry() throws Exception {
         String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
-
         assertTrue(resolver.contains("KeyboardHolder"));
         assertTrue(resolver.contains("KeyboardViewHolder"));
         assertTrue(resolver.contains("resolveFromKeyboardHolder"));
@@ -78,7 +75,6 @@ public class GboardFloatingGlassContractTest {
 
     @Test public void coordinatorTracksMovementWithPredrawInsteadOfDelay() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
-
         assertTrue(coordinator.contains("ViewTreeObserver.OnPreDrawListener"));
         assertTrue(coordinator.contains("addOnPreDrawListener"));
         assertTrue(coordinator.contains("removeOnPreDrawListener"));
@@ -88,7 +84,6 @@ public class GboardFloatingGlassContractTest {
 
     @Test public void stockAuthorityUsesPredrawAndNoObfuscatedManagerMembers() throws Exception {
         String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-
         assertTrue(authority.contains("OnPreDrawListener"));
         assertTrue(authority.contains("addOnPreDrawListener"));
         assertTrue(authority.contains("removeOnPreDrawListener"));
@@ -105,15 +100,21 @@ public class GboardFloatingGlassContractTest {
         assertFalse(authority.contains("0x7f0b"));
     }
 
-    @Test public void sinkUsesStructuralContentBoundaryAndRealKeyboardBounds() throws Exception {
+    @Test public void sinkUsesStructuralWidthAndVisualContentHeight() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
-
+        String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
         assertTrue(coordinator.contains("structure.contentColumn"));
         assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
         assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
         assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
-        assertTrue(coordinator.contains("state.keyboardArea.getWidth()"));
-        assertTrue(coordinator.contains("state.keyboardArea.getHeight()"));
+        assertTrue(coordinator.contains(
+                "state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
+        assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
+        assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
+        assertTrue(geometry.contains("structure.stockBackground"));
+        assertTrue(geometry.contains("structure.keyboardViewHolders"));
+        assertTrue(geometry.contains("structure.bottomFrame"));
+        assertTrue(geometry.contains("addVerticalAuthority"));
         assertTrue(coordinator.contains("resolveCornerRadiusPx"));
         assertTrue(coordinator.contains("Outline"));
     }
@@ -122,7 +123,6 @@ public class GboardFloatingGlassContractTest {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
         String domain = read(MAIN.resolve("PassBlurDomain.java"));
-
         assertTrue(domain.contains("GBOARD_FLOATING"));
         assertTrue(request.contains("static PassBlurBindRequest gboardFloating(View authoritativeRoot)"));
         assertTrue(session.contains("RootPassBlurBackend"));
@@ -138,7 +138,6 @@ public class GboardFloatingGlassContractTest {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String sink = read(MAIN.resolve("GboardFloatingGlassView.java"));
-
         assertTrue(session.contains("onOutputPresented"));
         assertTrue(sink.contains("onSurfaceTextureUpdated"));
         assertTrue(sink.contains("session.onOutputPresented()"));
@@ -152,7 +151,6 @@ public class GboardFloatingGlassContractTest {
         String settings = read(SETTINGS);
         String gboardSettings = read(GBOARD_SETTINGS);
         String preferences = read(MAIN.resolve("GboardGlassPreferences.java"));
-
         assertTrue(settings.contains("ThirdPartyApps"));
         assertTrue(settings.contains("GboardSettingsPage"));
         assertTrue(settings.contains("openThirdPartyApps"));

@@ -301,6 +301,40 @@ public class SettingsActivity extends AppCompatActivity {
         }).start();
     }
 
+    void restartGboard() {
+        // Gboard reads API101 Remote Preferences when its process starts. Kill only the running
+        // IME process instead of force-stopping the package, so Android can recreate it normally.
+        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
+        new Thread(() -> {
+            try {
+                Process p = new ProcessBuilder("su")
+                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .start();
+                try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
+                    os.writeBytes("PIDS=$(pidof com.google.android.inputmethod.latin); "
+                            + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
+                            + "kill -TERM $PIDS\nexit\n");
+                    os.flush();
+                }
+                if (!p.waitFor(8, TimeUnit.SECONDS)) {
+                    p.destroy();
+                    if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
+                    throw new IOException("su timed out while restarting Gboard");
+                }
+                int exitCode = p.exitValue();
+                if (exitCode != 0) throw new IOException("Gboard process is not running");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                runOnUiThread(() -> Toast.makeText(this,
+                        "Gboard restart interrupted", Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
     void restartSecurityCenter() {
         // Restart only the Security Center :ui process that hosts the sidebar/toolbox hooks.
         // Do not force-stop the package: that would mark the whole app stopped and is broader

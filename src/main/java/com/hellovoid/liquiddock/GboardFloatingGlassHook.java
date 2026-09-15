@@ -14,6 +14,7 @@ final class GboardFloatingGlassHook {
     static boolean install(ClassLoader classLoader) {
         if (installed) return true;
         if (classLoader == null) return false;
+        GboardFloatingHandlePolicy.install();
         try {
             Class<?> keyboardHolderClass = Class.forName(
                     GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS,
@@ -54,6 +55,8 @@ final class GboardFloatingGlassHook {
             GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;
         }
+
+        GboardFloatingHandlePolicy.bind(structure.bottomFrame);
 
         ConfigReader liveReader = ConfigReader.load();
         LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);

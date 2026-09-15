@@ -421,7 +421,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page == Page.Liquid) {
                         TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
                     }
-                    TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    if (page == Page.Gboard) {
+                        TextButton(text = stringResource(R.string.action_restart_gboard), onClick = { activity.restartGboard() })
+                    } else {
+                        TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    }
                     if (page == Page.Home) {
                         TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
                     }
