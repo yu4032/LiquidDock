@@ -88,6 +88,20 @@ private fun parentPage(page: Page): Page = when (page) {
     else -> Page.Home
 }
 
+private data class ThirdPartyAppPageDescriptor(
+    val packageName: String,
+    val displayName: String,
+    val restartLabelRes: Int,
+)
+
+private val THIRD_PARTY_APP_PAGES = mapOf(
+    Page.Gboard to ThirdPartyAppPageDescriptor(
+        packageName = "com.google.android.inputmethod.latin",
+        displayName = "Gboard",
+        restartLabelRes = R.string.action_restart_gboard,
+    ),
+)
+
 // Ordinary UI writes are mirrored to API101 Remote Preferences by LiquidDockApp's
 // SharedPreferences listener. No per-control JSON/file/root synchronization exists.
 
@@ -421,8 +435,17 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page == Page.Liquid) {
                         TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
                     }
-                    if (page == Page.Gboard) {
-                        TextButton(text = stringResource(R.string.action_restart_gboard), onClick = { activity.restartGboard() })
+                    val descriptor = THIRD_PARTY_APP_PAGES[page]
+                    if (descriptor != null) {
+                        TextButton(
+                            text = stringResource(descriptor.restartLabelRes),
+                            onClick = {
+                                activity.restartPackageProcess(
+                                    descriptor.packageName,
+                                    descriptor.displayName,
+                                )
+                            },
+                        )
                     } else {
                         TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
                     }
