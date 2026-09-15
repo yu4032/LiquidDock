@@ -1,12 +1,6 @@
 # Changelog for AI agent
 
-## v2.4.1 (2026-09-14)
-
-### R8 compatibility
-
-- 保留 Dock spacing 与 live-drag 运行时反射所需的类名，修复启用 R8 后 Dock 图标间距配置失效的问题
-
-## Unreleased / main (2026-09-14)
+## v2.4.2 (2026-09-15)
 
 ### Launcher 4.50 integration
 
@@ -36,6 +30,12 @@
 ### Documentation
 
 - 根文档按 2.4.1 当前生产代码重建，删除固定 Security Center build/混淆字段等过时说明，并补齐 R8、live drag、shortcut popup、图标缩放、Widget/功能 Dock 图标等当前行为
+
+## v2.4.1 (2026-09-14)
+
+### R8 compatibility
+
+- 保留 Dock spacing 与 live-drag 运行时反射所需的类名，修复启用 R8 后 Dock 图标间距配置失效的问题
 
 ## v2.2.1 (2026-09-01)
 
