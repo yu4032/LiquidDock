@@ -83,6 +83,14 @@ final class GboardFloatingGlassGeometry {
         }
     }
 
+    int outputWidthPx() {
+        return Math.max(1, (int) Math.ceil(width));
+    }
+
+    int outputHeightPx() {
+        return Math.max(1, (int) Math.ceil(height));
+    }
+
     PrismalGeometry toPrismalGeometry() {
         return new PrismalGeometry(
                 rootWidth, rootHeight,
