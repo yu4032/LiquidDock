@@ -100,18 +100,21 @@ public class GboardFloatingGlassContractTest {
         assertFalse(authority.contains("0x7f0b"));
     }
 
-    @Test public void sinkUsesStructuralContentBoundaryAndResizedStockShellBounds() throws Exception {
+    @Test public void sinkUsesStructuralWidthAndVisualContentHeight() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
         assertTrue(coordinator.contains("structure.contentColumn"));
         assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
         assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
         assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
-        assertTrue(coordinator.contains("state.root, state.backgroundFrame, state.cornerRadiusPx"));
-        assertTrue(coordinator.contains("state.backgroundFrame.getWidth()"));
-        assertTrue(coordinator.contains("state.backgroundFrame.getHeight()"));
-        assertTrue(coordinator.contains("state.backgroundFrame.getLocationInWindow(shellLocation)"));
-        assertTrue(geometry.contains("shellView.transformMatrixToGlobal"));
+        assertTrue(coordinator.contains(
+                "state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
+        assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
+        assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
+        assertTrue(geometry.contains("structure.stockBackground"));
+        assertTrue(geometry.contains("structure.keyboardViewHolders"));
+        assertTrue(geometry.contains("structure.bottomFrame"));
+        assertTrue(geometry.contains("addVerticalAuthority"));
         assertTrue(coordinator.contains("resolveCornerRadiusPx"));
         assertTrue(coordinator.contains("Outline"));
     }
