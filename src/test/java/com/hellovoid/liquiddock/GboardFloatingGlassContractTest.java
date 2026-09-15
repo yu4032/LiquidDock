@@ -87,6 +87,16 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("OnAttachStateChangeListener"));
     }
 
+    @Test public void sinkUsesRealKeyboardBoundsInsteadOfGboardMatchParentSentinel() throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+
+        assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT,\n                    ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
+        assertTrue(coordinator.contains("syncSinkBounds(state)"));
+        assertTrue(coordinator.contains("state.keyboardArea.getWidth()"));
+        assertTrue(coordinator.contains("state.keyboardArea.getHeight()"));
+    }
+
     @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
