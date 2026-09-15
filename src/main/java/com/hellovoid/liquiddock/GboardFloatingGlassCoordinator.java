@@ -135,7 +135,10 @@ final class GboardFloatingGlassCoordinator {
     private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
         if (state == null || sink == null) return false;
         ViewGroup host = state.keyboardArea;
-        int contentIndex = host.indexOfChild(state.structure.contentColumn);
+        View contentBranch = state.structure.contentColumn != null
+                ? state.structure.contentColumn
+                : state.structure.keyboardHolder;
+        int contentIndex = host.indexOfChild(contentBranch);
         if (contentIndex < 0) return false;
         try {
             host.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
