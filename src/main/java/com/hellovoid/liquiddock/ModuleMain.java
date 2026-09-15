@@ -73,24 +73,12 @@ public final class ModuleMain extends XposedModule {
             try {
                 ClassLoader classLoader = param.getClassLoader();
                 if (classLoader == null) return;
-                ConfigReader configReader = ConfigReader.load();
-                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
-                GboardGlassPreferences.Appearance gboardAppearance =
-                        GboardGlassPreferences.resolve(configReader, runtimeConfig.glass);
-                if (!runtimeConfig.enabled || !runtimeConfig.glass.enabled
-                        || !gboardAppearance.enabled) {
-                    Api101Bridge.log(
-                            "[DC][GboardFloatingGlass] initially disabled; stable lifecycle hooks remain installed");
-                }
-                // Install only inert lifecycle/SurfaceControl authorities here. Actual floating
-                // glass activation is live-gated from current preferences on every popup show,
-                // so enabling or disabling Gboard glass never requires restarting the IME process.
                 if (!GboardPassBlurContinuousAuthority.install()) {
                     Api101Bridge.log(
                             "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
                     return;
                 }
-                GboardFloatingGlassHook.install(classLoader, runtimeConfig);
+                GboardFloatingGlassHook.install(classLoader);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][GboardFloatingGlass] init failed", error);
             }
