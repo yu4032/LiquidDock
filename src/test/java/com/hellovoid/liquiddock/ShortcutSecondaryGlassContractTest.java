@@ -99,8 +99,15 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("快捷菜单深色模式文字"));
-        assertTrue(settings.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT")
-                > settings.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
+        assertTrue(settings.contains(
+                "ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,\n"
+                        + "            \"桌面快捷菜单玻璃背景\",\n"
+                        + "            \"替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效\",\n"
+                        + "            masterEnabled && liquidGlass,\n"
+                        + "        )\n"
+                        + "        BooleanSetting(\n"
+                        + "            prefs,\n"
+                        + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
     }
 
     @Test public void shortcutMenuWhiteTextUsesTypedAndroidViewApisWithoutProjectSelfReflection() throws Exception {
