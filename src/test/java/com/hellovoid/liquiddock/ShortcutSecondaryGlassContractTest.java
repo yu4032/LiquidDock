@@ -54,8 +54,8 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertTrue(hook.contains(
                 "Object menu = chain.getThisObject();\n"
-                        + "                ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
-                        + "                Object result = chain.proceed"));
+                        + "                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
+                        + "                    Object result = chain.proceed"));
         assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
         assertTrue(coordinator.contains("layer.fadeOutFast()"));
         assertTrue(layer.contains("private static final long FAST_DISMISS_FADE_MS = 90L"));
@@ -83,9 +83,38 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_glass\", true, true, true"));
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
-        assertTrue(hook.contains("disabled by shortcut popup replacement setting"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
         assertTrue(settings.contains("桌面快捷菜单玻璃背景"));
         assertTrue(settings.contains("重启桌面后生效"));
+    }
+
+    @Test public void shortcutMenuWhiteTextHasDedicatedDefaultOffSettingAfterGlassToggle() throws Exception {
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String settings = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        assertTrue(schema.contains("SHORTCUT_POPUP_DARK_TEXT = bool("));
+        assertTrue(schema.contains("\"liquid_shortcut_popup_dark_text\", false, false, false"));
+        assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(settings.contains("快捷菜单深色模式文字"));
+        assertTrue(settings.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT")
+                > settings.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
+    }
+
+    @Test public void shortcutMenuWhiteTextUsesTypedAndroidViewApisWithoutProjectSelfReflection() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String controller = Files.readString(MAIN.resolve("ShortcutMenuTextColorController.java"));
+
+        assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(hook.contains("ShortcutMenuTextColorController.attach"));
+        assertTrue(controller.contains("TextView"));
+        assertTrue(controller.contains("setTextColor(Color.WHITE)"));
+        assertTrue(controller.contains("OnGlobalLayoutListener"));
+        assertFalse(hook.contains("Class.forName(\"com.hellovoid.liquiddock"));
+        assertFalse(controller.contains("Class.forName("));
+        assertFalse(controller.contains("getDeclaredField("));
+        assertFalse(controller.contains("getDeclaredMethod("));
     }
 }
