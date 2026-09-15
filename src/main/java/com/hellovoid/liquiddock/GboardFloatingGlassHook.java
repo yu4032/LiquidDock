@@ -26,7 +26,11 @@ final class GboardFloatingGlassHook {
                     Object result = chain.proceed(args);
                     Object owner = chain.getThisObject();
                     if (owner instanceof PopupWindow) {
-                        handleShown((PopupWindow) owner, classLoader);
+                        PopupWindow popupWindow = (PopupWindow) owner;
+                        View content = popupWindow.getContentView();
+                        log("PopupWindow show hit content="
+                                + (content == null ? "null" : content.getClass().getName()), null);
+                        handleShown(popupWindow, classLoader);
                     }
                     return result;
                 });
@@ -60,13 +64,28 @@ final class GboardFloatingGlassHook {
         LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
         GboardGlassPreferences.Appearance liveAppearance =
                 GboardGlassPreferences.resolve(liveReader, liveConfig.glass);
-        if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) return;
+        log("popup config master=" + liveConfig.enabled
+                + " glass=" + liveConfig.glass.enabled
+                + " gboard=" + liveAppearance.enabled, null);
+        if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) {
+            log("popup skipped by live configuration", null);
+            return;
+        }
 
         View content = popupWindow.getContentView();
-        if (content == null) return;
+        if (content == null) {
+            log("popup skipped because contentView is null", null);
+            return;
+        }
         GboardFloatingStructureResolver.Structure structure =
                 GboardFloatingStructureResolver.resolve(content, classLoader);
-        if (structure == null) return;
+        if (structure == null) {
+            log("structural resolver rejected popup content=" + content.getClass().getName(), null);
+            return;
+        }
+        log("structural resolver accepted popup keyboardArea="
+                + structure.keyboardArea.getClass().getName()
+                + " holders=" + structure.keyboardViewHolders.size(), null);
         GboardFloatingGlassCoordinator.onShown(content, structure, liveConfig.glass);
     }
 
