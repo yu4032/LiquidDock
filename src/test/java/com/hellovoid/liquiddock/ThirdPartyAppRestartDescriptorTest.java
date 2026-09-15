@@ -8,7 +8,7 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Contracts that keep third-party app restart UI extensible instead of page-specific. */
+/** Static architecture contracts that keep third-party app restart UI extensible. */
 public class ThirdPartyAppRestartDescriptorTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Path COMPOSE_SETTINGS = Path.of(
