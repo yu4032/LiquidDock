@@ -119,6 +119,13 @@ internal fun GboardSettingsPage(
     }
     var appearanceGeneration by remember { mutableStateOf(0) }
     val controlsEnabled = masterEnabled && liquidEnabled && gboardEnabled
+    val hasAppearanceOverride = appearanceGeneration.let {
+        prefs.contains(GboardGlassPreferences.BLUR_KEY) ||
+            prefs.contains(GboardGlassPreferences.TINT_RED_KEY) ||
+            prefs.contains(GboardGlassPreferences.TINT_GREEN_KEY) ||
+            prefs.contains(GboardGlassPreferences.TINT_BLUE_KEY) ||
+            prefs.contains(GboardGlassPreferences.TINT_ALPHA_KEY)
+    }
 
     fun clearAppearanceOverrides() {
         prefs.edit()
@@ -215,14 +222,7 @@ internal fun GboardSettingsPage(
                 ArrowPreference(
                     title = "恢复继承全局外观",
                     summary = "删除 Gboard 的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
-                    enabled = controlsEnabled && (
-                        prefs.contains(GboardGlassPreferences.BLUR_KEY) ||
-                            prefs.contains(GboardGlassPreferences.TINT_RED_KEY) ||
-                            prefs.contains(GboardGlassPreferences.TINT_GREEN_KEY) ||
-                            prefs.contains(GboardGlassPreferences.TINT_BLUE_KEY) ||
-                            prefs.contains(GboardGlassPreferences.TINT_ALPHA_KEY) ||
-                            appearanceGeneration < 0
-                        ),
+                    enabled = controlsEnabled && hasAppearanceOverride,
                     onClick = { clearAppearanceOverrides() },
                 )
             }
