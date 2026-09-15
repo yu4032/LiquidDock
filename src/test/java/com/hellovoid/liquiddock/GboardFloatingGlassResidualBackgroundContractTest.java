@@ -22,7 +22,7 @@ public class GboardFloatingGlassResidualBackgroundContractTest {
         assertTrue(authority.contains("0x7f0b064f"));
         assertTrue(authority.contains("topEdgeBackground"));
         assertTrue(authority.contains("topEdge.setBackground(null)"));
-        assertTrue(authority.contains("topEdge.setBackground(claim.topEdgeBackground)"));
+        assertTrue(authority.contains("claim.topEdge.setBackground(claim.topEdgeBackground)"));
     }
 
     @Test public void mainKeyboardContentBackgroundTracksDynamicRebinds() throws Exception {
