@@ -1,6 +1,6 @@
 # LiquidDock Hook / Listener Map
 
-本文档记录当前 `main` / **v2.4.1** 的主要 libxposed Hook、Android listener、vendor reflection 与 runtime ownership 边界。它描述的是当前生产代码，不是历史设计计划。
+本文档记录当前 `main` / **v2.4.1** 的主要 libxposed Hook、Android listener、vendor reflection 与 runtime ownership 边界,它描述的是当前生产代码。
 
 当前 Xposed scope：
 
