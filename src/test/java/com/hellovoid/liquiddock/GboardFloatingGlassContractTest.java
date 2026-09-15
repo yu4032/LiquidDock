@@ -12,7 +12,9 @@ import org.junit.Test;
 public class GboardFloatingGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
     private static final Path SETTINGS = Path.of(
-            "src/main/java/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
+            "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
+    private static final Path GBOARD_SETTINGS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt");
 
     private static String read(Path path) throws Exception {
         return Files.exists(path) ? Files.readString(path) : "";
@@ -40,6 +42,7 @@ public class GboardFloatingGlassContractTest {
         assertTrue(hook.contains("GboardFloatingStructureResolver.resolve"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onShown"));
         assertTrue(hook.contains("GboardFloatingGlassCoordinator.onHidden"));
+        assertTrue(hook.contains("GboardGlassPreferences.resolve(liveReader"));
         assertFalse(hook.contains("GboardFloatingTargetResolver"));
         assertFalse(hook.contains("\"pev\""));
         assertFalse(hook.contains("\"pfl\""));
@@ -70,9 +73,10 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("addOnPreDrawListener"));
         assertTrue(authority.contains("removeOnPreDrawListener"));
         assertTrue(authority.contains("suppressCurrentContentBackgrounds"));
-        assertTrue(authority.contains("baseArea.setBackground(null)"));
-        assertTrue(authority.contains("bottomFrame.setBackground(null)"));
-        assertTrue(authority.contains("topEdge.setBackground(null)"));
+        assertTrue(authority.contains("suppressBackground(claim, structure.keyboardArea)"));
+        assertTrue(authority.contains("suppressBackground(claim, structure.bottomFrame)"));
+        assertTrue(authority.contains("suppressBackground(claim, topEdge)"));
+        assertTrue(authority.contains("if (view.getBackground() != null) view.setBackground(null)"));
         assertFalse(authority.contains("loadClass(\"pef\")"));
         assertFalse(authority.contains("loadClass(\"pew\")"));
         assertFalse(authority.contains("getDeclaredMethod(\"j\""));
@@ -121,22 +125,27 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
         assertTrue(coordinator.contains("restoreStockBackground"));
         assertTrue(session.contains("swapBuffers"));
+        assertTrue(session.contains("waiting for TextureView update"));
         assertFalse(session.contains("mainHandler.post(() -> {\n                    if (!shuttingDown && listener != null) listener.onPresented();"));
     }
 
     @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
         String settings = read(SETTINGS);
+        String gboardSettings = read(GBOARD_SETTINGS);
         String preferences = read(MAIN.resolve("GboardGlassPreferences.java"));
 
         assertTrue(settings.contains("ThirdPartyApps"));
-        assertTrue(settings.contains("Gboard"));
+        assertTrue(settings.contains("GboardSettingsPage"));
+        assertTrue(settings.contains("openThirdPartyApps"));
         assertTrue(settings.contains("第三方应用适配"));
-        assertTrue(settings.contains("启用悬浮键盘液态玻璃"));
-        assertTrue(settings.contains("GboardGlassPreferences.BLUR_KEY"));
-        assertTrue(settings.contains("GboardGlassPreferences.TINT_RED_KEY"));
-        assertTrue(settings.contains("GboardGlassPreferences.TINT_GREEN_KEY"));
-        assertTrue(settings.contains("GboardGlassPreferences.TINT_BLUE_KEY"));
-        assertTrue(settings.contains("GboardGlassPreferences.TINT_ALPHA_KEY"));
+        assertTrue(gboardSettings.contains("Gboard"));
+        assertTrue(gboardSettings.contains("启用悬浮键盘液态玻璃"));
+        assertTrue(gboardSettings.contains("GboardGlassPreferences.BLUR_KEY"));
+        assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_RED_KEY"));
+        assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_GREEN_KEY"));
+        assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_BLUE_KEY"));
+        assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_ALPHA_KEY"));
+        assertTrue(gboardSettings.contains("恢复继承全局外观"));
         assertTrue(preferences.contains("reader.has(BLUR_KEY)"));
         assertTrue(preferences.contains("reader.has(TINT_RED_KEY)"));
     }
