@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewTreeObserver;
 
 import java.util.WeakHashMap;
 
@@ -28,6 +29,7 @@ final class GboardFloatingGlassCoordinator {
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
         View.OnLayoutChangeListener layoutListener;
+        ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean stockHidden;
         boolean captureRequested;
         boolean geometryRetryPosted;
@@ -101,6 +103,12 @@ final class GboardFloatingGlassCoordinator {
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
         state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
+        state.preDrawListener = () -> {
+            syncGeometry(state);
+            return true;
+        };
+        ViewTreeObserver observer = state.keyboardArea.getViewTreeObserver();
+        if (observer.isAlive()) observer.addOnPreDrawListener(state.preDrawListener);
 
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
                 root,
@@ -133,8 +141,6 @@ final class GboardFloatingGlassCoordinator {
         int contentIndex = host.indexOfChild(state.structure.contentColumn);
         if (contentIndex < 0) return false;
         try {
-            // Gboard custom measurement can propagate 0x00ffffff for MATCH_PARENT. Start from a
-            // concrete 1x1 surface and promote to the authoritative laid-out keyboard bounds.
             host.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
             state.sinkHost = host;
             log("glass inserted below keyboard content contentIndex=" + contentIndex, null);
@@ -265,6 +271,13 @@ final class GboardFloatingGlassCoordinator {
             try { state.keyboardArea.removeOnLayoutChangeListener(state.layoutListener); }
             catch (Throwable ignored) {}
             state.layoutListener = null;
+        }
+        if (state.keyboardArea != null && state.preDrawListener != null) {
+            try {
+                ViewTreeObserver observer = state.keyboardArea.getViewTreeObserver();
+                if (observer.isAlive()) observer.removeOnPreDrawListener(state.preDrawListener);
+            } catch (Throwable ignored) {}
+            state.preDrawListener = null;
         }
         GboardFloatingGlassView sink = state.sink;
         ViewGroup sinkHost = state.sinkHost;
