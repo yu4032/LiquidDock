@@ -87,6 +87,16 @@ public class GboardFloatingGlassContractTest {
         assertFalse(resolver.contains("if (contentIndex <= 0 || holderIndex < 0) return null"));
     }
 
+    @Test public void ambiguousTopologiesPreferTheCandidateWithFloatingSurfaceAuthority() throws Exception {
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
+        assertTrue(resolver.contains("Structure wrapped"));
+        assertTrue(resolver.contains("Structure direct"));
+        assertTrue(resolver.contains("boolean wrappedFloating = isFloatingGeometry(wrapped)"));
+        assertTrue(resolver.contains("boolean directFloating = isFloatingGeometry(direct)"));
+        assertTrue(resolver.contains("if (wrappedFloating != directFloating)"));
+        assertTrue(resolver.contains("return wrappedFloating ? wrapped : direct"));
+    }
+
     @Test public void coordinatorTracksMovementWithPredrawInsteadOfDelay() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         assertTrue(coordinator.contains("ViewTreeObserver.OnPreDrawListener"));
