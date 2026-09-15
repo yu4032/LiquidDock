@@ -66,16 +66,4 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         assertFalse(policy.contains("0x7f"));
     }
 
-    @Test public void gboardPageRestartsGboardInsteadOfLauncher() throws Exception {
-        String compose = read(COMPOSE_SETTINGS);
-        String activity = read(MAIN.resolve("SettingsActivity.java"));
-
-        assertTrue(compose.contains("page == Page.Gboard"));
-        assertTrue(compose.contains("activity.restartGboard()"));
-        assertTrue(compose.contains("action_restart_gboard"));
-        assertTrue(activity.contains("void restartGboard()"));
-        assertTrue(activity.contains("pidof com.google.android.inputmethod.latin"));
-        assertTrue(activity.contains("kill -TERM $PIDS"));
-        assertFalse(activity.contains("am force-stop com.google.android.inputmethod.latin"));
-    }
 }
