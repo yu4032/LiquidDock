@@ -146,6 +146,9 @@ public class GboardFloatingGlassContractTest {
         assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_BLUE_KEY"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_ALPHA_KEY"));
         assertTrue(gboardSettings.contains("恢复继承全局外观"));
+        assertTrue(gboardSettings.contains("appearanceGeneration.let"));
+        assertTrue(gboardSettings.contains("hasAppearanceOverride"));
+        assertFalse(gboardSettings.contains("appearanceGeneration < 0"));
         assertTrue(preferences.contains("reader.has(BLUR_KEY)"));
         assertTrue(preferences.contains("reader.has(TINT_RED_KEY)"));
     }
