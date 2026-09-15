@@ -78,6 +78,13 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(geometry.contains("cropHeight"));
     }
 
+    @Test public void toolbarSurfaceOutputPremultipliesStraightAlpha() throws Exception {
+        String composite = read("Miuix307PrismalCompositeShaders.java");
+        assertTrue(composite.contains("vec4 sample = texture2D(uTexture, uv)"));
+        assertTrue(composite.contains("vec4(sample.rgb * sample.a, sample.a)"));
+        assertFalse(composite.contains("gl_FragColor = texture2D(uTexture, uv)"));
+    }
+
     @Test public void toolbarCoordinatorKeepsVendorControlsAndPlacesGlassUnderThem() throws Exception {
         String coordinator = read("GboardHandwritingCapsuleGlassCoordinator.java");
         assertTrue(coordinator.contains("GboardFloatingGlassView"));
