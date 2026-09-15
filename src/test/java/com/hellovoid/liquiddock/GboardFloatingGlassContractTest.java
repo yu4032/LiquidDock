@@ -20,15 +20,18 @@ public class GboardFloatingGlassContractTest {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void gboardPackageIsScopedAndMasterSwitchGatesAllHooks() throws Exception {
+    @Test public void gboardPackageKeepsStableHooksInstalledForLiveMasterSwitch() throws Exception {
         String scope = read(Path.of("src/main/resources/META-INF/xposed/scope.list"));
         String module = read(MAIN.resolve("ModuleMain.java"));
+        String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
 
         assertTrue(scope.contains("com.google.android.inputmethod.latin"));
         assertTrue(module.contains("GBOARD_PACKAGE = \"com.google.android.inputmethod.latin\""));
         assertTrue(module.contains("GboardGlassPreferences.resolve"));
-        assertTrue(module.contains("!gboardAppearance.enabled"));
+        assertTrue(module.contains("initially disabled; stable lifecycle hooks remain installed"));
         assertTrue(module.contains("GboardFloatingGlassHook.install(classLoader, runtimeConfig)"));
+        assertFalse(module.contains("disabled by configuration; no hooks installed"));
+        assertFalse(hook.contains("|| !runtimeConfig.enabled || !runtimeConfig.glass.enabled"));
     }
 
     @Test public void hookUsesStablePopupWindowLifecycleInsteadOfR8ProviderNames() throws Exception {
