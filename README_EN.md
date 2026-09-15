@@ -12,8 +12,6 @@
 
 LiquidDock is an LSPosed module for the **HyperOS tablet launcher**, focused on desktop layout, Dock customization, and Liquid Glass effects.
 
-It puts many launcher tweaks in one settings app, so you can adjust them directly without replacing launcher files, editing themes, or running commands every time.
-
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
 </p>
