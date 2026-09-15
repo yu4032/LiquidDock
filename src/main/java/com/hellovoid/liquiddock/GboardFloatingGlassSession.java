@@ -80,7 +80,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
-        prismalParams = Miuix307PrismalAdapter.toPortable(optical);
+        PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
+        GboardGlassPreferences.Appearance appearance =
+                GboardGlassPreferences.resolve(ConfigReader.load(), glassConfig);
+        prismalParams = GboardPrismalParams.apply(baseParams, appearance);
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
