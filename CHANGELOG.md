@@ -1,4 +1,4 @@
-# Changelog
+# Changelog for AI agent
 
 ## v2.4.1 (2026-09-14)
 
