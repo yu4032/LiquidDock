@@ -146,6 +146,7 @@ final class GboardStockVisualAuthority {
             if (claim.headerHolder != null) BY_HEADER_HOLDER.put(claim.headerHolder, claim);
         }
         applyClaim(claim);
+        GboardVisualTreeDiagnostics.dump(baseArea);
         log("claimed stock visuals baseElevation=" + claim.baseElevation
                 + " containerCount=" + presentContainerCount(claim)
                 + " headerContentCount=" + claim.headerContentBackgrounds.size());
