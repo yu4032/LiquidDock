@@ -1,13 +1,14 @@
 package com.hellovoid.liquiddock;
 
-import android.view.View;
-import android.widget.PopupWindow;
+import android.view.ViewGroup;
 
 import java.lang.reflect.Method;
+import java.util.WeakHashMap;
 
-/** Hooks stable Android PopupWindow lifecycle and structurally recognizes Gboard floating keyboard. */
+/** Hooks stable KeyboardHolder layout and structurally recognizes Gboard floating keyboard. */
 final class GboardFloatingGlassHook {
     private static final String TAG = "[DC][GboardFloatingGlass]";
+    private static final WeakHashMap<ViewGroup, Boolean> LAST_FLOATING_STATE = new WeakHashMap<>();
     private static boolean installed;
 
     private GboardFloatingGlassHook() {}
@@ -16,40 +17,29 @@ final class GboardFloatingGlassHook {
         if (installed) return true;
         if (classLoader == null || runtimeConfig == null) return false;
         try {
-            int showHooks = 0;
-            for (Method method : PopupWindow.class.getDeclaredMethods()) {
-                String name = method.getName();
-                if (!"showAtLocation".equals(name) && !"showAsDropDown".equals(name)) continue;
-                if (method.getReturnType() != Void.TYPE) continue;
-                HookUtil.hook(method, chain -> {
-                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object result = chain.proceed(args);
-                    Object owner = chain.getThisObject();
-                    if (owner instanceof PopupWindow) {
-                        PopupWindow popupWindow = (PopupWindow) owner;
-                        View content = popupWindow.getContentView();
-                        log("PopupWindow show hit content="
-                                + (content == null ? "null" : content.getClass().getName()), null);
-                        handleShown(popupWindow, classLoader);
-                    }
-                    return result;
-                });
-                showHooks++;
-            }
-            if (showHooks == 0) throw new NoSuchMethodException("PopupWindow show lifecycle missing");
-
-            Method dismiss = PopupWindow.class.getDeclaredMethod("dismiss");
-            HookUtil.hook(dismiss, chain -> {
+            Class<?> keyboardHolderClass = Class.forName(
+                    GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS,
+                    false,
+                    classLoader);
+            Method onLayout = keyboardHolderClass.getDeclaredMethod(
+                    "onLayout",
+                    Boolean.TYPE,
+                    Integer.TYPE,
+                    Integer.TYPE,
+                    Integer.TYPE,
+                    Integer.TYPE);
+            HookUtil.hook(onLayout, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
-                if (owner instanceof PopupWindow) {
-                    View content = ((PopupWindow) owner).getContentView();
-                    if (content != null) GboardFloatingGlassCoordinator.onHidden(content);
+                if (owner instanceof ViewGroup) {
+                    handleKeyboardHolderLayout((ViewGroup) owner, classLoader);
                 }
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                return result;
             });
 
             installed = true;
-            log("hook installed via PopupWindow lifecycle showHooks=" + showHooks, null);
+            log("hook installed via KeyboardHolder.onLayout", null);
             return true;
         } catch (Throwable error) {
             log("hook unavailable cause=" + failureSummary(error)
@@ -58,35 +48,47 @@ final class GboardFloatingGlassHook {
         }
     }
 
-    private static void handleShown(PopupWindow popupWindow, ClassLoader classLoader) {
-        if (popupWindow == null) return;
+    private static void handleKeyboardHolderLayout(ViewGroup keyboardHolder, ClassLoader classLoader) {
+        GboardFloatingStructureResolver.Structure structure =
+                GboardFloatingStructureResolver.resolveFromKeyboardHolder(keyboardHolder, classLoader);
+        if (structure == null) {
+            noteState(keyboardHolder, false, "holder topology rejected");
+            return;
+        }
+
+        boolean floating = GboardFloatingStructureResolver.isFloatingGeometry(structure);
+        noteState(keyboardHolder, floating,
+                "holder geometry " + structure.keyboardArea.getWidth() + "x"
+                        + structure.keyboardArea.getHeight()
+                        + " elevation=" + structure.keyboardArea.getElevation());
+        if (!floating) {
+            GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
+            return;
+        }
+
         ConfigReader liveReader = ConfigReader.load();
         LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
         GboardGlassPreferences.Appearance liveAppearance =
                 GboardGlassPreferences.resolve(liveReader, liveConfig.glass);
-        log("popup config master=" + liveConfig.enabled
-                + " glass=" + liveConfig.glass.enabled
-                + " gboard=" + liveAppearance.enabled, null);
         if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) {
-            log("popup skipped by live configuration", null);
+            GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;
         }
 
-        View content = popupWindow.getContentView();
-        if (content == null) {
-            log("popup skipped because contentView is null", null);
-            return;
+        GboardFloatingGlassCoordinator.onShown(
+                structure.keyboardArea,
+                structure,
+                liveConfig.glass);
+    }
+
+    private static void noteState(ViewGroup holder, boolean floating, String detail) {
+        Boolean previous;
+        synchronized (LAST_FLOATING_STATE) {
+            previous = LAST_FLOATING_STATE.put(holder, floating);
         }
-        GboardFloatingStructureResolver.Structure structure =
-                GboardFloatingStructureResolver.resolve(content, classLoader);
-        if (structure == null) {
-            log("structural resolver rejected popup content=" + content.getClass().getName(), null);
-            return;
+        if (previous == null || previous.booleanValue() != floating) {
+            log((floating ? "floating holder accepted: " : "holder ignored: ") + detail, null);
         }
-        log("structural resolver accepted popup keyboardArea="
-                + structure.keyboardArea.getClass().getName()
-                + " holders=" + structure.keyboardViewHolders.size(), null);
-        GboardFloatingGlassCoordinator.onShown(content, structure, liveConfig.glass);
     }
 
     private static String failureSummary(Throwable error) {
