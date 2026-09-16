@@ -11,15 +11,15 @@ import android.view.ViewGroup;
 /** TextureView output placed below Gboard floating-keyboard content. */
 final class GboardFloatingGlassView extends TextureView
         implements TextureView.SurfaceTextureListener {
-    private final GboardFloatingGlassSession session;
+    private final GboardFloatingGlassOutput.Listener listener;
     private Surface outputSurface;
     private boolean disposed;
     private long presentedSerial;
 
-    GboardFloatingGlassView(Context context, GboardFloatingGlassSession session) {
+    GboardFloatingGlassView(Context context, GboardFloatingGlassOutput.Listener listener) {
         super(context);
-        if (session == null) throw new IllegalArgumentException("session == null");
-        this.session = session;
+        if (listener == null) throw new IllegalArgumentException("listener == null");
+        this.listener = listener;
         setOpaque(false);
         setClickable(false);
         setFocusable(false);
@@ -32,7 +32,7 @@ final class GboardFloatingGlassView extends TextureView
         disposed = true;
         Surface current = outputSurface;
         outputSurface = null;
-        if (current != null) session.detachOutput(current);
+        if (current != null) current.release();
         if (getParent() instanceof ViewGroup) {
             ((ViewGroup) getParent()).removeView(this);
         }
@@ -42,10 +42,14 @@ final class GboardFloatingGlassView extends TextureView
     public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
         if (disposed) return;
         GboardDragDiagnostics.log("TEXTURE_AVAILABLE size=" + width + "x" + height);
-        Surface surface = new Surface(surfaceTexture);
-        requestDisplayFrameRate(surface);
-        outputSurface = surface;
-        session.attachOutput(surface, width, height);
+        try {
+            Surface surface = new Surface(surfaceTexture);
+            requestDisplayFrameRate(surface);
+            outputSurface = surface;
+            listener.onSurfaceReady(surface, width, height);
+        } catch (Throwable error) {
+            listener.onFailed("texture-surface-available", error);
+        }
     }
 
     private void requestDisplayFrameRate(Surface surface) {
@@ -67,16 +71,14 @@ final class GboardFloatingGlassView extends TextureView
     public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
         if (!disposed) {
             GboardDragDiagnostics.log("TEXTURE_RESIZED size=" + width + "x" + height);
-            session.resizeOutput(width, height);
+            listener.onSurfaceSizeChanged(width, height);
         }
     }
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
         GboardDragDiagnostics.log("TEXTURE_DESTROYED");
-        Surface current = outputSurface;
         outputSurface = null;
-        if (current != null) session.detachOutput(current);
         return true;
     }
 
@@ -85,7 +87,7 @@ final class GboardFloatingGlassView extends TextureView
         if (!disposed) {
             presentedSerial++;
             GboardDragDiagnostics.log("TEXTURE_PRESENTED serial=" + presentedSerial);
-            session.onOutputPresented();
+            listener.onPresented();
         }
     }
 }
