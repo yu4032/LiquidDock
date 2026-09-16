@@ -5,25 +5,25 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Runtime contract for blocking Gboard's floating-keyboard bottom docking gesture. */
+/** Runtime contract for blocking Gboard's floating-keyboard dock predicate without blocking drag. */
 public class GboardFloatingBottomDockPolicyTest {
-    @Test public void disabledBottomDockingSuppressesMoveInsideDockZone() {
-        assertTrue(GboardFloatingHandlePolicy.shouldSuppressDockMove(
-                false, 900f, 800));
+    @Test public void disabledBottomDockingMasksDockIconLookup() {
+        assertTrue(GboardFloatingHandlePolicy.shouldMaskDockHitResult(
+                false, ".icon.floating_keyboard_dock_hint_v2"));
     }
 
-    @Test public void disabledBottomDockingKeepsNormalDragAboveDockZone() {
-        assertFalse(GboardFloatingHandlePolicy.shouldSuppressDockMove(
-                false, 700f, 800));
+    @Test public void enabledBottomDockingPreservesDockIconLookup() {
+        assertFalse(GboardFloatingHandlePolicy.shouldMaskDockHitResult(
+                true, ".icon.floating_keyboard_dock_hint_v2"));
     }
 
-    @Test public void enabledBottomDockingPreservesVendorBehavior() {
-        assertFalse(GboardFloatingHandlePolicy.shouldSuppressDockMove(
-                true, 900f, 800));
+    @Test public void disabledBottomDockingDoesNotMaskDockHintRoot() {
+        assertFalse(GboardFloatingHandlePolicy.shouldMaskDockHitResult(
+                false, ".floating_keyboard_dock_hint_v2"));
     }
 
-    @Test public void unresolvedDockZoneFailsOpen() {
-        assertFalse(GboardFloatingHandlePolicy.shouldSuppressDockMove(
-                false, 900f, Integer.MAX_VALUE));
+    @Test public void disabledBottomDockingDoesNotMaskUnrelatedViews() {
+        assertFalse(GboardFloatingHandlePolicy.shouldMaskDockHitResult(false, null));
+        assertFalse(GboardFloatingHandlePolicy.shouldMaskDockHitResult(false, ".some_other_view"));
     }
 }
