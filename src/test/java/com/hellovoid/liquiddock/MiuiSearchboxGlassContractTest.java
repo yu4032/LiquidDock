@@ -20,6 +20,7 @@ public class MiuiSearchboxGlassContractTest {
         String registry = read(MAIN.resolve("ThirdPartyGlassAdapterRegistry.java"));
         String hook = read(MAIN.resolve("MiuiSearchboxGlassHook.java"));
         String session = read(MAIN.resolve("MiuiSearchboxGlassSession.java"));
+        String geometry = read(MAIN.resolve("MiuiSearchboxGlassGeometry.java"));
         String prefs = read(MAIN.resolve("MiuiSearchboxGlassPreferences.java"));
         String profiles = read(MAIN.resolve("ThirdPartyGlassProfiles.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
@@ -40,16 +41,12 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(hook.contains("com.android.quicksearchbox.ui.SearchActivityBackground"));
         assertTrue(hook.contains("com.android.quicksearchbox.util.BlurTransition"));
         assertTrue(hook.contains("search_activity_view_background"));
-        assertTrue(hook.contains("getDeclaredMethod(\"showSearchActivity\")"));
-        assertTrue(hook.contains("deferShowUntilSnapshot"));
-        assertTrue(hook.contains("onSnapshotReady()"));
-        assertTrue(hook.contains("android.R.id.content"));
         assertTrue(hook.contains("MiuiSearchboxGlassPreferences.resolve(reader, config.glass)"));
-        assertFalse(hook.contains("Activity.class.getDeclaredMethod(\"onResume\")"));
         assertTrue(session.contains("implements RootPassBlurBackend.Consumer"));
         assertTrue(session.contains("View sourceRoot = root.getRootView()"));
         assertTrue(session.contains("PassBlurBindRequest.miuiSearchbox(sourceRoot)"));
-        assertTrue(session.contains("MiuiSearchboxGlassGeometry.capture(\n                sourceRoot, root, cornerRadius)"));
+        assertTrue(session.contains("MiuiSearchboxGlassGeometry.captureSettled(\n                sourceRoot, root, cornerRadius)"));
+        assertTrue(session.contains("if (snapshotState.isLatched()) return;"));
         assertTrue(session.contains("ThirdPartyPrismalParams.apply(baseParams, appearance)"));
         assertTrue(session.contains("appearance.captureScalePercent"));
         assertTrue(session.contains("appearance.renderFps"));
@@ -57,7 +54,8 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("snapshotState.beginCapture()"));
         assertTrue(session.contains("!snapshotState.acceptFreshFrame()"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"searchbox-snapshot-latched\")"));
-        assertTrue(session.contains("listener.onSnapshotReady()"));
+        assertTrue(geometry.contains("captureSettled"));
+        assertTrue(geometry.contains("getTranslationY()"));
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
         assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
         assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.claim"));
