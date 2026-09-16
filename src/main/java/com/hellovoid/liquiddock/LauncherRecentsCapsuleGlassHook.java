@@ -78,7 +78,7 @@ final class LauncherRecentsCapsuleGlassHook {
             activeBinding = binding;
             binding.start();
         } catch (Throwable error) {
-            MainHook.log(TAG + " Prismal bind failed; stock retained: " + error);
+            MainHook.log(TAG + " Prismal bind failed; native fallback retained: " + error);
             releaseActive("bind-failure");
         }
     }
@@ -110,10 +110,16 @@ final class LauncherRecentsCapsuleGlassHook {
         final View world;
         final Drawable clearAllStockBackground;
         final Drawable worldStockBackground;
+        final int nativeBlurRadiusPx;
         final RecentsCapsuleGlassSession session;
-        final RecentsCapsuleGlassOverlay overlay;
+        RecentsCapsuleGlassSinkView clearAllSink;
+        RecentsCapsuleGlassSinkView worldSink;
+        boolean clearAllPrismalPresented;
+        boolean worldPrismalPresented;
+        boolean clearAllNativeFallback;
+        boolean worldNativeFallback;
         boolean captureRequested;
-        boolean presented;
+        boolean prismalFailed;
         boolean released;
 
         Binding(ViewGroup decorations, View sourceRoot, View clearAll, View world,
@@ -124,17 +130,33 @@ final class LauncherRecentsCapsuleGlassHook {
             this.world = world;
             clearAllStockBackground = clearAll.getBackground();
             worldStockBackground = world.getBackground();
+            nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
             session = new RecentsCapsuleGlassSession(sourceRoot, glass, this);
-            overlay = new RecentsCapsuleGlassOverlay(decorations.getContext(), session);
         }
 
         void start() {
-            ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            decorations.addView(overlay, 0, lp);
+            applyNativeFallback();
+            clearAllSink = installSink(clearAll, RecentsCapsuleGlassSession.Target.CLEAR_ALL);
+            worldSink = installSink(world, RecentsCapsuleGlassSession.Target.WORLD);
             decorations.addOnAttachStateChangeListener(this);
             decorations.getViewTreeObserver().addOnPreDrawListener(this);
             refreshGeometry();
+            if (clearAllSink == null || worldSink == null) {
+                prismalFailed = true;
+                MainHook.log(TAG + " capsule is not a ViewGroup; keeping native blur fallback");
+                session.shutdown();
+            }
+        }
+
+        private RecentsCapsuleGlassSinkView installSink(
+                View target, RecentsCapsuleGlassSession.Target targetId) {
+            if (!(target instanceof ViewGroup)) return null;
+            ViewGroup group = (ViewGroup) target;
+            RecentsCapsuleGlassSinkView sink =
+                    new RecentsCapsuleGlassSinkView(group.getContext(), session, targetId);
+            group.addView(sink, 0, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            return sink;
         }
 
         @Override public boolean onPreDraw() {
@@ -148,7 +170,7 @@ final class LauncherRecentsCapsuleGlassHook {
         }
 
         void refreshGeometry() {
-            if (released) return;
+            if (released || prismalFailed) return;
             RecentsCapsuleGlassSession.GeometrySet next = new RecentsCapsuleGlassSession.GeometrySet(
                     geometryFor(clearAll), geometryFor(world));
             session.updateGeometry(next);
@@ -176,20 +198,58 @@ final class LauncherRecentsCapsuleGlassHook {
                     left, top, right, bottom, radius);
         }
 
-        @Override public void onFirstFramePresented() {
-            if (released || presented) return;
-            presented = true;
-            clearAll.setBackground(null);
-            world.setBackground(null);
-            overlay.reveal();
-            MainHook.log(TAG + " full Prismal presented targets=clear-all,device-interconnect");
+        private void applyNativeFallback() {
+            if (!clearAllPrismalPresented) {
+                clearAllNativeFallback = MiBlurBridge.applyPassWindowBlur(clearAll, nativeBlurRadiusPx);
+            }
+            if (!worldPrismalPresented) {
+                worldNativeFallback = MiBlurBridge.applyPassWindowBlur(world, nativeBlurRadiusPx);
+            }
+            MainHook.log(TAG + " native fallback clearAll=" + clearAllNativeFallback
+                    + " world=" + worldNativeFallback + " blur=" + nativeBlurRadiusPx);
+        }
+
+        private void clearNativeFallback(RecentsCapsuleGlassSession.Target target) {
+            if (target == RecentsCapsuleGlassSession.Target.CLEAR_ALL) {
+                if (clearAllNativeFallback) MiBlurBridge.clearPassWindowBlur(clearAll);
+                clearAllNativeFallback = false;
+            } else {
+                if (worldNativeFallback) MiBlurBridge.clearPassWindowBlur(world);
+                worldNativeFallback = false;
+            }
+        }
+
+        @Override public void onFirstFramePresented(RecentsCapsuleGlassSession.Target target) {
+            if (released || prismalFailed) return;
+            if (target == RecentsCapsuleGlassSession.Target.CLEAR_ALL) {
+                if (clearAllPrismalPresented) return;
+                clearAllPrismalPresented = true;
+                clearNativeFallback(target);
+                clearAll.setBackground(null);
+                if (clearAllSink != null) clearAllSink.reveal();
+            } else {
+                if (worldPrismalPresented) return;
+                worldPrismalPresented = true;
+                clearNativeFallback(target);
+                world.setBackground(null);
+                if (worldSink != null) worldSink.reveal();
+            }
+            MainHook.log(TAG + " Prismal presented target=" + target);
         }
 
         @Override public void onFailure(Throwable error) {
-            if (released) return;
-            MainHook.log(TAG + " Prismal session failed; restoring stock: " + error);
-            if (activeBinding == this) activeBinding = null;
-            release();
+            if (released || prismalFailed) return;
+            prismalFailed = true;
+            MainHook.log(TAG + " Prismal session failed; keeping native fallback: " + error);
+            restoreStockBackground();
+            if (clearAllSink != null) clearAllSink.dispose();
+            if (worldSink != null) worldSink.dispose();
+            clearAllSink = null;
+            worldSink = null;
+            clearAllPrismalPresented = false;
+            worldPrismalPresented = false;
+            applyNativeFallback();
+            session.shutdown();
         }
 
         void restoreStockBackground() {
@@ -203,8 +263,13 @@ final class LauncherRecentsCapsuleGlassHook {
             ViewTreeObserver observer = decorations.getViewTreeObserver();
             if (observer.isAlive()) observer.removeOnPreDrawListener(this);
             decorations.removeOnAttachStateChangeListener(this);
+            clearNativeFallback(RecentsCapsuleGlassSession.Target.CLEAR_ALL);
+            clearNativeFallback(RecentsCapsuleGlassSession.Target.WORLD);
             restoreStockBackground();
-            overlay.dispose();
+            if (clearAllSink != null) clearAllSink.dispose();
+            if (worldSink != null) worldSink.dispose();
+            clearAllSink = null;
+            worldSink = null;
             session.shutdown();
         }
 
