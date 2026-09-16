@@ -6,13 +6,9 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
-      - feat/recents-capsule-glass
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 concurrency:
   group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -23,27 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply one-shot Recents settings patch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/recents-capsule-glass'
-        shell: bash
-        run: |
-          python tools/apply_recents_capsule_patch.py
-          if ! git diff --quiet; then
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java \
-                    src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java \
-                    src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt
-            git commit -m 'feat: add Recents capsule glass setting'
-            git push origin HEAD:feat/recents-capsule-glass
-          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
+          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
+          # to the same PR reuse branch-specific Gradle/build-cache state.
           cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
+          # The default on-success cleanup starts an extra Gradle invocation and
+          # costs ~20-30s on this project. Cache keys are immutable and the repo
+          # is small enough that retaining prior entries is preferable here.
           cache-cleanup: never
       - run: chmod +x ./gradlew
       - name: Audit Security Center zero-copy constraints
@@ -67,12 +54,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: LiquidDock-build-source
           path: |
             src/main/java/com/hellovoid/liquiddock
-            src/main/kotlin/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
             prismal/src/main/java/com/hellovoid/prismal
           if-no-files-found: error
