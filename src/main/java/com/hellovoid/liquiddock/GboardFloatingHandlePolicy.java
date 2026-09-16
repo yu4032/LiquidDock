@@ -133,7 +133,7 @@ final class GboardFloatingHandlePolicy {
                     || action == MotionEvent.ACTION_POINTER_UP)
                     && activePointerId >= 0
                     && event.getPointerId(actionIndex) == activePointerId;
-            if (terminalActivePointer && dragged && !autoResizeAfterHandleDragEnabled()) {
+            if (terminalActivePointer && !autoResizeAfterHandleDragEnabled()) {
                 MotionEvent cancel = MotionEvent.obtain(event);
                 cancel.setAction(MotionEvent.ACTION_CANCEL);
                 try {
