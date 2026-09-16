@@ -10,7 +10,10 @@ import android.view.ViewGroup;
 
 import java.lang.ref.WeakReference;
 
-/** Transparent Prismal output kept as a sibling immediately behind one native Recents capsule. */
+/**
+ * Transparent Prismal output hosted inside one native Recents capsule without taking measured
+ * layout space. The native capsule keeps its original parent/LayoutParams and interaction tree.
+ */
 final class RecentsCapsuleGlassSinkView extends TextureView
         implements TextureView.SurfaceTextureListener {
     private final WeakReference<View> targetRef;
@@ -37,46 +40,44 @@ final class RecentsCapsuleGlassSinkView extends TextureView
         setSurfaceTextureListener(this);
     }
 
-    static RecentsCapsuleGlassSinkView attachBehindTarget(
+    static RecentsCapsuleGlassSinkView attachInsideTarget(
             View target,
             RecentsCapsuleGlassSession session,
             RecentsCapsuleGlassSession.Target targetId) {
-        if (target == null || session == null || targetId == null
-                || !(target.getParent() instanceof ViewGroup)) return null;
-        ViewGroup parent = (ViewGroup) target.getParent();
+        if (!(target instanceof ViewGroup) || session == null || targetId == null) return null;
+        ViewGroup targetGroup = (ViewGroup) target;
         RecentsCapsuleGlassSinkView sink = new RecentsCapsuleGlassSinkView(
                 target.getContext(), target, session, targetId);
-        int index = Math.max(0, parent.indexOfChild(target));
-        parent.addView(sink, index, new ViewGroup.LayoutParams(
-                Math.max(1, target.getWidth()), Math.max(1, target.getHeight())));
+        // Zero measured size means this child cannot change LinearLayout total length, gravity,
+        // weights or the positions of the vendor content. syncFromTarget() applies the visual
+        // TextureView frame only after the vendor layout pass has finished.
+        targetGroup.addView(sink, 0, new ViewGroup.LayoutParams(0, 0));
         sink.syncFromTarget();
         return sink;
     }
 
     boolean syncFromTarget() {
         View target = targetRef.get();
-        if (disposed || target == null || target.getParent() != getParent()) return false;
-        boolean changed = false;
+        if (disposed || target == null || getParent() != target) return false;
         int width = Math.max(1, target.getWidth());
         int height = Math.max(1, target.getHeight());
-        ViewGroup.LayoutParams lp = getLayoutParams();
-        if (lp != null && (lp.width != width || lp.height != height)) {
-            lp.width = width;
-            lp.height = height;
-            setLayoutParams(lp);
+        boolean changed = getLeft() != 0 || getTop() != 0
+                || getRight() != width || getBottom() != height;
+        if (changed) {
+            // Keep LayoutParams at 0x0. Direct layout changes only the final child frame and does
+            // not feed back into the vendor measure/layout calculation.
+            layout(0, 0, width, height);
+        }
+        float desiredAlpha = presented ? 1f : 0f;
+        if (getAlpha() != desiredAlpha) {
+            setAlpha(desiredAlpha);
             changed = true;
         }
-        changed |= setFloatIfChanged(getX(), target.getX(), this::setX);
-        changed |= setFloatIfChanged(getY(), target.getY(), this::setY);
-        if (getPivotX() != target.getPivotX()) { setPivotX(target.getPivotX()); changed = true; }
-        if (getPivotY() != target.getPivotY()) { setPivotY(target.getPivotY()); changed = true; }
-        if (getScaleX() != target.getScaleX()) { setScaleX(target.getScaleX()); changed = true; }
-        if (getScaleY() != target.getScaleY()) { setScaleY(target.getScaleY()); changed = true; }
-        if (getRotation() != target.getRotation()) { setRotation(target.getRotation()); changed = true; }
-        float desiredAlpha = presented ? target.getAlpha() : 0f;
-        if (getAlpha() != desiredAlpha) { setAlpha(desiredAlpha); changed = true; }
         int desiredVisibility = target.getVisibility();
-        if (getVisibility() != desiredVisibility) { setVisibility(desiredVisibility); changed = true; }
+        if (getVisibility() != desiredVisibility) {
+            setVisibility(desiredVisibility);
+            changed = true;
+        }
         return changed;
     }
 
@@ -86,18 +87,17 @@ final class RecentsCapsuleGlassSinkView extends TextureView
                 || target.getVisibility() != View.VISIBLE || !target.isShown()
                 || target.getWidth() <= 0 || target.getHeight() <= 0) return null;
         syncFromTarget();
-        Rect sinkRect = new Rect();
-        if (!getGlobalVisibleRect(sinkRect) || sinkRect.width() <= 0 || sinkRect.height() <= 0) {
-            return null;
-        }
+        Rect targetRect = new Rect();
+        if (!target.getGlobalVisibleRect(targetRect)
+                || targetRect.width() <= 0 || targetRect.height() <= 0) return null;
         int[] rootLocation = new int[2];
         root.getLocationOnScreen(rootLocation);
         LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
                 rootLocation[0], rootLocation[1],
-                sinkRect.left, sinkRect.top, sinkRect.right, sinkRect.bottom);
+                targetRect.left, targetRect.top, targetRect.right, targetRect.bottom);
         float visualScale = Math.min(
-                sinkRect.width() / (float) Math.max(1, getWidth()),
-                sinkRect.height() / (float) Math.max(1, getHeight()));
+                targetRect.width() / (float) Math.max(1, target.getWidth()),
+                targetRect.height() / (float) Math.max(1, target.getHeight()));
         float radius = Math.min(target.getWidth(), target.getHeight()) * 0.5f
                 * Math.max(0.01f, visualScale);
         return LauncherGlassGeometry.resolve(
@@ -141,12 +141,4 @@ final class RecentsCapsuleGlassSinkView extends TextureView
     }
 
     @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
-
-    private interface FloatSetter { void set(float value); }
-
-    private static boolean setFloatIfChanged(float current, float next, FloatSetter setter) {
-        if (Math.abs(current - next) < 0.01f) return false;
-        setter.set(next);
-        return true;
-    }
 }
