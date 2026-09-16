@@ -241,14 +241,14 @@ final class LauncherRecentsCapsuleGlassHook {
             refreshGeometry();
             if (clearAllSink == null || worldSink == null) {
                 prismalFailed = true;
-                MainHook.log(TAG + " capsule sibling host unavailable; keeping native blur fallback");
+                MainHook.log(TAG + " capsule local host unavailable; keeping native blur fallback");
                 session.shutdown();
             }
         }
 
         private RecentsCapsuleGlassSinkView installSink(
                 View target, RecentsCapsuleGlassSession.Target targetId) {
-            return RecentsCapsuleGlassSinkView.attachBehindTarget(target, session, targetId);
+            return RecentsCapsuleGlassSinkView.attachInsideTarget(target, session, targetId);
         }
 
         @Override public boolean onPreDraw() {
@@ -280,7 +280,8 @@ final class LauncherRecentsCapsuleGlassHook {
                         + " world=" + Math.round(worldGeometry.left) + ","
                         + Math.round(worldGeometry.top) + " " + Math.round(worldGeometry.width)
                         + "x" + Math.round(worldGeometry.height)
-                        + " parents=" + clearAll.getParent().getClass().getSimpleName() + "/"
+                        + " localHosts=true parents="
+                        + clearAll.getParent().getClass().getSimpleName() + "/"
                         + world.getParent().getClass().getSimpleName());
             }
             if (!captureRequested && (next.clearAll != null || next.world != null)) {
