@@ -40,6 +40,17 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertFalse(capsule.contains("setOnClickListener"));
     }
 
+    @Test public void recentsDefersActualBindUntilAttachedAndLaidOut() throws Exception {
+        String capsule = read("LauncherRecentsCapsuleGlassHook.java");
+        assertTrue(capsule.contains("PendingBinding"));
+        assertTrue(capsule.contains("addOnAttachStateChangeListener"));
+        assertTrue(capsule.contains("addOnLayoutChangeListener"));
+        assertTrue(capsule.contains("isAttachedToWindow()"));
+        assertTrue(capsule.contains("getWidth() > 0"));
+        assertTrue(capsule.contains("getHeight() > 0"));
+        assertFalse(capsule.contains("Recents root unavailable; stock retained"));
+    }
+
     @Test public void recentsUsesOnePrismalSessionButTwoCapsuleLocalSinks() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         String sink = read("RecentsCapsuleGlassSinkView.java");
