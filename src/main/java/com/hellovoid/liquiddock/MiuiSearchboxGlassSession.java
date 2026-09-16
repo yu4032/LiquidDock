@@ -7,7 +7,6 @@ import android.os.Handler;
 import android.view.Surface;
 import android.view.View;
 
-import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
 import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
@@ -56,6 +55,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final PrismalHighlightProfile highlightProfile;
     private final float cornerRadius;
 
+    private volatile MiuiSearchboxGlassGeometry geometry;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
@@ -105,12 +105,30 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 "LiquidDock-MiuiSearchbox-EGL");
     }
 
-    void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+    void requestFreshCapture() {
+        if (shuttingDown) return;
+        backdropPrepared = false;
+        swapSucceeded = false;
+        presentationSignaled = false;
+        sourceBackend.reconcileRoot();
+        sourceBackend.requestFresh(GENERATION);
     }
 
     void reconcileRoot() {
         if (!shuttingDown) sourceBackend.reconcileRoot();
+    }
+
+    void updateGeometry() {
+        View target = rootRef.get();
+        if (target == null || !target.isAttachedToWindow()) return;
+        View windowRoot = target.getRootView();
+        MiuiSearchboxGlassGeometry next = MiuiSearchboxGlassGeometry.capture(
+                windowRoot, target, cornerRadius);
+        if (next == null) return;
+        MiuiSearchboxGlassGeometry old = geometry;
+        if (old != null && old.sameAs(next)) return;
+        geometry = next;
+        sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -139,6 +157,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
 
     void resizeOutput(int width, int height) {
         if (shuttingDown) return;
+        updateGeometry();
         sourceBackend.reconcileRoot();
         sourceBackend.postToRenderThread(() -> {
             OutputState current = output;
@@ -176,6 +195,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             ensureGl();
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
+            updateGeometry();
             sourceBackend.makePbufferCurrent();
             prismalRenderer.prepareBackdrop(
                     frame.normalizedTextureId,
@@ -216,27 +236,27 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private void renderCurrent() {
         OutputState current = output;
         View root = rootRef.get();
+        MiuiSearchboxGlassGeometry currentGeometry = geometry;
         if (shuttingDown || !backdropPrepared || current == null
+                || currentGeometry == null
                 || current.eglSurface == EGL14.EGL_NO_SURFACE
                 || root == null || !root.isAttachedToWindow()
-                || logicalWidth <= 0 || logicalHeight <= 0) return;
+                || logicalWidth <= 0 || logicalHeight <= 0
+                || currentGeometry.rootWidth != logicalWidth
+                || currentGeometry.rootHeight != logicalHeight) return;
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
             prismalRenderer.beginGlassFrame();
             prismalRenderer.drawGlass(
-                    new PrismalGeometry(
-                            logicalWidth,
-                            logicalHeight,
-                            logicalWidth * 0.5f,
-                            logicalHeight * 0.5f,
-                            logicalWidth,
-                            logicalHeight,
-                            cornerRadius),
+                    currentGeometry.toPrismalGeometry(),
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
-            presentFull(prismalRenderer.outputTexture(), current);
+            presentCropped(
+                    prismalRenderer.outputTexture(),
+                    currentGeometry.toCropUvRect(),
+                    current);
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -253,7 +273,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState current) {
+    private void presentCropped(int sceneTexture, float[] crop, OutputState current) {
+        if (crop == null || crop.length != 4) return;
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -266,7 +287,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                crop[0], crop[1], crop[2], crop[3]);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
