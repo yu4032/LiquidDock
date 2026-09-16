@@ -53,6 +53,7 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(sink.contains("setOpaque(false)"));
         assertTrue(sink.contains("setClickable(false)"));
         assertTrue(sink.contains("setFocusable(false)"));
+        assertTrue(sink.contains("session.attachOutput(target"));
         assertTrue(session.contains("RootPassBlurBackend"));
         assertTrue(session.contains("PassBlurBindRequest.recentsCapsule"));
         assertTrue(session.contains("Miuix307PrismalMaterial.fromConfig"));
@@ -60,8 +61,10 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("drawGlass"));
         assertTrue(session.contains("launcherHighlightProfile"));
-        assertTrue(session.contains("attachOutput(Target.CLEAR_ALL"));
-        assertTrue(session.contains("attachOutput(Target.WORLD"));
+        assertTrue(session.contains("Target.CLEAR_ALL"));
+        assertTrue(session.contains("Target.WORLD"));
+        assertTrue(session.contains("g.cropLeft"));
+        assertTrue(session.contains("g.cropBottom"));
     }
 
     @Test public void nativeBlurStaysUntilPrismalActuallyPresents() throws Exception {
