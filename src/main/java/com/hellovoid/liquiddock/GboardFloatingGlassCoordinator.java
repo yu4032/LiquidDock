@@ -27,6 +27,7 @@ final class GboardFloatingGlassCoordinator {
         float cornerRadiusPx;
         GboardFloatingGlassSession session;
         GboardFloatingGlassView sink;
+        GboardFloatingHandlePolicy.DragObserver dragObserver;
         View.OnAttachStateChangeListener attachListener;
         View.OnLayoutChangeListener layoutListener;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
@@ -122,6 +123,17 @@ final class GboardFloatingGlassCoordinator {
                     }
                 });
         state.session = session;
+        state.dragObserver = new GboardFloatingHandlePolicy.DragObserver() {
+            @Override public void onDragStarted() {
+                GboardFloatingGlassCoordinator.onDragStarted(state);
+            }
+
+            @Override public void onDragEnded() {
+                GboardFloatingGlassCoordinator.onDragEnded(state);
+            }
+        };
+        GboardFloatingHandlePolicy.observe(state.structure.bottomFrame, state.dragObserver);
+
         GboardFloatingGlassView sink = new GboardFloatingGlassView(
                 state.keyboardArea.getContext(), session);
         state.sink = sink;
@@ -130,6 +142,16 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         syncGeometry(state);
+    }
+
+    private static synchronized void onDragStarted(State state) {
+        if (state == null || state.released || state.session == null) return;
+        state.session.beginFullscreenBackdropDrag();
+    }
+
+    private static synchronized void onDragEnded(State state) {
+        if (state == null || state.released || state.session == null) return;
+        if (state.session.endFullscreenBackdropDrag()) syncGeometry(state);
     }
 
     private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
@@ -250,6 +272,11 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
+        if (state.dragObserver != null) {
+            GboardFloatingHandlePolicy.clearObserver(
+                    state.structure.bottomFrame, state.dragObserver);
+            state.dragObserver = null;
+        }
         GboardStockVisualAuthority.release(state.structure);
         restoreStockBackground(state);
         if (state.attachListener != null) {
