@@ -100,7 +100,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     void requestInitialCapture() {
         if (shuttingDown) return;
-        sourceBackend.reconcileRoot();
+        GboardFloatingUpdatePolicy.Cause cause = GboardFloatingUpdatePolicy.Cause.INITIAL_CAPTURE;
+        if (GboardFloatingUpdatePolicy.shouldReconcileRoot(cause)) {
+            sourceBackend.reconcileRoot();
+        }
         sourceBackend.requestFresh(GENERATION);
     }
 
@@ -109,7 +112,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        requestRender();
+        if (GboardFloatingUpdatePolicy.shouldRequestRender(
+                GboardFloatingUpdatePolicy.Cause.GEOMETRY)) {
+            requestRender();
+        }
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -143,7 +149,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown) return;
         requestedOutputWidth = Math.max(1, width);
         requestedOutputHeight = Math.max(1, height);
-        requestRender();
+        if (GboardFloatingUpdatePolicy.shouldRequestRender(
+                GboardFloatingUpdatePolicy.Cause.OUTPUT_RESIZE)) {
+            requestRender();
+        }
     }
 
     void detachOutput(Surface surface) {
@@ -183,7 +192,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            requestRenderFromRenderThread();
+            if (GboardFloatingUpdatePolicy.shouldRequestRender(
+                    GboardFloatingUpdatePolicy.Cause.FRESH_FRAME)) {
+                requestRenderFromRenderThread();
+            }
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
