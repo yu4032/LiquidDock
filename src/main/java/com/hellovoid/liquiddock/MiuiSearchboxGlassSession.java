@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** One-shot RootPassBlur snapshot -> Prismal renderer for SearchActivityBackground. */
+/** Frozen full-screen backdrop plus live Prismal geometry for SearchActivityBackground. */
 final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -267,10 +267,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
-            presentCropped(
-                    prismalRenderer.outputTexture(),
-                    currentGeometry.toCropUvRect(),
-                    current);
+            presentFull(prismalRenderer.outputTexture(), current);
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -287,8 +284,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentCropped(int sceneTexture, float[] crop, OutputState current) {
-        if (crop == null || crop.length != 4) return;
+    private void presentFull(int sceneTexture, OutputState current) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -301,8 +297,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
-                crop[0], crop[1], crop[2], crop[3]);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);

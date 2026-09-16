@@ -2,11 +2,10 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
 import android.view.View;
-import android.view.ViewParent;
 
 import com.hellovoid.prismal.PrismalGeometry;
 
-/** Window-local settled geometry for SearchActivityBackground and its matching PassBlur crop. */
+/** Window-local live geometry for SearchActivityBackground against a fixed screen backdrop. */
 final class MiuiSearchboxGlassGeometry {
     final int rootWidth;
     final int rootHeight;
@@ -38,7 +37,7 @@ final class MiuiSearchboxGlassGeometry {
                 Math.min(cornerRadius, Math.min(width, height) * 0.5f));
     }
 
-    /** Ignores transient ancestor translations so entrance animation never shifts the backdrop crop. */
+    /** Includes transient ancestor transforms so Prismal follows the current entrance-animation frame. */
     static MiuiSearchboxGlassGeometry capture(View windowRoot, View target, float cornerRadiusPx) {
         if (windowRoot == null || target == null
                 || !windowRoot.isAttachedToWindow() || !target.isAttachedToWindow()
@@ -61,12 +60,6 @@ final class MiuiSearchboxGlassGeometry {
             targetToGlobal.mapPoints(points);
             globalToRoot.mapPoints(points);
 
-            float[] translation = cumulativeTranslation(target, windowRoot);
-            for (int i = 0; i < points.length; i += 2) {
-                points[i] = settledCoordinate(points[i], translation[0]);
-                points[i + 1] = settledCoordinate(points[i + 1], translation[1]);
-            }
-
             float left = min(points[0], points[2], points[4], points[6]);
             float top = min(points[1], points[3], points[5], points[7]);
             float right = max(points[0], points[2], points[4], points[6]);
@@ -78,23 +71,6 @@ final class MiuiSearchboxGlassGeometry {
         } catch (Throwable ignored) {
             return null;
         }
-    }
-
-    private static float[] cumulativeTranslation(View target, View windowRoot) {
-        float x = 0f;
-        float y = 0f;
-        View current = target;
-        while (current != null && current != windowRoot) {
-            x += current.getTranslationX();
-            y += current.getTranslationY();
-            ViewParent parent = current.getParent();
-            current = parent instanceof View ? (View) parent : null;
-        }
-        return new float[]{x, y};
-    }
-
-    static float settledCoordinate(float animatedCoordinate, float cumulativeTranslation) {
-        return animatedCoordinate - cumulativeTranslation;
     }
 
     static MiuiSearchboxGlassGeometry fromWindowBounds(
@@ -132,17 +108,6 @@ final class MiuiSearchboxGlassGeometry {
                 width,
                 height,
                 cornerRadius);
-    }
-
-    float[] toCropUvRect() {
-        float uvLeft = left / rootWidth;
-        float uvBottom = (rootHeight - (top + height)) / rootHeight;
-        return new float[]{
-                clamp(uvLeft, 0f, 1f),
-                clamp(uvBottom, 0f, 1f),
-                clamp(width / rootWidth, 0f, 1f),
-                clamp(height / rootHeight, 0f, 1f)
-        };
     }
 
     boolean sameAs(MiuiSearchboxGlassGeometry other) {

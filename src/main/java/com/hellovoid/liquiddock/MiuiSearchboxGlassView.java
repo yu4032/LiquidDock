@@ -7,7 +7,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 
-/** Transparent Prismal output inserted below SearchActivityBackground content. */
+/** Stable full-screen Prismal output; only glass geometry moves over the frozen backdrop. */
 final class MiuiSearchboxGlassView extends TextureView
         implements TextureView.SurfaceTextureListener {
     private final MiuiSearchboxGlassSession session;
