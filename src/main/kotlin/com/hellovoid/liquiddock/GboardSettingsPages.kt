@@ -29,7 +29,50 @@ internal fun ThirdPartyAppsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    openSearchbox: () -> Unit,
     openGboard: () -> Unit,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            GboardPageHeader(
+                "第三方应用适配",
+                "为第三方应用提供独立的液态玻璃适配与参数。",
+            )
+        }
+        item { SmallTitle("系统搜索") }
+        item {
+            GboardSettingsCard {
+                ArrowPreference(
+                    title = "MIUI 系统搜索",
+                    summary = "主界面液态玻璃与搜索进程控制",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = openSearchbox,
+                )
+            }
+        }
+        item { SmallTitle("输入法") }
+        item {
+            GboardSettingsCard {
+                ArrowPreference(
+                    title = "Gboard",
+                    summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = openGboard,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SearchboxSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -46,11 +89,11 @@ internal fun ThirdPartyAppsPage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             GboardPageHeader(
-                "第三方应用适配",
-                "为第三方应用提供独立的液态玻璃适配与参数。",
+                "系统搜索",
+                "仅替换 MIUI 搜索主界面的原生 blur 背景；搜索框自身背景保持原样。",
             )
         }
-        item { SmallTitle("系统搜索") }
+        item { SmallTitle("功能") }
         item {
             GboardSettingsCard {
                 SwitchPreference(
@@ -62,19 +105,8 @@ internal fun ThirdPartyAppsPage(
                             .apply()
                     },
                     title = "MIUI 搜索主界面液态玻璃",
-                    summary = "仅替换搜索主界面的原生 blur 背景；搜索框自身背景保持原样",
+                    summary = "玻璃采样严格对应背景 View 后方区域；重新调出搜索时刷新当前帧",
                     enabled = masterEnabled && liquidEnabled,
-                )
-            }
-        }
-        item { SmallTitle("输入法") }
-        item {
-            GboardSettingsCard {
-                ArrowPreference(
-                    title = "Gboard",
-                    summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
-                    enabled = masterEnabled && liquidEnabled,
-                    onClick = openGboard,
                 )
             }
         }
