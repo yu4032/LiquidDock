@@ -90,6 +90,11 @@ public final class ModuleMain extends XposedModule {
             try {
                 ClassLoader classLoader = param.getClassLoader();
                 if (classLoader == null) return;
+                if (!MiuiSearchboxPassBlurContinuousAuthority.install()) {
+                    Api101Bridge.log(
+                            "[DC][MiuiSearchboxGlass] continuous PassBlur authority unavailable; fail closed");
+                    return;
+                }
                 MiuiSearchboxGlassHook.install(classLoader);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][MiuiSearchboxGlass] init failed", error);
