@@ -63,14 +63,15 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(capsule.contains("worldSink = installSink(world"));
     }
 
-    @Test public void zeroMeasureSinkKeepsNativeContentAboveGlassAndTracksVisualBounds() throws Exception {
+    @Test public void localSinkKeepsNativeContentAboveGlassAndUsesTargetVisualBounds() throws Exception {
         String sink = read("RecentsCapsuleGlassSinkView.java");
         assertTrue(sink.contains("targetRef"));
         assertTrue(sink.contains("syncFromTarget"));
-        assertTrue(sink.contains("target.getScaleX()"));
-        assertTrue(sink.contains("target.getScaleY()"));
-        assertTrue(sink.contains("getGlobalVisibleRect"));
+        assertTrue(sink.contains("target.getGlobalVisibleRect"));
         assertTrue(sink.contains("LauncherGlassScreenSpace.relativeToRoot"));
+        assertFalse(sink.contains("setScaleX(target.getScaleX())"));
+        assertFalse(sink.contains("setScaleY(target.getScaleY())"));
+        assertFalse(sink.contains("setRotation(target.getRotation())"));
     }
 
     @Test public void recentsUsesOnePrismalSessionForBothLocalSinks() throws Exception {
