@@ -88,7 +88,10 @@ final class MiuiSearchboxGlassHook {
 
         @Override
         public void onPresented() {
-            if (!disposed) glassView.setAlpha(1f);
+            if (disposed) return;
+            MiuiSearchboxVendorMaterial.release(background);
+            glassView.setAlpha(1f);
+            Api101Bridge.log(TAG + " Prismal presented; vendor blur material released");
         }
 
         @Override
