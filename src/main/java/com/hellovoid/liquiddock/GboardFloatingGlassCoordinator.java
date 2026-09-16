@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.view.Choreographer;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -26,6 +27,7 @@ final class GboardFloatingGlassCoordinator {
         float stockBackgroundAlpha = 1f;
         float cornerRadiusPx;
         GboardFloatingGlassSession session;
+        GboardFloatingGlassOutput output;
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
         Choreographer.FrameCallback frameCallback;
@@ -36,9 +38,7 @@ final class GboardFloatingGlassCoordinator {
         int invalidGeometryFrames;
         boolean released;
 
-        State(
-                View popup,
-                GboardFloatingStructureResolver.Structure structure,
+        State(View popup, GboardFloatingStructureResolver.Structure structure,
                 LiquidDockConfig.Glass glassConfig) {
             this.popup = popup;
             this.structure = structure;
@@ -50,8 +50,7 @@ final class GboardFloatingGlassCoordinator {
 
     private GboardFloatingGlassCoordinator() {}
 
-    static synchronized void onShown(
-            View popup,
+    static synchronized void onShown(View popup,
             GboardFloatingStructureResolver.Structure structure,
             LiquidDockConfig.Glass glassConfig) {
         if (popup == null || structure == null || glassConfig == null) return;
@@ -63,13 +62,8 @@ final class GboardFloatingGlassCoordinator {
         }
         State state = new State(popup, structure, glassConfig);
         state.attachListener = new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View view) {
-                attachNow(state);
-            }
-
-            @Override public void onViewDetachedFromWindow(View view) {
-                release(state);
-            }
+            @Override public void onViewAttachedToWindow(View view) { attachNow(state); }
+            @Override public void onViewDetachedFromWindow(View view) { release(state); }
         };
         STATES.put(popup, state);
         popup.addOnAttachStateChangeListener(state.attachListener);
@@ -101,13 +95,10 @@ final class GboardFloatingGlassCoordinator {
         state.stockBackgroundAlpha = state.backgroundFrame.getAlpha();
 
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
-                root,
-                state.glassConfig,
-                new GboardFloatingGlassSession.Listener() {
+                root, state.glassConfig, new GboardFloatingGlassSession.Listener() {
                     @Override public void onPresented() {
                         state.popup.post(() -> GboardFloatingGlassCoordinator.onPresented(state));
                     }
-
                     @Override public void onFailure(Throwable error) {
                         state.popup.post(() -> failClosed(state, "session failure", error));
                     }
@@ -118,7 +109,6 @@ final class GboardFloatingGlassCoordinator {
                 GboardFloatingGlassSession live = state.session;
                 if (!state.released && live != null) live.beginDragSnapshot();
             }
-
             @Override public void onDragEnded() {
                 GboardFloatingGlassSession live = state.session;
                 if (!state.released && live != null) live.endDragSnapshot();
@@ -126,13 +116,39 @@ final class GboardFloatingGlassCoordinator {
         };
         GboardFloatingHandlePolicy.observe(state.structure.bottomFrame, state.dragObserver);
 
-        GboardFloatingGlassView sink = new GboardFloatingGlassView(
-                state.keyboardArea.getContext(), session);
-        state.sink = sink;
-        if (!insertSinkBelowKeyboardContent(state, sink)) {
+        GboardTextureViewGlassOutput fallback = GboardTextureViewGlassOutput.create(
+                state.keyboardArea.getContext(), new GboardFloatingGlassOutput.Listener() {
+                    @Override public void onSurfaceReady(Surface surface, int width, int height) {
+                        GboardFloatingGlassSession live = state.session;
+                        if (state.released || live == null) {
+                            surface.release();
+                            return;
+                        }
+                        live.attachOutput(surface, width, height);
+                    }
+                    @Override public void onSurfaceSizeChanged(int width, int height) {
+                        GboardFloatingGlassSession live = state.session;
+                        if (!state.released && live != null) live.resizeOutput(width, height);
+                    }
+                    @Override public void onPresented() {
+                        GboardFloatingGlassSession live = state.session;
+                        if (!state.released && live != null) live.onOutputPresented();
+                    }
+                    @Override public void onFailed(String reason, Throwable error) {
+                        state.popup.post(() -> failClosed(state, reason, error));
+                    }
+                });
+        if (fallback == null) {
+            failClosed(state, "unable to create TextureView output", null);
+            return;
+        }
+        state.output = fallback;
+        state.sink = fallback.view();
+        if (!insertSinkBelowKeyboardContent(state, state.sink)) {
             failClosed(state, "unable to insert glass below keyboard content", null);
             return;
         }
+
         state.frameCallback = new Choreographer.FrameCallback() {
             @Override public void doFrame(long frameTimeNanos) {
                 synchronized (GboardFloatingGlassCoordinator.class) {
@@ -149,9 +165,7 @@ final class GboardFloatingGlassCoordinator {
     }
 
     private static synchronized void startFrameTracking(State state) {
-        if (state == null || state.released || state.frameTracking || state.frameCallback == null) {
-            return;
-        }
+        if (state == null || state.released || state.frameTracking || state.frameCallback == null) return;
         state.frameTracking = true;
         Choreographer.getInstance().removeFrameCallback(state.frameCallback);
         Choreographer.getInstance().postFrameCallback(state.frameCallback);
@@ -172,14 +186,12 @@ final class GboardFloatingGlassCoordinator {
         }
     }
 
-    private static float resolveCornerRadiusPx(
-            GboardFloatingStructureResolver.Structure structure) {
+    private static float resolveCornerRadiusPx(GboardFloatingStructureResolver.Structure structure) {
         if (structure == null) return 0f;
         float radius = outlineRadius(structure.stockBackground);
         if (radius > 0f) return radius;
         radius = outlineRadius(structure.keyboardArea);
-        if (radius > 0f) return radius;
-        return 0f;
+        return radius > 0f ? radius : 0f;
     }
 
     private static float outlineRadius(View view) {
@@ -203,10 +215,6 @@ final class GboardFloatingGlassCoordinator {
         return 0f;
     }
 
-    /**
-     * Sample the vendor-authoritative transform once per VSYNC. During drag the geometry is rendered
-     * only against the immutable full-root backdrop latched before the vendor MOVE is dispatched.
-     */
     private static void syncAuthoritativeFrame(State state) {
         if (state == null || state.released || state.session == null
                 || state.sinkHost == null || state.root == null) return;
@@ -222,16 +230,16 @@ final class GboardFloatingGlassCoordinator {
         state.invalidGeometryFrames = 0;
         syncSinkBounds(state, next);
         state.session.updateGeometry(next);
+        GboardFloatingGlassOutput output = state.output;
+        if (output != null) output.updateGeometry(next);
         if (!state.captureRequested) {
             state.captureRequested = true;
             state.session.requestInitialCapture();
         }
     }
 
-    private static void syncSinkBounds(
-            State state, GboardFloatingGlassGeometry geometry) {
-        if (state == null || geometry == null || state.sinkHost == null
-                || state.sink == null) return;
+    private static void syncSinkBounds(State state, GboardFloatingGlassGeometry geometry) {
+        if (state == null || geometry == null || state.sinkHost == null || state.sink == null) return;
         int width = geometry.sinkWidthPx();
         int height = geometry.sinkHeightPx();
         if (width <= 0 || height <= 0) return;
@@ -275,10 +283,8 @@ final class GboardFloatingGlassCoordinator {
             state.frameCallback = null;
         }
         if (state.dragObserver != null) {
-            try {
-                GboardFloatingHandlePolicy.clearObserver(
-                        state.structure.bottomFrame, state.dragObserver);
-            } catch (Throwable ignored) {}
+            try { GboardFloatingHandlePolicy.clearObserver(state.structure.bottomFrame, state.dragObserver); }
+            catch (Throwable ignored) {}
             state.dragObserver = null;
         }
         GboardStockVisualAuthority.release(state.structure);
@@ -288,22 +294,17 @@ final class GboardFloatingGlassCoordinator {
             catch (Throwable ignored) {}
             state.attachListener = null;
         }
-        GboardFloatingGlassView sink = state.sink;
-        ViewGroup sinkHost = state.sinkHost;
-        state.sink = null;
-        state.sinkHost = null;
-        if (sink != null) {
-            try { sink.dispose(); } catch (Throwable ignored) {}
-            if (sinkHost != null) {
-                try {
-                    if (sink.getParent() == sinkHost) sinkHost.removeView(sink);
-                } catch (Throwable ignored) {}
-            }
-        }
         GboardFloatingGlassSession session = state.session;
         state.session = null;
         if (session != null) {
             try { session.shutdown(); } catch (Throwable ignored) {}
+        }
+        GboardFloatingGlassOutput output = state.output;
+        state.output = null;
+        state.sink = null;
+        state.sinkHost = null;
+        if (output != null) {
+            try { output.release("coordinator-release"); } catch (Throwable ignored) {}
         }
     }
 
