@@ -1,0 +1,204 @@
+package com.hellovoid.liquiddock;
+
+import android.app.Activity;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.view.View;
+import android.view.ViewGroup;
+
+import java.lang.reflect.Method;
+import java.util.WeakHashMap;
+
+/** Replaces only the stable SearchActivityBackground blur layer with LiquidDock Prismal glass. */
+final class MiuiSearchboxGlassHook {
+    private static final String TAG = "[DC][MiuiSearchboxGlass]";
+    private static final String SEARCH_ACTIVITY_CLASS = "com.android.quicksearchbox.SearchActivity";
+    private static final String BACKGROUND_CLASS =
+            "com.android.quicksearchbox.ui.SearchActivityBackground";
+    private static final String BLUR_TRANSITION_CLASS =
+            "com.android.quicksearchbox.util.BlurTransition";
+    private static final String BACKGROUND_ID_NAME = "search_activity_view_background";
+    private static final String SEARCHBOX_PACKAGE = "com.android.quicksearchbox";
+
+    private static final WeakHashMap<ViewGroup, State> STATES = new WeakHashMap<>();
+    private static boolean installed;
+
+    private MiuiSearchboxGlassHook() {}
+
+    private static final class State implements View.OnAttachStateChangeListener,
+            MiuiSearchboxGlassSession.Listener {
+        final ViewGroup background;
+        final Drawable stockBackground;
+        final MiuiSearchboxGlassSession session;
+        final MiuiSearchboxGlassView glassView;
+        boolean disposed;
+
+        State(ViewGroup background, LiquidDockConfig.Glass glassConfig, float cornerRadius) {
+            this.background = background;
+            stockBackground = background.getBackground();
+            session = new MiuiSearchboxGlassSession(background, glassConfig, cornerRadius, this);
+            glassView = new MiuiSearchboxGlassView(background.getContext(), session);
+            glassView.setAlpha(0f);
+        }
+
+        void attach() {
+            background.addOnAttachStateChangeListener(this);
+            background.setBackgroundColor(Color.TRANSPARENT);
+            background.addView(glassView, 0, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            background.post(this::refreshVisible);
+        }
+
+        void refreshVisible() {
+            if (disposed || !background.isAttachedToWindow()) return;
+            glassView.setAlpha(0f);
+            session.updateGeometry();
+            session.reconcileRoot();
+            session.requestFreshCapture();
+            Api101Bridge.log(TAG + " visible freshness barrier requested");
+        }
+
+        @Override
+        public void onPresented() {
+            if (!disposed) glassView.setAlpha(1f);
+        }
+
+        @Override
+        public void onFailure(Throwable error) {
+            Api101Bridge.log(TAG + " render failed; restoring stock drawable", error);
+            dispose(true);
+        }
+
+        @Override
+        public void onViewAttachedToWindow(View v) {
+            if (!disposed) background.post(this::refreshVisible);
+        }
+
+        @Override
+        public void onViewDetachedFromWindow(View v) {
+            dispose(false);
+        }
+
+        void dispose(boolean restoreStock) {
+            if (disposed) return;
+            disposed = true;
+            background.removeOnAttachStateChangeListener(this);
+            synchronized (STATES) {
+                if (STATES.get(background) == this) STATES.remove(background);
+            }
+            glassView.dispose();
+            session.shutdown();
+            if (restoreStock) background.setBackground(stockBackground);
+        }
+    }
+
+    static boolean install(ClassLoader classLoader) {
+        if (installed) return true;
+        if (classLoader == null) return false;
+        try {
+            Class<?> activityClass = Class.forName(SEARCH_ACTIVITY_CLASS, false, classLoader);
+            Class<?> backgroundClass = Class.forName(BACKGROUND_CLASS, false, classLoader);
+            Class<?> blurTransitionClass = Class.forName(BLUR_TRANSITION_CLASS, false, classLoader);
+
+            Method setupContentView = activityClass.getDeclaredMethod("setupContentView");
+            Method activityResume = Activity.class.getDeclaredMethod("onResume");
+            Method dayBlur = backgroundClass.getDeclaredMethod("getBlurStyleDayMode");
+            Method nightBlur = backgroundClass.getDeclaredMethod("getBlurStyleNightMode");
+            Method addBlur = blurTransitionClass.getDeclaredMethod("addBlur", View.class);
+
+            HookUtil.hook(setupContentView, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                Object owner = chain.getThisObject();
+                if (owner instanceof Activity) attach((Activity) owner, backgroundClass);
+                return result;
+            });
+
+            HookUtil.hook(activityResume, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                Object owner = chain.getThisObject();
+                if (owner != null && owner.getClass() == activityClass) {
+                    refreshActivity((Activity) owner, backgroundClass);
+                }
+                return result;
+            });
+
+            HookUtil.hook(dayBlur, chain -> isOwned(chain.getThisObject())
+                    ? null : chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(nightBlur, chain -> isOwned(chain.getThisObject())
+                    ? null : chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(addBlur, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (args.length == 1 && isOwned(args[0])) return null;
+                return chain.proceed(args);
+            });
+
+            installed = true;
+            Api101Bridge.log(TAG + " installed using stable SearchActivity/SearchActivityBackground anchors");
+            return true;
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " hook unavailable; stock Searchbox blur retained", error);
+            return false;
+        }
+    }
+
+    private static void attach(Activity activity, Class<?> backgroundClass) {
+        ConfigReader reader = ConfigReader.load();
+        LiquidDockConfig config = LiquidDockConfig.from(reader);
+        if (!config.enabled || !config.glass.enabled || !MiuiSearchboxGlassPreferences.isEnabled(reader)) {
+            return;
+        }
+        ViewGroup background = resolveBackground(activity, backgroundClass);
+        if (background == null) return;
+        synchronized (STATES) {
+            State existing = STATES.get(background);
+            if (existing != null && !existing.disposed) return;
+            State state = new State(background, config.glass, resolveCornerRadius(background));
+            STATES.put(background, state);
+            state.attach();
+        }
+    }
+
+    private static void refreshActivity(Activity activity, Class<?> backgroundClass) {
+        ViewGroup background = resolveBackground(activity, backgroundClass);
+        if (background == null) return;
+        synchronized (STATES) {
+            State state = STATES.get(background);
+            if (state != null && !state.disposed) state.refreshVisible();
+        }
+    }
+
+    private static ViewGroup resolveBackground(Activity activity, Class<?> backgroundClass) {
+        int id = activity.getResources().getIdentifier(
+                BACKGROUND_ID_NAME, "id", SEARCHBOX_PACKAGE);
+        if (id == 0) {
+            Api101Bridge.log(TAG + " stable background resource missing; stock blur retained");
+            return null;
+        }
+        View candidate = activity.findViewById(id);
+        if (!(candidate instanceof ViewGroup) || !backgroundClass.isInstance(candidate)) {
+            Api101Bridge.log(TAG + " background resource no longer resolves to SearchActivityBackground");
+            return null;
+        }
+        return (ViewGroup) candidate;
+    }
+
+    private static boolean isOwned(Object object) {
+        if (!(object instanceof ViewGroup)) return false;
+        synchronized (STATES) {
+            State state = STATES.get((ViewGroup) object);
+            return state != null && !state.disposed;
+        }
+    }
+
+    private static float resolveCornerRadius(View background) {
+        int id = background.getResources().getIdentifier("dip_27", "dimen", SEARCHBOX_PACKAGE);
+        if (id != 0) {
+            try { return background.getResources().getDimension(id); }
+            catch (Throwable ignored) {}
+        }
+        return 27f * background.getResources().getDisplayMetrics().density;
+    }
+}

@@ -43,6 +43,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "GboardFloatingGlassContractTest.java",
             "GboardFloatingResizeAndHandlePolicyTest.java",
             "GboardHandwritingCapsuleGlassContractTest.java",
+            "MiuiSearchboxGlassContractTest.java",
             "ThirdPartyAppRestartDescriptorTest.java",
             "HookUtilArchitectureContractTest.java",
             "Launcher450IconSizeContractTest.java",

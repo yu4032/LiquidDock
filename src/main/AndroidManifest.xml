@@ -23,6 +23,11 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".SearchboxSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LiquidDock"
+            android:label="@string/page_searchbox" />
+        <activity
             android:name=".WidgetComponentDetailActivity"
             android:exported="false"
             android:theme="@style/Theme.LiquidDock"
