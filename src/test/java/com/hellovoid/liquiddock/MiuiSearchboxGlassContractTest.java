@@ -56,8 +56,11 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
         assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.claim"));
         assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.release"));
+        assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled("));
         assertTrue(authority.contains("SetPassBlurSurface"));
         assertTrue(authority.contains("setUpdateTextureFlag"));
+        assertTrue(authority.contains("boolean updatesEnabled"));
+        assertTrue(authority.contains("args[1] = Boolean.valueOf(claim.updatesEnabled)"));
 
         assertTrue(prefs.contains("liquid_miui_searchbox_blur"));
         assertTrue(prefs.contains("liquid_miui_searchbox_tint_r"));
