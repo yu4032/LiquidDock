@@ -32,6 +32,7 @@ final class MiuiSearchboxGlassHook {
         final ViewGroup outputHost;
         final int contentIndex;
         final Drawable stockBackground;
+        final Method blurEnabledMethod;
         final MiuiSearchboxGlassSession session;
         final MiuiSearchboxGlassView glassView;
         final boolean freshOnResume;
@@ -43,12 +44,14 @@ final class MiuiSearchboxGlassHook {
                 ViewGroup background,
                 ViewGroup outputHost,
                 int contentIndex,
+                Method blurEnabledMethod,
                 LiquidDockConfig.Glass glassConfig,
                 ThirdPartyGlassAppearance appearance,
                 float cornerRadius) {
             this.background = background;
             this.outputHost = outputHost;
             this.contentIndex = contentIndex;
+            this.blurEnabledMethod = blurEnabledMethod;
             stockBackground = background.getBackground();
             freshOnResume = appearance == null || appearance.freshOnResume;
             session = new MiuiSearchboxGlassSession(
@@ -92,14 +95,14 @@ final class MiuiSearchboxGlassHook {
         @Override
         public void onPresented() {
             if (disposed) return;
-            MiuiSearchboxVendorMaterial.release(background);
+            MiuiSearchboxVendorMaterial.release(background, blurEnabledMethod);
             glassView.setAlpha(1f);
-            Api101Bridge.log(TAG + " Prismal presented; vendor blur material released");
+            Api101Bridge.log(TAG + " Prismal presented; vendor backdrop binder released");
         }
 
         @Override
         public void onFailure(Throwable error) {
-            Api101Bridge.log(TAG + " render failed; restoring stock drawable", error);
+            Api101Bridge.log(TAG + " render failed; restoring stock material", error);
             dispose(true);
         }
 
@@ -129,7 +132,10 @@ final class MiuiSearchboxGlassHook {
             }
             glassView.dispose();
             session.shutdown();
-            if (restoreStock) background.setBackground(stockBackground);
+            if (restoreStock) {
+                MiuiSearchboxVendorMaterial.restore(background, blurEnabledMethod);
+                background.setBackground(stockBackground);
+            }
         }
     }
 
@@ -146,12 +152,15 @@ final class MiuiSearchboxGlassHook {
             Method dayBlur = backgroundClass.getDeclaredMethod("getBlurStyleDayMode");
             Method nightBlur = backgroundClass.getDeclaredMethod("getBlurStyleNightMode");
             Method addBlur = blurTransitionClass.getDeclaredMethod("addBlur", View.class);
+            Method blurEnabledMethod = backgroundClass.getMethod("setBlurEnabled", Boolean.TYPE);
 
             HookUtil.hook(setupContentView, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
-                if (owner instanceof Activity) attach((Activity) owner, backgroundClass);
+                if (owner instanceof Activity) {
+                    attach((Activity) owner, backgroundClass, blurEnabledMethod);
+                }
                 return result;
             });
 
@@ -184,7 +193,10 @@ final class MiuiSearchboxGlassHook {
         }
     }
 
-    private static void attach(Activity activity, Class<?> backgroundClass) {
+    private static void attach(
+            Activity activity,
+            Class<?> backgroundClass,
+            Method blurEnabledMethod) {
         ConfigReader reader = ConfigReader.load();
         LiquidDockConfig config = LiquidDockConfig.from(reader);
         ThirdPartyGlassAppearance appearance =
@@ -219,6 +231,7 @@ final class MiuiSearchboxGlassHook {
                     background,
                     outputHost,
                     contentIndex,
+                    blurEnabledMethod,
                     config.glass,
                     appearance,
                     cornerRadius);
