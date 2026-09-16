@@ -32,7 +32,8 @@ public class SecurityCenterScopeContractTest {
                 "com.miui.home",
                 "com.android.systemui",
                 "com.miui.securitycenter",
-                "com.google.android.inputmethod.latin"), lines);
+                "com.google.android.inputmethod.latin",
+                "com.baidu.input_mi"), lines);
     }
 
     @Test
@@ -59,34 +60,28 @@ public class SecurityCenterScopeContractTest {
     private static void appendSecurityCenterSources(Path root, StringBuilder target)
             throws Exception {
         if (!Files.isDirectory(root)) return;
-        try (java.util.stream.Stream<Path> paths = Files.list(root)) {
-            paths.filter(path -> path.getFileName().toString().startsWith("SecurityCenter"))
-                    .filter(path -> path.toString().endsWith(".java"))
-                    .sorted()
-                    .forEach(path -> append(path, target));
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (!name.startsWith("SecurityCenter")) continue;
+                if (!name.endsWith(".java") && !name.endsWith(".kt")) continue;
+                target.append(Files.readString(path, StandardCharsets.UTF_8)).append('\n');
+            }
         }
     }
 
     private static void appendTreeIfPresent(Path root, StringBuilder target) throws Exception {
         if (!Files.isDirectory(root)) return;
-        try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
-            paths.filter(Files::isRegularFile)
-                    .filter(path -> path.toString().endsWith(".java"))
-                    .sorted()
-                    .forEach(path -> append(path, target));
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (!name.endsWith(".java") && !name.endsWith(".kt")) continue;
+                target.append(Files.readString(path, StandardCharsets.UTF_8)).append('\n');
+            }
         }
     }
 
-    private static void append(Path path, StringBuilder target) {
-        try {
-            target.append(Files.readString(path, StandardCharsets.UTF_8)).append('\n');
-        } catch (java.io.IOException error) {
-            throw new java.io.UncheckedIOException(error);
-        }
-    }
-
-    private static void assertNoMatch(String description, Pattern pattern, String source) {
-        assertFalse(description + " remains in Security Center contract sources/docs",
-                pattern.matcher(source).find());
+    private static void assertNoMatch(String label, Pattern pattern, String source) {
+        assertFalse(label + " found: " + pattern, pattern.matcher(source).find());
     }
 }
