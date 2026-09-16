@@ -27,6 +27,7 @@ public class MiuiSearchboxGlassContractTest {
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
         String bridge = read(MAIN.resolve("Miuix307PassBlurBridge.java"));
         String authority = read(MAIN.resolve("MiuiSearchboxPassBlurContinuousAuthority.java"));
+        String material = read(MAIN.resolve("MiuiSearchboxVendorMaterial.java"));
         String settings = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt"));
         String scope = Files.readString(Path.of("src/main/resources/META-INF/xposed/scope.list"));
@@ -74,6 +75,18 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("ThirdPartyPrismalParams.apply(baseParams, appearance)"));
         assertTrue(session.contains("appearance.captureScalePercent"));
         assertTrue(session.contains("appearance.renderFps"));
+
+        // Vendor blur ownership transfers only after Prismal has actually presented a frame.
+        assertTrue(hook.contains("public void onPresented()"));
+        assertTrue(hook.contains("MiuiSearchboxVendorMaterial.release(background)"));
+        assertTrue(material.contains("MiBlurBridge.clearContentBlur(background)"));
+        assertTrue(material.contains("setBlurRadius"));
+        assertTrue(material.contains("setBackgroundBlur"));
+        assertTrue(material.contains("Integer.TYPE"));
+        assertTrue(material.contains("float[].class"));
+        assertTrue(material.contains("int[][].class"));
+        assertFalse(material.contains("getDeclaredFields("));
+        assertFalse(material.contains("getDeclaredConstructors("));
 
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
         assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
