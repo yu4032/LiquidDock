@@ -153,6 +153,19 @@ public class GboardFloatingGlassContractTest {
         assertFalse(session.contains("Bitmap.createBitmap"));
     }
 
+    @Test public void presentationIsAbstractedFromTextureViewImplementation() throws Exception {
+        String output = read(MAIN.resolve("GboardFloatingGlassOutput.java"));
+        String fallback = read(MAIN.resolve("GboardTextureViewGlassOutput.java"));
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        assertTrue(output.contains("interface GboardFloatingGlassOutput"));
+        assertTrue(output.contains("void onSurfaceReady(Surface surface, int width, int height)"));
+        assertTrue(output.contains("void updateGeometry(GboardFloatingGlassGeometry geometry)"));
+        assertTrue(output.contains("void showAfterFirstSwap()"));
+        assertTrue(fallback.contains("implements GboardFloatingGlassOutput"));
+        assertTrue(fallback.contains("GboardFloatingGlassView"));
+        assertTrue(coordinator.contains("GboardFloatingGlassOutput"));
+    }
+
     @Test public void stockHidesOnlyAfterTextureViewConsumesFirstSwap() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
