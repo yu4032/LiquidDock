@@ -20,6 +20,7 @@ final class GboardFloatingGlassCoordinator {
         final GboardFloatingStructureResolver.Structure structure;
         final LiquidDockConfig.Glass glassConfig;
         final ViewGroup keyboardArea;
+        final GboardFloatingCoalescingGate geometryGate = new GboardFloatingCoalescingGate();
         ViewGroup sinkHost;
         View backgroundFrame;
         View root;
@@ -32,7 +33,6 @@ final class GboardFloatingGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean stockHidden;
         boolean captureRequested;
-        boolean geometryRetryPosted;
         int geometryRetryCount;
         boolean released;
 
@@ -58,7 +58,7 @@ final class GboardFloatingGlassCoordinator {
         State existing = STATES.get(popup);
         if (existing != null && !existing.released) {
             if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
-            else syncGeometry(existing);
+            else requestGeometryFrame(existing);
             return;
         }
         State state = new State(popup, structure, glassConfig);
@@ -100,10 +100,10 @@ final class GboardFloatingGlassCoordinator {
         state.cornerRadiusPx = cornerRadiusPx;
         state.stockBackgroundAlpha = state.backgroundFrame.getAlpha();
         state.layoutListener = (view, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
+                oldLeft, oldTop, oldRight, oldBottom) -> requestGeometryFrame(state);
         state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
         state.preDrawListener = () -> {
-            syncGeometry(state);
+            requestGeometryFrame(state);
             return true;
         };
         ViewTreeObserver observer = state.keyboardArea.getViewTreeObserver();
@@ -129,7 +129,7 @@ final class GboardFloatingGlassCoordinator {
             failClosed(state, "unable to insert glass below keyboard content", null);
             return;
         }
-        syncGeometry(state);
+        requestGeometryFrame(state);
     }
 
     private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
@@ -178,6 +178,39 @@ final class GboardFloatingGlassCoordinator {
         return 0f;
     }
 
+    private static void requestGeometryFrame(State state) {
+        if (state == null) return;
+        boolean shouldPost;
+        synchronized (GboardFloatingGlassCoordinator.class) {
+            if (state.released || state.session == null || state.sinkHost == null
+                    || state.root == null) return;
+            shouldPost = state.geometryGate.request();
+        }
+        if (shouldPost) state.keyboardArea.postOnAnimation(() -> runGeometryFrame(state));
+    }
+
+    private static void runGeometryFrame(State state) {
+        synchronized (GboardFloatingGlassCoordinator.class) {
+            if (state == null || state.released) {
+                if (state != null) state.geometryGate.cancel();
+                return;
+            }
+            if (!state.geometryGate.begin()) return;
+        }
+
+        syncGeometry(state);
+
+        boolean rearm;
+        synchronized (GboardFloatingGlassCoordinator.class) {
+            if (state.released) {
+                state.geometryGate.cancel();
+                return;
+            }
+            rearm = state.geometryGate.complete();
+        }
+        if (rearm) state.keyboardArea.postOnAnimation(() -> runGeometryFrame(state));
+    }
+
     private static synchronized void syncGeometry(State state) {
         if (state == null || state.released || state.session == null
                 || state.sinkHost == null || state.root == null) return;
@@ -188,17 +221,8 @@ final class GboardFloatingGlassCoordinator {
                 failClosed(state, "floating geometry never became valid", null);
                 return;
             }
-            if (!state.geometryRetryPosted) {
-                state.geometryRetryPosted = true;
-                state.geometryRetryCount++;
-                state.keyboardArea.postOnAnimation(() -> {
-                    synchronized (GboardFloatingGlassCoordinator.class) {
-                        state.geometryRetryPosted = false;
-                        if (state.released) return;
-                    }
-                    syncGeometry(state);
-                });
-            }
+            state.geometryRetryCount++;
+            state.geometryGate.request();
             return;
         }
         state.geometryRetryCount = 0;
@@ -249,6 +273,7 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void release(State state) {
         if (state == null || state.released) return;
         state.released = true;
+        state.geometryGate.cancel();
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
         GboardStockVisualAuthority.release(state.structure);
         restoreStockBackground(state);
