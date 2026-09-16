@@ -29,7 +29,6 @@ public class GboardGlassAppearanceConfigTest {
         assertTrue(GboardGlassPreferences.ENABLED_DEFAULT);
         assertTrue(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT);
         assertTrue(GboardGlassPreferences.BOTTOM_DOCKING_DEFAULT);
-        assertTrue(hasSchemaKey(GboardGlassPreferences.BOTTOM_DOCKING_KEY));
     }
 
     @Test public void missingGboardAppearanceValuesInheritGlobalGlass() {
@@ -87,7 +86,6 @@ public class GboardGlassAppearanceConfigTest {
 
     @Test public void gboardGlassSettingsParticipateInConfigBackupWithoutDestroyingInheritance() {
         assertTrue(hasSchemaKey(GboardGlassPreferences.ENABLED_KEY));
-        assertTrue(hasSchemaKey(GboardGlassPreferences.BOTTOM_DOCKING_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.BLUR_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_RED_KEY));
         assertTrue(hasSchemaKey(GboardGlassPreferences.TINT_GREEN_KEY));
@@ -96,10 +94,8 @@ public class GboardGlassAppearanceConfigTest {
 
         Map<String, Object> values = new HashMap<>();
         values.put(GboardGlassPreferences.ENABLED_KEY, false);
-        values.put(GboardGlassPreferences.BOTTOM_DOCKING_KEY, false);
         Map<String, Object> exported = ConfigCodec.exportValues(values);
         assertEquals(Boolean.FALSE, exported.get(GboardGlassPreferences.ENABLED_KEY));
-        assertEquals(Boolean.FALSE, exported.get(GboardGlassPreferences.BOTTOM_DOCKING_KEY));
         assertFalse(exported.containsKey(GboardGlassPreferences.BLUR_KEY));
         assertFalse(exported.containsKey(GboardGlassPreferences.TINT_RED_KEY));
 
@@ -111,7 +107,6 @@ public class GboardGlassAppearanceConfigTest {
 
         Map<String, Object> imported = ConfigCodec.importValues(exported);
         assertEquals(Boolean.FALSE, imported.get(GboardGlassPreferences.ENABLED_KEY));
-        assertEquals(Boolean.FALSE, imported.get(GboardGlassPreferences.BOTTOM_DOCKING_KEY));
         assertEquals(42, imported.get(GboardGlassPreferences.BLUR_KEY));
         assertEquals(12, imported.get(GboardGlassPreferences.TINT_RED_KEY));
     }
