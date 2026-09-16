@@ -31,12 +31,19 @@ final class MiuiSearchboxGlassHook {
         final Drawable stockBackground;
         final MiuiSearchboxGlassSession session;
         final MiuiSearchboxGlassView glassView;
+        final boolean freshOnResume;
         boolean disposed;
 
-        State(ViewGroup background, LiquidDockConfig.Glass glassConfig, float cornerRadius) {
+        State(
+                ViewGroup background,
+                LiquidDockConfig.Glass glassConfig,
+                ThirdPartyGlassAppearance appearance,
+                float cornerRadius) {
             this.background = background;
             stockBackground = background.getBackground();
-            session = new MiuiSearchboxGlassSession(background, glassConfig, cornerRadius, this);
+            freshOnResume = appearance == null || appearance.freshOnResume;
+            session = new MiuiSearchboxGlassSession(
+                    background, glassConfig, appearance, cornerRadius, this);
             glassView = new MiuiSearchboxGlassView(background.getContext(), session);
             glassView.setAlpha(0f);
         }
@@ -57,6 +64,10 @@ final class MiuiSearchboxGlassHook {
             session.reconcileRoot();
             session.requestFreshCapture();
             Api101Bridge.log(TAG + " visible freshness barrier requested");
+        }
+
+        void refreshOnResume() {
+            if (freshOnResume) refreshVisible();
         }
 
         @Override
@@ -147,15 +158,21 @@ final class MiuiSearchboxGlassHook {
     private static void attach(Activity activity, Class<?> backgroundClass) {
         ConfigReader reader = ConfigReader.load();
         LiquidDockConfig config = LiquidDockConfig.from(reader);
-        if (!config.enabled || !config.glass.enabled || !MiuiSearchboxGlassPreferences.isEnabled(reader)) {
-            return;
-        }
+        ThirdPartyGlassAppearance appearance =
+                MiuiSearchboxGlassPreferences.resolve(reader, config.glass);
+        if (!config.enabled || !config.glass.enabled || !appearance.enabled) return;
+
         ViewGroup background = resolveBackground(activity, backgroundClass);
         if (background == null) return;
+        float cornerRadius = resolveCornerRadius(background);
+        if (appearance.cornerRadiusOverrideDp >= 0f) {
+            cornerRadius = appearance.cornerRadiusOverrideDp
+                    * background.getResources().getDisplayMetrics().density;
+        }
         synchronized (STATES) {
             State existing = STATES.get(background);
             if (existing != null && !existing.disposed) return;
-            State state = new State(background, config.glass, resolveCornerRadius(background));
+            State state = new State(background, config.glass, appearance, cornerRadius);
             STATES.put(background, state);
             state.attach();
         }
@@ -166,7 +183,7 @@ final class MiuiSearchboxGlassHook {
         if (background == null) return;
         synchronized (STATES) {
             State state = STATES.get(background);
-            if (state != null && !state.disposed) state.refreshVisible();
+            if (state != null && !state.disposed) state.refreshOnResume();
         }
     }
 

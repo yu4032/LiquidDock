@@ -82,23 +82,15 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
         PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
-        GboardGlassPreferences.Appearance appearance =
-                GboardGlassPreferences.resolve(ConfigReader.load(), glassConfig);
-        prismalParams = GboardPrismalParams.apply(baseParams, appearance);
-        highlightProfile = glassConfig != null
-                ? glassConfig.largeSurfaceHighlightProfile
-                : PrismalHighlightProfile.ALL_ENABLED;
-        int scalePercent = glassConfig != null
-                ? glassConfig.passBlurCaptureScalePercent
-                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        int renderFps = glassConfig != null
-                ? glassConfig.passBlurRenderFps
-                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        ThirdPartyGlassAppearance appearance =
+                GboardGlassPreferences.resolveShared(ConfigReader.load(), glassConfig);
+        prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
+        highlightProfile = appearance.highlightProfile;
         sourceBackend = new RootPassBlurBackend(
                 root,
                 PassBlurBindRequest.gboardFloating(root),
-                scalePercent,
-                renderFps,
+                appearance.captureScalePercent,
+                appearance.renderFps,
                 this,
                 "LiquidDock-GboardFloating-EGL");
     }
