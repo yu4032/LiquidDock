@@ -58,17 +58,30 @@ final class ThirdPartyGlassAdapterRegistry {
 
     static boolean install(String packageName, ClassLoader classLoader) {
         Registration registration = find(packageName);
-        return registration != null && classLoader != null && registration.installer.install(classLoader);
+        if (registration == null || classLoader == null) return false;
+        if ("com.google.android.inputmethod.latin".equals(packageName)) {
+            GboardDragDiagnostics.log("REGISTRY_INSTALL_BEGIN loader="
+                    + classLoader.getClass().getName());
+        }
+        boolean installed = registration.installer.install(classLoader);
+        if ("com.google.android.inputmethod.latin".equals(packageName)) {
+            GboardDragDiagnostics.log("REGISTRY_INSTALL_RESULT installed=" + installed);
+        }
+        return installed;
     }
 
     private static boolean installGboard(ClassLoader classLoader) {
-        if (!GboardPassBlurContinuousAuthority.install()) {
+        boolean authority = GboardPassBlurContinuousAuthority.install();
+        GboardDragDiagnostics.log("PASSBLUR_AUTHORITY installed=" + authority);
+        if (!authority) {
             Api101Bridge.log(
                     "[DC][GboardFloatingGlass] continuous PassBlur authority unavailable; fail closed");
             return false;
         }
-        GboardFloatingGlassHook.install(classLoader);
-        GboardHandwritingCapsuleGlassHook.install(classLoader);
+        boolean floating = GboardFloatingGlassHook.install(classLoader);
+        boolean handwriting = GboardHandwritingCapsuleGlassHook.install(classLoader);
+        GboardDragDiagnostics.log("HOOK_RESULTS floating=" + floating
+                + " handwriting=" + handwriting);
         return true;
     }
 
