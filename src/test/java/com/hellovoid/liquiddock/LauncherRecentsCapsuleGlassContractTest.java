@@ -40,17 +40,19 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertFalse(capsule.contains("setOnClickListener"));
     }
 
-    @Test public void recentsUsesOneDedicatedFullPrismalSessionForBothCapsules() throws Exception {
+    @Test public void recentsUsesOnePrismalSessionButTwoCapsuleLocalSinks() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
-        String overlay = read("RecentsCapsuleGlassOverlay.java");
+        String sink = read("RecentsCapsuleGlassSinkView.java");
         String session = read("RecentsCapsuleGlassSession.java");
-        assertTrue(capsule.contains("RecentsCapsuleGlassOverlay"));
         assertTrue(capsule.contains("RecentsCapsuleGlassSession"));
-        assertFalse(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
-        assertTrue(overlay.contains("extends TextureView"));
-        assertTrue(overlay.contains("setOpaque(false)"));
-        assertTrue(overlay.contains("setClickable(false)"));
-        assertTrue(overlay.contains("setFocusable(false)"));
+        assertTrue(capsule.contains("RecentsCapsuleGlassSinkView"));
+        assertTrue(capsule.contains("installSink(clearAll"));
+        assertTrue(capsule.contains("installSink(world"));
+        assertFalse(capsule.contains("decorations.addView(overlay, 0"));
+        assertTrue(sink.contains("extends TextureView"));
+        assertTrue(sink.contains("setOpaque(false)"));
+        assertTrue(sink.contains("setClickable(false)"));
+        assertTrue(sink.contains("setFocusable(false)"));
         assertTrue(session.contains("RootPassBlurBackend"));
         assertTrue(session.contains("PassBlurBindRequest.recentsCapsule"));
         assertTrue(session.contains("Miuix307PrismalMaterial.fromConfig"));
@@ -58,6 +60,16 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("drawGlass"));
         assertTrue(session.contains("launcherHighlightProfile"));
+        assertTrue(session.contains("attachOutput(Target.CLEAR_ALL"));
+        assertTrue(session.contains("attachOutput(Target.WORLD"));
+    }
+
+    @Test public void nativeBlurStaysUntilPrismalActuallyPresents() throws Exception {
+        String capsule = read("LauncherRecentsCapsuleGlassHook.java");
+        assertTrue(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
+        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur"));
+        assertTrue(capsule.contains("onFirstFramePresented"));
+        assertTrue(capsule.contains("clearNativeFallback"));
     }
 
     @Test public void stockBackgroundIsRemovedOnlyAfterPrismalPresentationAndRestored() throws Exception {
