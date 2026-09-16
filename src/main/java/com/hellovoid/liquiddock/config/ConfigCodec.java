@@ -15,6 +15,7 @@ public final class ConfigCodec {
                     && !preferences.containsKey(key.name())) continue;
             out.put(key.name(), exportValue(key, preferences));
         }
+        ThirdPartyGlassConfigCodec.exportInto(preferences, out);
         return out;
     }
 
@@ -25,6 +26,7 @@ public final class ConfigCodec {
             if (!isDirectlyImportable(key) || !jsonValues.containsKey(key.name())) continue;
             importValue(key, jsonValues.get(key.name()), out);
         }
+        ThirdPartyGlassConfigCodec.importInto(jsonValues, out);
         importLegacyHorizontalMargins(jsonValues, out);
         importPreAxisLegacyMargins(jsonValues, out);
         importLegacyWorkstationAllAppsOffsets(jsonValues, out);

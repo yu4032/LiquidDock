@@ -40,4 +40,14 @@ public class MiuiSearchboxGlassGeometryTest {
         assertEquals(1850f, geometry.height, 0.001f);
         assertArrayEquals(new float[]{0f, 0f, 1f, 0.925f}, geometry.toCropUvRect(), 0.0001f);
     }
+
+    @Test
+    public void removesAnimatedAncestorTranslationFromSettledCrop() {
+        assertEquals(300f,
+                MiuiSearchboxGlassGeometry.settledCoordinate(1850f, 1550f),
+                0.001f);
+        assertEquals(90f,
+                MiuiSearchboxGlassGeometry.settledCoordinate(90f, 0f),
+                0.001f);
+    }
 }

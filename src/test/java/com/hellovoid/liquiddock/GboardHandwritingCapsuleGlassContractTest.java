@@ -19,8 +19,11 @@ public class GboardHandwritingCapsuleGlassContractTest {
 
     @Test public void gboardProcessInstallsStableCompanionToolbarHook() throws Exception {
         String module = read("ModuleMain.java");
+        String registry = read("ThirdPartyGlassAdapterRegistry.java");
         String hook = read("GboardHandwritingCapsuleGlassHook.java");
-        assertTrue(module.contains("GboardHandwritingCapsuleGlassHook.install(classLoader)"));
+        assertTrue(module.contains("ThirdPartyGlassAdapterRegistry.install(packageName, classLoader)"));
+        assertTrue(registry.contains("com.google.android.inputmethod.latin"));
+        assertTrue(registry.contains("GboardHandwritingCapsuleGlassHook.install(classLoader)"));
         assertTrue(hook.contains(
                 "com.google.android.libraries.inputmethod.companionwidget.widget.WidgetSoftKeyboardView"));
         assertTrue(hook.contains("\"onLayout\""));

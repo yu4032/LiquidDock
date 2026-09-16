@@ -223,6 +223,10 @@ final class Miuix307PassBlurBridge {
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
         if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
         if (!force && binding.updatesEnabled == enabled) return;
+        if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+            MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
+                    binding.rootSurface, enabled);
+        }
         try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
             binding.setUpdateTextureFlag.invoke(
                     transaction,

@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Continuous zero-copy RootPassBlurBackend -> Prismal renderer for SearchActivityBackground. */
+/** One-shot RootPassBlur snapshot -> Prismal renderer for SearchActivityBackground. */
 final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -50,6 +50,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
+    private final MiuiSearchboxSnapshotState snapshotState = new MiuiSearchboxSnapshotState();
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
@@ -71,6 +72,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     MiuiSearchboxGlassSession(
             View root,
             LiquidDockConfig.Glass glassConfig,
+            ThirdPartyGlassAppearance appearance,
             float cornerRadius,
             Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
@@ -88,16 +90,23 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
-        prismalParams = Miuix307PrismalAdapter.toPortable(optical);
-        highlightProfile = glassConfig != null
-                ? glassConfig.largeSurfaceHighlightProfile
-                : PrismalHighlightProfile.ALL_ENABLED;
-        int scalePercent = glassConfig != null
-                ? glassConfig.passBlurCaptureScalePercent
-                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        int renderFps = glassConfig != null
-                ? glassConfig.passBlurRenderFps
-                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
+        prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
+        highlightProfile = appearance != null
+                ? appearance.highlightProfile
+                : (glassConfig != null
+                    ? glassConfig.largeSurfaceHighlightProfile
+                    : PrismalHighlightProfile.ALL_ENABLED);
+        int scalePercent = appearance != null
+                ? appearance.captureScalePercent
+                : (glassConfig != null
+                    ? glassConfig.passBlurCaptureScalePercent
+                    : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT);
+        int renderFps = appearance != null
+                ? appearance.renderFps
+                : (glassConfig != null
+                    ? glassConfig.passBlurRenderFps
+                    : PassBlurQualityPolicy.DEFAULT_RENDER_FPS);
         sourceBackend = new RootPassBlurBackend(
                 sourceRoot,
                 PassBlurBindRequest.miuiSearchbox(sourceRoot),
@@ -112,6 +121,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         backdropPrepared = false;
         swapSucceeded = false;
         presentationSignaled = false;
+        snapshotState.beginCapture();
         sourceBackend.reconcileRoot();
         sourceBackend.requestFresh(GENERATION);
     }
@@ -193,7 +203,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+                || frame.generation != GENERATION || !snapshotState.acceptFreshFrame()) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -209,6 +219,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams);
             backdropPrepared = true;
             renderCurrent();
+            sourceBackend.setUpdatesEnabled(false, "searchbox-snapshot-latched");
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
