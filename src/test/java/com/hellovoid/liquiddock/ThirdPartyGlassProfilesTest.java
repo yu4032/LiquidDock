@@ -38,6 +38,7 @@ public class ThirdPartyGlassProfilesTest {
         assertEquals(base.tintAlpha, appearance.tintAlpha);
         assertEquals(base.passBlurCaptureScalePercent, appearance.captureScalePercent);
         assertEquals(base.passBlurRenderFps, appearance.renderFps);
+        assertEquals(base.largeSurfaceHighlightProfile.specular, appearance.highlightProfile.specular);
         assertEquals(-1f, appearance.cornerRadiusOverrideDp, 0.001f);
         assertTrue(appearance.freshOnResume);
     }
@@ -54,6 +55,7 @@ public class ThirdPartyGlassProfilesTest {
         values.put("third_party_glass.example.adapter.capture_scale_percent", 500);
         values.put("third_party_glass.example.adapter.render_fps", -1);
         values.put("third_party_glass.example.adapter.corner_radius_dp", 26f);
+        values.put("third_party_glass.example.adapter.highlight_specular", false);
         values.put("third_party_glass.example.adapter.fresh_on_resume", false);
         ConfigReader reader = new ConfigReader(values);
         LiquidDockConfig.Glass base = LiquidDockConfig.from(new ConfigReader(new HashMap<>())).glass;
@@ -74,6 +76,7 @@ public class ThirdPartyGlassProfilesTest {
         assertEquals(PassBlurQualityPolicy.MAX_CAPTURE_SCALE_PERCENT, appearance.captureScalePercent);
         assertEquals(0, appearance.renderFps);
         assertEquals(26f, appearance.cornerRadiusOverrideDp, 0.001f);
+        assertFalse(appearance.highlightProfile.specular);
         assertFalse(appearance.freshOnResume);
     }
 
