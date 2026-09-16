@@ -85,6 +85,11 @@ final class GboardFloatingHandlePolicy {
                 GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT);
     }
 
+    static boolean shouldCancelTerminalRelease(
+            boolean terminalActivePointer, boolean autoResizeEnabled) {
+        return terminalActivePointer && !autoResizeEnabled;
+    }
+
     private static <T> T dereference(WeakReference<T> reference) {
         return reference != null ? reference.get() : null;
     }
@@ -133,7 +138,8 @@ final class GboardFloatingHandlePolicy {
                     || action == MotionEvent.ACTION_POINTER_UP)
                     && activePointerId >= 0
                     && event.getPointerId(actionIndex) == activePointerId;
-            if (terminalActivePointer && !autoResizeAfterHandleDragEnabled()) {
+            if (shouldCancelTerminalRelease(
+                    terminalActivePointer, autoResizeAfterHandleDragEnabled())) {
                 MotionEvent cancel = MotionEvent.obtain(event);
                 cancel.setAction(MotionEvent.ACTION_CANCEL);
                 try {
