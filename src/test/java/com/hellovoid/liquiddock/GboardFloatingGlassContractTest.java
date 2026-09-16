@@ -142,6 +142,7 @@ public class GboardFloatingGlassContractTest {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
         String domain = read(MAIN.resolve("PassBlurDomain.java"));
+        String compositor = read(MAIN.resolve("GboardSurfaceControlGlassOutput.java"));
         assertTrue(domain.contains("GBOARD_FLOATING"));
         assertTrue(request.contains("static PassBlurBindRequest gboardFloating(View authoritativeRoot)"));
         assertTrue(session.contains("RootPassBlurBackend"));
@@ -151,6 +152,11 @@ public class GboardFloatingGlassContractTest {
         assertFalse(session.contains("ScreenCapture"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap.createBitmap"));
+        assertFalse(compositor.contains("ScreenCapture"));
+        assertFalse(compositor.contains("PixelCopy"));
+        assertFalse(compositor.contains("Bitmap"));
+        assertFalse(compositor.contains("ImageReader"));
+        assertFalse(compositor.contains("glReadPixels"));
     }
 
     @Test public void presentationIsAbstractedFromTextureViewImplementation() throws Exception {
@@ -166,17 +172,57 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("GboardFloatingGlassOutput"));
     }
 
-    @Test public void stockHidesOnlyAfterTextureViewConsumesFirstSwap() throws Exception {
+    @Test public void surfaceControlIsPreferredAndUsesPublicCompositorApis() throws Exception {
+        String compositor = read(MAIN.resolve("GboardSurfaceControlGlassOutput.java"));
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        assertTrue(compositor.contains("implements GboardFloatingGlassOutput"));
+        assertTrue(compositor.contains("AttachedSurfaceControl"));
+        assertTrue(compositor.contains("getRootSurfaceControl()"));
+        assertTrue(compositor.contains("buildReparentTransaction"));
+        assertTrue(compositor.contains("new SurfaceControl.Builder()"));
+        assertTrue(compositor.contains("setHidden(true)"));
+        assertTrue(compositor.contains("setBufferSize"));
+        assertTrue(compositor.contains("setPosition"));
+        assertTrue(compositor.contains("setCrop"));
+        assertTrue(compositor.contains("setVisibility(surfaceControl, true)"));
+        assertTrue(compositor.contains("addTransactionCommittedListener"));
+        assertTrue(coordinator.contains("GboardSurfaceControlGlassOutput.create"));
+        assertTrue(coordinator.contains("onSurfaceControlReady()"));
+        assertTrue(coordinator.contains("onSurfaceControlFailed(true)"));
+        assertFalse(compositor.contains("setWindowCrop"));
+        assertFalse(compositor.contains("getDeclared"));
+        assertFalse(compositor.contains("setAccessible"));
+    }
+
+    @Test public void firstSwapAndCompositorCommitGateStockReplacement() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String compositor = read(MAIN.resolve("GboardSurfaceControlGlassOutput.java"));
         String sink = read(MAIN.resolve("GboardFloatingGlassView.java"));
+        assertTrue(session.contains("default void onFirstSwap()"));
+        assertTrue(session.contains("signalFirstSwap()"));
+        assertTrue(session.contains("swapSucceeded = true"));
+        assertTrue(coordinator.contains("onFirstSwap(state)"));
+        assertTrue(coordinator.contains("output.showAfterFirstSwap()"));
+        assertTrue(compositor.contains("addTransactionCommittedListener"));
+        assertTrue(compositor.contains("listener.onPresented()"));
         assertTrue(session.contains("onOutputPresented"));
         assertTrue(sink.contains("onSurfaceTextureUpdated"));
-        assertTrue(sink.contains("session.onOutputPresented()"));
         assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
         assertTrue(coordinator.contains("restoreStockBackground"));
-        assertTrue(session.contains("swapBuffers"));
-        assertTrue(session.contains("swapSucceeded = true"));
+    }
+
+    @Test public void rootResizeRefreshesOnlyWithLiveBackdropAuthority() throws Exception {
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String policy = read(MAIN.resolve("GboardFloatingRootRecoveryPolicy.java"));
+        assertTrue(policy.contains("REQUEST_FRESH"));
+        assertTrue(policy.contains("FAIL_CLOSED"));
+        assertTrue(session.contains("requestFreshForRootResize()"));
+        assertTrue(session.contains("liveBackdropState.phase() == GboardFloatingLiveBackdropState.Phase.LIVE"));
+        assertTrue(session.contains("root-size-changed-without-live-authority"));
+        assertTrue(session.contains("++freshnessGeneration"));
+        assertTrue(session.contains("sourceBackend.reconcileRoot()"));
+        assertTrue(session.contains("sourceBackend.requestFresh(generation)"));
     }
 
     @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
