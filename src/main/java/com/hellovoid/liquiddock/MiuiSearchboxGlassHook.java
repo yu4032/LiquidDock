@@ -38,6 +38,7 @@ final class MiuiSearchboxGlassHook {
             stockBackground = background.getBackground();
             session = new MiuiSearchboxGlassSession(background, glassConfig, cornerRadius, this);
             glassView = new MiuiSearchboxGlassView(background.getContext(), session);
+            glassView.setAlpha(0f);
         }
 
         void attach() {
@@ -46,16 +47,21 @@ final class MiuiSearchboxGlassHook {
             background.addView(glassView, 0, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-            background.post(() -> {
-                if (disposed) return;
-                session.reconcileRoot();
-                session.requestInitialCapture();
-            });
+            background.post(this::refreshVisible);
+        }
+
+        void refreshVisible() {
+            if (disposed || !background.isAttachedToWindow()) return;
+            glassView.setAlpha(0f);
+            session.updateGeometry();
+            session.reconcileRoot();
+            session.requestFreshCapture();
+            Api101Bridge.log(TAG + " visible freshness barrier requested");
         }
 
         @Override
         public void onPresented() {
-            // Stock blur has already been intercepted. Presentation means Prismal owns the layer.
+            if (!disposed) glassView.setAlpha(1f);
         }
 
         @Override
@@ -66,10 +72,7 @@ final class MiuiSearchboxGlassHook {
 
         @Override
         public void onViewAttachedToWindow(View v) {
-            if (!disposed) {
-                session.reconcileRoot();
-                session.requestInitialCapture();
-            }
+            if (!disposed) background.post(this::refreshVisible);
         }
 
         @Override
@@ -99,6 +102,7 @@ final class MiuiSearchboxGlassHook {
             Class<?> blurTransitionClass = Class.forName(BLUR_TRANSITION_CLASS, false, classLoader);
 
             Method setupContentView = activityClass.getDeclaredMethod("setupContentView");
+            Method activityResume = Activity.class.getDeclaredMethod("onResume");
             Method dayBlur = backgroundClass.getDeclaredMethod("getBlurStyleDayMode");
             Method nightBlur = backgroundClass.getDeclaredMethod("getBlurStyleNightMode");
             Method addBlur = blurTransitionClass.getDeclaredMethod("addBlur", View.class);
@@ -108,6 +112,16 @@ final class MiuiSearchboxGlassHook {
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
                 if (owner instanceof Activity) attach((Activity) owner, backgroundClass);
+                return result;
+            });
+
+            HookUtil.hook(activityResume, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                Object owner = chain.getThisObject();
+                if (owner != null && owner.getClass() == activityClass) {
+                    refreshActivity((Activity) owner, backgroundClass);
+                }
                 return result;
             });
 
@@ -136,18 +150,8 @@ final class MiuiSearchboxGlassHook {
         if (!config.enabled || !config.glass.enabled || !MiuiSearchboxGlassPreferences.isEnabled(reader)) {
             return;
         }
-        int id = activity.getResources().getIdentifier(
-                BACKGROUND_ID_NAME, "id", SEARCHBOX_PACKAGE);
-        if (id == 0) {
-            Api101Bridge.log(TAG + " stable background resource missing; stock blur retained");
-            return;
-        }
-        View candidate = activity.findViewById(id);
-        if (!(candidate instanceof ViewGroup) || !backgroundClass.isInstance(candidate)) {
-            Api101Bridge.log(TAG + " background resource no longer resolves to SearchActivityBackground");
-            return;
-        }
-        ViewGroup background = (ViewGroup) candidate;
+        ViewGroup background = resolveBackground(activity, backgroundClass);
+        if (background == null) return;
         synchronized (STATES) {
             State existing = STATES.get(background);
             if (existing != null && !existing.disposed) return;
@@ -155,6 +159,30 @@ final class MiuiSearchboxGlassHook {
             STATES.put(background, state);
             state.attach();
         }
+    }
+
+    private static void refreshActivity(Activity activity, Class<?> backgroundClass) {
+        ViewGroup background = resolveBackground(activity, backgroundClass);
+        if (background == null) return;
+        synchronized (STATES) {
+            State state = STATES.get(background);
+            if (state != null && !state.disposed) state.refreshVisible();
+        }
+    }
+
+    private static ViewGroup resolveBackground(Activity activity, Class<?> backgroundClass) {
+        int id = activity.getResources().getIdentifier(
+                BACKGROUND_ID_NAME, "id", SEARCHBOX_PACKAGE);
+        if (id == 0) {
+            Api101Bridge.log(TAG + " stable background resource missing; stock blur retained");
+            return null;
+        }
+        View candidate = activity.findViewById(id);
+        if (!(candidate instanceof ViewGroup) || !backgroundClass.isInstance(candidate)) {
+            Api101Bridge.log(TAG + " background resource no longer resolves to SearchActivityBackground");
+            return null;
+        }
+        return (ViewGroup) candidate;
     }
 
     private static boolean isOwned(Object object) {
