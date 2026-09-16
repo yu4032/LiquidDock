@@ -6,7 +6,7 @@ import android.view.ViewParent;
 
 import com.hellovoid.prismal.PrismalGeometry;
 
-/** Window-local geometry for SearchActivityBackground and its matching PassBlur crop. */
+/** Window-local settled geometry for SearchActivityBackground and its matching PassBlur crop. */
 final class MiuiSearchboxGlassGeometry {
     final int rootWidth;
     final int rootHeight;
@@ -38,22 +38,8 @@ final class MiuiSearchboxGlassGeometry {
                 Math.min(cornerRadius, Math.min(width, height) * 0.5f));
     }
 
+    /** Ignores transient ancestor translations so entrance animation never shifts the backdrop crop. */
     static MiuiSearchboxGlassGeometry capture(View windowRoot, View target, float cornerRadiusPx) {
-        return captureInternal(windowRoot, target, cornerRadiusPx, true);
-    }
-
-    /**
-     * Captures the target's settled window-local geometry while ignoring transient View translations.
-     * SearchActivity animates android.R.id.content only with translationY; allowing that transform to
-     * enter the crop would sample the Dock/background region traversed during the entrance animation.
-     */
-    static MiuiSearchboxGlassGeometry captureSettled(
-            View windowRoot, View target, float cornerRadiusPx) {
-        return captureInternal(windowRoot, target, cornerRadiusPx, true);
-    }
-
-    private static MiuiSearchboxGlassGeometry captureInternal(
-            View windowRoot, View target, float cornerRadiusPx, boolean settled) {
         if (windowRoot == null || target == null
                 || !windowRoot.isAttachedToWindow() || !target.isAttachedToWindow()
                 || windowRoot.getWidth() <= 0 || windowRoot.getHeight() <= 0
@@ -75,12 +61,10 @@ final class MiuiSearchboxGlassGeometry {
             targetToGlobal.mapPoints(points);
             globalToRoot.mapPoints(points);
 
-            if (settled) {
-                float[] translation = cumulativeTranslation(target, windowRoot);
-                for (int i = 0; i < points.length; i += 2) {
-                    points[i] = settledCoordinate(points[i], translation[0]);
-                    points[i + 1] = settledCoordinate(points[i + 1], translation[1]);
-                }
+            float[] translation = cumulativeTranslation(target, windowRoot);
+            for (int i = 0; i < points.length; i += 2) {
+                points[i] = settledCoordinate(points[i], translation[0]);
+                points[i + 1] = settledCoordinate(points[i + 1], translation[1]);
             }
 
             float left = min(points[0], points[2], points[4], points[6]);
