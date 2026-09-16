@@ -39,7 +39,7 @@ final class MiuiSearchboxGlassGeometry {
     }
 
     static MiuiSearchboxGlassGeometry capture(View windowRoot, View target, float cornerRadiusPx) {
-        return captureInternal(windowRoot, target, cornerRadiusPx, false);
+        return captureInternal(windowRoot, target, cornerRadiusPx, true);
     }
 
     /**
