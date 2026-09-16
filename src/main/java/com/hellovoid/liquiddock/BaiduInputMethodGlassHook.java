@@ -9,6 +9,7 @@ import java.util.WeakHashMap;
 /** Hooks only stable Baidu InputMethodService lifecycle and delegates runtime structure discovery. */
 final class BaiduInputMethodGlassHook {
     private static final String TAG = "[DC][BaiduInputMethodGlass]";
+    private static final String IME_SERVICE_CLASS = "com.content.input_mi.ImeService";
     private static final WeakHashMap<Object, WeakReference<View>> INPUT_VIEWS = new WeakHashMap<>();
     private static boolean installed;
 
@@ -18,10 +19,7 @@ final class BaiduInputMethodGlassHook {
         if (installed) return true;
         if (classLoader == null) return false;
         try {
-            Class<?> serviceClass = Class.forName(
-                    BaiduInputMethodStructureResolver.IME_SERVICE_CLASS,
-                    false,
-                    classLoader);
+            Class<?> serviceClass = Class.forName(IME_SERVICE_CLASS, false, classLoader);
             Method setInputView = serviceClass.getDeclaredMethod("setInputView", View.class);
             Method onWindowShown = serviceClass.getDeclaredMethod("onWindowShown");
 
