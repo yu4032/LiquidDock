@@ -78,6 +78,10 @@ final class GboardFloatingFullscreenBackdropDragState {
         return backdropGeneration >= 0L;
     }
 
+    synchronized boolean shouldReconcileForGeometry() {
+        return mode == Mode.LIVE;
+    }
+
     synchronized boolean shouldPrepareBackdrop(long generation) {
         if (mode == Mode.DRAG) return false;
         if (generation != requestedGeneration) return false;
