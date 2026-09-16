@@ -76,7 +76,7 @@ public class GboardFloatingGlassContractTest {
         assertFalse(coordinator.contains("findViewById"));
     }
 
-    @Test public void coordinatorTracksMovementFromChoreographerFrameAuthority() throws Exception {
+    @Test public void coordinatorTracksMovementWithChoreographerInsteadOfPredrawOrDelay() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         assertTrue(coordinator.contains("Choreographer.FrameCallback"));
         assertTrue(coordinator.contains("postFrameCallback"));
@@ -85,6 +85,21 @@ public class GboardFloatingGlassContractTest {
         assertFalse(coordinator.contains("ViewTreeObserver.OnPreDrawListener"));
         assertFalse(coordinator.contains("addOnPreDrawListener"));
         assertFalse(coordinator.contains("postDelayed"));
+    }
+
+    @Test public void dragLatchesPreparedFullRootBackdropBeforeVendorMovement() throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String handle = read(MAIN.resolve("GboardFloatingHandlePolicy.java"));
+        assertTrue(handle.contains("notifyDragStarted(owner)"));
+        assertTrue(handle.indexOf("notifyDragStarted(owner)") < handle.indexOf("current.onTouch(view, event)"));
+        assertTrue(coordinator.contains("GboardFloatingHandlePolicy.observe"));
+        assertTrue(session.contains("beginDragSnapshot"));
+        assertTrue(session.contains("setUpdatesEnabled(false, \"gboard-drag-snapshot\")"));
+        assertTrue(session.contains("!dragSnapshot.acceptLiveBackdrop()"));
+        assertTrue(session.contains("!dragSnapshot.allowPrepareBackdrop()"));
+        assertTrue(session.contains("endDragSnapshot"));
+        assertTrue(session.contains("setUpdatesEnabled(true, \"gboard-drag-release\")"));
     }
 
     @Test public void stockAuthorityUsesPredrawAndNoObfuscatedManagerMembers() throws Exception {
