@@ -151,7 +151,9 @@ final class LauncherRecentsCapsuleGlassHook {
             tryBind();
         }
 
-        void tryBind() {
+        void tryBind() { tryBindIfReady(); }
+
+        void tryBindIfReady() {
             if (released || pendingBinding != this) return;
             if (!GlassRuntimeState.isRecentsCapsuleEnabled()) {
                 releasePending("pending-setting-off");
@@ -184,9 +186,7 @@ final class LauncherRecentsCapsuleGlassHook {
             decorations.removeOnLayoutChangeListener(this);
         }
 
-        @Override public void onViewAttachedToWindow(View view) {
-            tryBind();
-        }
+        @Override public void onViewAttachedToWindow(View view) { tryBindIfReady(); }
 
         @Override public void onViewDetachedFromWindow(View view) {
             if (pendingBinding == this) pendingBinding = null;
@@ -195,7 +195,7 @@ final class LauncherRecentsCapsuleGlassHook {
 
         @Override public void onLayoutChange(View view, int left, int top, int right, int bottom,
                 int oldLeft, int oldTop, int oldRight, int oldBottom) {
-            tryBind();
+            tryBindIfReady();
         }
     }
 
@@ -218,6 +218,7 @@ final class LauncherRecentsCapsuleGlassHook {
         boolean captureRequested;
         boolean prismalFailed;
         boolean released;
+        boolean geometryLogged;
 
         Binding(ViewGroup decorations, View sourceRoot, View clearAll, View world,
                 LiquidDockConfig.Glass glass) {
@@ -240,20 +241,14 @@ final class LauncherRecentsCapsuleGlassHook {
             refreshGeometry();
             if (clearAllSink == null || worldSink == null) {
                 prismalFailed = true;
-                MainHook.log(TAG + " capsule is not a ViewGroup; keeping native blur fallback");
+                MainHook.log(TAG + " capsule sibling host unavailable; keeping native blur fallback");
                 session.shutdown();
             }
         }
 
         private RecentsCapsuleGlassSinkView installSink(
                 View target, RecentsCapsuleGlassSession.Target targetId) {
-            if (!(target instanceof ViewGroup)) return null;
-            ViewGroup group = (ViewGroup) target;
-            RecentsCapsuleGlassSinkView sink =
-                    new RecentsCapsuleGlassSinkView(group.getContext(), session, targetId);
-            group.addView(sink, 0, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            return sink;
+            return RecentsCapsuleGlassSinkView.attachBehindTarget(target, session, targetId);
         }
 
         @Override public boolean onPreDraw() {
@@ -268,31 +263,30 @@ final class LauncherRecentsCapsuleGlassHook {
 
         void refreshGeometry() {
             if (released || prismalFailed) return;
-            RecentsCapsuleGlassSession.GeometrySet next = new RecentsCapsuleGlassSession.GeometrySet(
-                    geometryFor(clearAll), geometryFor(world));
+            if (clearAllSink != null) clearAllSink.syncFromTarget();
+            if (worldSink != null) worldSink.syncFromTarget();
+            LauncherGlassGeometry.Snapshot clearGeometry =
+                    clearAllSink != null ? clearAllSink.captureGeometry(sourceRoot) : null;
+            LauncherGlassGeometry.Snapshot worldGeometry =
+                    worldSink != null ? worldSink.captureGeometry(sourceRoot) : null;
+            RecentsCapsuleGlassSession.GeometrySet next =
+                    new RecentsCapsuleGlassSession.GeometrySet(clearGeometry, worldGeometry);
             session.updateGeometry(next);
+            if (!geometryLogged && clearGeometry != null && worldGeometry != null) {
+                geometryLogged = true;
+                MainHook.log(TAG + " geometry clearAll=" + Math.round(clearGeometry.left) + ","
+                        + Math.round(clearGeometry.top) + " " + Math.round(clearGeometry.width)
+                        + "x" + Math.round(clearGeometry.height)
+                        + " world=" + Math.round(worldGeometry.left) + ","
+                        + Math.round(worldGeometry.top) + " " + Math.round(worldGeometry.width)
+                        + "x" + Math.round(worldGeometry.height)
+                        + " parents=" + clearAll.getParent().getClass().getSimpleName() + "/"
+                        + world.getParent().getClass().getSimpleName());
+            }
             if (!captureRequested && (next.clearAll != null || next.world != null)) {
                 captureRequested = true;
                 session.requestInitialCapture();
             }
-        }
-
-        private LauncherGlassGeometry.Snapshot geometryFor(View target) {
-            if (target == null || target.getVisibility() != View.VISIBLE
-                    || target.getAlpha() <= 0.01f || !target.isShown()
-                    || target.getWidth() <= 0 || target.getHeight() <= 0) return null;
-            int[] targetLocation = new int[2];
-            int[] rootLocation = new int[2];
-            target.getLocationOnScreen(targetLocation);
-            sourceRoot.getLocationOnScreen(rootLocation);
-            float left = targetLocation[0] - rootLocation[0];
-            float top = targetLocation[1] - rootLocation[1];
-            float right = left + target.getWidth();
-            float bottom = top + target.getHeight();
-            float radius = Math.min(target.getWidth(), target.getHeight()) * 0.5f;
-            return LauncherGlassGeometry.resolveStatic(
-                    sourceRoot.getWidth(), sourceRoot.getHeight(),
-                    left, top, right, bottom, radius);
         }
 
         private void applyNativeFallback() {
