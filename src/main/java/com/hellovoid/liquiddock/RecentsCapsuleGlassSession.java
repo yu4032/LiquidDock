@@ -17,10 +17,12 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Dedicated realtime Prismal scene for the two Recents action capsules. */
+/** Dedicated realtime Prismal scene shared by the two Recents action capsules. */
 final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
+    enum Target { CLEAR_ALL, WORLD }
+
     interface Listener {
-        void onFirstFramePresented();
+        void onFirstFramePresented(Target target);
         void onFailure(Throwable error);
     }
 
@@ -34,11 +36,13 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
     };
 
     private static final class OutputState {
+        final Target target;
         final Surface surface;
         EGLSurface eglSurface = EGL14.EGL_NO_SURFACE;
         int width;
         int height;
-        OutputState(Surface surface, int width, int height) {
+        OutputState(Target target, Surface surface, int width, int height) {
+            this.target = target;
             this.surface = surface;
             this.width = width;
             this.height = height;
@@ -74,10 +78,12 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean backdropPrepared;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
-    private boolean presentationSignaled;
+    private boolean clearAllPresentationSignaled;
+    private boolean worldPresentationSignaled;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
-    private OutputState output;
+    private OutputState clearAllOutput;
+    private OutputState worldOutput;
 
     RecentsCapsuleGlassSession(View sourceRoot, LiquidDockConfig.Glass glassConfig,
                                Listener listener) {
@@ -122,8 +128,8 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
-    void attachOutput(Surface surface, int width, int height) {
-        if (surface == null || shuttingDown) {
+    void attachOutput(Target target, Surface surface, int width, int height) {
+        if (target == null || surface == null || shuttingDown) {
             if (surface != null) surface.release();
             return;
         }
@@ -131,10 +137,11 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
             if (shuttingDown) { surface.release(); return; }
             try {
                 ensureGl();
-                releaseOutput(output);
-                OutputState next = new OutputState(surface, width, height);
+                OutputState previous = outputFor(target);
+                releaseOutput(previous);
+                OutputState next = new OutputState(target, surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
-                output = next;
+                setOutput(target, next);
                 renderCurrent();
             } catch (Throwable error) {
                 try { surface.release(); } catch (Throwable ignored) {}
@@ -143,22 +150,23 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         })) surface.release();
     }
 
-    void resizeOutput(int width, int height) {
-        if (shuttingDown) return;
+    void resizeOutput(Target target, int width, int height) {
+        if (target == null || shuttingDown) return;
         sourceBackend.postToRenderThread(() -> {
-            if (output == null) return;
-            output.width = Math.max(1, width);
-            output.height = Math.max(1, height);
+            OutputState current = outputFor(target);
+            if (current == null) return;
+            current.width = Math.max(1, width);
+            current.height = Math.max(1, height);
             renderCurrent();
         });
     }
 
-    void detachOutput(Surface surface) {
-        if (surface == null) return;
+    void detachOutput(Target target, Surface surface) {
+        if (target == null || surface == null) return;
         if (shuttingDown || !sourceBackend.postToRenderThread(() -> {
-            OutputState current = output;
+            OutputState current = outputFor(target);
             if (current != null && current.surface == surface) {
-                output = null;
+                setOutput(target, null);
                 releaseOutput(current);
             } else {
                 try { surface.release(); } catch (Throwable ignored) {}
@@ -196,9 +204,7 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
 
     private void renderCurrent() {
         GeometrySet currentGeometry = geometry;
-        OutputState currentOutput = output;
         if (shuttingDown || !backdropPrepared || currentGeometry == null
-                || currentOutput == null || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE
                 || logicalWidth <= 0 || logicalHeight <= 0) return;
         try {
             ensureGl();
@@ -206,13 +212,9 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.beginGlassFrame();
             drawGlass(currentGeometry.clearAll);
             drawGlass(currentGeometry.world);
-            presentFull(prismalRenderer.outputTexture(), currentOutput);
-            if (!presentationSignaled) {
-                presentationSignaled = true;
-                mainHandler.post(() -> {
-                    if (!shuttingDown && listener != null) listener.onFirstFramePresented();
-                });
-            }
+            int sceneTexture = prismalRenderer.outputTexture();
+            presentTarget(Target.CLEAR_ALL, sceneTexture, currentGeometry.clearAll, clearAllOutput);
+            presentTarget(Target.WORLD, sceneTexture, currentGeometry.world, worldOutput);
         } catch (Throwable error) {
             notifyFailure(error);
         }
@@ -228,34 +230,9 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
                 PrismalInteractionState.IDLE);
     }
 
-    void shutdown() {
-        if (shuttingDown) return;
-        shuttingDown = true;
-        boolean queued = sourceBackend.postToRenderThread(() -> {
-            releaseOutput(output);
-            output = null;
-            if (prismalRenderer != null) {
-                try { prismalRenderer.close(); } catch (Throwable ignored) {}
-                prismalRenderer = null;
-            }
-            if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
-            compositeProgram = 0;
-            sourceBackend.shutdown();
-        });
-        if (!queued) sourceBackend.shutdown();
-    }
-
-    private void ensureGl() {
-        sourceBackend.makePbufferCurrent();
-        if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
-        if (compositeProgram == 0) {
-            compositeProgram = createProgram(
-                    Miuix307PassBlurShaders.QUAD_VERTEX,
-                    Miuix307PrismalCompositeShaders.FRAGMENT);
-        }
-    }
-
-    private void presentFull(int sceneTexture, OutputState current) {
+    private void presentTarget(Target target, int sceneTexture,
+                               LauncherGlassGeometry.Snapshot g, OutputState current) {
+        if (g == null || current == null || current.eglSurface == EGL14.EGL_NO_SURFACE) return;
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -268,10 +245,63 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                g.cropLeft, g.cropBottom, g.cropWidth, g.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
+        signalPresented(target);
+    }
+
+    private void signalPresented(Target target) {
+        if (target == Target.CLEAR_ALL) {
+            if (clearAllPresentationSignaled) return;
+            clearAllPresentationSignaled = true;
+        } else {
+            if (worldPresentationSignaled) return;
+            worldPresentationSignaled = true;
+        }
+        mainHandler.post(() -> {
+            if (!shuttingDown && listener != null) listener.onFirstFramePresented(target);
+        });
+    }
+
+    void shutdown() {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        boolean queued = sourceBackend.postToRenderThread(() -> {
+            releaseOutput(clearAllOutput);
+            releaseOutput(worldOutput);
+            clearAllOutput = null;
+            worldOutput = null;
+            if (prismalRenderer != null) {
+                try { prismalRenderer.close(); } catch (Throwable ignored) {}
+                prismalRenderer = null;
+            }
+            if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
+            compositeProgram = 0;
+            sourceBackend.shutdown();
+        });
+        if (!queued) sourceBackend.shutdown();
+    }
+
+    private OutputState outputFor(Target target) {
+        return target == Target.CLEAR_ALL ? clearAllOutput : worldOutput;
+    }
+
+    private void setOutput(Target target, OutputState output) {
+        if (target == Target.CLEAR_ALL) clearAllOutput = output;
+        else worldOutput = output;
+    }
+
+    private void ensureGl() {
+        sourceBackend.makePbufferCurrent();
+        if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
+        if (compositeProgram == 0) {
+            compositeProgram = createProgram(
+                    Miuix307PassBlurShaders.QUAD_VERTEX,
+                    Miuix307PrismalCompositeShaders.FRAGMENT);
+        }
     }
 
     private void releaseOutput(OutputState current) {
