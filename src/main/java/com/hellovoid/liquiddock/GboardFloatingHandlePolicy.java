@@ -28,6 +28,7 @@ final class GboardFloatingHandlePolicy {
             new WeakHashMap<>();
     private static final WeakHashMap<View, WeakReference<DragReleaseListener>> BOUND =
             new WeakHashMap<>();
+    private static WeakReference<View> dockDragTarget = new WeakReference<>(null);
     private static boolean installed;
 
     private GboardFloatingHandlePolicy() {}
@@ -66,7 +67,9 @@ final class GboardFloatingHandlePolicy {
                 HookUtil.hook(findViewById, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object result = chain.proceed(args);
-                    if (DOCK_HIT_MASK_DEPTH.get() <= 0 || !(result instanceof View)) {
+                    if (DOCK_HIT_MASK_DEPTH.get() <= 0
+                            || dereference(dockDragTarget) == null
+                            || !(result instanceof View)) {
                         return result;
                     }
                     View found = (View) result;
@@ -89,12 +92,33 @@ final class GboardFloatingHandlePolicy {
                         View.class.getDeclaredMethod("performHapticFeedback", int.class);
                 HookUtil.hook(performHapticFeedback, chain -> {
                     Object owner = chain.getThisObject();
-                    if (owner instanceof View
-                            && shouldSuppressDockHaptic(
-                            bottomDockingEnabled(), isIntersectingDockIcon((View) owner))) {
-                        return true;
+                    if (owner instanceof View) {
+                        View target = (View) owner;
+                        boolean dockHit = isIntersectingDockIcon(target);
+                        if (shouldSuppressDockHaptic(bottomDockingEnabled(), dockHit)) {
+                            dockDragTarget = new WeakReference<>(target);
+                            return true;
+                        }
                     }
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
+
+                Method getHeight = View.class.getDeclaredMethod("getHeight");
+                HookUtil.hook(getHeight, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object owner = chain.getThisObject();
+                    View captured = dereference(dockDragTarget);
+                    if (!(result instanceof Integer)
+                            || !(owner instanceof View)
+                            || owner != captured
+                            || DOCK_HIT_MASK_DEPTH.get() <= 0
+                            || bottomDockingEnabled()) {
+                        return result;
+                    }
+                    View hint = findTaggedView(((View) owner).getRootView(), DOCK_HINT_TAG);
+                    int hintHeight = hint != null ? hint.getMeasuredHeight() : 0;
+                    return effectiveDragClampHeight(
+                            false, true, (Integer) result, hintHeight);
                 });
 
                 installed = true;
@@ -143,6 +167,11 @@ final class GboardFloatingHandlePolicy {
         return terminalActivePointer && !autoResizeEnabled;
     }
 
+    static boolean shouldCancelBottomDockRelease(
+            boolean terminalActivePointer, boolean bottomDockingEnabled) {
+        return terminalActivePointer && !bottomDockingEnabled;
+    }
+
     static boolean shouldMaskDockHitResult(boolean bottomDockingEnabled, Object viewTag) {
         return !bottomDockingEnabled && DOCK_ICON_TAG.equals(viewTag);
     }
@@ -159,6 +188,16 @@ final class GboardFloatingHandlePolicy {
     static boolean shouldSuppressDockHaptic(
             boolean bottomDockingEnabled, boolean intersectsDockIcon) {
         return !bottomDockingEnabled && intersectsDockIcon;
+    }
+
+    static int effectiveDragClampHeight(
+            boolean bottomDockingEnabled,
+            boolean capturedDockTarget,
+            int actualHeight,
+            int dockHintHeight) {
+        int safeHeight = Math.max(0, actualHeight);
+        if (bottomDockingEnabled || !capturedDockTarget || dockHintHeight <= 0) return safeHeight;
+        return Math.max(0, safeHeight - dockHintHeight);
     }
 
     private static <T> T dereference(WeakReference<T> reference) {
@@ -251,6 +290,7 @@ final class GboardFloatingHandlePolicy {
             int actionIndex = event.getActionIndex();
             if (action == MotionEvent.ACTION_DOWN) {
                 activePointerId = event.getPointerId(actionIndex);
+                dockDragTarget = new WeakReference<>(null);
             }
 
             boolean terminalActivePointer = (action == MotionEvent.ACTION_UP
@@ -259,7 +299,9 @@ final class GboardFloatingHandlePolicy {
                     && event.getPointerId(actionIndex) == activePointerId;
 
             if (shouldCancelTerminalRelease(
-                    terminalActivePointer, autoResizeAfterHandleDragEnabled())) {
+                    terminalActivePointer, autoResizeAfterHandleDragEnabled())
+                    || shouldCancelBottomDockRelease(
+                    terminalActivePointer, bottomDockingEnabled())) {
                 MotionEvent cancel = MotionEvent.obtain(event);
                 cancel.setAction(MotionEvent.ACTION_CANCEL);
                 try {
@@ -277,6 +319,7 @@ final class GboardFloatingHandlePolicy {
 
         private void reset() {
             activePointerId = -1;
+            dockDragTarget = new WeakReference<>(null);
         }
     }
 }
