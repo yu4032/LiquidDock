@@ -35,7 +35,9 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(hook.contains("com.android.quicksearchbox.util.BlurTransition"));
         assertTrue(hook.contains("search_activity_view_background"));
         assertTrue(session.contains("implements RootPassBlurBackend.Consumer"));
-        assertTrue(session.contains("PassBlurBindRequest.miuiSearchbox(root)"));
+        assertTrue(session.contains("View sourceRoot = root.getRootView()"));
+        assertTrue(session.contains("PassBlurBindRequest.miuiSearchbox(sourceRoot)"));
+        assertTrue(session.contains("MiuiSearchboxGlassGeometry.capture(\n                sourceRoot, root, cornerRadius)"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
         assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
