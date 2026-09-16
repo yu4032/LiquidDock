@@ -2,17 +2,17 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
+import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.view.ViewTreeObserver;
 
 import java.util.WeakHashMap;
 
 /** Owns one structurally identified Gboard floating-keyboard glass session. */
 final class GboardFloatingGlassCoordinator {
     private static final String TAG = "[DC][GboardFloatingGlass]";
-    private static final int MAX_GEOMETRY_FRAME_RETRIES = 24;
+    private static final int MAX_INVALID_GEOMETRY_FRAMES = 24;
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
 
     private static final class State {
@@ -28,12 +28,11 @@ final class GboardFloatingGlassCoordinator {
         GboardFloatingGlassSession session;
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
-        View.OnLayoutChangeListener layoutListener;
-        ViewTreeObserver.OnPreDrawListener preDrawListener;
+        Choreographer.FrameCallback frameCallback;
+        boolean frameTracking;
         boolean stockHidden;
         boolean captureRequested;
-        boolean geometryRetryPosted;
-        int geometryRetryCount;
+        int invalidGeometryFrames;
         boolean released;
 
         State(
@@ -58,7 +57,7 @@ final class GboardFloatingGlassCoordinator {
         State existing = STATES.get(popup);
         if (existing != null && !existing.released) {
             if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
-            else syncGeometry(existing);
+            else startFrameTracking(existing);
             return;
         }
         State state = new State(popup, structure, glassConfig);
@@ -99,15 +98,6 @@ final class GboardFloatingGlassCoordinator {
         state.root = root;
         state.cornerRadiusPx = cornerRadiusPx;
         state.stockBackgroundAlpha = state.backgroundFrame.getAlpha();
-        state.layoutListener = (view, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
-        state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
-        state.preDrawListener = () -> {
-            syncGeometry(state);
-            return true;
-        };
-        ViewTreeObserver observer = state.keyboardArea.getViewTreeObserver();
-        if (observer.isAlive()) observer.addOnPreDrawListener(state.preDrawListener);
 
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
                 root,
@@ -129,7 +119,28 @@ final class GboardFloatingGlassCoordinator {
             failClosed(state, "unable to insert glass below keyboard content", null);
             return;
         }
-        syncGeometry(state);
+        state.frameCallback = new Choreographer.FrameCallback() {
+            @Override public void doFrame(long frameTimeNanos) {
+                synchronized (GboardFloatingGlassCoordinator.class) {
+                    if (state.released || !state.frameTracking) return;
+                }
+                syncAuthoritativeFrame(state);
+                synchronized (GboardFloatingGlassCoordinator.class) {
+                    if (state.released || !state.frameTracking) return;
+                    Choreographer.getInstance().postFrameCallback(this);
+                }
+            }
+        };
+        startFrameTracking(state);
+    }
+
+    private static synchronized void startFrameTracking(State state) {
+        if (state == null || state.released || state.frameTracking || state.frameCallback == null) {
+            return;
+        }
+        state.frameTracking = true;
+        Choreographer.getInstance().removeFrameCallback(state.frameCallback);
+        Choreographer.getInstance().postFrameCallback(state.frameCallback);
     }
 
     private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
@@ -178,30 +189,23 @@ final class GboardFloatingGlassCoordinator {
         return 0f;
     }
 
-    private static synchronized void syncGeometry(State state) {
+    /**
+     * Workspace-style frame ownership: sample the vendor-authoritative transform once per VSYNC,
+     * move the output sibling immediately, then publish only the latest root-space geometry.
+     */
+    private static void syncAuthoritativeFrame(State state) {
         if (state == null || state.released || state.session == null
                 || state.sinkHost == null || state.root == null) return;
         GboardFloatingGlassGeometry next = GboardFloatingGlassGeometry.capture(
                 state.root, state.sinkHost, state.structure, state.cornerRadiusPx);
         if (next == null) {
-            if (state.geometryRetryCount >= MAX_GEOMETRY_FRAME_RETRIES) {
+            state.invalidGeometryFrames++;
+            if (state.invalidGeometryFrames >= MAX_INVALID_GEOMETRY_FRAMES) {
                 failClosed(state, "floating geometry never became valid", null);
-                return;
-            }
-            if (!state.geometryRetryPosted) {
-                state.geometryRetryPosted = true;
-                state.geometryRetryCount++;
-                state.keyboardArea.postOnAnimation(() -> {
-                    synchronized (GboardFloatingGlassCoordinator.class) {
-                        state.geometryRetryPosted = false;
-                        if (state.released) return;
-                    }
-                    syncGeometry(state);
-                });
             }
             return;
         }
-        state.geometryRetryCount = 0;
+        state.invalidGeometryFrames = 0;
         syncSinkBounds(state, next);
         state.session.updateGeometry(next);
         if (!state.captureRequested) {
@@ -250,24 +254,18 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
+        state.frameTracking = false;
+        if (state.frameCallback != null) {
+            try { Choreographer.getInstance().removeFrameCallback(state.frameCallback); }
+            catch (Throwable ignored) {}
+            state.frameCallback = null;
+        }
         GboardStockVisualAuthority.release(state.structure);
         restoreStockBackground(state);
         if (state.attachListener != null) {
             try { state.popup.removeOnAttachStateChangeListener(state.attachListener); }
             catch (Throwable ignored) {}
             state.attachListener = null;
-        }
-        if (state.keyboardArea != null && state.layoutListener != null) {
-            try { state.keyboardArea.removeOnLayoutChangeListener(state.layoutListener); }
-            catch (Throwable ignored) {}
-            state.layoutListener = null;
-        }
-        if (state.keyboardArea != null && state.preDrawListener != null) {
-            try {
-                ViewTreeObserver observer = state.keyboardArea.getViewTreeObserver();
-                if (observer.isAlive()) observer.removeOnPreDrawListener(state.preDrawListener);
-            } catch (Throwable ignored) {}
-            state.preDrawListener = null;
         }
         GboardFloatingGlassView sink = state.sink;
         ViewGroup sinkHost = state.sinkHost;
