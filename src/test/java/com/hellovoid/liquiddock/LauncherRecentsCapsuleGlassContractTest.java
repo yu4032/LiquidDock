@@ -62,7 +62,8 @@ public class LauncherRecentsCapsuleGlassContractTest {
 
     @Test public void stockBackgroundIsRemovedOnlyAfterPrismalPresentationAndRestored() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
-        assertTrue(capsule.contains("stockBackground"));
+        assertTrue(capsule.contains("clearAllStockBackground"));
+        assertTrue(capsule.contains("worldStockBackground"));
         assertTrue(capsule.contains("onFirstFramePresented"));
         assertTrue(capsule.contains("setBackground(null)"));
         assertTrue(capsule.contains("restoreStockBackground"));
