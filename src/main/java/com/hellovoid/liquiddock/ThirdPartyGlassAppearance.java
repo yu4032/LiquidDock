@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.prismal.PrismalHighlightProfile;
+
 /** Immutable resolved runtime controls shared by code-registered third-party glass adapters. */
 final class ThirdPartyGlassAppearance {
     final boolean enabled;
@@ -12,6 +14,7 @@ final class ThirdPartyGlassAppearance {
     final int captureScalePercent;
     final int renderFps;
     final float cornerRadiusOverrideDp;
+    final PrismalHighlightProfile highlightProfile;
     final boolean freshOnResume;
 
     ThirdPartyGlassAppearance(
@@ -25,6 +28,7 @@ final class ThirdPartyGlassAppearance {
             int captureScalePercent,
             int renderFps,
             float cornerRadiusOverrideDp,
+            PrismalHighlightProfile highlightProfile,
             boolean freshOnResume) {
         this.enabled = enabled;
         this.hasAppearanceOverride = hasAppearanceOverride;
@@ -39,6 +43,8 @@ final class ThirdPartyGlassAppearance {
                 PassBlurQualityPolicy.MAX_CAPTURE_SCALE_PERCENT);
         this.renderFps = clamp(renderFps, 0, PassBlurQualityPolicy.MAX_RENDER_FPS);
         this.cornerRadiusOverrideDp = cornerRadiusOverrideDp;
+        this.highlightProfile = highlightProfile != null
+                ? highlightProfile : PrismalHighlightProfile.ALL_ENABLED;
         this.freshOnResume = freshOnResume;
     }
 
