@@ -74,6 +74,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             float cornerRadius,
             Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
+        View sourceRoot = root.getRootView();
+        if (sourceRoot == null) throw new IllegalArgumentException("sourceRoot == null");
         rootRef = new WeakReference<>(root);
         this.listener = listener;
         this.cornerRadius = Math.max(0f, cornerRadius);
@@ -97,8 +99,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 ? glassConfig.passBlurRenderFps
                 : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
         sourceBackend = new RootPassBlurBackend(
-                root,
-                PassBlurBindRequest.miuiSearchbox(root),
+                sourceRoot,
+                PassBlurBindRequest.miuiSearchbox(sourceRoot),
                 scalePercent,
                 renderFps,
                 this,
@@ -119,11 +121,12 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void updateGeometry() {
-        View target = rootRef.get();
-        if (target == null || !target.isAttachedToWindow()) return;
-        View windowRoot = target.getRootView();
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) return;
+        View sourceRoot = root.getRootView();
+        if (sourceRoot == null || !sourceRoot.isAttachedToWindow()) return;
         MiuiSearchboxGlassGeometry next = MiuiSearchboxGlassGeometry.capture(
-                windowRoot, target, cornerRadius);
+                sourceRoot, root, cornerRadius);
         if (next == null) return;
         MiuiSearchboxGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
