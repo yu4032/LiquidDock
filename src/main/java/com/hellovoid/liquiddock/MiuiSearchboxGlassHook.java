@@ -30,6 +30,7 @@ final class MiuiSearchboxGlassHook {
             MiuiSearchboxGlassSession.Listener {
         final ViewGroup background;
         final ViewGroup outputHost;
+        final int contentIndex;
         final Drawable stockBackground;
         final MiuiSearchboxGlassSession session;
         final MiuiSearchboxGlassView glassView;
@@ -41,11 +42,13 @@ final class MiuiSearchboxGlassHook {
         State(
                 ViewGroup background,
                 ViewGroup outputHost,
+                int contentIndex,
                 LiquidDockConfig.Glass glassConfig,
                 ThirdPartyGlassAppearance appearance,
                 float cornerRadius) {
             this.background = background;
             this.outputHost = outputHost;
+            this.contentIndex = contentIndex;
             stockBackground = background.getBackground();
             freshOnResume = appearance == null || appearance.freshOnResume;
             session = new MiuiSearchboxGlassSession(
@@ -57,7 +60,7 @@ final class MiuiSearchboxGlassHook {
         void attach() {
             background.addOnAttachStateChangeListener(this);
             background.setBackgroundColor(Color.TRANSPARENT);
-            outputHost.addView(glassView, 0, new ViewGroup.LayoutParams(
+            outputHost.addView(glassView, contentIndex, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
             ViewTreeObserver nextObserver = outputHost.getViewTreeObserver();
@@ -190,12 +193,20 @@ final class MiuiSearchboxGlassHook {
 
         ViewGroup background = resolveBackground(activity, backgroundClass);
         if (background == null) return;
-        View root = background.getRootView();
-        if (!(root instanceof ViewGroup)) {
-            Api101Bridge.log(TAG + " stable full-screen output host unavailable; stock blur retained");
+
+        View contentRoot = activity.findViewById(android.R.id.content);
+        if (contentRoot == null || !(contentRoot.getParent() instanceof ViewGroup)) {
+            Api101Bridge.log(TAG + " stable content parent unavailable; stock blur retained");
             return;
         }
-        ViewGroup outputHost = (ViewGroup) root;
+        ViewGroup contentParent = (ViewGroup) contentRoot.getParent();
+        int contentIndex = contentParent.indexOfChild(contentRoot);
+        if (contentIndex < 0) {
+            Api101Bridge.log(TAG + " stable content index unavailable; stock blur retained");
+            return;
+        }
+        ViewGroup outputHost = contentParent;
+
         float cornerRadius = resolveCornerRadius(background);
         if (appearance.cornerRadiusOverrideDp >= 0f) {
             cornerRadius = appearance.cornerRadiusOverrideDp
@@ -204,7 +215,13 @@ final class MiuiSearchboxGlassHook {
         synchronized (STATES) {
             State existing = STATES.get(background);
             if (existing != null && !existing.disposed) return;
-            State state = new State(background, outputHost, config.glass, appearance, cornerRadius);
+            State state = new State(
+                    background,
+                    outputHost,
+                    contentIndex,
+                    config.glass,
+                    appearance,
+                    cornerRadius);
             STATES.put(background, state);
             state.attach();
         }
