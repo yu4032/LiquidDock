@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
+import com.hellovoid.prismal.PrismalHighlightProfile;
 
 /** Gboard persisted controls layered over the shared third-party glass profile contract. */
 final class GboardGlassPreferences {
@@ -50,10 +51,12 @@ final class GboardGlassPreferences {
             int fps = base != null
                     ? base.passBlurRenderFps
                     : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+            PrismalHighlightProfile highlights = base != null && base.largeSurfaceHighlightProfile != null
+                    ? base.largeSurfaceHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
             return new ThirdPartyGlassAppearance(
                     enabled, hasAppearanceOverride, blur,
                     tintR, tintG, tintB, tintAlpha,
-                    scale, fps, -1f, false);
+                    scale, fps, -1f, highlights, false);
         }
     }
 
@@ -96,6 +99,7 @@ final class GboardGlassPreferences {
                 shared.captureScalePercent,
                 shared.renderFps,
                 shared.cornerRadiusOverrideDp,
+                shared.highlightProfile,
                 shared.freshOnResume);
     }
 
