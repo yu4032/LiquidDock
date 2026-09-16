@@ -71,8 +71,8 @@ public class ThirdPartyGlassProfilesTest {
         assertEquals(0, appearance.tintG);
         assertEquals(77, appearance.tintB);
         assertEquals(190, appearance.tintAlpha);
-        assertEquals(100, appearance.captureScalePercent);
-        assertEquals(1, appearance.renderFps);
+        assertEquals(PassBlurQualityPolicy.MAX_CAPTURE_SCALE_PERCENT, appearance.captureScalePercent);
+        assertEquals(0, appearance.renderFps);
         assertEquals(26f, appearance.cornerRadiusOverrideDp, 0.001f);
         assertFalse(appearance.freshOnResume);
     }
