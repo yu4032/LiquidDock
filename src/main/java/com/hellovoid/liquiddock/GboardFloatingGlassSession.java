@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Continuous zero-copy PassBlur -> Prismal pipeline for one Gboard floating popup root. */
+/** Zero-copy full-root PassBlur backdrop plus live Prismal geometry for floating Gboard. */
 final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -25,7 +25,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private static final String TAG = "[DC][GboardFloatingGlass]";
-    private static final long GENERATION = 1L;
+    private static final long INITIAL_GENERATION = 1L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -50,6 +50,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
+    private final GboardFloatingFullscreenBackdropDragState dragState =
+            new GboardFloatingFullscreenBackdropDragState(INITIAL_GENERATION);
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
@@ -96,7 +98,25 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        if (!shuttingDown) sourceBackend.requestFresh(dragState.requestedGeneration());
+    }
+
+    boolean beginFullscreenBackdropDrag() {
+        if (shuttingDown || !dragState.beginDrag()) return false;
+        sourceBackend.setUpdatesEnabled(false, "gboard-fullscreen-backdrop-drag");
+        return true;
+    }
+
+    boolean endFullscreenBackdropDrag() {
+        if (shuttingDown) return false;
+        GboardFloatingFullscreenBackdropDragState.Recovery recovery = dragState.endDrag();
+        if (!recovery.requestFresh) return false;
+        if (recovery.resumeSourceUpdates) {
+            sourceBackend.setUpdatesEnabled(true, "gboard-fullscreen-backdrop-drag-ended");
+        }
+        if (recovery.reconcileRoot) sourceBackend.reconcileRoot();
+        if (recovery.requestFresh) sourceBackend.requestFresh(recovery.generation);
+        return true;
     }
 
     void updateGeometry(GboardFloatingGlassGeometry next) {
@@ -104,8 +124,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        sourceBackend.reconcileRoot();
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        if (dragState.shouldReconcileForGeometry()) sourceBackend.reconcileRoot();
+        if (dragState.shouldRenderGeometry()) {
+            sourceBackend.postToRenderThread(this::renderCurrent);
+        }
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -158,7 +180,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     /** Called on the UI thread only after TextureView consumed a swapped buffer. */
     void onOutputPresented() {
-        if (shuttingDown || presentationSignaled || !swapSucceeded) return;
+        if (shuttingDown || !swapSucceeded) return;
+        dragState.onOutputPresented();
+        if (presentationSignaled) return;
         presentationSignaled = true;
         if (listener != null) listener.onPresented();
     }
@@ -166,7 +190,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+                || !dragState.shouldPrepareBackdrop(frame.generation)) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -180,6 +204,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
+            dragState.onBackdropPrepared(frame.generation);
             renderCurrent();
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
@@ -188,7 +213,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
-        if (!shuttingDown) notifyFailure("source-terminal", error);
+        if (!shuttingDown && generation == dragState.requestedGeneration()) {
+            notifyFailure("source-terminal", error);
+        }
     }
 
     void shutdown() {
