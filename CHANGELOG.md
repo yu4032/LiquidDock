@@ -1,5 +1,19 @@
 # Changelog for AI agent
 
+## v2.4.3 (2026-09-16)
+
+### MIUI Searchbox 液态玻璃
+
+- 接入 `com.android.quicksearchbox` 搜索界面 Hook，将搜索背景替换为动态 Prismal 液态玻璃，并修复冻结背景更新问题
+
+### 多任务液态玻璃
+
+- 将 Launcher 多任务界面的“清除全部”和“设备互联”两个操作胶囊背景替换为完整 Prismal 液态玻璃
+
+### Gboard 触摸底栏
+
+- 修复关闭 Gboard 触摸底栏自动调节大小后，点击和小幅移动仍触发尺寸调整的问题
+
 ## v2.4.2 (2026-09-15)
 
 ### Launcher 4.50 integration
