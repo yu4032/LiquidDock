@@ -617,7 +617,7 @@ public final class ConfigSchema {
         add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
-                Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+                Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.FOLDER_CORNER_RADIUS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
                 Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,
