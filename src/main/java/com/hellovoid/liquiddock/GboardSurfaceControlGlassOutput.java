@@ -126,7 +126,7 @@ final class GboardSurfaceControlGlassOutput implements GboardFloatingGlassOutput
         shown = true;
         SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
         try {
-            transaction.show(surfaceControl);
+            transaction.setVisibility(surfaceControl, true);
             transaction.addTransactionCommittedListener(
                     command -> root.post(command),
                     () -> {
