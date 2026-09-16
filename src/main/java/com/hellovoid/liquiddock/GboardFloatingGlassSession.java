@@ -143,8 +143,38 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || next == null || !dragSnapshot.allowGeometryRender()) return;
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
-        geometry = next;
+        if (old != null) {
+            boolean liveRefreshAllowed = dragSnapshot.allowFreshRequest()
+                    && liveBackdropState.phase() == GboardFloatingLiveBackdropState.Phase.LIVE;
+            GboardFloatingRootRecoveryPolicy.Decision recovery =
+                    GboardFloatingRootRecoveryPolicy.decide(
+                            old.rootWidth, old.rootHeight,
+                            next.rootWidth, next.rootHeight,
+                            liveRefreshAllowed);
+            if (recovery == GboardFloatingRootRecoveryPolicy.Decision.FAIL_CLOSED) {
+                notifyFailure("root-size-changed-without-live-authority",
+                        new IllegalStateException("root size changed while live refresh unavailable"));
+                return;
+            }
+            geometry = next;
+            if (recovery == GboardFloatingRootRecoveryPolicy.Decision.REQUEST_FRESH) {
+                requestFreshForRootResize();
+                return;
+            }
+        } else {
+            geometry = next;
+        }
         requestRender();
+    }
+
+    private void requestFreshForRootResize() {
+        backdropPrepared = false;
+        logicalWidth = 0;
+        logicalHeight = 0;
+        preparedBackdropGeneration = -1L;
+        long generation = ++freshnessGeneration;
+        sourceBackend.reconcileRoot();
+        sourceBackend.requestFresh(generation);
     }
 
     void attachOutput(Surface surface, int width, int height) {
