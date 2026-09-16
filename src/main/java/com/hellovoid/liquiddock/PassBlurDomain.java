@@ -7,5 +7,6 @@ enum PassBlurDomain {
     DOCK,
     SECURITY_CENTER,
     GBOARD_FLOATING,
-    MIUI_SEARCHBOX
+    MIUI_SEARCHBOX,
+    RECENTS_CAPSULE
 }

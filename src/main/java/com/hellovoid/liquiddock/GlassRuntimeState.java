@@ -10,6 +10,7 @@ final class GlassRuntimeState {
     private static volatile boolean enabled;
     private static volatile boolean iconEnabled;
     private static volatile boolean functionalDockIconEnabled;
+    private static volatile boolean recentsCapsuleEnabled;
     private static volatile boolean widgetEnabled;
     private static volatile boolean widgetDarkContentEnabled;
     private static volatile boolean smallFolderEnabled;
@@ -23,6 +24,7 @@ final class GlassRuntimeState {
             boolean initialEnabled,
             boolean initialIconEnabled,
             boolean initialFunctionalDockIconEnabled,
+            boolean initialRecentsCapsuleEnabled,
             boolean initialWidgetEnabled,
             boolean initialWidgetDarkContentEnabled,
             boolean initialSmallFolderEnabled,
@@ -34,6 +36,7 @@ final class GlassRuntimeState {
         enabled = initialEnabled;
         iconEnabled = initialIconEnabled;
         functionalDockIconEnabled = initialFunctionalDockIconEnabled;
+        recentsCapsuleEnabled = initialRecentsCapsuleEnabled;
         widgetEnabled = initialWidgetEnabled;
         widgetDarkContentEnabled = initialWidgetDarkContentEnabled;
         smallFolderEnabled = initialSmallFolderEnabled;
@@ -44,6 +47,7 @@ final class GlassRuntimeState {
                     && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ICON_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name().equals(key)
+                    && !ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.WIDGET_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.WIDGET_DARK_CONTENT.name().equals(key)
                     && !ConfigSchema.Glass.SMALL_FOLDER_GLASS.name().equals(key)
@@ -58,6 +62,9 @@ final class GlassRuntimeState {
             boolean nextFunctionalDockIconEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
                     ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.runtimeFallback());
+            boolean nextRecentsCapsuleEnabled = sharedPreferences.getBoolean(
+                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name(),
+                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.runtimeFallback());
             boolean nextWidgetEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Glass.WIDGET_GLASS.name(),
                     ConfigSchema.Glass.WIDGET_GLASS.runtimeFallback());
@@ -71,13 +78,14 @@ final class GlassRuntimeState {
                     ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(),
                     ConfigSchema.Glass.LARGE_FOLDER_GLASS.runtimeFallback());
             apply(nextEnabled, nextIconEnabled, nextFunctionalDockIconEnabled,
-                    nextWidgetEnabled, nextWidgetDarkContentEnabled,
+                    nextRecentsCapsuleEnabled, nextWidgetEnabled, nextWidgetDarkContentEnabled,
                     nextSmallFolderEnabled, nextLargeFolderEnabled);
         };
         nextPrefs.registerOnSharedPreferenceChangeListener(listener);
         MainHook.log("[DC][GlassRuntime] initialized enabled=" + enabled
                 + " iconEnabled=" + isIconEnabled()
                 + " functionalDockIconEnabled=" + isFunctionalDockIconEnabled()
+                + " recentsCapsuleEnabled=" + isRecentsCapsuleEnabled()
                 + " widgetEnabled=" + isWidgetEnabled()
                 + " widgetDarkContentEnabled=" + isWidgetDarkContentEnabled()
                 + " smallFolderEnabled=" + isSmallFolderEnabled()
@@ -86,16 +94,11 @@ final class GlassRuntimeState {
 
     static boolean isEnabled() { return enabled; }
     static boolean isIconEnabled() { return enabled && iconEnabled; }
-    static boolean isFunctionalDockIconEnabled() {
-        return enabled && functionalDockIconEnabled;
-    }
-    static boolean isAnyIconEnabled() {
-        return isIconEnabled() || isFunctionalDockIconEnabled();
-    }
+    static boolean isFunctionalDockIconEnabled() { return enabled && functionalDockIconEnabled; }
+    static boolean isAnyIconEnabled() { return isIconEnabled() || isFunctionalDockIconEnabled(); }
+    static boolean isRecentsCapsuleEnabled() { return enabled && recentsCapsuleEnabled; }
     static boolean isWidgetEnabled() { return enabled && widgetEnabled; }
-    static boolean isWidgetDarkContentEnabled() {
-        return isWidgetEnabled() && widgetDarkContentEnabled;
-    }
+    static boolean isWidgetDarkContentEnabled() { return isWidgetEnabled() && widgetDarkContentEnabled; }
     static boolean isSmallFolderEnabled() { return enabled && smallFolderEnabled; }
     static boolean isLargeFolderEnabled() { return enabled && largeFolderEnabled; }
 
@@ -109,6 +112,7 @@ final class GlassRuntimeState {
             boolean nextEnabled,
             boolean nextIconEnabled,
             boolean nextFunctionalDockIconEnabled,
+            boolean nextRecentsCapsuleEnabled,
             boolean nextWidgetEnabled,
             boolean nextWidgetDarkContentEnabled,
             boolean nextSmallFolderEnabled,
@@ -116,6 +120,7 @@ final class GlassRuntimeState {
         if (enabled == nextEnabled
                 && iconEnabled == nextIconEnabled
                 && functionalDockIconEnabled == nextFunctionalDockIconEnabled
+                && recentsCapsuleEnabled == nextRecentsCapsuleEnabled
                 && widgetEnabled == nextWidgetEnabled
                 && widgetDarkContentEnabled == nextWidgetDarkContentEnabled
                 && smallFolderEnabled == nextSmallFolderEnabled
@@ -124,10 +129,13 @@ final class GlassRuntimeState {
         GlassRuntimeTransitionPolicy.Snapshot before = snapshot();
         boolean iconPolicyChanged = iconEnabled != nextIconEnabled
                 || functionalDockIconEnabled != nextFunctionalDockIconEnabled;
+        boolean recentsCapsulePolicyChanged =
+                recentsCapsuleEnabled != nextRecentsCapsuleEnabled || enabled != nextEnabled;
 
         enabled = nextEnabled;
         iconEnabled = nextIconEnabled;
         functionalDockIconEnabled = nextFunctionalDockIconEnabled;
+        recentsCapsuleEnabled = nextRecentsCapsuleEnabled;
         widgetEnabled = nextWidgetEnabled;
         widgetDarkContentEnabled = nextWidgetDarkContentEnabled;
         smallFolderEnabled = nextSmallFolderEnabled;
@@ -138,6 +146,7 @@ final class GlassRuntimeState {
         MainHook.log("[DC][GlassRuntime] enabled=" + enabled
                 + " iconEnabled=" + isIconEnabled()
                 + " functionalDockIconEnabled=" + isFunctionalDockIconEnabled()
+                + " recentsCapsuleEnabled=" + isRecentsCapsuleEnabled()
                 + " widgetEnabled=" + isWidgetEnabled()
                 + " widgetDarkContentEnabled=" + isWidgetDarkContentEnabled()
                 + " smallFolderEnabled=" + isSmallFolderEnabled()
@@ -152,14 +161,16 @@ final class GlassRuntimeState {
                 LauncherGlassSessionRegistry.shutdownAll();
                 Miuix307MaterialPipeline.onRuntimeGlassDisabled();
                 MiuixGlassHook.onRuntimeGlassDisabled();
-                // Teardown cleared the GlassHost binding; native BlurBackground2 can own
-                // the edge again, so restore its remembered stroke immediately.
+                LauncherRecentsCapsuleGlassHook.onRuntimeStateChanged();
                 DockStrokeRenderer.refreshInstalledFromCurrentConfig();
                 MainHook.log("[DC][GlassRuntime] GPU glass teardown complete");
             });
             return;
         }
 
+        if (recentsCapsulePolicyChanged) {
+            runOnMain(LauncherRecentsCapsuleGlassHook::onRuntimeStateChanged);
+        }
         if (transition.iconRelease) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeIconGlassDisabled();
@@ -169,7 +180,6 @@ final class GlassRuntimeState {
         } else if (iconPolicyChanged) {
             runOnMain(() -> {
                 MiuixLauncherStaticGlassHook.onRuntimeIconGlassPolicyChanged();
-                // A mode switch must not leave a normal-app drag overlay alive from the old mode.
                 MiuixLauncherDragOverlayHook.onRuntimeIconGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] icon glass policy reconciled");
             });

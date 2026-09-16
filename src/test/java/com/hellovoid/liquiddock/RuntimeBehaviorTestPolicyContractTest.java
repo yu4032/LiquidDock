@@ -50,6 +50,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherGlassStaticBoundaryTest.java",
             "LauncherGlassVendorMaterialSuppressionContractTest.java",
             "LauncherMamlBackgroundRuleExecutorContractTest.java",
+            "LauncherRecentsCapsuleGlassContractTest.java",
             "LauncherWallpaperFreshnessHookContractTest.java",
             "LauncherWidgetBackgroundControllerContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",

@@ -92,6 +92,7 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
                     runtimeConfig.glass.iconEnabled,
                     runtimeConfig.glass.functionalDockIconEnabled,
+                    runtimeConfig.glass.recentsCapsuleEnabled,
                     runtimeConfig.glass.widgetEnabled,
                     runtimeConfig.glass.widgetDarkContent,
                     runtimeConfig.glass.smallFolderStyle.enabled,
