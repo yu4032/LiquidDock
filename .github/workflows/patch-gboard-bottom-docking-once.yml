@@ -25,16 +25,16 @@ jobs:
           path = Path('src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt')
           text = path.read_text()
 
-          state_anchor = '''    var autoResizeAfterHandleDrag by remember {
-              mutableStateOf(
-                  prefs.getBoolean(
-                      GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY,
-                      GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT,
-                  ),
-              )
-          }
+          state_marker = '''            GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT,
+                      ),
+                  )
+              }
           '''
-          state_replacement = state_anchor + '''    var bottomDockingEnabled by remember {
+          state_pos = text.find(state_marker)
+          if state_pos < 0:
+              raise SystemExit('Gboard state marker not found')
+          state_pos += len(state_marker)
+          state_block = '''    var bottomDockingEnabled by remember {
               mutableStateOf(
                   prefs.getBoolean(
                       GboardGlassPreferences.BOTTOM_DOCKING_KEY,
@@ -43,24 +43,17 @@ jobs:
               )
           }
           '''
-          if state_anchor not in text:
-              raise SystemExit('Gboard state anchor not found')
-          text = text.replace(state_anchor, state_replacement, 1)
+          text = text[:state_pos] + state_block + text[state_pos:]
 
-          switch_anchor = '''                SwitchPreference(
-                      checked = autoResizeAfterHandleDrag,
-                      onCheckedChange = {
-                          autoResizeAfterHandleDrag = it
-                          prefs.edit()
-                              .putBoolean(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY, it)
-                              .apply()
-                      },
-                      title = "拖动后自动进入大小调整",
-                      summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
-                      enabled = masterEnabled,
-                  )
-          '''
-          switch_replacement = switch_anchor + '''                SwitchPreference(
+          title_marker = '                    title = "拖动后自动进入大小调整",\n'
+          title_pos = text.find(title_marker)
+          if title_pos < 0:
+              raise SystemExit('Gboard resize switch title not found')
+          switch_end = text.find('                )\n', title_pos)
+          if switch_end < 0:
+              raise SystemExit('Gboard resize switch end not found')
+          switch_end += len('                )\n')
+          switch_block = '''                SwitchPreference(
                       checked = bottomDockingEnabled,
                       onCheckedChange = {
                           bottomDockingEnabled = it
@@ -73,9 +66,7 @@ jobs:
                       enabled = masterEnabled,
                   )
           '''
-          if switch_anchor not in text:
-              raise SystemExit('Gboard switch anchor not found')
-          text = text.replace(switch_anchor, switch_replacement, 1)
+          text = text[:switch_end] + switch_block + text[switch_end:]
           path.write_text(text)
           PY
       - name: Commit patch
