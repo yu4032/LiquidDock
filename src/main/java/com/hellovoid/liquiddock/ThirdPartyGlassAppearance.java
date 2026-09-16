@@ -33,8 +33,11 @@ final class ThirdPartyGlassAppearance {
         this.tintG = channel(tintG);
         this.tintB = channel(tintB);
         this.tintAlpha = channel(tintAlpha);
-        this.captureScalePercent = clamp(captureScalePercent, 1, 100);
-        this.renderFps = clamp(renderFps, 1, 120);
+        this.captureScalePercent = clamp(
+                captureScalePercent,
+                PassBlurQualityPolicy.MIN_CAPTURE_SCALE_PERCENT,
+                PassBlurQualityPolicy.MAX_CAPTURE_SCALE_PERCENT);
+        this.renderFps = clamp(renderFps, 0, PassBlurQualityPolicy.MAX_RENDER_FPS);
         this.cornerRadiusOverrideDp = cornerRadiusOverrideDp;
         this.freshOnResume = freshOnResume;
     }
