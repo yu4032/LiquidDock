@@ -19,6 +19,7 @@ final class LauncherRecentsCapsuleGlassHook {
 
     private static boolean installed;
     private static WeakReference<ViewGroup> lastDecorationsRef = new WeakReference<>(null);
+    private static PendingBinding pendingBinding;
     private static Binding activeBinding;
 
     private LauncherRecentsCapsuleGlassHook() {}
@@ -29,7 +30,7 @@ final class LauncherRecentsCapsuleGlassHook {
             HookUtil.hookMethod(classLoader, RECENTS_DECORATIONS, "findAndSetupViews", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Object owner = chain.getThisObject();
-                if (owner instanceof ViewGroup) bind((ViewGroup) owner);
+                if (owner instanceof ViewGroup) scheduleBinding((ViewGroup) owner);
                 return result;
             });
             installed = true;
@@ -42,15 +43,23 @@ final class LauncherRecentsCapsuleGlassHook {
     static void onRuntimeStateChanged() {
         ViewGroup decorations = lastDecorationsRef.get();
         if (!GlassRuntimeState.isRecentsCapsuleEnabled()) {
+            releasePending("runtime-disabled");
             releaseActive("runtime-disabled");
             return;
         }
-        if (decorations != null && decorations.isAttachedToWindow()) bind(decorations);
+        if (decorations != null) scheduleBinding(decorations);
     }
 
-    private static void bind(ViewGroup decorations) {
+    /**
+     * findAndSetupViews runs during RecentsContainer inflation, before this subtree has a usable
+     * ViewRoot/layout. Keep the stable discovery hook, but wait for real attach/layout authority
+     * before constructing any native blur or Prismal producer.
+     */
+    private static void scheduleBinding(ViewGroup decorations) {
+        if (decorations == null) return;
         lastDecorationsRef = new WeakReference<>(decorations);
         if (!GlassRuntimeState.isRecentsCapsuleEnabled()) {
+            releasePending("setting-off");
             releaseActive("setting-off");
             return;
         }
@@ -58,17 +67,29 @@ final class LauncherRecentsCapsuleGlassHook {
             activeBinding.refreshGeometry();
             return;
         }
+        if (pendingBinding != null && pendingBinding.decorations == decorations) {
+            pendingBinding.tryBind();
+            return;
+        }
+        releasePending("owner-replaced");
         releaseActive("owner-replaced");
+        PendingBinding pending = new PendingBinding(decorations);
+        pendingBinding = pending;
+        pending.start();
+    }
+
+    private static void bindReady(ViewGroup decorations) {
+        if (decorations == null || !GlassRuntimeState.isRecentsCapsuleEnabled()) return;
+        if (!decorations.isAttachedToWindow() || decorations.getWidth() <= 0
+                || decorations.getHeight() <= 0) return;
+        View sourceRoot = decorations.getRootView();
+        if (sourceRoot == null || !sourceRoot.isAttachedToWindow()
+                || sourceRoot.getWidth() <= 0 || sourceRoot.getHeight() <= 0) return;
 
         View clearAll = findByResourceName(decorations, CLEAR_ALL_CAPSULE);
         View world = findByResourceName(decorations, WORLD_CAPSULE);
         if (clearAll == null || world == null) {
             MainHook.log(TAG + " stable capsule resources unavailable; stock retained");
-            return;
-        }
-        View sourceRoot = decorations.getRootView();
-        if (sourceRoot == null || sourceRoot.getWidth() <= 0 || sourceRoot.getHeight() <= 0) {
-            MainHook.log(TAG + " Recents root unavailable; stock retained");
             return;
         }
 
@@ -77,6 +98,9 @@ final class LauncherRecentsCapsuleGlassHook {
             Binding binding = new Binding(decorations, sourceRoot, clearAll, world, glass);
             activeBinding = binding;
             binding.start();
+            MainHook.log(TAG + " lifecycle-ready bind started root="
+                    + sourceRoot.getWidth() + "x" + sourceRoot.getHeight()
+                    + " decorations=" + decorations.getWidth() + "x" + decorations.getHeight());
         } catch (Throwable error) {
             MainHook.log(TAG + " Prismal bind failed; native fallback retained: " + error);
             releaseActive("bind-failure");
@@ -93,12 +117,85 @@ final class LauncherRecentsCapsuleGlassHook {
         return resources != null ? resources.getIdentifier(name, "id", LAUNCHER_PACKAGE) : 0;
     }
 
+    private static void releasePending(String reason) {
+        PendingBinding pending = pendingBinding;
+        pendingBinding = null;
+        if (pending != null) {
+            pending.release();
+            MainHook.log(TAG + " pending bind released reason=" + reason);
+        }
+    }
+
     private static void releaseActive(String reason) {
         Binding binding = activeBinding;
         activeBinding = null;
         if (binding != null) {
             binding.release();
             MainHook.log(TAG + " released reason=" + reason);
+        }
+    }
+
+    private static final class PendingBinding implements View.OnAttachStateChangeListener,
+            View.OnLayoutChangeListener {
+        final ViewGroup decorations;
+        boolean released;
+        boolean waitingLogged;
+
+        PendingBinding(ViewGroup decorations) {
+            this.decorations = decorations;
+        }
+
+        void start() {
+            decorations.addOnAttachStateChangeListener(this);
+            decorations.addOnLayoutChangeListener(this);
+            tryBind();
+        }
+
+        void tryBind() {
+            if (released || pendingBinding != this) return;
+            if (!GlassRuntimeState.isRecentsCapsuleEnabled()) {
+                releasePending("pending-setting-off");
+                return;
+            }
+            View root = decorations.getRootView();
+            boolean ready = decorations.isAttachedToWindow()
+                    && decorations.getWidth() > 0 && decorations.getHeight() > 0
+                    && root != null && root.isAttachedToWindow()
+                    && root.getWidth() > 0 && root.getHeight() > 0;
+            if (!ready) {
+                if (!waitingLogged) {
+                    waitingLogged = true;
+                    MainHook.log(TAG + " waiting for Recents attach/layout"
+                            + " attached=" + decorations.isAttachedToWindow()
+                            + " size=" + decorations.getWidth() + "x" + decorations.getHeight());
+                }
+                return;
+            }
+            pendingBinding = null;
+            release();
+            MainHook.log(TAG + " Recents attach/layout ready; binding glass");
+            bindReady(decorations);
+        }
+
+        void release() {
+            if (released) return;
+            released = true;
+            decorations.removeOnAttachStateChangeListener(this);
+            decorations.removeOnLayoutChangeListener(this);
+        }
+
+        @Override public void onViewAttachedToWindow(View view) {
+            tryBind();
+        }
+
+        @Override public void onViewDetachedFromWindow(View view) {
+            if (pendingBinding == this) pendingBinding = null;
+            release();
+        }
+
+        @Override public void onLayoutChange(View view, int left, int top, int right, int bottom,
+                int oldLeft, int oldTop, int oldRight, int oldBottom) {
+            tryBind();
         }
     }
 
