@@ -19,6 +19,7 @@ final class GboardSurfaceControlGlassOutput implements GboardFloatingGlassOutput
     private final SurfaceControl surfaceControl;
     private final Surface surface;
 
+    private boolean surfaceOwnedBySession;
     private boolean released;
     private boolean shown;
     private boolean presentationReported;
@@ -31,9 +32,8 @@ final class GboardSurfaceControlGlassOutput implements GboardFloatingGlassOutput
         try {
             return new GboardSurfaceControlGlassOutput(root, listener);
         } catch (Throwable error) {
-            try {
-                Api101Bridge.log(TAG + " create failed", error);
-            } catch (Throwable ignored) {}
+            try { Api101Bridge.log(TAG + " create failed", error); }
+            catch (Throwable ignored) {}
             return null;
         }
     }
@@ -86,7 +86,14 @@ final class GboardSurfaceControlGlassOutput implements GboardFloatingGlassOutput
         }
         surfaceControl = child;
         surface = childSurface;
-        listener.onSurfaceReady(surface, width, height);
+        try {
+            listener.onSurfaceReady(surface, width, height);
+            surfaceOwnedBySession = true;
+        } catch (Throwable error) {
+            try { surface.release(); } catch (Throwable ignored) {}
+            try { surfaceControl.release(); } catch (Throwable ignored) {}
+            throw error;
+        }
     }
 
     @Override public boolean isPreferred() {
@@ -95,6 +102,10 @@ final class GboardSurfaceControlGlassOutput implements GboardFloatingGlassOutput
 
     @Override public void updateGeometry(GboardFloatingGlassGeometry geometry) {
         if (released || geometry == null || !surfaceControl.isValid()) return;
+        if (!root.isAttachedToWindow() || root.getRootSurfaceControl() == null) {
+            fail("root-surface-unavailable", null);
+            return;
+        }
         int targetWidth = Math.max(1, (int) Math.ceil(geometry.width));
         int targetHeight = Math.max(1, (int) Math.ceil(geometry.height));
         GboardSurfaceControlGeometryPolicy.Frame frame =
@@ -160,7 +171,9 @@ final class GboardSurfaceControlGlassOutput implements GboardFloatingGlassOutput
             if (transaction != null) {
                 try { transaction.close(); } catch (Throwable ignored) {}
             }
-            try { surface.release(); } catch (Throwable ignored) {}
+            if (!surfaceOwnedBySession) {
+                try { surface.release(); } catch (Throwable ignored) {}
+            }
             try { surfaceControl.release(); } catch (Throwable ignored) {}
         }
     }
