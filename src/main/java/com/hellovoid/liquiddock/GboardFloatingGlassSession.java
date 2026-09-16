@@ -53,6 +53,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final GboardFloatingCoalescingGate renderGate = new GboardFloatingCoalescingGate();
 
     private volatile GboardFloatingGlassGeometry geometry;
     private volatile boolean shuttingDown;
@@ -60,6 +61,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean swapSucceeded;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
+    private volatile int requestedOutputWidth;
+    private volatile int requestedOutputHeight;
     private boolean presentationSignaled;
     private boolean failureSignaled;
 
@@ -96,7 +99,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        if (shuttingDown) return;
+        sourceBackend.reconcileRoot();
+        sourceBackend.requestFresh(GENERATION);
     }
 
     void updateGeometry(GboardFloatingGlassGeometry next) {
@@ -104,8 +109,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        sourceBackend.reconcileRoot();
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        requestRender();
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -113,6 +117,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             if (surface != null) surface.release();
             return;
         }
+        requestedOutputWidth = Math.max(1, width);
+        requestedOutputHeight = Math.max(1, height);
         if (!sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) {
                 surface.release();
@@ -121,10 +127,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             try {
                 ensureGl();
                 releaseOutput(output);
-                OutputState next = new OutputState(surface, width, height);
+                OutputState next = new OutputState(
+                        surface, requestedOutputWidth, requestedOutputHeight);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 output = next;
-                renderCurrent();
+                requestRenderFromRenderThread();
             } catch (Throwable error) {
                 surface.release();
                 notifyFailure("output-attach", error);
@@ -134,13 +141,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     void resizeOutput(int width, int height) {
         if (shuttingDown) return;
-        sourceBackend.postToRenderThread(() -> {
-            OutputState current = output;
-            if (current == null) return;
-            current.width = Math.max(1, width);
-            current.height = Math.max(1, height);
-            renderCurrent();
-        });
+        requestedOutputWidth = Math.max(1, width);
+        requestedOutputHeight = Math.max(1, height);
+        requestRender();
     }
 
     void detachOutput(Surface surface) {
@@ -180,7 +183,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            renderCurrent();
+            requestRenderFromRenderThread();
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
@@ -194,6 +197,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        renderGate.cancel();
         boolean queued = sourceBackend.postToRenderThread(() -> {
             releaseOutput(output);
             output = null;
@@ -208,10 +212,41 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (!queued) sourceBackend.shutdown();
     }
 
+    private void requestRender() {
+        if (shuttingDown || !renderGate.request()) return;
+        if (!sourceBackend.postToRenderThread(this::drainRender)) renderGate.cancel();
+    }
+
+    private void requestRenderFromRenderThread() {
+        if (shuttingDown || !renderGate.request()) return;
+        drainRender();
+    }
+
+    private void drainRender() {
+        if (shuttingDown) {
+            renderGate.cancel();
+            return;
+        }
+        if (!renderGate.begin()) return;
+        renderCurrent();
+        if (shuttingDown) {
+            renderGate.cancel();
+            return;
+        }
+        if (renderGate.complete()
+                && !sourceBackend.postToRenderThread(this::drainRender)) {
+            renderGate.cancel();
+        }
+    }
+
     private void renderCurrent() {
         GboardFloatingGlassGeometry currentGeometry = geometry;
         OutputState currentOutput = output;
         View root = rootRef.get();
+        if (currentOutput != null) {
+            currentOutput.width = Math.max(1, requestedOutputWidth);
+            currentOutput.height = Math.max(1, requestedOutputHeight);
+        }
         if (shuttingDown || !backdropPrepared || currentGeometry == null
                 || currentOutput == null || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE
                 || root == null || !root.isAttachedToWindow()
