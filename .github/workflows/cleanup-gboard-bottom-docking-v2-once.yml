@@ -1,0 +1,141 @@
+name: Structurally normalize Gboard bottom docking once
+
+on:
+  push:
+    branches:
+      - feat/gboard-disable-bottom-docking
+    paths:
+      - .github/workflows/cleanup-gboard-bottom-docking-v2-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gboard-disable-bottom-docking
+      - name: Normalize structurally
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt')
+          text = path.read_text()
+          start = text.index('@Composable\ninternal fun GboardSettingsPage(')
+          end = text.index('\n@Composable\nprivate fun GboardValueSlider(', start)
+          section = text[start:end]
+
+          def matching(s, open_pos, opening, closing):
+              depth = 0
+              quote = None
+              escaped = False
+              for i in range(open_pos, len(s)):
+                  ch = s[i]
+                  if quote:
+                      if escaped:
+                          escaped = False
+                      elif ch == '\\':
+                          escaped = True
+                      elif ch == quote:
+                          quote = None
+                      continue
+                  if ch in ('"', "'"):
+                      quote = ch
+                      continue
+                  if ch == opening:
+                      depth += 1
+                  elif ch == closing:
+                      depth -= 1
+                      if depth == 0:
+                          return i
+              raise RuntimeError(f'unmatched {opening} at {open_pos}')
+
+          def remove_state_blocks(s):
+              marker = 'var bottomDockingEnabled by remember'
+              count = 0
+              while marker in s:
+                  pos = s.index(marker)
+                  line_start = s.rfind('\n', 0, pos) + 1
+                  brace = s.index('{', pos)
+                  close = matching(s, brace, '{', '}')
+                  tail = close + 1
+                  if tail < len(s) and s[tail] == '\n':
+                      tail += 1
+                  s = s[:line_start] + s[tail:]
+                  count += 1
+              return s, count
+
+          def remove_switches(s):
+              marker = 'checked = bottomDockingEnabled'
+              count = 0
+              while marker in s:
+                  checked = s.index(marker)
+                  begin = s.rfind('SwitchPreference(', 0, checked)
+                  if begin < 0:
+                      raise RuntimeError('bottom docking SwitchPreference start not found')
+                  line_start = s.rfind('\n', 0, begin) + 1
+                  paren = begin + len('SwitchPreference')
+                  close = matching(s, paren, '(', ')')
+                  tail = close + 1
+                  if tail < len(s) and s[tail] == '\n':
+                      tail += 1
+                  s = s[:line_start] + s[tail:]
+                  count += 1
+              return s, count
+
+          section, states = remove_state_blocks(section)
+          section, switches = remove_switches(section)
+          if states < 1 or switches < 1:
+              raise SystemExit(f'expected duplicates to normalize, states={states}, switches={switches}')
+
+          auto_state_marker = 'var autoResizeAfterHandleDrag by remember'
+          p = section.index(auto_state_marker)
+          brace = section.index('{', p)
+          state_end = matching(section, brace, '{', '}') + 1
+          canonical_state = '''
+              var bottomDockingEnabled by remember {
+                  mutableStateOf(
+                      prefs.getBoolean(
+                          GboardGlassPreferences.BOTTOM_DOCKING_KEY,
+                          GboardGlassPreferences.BOTTOM_DOCKING_DEFAULT,
+                      ),
+                  )
+              }'''
+          section = section[:state_end] + canonical_state + section[state_end:]
+
+          auto_checked = section.index('checked = autoResizeAfterHandleDrag')
+          switch_begin = section.rfind('SwitchPreference(', 0, auto_checked)
+          paren = switch_begin + len('SwitchPreference')
+          switch_end = matching(section, paren, '(', ')') + 1
+          canonical_switch = '''
+                  SwitchPreference(
+                      checked = bottomDockingEnabled,
+                      onCheckedChange = {
+                          bottomDockingEnabled = it
+                          prefs.edit()
+                              .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
+                              .apply()
+                      },
+                      title = "拖到底部切换为全尺寸键盘",
+                      summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
+                      enabled = masterEnabled,
+                  )'''
+          section = section[:switch_end] + canonical_switch + section[switch_end:]
+
+          assert section.count('var bottomDockingEnabled by remember') == 1
+          assert section.count('checked = bottomDockingEnabled') == 1
+          assert section.count('title = "拖到底部切换为全尺寸键盘"') == 1
+
+          text = text[:start] + section + text[end:]
+          path.write_text(text)
+          PY
+      - name: Commit cleanup
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt
+          git commit -m "fix: deduplicate Gboard bottom docking setting"
+          git push origin HEAD:feat/gboard-disable-bottom-docking
