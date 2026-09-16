@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.prismal.PrismalHighlightProfile;
+
 import java.util.regex.Pattern;
 
 /** Resolves bounded, namespaced configuration for code-registered third-party adapters. */
@@ -35,8 +37,14 @@ final class ThirdPartyGlassProfiles {
         int baseG = base != null ? base.tintG : 255;
         int baseB = base != null ? base.tintB : 255;
         int baseAlpha = base != null ? base.tintAlpha : 35;
-        int baseScale = base != null ? base.passBlurCaptureScalePercent : 100;
-        int baseFps = base != null ? base.passBlurRenderFps : 60;
+        int baseScale = base != null
+                ? base.passBlurCaptureScalePercent
+                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
+        int baseFps = base != null
+                ? base.passBlurRenderFps
+                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        PrismalHighlightProfile baseHighlights = base != null && base.largeSurfaceHighlightProfile != null
+                ? base.largeSurfaceHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
 
         String blur = key(profileId, "blur");
         String tintR = key(profileId, "tint_r");
@@ -49,6 +57,17 @@ final class ThirdPartyGlassProfiles {
                 || reader.has(tintB)
                 || reader.has(tintAlpha);
 
+        PrismalHighlightProfile highlights = new PrismalHighlightProfile(
+                reader.b(key(profileId, "highlight_sky_haze"), baseHighlights.skyHaze),
+                reader.b(key(profileId, "highlight_specular"), baseHighlights.specular),
+                reader.b(key(profileId, "highlight_lit_rim"), baseHighlights.litRim),
+                reader.b(key(profileId, "highlight_opposite_rim"), baseHighlights.oppositeRim),
+                reader.b(key(profileId, "highlight_corner_rim"), baseHighlights.cornerRim),
+                reader.b(key(profileId, "highlight_face_sheen"), baseHighlights.faceSheen),
+                reader.b(key(profileId, "highlight_plain"), baseHighlights.plainHighlight),
+                reader.b(key(profileId, "highlight_caustics"), baseHighlights.caustics),
+                reader.b(key(profileId, "highlight_press_glow"), baseHighlights.pressGlow));
+
         return new ThirdPartyGlassAppearance(
                 reader.b(key(profileId, "enabled"), defaults.enabled),
                 hasAppearanceOverride,
@@ -60,6 +79,7 @@ final class ThirdPartyGlassProfiles {
                 reader.i(key(profileId, "capture_scale_percent"), baseScale),
                 reader.i(key(profileId, "render_fps"), baseFps),
                 reader.f(key(profileId, "corner_radius_dp"), defaults.cornerRadiusOverrideDp),
+                highlights,
                 reader.b(key(profileId, "fresh_on_resume"), defaults.freshOnResume));
     }
 
