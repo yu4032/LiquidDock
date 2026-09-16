@@ -282,14 +282,6 @@ internal fun GboardSettingsPage(
             ),
         )
     }
-    var bottomDockingEnabled by remember {
-    mutableStateOf(
-        prefs.getBoolean(
-            GboardGlassPreferences.BOTTOM_DOCKING_KEY,
-            GboardGlassPreferences.BOTTOM_DOCKING_DEFAULT,
-        ),
-    )
-}
 
     fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
         prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
@@ -392,18 +384,6 @@ internal fun GboardSettingsPage(
                     enabled = masterEnabled,
                 )
         SwitchPreference(
-            checked = bottomDockingEnabled,
-            onCheckedChange = {
-                bottomDockingEnabled = it
-                prefs.edit()
-                    .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
-                    .apply()
-            },
-            title = "拖到底部切换为全尺寸键盘",
-            summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
-            enabled = masterEnabled,
-        )
-                SwitchPreference(
             checked = bottomDockingEnabled,
             onCheckedChange = {
                 bottomDockingEnabled = it
