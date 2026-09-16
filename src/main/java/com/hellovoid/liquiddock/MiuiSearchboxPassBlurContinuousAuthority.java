@@ -7,7 +7,7 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Keeps the LiquidDock-owned PassBlur producer authoritative while Searchbox glass is active. */
+/** Keeps the LiquidDock-owned Searchbox PassBlur producer and its snapshot update state authoritative. */
 final class MiuiSearchboxPassBlurContinuousAuthority {
     private static final String TAG = "[DC][MiuiSearchboxGlass]";
     private static final Object LOCK = new Object();
@@ -15,6 +15,7 @@ final class MiuiSearchboxPassBlurContinuousAuthority {
     private static final class Claim {
         final Surface surface;
         final float scale;
+        boolean updatesEnabled = true;
 
         Claim(Surface surface, float scale) {
             this.surface = surface;
@@ -56,7 +57,7 @@ final class MiuiSearchboxPassBlurContinuousAuthority {
                             ? (SurfaceControl) args[0] : null;
                     Claim claim = root != null ? claimFor(root) : null;
                     if (claim != null) {
-                        args[1] = Boolean.TRUE;
+                        args[1] = Boolean.valueOf(claim.updatesEnabled);
                         args[2] = Float.valueOf(claim.scale);
                     }
                     return chain.proceed(args);
@@ -65,7 +66,7 @@ final class MiuiSearchboxPassBlurContinuousAuthority {
                 installed = true;
                 return true;
             } catch (Throwable error) {
-                log("continuous PassBlur output authority unavailable cause="
+                log("Searchbox PassBlur output authority unavailable cause="
                         + failureSummary(error));
                 return false;
             }
@@ -76,6 +77,14 @@ final class MiuiSearchboxPassBlurContinuousAuthority {
         if (root == null || surface == null || !Float.isFinite(scale) || scale <= 0f) return;
         synchronized (LOCK) {
             ACTIVE_ROOTS.put(root, new Claim(surface, scale));
+        }
+    }
+
+    static void setUpdatesEnabled(SurfaceControl root, boolean enabled) {
+        if (root == null) return;
+        synchronized (LOCK) {
+            Claim current = ACTIVE_ROOTS.get(root);
+            if (current != null) current.updatesEnabled = enabled;
         }
     }
 
