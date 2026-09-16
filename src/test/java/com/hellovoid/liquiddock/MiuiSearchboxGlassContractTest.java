@@ -40,7 +40,12 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(hook.contains("com.android.quicksearchbox.ui.SearchActivityBackground"));
         assertTrue(hook.contains("com.android.quicksearchbox.util.BlurTransition"));
         assertTrue(hook.contains("search_activity_view_background"));
+        assertTrue(hook.contains("getDeclaredMethod(\"showSearchActivity\")"));
+        assertTrue(hook.contains("deferShowUntilSnapshot"));
+        assertTrue(hook.contains("onSnapshotReady()"));
+        assertTrue(hook.contains("android.R.id.content"));
         assertTrue(hook.contains("MiuiSearchboxGlassPreferences.resolve(reader, config.glass)"));
+        assertFalse(hook.contains("Activity.class.getDeclaredMethod(\"onResume\")"));
         assertTrue(session.contains("implements RootPassBlurBackend.Consumer"));
         assertTrue(session.contains("View sourceRoot = root.getRootView()"));
         assertTrue(session.contains("PassBlurBindRequest.miuiSearchbox(sourceRoot)"));
@@ -52,6 +57,7 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("snapshotState.beginCapture()"));
         assertTrue(session.contains("!snapshotState.acceptFreshFrame()"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"searchbox-snapshot-latched\")"));
+        assertTrue(session.contains("listener.onSnapshotReady()"));
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
         assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
         assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.claim"));
