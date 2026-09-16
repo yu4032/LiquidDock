@@ -29,6 +29,7 @@ final class GboardFloatingGlassCoordinator {
         GboardFloatingGlassView sink;
         View.OnAttachStateChangeListener attachListener;
         Choreographer.FrameCallback frameCallback;
+        GboardFloatingHandlePolicy.DragObserver dragObserver;
         boolean frameTracking;
         boolean stockHidden;
         boolean captureRequested;
@@ -112,6 +113,19 @@ final class GboardFloatingGlassCoordinator {
                     }
                 });
         state.session = session;
+        state.dragObserver = new GboardFloatingHandlePolicy.DragObserver() {
+            @Override public void onDragStarted() {
+                GboardFloatingGlassSession live = state.session;
+                if (!state.released && live != null) live.beginDragSnapshot();
+            }
+
+            @Override public void onDragEnded() {
+                GboardFloatingGlassSession live = state.session;
+                if (!state.released && live != null) live.endDragSnapshot();
+            }
+        };
+        GboardFloatingHandlePolicy.observe(state.structure.bottomFrame, state.dragObserver);
+
         GboardFloatingGlassView sink = new GboardFloatingGlassView(
                 state.keyboardArea.getContext(), session);
         state.sink = sink;
@@ -190,8 +204,8 @@ final class GboardFloatingGlassCoordinator {
     }
 
     /**
-     * Workspace-style frame ownership: sample the vendor-authoritative transform once per VSYNC,
-     * move the output sibling immediately, then publish only the latest root-space geometry.
+     * Sample the vendor-authoritative transform once per VSYNC. During drag the geometry is rendered
+     * only against the immutable full-root backdrop latched before the vendor MOVE is dispatched.
      */
     private static void syncAuthoritativeFrame(State state) {
         if (state == null || state.released || state.session == null
@@ -259,6 +273,13 @@ final class GboardFloatingGlassCoordinator {
             try { Choreographer.getInstance().removeFrameCallback(state.frameCallback); }
             catch (Throwable ignored) {}
             state.frameCallback = null;
+        }
+        if (state.dragObserver != null) {
+            try {
+                GboardFloatingHandlePolicy.clearObserver(
+                        state.structure.bottomFrame, state.dragObserver);
+            } catch (Throwable ignored) {}
+            state.dragObserver = null;
         }
         GboardStockVisualAuthority.release(state.structure);
         restoreStockBackground(state);
