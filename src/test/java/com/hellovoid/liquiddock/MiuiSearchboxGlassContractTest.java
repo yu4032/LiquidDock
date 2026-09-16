@@ -17,6 +17,7 @@ public class MiuiSearchboxGlassContractTest {
     @Test
     public void searchboxUsesStableSemanticAnchorsAndExistingGlassBackend() throws Exception {
         String module = read(MAIN.resolve("ModuleMain.java"));
+        String registry = read(MAIN.resolve("ThirdPartyGlassAdapterRegistry.java"));
         String hook = read(MAIN.resolve("MiuiSearchboxGlassHook.java"));
         String session = read(MAIN.resolve("MiuiSearchboxGlassSession.java"));
         String prefs = read(MAIN.resolve("MiuiSearchboxGlassPreferences.java"));
@@ -29,9 +30,12 @@ public class MiuiSearchboxGlassContractTest {
         String scope = Files.readString(Path.of("src/main/resources/META-INF/xposed/scope.list"));
 
         assertTrue(scope.contains("com.android.quicksearchbox"));
-        assertTrue(module.contains("MIUI_SEARCHBOX_PACKAGE = \"com.android.quicksearchbox\""));
-        assertTrue(module.contains("MiuiSearchboxPassBlurContinuousAuthority.install()"));
-        assertTrue(module.contains("MiuiSearchboxGlassHook.install(classLoader)"));
+        assertTrue(module.contains("ThirdPartyGlassAdapterRegistry.handles(packageName)"));
+        assertTrue(module.contains("ThirdPartyGlassAdapterRegistry.install(packageName, classLoader)"));
+        assertTrue(registry.contains("com.android.quicksearchbox"));
+        assertTrue(registry.contains("miui.searchbox"));
+        assertTrue(registry.contains("MiuiSearchboxPassBlurContinuousAuthority.install()"));
+        assertTrue(registry.contains("MiuiSearchboxGlassHook.install(classLoader)"));
         assertTrue(hook.contains("com.android.quicksearchbox.SearchActivity"));
         assertTrue(hook.contains("com.android.quicksearchbox.ui.SearchActivityBackground"));
         assertTrue(hook.contains("com.android.quicksearchbox.util.BlurTransition"));
