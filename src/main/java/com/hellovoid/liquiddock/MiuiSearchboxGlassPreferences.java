@@ -14,7 +14,8 @@ final class MiuiSearchboxGlassPreferences {
     private MiuiSearchboxGlassPreferences() {}
 
     static boolean isEnabled(ConfigReader reader) {
-        return resolve(reader, LiquidDockConfig.from(reader != null ? reader : ConfigReader.load()).glass).enabled;
+        ConfigReader effective = reader != null ? reader : ConfigReader.load();
+        return resolve(effective, LiquidDockConfig.from(effective).glass).enabled;
     }
 
     static ThirdPartyGlassAppearance resolve(ConfigReader reader, LiquidDockConfig.Glass base) {
@@ -42,6 +43,7 @@ final class MiuiSearchboxGlassPreferences {
                 shared.captureScalePercent,
                 shared.renderFps,
                 shared.cornerRadiusOverrideDp,
+                shared.highlightProfile,
                 shared.freshOnResume);
     }
 }
