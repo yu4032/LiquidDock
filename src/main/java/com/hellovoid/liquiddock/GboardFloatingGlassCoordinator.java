@@ -21,6 +21,7 @@ final class GboardFloatingGlassCoordinator {
         final GboardFloatingStructureResolver.Structure structure;
         final LiquidDockConfig.Glass glassConfig;
         final ViewGroup keyboardArea;
+        final GboardFloatingOutputSelection outputSelection = new GboardFloatingOutputSelection();
         ViewGroup sinkHost;
         View backgroundFrame;
         View root;
@@ -96,6 +97,9 @@ final class GboardFloatingGlassCoordinator {
 
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
                 root, state.glassConfig, new GboardFloatingGlassSession.Listener() {
+                    @Override public void onFirstSwap() {
+                        state.popup.post(() -> GboardFloatingGlassCoordinator.onFirstSwap(state));
+                    }
                     @Override public void onPresented() {
                         state.popup.post(() -> GboardFloatingGlassCoordinator.onPresented(state));
                     }
@@ -116,37 +120,31 @@ final class GboardFloatingGlassCoordinator {
         };
         GboardFloatingHandlePolicy.observe(state.structure.bottomFrame, state.dragObserver);
 
-        GboardTextureViewGlassOutput fallback = GboardTextureViewGlassOutput.create(
-                state.keyboardArea.getContext(), new GboardFloatingGlassOutput.Listener() {
-                    @Override public void onSurfaceReady(Surface surface, int width, int height) {
-                        GboardFloatingGlassSession live = state.session;
-                        if (state.released || live == null) {
-                            surface.release();
-                            return;
-                        }
-                        live.attachOutput(surface, width, height);
-                    }
-                    @Override public void onSurfaceSizeChanged(int width, int height) {
-                        GboardFloatingGlassSession live = state.session;
-                        if (!state.released && live != null) live.resizeOutput(width, height);
-                    }
-                    @Override public void onPresented() {
-                        GboardFloatingGlassSession live = state.session;
-                        if (!state.released && live != null) live.onOutputPresented();
-                    }
-                    @Override public void onFailed(String reason, Throwable error) {
-                        state.popup.post(() -> failClosed(state, reason, error));
-                    }
-                });
-        if (fallback == null) {
-            failClosed(state, "unable to create TextureView output", null);
-            return;
-        }
-        state.output = fallback;
-        state.sink = fallback.view();
-        if (!insertSinkBelowKeyboardContent(state, state.sink)) {
-            failClosed(state, "unable to insert glass below keyboard content", null);
-            return;
+        GboardFloatingGlassOutput.Listener outputListener = outputListener(state);
+        GboardSurfaceControlGlassOutput preferred =
+                GboardSurfaceControlGlassOutput.create(root, outputListener);
+        if (preferred != null) {
+            state.outputSelection.onSurfaceControlReady();
+            state.output = preferred;
+            state.sinkHost = state.keyboardArea;
+            log("using SurfaceControl output", null);
+        } else {
+            state.outputSelection.onSurfaceControlFailed(true);
+            GboardTextureViewGlassOutput fallback = GboardTextureViewGlassOutput.create(
+                    state.keyboardArea.getContext(), outputListener);
+            if (fallback == null) {
+                state.outputSelection.onSurfaceControlFailed(false);
+                failClosed(state, "unable to create any glass output", null);
+                return;
+            }
+            state.output = fallback;
+            state.sink = fallback.view();
+            if (!insertSinkBelowKeyboardContent(state, state.sink)) {
+                state.outputSelection.onSurfaceControlFailed(false);
+                failClosed(state, "unable to insert TextureView fallback", null);
+                return;
+            }
+            log("using TextureView fallback output", null);
         }
 
         state.frameCallback = new Choreographer.FrameCallback() {
@@ -162,6 +160,39 @@ final class GboardFloatingGlassCoordinator {
             }
         };
         startFrameTracking(state);
+    }
+
+    private static GboardFloatingGlassOutput.Listener outputListener(State state) {
+        return new GboardFloatingGlassOutput.Listener() {
+            @Override public void onSurfaceReady(Surface surface, int width, int height) {
+                GboardFloatingGlassSession live = state.session;
+                if (state.released || live == null) {
+                    surface.release();
+                    return;
+                }
+                live.attachOutput(surface, width, height);
+            }
+
+            @Override public void onSurfaceSizeChanged(int width, int height) {
+                GboardFloatingGlassSession live = state.session;
+                if (!state.released && live != null) live.resizeOutput(width, height);
+            }
+
+            @Override public void onPresented() {
+                GboardFloatingGlassSession live = state.session;
+                if (!state.released && live != null) live.onOutputPresented();
+            }
+
+            @Override public void onFailed(String reason, Throwable error) {
+                state.popup.post(() -> failClosed(state, "output failure: " + reason, error));
+            }
+        };
+    }
+
+    private static synchronized void onFirstSwap(State state) {
+        if (state == null || state.released) return;
+        GboardFloatingGlassOutput output = state.output;
+        if (output != null) output.showAfterFirstSwap();
     }
 
     private static synchronized void startFrameTracking(State state) {
