@@ -60,9 +60,13 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         assertTrue(policy.contains("ConfigReader.load()"));
         assertTrue(policy.contains("AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY"));
         assertTrue(policy.contains("BOTTOM_DOCKING_KEY"));
-        assertTrue(policy.contains(".floating_keyboard_dock_hint_v2"));
-        assertTrue(policy.contains("findTaggedView"));
-        assertTrue(policy.contains("shouldSuppressDockMove"));
+        assertTrue(policy.contains(".icon.floating_keyboard_dock_hint_v2"));
+        assertTrue(policy.contains("findViewById"));
+        assertTrue(policy.contains("ThreadLocal"));
+        assertTrue(policy.contains("shouldMaskDockHitResult"));
+        assertFalse(policy.contains("shouldSuppressDockMove"));
+        assertFalse(policy.contains("dockZoneTop"));
+        assertFalse(policy.contains("dockGestureSuppressed"));
         assertTrue(hook.contains("GboardFloatingHandlePolicy.install()"));
         assertTrue(hook.contains("GboardFloatingHandlePolicy.bind(structure.bottomFrame)"));
         assertTrue(settings.contains("拖动后自动进入大小调整"));
