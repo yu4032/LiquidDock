@@ -76,12 +76,14 @@ public class GboardFloatingGlassContractTest {
         assertFalse(coordinator.contains("findViewById"));
     }
 
-    @Test public void coordinatorTracksMovementWithPredrawInsteadOfDelay() throws Exception {
+    @Test public void coordinatorTracksMovementFromChoreographerFrameAuthority() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
-        assertTrue(coordinator.contains("ViewTreeObserver.OnPreDrawListener"));
-        assertTrue(coordinator.contains("addOnPreDrawListener"));
-        assertTrue(coordinator.contains("removeOnPreDrawListener"));
-        assertTrue(coordinator.contains("syncGeometry(state)"));
+        assertTrue(coordinator.contains("Choreographer.FrameCallback"));
+        assertTrue(coordinator.contains("postFrameCallback"));
+        assertTrue(coordinator.contains("removeFrameCallback"));
+        assertTrue(coordinator.contains("syncAuthoritativeFrame(state)"));
+        assertFalse(coordinator.contains("ViewTreeObserver.OnPreDrawListener"));
+        assertFalse(coordinator.contains("addOnPreDrawListener"));
         assertFalse(coordinator.contains("postDelayed"));
     }
 
