@@ -40,31 +40,45 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertFalse(capsule.contains("setOnClickListener"));
     }
 
-    @Test public void recentsDefersActualBindUntilAttachedAndLaidOut() throws Exception {
+    @Test public void recentsDefersBindingUntilAttachedAndLaidOut() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         assertTrue(capsule.contains("PendingBinding"));
-        assertTrue(capsule.contains("addOnAttachStateChangeListener"));
-        assertTrue(capsule.contains("addOnLayoutChangeListener"));
+        assertTrue(capsule.contains("OnAttachStateChangeListener"));
+        assertTrue(capsule.contains("OnLayoutChangeListener"));
         assertTrue(capsule.contains("isAttachedToWindow()"));
-        assertTrue(capsule.contains("getWidth() > 0"));
-        assertTrue(capsule.contains("getHeight() > 0"));
+        assertTrue(capsule.contains("tryBindIfReady"));
         assertFalse(capsule.contains("Recents root unavailable; stock retained"));
     }
 
-    @Test public void recentsUsesOnePrismalSessionButTwoCapsuleLocalSinks() throws Exception {
+    @Test public void sinksAreSiblingsBehindNativeButtonsAndFollowTheirGeometry() throws Exception {
+        String capsule = read("LauncherRecentsCapsuleGlassHook.java");
+        String sink = read("RecentsCapsuleGlassSinkView.java");
+        assertTrue(sink.contains("attachBehindTarget"));
+        assertTrue(sink.contains("parent.indexOfChild(target)"));
+        assertTrue(sink.contains("parent.addView(sink, index"));
+        assertTrue(sink.contains("syncFromTarget"));
+        assertTrue(sink.contains("target.getX()"));
+        assertTrue(sink.contains("target.getY()"));
+        assertTrue(sink.contains("target.getScaleX()"));
+        assertTrue(sink.contains("target.getScaleY()"));
+        assertTrue(sink.contains("getGlobalVisibleRect"));
+        assertTrue(sink.contains("LauncherGlassScreenSpace.relativeToRoot"));
+        assertTrue(capsule.contains("clearAllSink.captureGeometry(sourceRoot)"));
+        assertTrue(capsule.contains("worldSink.captureGeometry(sourceRoot)"));
+        assertFalse(capsule.contains("group.addView(sink, 0"));
+    }
+
+    @Test public void recentsUsesOnePrismalSessionForBothSiblingSinks() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         String sink = read("RecentsCapsuleGlassSinkView.java");
         String session = read("RecentsCapsuleGlassSession.java");
         assertTrue(capsule.contains("RecentsCapsuleGlassSession"));
         assertTrue(capsule.contains("RecentsCapsuleGlassSinkView"));
-        assertTrue(capsule.contains("installSink(clearAll"));
-        assertTrue(capsule.contains("installSink(world"));
-        assertFalse(capsule.contains("decorations.addView(overlay, 0"));
         assertTrue(sink.contains("extends TextureView"));
         assertTrue(sink.contains("setOpaque(false)"));
         assertTrue(sink.contains("setClickable(false)"));
         assertTrue(sink.contains("setFocusable(false)"));
-        assertTrue(sink.contains("session.attachOutput(target"));
+        assertTrue(sink.contains("session.attachOutput(targetId"));
         assertTrue(session.contains("RootPassBlurBackend"));
         assertTrue(session.contains("PassBlurBindRequest.recentsCapsule"));
         assertTrue(session.contains("Miuix307PrismalMaterial.fromConfig"));
@@ -86,13 +100,15 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(capsule.contains("clearNativeFallback"));
     }
 
-    @Test public void stockBackgroundIsRemovedOnlyAfterPrismalPresentationAndRestored() throws Exception {
+    @Test public void stockBackgroundIsRemovedOnlyAfterPrismalPresentationAndNativeContentRemains() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         assertTrue(capsule.contains("clearAllStockBackground"));
         assertTrue(capsule.contains("worldStockBackground"));
         assertTrue(capsule.contains("onFirstFramePresented"));
         assertTrue(capsule.contains("setBackground(null)"));
         assertTrue(capsule.contains("restoreStockBackground"));
+        assertFalse(capsule.contains("clearAll.setVisibility"));
+        assertFalse(capsule.contains("world.setVisibility"));
     }
 
     @Test public void replacementHasIndependentRuntimeSwitch() throws Exception {
