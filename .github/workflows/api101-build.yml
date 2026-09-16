@@ -6,9 +6,13 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
+      - feat/recents-capsule-glass
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 concurrency:
   group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -19,18 +23,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Apply one-shot Recents schema registration
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/recents-capsule-glass'
+        shell: bash
+        run: |
+          python tools/register_recents_capsule_key.py
+          if ! git diff --quiet; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java
+            git commit -m 'fix: register Recents capsule glass preference'
+            git push origin HEAD:feat/recents-capsule-glass
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          # PR caches are isolated to refs/pull/*/merge, so let repeated pushes
-          # to the same PR reuse branch-specific Gradle/build-cache state.
           cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-          # The default on-success cleanup starts an extra Gradle invocation and
-          # costs ~20-30s on this project. Cache keys are immutable and the repo
-          # is small enough that retaining prior entries is preferable here.
           cache-cleanup: never
       - run: chmod +x ./gradlew
       - name: Audit Security Center zero-copy constraints
