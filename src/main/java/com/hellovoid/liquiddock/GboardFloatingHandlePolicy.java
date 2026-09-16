@@ -15,10 +15,17 @@ import java.util.WeakHashMap;
  * floating-keyboard bottom frame.
  */
 final class GboardFloatingHandlePolicy {
+    interface DragObserver {
+        void onDragStarted();
+        void onDragEnded();
+    }
+
     private static final Object LOCK = new Object();
     private static final WeakHashMap<View, WeakReference<View.OnTouchListener>> VENDOR_LISTENERS =
             new WeakHashMap<>();
     private static final WeakHashMap<View, WeakReference<DragReleaseListener>> BOUND =
+            new WeakHashMap<>();
+    private static final WeakHashMap<View, WeakReference<DragObserver>> OBSERVERS =
             new WeakHashMap<>();
     private static boolean installed;
 
@@ -41,6 +48,7 @@ final class GboardFloatingHandlePolicy {
                             if (listener == null) {
                                 VENDOR_LISTENERS.remove(view);
                                 BOUND.remove(view);
+                                OBSERVERS.remove(view);
                             } else if (!(listener instanceof DragReleaseListener)) {
                                 VENDOR_LISTENERS.put(view, new WeakReference<>(listener));
                                 DragReleaseListener wrapper = dereference(BOUND.get(view));
@@ -78,6 +86,34 @@ final class GboardFloatingHandlePolicy {
         bottomFrame.setOnTouchListener(wrapper);
     }
 
+    static void observe(View bottomFrame, DragObserver observer) {
+        if (bottomFrame == null) return;
+        synchronized (LOCK) {
+            if (observer == null) OBSERVERS.remove(bottomFrame);
+            else OBSERVERS.put(bottomFrame, new WeakReference<>(observer));
+        }
+    }
+
+    static void clearObserver(View bottomFrame, DragObserver observer) {
+        if (bottomFrame == null) return;
+        synchronized (LOCK) {
+            DragObserver current = dereference(OBSERVERS.get(bottomFrame));
+            if (current == null || current == observer) OBSERVERS.remove(bottomFrame);
+        }
+    }
+
+    private static void notifyDragStarted(View view) {
+        DragObserver observer;
+        synchronized (LOCK) { observer = dereference(OBSERVERS.get(view)); }
+        if (observer != null) observer.onDragStarted();
+    }
+
+    private static void notifyDragEnded(View view) {
+        DragObserver observer;
+        synchronized (LOCK) { observer = dereference(OBSERVERS.get(view)); }
+        if (observer != null) observer.onDragEnded();
+    }
+
     private static boolean autoResizeAfterHandleDragEnabled() {
         ConfigReader reader = ConfigReader.load();
         return reader.b(
@@ -95,6 +131,7 @@ final class GboardFloatingHandlePolicy {
     }
 
     private static final class DragReleaseListener implements View.OnTouchListener {
+        private final View owner;
         private final int touchSlop;
         private View.OnTouchListener delegate;
         private int activePointerId = -1;
@@ -103,6 +140,7 @@ final class GboardFloatingHandlePolicy {
         private boolean dragged;
 
         DragReleaseListener(View view, View.OnTouchListener delegate) {
+            owner = view;
             this.delegate = delegate;
             touchSlop = ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
         }
@@ -128,8 +166,9 @@ final class GboardFloatingHandlePolicy {
                 if (pointerIndex >= 0) {
                     float dx = event.getX(pointerIndex) - downX;
                     float dy = event.getY(pointerIndex) - downY;
-                    if ((dx * dx) + (dy * dy) > (float) touchSlop * touchSlop) {
+                    if (!dragged && (dx * dx) + (dy * dy) > (float) touchSlop * touchSlop) {
                         dragged = true;
+                        notifyDragStarted(owner);
                     }
                 }
             }
@@ -145,14 +184,22 @@ final class GboardFloatingHandlePolicy {
                 try {
                     return current.onTouch(view, cancel);
                 } finally {
+                    finishDragIfNeeded();
                     cancel.recycle();
                     reset();
                 }
             }
 
             boolean handled = current.onTouch(view, event);
-            if (action == MotionEvent.ACTION_CANCEL || terminalActivePointer) reset();
+            if (action == MotionEvent.ACTION_CANCEL || terminalActivePointer) {
+                finishDragIfNeeded();
+                reset();
+            }
             return handled;
+        }
+
+        private void finishDragIfNeeded() {
+            if (dragged) notifyDragEnded(owner);
         }
 
         private void reset() {
