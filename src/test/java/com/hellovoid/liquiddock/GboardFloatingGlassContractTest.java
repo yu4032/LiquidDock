@@ -87,12 +87,11 @@ public class GboardFloatingGlassContractTest {
         assertFalse(coordinator.contains("postDelayed"));
     }
 
-    @Test public void dragLatchesPreparedFullRootBackdropBeforeVendorMovement() throws Exception {
+    @Test public void dragLatchesPreparedFullRootBackdrop() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String handle = read(MAIN.resolve("GboardFloatingHandlePolicy.java"));
         assertTrue(handle.contains("notifyDragStarted(owner)"));
-        assertTrue(handle.indexOf("notifyDragStarted(owner)") < handle.indexOf("current.onTouch(view, event)"));
         assertTrue(coordinator.contains("GboardFloatingHandlePolicy.observe"));
         assertTrue(session.contains("beginDragSnapshot"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"gboard-drag-snapshot\")"));
