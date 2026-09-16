@@ -383,18 +383,18 @@ internal fun GboardSettingsPage(
                     summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
                     enabled = masterEnabled,
                 )
-        SwitchPreference(
-            checked = bottomDockingEnabled,
-            onCheckedChange = {
-                bottomDockingEnabled = it
-                prefs.edit()
-                    .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
-                    .apply()
-            },
-            title = "拖到底部切换为全尺寸键盘",
-            summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
-            enabled = masterEnabled,
-        )
+                SwitchPreference(
+                    checked = bottomDockingEnabled,
+                    onCheckedChange = {
+                        bottomDockingEnabled = it
+                        prefs.edit()
+                            .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
+                            .apply()
+                    },
+                    title = "拖到底部切换为全尺寸键盘",
+                    summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
+                    enabled = masterEnabled,
+                )
             }
         }
         item { SmallTitle("玻璃颜色") }
