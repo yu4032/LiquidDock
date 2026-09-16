@@ -2,21 +2,22 @@ package com.hellovoid.liquiddock;
 
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
-import android.view.ViewGroup;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
 /**
- * Keeps Gboard's vendor drag implementation intact while applying user policy before terminal
- * resize/docking transitions. The policy is bound only to the structurally resolved floating
- * keyboard bottom frame and uses Gboard's semantic dock-hint tag rather than R8 names or IDs.
+ * Keeps Gboard's vendor drag implementation intact while applying user policy around the
+ * structurally resolved floating-keyboard bottom-frame listener. Bottom docking is disabled by
+ * masking only Gboard's semantic dock-icon lookup while that vendor listener is synchronously
+ * executing; no coordinate threshold or R8/private app symbol is used.
  */
 final class GboardFloatingHandlePolicy {
     private static final Object LOCK = new Object();
-    private static final String DOCK_HINT_TAG = ".floating_keyboard_dock_hint_v2";
+    private static final String DOCK_ICON_TAG = ".icon.floating_keyboard_dock_hint_v2";
+    private static final ThreadLocal<Integer> DOCK_HIT_MASK_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
     private static final WeakHashMap<View, WeakReference<View.OnTouchListener>> VENDOR_LISTENERS =
             new WeakHashMap<>();
     private static final WeakHashMap<View, WeakReference<DragReleaseListener>> BOUND =
@@ -54,6 +55,18 @@ final class GboardFloatingHandlePolicy {
                     }
                     return chain.proceed(args);
                 });
+
+                Method findViewById = View.class.getDeclaredMethod("findViewById", int.class);
+                HookUtil.hook(findViewById, chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object result = chain.proceed(args);
+                    if (DOCK_HIT_MASK_DEPTH.get() <= 0 || !(result instanceof View)) {
+                        return result;
+                    }
+                    View found = (View) result;
+                    return shouldMaskDockHitResult(false, found.getTag()) ? null : result;
+                });
+
                 installed = true;
                 return true;
             } catch (Throwable error) {
@@ -70,7 +83,7 @@ final class GboardFloatingHandlePolicy {
             if (vendor == null) return;
             wrapper = dereference(BOUND.get(bottomFrame));
             if (wrapper == null) {
-                wrapper = new DragReleaseListener(bottomFrame, vendor);
+                wrapper = new DragReleaseListener(vendor);
                 BOUND.put(bottomFrame, new WeakReference<>(wrapper));
             } else {
                 wrapper.setDelegate(vendor);
@@ -98,30 +111,38 @@ final class GboardFloatingHandlePolicy {
         return terminalActivePointer && !autoResizeEnabled;
     }
 
-    static boolean shouldSuppressDockMove(
-            boolean bottomDockingEnabled, float pointerScreenY, int dockZoneTop) {
-        return !bottomDockingEnabled
-                && dockZoneTop != Integer.MAX_VALUE
-                && pointerScreenY >= dockZoneTop;
+    static boolean shouldMaskDockHitResult(boolean bottomDockingEnabled, Object viewTag) {
+        return !bottomDockingEnabled && DOCK_ICON_TAG.equals(viewTag);
     }
 
     private static <T> T dereference(WeakReference<T> reference) {
         return reference != null ? reference.get() : null;
     }
 
-    private static final class DragReleaseListener implements View.OnTouchListener {
-        private final int touchSlop;
-        private View.OnTouchListener delegate;
-        private WeakReference<View> dockZone = new WeakReference<>(null);
-        private int activePointerId = -1;
-        private float downX;
-        private float downY;
-        private boolean dragged;
-        private boolean dockGestureSuppressed;
+    private static boolean dispatchVendor(
+            View.OnTouchListener listener, View view, MotionEvent event) {
+        if (bottomDockingEnabled()) {
+            return listener.onTouch(view, event);
+        }
+        int previousDepth = DOCK_HIT_MASK_DEPTH.get();
+        DOCK_HIT_MASK_DEPTH.set(previousDepth + 1);
+        try {
+            return listener.onTouch(view, event);
+        } finally {
+            if (previousDepth == 0) {
+                DOCK_HIT_MASK_DEPTH.remove();
+            } else {
+                DOCK_HIT_MASK_DEPTH.set(previousDepth);
+            }
+        }
+    }
 
-        DragReleaseListener(View view, View.OnTouchListener delegate) {
+    private static final class DragReleaseListener implements View.OnTouchListener {
+        private View.OnTouchListener delegate;
+        private int activePointerId = -1;
+
+        DragReleaseListener(View.OnTouchListener delegate) {
             this.delegate = delegate;
-            touchSlop = ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
         }
 
         void setDelegate(View.OnTouchListener value) {
@@ -137,10 +158,6 @@ final class GboardFloatingHandlePolicy {
             int actionIndex = event.getActionIndex();
             if (action == MotionEvent.ACTION_DOWN) {
                 activePointerId = event.getPointerId(actionIndex);
-                downX = event.getX(actionIndex);
-                downY = event.getY(actionIndex);
-                dragged = false;
-                dockGestureSuppressed = false;
             }
 
             boolean terminalActivePointer = (action == MotionEvent.ACTION_UP
@@ -148,92 +165,25 @@ final class GboardFloatingHandlePolicy {
                     && activePointerId >= 0
                     && event.getPointerId(actionIndex) == activePointerId;
 
-            if (dockGestureSuppressed) {
-                if (action == MotionEvent.ACTION_CANCEL || terminalActivePointer) reset();
-                return true;
-            }
-
-            if (action == MotionEvent.ACTION_MOVE && activePointerId >= 0) {
-                int pointerIndex = event.findPointerIndex(activePointerId);
-                if (pointerIndex >= 0) {
-                    float dx = event.getX(pointerIndex) - downX;
-                    float dy = event.getY(pointerIndex) - downY;
-                    if ((dx * dx) + (dy * dy) > (float) touchSlop * touchSlop) {
-                        dragged = true;
-                    }
-
-                    int dockZoneTop = resolveDockZoneTop(view);
-                    float pointerScreenY = pointerScreenY(view, event, pointerIndex);
-                    if (shouldSuppressDockMove(
-                            bottomDockingEnabled(), pointerScreenY, dockZoneTop)) {
-                        MotionEvent cancel = MotionEvent.obtain(event);
-                        cancel.setAction(MotionEvent.ACTION_CANCEL);
-                        try {
-                            current.onTouch(view, cancel);
-                        } finally {
-                            cancel.recycle();
-                        }
-                        dockGestureSuppressed = true;
-                        return true;
-                    }
-                }
-            }
-
             if (shouldCancelTerminalRelease(
                     terminalActivePointer, autoResizeAfterHandleDragEnabled())) {
                 MotionEvent cancel = MotionEvent.obtain(event);
                 cancel.setAction(MotionEvent.ACTION_CANCEL);
                 try {
-                    return current.onTouch(view, cancel);
+                    return dispatchVendor(current, view, cancel);
                 } finally {
                     cancel.recycle();
                     reset();
                 }
             }
 
-            boolean handled = current.onTouch(view, event);
+            boolean handled = dispatchVendor(current, view, event);
             if (action == MotionEvent.ACTION_CANCEL || terminalActivePointer) reset();
             return handled;
         }
 
-        private float pointerScreenY(View view, MotionEvent event, int pointerIndex) {
-            int[] location = new int[2];
-            view.getLocationOnScreen(location);
-            return location[1] + event.getY(pointerIndex);
-        }
-
-        private int resolveDockZoneTop(View view) {
-            View zone = dockZone.get();
-            if (zone == null || zone.getRootView() != view.getRootView()) {
-                View hint = findTaggedView(view.getRootView());
-                if (hint == null) return Integer.MAX_VALUE;
-                Object parent = hint.getParent();
-                zone = parent instanceof View ? (View) parent : hint;
-                dockZone = new WeakReference<>(zone);
-            }
-            if (zone.getHeight() <= 0) return Integer.MAX_VALUE;
-            int[] location = new int[2];
-            zone.getLocationOnScreen(location);
-            return location[1];
-        }
-
-        private View findTaggedView(View root) {
-            if (root == null) return null;
-            Object tag = root.getTag();
-            if (DOCK_HINT_TAG.equals(tag)) return root;
-            if (!(root instanceof ViewGroup)) return null;
-            ViewGroup group = (ViewGroup) root;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                View found = findTaggedView(group.getChildAt(i));
-                if (found != null) return found;
-            }
-            return null;
-        }
-
         private void reset() {
             activePointerId = -1;
-            dragged = false;
-            dockGestureSuppressed = false;
         }
     }
 }
