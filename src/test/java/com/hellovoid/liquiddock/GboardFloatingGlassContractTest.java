@@ -23,11 +23,14 @@ public class GboardFloatingGlassContractTest {
     @Test public void gboardPackageKeepsStableHooksInstalledForLiveMasterSwitch() throws Exception {
         String scope = read(Path.of("src/main/resources/META-INF/xposed/scope.list"));
         String module = read(MAIN.resolve("ModuleMain.java"));
+        String registry = read(MAIN.resolve("ThirdPartyGlassAdapterRegistry.java"));
         String hook = read(MAIN.resolve("GboardFloatingGlassHook.java"));
         assertTrue(scope.contains("com.google.android.inputmethod.latin"));
-        assertTrue(module.contains("GBOARD_PACKAGE = \"com.google.android.inputmethod.latin\""));
-        assertTrue(module.contains("GboardPassBlurContinuousAuthority.install()"));
-        assertTrue(module.contains("GboardFloatingGlassHook.install(classLoader)"));
+        assertTrue(module.contains("ThirdPartyGlassAdapterRegistry.handles(packageName)"));
+        assertTrue(module.contains("ThirdPartyGlassAdapterRegistry.install(packageName, classLoader)"));
+        assertTrue(registry.contains("com.google.android.inputmethod.latin"));
+        assertTrue(registry.contains("GboardPassBlurContinuousAuthority.install()"));
+        assertTrue(registry.contains("GboardFloatingGlassHook.install(classLoader)"));
         assertTrue(hook.contains("ConfigReader liveReader = ConfigReader.load()"));
         assertTrue(hook.contains("GboardGlassPreferences.resolve(liveReader"));
         assertFalse(module.contains("GboardGlassPreferences.resolve"));
