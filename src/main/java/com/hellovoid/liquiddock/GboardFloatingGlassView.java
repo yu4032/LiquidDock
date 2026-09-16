@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.SurfaceTexture;
+import android.view.Display;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -42,8 +43,24 @@ final class GboardFloatingGlassView extends TextureView
         if (disposed) return;
         GboardDragDiagnostics.log("TEXTURE_AVAILABLE size=" + width + "x" + height);
         Surface surface = new Surface(surfaceTexture);
+        requestDisplayFrameRate(surface);
         outputSurface = surface;
         session.attachOutput(surface, width, height);
+    }
+
+    private void requestDisplayFrameRate(Surface surface) {
+        if (surface == null) return;
+        Display display = getDisplay();
+        float displayHz = display != null ? display.getRefreshRate() : Float.NaN;
+        float preferredHz = GboardFloatingFrameRatePolicy.preferredHz(displayHz);
+        try {
+            surface.setFrameRate(preferredHz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
+            GboardDragDiagnostics.log("SURFACE_FRAME_RATE requested=" + preferredHz
+                    + " display=" + displayHz);
+        } catch (Throwable error) {
+            GboardDragDiagnostics.log("SURFACE_FRAME_RATE_FAIL requested=" + preferredHz
+                    + " cause=" + error.getClass().getName());
+        }
     }
 
     @Override
