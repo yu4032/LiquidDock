@@ -20,6 +20,7 @@ import java.nio.FloatBuffer;
 /** Continuous zero-copy PassBlur -> Prismal pipeline for one Gboard floating popup root. */
 final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
+        default void onFirstSwap() {}
         void onPresented();
         void onFailure(Throwable error);
     }
@@ -68,6 +69,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile long freshnessGeneration = 1L;
     private volatile long preparedBackdropGeneration = -1L;
     private long renderRevision;
+    private boolean firstSwapSignaled;
     private boolean presentationSignaled;
     private boolean failureSignaled;
 
@@ -193,7 +195,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         })) surface.release();
     }
 
-    /** Called on the UI thread only after TextureView consumed a swapped buffer. */
+    /** Called on the UI thread only after the presentation backend consumed the swapped buffer. */
     void onOutputPresented() {
         if (shuttingDown || presentationSignaled || !swapSucceeded) return;
         presentationSignaled = true;
@@ -305,10 +307,19 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     currentGeometry.toCropUvRect(),
                     currentOutput);
             swapSucceeded = true;
+            signalFirstSwap();
             liveBackdropState.onFreshOutputSwapped(preparedBackdropGeneration);
         } catch (Throwable error) {
             notifyFailure("render", error);
         }
+    }
+
+    private void signalFirstSwap() {
+        if (firstSwapSignaled) return;
+        firstSwapSignaled = true;
+        mainHandler.post(() -> {
+            if (!shuttingDown && listener != null) listener.onFirstSwap();
+        });
     }
 
     private void ensureGl() {
