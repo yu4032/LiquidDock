@@ -76,6 +76,7 @@ final class Miuix307PassBlurBridge {
         SurfaceControl rootSurface = null;
         boolean securityCenterClaimed = false;
         boolean gboardClaimed = false;
+        boolean searchboxClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -122,6 +123,10 @@ final class Miuix307PassBlurBridge {
                 GboardPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 gboardClaimed = true;
             }
+            if (domain == PassBlurDomain.MIUI_SEARCHBOX) {
+                MiuiSearchboxPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
+                searchboxClaimed = true;
+            }
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -162,6 +167,9 @@ final class Miuix307PassBlurBridge {
             if (gboardClaimed && rootSurface != null) {
                 GboardPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
+            if (searchboxClaimed && rootSurface != null) {
+                MiuiSearchboxPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
             MainHook.log(TAG + " PassBlur bind unavailable: " + error);
             return null;
         }
@@ -189,7 +197,8 @@ final class Miuix307PassBlurBridge {
             return;
         }
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
-                || binding.domain == PassBlurDomain.GBOARD_FLOATING;
+                || binding.domain == PassBlurDomain.GBOARD_FLOATING
+                || binding.domain == PassBlurDomain.MIUI_SEARCHBOX;
         setUpdatesEnabled(binding, true, force);
     }
 
@@ -239,6 +248,10 @@ final class Miuix307PassBlurBridge {
         }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+            MiuiSearchboxPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         try {

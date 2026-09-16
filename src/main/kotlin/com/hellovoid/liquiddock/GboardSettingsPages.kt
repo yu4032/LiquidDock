@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock
 
+import android.content.Intent
 import android.content.SharedPreferences
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
@@ -35,12 +37,26 @@ internal fun ThirdPartyAppsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val context = LocalContext.current
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             GboardPageHeader(
                 "第三方应用适配",
                 "为第三方应用提供独立的液态玻璃适配与参数。",
             )
+        }
+        item { SmallTitle("系统搜索") }
+        item {
+            GboardSettingsCard {
+                ArrowPreference(
+                    title = "MIUI 系统搜索",
+                    summary = "主界面液态玻璃、严格区域采样与搜索进程控制",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = {
+                        context.startActivity(Intent(context, SearchboxSettingsActivity::class.java))
+                    },
+                )
+            }
         }
         item { SmallTitle("输入法") }
         item {
@@ -50,6 +66,51 @@ internal fun ThirdPartyAppsPage(
                     summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = openGboard,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SearchboxSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var searchboxEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                MiuiSearchboxGlassPreferences.ENABLED_KEY,
+                MiuiSearchboxGlassPreferences.ENABLED_DEFAULT,
+            ),
+        )
+    }
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            GboardPageHeader(
+                "系统搜索",
+                "仅替换 MIUI 搜索主界面的原生 blur 背景；搜索框自身背景保持原样。",
+            )
+        }
+        item { SmallTitle("功能") }
+        item {
+            GboardSettingsCard {
+                SwitchPreference(
+                    checked = searchboxEnabled,
+                    onCheckedChange = {
+                        searchboxEnabled = it
+                        prefs.edit()
+                            .putBoolean(MiuiSearchboxGlassPreferences.ENABLED_KEY, it)
+                            .apply()
+                    },
+                    title = "MIUI 搜索主界面液态玻璃",
+                    summary = "玻璃采样严格对应背景 View 后方区域；重新调出搜索时强制刷新当前帧",
+                    enabled = masterEnabled && liquidEnabled,
                 )
             }
         }
