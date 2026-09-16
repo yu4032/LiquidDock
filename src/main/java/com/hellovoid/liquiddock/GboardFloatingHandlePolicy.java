@@ -1,20 +1,26 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Rect;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
 /**
- * Keeps Gboard's vendor drag implementation intact while applying user policy around the
- * structurally resolved floating-keyboard bottom-frame listener. Bottom docking is disabled by
- * masking only Gboard's semantic dock-icon lookup while that vendor listener is synchronously
- * executing; no coordinate threshold or R8/private app symbol is used.
+ * Keeps Gboard's vendor drag implementation intact while applying user policy around floating
+ * keyboard resize/docking behavior. Docking effects are suppressed only through stable framework
+ * APIs and semantic view tags; no R8/private app symbol or fixed resource ID is used.
  */
 final class GboardFloatingHandlePolicy {
     private static final Object LOCK = new Object();
+    private static final String DOCK_HINT_TAG = ".floating_keyboard_dock_hint_v2";
+    private static final String DOCK_DEFAULT_TAG =
+            ".floating_keyboard_dock_hint_v2_animated_color_default";
+    private static final String DOCK_EXPANDED_TAG =
+            ".floating_keyboard_dock_hint_v2_animated_color_expanded";
     private static final String DOCK_ICON_TAG = ".icon.floating_keyboard_dock_hint_v2";
     private static final ThreadLocal<Integer> DOCK_HIT_MASK_DEPTH =
             ThreadLocal.withInitial(() -> 0);
@@ -67,6 +73,30 @@ final class GboardFloatingHandlePolicy {
                     return shouldMaskDockHitResult(false, found.getTag()) ? null : result;
                 });
 
+                Method setVisibility = View.class.getDeclaredMethod("setVisibility", int.class);
+                HookUtil.hook(setVisibility, chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof View && args.length == 1
+                            && shouldForceDockEffectInvisible(
+                            bottomDockingEnabled(), ((View) owner).getTag())) {
+                        args[0] = View.INVISIBLE;
+                    }
+                    return chain.proceed(args);
+                });
+
+                Method performHapticFeedback =
+                        View.class.getDeclaredMethod("performHapticFeedback", int.class);
+                HookUtil.hook(performHapticFeedback, chain -> {
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof View
+                            && shouldSuppressDockHaptic(
+                            bottomDockingEnabled(), isIntersectingDockIcon((View) owner))) {
+                        return true;
+                    }
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
+
                 installed = true;
                 return true;
             } catch (Throwable error) {
@@ -77,6 +107,8 @@ final class GboardFloatingHandlePolicy {
 
     static void bind(View bottomFrame) {
         if (bottomFrame == null) return;
+        hideDockEffects(bottomFrame.getRootView());
+
         DragReleaseListener wrapper;
         synchronized (LOCK) {
             View.OnTouchListener vendor = dereference(VENDOR_LISTENERS.get(bottomFrame));
@@ -115,8 +147,69 @@ final class GboardFloatingHandlePolicy {
         return !bottomDockingEnabled && DOCK_ICON_TAG.equals(viewTag);
     }
 
+    static boolean shouldForceDockEffectInvisible(boolean bottomDockingEnabled, Object viewTag) {
+        if (bottomDockingEnabled || !(viewTag instanceof String)) return false;
+        String tag = (String) viewTag;
+        return DOCK_HINT_TAG.equals(tag)
+                || DOCK_DEFAULT_TAG.equals(tag)
+                || DOCK_EXPANDED_TAG.equals(tag)
+                || DOCK_ICON_TAG.equals(tag);
+    }
+
+    static boolean shouldSuppressDockHaptic(
+            boolean bottomDockingEnabled, boolean intersectsDockIcon) {
+        return !bottomDockingEnabled && intersectsDockIcon;
+    }
+
     private static <T> T dereference(WeakReference<T> reference) {
         return reference != null ? reference.get() : null;
+    }
+
+    private static void hideDockEffects(View root) {
+        if (root == null || bottomDockingEnabled()) return;
+        if (shouldForceDockEffectInvisible(false, root.getTag())) {
+            root.setVisibility(View.INVISIBLE);
+        }
+        if (!(root instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            hideDockEffects(group.getChildAt(i));
+        }
+    }
+
+    private static boolean isIntersectingDockIcon(View target) {
+        if (target == null) return false;
+        View root = target.getRootView();
+        View dockIcon = findTaggedView(root, DOCK_ICON_TAG);
+        if (dockIcon == null || target.getWidth() <= 0 || target.getHeight() <= 0
+                || dockIcon.getWidth() <= 0 || dockIcon.getHeight() <= 0) {
+            return false;
+        }
+        Rect targetRect = screenRect(target);
+        Rect dockRect = screenRect(dockIcon);
+        return Rect.intersects(targetRect, dockRect);
+    }
+
+    private static Rect screenRect(View view) {
+        int[] location = new int[2];
+        view.getLocationOnScreen(location);
+        return new Rect(
+                location[0],
+                location[1],
+                location[0] + view.getWidth(),
+                location[1] + view.getHeight());
+    }
+
+    private static View findTaggedView(View root, String tag) {
+        if (root == null) return null;
+        if (tag.equals(root.getTag())) return root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = findTaggedView(group.getChildAt(i), tag);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static boolean dispatchVendor(
