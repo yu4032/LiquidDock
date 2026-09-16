@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Continuous zero-copy RootPassBlurBackend -> Prismal renderer for SearchActivityBackground. */
+/** One-shot RootPassBlur snapshot -> Prismal renderer for SearchActivityBackground. */
 final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -50,6 +50,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
+    private final MiuiSearchboxSnapshotState snapshotState = new MiuiSearchboxSnapshotState();
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
@@ -120,6 +121,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         backdropPrepared = false;
         swapSucceeded = false;
         presentationSignaled = false;
+        snapshotState.beginCapture();
         sourceBackend.reconcileRoot();
         sourceBackend.requestFresh(GENERATION);
     }
@@ -201,7 +203,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+                || frame.generation != GENERATION || !snapshotState.acceptFreshFrame()) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -217,6 +219,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams);
             backdropPrepared = true;
             renderCurrent();
+            sourceBackend.setUpdatesEnabled(false, "searchbox-snapshot-latched");
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
