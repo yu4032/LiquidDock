@@ -20,13 +20,30 @@ public class GboardFloatingFullscreenBackdropDragStateTest {
         assertTrue(state.shouldPauseSourceUpdates());
         assertFalse(state.shouldPrepareBackdrop(1L));
         assertTrue(state.shouldRenderGeometry());
+        assertFalse(state.shouldReconcileForGeometry());
         assertEquals(1L, state.backdropGeneration());
 
         for (int i = 0; i < 100; i++) {
             assertTrue(state.shouldRenderGeometry());
+            assertFalse(state.shouldReconcileForGeometry());
             assertFalse(state.shouldPrepareBackdrop(1L));
         }
         assertEquals(1L, state.backdropGeneration());
+    }
+
+    @Test public void liveGeometryMayReconcileButRecoveryGeometryDoesNot() {
+        GboardFloatingFullscreenBackdropDragState state =
+                new GboardFloatingFullscreenBackdropDragState(1L);
+        assertTrue(state.shouldReconcileForGeometry());
+        state.onBackdropPrepared(1L);
+        state.onOutputPresented();
+        assertTrue(state.beginDrag());
+        assertFalse(state.shouldReconcileForGeometry());
+
+        state.endDrag();
+        assertEquals(GboardFloatingFullscreenBackdropDragState.Mode.RECOVERING, state.mode());
+        assertFalse(state.shouldReconcileForGeometry());
+        assertTrue(state.shouldRenderGeometry());
     }
 
     @Test public void dragCannotFreezeBeforeAFullBackdropWasPresented() {
