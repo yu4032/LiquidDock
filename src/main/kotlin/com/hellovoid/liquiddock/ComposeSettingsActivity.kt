@@ -718,6 +718,13 @@ private fun LiquidPage(
             "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
             masterEnabled && liquidGlass,
         ) { functionalDockIconGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
+            "多任务操作按钮玻璃",
+            "将多任务界面的清除全部和设备互联胶囊背景替换为完整 Prismal 液态玻璃",
+            masterEnabled && liquidGlass,
+        )
         IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
         IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
         BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃", "只替换材质背景，保留 RemoteViews / MAML 内容", masterEnabled && liquidGlass) { widgetGlass = it }
