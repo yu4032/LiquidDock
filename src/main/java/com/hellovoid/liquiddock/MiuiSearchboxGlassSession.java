@@ -91,9 +91,11 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 : Miuix307PrismalMaterial.defaults(density);
         PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
         prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
-        highlightProfile = glassConfig != null
-                ? glassConfig.largeSurfaceHighlightProfile
-                : PrismalHighlightProfile.ALL_ENABLED;
+        highlightProfile = appearance != null
+                ? appearance.highlightProfile
+                : (glassConfig != null
+                    ? glassConfig.largeSurfaceHighlightProfile
+                    : PrismalHighlightProfile.ALL_ENABLED);
         int scalePercent = appearance != null
                 ? appearance.captureScalePercent
                 : (glassConfig != null
