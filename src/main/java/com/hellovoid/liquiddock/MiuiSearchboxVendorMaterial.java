@@ -5,50 +5,37 @@ import android.view.View;
 import java.lang.reflect.Method;
 
 /**
- * Symmetric release for the two stable blur paths used by SearchActivityBackground.
- * This is intentionally Searchbox-specific: it does not discover arbitrary vendor methods.
+ * Ownership handoff for SearchActivityBackground's stable BackdropBlurRelativeLayout API.
+ * The Method is resolved once from the known semantic class during hook installation; this helper
+ * never discovers methods from the runtime class.
  */
 final class MiuiSearchboxVendorMaterial {
     private static final String TAG = "[DC][MiuiSearchboxGlass]";
-    private static final float[] NO_CORNERS = new float[]{0f, 0f, 0f, 0f};
-    private static final int[][] NO_BLEND_LAYERS = new int[0][];
 
     private MiuiSearchboxVendorMaterial() {}
 
-    static void release(View background) {
-        if (background == null) return;
-
-        // Clear the framework/MIUI pass-window paths known to LiquidDock first.
-        MiBlurBridge.clearContentBlur(background);
-
-        // Legacy com.miui.blur.sdk.backdrop.BackdropBlurRelativeLayout path.
-        invokeBlurRadiusZero(background);
-
-        // Android 35+ Searchbox BlurTransition path:
-        // setBackgroundBlur(int radius, float[] corners, int[][] blendLayers).
-        invokeBackgroundBlurZero(background);
+    static void release(View background, Method blurEnabledMethod) {
+        setBlurEnabled(background, blurEnabledMethod, false, "release");
     }
 
-    private static void invokeBlurRadiusZero(View background) {
-        try {
-            Method method = background.getClass().getMethod("setBlurRadius", Integer.TYPE);
-            method.invoke(background, 0);
-        } catch (NoSuchMethodException ignored) {
-            // Not every Searchbox build exposes the legacy backdrop SDK path.
-        } catch (Throwable error) {
-            Api101Bridge.log(TAG + " legacy vendor blur release failed", error);
-        }
+    static void restore(View background, Method blurEnabledMethod) {
+        setBlurEnabled(background, blurEnabledMethod, true, "restore");
     }
 
-    private static void invokeBackgroundBlurZero(View background) {
+    private static void setBlurEnabled(
+            View background,
+            Method blurEnabledMethod,
+            boolean enabled,
+            String stage) {
+        if (background == null || blurEnabledMethod == null) return;
         try {
-            Method method = background.getClass().getMethod(
-                    "setBackgroundBlur", Integer.TYPE, float[].class, int[][].class);
-            method.invoke(background, 0, NO_CORNERS, NO_BLEND_LAYERS);
-        } catch (NoSuchMethodException ignored) {
-            // Expected on Searchbox builds using only BackdropBlurRelativeLayout.
+            if (enabled) {
+                blurEnabledMethod.invoke(background, Boolean.TRUE);
+            } else {
+                blurEnabledMethod.invoke(background, Boolean.FALSE);
+            }
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " background vendor blur release failed", error);
+            Api101Bridge.log(TAG + " vendor backdrop " + stage + " failed", error);
         }
     }
 }
