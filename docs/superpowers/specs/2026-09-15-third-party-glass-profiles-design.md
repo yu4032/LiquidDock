@@ -9,8 +9,8 @@ Extend LiquidDock's third-party glass support so MIUI Searchbox has its own blur
 - Do not use JADX/R8-obfuscated class or method names as runtime hook anchors.
 - Do not implement arbitrary configuration-driven reflection or class/method hooking.
 - Every supported third-party app must still have a code-registered adapter with stable semantic anchors and explicit lifecycle/stock-material authority.
-- Hidden third-party profiles are disabled by default and must not appear in the current GUI.
-- Missing profile values inherit the global `LiquidDockConfig.Glass` material values.
+- Generic hidden profiles never create adapters by themselves and do not appear in the current GUI.
+- Missing profile values inherit the global `LiquidDockConfig.Glass` values.
 - Preserve the existing zero-copy `RootPassBlurBackend -> Prismal` path and producer-authority model.
 - Preserve Searchbox exact window-space crop and visible-lifecycle fresh-frame barrier.
 
@@ -18,7 +18,7 @@ Extend LiquidDock's third-party glass support so MIUI Searchbox has its own blur
 
 ### 1. Shared appearance model
 
-Add `ThirdPartyGlassAppearance` as a small immutable runtime value containing:
+`ThirdPartyGlassAppearance` is the immutable runtime value shared by third-party adapters. It contains:
 
 - `enabled`
 - `hasAppearanceOverride`
@@ -27,6 +27,7 @@ Add `ThirdPartyGlassAppearance` as a small immutable runtime value containing:
 - `captureScalePercent`
 - `renderFps`
 - `cornerRadiusOverrideDp` (`< 0` means adapter default)
+- `highlightProfile`
 - `freshOnResume`
 
 `ThirdPartyGlassProfiles.resolve(reader, profileId, baseGlass, defaults)` reads a namespaced profile and falls back to global glass values when individual keys are absent.
@@ -35,32 +36,47 @@ Names use the stable prefix:
 
 `third_party_glass.<profileId>.<field>`
 
-Supported fields are:
+The runtime profile supports:
 
-`enabled`, `blur`, `tint_r`, `tint_g`, `tint_b`, `tint_alpha`, `capture_scale_percent`, `render_fps`, `corner_radius_dp`, `fresh_on_resume`.
+- `enabled`
+- `blur`
+- `tint_r`, `tint_g`, `tint_b`, `tint_alpha`
+- `capture_scale_percent`
+- `render_fps`
+- `corner_radius_dp`
+- `fresh_on_resume`
+- `highlight_sky_haze`
+- `highlight_specular`
+- `highlight_lit_rim`
+- `highlight_opposite_rim`
+- `highlight_corner_rim`
+- `highlight_face_sheen`
+- `highlight_plain`
+- `highlight_caustics`
+- `highlight_press_glow`
 
-The parser accepts only a validated profile ID (`[a-z0-9_.-]+`) supplied by registered code. Configuration does not supply runtime class names or hook methods.
+Profile IDs are validated with `[a-z0-9_.-]+`. Configuration never contains runtime class names, method names, resource selectors, or arbitrary hook declarations.
 
 ### 2. Adapter registry
 
-Add `ThirdPartyGlassAdapterRegistry` with code-owned registrations. A registration contains:
+`ThirdPartyGlassAdapterRegistry` owns the supported adapter registrations. Each registration contains only:
 
 - stable profile ID
 - package name
-- domain identifier
-- adapter installer callback
-- defaults for enable state, fresh-on-resume, and corner-radius override
+- code-owned installer callback
 
-The registry is package-indexed and used by `ModuleMain` for third-party adapter dispatch. The first registrations are:
+The registry is package-indexed and used by `ModuleMain` for third-party adapter dispatch. Initial registrations are:
 
 - `gboard.floating` -> `com.google.android.inputmethod.latin`
 - `miui.searchbox` -> `com.android.quicksearchbox`
 
 Existing adapter implementations remain responsible for target discovery, stock-material suppression, freshness, teardown, and producer authority. The registry does not generalize those semantics into reflection.
 
+A configuration profile for an unregistered package/profile may be stored and round-tripped, but it cannot cause any hook installation. It becomes effective only after code adds a matching registered adapter.
+
 ### 3. Searchbox independent appearance
 
-Add schema-backed Searchbox keys for GUI-supported appearance:
+Searchbox keeps stable public GUI keys:
 
 - `liquid_miui_searchbox_glass`
 - `liquid_miui_searchbox_blur`
@@ -69,30 +85,50 @@ Add schema-backed Searchbox keys for GUI-supported appearance:
 - `liquid_miui_searchbox_tint_b`
 - `liquid_miui_searchbox_tint_alpha`
 
-`MiuiSearchboxGlassPreferences.resolve()` mirrors Gboard behavior: if none of the appearance keys are present, Searchbox inherits global Prismal blur/tint. The Searchbox settings page exposes blur and RGBA tint controls; capture quality and lifecycle remain hidden profile-level controls.
+`MiuiSearchboxGlassPreferences.resolve()` layers values in this order:
 
-The Searchbox session applies the resolved appearance to a copy of global Prismal parameters before rendering.
+1. global glass defaults;
+2. hidden `third_party_glass.miui.searchbox.*` profile;
+3. visible Searchbox GUI keys for enable/blur/tint.
+
+The Searchbox settings page exposes enable, blur, RGBA tint, inheritance reset, and the existing restart-search action. Capture quality, corner override, highlight controls, and lifecycle policy remain hidden configuration controls.
+
+The Searchbox session applies the resolved appearance to a copy of global Prismal parameters without changing the validated window-root capture geometry or freshness barrier.
 
 ### 4. Hidden configuration compatibility
 
-Because current import/export is schema-driven, hidden generic profile keys must be represented by a bounded set of schema keys for registered adapters rather than accepting arbitrary unknown JSON keys. `ThirdPartyGlassProfiles` therefore defines profile namespaces for registered adapters and their hidden fields, with `ConfigKey.ExportMode.IF_PRESENT` for non-GUI controls. This keeps configuration round-trippable while avoiding arbitrary runtime hook declarations.
+Normal LiquidDock JSON import/export must preserve hidden profiles, but only through the restricted `ThirdPartyGlassConfigCodec` namespace parser.
 
-Searchbox and Gboard may keep their existing public key names for backward compatibility; profile resolution can map those legacy/public keys into the shared runtime appearance model.
+The codec:
 
-### 5. GUI boundary
+- accepts any syntactically valid future profile ID so configuration can be prepared before an adapter receives GUI support;
+- accepts only the allowlisted glass fields listed above;
+- clamps tint, capture scale, FPS, blur, and corner-radius values to existing runtime policy bounds;
+- rejects unknown fields such as `hook_class`, `method`, arbitrary selectors, and unrelated dynamic keys;
+- never performs adapter registration or reflection.
 
-Only existing explicit adapter pages are rendered:
+This keeps hidden configuration round-trippable without expanding the attack or compatibility surface into arbitrary hook injection.
+
+### 5. Gboard compatibility
+
+Existing public Gboard keys remain unchanged. `GboardGlassPreferences.resolveShared()` maps both the existing public keys and hidden `third_party_glass.gboard.floating.*` values into `ThirdPartyGlassAppearance`.
+
+The floating Gboard session directly consumes the shared blur/tint, PassBlur quality, and highlight profile while its existing structural target discovery and lifecycle remain unchanged.
+
+### 6. GUI boundary
+
+Only explicit adapter pages are rendered:
 
 - Gboard
 - MIUI Searchbox
 
-The generic registry does not enumerate adapters into settings. Future adapters can be registered and enabled through imported/configured values without receiving a GUI page.
+The registry and generic profiles are not enumerated into settings. Future code-registered adapters can be configured through hidden profile values without receiving a GUI page.
 
 ## Testing
 
-- Unit tests for profile ID validation, inheritance, clamping, explicit overrides, and hidden defaults.
+- Unit tests for profile ID validation, inheritance, policy clamping, explicit overrides, hidden highlights, and lifecycle defaults.
 - Searchbox tests proving independent blur/tint overrides while absent values inherit global glass.
 - Registry contract tests proving only code-registered package adapters are dispatchable and configuration cannot provide hook class/method names.
-- Config schema/codec round-trip tests for hidden IF_PRESENT fields.
-- Existing Gboard/Searchbox geometry, freshness, scope, and runtime policy tests must remain green.
+- Dynamic config-codec tests proving allowlisted hidden fields round-trip and arbitrary fields are dropped.
+- Existing Gboard/Searchbox geometry, freshness, scope, producer-authority, and runtime-policy tests must remain green.
 - Final verification: `./gradlew testDebugUnitTest assembleDebug --stacktrace` in GitHub Actions.
