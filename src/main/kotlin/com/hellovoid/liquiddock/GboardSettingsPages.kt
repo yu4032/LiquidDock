@@ -35,12 +35,37 @@ internal fun ThirdPartyAppsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    var searchboxEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                MiuiSearchboxGlassPreferences.ENABLED_KEY,
+                MiuiSearchboxGlassPreferences.ENABLED_DEFAULT,
+            ),
+        )
+    }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             GboardPageHeader(
                 "第三方应用适配",
                 "为第三方应用提供独立的液态玻璃适配与参数。",
             )
+        }
+        item { SmallTitle("系统搜索") }
+        item {
+            GboardSettingsCard {
+                SwitchPreference(
+                    checked = searchboxEnabled,
+                    onCheckedChange = {
+                        searchboxEnabled = it
+                        prefs.edit()
+                            .putBoolean(MiuiSearchboxGlassPreferences.ENABLED_KEY, it)
+                            .apply()
+                    },
+                    title = "MIUI 搜索主界面液态玻璃",
+                    summary = "仅替换搜索主界面的原生 blur 背景；搜索框自身背景保持原样",
+                    enabled = masterEnabled && liquidEnabled,
+                )
+            }
         }
         item { SmallTitle("输入法") }
         item {
