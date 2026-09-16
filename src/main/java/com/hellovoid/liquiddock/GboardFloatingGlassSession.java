@@ -53,6 +53,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final GboardFloatingFrameRenderGate renderGate = new GboardFloatingFrameRenderGate();
+    private final Object renderRevisionLock = new Object();
 
     private volatile GboardFloatingGlassGeometry geometry;
     private volatile boolean shuttingDown;
@@ -60,6 +62,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean swapSucceeded;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
+    private long renderRevision;
     private boolean presentationSignaled;
     private boolean failureSignaled;
 
@@ -96,16 +99,18 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        if (shuttingDown) return;
+        sourceBackend.reconcileRoot();
+        sourceBackend.requestFresh(GENERATION);
     }
 
+    /** Publish latest authoritative frame geometry. Geometry mutation is not producer lifecycle. */
     void updateGeometry(GboardFloatingGlassGeometry next) {
         if (shuttingDown || next == null) return;
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        sourceBackend.reconcileRoot();
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        requestRender();
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -124,7 +129,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 output = next;
-                renderCurrent();
+                requestRenderFromRenderThread();
             } catch (Throwable error) {
                 surface.release();
                 notifyFailure("output-attach", error);
@@ -139,7 +144,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             if (current == null) return;
             current.width = Math.max(1, width);
             current.height = Math.max(1, height);
-            renderCurrent();
+            requestRenderFromRenderThread();
         });
     }
 
@@ -180,7 +185,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            renderCurrent();
+            requestRenderFromRenderThread();
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
@@ -194,6 +199,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        renderGate.cancel();
         boolean queued = sourceBackend.postToRenderThread(() -> {
             releaseOutput(output);
             output = null;
@@ -206,6 +212,36 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.shutdown();
         });
         if (!queued) sourceBackend.shutdown();
+    }
+
+    private long nextRenderRevision() {
+        synchronized (renderRevisionLock) {
+            return ++renderRevision;
+        }
+    }
+
+    private void requestRender() {
+        if (shuttingDown) return;
+        long revision = nextRenderRevision();
+        if (!renderGate.publish(revision)) return;
+        if (!sourceBackend.postToRenderThread(this::drainRender)) {
+            notifyFailure("render-queue", new IllegalStateException("render thread unavailable"));
+        }
+    }
+
+    /** Used only when caller already owns the render thread. */
+    private void requestRenderFromRenderThread() {
+        if (shuttingDown) return;
+        long revision = nextRenderRevision();
+        if (renderGate.publish(revision)) drainRender();
+    }
+
+    private void drainRender() {
+        long revision = renderGate.beginDrain();
+        while (!shuttingDown && revision >= 0L) {
+            renderCurrent();
+            revision = renderGate.nextOrIdle();
+        }
     }
 
     private void renderCurrent() {
