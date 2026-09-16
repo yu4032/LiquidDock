@@ -26,6 +26,28 @@ final class GboardFloatingGlassView extends TextureView
         setSurfaceTextureListener(this);
     }
 
+    /** Compatibility bridge for the handwriting capsule, which is not part of this output migration. */
+    GboardFloatingGlassView(Context context, GboardFloatingGlassSession session) {
+        this(context, new GboardFloatingGlassOutput.Listener() {
+            @Override public void onSurfaceReady(Surface surface, int width, int height) {
+                session.attachOutput(surface, width, height);
+            }
+            @Override public void onSurfaceSizeChanged(int width, int height) {
+                session.resizeOutput(width, height);
+            }
+            @Override public void onPresented() {
+                session.onOutputPresented();
+            }
+            @Override public void onFailed(String reason, Throwable error) {
+                try {
+                    Api101Bridge.log("[DC][GboardFloatingGlass] handwriting output failure "
+                            + reason, error);
+                } catch (Throwable ignored) {}
+            }
+        });
+        if (session == null) throw new IllegalArgumentException("session == null");
+    }
+
     void dispose() {
         if (disposed) return;
         disposed = true;
