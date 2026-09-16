@@ -50,25 +50,38 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertFalse(capsule.contains("Recents root unavailable; stock retained"));
     }
 
-    @Test public void sinksAreSiblingsBehindNativeButtonsAndFollowTheirGeometry() throws Exception {
+    @Test public void sinksUseLayoutNeutralHostsAndNeverBecomeLinearLayoutSiblings() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         String sink = read("RecentsCapsuleGlassSinkView.java");
-        assertTrue(sink.contains("attachBehindTarget"));
-        assertTrue(sink.contains("parent.indexOfChild(target)"));
-        assertTrue(sink.contains("parent.addView(sink, index"));
+        String host = read("RecentsCapsuleGlassHost.java");
+        assertTrue(host.contains("extends FrameLayout"));
+        assertTrue(host.contains("originalParent.indexOfChild(target)"));
+        assertTrue(host.contains("originalLayoutParams"));
+        assertTrue(host.contains("originalParent.removeView(target)"));
+        assertTrue(host.contains("originalParent.addView(host, originalIndex, originalLayoutParams)"));
+        assertTrue(host.contains("host.addView(sink"));
+        assertTrue(host.contains("host.addView(target"));
+        assertTrue(host.contains("restoreTarget"));
+        assertTrue(sink.contains("attachInsideHost"));
+        assertFalse(sink.contains("parent.addView(sink, index"));
+        assertFalse(capsule.contains("attachBehindTarget"));
+        assertTrue(capsule.contains("clearAllHost"));
+        assertTrue(capsule.contains("worldHost"));
+    }
+
+    @Test public void hostKeepsNativeButtonAboveGlassAndGeometryTracksTargetVisualBounds() throws Exception {
+        String host = read("RecentsCapsuleGlassHost.java");
+        String sink = read("RecentsCapsuleGlassSinkView.java");
+        assertTrue(host.contains("FrameLayout.LayoutParams"));
+        assertTrue(host.contains("MATCH_PARENT"));
         assertTrue(sink.contains("syncFromTarget"));
-        assertTrue(sink.contains("target.getX()"));
-        assertTrue(sink.contains("target.getY()"));
         assertTrue(sink.contains("target.getScaleX()"));
         assertTrue(sink.contains("target.getScaleY()"));
         assertTrue(sink.contains("getGlobalVisibleRect"));
         assertTrue(sink.contains("LauncherGlassScreenSpace.relativeToRoot"));
-        assertTrue(capsule.contains("clearAllSink.captureGeometry(sourceRoot)"));
-        assertTrue(capsule.contains("worldSink.captureGeometry(sourceRoot)"));
-        assertFalse(capsule.contains("group.addView(sink, 0"));
     }
 
-    @Test public void recentsUsesOnePrismalSessionForBothSiblingSinks() throws Exception {
+    @Test public void recentsUsesOnePrismalSessionForBothHostedSinks() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         String sink = read("RecentsCapsuleGlassSinkView.java");
         String session = read("RecentsCapsuleGlassSession.java");
