@@ -10,7 +10,7 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
 </p>
 
-LiquidDock 是一个面向 **HyperOS 平板桌面** 的 LSPosed 模块，主要用来调整桌面、Dock 和液态玻璃效果。
+LiquidDock 是一个面向 **HyperOS 3 平板桌面** 的 LSPosed 模块，主要用来调整桌面、Dock 和液态玻璃效果。
 
 
 <p align="center">
@@ -33,7 +33,7 @@ LiquidDock 是一个面向 **HyperOS 平板桌面** 的 LSPosed 模块，主要�
 
 支持 **8×4** 和 **10×6** 桌面网格，可以分别调整横屏、竖屏下的间距和位置。
 
-在 Launcher 4.50 上还可以单独调整桌面、Dock、文件夹等位置的图标大小，普通应用抽屉和搜索页不会跟着一起变化。
+还可以单独调整桌面、Dock、文件夹等位置的图标大小，普通应用抽屉和搜索页不会跟着一起变化。
 
 ### Dock
 
@@ -49,7 +49,7 @@ LiquidDock 是一个面向 **HyperOS 平板桌面** 的 LSPosed 模块，主要�
 
 ### 多任务和工作台
 
-可以调整多任务界面的背景模糊，并提供一部分 Workstation / Laptop 模式下的 Dock、桌面和应用页布局选项。
+可以调整多任务界面的背景模糊，并提供一部分工作台模式下的 Dock、桌面和应用页布局选项。
 
 工作台适配仍在持续完善，使用前建议保留默认参数，逐项调整。
 
@@ -86,7 +86,7 @@ LiquidDock 也可以为新版 HyperOS 4 安全中心侧边栏页面加入液态�
 
 ## 反馈问题
 
-提交 Issue 时，最好附上：
+提交 Issue 时请附上：
 
 - HyperOS 版本；
 - 系统桌面版本；
