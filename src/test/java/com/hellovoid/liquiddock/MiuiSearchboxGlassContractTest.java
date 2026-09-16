@@ -20,12 +20,15 @@ public class MiuiSearchboxGlassContractTest {
         String hook = read(MAIN.resolve("MiuiSearchboxGlassHook.java"));
         String session = read(MAIN.resolve("MiuiSearchboxGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
+        String bridge = read(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String authority = read(MAIN.resolve("MiuiSearchboxPassBlurContinuousAuthority.java"));
         String settings = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt"));
         String scope = Files.readString(Path.of("src/main/resources/META-INF/xposed/scope.list"));
 
         assertTrue(scope.contains("com.android.quicksearchbox"));
         assertTrue(module.contains("MIUI_SEARCHBOX_PACKAGE = \"com.android.quicksearchbox\""));
+        assertTrue(module.contains("MiuiSearchboxPassBlurContinuousAuthority.install()"));
         assertTrue(module.contains("MiuiSearchboxGlassHook.install(classLoader)"));
         assertTrue(hook.contains("com.android.quicksearchbox.SearchActivity"));
         assertTrue(hook.contains("com.android.quicksearchbox.ui.SearchActivityBackground"));
@@ -35,6 +38,11 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("PassBlurBindRequest.miuiSearchbox(root)"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
+        assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
+        assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.claim"));
+        assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.release"));
+        assertTrue(authority.contains("SetPassBlurSurface"));
+        assertTrue(authority.contains("setUpdateTextureFlag"));
         assertTrue(settings.contains("MiuiSearchboxGlassPreferences.ENABLED_KEY"));
         assertTrue(settings.contains("MIUI 搜索主界面液态玻璃"));
         assertTrue(settings.contains("搜索框自身背景保持原样"));
