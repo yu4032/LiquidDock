@@ -20,6 +20,8 @@ public class MiuiSearchboxGlassContractTest {
         String hook = read(MAIN.resolve("MiuiSearchboxGlassHook.java"));
         String session = read(MAIN.resolve("MiuiSearchboxGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
+        String settings = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt"));
         String scope = Files.readString(Path.of("src/main/resources/META-INF/xposed/scope.list"));
 
         assertTrue(scope.contains("com.android.quicksearchbox"));
@@ -33,6 +35,9 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("PassBlurBindRequest.miuiSearchbox(root)"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
+        assertTrue(settings.contains("MiuiSearchboxGlassPreferences.ENABLED_KEY"));
+        assertTrue(settings.contains("MIUI 搜索主界面液态玻璃"));
+        assertTrue(settings.contains("搜索框自身背景保持原样"));
         assertFalse(hook.contains("getDeclaredFields("));
         assertFalse(hook.contains("getDeclaredConstructors("));
         assertFalse(hook.contains("search_input_bg_hf"));
