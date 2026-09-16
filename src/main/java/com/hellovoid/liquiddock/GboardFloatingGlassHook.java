@@ -12,10 +12,18 @@ final class GboardFloatingGlassHook {
     private GboardFloatingGlassHook() {}
 
     static boolean install(ClassLoader classLoader) {
-        if (installed) return true;
-        if (classLoader == null) return false;
+        if (installed) {
+            GboardDragDiagnostics.log("HOOK_INSTALL_ALREADY");
+            return true;
+        }
+        if (classLoader == null) {
+            GboardDragDiagnostics.log("HOOK_INSTALL_SKIP loader=null");
+            return false;
+        }
         GboardFloatingHandlePolicy.install();
         try {
+            GboardDragDiagnostics.log("HOOK_INSTALL_BEGIN anchor="
+                    + GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS);
             Class<?> keyboardHolderClass = Class.forName(
                     GboardFloatingStructureResolver.KEYBOARD_HOLDER_CLASS,
                     false,
@@ -38,8 +46,11 @@ final class GboardFloatingGlassHook {
             });
 
             installed = true;
+            GboardDragDiagnostics.log("HOOK_INSTALL_OK class=" + keyboardHolderClass.getName()
+                    + " method=onLayout");
             return true;
         } catch (Throwable error) {
+            GboardDragDiagnostics.log("HOOK_INSTALL_FAIL cause=" + failureSummary(error), error);
             log("hook unavailable cause=" + failureSummary(error)
                     + "; stock floating background retained", error);
             return false;
@@ -47,11 +58,23 @@ final class GboardFloatingGlassHook {
     }
 
     private static void handleKeyboardHolderLayout(ViewGroup keyboardHolder, ClassLoader classLoader) {
+        GboardDragDiagnostics.log("HOLDER_LAYOUT size=" + keyboardHolder.getWidth()
+                + "x" + keyboardHolder.getHeight()
+                + " attached=" + keyboardHolder.isAttachedToWindow());
         GboardFloatingStructureResolver.Structure structure =
                 GboardFloatingStructureResolver.resolveFromKeyboardHolder(keyboardHolder, classLoader);
-        if (structure == null) return;
+        if (structure == null) {
+            GboardDragDiagnostics.log("STRUCTURE_NULL");
+            return;
+        }
 
-        if (!GboardFloatingStructureResolver.isFloatingGeometry(structure)) {
+        boolean floating = GboardFloatingStructureResolver.isFloatingGeometry(structure);
+        GboardDragDiagnostics.log("STRUCTURE_OK floating=" + floating
+                + " keyboardArea=" + structure.keyboardArea.getWidth() + "x"
+                + structure.keyboardArea.getHeight()
+                + " bottom=" + structure.bottomFrame.getWidth() + "x"
+                + structure.bottomFrame.getHeight());
+        if (!floating) {
             GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;
         }
@@ -63,10 +86,14 @@ final class GboardFloatingGlassHook {
         GboardGlassPreferences.Appearance liveAppearance =
                 GboardGlassPreferences.resolve(liveReader, liveConfig.glass);
         if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) {
+            GboardDragDiagnostics.log("FEATURE_DISABLED module=" + liveConfig.enabled
+                    + " glass=" + liveConfig.glass.enabled
+                    + " gboard=" + liveAppearance.enabled);
             GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;
         }
 
+        GboardDragDiagnostics.log("COORDINATOR_SHOW");
         GboardFloatingGlassCoordinator.onShown(
                 structure.keyboardArea,
                 structure,
