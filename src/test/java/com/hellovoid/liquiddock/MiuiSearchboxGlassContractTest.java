@@ -79,15 +79,15 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("appearance.captureScalePercent"));
         assertTrue(session.contains("appearance.renderFps"));
 
-        // Vendor blur ownership transfers only after Prismal has actually presented a frame.
-        assertTrue(hook.contains("public void onPresented()"));
-        assertTrue(hook.contains("MiuiSearchboxVendorMaterial.release(background)"));
-        assertTrue(material.contains("MiBlurBridge.clearContentBlur(background)"));
-        assertTrue(material.contains("setBlurRadius"));
-        assertTrue(material.contains("setBackgroundBlur"));
-        assertTrue(material.contains("Integer.TYPE"));
-        assertTrue(material.contains("float[].class"));
-        assertTrue(material.contains("int[][].class"));
+        // SearchActivityBackground inherits the stable BackdropBlurRelativeLayout API. Ownership
+        // transfers only after Prismal presents, and failure restores the same binder symmetrically.
+        assertTrue(hook.contains("backgroundClass.getMethod(\"setBlurEnabled\", Boolean.TYPE)"));
+        assertTrue(hook.contains("MiuiSearchboxVendorMaterial.release(background, blurEnabledMethod)"));
+        assertTrue(hook.contains("MiuiSearchboxVendorMaterial.restore(background, blurEnabledMethod)"));
+        assertTrue(material.contains("Method blurEnabledMethod"));
+        assertTrue(material.contains("blurEnabledMethod.invoke(background, Boolean.FALSE)"));
+        assertTrue(material.contains("blurEnabledMethod.invoke(background, Boolean.TRUE)"));
+        assertFalse(material.contains("background.getClass().getMethod("));
         assertFalse(material.contains("getDeclaredFields("));
         assertFalse(material.contains("getDeclaredConstructors("));
 
