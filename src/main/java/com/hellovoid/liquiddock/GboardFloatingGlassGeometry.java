@@ -134,13 +134,11 @@ final class GboardFloatingGlassGeometry {
                     / Math.max(1f, structure.stockBackground.getWidth());
             if (!finite(horizontalScale) || horizontalScale <= 0f) return null;
 
-            GboardFloatingGlassGeometry geometry = new GboardFloatingGlassGeometry(
+            return new GboardFloatingGlassGeometry(
                     root.getWidth(), root.getHeight(),
                     left, top, right - left, bottom - top,
                     cornerRadiusPx * horizontalScale,
                     sinkLeft, sinkTop, sinkRight - sinkLeft, sinkBottom - sinkTop);
-            GboardDragDiagnostics.geometryCaptured(geometry);
-            return geometry;
         } catch (Throwable ignored) {
             return null;
         }
@@ -249,14 +247,12 @@ final class GboardFloatingGlassGeometry {
     float[] toCropUvRect() {
         float cropUvLeft = cropLeft / rootWidth;
         float cropBottom = (rootHeight - (cropTop + cropHeight)) / rootHeight;
-        float[] crop = new float[]{
+        return new float[]{
                 clamp(cropUvLeft, 0f, 1f),
                 clamp(cropBottom, 0f, 1f),
                 clamp(cropWidth / rootWidth, 0f, 1f),
                 clamp(cropHeight / rootHeight, 0f, 1f)
         };
-        GboardDragDiagnostics.renderCrop(this, crop);
-        return crop;
     }
 
     boolean sameAs(GboardFloatingGlassGeometry other) {

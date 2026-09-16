@@ -62,10 +62,8 @@ final class GboardFloatingHandlePolicy {
                     return chain.proceed(args);
                 });
                 installed = true;
-                GboardDragDiagnostics.log("HANDLE_HOOK_OK");
                 return true;
             } catch (Throwable error) {
-                GboardDragDiagnostics.log("HANDLE_HOOK_FAIL " + error.getClass().getName(), error);
                 return false;
             }
         }
@@ -76,11 +74,7 @@ final class GboardFloatingHandlePolicy {
         DragReleaseListener wrapper;
         synchronized (LOCK) {
             View.OnTouchListener vendor = dereference(VENDOR_LISTENERS.get(bottomFrame));
-            if (vendor == null) {
-                GboardDragDiagnostics.log("HANDLE_BIND_VENDOR_MISSING view="
-                        + bottomFrame.getClass().getName());
-                return;
-            }
+            if (vendor == null) return;
             wrapper = dereference(BOUND.get(bottomFrame));
             if (wrapper == null) {
                 wrapper = new DragReleaseListener(bottomFrame, vendor);
@@ -90,7 +84,6 @@ final class GboardFloatingHandlePolicy {
             }
         }
         bottomFrame.setOnTouchListener(wrapper);
-        GboardDragDiagnostics.log("HANDLE_BIND_OK view=" + bottomFrame.getClass().getName());
     }
 
     static void observe(View bottomFrame, DragObserver observer) {
@@ -99,7 +92,6 @@ final class GboardFloatingHandlePolicy {
             if (observer == null) OBSERVERS.remove(bottomFrame);
             else OBSERVERS.put(bottomFrame, new WeakReference<>(observer));
         }
-        GboardDragDiagnostics.log("HANDLE_OBSERVER " + (observer != null ? "SET" : "CLEARED"));
     }
 
     static void clearObserver(View bottomFrame, DragObserver observer) {
@@ -108,22 +100,17 @@ final class GboardFloatingHandlePolicy {
             DragObserver current = dereference(OBSERVERS.get(bottomFrame));
             if (current == null || current == observer) OBSERVERS.remove(bottomFrame);
         }
-        GboardDragDiagnostics.log("HANDLE_OBSERVER_CLEARED");
     }
 
     private static void notifyDragStarted(View view) {
-        GboardDragDiagnostics.log("DRAG_START owner=" + view.getClass().getName());
         DragObserver observer;
         synchronized (LOCK) { observer = dereference(OBSERVERS.get(view)); }
-        GboardDragDiagnostics.log("DRAG_START observer=" + (observer != null));
         if (observer != null) observer.onDragStarted();
     }
 
     private static void notifyDragEnded(View view) {
-        GboardDragDiagnostics.log("DRAG_END owner=" + view.getClass().getName());
         DragObserver observer;
         synchronized (LOCK) { observer = dereference(OBSERVERS.get(view)); }
-        GboardDragDiagnostics.log("DRAG_END observer=" + (observer != null));
         if (observer != null) observer.onDragEnded();
     }
 
@@ -174,8 +161,6 @@ final class GboardFloatingHandlePolicy {
                 downX = event.getX(actionIndex);
                 downY = event.getY(actionIndex);
                 dragged = false;
-                GboardDragDiagnostics.log("TOUCH_DOWN x=" + downX + " y=" + downY
-                        + " slop=" + touchSlop);
             } else if (action == MotionEvent.ACTION_MOVE && activePointerId >= 0) {
                 int pointerIndex = event.findPointerIndex(activePointerId);
                 if (pointerIndex >= 0) {

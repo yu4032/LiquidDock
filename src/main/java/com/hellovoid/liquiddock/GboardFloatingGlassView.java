@@ -14,7 +14,6 @@ final class GboardFloatingGlassView extends TextureView
     private final GboardFloatingGlassSession session;
     private Surface outputSurface;
     private boolean disposed;
-    private long presentedSerial;
 
     GboardFloatingGlassView(Context context, GboardFloatingGlassSession session) {
         super(context);
@@ -41,7 +40,6 @@ final class GboardFloatingGlassView extends TextureView
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
         if (disposed) return;
-        GboardDragDiagnostics.log("TEXTURE_AVAILABLE size=" + width + "x" + height);
         Surface surface = new Surface(surfaceTexture);
         requestDisplayFrameRate(surface);
         outputSurface = surface;
@@ -55,25 +53,16 @@ final class GboardFloatingGlassView extends TextureView
         float preferredHz = GboardFloatingFrameRatePolicy.preferredHz(displayHz);
         try {
             surface.setFrameRate(preferredHz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
-            GboardDragDiagnostics.log("SURFACE_FRAME_RATE requested=" + preferredHz
-                    + " display=" + displayHz);
-        } catch (Throwable error) {
-            GboardDragDiagnostics.log("SURFACE_FRAME_RATE_FAIL requested=" + preferredHz
-                    + " cause=" + error.getClass().getName());
-        }
+        } catch (Throwable ignored) {}
     }
 
     @Override
     public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
-        if (!disposed) {
-            GboardDragDiagnostics.log("TEXTURE_RESIZED size=" + width + "x" + height);
-            session.resizeOutput(width, height);
-        }
+        if (!disposed) session.resizeOutput(width, height);
     }
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
-        GboardDragDiagnostics.log("TEXTURE_DESTROYED");
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachOutput(current);
@@ -82,10 +71,6 @@ final class GboardFloatingGlassView extends TextureView
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
-        if (!disposed) {
-            presentedSerial++;
-            GboardDragDiagnostics.log("TEXTURE_PRESENTED serial=" + presentedSerial);
-            session.onOutputPresented();
-        }
+        if (!disposed) session.onOutputPresented();
     }
 }
