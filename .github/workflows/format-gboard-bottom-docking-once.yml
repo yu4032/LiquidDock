@@ -1,0 +1,60 @@
+name: Format Gboard bottom docking setting once
+
+on:
+  push:
+    branches:
+      - feat/gboard-disable-bottom-docking
+    paths:
+      - .github/workflows/format-gboard-bottom-docking-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gboard-disable-bottom-docking
+      - name: Format switch block
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt')
+          text = path.read_text()
+          old = '''        SwitchPreference(
+              checked = bottomDockingEnabled,
+              onCheckedChange = {
+                  bottomDockingEnabled = it
+                  prefs.edit()
+                      .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
+                      .apply()
+              },
+              title = "拖到底部切换为全尺寸键盘",
+              summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
+              enabled = masterEnabled,
+          )'''
+          new = '''                SwitchPreference(
+                      checked = bottomDockingEnabled,
+                      onCheckedChange = {
+                          bottomDockingEnabled = it
+                          prefs.edit()
+                              .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
+                              .apply()
+                      },
+                      title = "拖到底部切换为全尺寸键盘",
+                      summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
+                      enabled = masterEnabled,
+                  )'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one malformed switch block, got {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit formatting
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt
+          git commit -m "style: align Gboard bottom docking setting"
+          git push origin HEAD:feat/gboard-disable-bottom-docking
