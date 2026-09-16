@@ -7,7 +7,7 @@ final class PassBlurBindRequest {
     private static final String[] NO_EXTRA_EXCLUSIONS = new String[0];
     private static final String[] DOCK_EXTRA_EXCLUSIONS = {"DockAssistantView"};
     private static final String[] MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {"MiuiSearchboxGlassView"};
-    private static final String[] RECENTS_CAPSULE_EXTRA_EXCLUSIONS = {"RecentsCapsuleGlassOverlay"};
+    private static final String[] RECENTS_CAPSULE_EXTRA_EXCLUSIONS = {"RecentsCapsuleGlassSinkView"};
 
     private final View host;
     private final PassBlurDomain domain;
