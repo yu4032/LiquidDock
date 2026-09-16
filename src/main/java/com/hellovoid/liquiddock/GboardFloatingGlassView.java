@@ -12,7 +12,6 @@ import android.view.ViewGroup;
 final class GboardFloatingGlassView extends TextureView
         implements TextureView.SurfaceTextureListener {
     private final GboardFloatingGlassOutput.Listener listener;
-    private Surface outputSurface;
     private boolean disposed;
     private long presentedSerial;
 
@@ -30,9 +29,6 @@ final class GboardFloatingGlassView extends TextureView
     void dispose() {
         if (disposed) return;
         disposed = true;
-        Surface current = outputSurface;
-        outputSurface = null;
-        if (current != null) current.release();
         if (getParent() instanceof ViewGroup) {
             ((ViewGroup) getParent()).removeView(this);
         }
@@ -45,7 +41,6 @@ final class GboardFloatingGlassView extends TextureView
         try {
             Surface surface = new Surface(surfaceTexture);
             requestDisplayFrameRate(surface);
-            outputSurface = surface;
             listener.onSurfaceReady(surface, width, height);
         } catch (Throwable error) {
             listener.onFailed("texture-surface-available", error);
@@ -78,7 +73,6 @@ final class GboardFloatingGlassView extends TextureView
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
         GboardDragDiagnostics.log("TEXTURE_DESTROYED");
-        outputSurface = null;
         return true;
     }
 
