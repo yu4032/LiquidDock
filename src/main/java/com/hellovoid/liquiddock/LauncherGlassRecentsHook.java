@@ -19,6 +19,7 @@ final class LauncherGlassRecentsHook {
 
     static void install(ClassLoader classLoader, LiquidDockConfig config) {
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
+        LauncherRecentsCapsuleGlassHook.install(classLoader);
         mainHandler = new Handler(Looper.getMainLooper());
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
