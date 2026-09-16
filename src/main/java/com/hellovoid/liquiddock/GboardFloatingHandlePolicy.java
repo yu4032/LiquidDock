@@ -15,10 +15,17 @@ import java.util.WeakHashMap;
  * floating-keyboard bottom frame.
  */
 final class GboardFloatingHandlePolicy {
+    interface DragObserver {
+        void onDragStarted();
+        void onDragEnded();
+    }
+
     private static final Object LOCK = new Object();
     private static final WeakHashMap<View, WeakReference<View.OnTouchListener>> VENDOR_LISTENERS =
             new WeakHashMap<>();
     private static final WeakHashMap<View, WeakReference<DragReleaseListener>> BOUND =
+            new WeakHashMap<>();
+    private static final WeakHashMap<View, WeakReference<DragObserver>> OBSERVERS =
             new WeakHashMap<>();
     private static boolean installed;
 
@@ -41,6 +48,7 @@ final class GboardFloatingHandlePolicy {
                             if (listener == null) {
                                 VENDOR_LISTENERS.remove(view);
                                 BOUND.remove(view);
+                                OBSERVERS.remove(view);
                             } else if (!(listener instanceof DragReleaseListener)) {
                                 VENDOR_LISTENERS.put(view, new WeakReference<>(listener));
                                 DragReleaseListener wrapper = dereference(BOUND.get(view));
@@ -70,12 +78,32 @@ final class GboardFloatingHandlePolicy {
             wrapper = dereference(BOUND.get(bottomFrame));
             if (wrapper == null) {
                 wrapper = new DragReleaseListener(bottomFrame, vendor);
+                wrapper.setObserver(dereference(OBSERVERS.get(bottomFrame)));
                 BOUND.put(bottomFrame, new WeakReference<>(wrapper));
             } else {
                 wrapper.setDelegate(vendor);
             }
         }
         bottomFrame.setOnTouchListener(wrapper);
+    }
+
+    static void observe(View bottomFrame, DragObserver observer) {
+        if (bottomFrame == null || observer == null) return;
+        synchronized (LOCK) {
+            OBSERVERS.put(bottomFrame, new WeakReference<>(observer));
+            DragReleaseListener wrapper = dereference(BOUND.get(bottomFrame));
+            if (wrapper != null) wrapper.setObserver(observer);
+        }
+    }
+
+    static void clearObserver(View bottomFrame, DragObserver observer) {
+        if (bottomFrame == null || observer == null) return;
+        synchronized (LOCK) {
+            DragObserver current = dereference(OBSERVERS.get(bottomFrame));
+            if (current == observer) OBSERVERS.remove(bottomFrame);
+            DragReleaseListener wrapper = dereference(BOUND.get(bottomFrame));
+            if (wrapper != null) wrapper.clearObserver(observer);
+        }
     }
 
     private static boolean autoResizeAfterHandleDragEnabled() {
@@ -95,20 +123,30 @@ final class GboardFloatingHandlePolicy {
     }
 
     private static final class DragReleaseListener implements View.OnTouchListener {
-        private final int touchSlop;
+        private final float touchSlopSquared;
+        private final GboardFloatingDragGestureState dragState =
+                new GboardFloatingDragGestureState();
         private View.OnTouchListener delegate;
+        private WeakReference<DragObserver> observerRef;
         private int activePointerId = -1;
-        private float downX;
-        private float downY;
-        private boolean dragged;
 
         DragReleaseListener(View view, View.OnTouchListener delegate) {
             this.delegate = delegate;
-            touchSlop = ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
+            int touchSlop = ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
+            touchSlopSquared = (float) touchSlop * touchSlop;
         }
 
         void setDelegate(View.OnTouchListener value) {
             if (value != null && value != this) delegate = value;
+        }
+
+        void setObserver(DragObserver observer) {
+            observerRef = observer != null ? new WeakReference<>(observer) : null;
+        }
+
+        void clearObserver(DragObserver observer) {
+            DragObserver current = dereference(observerRef);
+            if (current == observer) observerRef = null;
         }
 
         @Override
@@ -120,17 +158,18 @@ final class GboardFloatingHandlePolicy {
             int actionIndex = event.getActionIndex();
             if (action == MotionEvent.ACTION_DOWN) {
                 activePointerId = event.getPointerId(actionIndex);
-                downX = event.getX(actionIndex);
-                downY = event.getY(actionIndex);
-                dragged = false;
+                dragState.onDown(
+                        activePointerId,
+                        event.getX(actionIndex),
+                        event.getY(actionIndex));
             } else if (action == MotionEvent.ACTION_MOVE && activePointerId >= 0) {
                 int pointerIndex = event.findPointerIndex(activePointerId);
                 if (pointerIndex >= 0) {
-                    float dx = event.getX(pointerIndex) - downX;
-                    float dy = event.getY(pointerIndex) - downY;
-                    if ((dx * dx) + (dy * dy) > (float) touchSlop * touchSlop) {
-                        dragged = true;
-                    }
+                    dispatch(dragState.onMove(
+                            activePointerId,
+                            event.getX(pointerIndex),
+                            event.getY(pointerIndex),
+                            touchSlopSquared));
                 }
             }
 
@@ -146,18 +185,28 @@ final class GboardFloatingHandlePolicy {
                     return current.onTouch(view, cancel);
                 } finally {
                     cancel.recycle();
-                    reset();
+                    dispatch(dragState.onTerminal(activePointerId));
+                    activePointerId = -1;
                 }
             }
 
             boolean handled = current.onTouch(view, event);
-            if (action == MotionEvent.ACTION_CANCEL || terminalActivePointer) reset();
+            if (action == MotionEvent.ACTION_CANCEL) {
+                dispatch(dragState.onCancel());
+                activePointerId = -1;
+            } else if (terminalActivePointer) {
+                dispatch(dragState.onTerminal(activePointerId));
+                activePointerId = -1;
+            }
             return handled;
         }
 
-        private void reset() {
-            activePointerId = -1;
-            dragged = false;
+        private void dispatch(GboardFloatingDragGestureState.Signal signal) {
+            if (signal == null || signal == GboardFloatingDragGestureState.Signal.NONE) return;
+            DragObserver observer = dereference(observerRef);
+            if (observer == null) return;
+            if (signal == GboardFloatingDragGestureState.Signal.STARTED) observer.onDragStarted();
+            else if (signal == GboardFloatingDragGestureState.Signal.ENDED) observer.onDragEnded();
         }
     }
 }
