@@ -76,6 +76,7 @@ final class Miuix307PassBlurBridge {
         SurfaceControl rootSurface = null;
         boolean securityCenterClaimed = false;
         boolean gboardClaimed = false;
+        boolean baiduInputMethodClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -122,6 +123,11 @@ final class Miuix307PassBlurBridge {
                 GboardPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 gboardClaimed = true;
             }
+            if (domain == PassBlurDomain.BAIDU_INPUTMETHOD) {
+                BaiduInputMethodPassBlurContinuousAuthority.claim(
+                        rootSurface, producerSurface, scale);
+                baiduInputMethodClaimed = true;
+            }
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -162,6 +168,9 @@ final class Miuix307PassBlurBridge {
             if (gboardClaimed && rootSurface != null) {
                 GboardPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
+            if (baiduInputMethodClaimed && rootSurface != null) {
+                BaiduInputMethodPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
             MainHook.log(TAG + " PassBlur bind unavailable: " + error);
             return null;
         }
@@ -189,7 +198,8 @@ final class Miuix307PassBlurBridge {
             return;
         }
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
-                || binding.domain == PassBlurDomain.GBOARD_FLOATING;
+                || binding.domain == PassBlurDomain.GBOARD_FLOATING
+                || binding.domain == PassBlurDomain.BAIDU_INPUTMETHOD;
         setUpdatesEnabled(binding, true, force);
     }
 
@@ -239,6 +249,10 @@ final class Miuix307PassBlurBridge {
         }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.BAIDU_INPUTMETHOD) {
+            BaiduInputMethodPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         try {

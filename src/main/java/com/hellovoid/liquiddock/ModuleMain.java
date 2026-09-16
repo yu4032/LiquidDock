@@ -14,6 +14,7 @@ public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String GBOARD_PACKAGE = "com.google.android.inputmethod.latin";
+    private static final String BAIDU_INPUTMETHOD_PACKAGE = "com.baidu.input_mi";
 
     private String loadedProcessName;
 
@@ -82,6 +83,21 @@ public final class ModuleMain extends XposedModule {
                 GboardHandwritingCapsuleGlassHook.install(classLoader);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][GboardFloatingGlass] init failed", error);
+            }
+            return;
+        }
+        if (BAIDU_INPUTMETHOD_PACKAGE.equals(packageName)) {
+            try {
+                ClassLoader classLoader = param.getClassLoader();
+                if (classLoader == null) return;
+                if (!BaiduInputMethodPassBlurContinuousAuthority.install()) {
+                    Api101Bridge.log(
+                            "[DC][BaiduInputMethodGlass] continuous PassBlur authority unavailable; fail closed");
+                    return;
+                }
+                BaiduInputMethodGlassHook.install(classLoader);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][BaiduInputMethodGlass] init failed", error);
             }
             return;
         }

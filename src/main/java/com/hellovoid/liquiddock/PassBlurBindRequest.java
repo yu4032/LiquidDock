@@ -73,6 +73,14 @@ final class PassBlurBindRequest {
                 NO_EXTRA_EXCLUSIONS);
     }
 
+    static PassBlurBindRequest baiduInputMethod(View authoritativeRoot) {
+        return new PassBlurBindRequest(
+                authoritativeRoot,
+                PassBlurDomain.BAIDU_INPUTMETHOD,
+                1.0f,
+                NO_EXTRA_EXCLUSIONS);
+    }
+
     View host() {
         return host;
     }
