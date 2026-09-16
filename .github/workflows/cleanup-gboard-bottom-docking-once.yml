@@ -1,0 +1,106 @@
+name: Normalize Gboard bottom docking settings once
+
+on:
+  push:
+    branches:
+      - feat/gboard-disable-bottom-docking
+    paths:
+      - .github/workflows/cleanup-gboard-bottom-docking-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gboard-disable-bottom-docking
+      - name: Normalize Gboard settings page
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt')
+          text = path.read_text()
+          start = text.index('@Composable\ninternal fun GboardSettingsPage(')
+          end = text.index('\n@Composable\nprivate fun GboardValueSlider(', start)
+          section = text[start:end]
+
+          state_pattern = re.compile(
+              r'\n\s*var bottomDockingEnabled by remember \{\s*'
+              r'mutableStateOf\(\s*prefs\.getBoolean\(\s*'
+              r'GboardGlassPreferences\.BOTTOM_DOCKING_KEY,\s*'
+              r'GboardGlassPreferences\.BOTTOM_DOCKING_DEFAULT,\s*\),\s*\)\s*\}',
+              re.S,
+          )
+          section, state_count = state_pattern.subn('', section)
+          if state_count < 1:
+              raise SystemExit('bottom docking state not found')
+
+          state_anchor = '''    var autoResizeAfterHandleDrag by remember {
+              mutableStateOf(
+                  prefs.getBoolean(
+                      GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY,
+                      GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT,
+                  ),
+              )
+          }
+          '''
+          if state_anchor not in section:
+              raise SystemExit('auto resize state anchor not found')
+          canonical_state = state_anchor + '''    var bottomDockingEnabled by remember {
+              mutableStateOf(
+                  prefs.getBoolean(
+                      GboardGlassPreferences.BOTTOM_DOCKING_KEY,
+                      GboardGlassPreferences.BOTTOM_DOCKING_DEFAULT,
+                  ),
+              )
+          }
+          '''
+          section = section.replace(state_anchor, canonical_state, 1)
+
+          switch_pattern = re.compile(
+              r'\n\s*SwitchPreference\(\s*checked = bottomDockingEnabled,.*?'
+              r'title = "拖到底部切换为全尺寸键盘",.*?\n\s*\)',
+              re.S,
+          )
+          section, switch_count = switch_pattern.subn('', section)
+          if switch_count < 1:
+              raise SystemExit('bottom docking switch not found')
+
+          resize_title = '                    title = "拖动后自动进入大小调整",\n'
+          title_pos = section.index(resize_title)
+          switch_end = section.index('\n                )', title_pos) + len('\n                )')
+          canonical_switch = '''
+                  SwitchPreference(
+                      checked = bottomDockingEnabled,
+                      onCheckedChange = {
+                          bottomDockingEnabled = it
+                          prefs.edit()
+                              .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
+                              .apply()
+                      },
+                      title = "拖到底部切换为全尺寸键盘",
+                      summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
+                      enabled = masterEnabled,
+                  )'''
+          section = section[:switch_end] + canonical_switch + section[switch_end:]
+
+          if section.count('var bottomDockingEnabled by remember') != 1:
+              raise SystemExit('state normalization failed')
+          if section.count('title = "拖到底部切换为全尺寸键盘"') != 1:
+              raise SystemExit('switch normalization failed')
+
+          text = text[:start] + section + text[end:]
+          path.write_text(text)
+          PY
+      - name: Commit normalized settings
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt
+          git commit -m "fix: normalize Gboard bottom docking setting"
+          git push origin HEAD:feat/gboard-disable-bottom-docking
