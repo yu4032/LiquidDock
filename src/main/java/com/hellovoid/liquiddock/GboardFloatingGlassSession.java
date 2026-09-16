@@ -25,7 +25,6 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private static final String TAG = "[DC][GboardFloatingGlass]";
-    private static final long GENERATION = 1L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -54,6 +53,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
     private final GboardFloatingFrameRenderGate renderGate = new GboardFloatingFrameRenderGate();
+    private final GboardFloatingDragSnapshotAuthority dragSnapshot =
+            new GboardFloatingDragSnapshotAuthority();
     private final Object renderRevisionLock = new Object();
 
     private volatile GboardFloatingGlassGeometry geometry;
@@ -62,6 +63,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean swapSucceeded;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
+    private volatile long freshnessGeneration = 1L;
     private long renderRevision;
     private boolean presentationSignaled;
     private boolean failureSignaled;
@@ -99,14 +101,38 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (shuttingDown) return;
+        if (shuttingDown || !dragSnapshot.allowFreshRequest()) return;
         sourceBackend.reconcileRoot();
-        sourceBackend.requestFresh(GENERATION);
+        sourceBackend.requestFresh(freshnessGeneration);
+    }
+
+    void beginDragSnapshot() {
+        if (shuttingDown) return;
+        GboardFloatingDragSnapshotAuthority.Decision decision =
+                dragSnapshot.onDragStarted(backdropPrepared);
+        if (decision.pauseLiveSource) {
+            sourceBackend.setUpdatesEnabled(false, "gboard-drag-snapshot");
+        }
+    }
+
+    void endDragSnapshot() {
+        if (shuttingDown) return;
+        GboardFloatingDragSnapshotAuthority.Decision decision = dragSnapshot.onDragEnded();
+        if (decision.resumeLiveSource) {
+            sourceBackend.setUpdatesEnabled(true, "gboard-drag-release");
+        }
+        if (decision.reconcileProducer) {
+            sourceBackend.reconcileRoot();
+        }
+        if (decision.requestFreshBackdrop) {
+            long generation = ++freshnessGeneration;
+            sourceBackend.requestFresh(generation);
+        }
     }
 
     /** Publish latest authoritative frame geometry. Geometry mutation is not producer lifecycle. */
     void updateGeometry(GboardFloatingGlassGeometry next) {
-        if (shuttingDown || next == null) return;
+        if (shuttingDown || next == null || !dragSnapshot.allowGeometryRender()) return;
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
@@ -171,7 +197,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+                || frame.generation != freshnessGeneration
+                || !dragSnapshot.acceptLiveBackdrop()
+                || !dragSnapshot.allowPrepareBackdrop()) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
