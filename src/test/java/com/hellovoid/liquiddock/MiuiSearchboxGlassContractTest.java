@@ -54,9 +54,12 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("!snapshotState.acceptFreshFrame()"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"searchbox-snapshot-latched\")"));
 
-        // The output Surface is stable and screen-sized, like ShortcutPopupGlassLayer.
-        assertTrue(hook.contains("ViewGroup outputHost"));
-        assertTrue(hook.contains("background.getRootView()"));
+        // The output Surface is fixed in screen space but must sit directly below Searchbox content,
+        // matching ShortcutPopupGlassCoordinator instead of living at DecorView index 0.
+        assertTrue(hook.contains("activity.findViewById(android.R.id.content)"));
+        assertTrue(hook.contains("contentParent.indexOfChild(contentRoot)"));
+        assertTrue(hook.contains("outputHost.addView(glassView, contentIndex"));
+        assertFalse(hook.contains("outputHost.addView(glassView, 0"));
         assertTrue(hook.contains("ViewTreeObserver.OnPreDrawListener"));
         assertTrue(hook.contains("session.updateGeometry()"));
         assertTrue(hook.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
