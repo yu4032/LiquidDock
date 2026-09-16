@@ -3,24 +3,19 @@ package com.hellovoid.liquiddock;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import org.junit.Test;
 
-/** Regression contract for suppressing Gboard's terminal resize transition. */
+/** Runtime regression coverage for Gboard's bottom-handle terminal release policy. */
 public class GboardFloatingHandleTerminalPolicyTest {
-    private static final Path POLICY = Path.of(
-            "src/main/java/com/hellovoid/liquiddock/GboardFloatingHandlePolicy.java");
-
-    private static String readPolicy() throws Exception {
-        return Files.exists(POLICY) ? Files.readString(POLICY) : "";
+    @Test public void disabledAutoResizeCancelsAnyTerminalHandleRelease() {
+        assertTrue(GboardFloatingHandlePolicy.shouldCancelTerminalRelease(true, false));
     }
 
-    @Test public void disabledAutoResizeCancelsEveryTerminalHandleRelease() throws Exception {
-        String policy = readPolicy();
+    @Test public void enabledAutoResizeKeepsVendorTerminalRelease() {
+        assertFalse(GboardFloatingHandlePolicy.shouldCancelTerminalRelease(true, true));
+    }
 
-        assertTrue(policy.contains("terminalActivePointer && !autoResizeAfterHandleDragEnabled()"));
-        assertFalse(policy.contains("terminalActivePointer && dragged && !autoResizeAfterHandleDragEnabled()"));
+    @Test public void nonTerminalEventsAreNeverCancelledByTerminalPolicy() {
+        assertFalse(GboardFloatingHandlePolicy.shouldCancelTerminalRelease(false, false));
     }
 }
