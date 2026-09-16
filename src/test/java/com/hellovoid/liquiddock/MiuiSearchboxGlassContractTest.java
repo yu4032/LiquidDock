@@ -48,6 +48,10 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(session.contains("ThirdPartyPrismalParams.apply(baseParams, appearance)"));
         assertTrue(session.contains("appearance.captureScalePercent"));
         assertTrue(session.contains("appearance.renderFps"));
+        assertTrue(session.contains("MiuiSearchboxSnapshotState"));
+        assertTrue(session.contains("snapshotState.beginCapture()"));
+        assertTrue(session.contains("!snapshotState.acceptFreshFrame()"));
+        assertTrue(session.contains("setUpdatesEnabled(false, \"searchbox-snapshot-latched\")"));
         assertTrue(request.contains("MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {\"MiuiSearchboxGlassView\"}"));
         assertTrue(bridge.contains("domain == PassBlurDomain.MIUI_SEARCHBOX"));
         assertTrue(bridge.contains("MiuiSearchboxPassBlurContinuousAuthority.claim"));
