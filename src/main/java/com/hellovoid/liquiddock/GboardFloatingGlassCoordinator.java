@@ -125,11 +125,11 @@ final class GboardFloatingGlassCoordinator {
         state.session = session;
         state.dragObserver = new GboardFloatingHandlePolicy.DragObserver() {
             @Override public void onDragStarted() {
-                onDragStarted(state);
+                GboardFloatingGlassCoordinator.onDragStarted(state);
             }
 
             @Override public void onDragEnded() {
-                onDragEnded(state);
+                GboardFloatingGlassCoordinator.onDragEnded(state);
             }
         };
         GboardFloatingHandlePolicy.observe(state.structure.bottomFrame, state.dragObserver);
