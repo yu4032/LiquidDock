@@ -1,0 +1,87 @@
+name: Patch Gboard bottom docking settings once
+
+on:
+  push:
+    branches:
+      - feat/gboard-disable-bottom-docking
+    paths:
+      - .github/workflows/patch-gboard-bottom-docking-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/gboard-disable-bottom-docking
+      - name: Patch Gboard settings page
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt')
+          text = path.read_text()
+
+          state_anchor = '''    var autoResizeAfterHandleDrag by remember {
+              mutableStateOf(
+                  prefs.getBoolean(
+                      GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY,
+                      GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT,
+                  ),
+              )
+          }
+          '''
+          state_replacement = state_anchor + '''    var bottomDockingEnabled by remember {
+              mutableStateOf(
+                  prefs.getBoolean(
+                      GboardGlassPreferences.BOTTOM_DOCKING_KEY,
+                      GboardGlassPreferences.BOTTOM_DOCKING_DEFAULT,
+                  ),
+              )
+          }
+          '''
+          if state_anchor not in text:
+              raise SystemExit('Gboard state anchor not found')
+          text = text.replace(state_anchor, state_replacement, 1)
+
+          switch_anchor = '''                SwitchPreference(
+                      checked = autoResizeAfterHandleDrag,
+                      onCheckedChange = {
+                          autoResizeAfterHandleDrag = it
+                          prefs.edit()
+                              .putBoolean(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY, it)
+                              .apply()
+                      },
+                      title = "拖动后自动进入大小调整",
+                      summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
+                      enabled = masterEnabled,
+                  )
+          '''
+          switch_replacement = switch_anchor + '''                SwitchPreference(
+                      checked = bottomDockingEnabled,
+                      onCheckedChange = {
+                          bottomDockingEnabled = it
+                          prefs.edit()
+                              .putBoolean(GboardGlassPreferences.BOTTOM_DOCKING_KEY, it)
+                              .apply()
+                      },
+                      title = "拖到底部切换为全尺寸键盘",
+                      summary = "关闭后，悬浮键盘进入底部区域时不触发震动、Dock 提示动画或全尺寸键盘切换",
+                      enabled = masterEnabled,
+                  )
+          '''
+          if switch_anchor not in text:
+              raise SystemExit('Gboard switch anchor not found')
+          text = text.replace(switch_anchor, switch_replacement, 1)
+          path.write_text(text)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt
+          git commit -m "feat: add Gboard bottom docking switch"
+          git push origin HEAD:feat/gboard-disable-bottom-docking
