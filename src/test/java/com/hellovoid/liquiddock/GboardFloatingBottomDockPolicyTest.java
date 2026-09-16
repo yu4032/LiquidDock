@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -43,5 +44,25 @@ public class GboardFloatingBottomDockPolicyTest {
         assertTrue(GboardFloatingHandlePolicy.shouldSuppressDockHaptic(false, true));
         assertFalse(GboardFloatingHandlePolicy.shouldSuppressDockHaptic(false, false));
         assertFalse(GboardFloatingHandlePolicy.shouldSuppressDockHaptic(true, true));
+    }
+
+    @Test public void capturedDockTargetMayMoveThroughHiddenHintRegion() {
+        assertEquals(600, GboardFloatingHandlePolicy.effectiveDragClampHeight(
+                false, true, 760, 160));
+        assertEquals(0, GboardFloatingHandlePolicy.effectiveDragClampHeight(
+                false, true, 120, 160));
+    }
+
+    @Test public void clampHeightStaysNativeUntilDockTargetIsCaptured() {
+        assertEquals(760, GboardFloatingHandlePolicy.effectiveDragClampHeight(
+                false, false, 760, 160));
+        assertEquals(760, GboardFloatingHandlePolicy.effectiveDragClampHeight(
+                true, true, 760, 160));
+    }
+
+    @Test public void disabledBottomDockingCancelsTerminalRelease() {
+        assertTrue(GboardFloatingHandlePolicy.shouldCancelBottomDockRelease(true, false));
+        assertFalse(GboardFloatingHandlePolicy.shouldCancelBottomDockRelease(false, false));
+        assertFalse(GboardFloatingHandlePolicy.shouldCancelBottomDockRelease(true, true));
     }
 }
