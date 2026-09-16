@@ -71,6 +71,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     MiuiSearchboxGlassSession(
             View root,
             LiquidDockConfig.Glass glassConfig,
+            ThirdPartyGlassAppearance appearance,
             float cornerRadius,
             Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
@@ -88,16 +89,21 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
-        prismalParams = Miuix307PrismalAdapter.toPortable(optical);
+        PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
+        prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
-        int scalePercent = glassConfig != null
-                ? glassConfig.passBlurCaptureScalePercent
-                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        int renderFps = glassConfig != null
-                ? glassConfig.passBlurRenderFps
-                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        int scalePercent = appearance != null
+                ? appearance.captureScalePercent
+                : (glassConfig != null
+                    ? glassConfig.passBlurCaptureScalePercent
+                    : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT);
+        int renderFps = appearance != null
+                ? appearance.renderFps
+                : (glassConfig != null
+                    ? glassConfig.passBlurRenderFps
+                    : PassBlurQualityPolicy.DEFAULT_RENDER_FPS);
         sourceBackend = new RootPassBlurBackend(
                 sourceRoot,
                 PassBlurBindRequest.miuiSearchbox(sourceRoot),
