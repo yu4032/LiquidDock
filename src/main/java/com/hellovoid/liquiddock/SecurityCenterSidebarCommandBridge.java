@@ -52,7 +52,7 @@ final class SecurityCenterSidebarCommandBridge {
                 sidebarBinder = service;
                 showMethod = candidate;
                 stateMethods = states;
-                MainHook.log(TAG + " ready descriptor=" + descriptor
+                SideSlideHoldDiagnostics.log(TAG + " ready descriptor=" + descriptor
                         + " owner=" + service.getClass().getName());
             } catch (Throwable error) {
                 clearBinder("bind validation failed: " + error);
@@ -86,7 +86,7 @@ final class SecurityCenterSidebarCommandBridge {
             String action = intent.getAction();
             if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
                 boolean ready = vendorAvailableOrShowing();
-                MainHook.log(TAG + " prepare result=" + ready);
+                SideSlideHoldDiagnostics.log(TAG + " prepare result=" + ready);
                 setResultCode(ready
                         ? SidebarCommandContract.RESULT_READY
                         : SidebarCommandContract.RESULT_UNAVAILABLE);
@@ -114,7 +114,7 @@ final class SecurityCenterSidebarCommandBridge {
                 HookUtil.tryInvokeActivityThreadCurrentApplication();
         Object application = appResult.succeeded() ? appResult.value() : null;
         if (!(application instanceof Context)) {
-            MainHook.log(TAG + " no application context; fail closed"
+            SideSlideHoldDiagnostics.log(TAG + " no application context; fail closed"
                     + (appResult.failure() == null ? "" : " " + appResult.failure()));
             return false;
         }
@@ -129,11 +129,11 @@ final class SecurityCenterSidebarCommandBridge {
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             installed = true;
             bindVendorService(context);
-            MainHook.log(TAG + " installed process=" + android.os.Process.myPid());
+            SideSlideHoldDiagnostics.log(TAG + " installed process=" + android.os.Process.myPid());
             return true;
         } catch (Throwable error) {
             installed = false;
-            MainHook.log(TAG + " install failed: " + error);
+            SideSlideHoldDiagnostics.log(TAG + " install failed: " + error);
             return false;
         }
     }
@@ -145,7 +145,7 @@ final class SecurityCenterSidebarCommandBridge {
                             SidebarCommandContract.SECURITY_CENTER_PACKAGE,
                             SidebarCommandContract.SERVICE_CLASS));
             boolean bound = context.bindService(intent, CONNECTION, Context.BIND_AUTO_CREATE);
-            MainHook.log(TAG + " bindService requested result=" + bound);
+            SideSlideHoldDiagnostics.log(TAG + " bindService requested result=" + bound);
             if (!bound) clearBinder("bindService returned false");
         } catch (Throwable error) {
             clearBinder("bindService failed: " + error);
@@ -167,7 +167,7 @@ final class SecurityCenterSidebarCommandBridge {
             }
             if (!allInts) continue;
             if (match != null) {
-                MainHook.log(TAG + " ambiguous five-int Sidebar methods: "
+                SideSlideHoldDiagnostics.log(TAG + " ambiguous five-int Sidebar methods: "
                         + match + " and " + method);
                 return null;
             }
@@ -185,7 +185,7 @@ final class SecurityCenterSidebarCommandBridge {
             matches.add(method);
         }
         if (matches.size() != 2) {
-            MainHook.log(TAG + " expected two boolean() Sidebar state methods, found="
+            SideSlideHoldDiagnostics.log(TAG + " expected two boolean() Sidebar state methods, found="
                     + matches.size());
             return null;
         }
@@ -196,7 +196,7 @@ final class SecurityCenterSidebarCommandBridge {
         IBinder binder = sidebarBinder;
         Method[] states = stateMethods;
         if (binder == null || states == null || !binder.isBinderAlive()) {
-            MainHook.log(TAG + " prepare rejected: binder unavailable");
+            SideSlideHoldDiagnostics.log(TAG + " prepare rejected: binder unavailable");
             Context context = appContext;
             if (context != null) bindVendorService(context);
             return false;
@@ -205,12 +205,12 @@ final class SecurityCenterSidebarCommandBridge {
             boolean any = false;
             for (Method state : states) {
                 Object value = state.invoke(binder);
-                MainHook.log(TAG + " state " + state.getName() + "=" + value);
+                SideSlideHoldDiagnostics.log(TAG + " state " + state.getName() + "=" + value);
                 if (Boolean.TRUE.equals(value)) any = true;
             }
             return any;
         } catch (Throwable error) {
-            MainHook.log(TAG + " state query failed: " + error);
+            SideSlideHoldDiagnostics.log(TAG + " state query failed: " + error);
             return false;
         }
     }
@@ -219,27 +219,27 @@ final class SecurityCenterSidebarCommandBridge {
         IBinder binder = sidebarBinder;
         Method method = showMethod;
         if (binder == null || method == null || !binder.isBinderAlive()) {
-            MainHook.log(TAG + " show rejected: binder unavailable");
+            SideSlideHoldDiagnostics.log(TAG + " show rejected: binder unavailable");
             Context context = appContext;
             if (context != null) bindVendorService(context);
             return false;
         }
         if (width <= 0 || height <= 0 || radius < 0) {
-            MainHook.log(TAG + " show rejected: invalid geometry "
+            SideSlideHoldDiagnostics.log(TAG + " show rejected: invalid geometry "
                     + x + "," + y + " " + width + "x" + height + " r=" + radius);
             return false;
         }
         if (!vendorAvailableOrShowing()) {
-            MainHook.log(TAG + " show rejected: vendor reports unavailable and not showing");
+            SideSlideHoldDiagnostics.log(TAG + " show rejected: vendor reports unavailable and not showing");
             return false;
         }
         try {
             method.invoke(binder, x, y, width, height, radius);
-            MainHook.log(TAG + " show accepted x=" + x + " y=" + y
+            SideSlideHoldDiagnostics.log(TAG + " show accepted x=" + x + " y=" + y
                     + " w=" + width + " h=" + height + " r=" + radius);
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " show failed: " + error);
+            SideSlideHoldDiagnostics.log(TAG + " show failed: " + error);
             return false;
         }
     }
@@ -248,6 +248,6 @@ final class SecurityCenterSidebarCommandBridge {
         sidebarBinder = null;
         showMethod = null;
         stateMethods = null;
-        MainHook.log(TAG + " not ready: " + reason);
+        SideSlideHoldDiagnostics.log(TAG + " not ready: " + reason);
     }
 }

@@ -71,17 +71,17 @@ final class Launcher450SideSlideHoldHook {
             HookUtil.hook(injectBack, chain -> {
                 GestureState state = stateFor(chain.getThisObject());
                 if (state.policy.shouldConsumeBack()) {
-                    MainHook.log(TAG + " suppress vendor Back after armed Sidebar release");
+                    SideSlideHoldDiagnostics.log(TAG + " suppress vendor Back after armed Sidebar release");
                     return null;
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
             installed = true;
-            MainHook.log(TAG + " installed class=" + stub.getName());
+            SideSlideHoldDiagnostics.log(TAG + " installed class=" + stub.getName());
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " unavailable on target Launcher: " + error);
+            SideSlideHoldDiagnostics.log(TAG + " unavailable on target Launcher: " + error);
             return false;
         }
     }
@@ -110,7 +110,7 @@ final class Launcher450SideSlideHoldHook {
             state.policy.onDown(event.getRawX(), event.getRawY(), eventTime);
             state.scheduledGeneration = Integer.MIN_VALUE;
             DisplayMetrics dm = view.getResources().getDisplayMetrics();
-            MainHook.log(TAG + " DOWN sideStub=" + state.sideStub
+            SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
                     + " view=" + view.getWidth() + "x" + view.getHeight()
                     + " screen=" + dm.widthPixels + "x" + dm.heightPixels
                     + " sw=" + view.getResources().getConfiguration().smallestScreenWidthDp
@@ -121,15 +121,15 @@ final class Launcher450SideSlideHoldHook {
 
         if (action == MotionEvent.ACTION_UP) {
             if (state.policy.shouldConsumeBack()) {
-                MainHook.log(TAG + " UP armed=true -> dispatch show before vendor Back decision");
+                SideSlideHoldDiagnostics.log(TAG + " UP armed=true -> dispatch show before vendor Back decision");
                 dispatchShow(view, state);
             } else {
-                MainHook.log(TAG + " UP armed=false -> stock Back remains authoritative");
+                SideSlideHoldDiagnostics.log(TAG + " UP armed=false -> stock Back remains authoritative");
             }
             return;
         }
         if (action == MotionEvent.ACTION_CANCEL) {
-            MainHook.log(TAG + " CANCEL");
+            SideSlideHoldDiagnostics.log(TAG + " CANCEL");
             return;
         }
         if (action != MotionEvent.ACTION_MOVE) return;
@@ -147,7 +147,7 @@ final class Launcher450SideSlideHoldHook {
         }
 
         if (generation != beforeGeneration || state.scheduledGeneration != generation) {
-            MainHook.log(TAG + " completion reached distance=" + distance
+            SideSlideHoldDiagnostics.log(TAG + " completion reached distance=" + distance
                     + " generation=" + generation + " -> dwell "
                     + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms");
             scheduleDwell(view, state, generation);
@@ -168,7 +168,7 @@ final class Launcher450SideSlideHoldHook {
         Runnable runnable = () -> {
             if (state.scheduledGeneration != generation) return;
             if (!state.policy.shouldRequestSidebar(SystemClock.uptimeMillis())) return;
-            MainHook.log(TAG + " dwell elapsed generation=" + generation + " -> SC preflight");
+            SideSlideHoldDiagnostics.log(TAG + " dwell elapsed generation=" + generation + " -> SC preflight");
             sendSidebarPrepare(view, state, generation);
         };
         state.dwellRunnable = runnable;
@@ -191,10 +191,10 @@ final class Launcher450SideSlideHoldHook {
                 if (ready && state.policy.shouldConsumeBack()) {
                     // Diagnostic mapping for the recovered OS4 hold-commit CLICK feedback.
                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                    MainHook.log(TAG + " ARMED generation=" + generation
+                    SideSlideHoldDiagnostics.log(TAG + " ARMED generation=" + generation
                             + " preflight=ready haptic=VIRTUAL_KEY");
                 } else {
-                    MainHook.log(TAG + " preflight unavailable generation=" + generation
+                    SideSlideHoldDiagnostics.log(TAG + " preflight unavailable generation=" + generation
                             + " result=" + getResultCode());
                 }
             }
@@ -210,7 +210,7 @@ final class Launcher450SideSlideHoldHook {
                     null);
         } catch (Throwable error) {
             state.policy.onSidebarResult(false, generation);
-            MainHook.log(TAG + " preflight dispatch failed: " + error);
+            SideSlideHoldDiagnostics.log(TAG + " preflight dispatch failed: " + error);
         }
     }
 
@@ -227,11 +227,11 @@ final class Launcher450SideSlideHoldHook {
                 .putExtra(SidebarCommandContract.EXTRA_RADIUS, geometry[4]);
         try {
             context.sendBroadcast(intent);
-            MainHook.log(TAG + " SHOW dispatched geometry="
+            SideSlideHoldDiagnostics.log(TAG + " SHOW dispatched geometry="
                     + geometry[0] + "," + geometry[1] + " "
                     + geometry[2] + "x" + geometry[3] + " r=" + geometry[4]);
         } catch (Throwable error) {
-            MainHook.log(TAG + " show dispatch failed after arm: " + error);
+            SideSlideHoldDiagnostics.log(TAG + " show dispatch failed after arm: " + error);
         }
     }
 
