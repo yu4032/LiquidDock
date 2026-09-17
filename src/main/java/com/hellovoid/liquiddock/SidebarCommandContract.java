@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 final class SidebarCommandContract {
+    static final String ACTION_PREPARE =
+            "com.hellovoid.liquiddock.action.PREPARE_SECURITY_CENTER_SIDEBAR";
     static final String ACTION_SHOW =
             "com.hellovoid.liquiddock.action.SHOW_SECURITY_CENTER_SIDEBAR";
     static final String SECURITY_CENTER_PACKAGE = "com.miui.securitycenter";
@@ -16,6 +18,7 @@ final class SidebarCommandContract {
     static final String EXTRA_HEIGHT = "height";
     static final String EXTRA_RADIUS = "radius";
 
+    static final int RESULT_READY = 0x5343;
     static final int RESULT_SHOWN = 0x5344;
     static final int RESULT_UNAVAILABLE = 0x5345;
 
