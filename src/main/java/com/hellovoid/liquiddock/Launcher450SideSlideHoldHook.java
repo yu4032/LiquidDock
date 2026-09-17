@@ -23,7 +23,7 @@ import java.util.WeakHashMap;
  * <p>The vendor Back state machine remains authoritative. This hook only observes the stable
  * {@code GestureStubView.onTouchEvent(MotionEvent)} boundary and suppresses the stable
  * {@code injectBackKeyEvent(boolean)} commit after Security Center has positively acknowledged
- * a Sidebar show command. No obfuscated Launcher member is read or hooked.</p>
+ * the hold preflight. No obfuscated Launcher member is read or hooked.</p>
  */
 final class Launcher450SideSlideHoldHook {
     private static final String TAG = "[DC][SideSlideHold450]";
@@ -71,14 +71,14 @@ final class Launcher450SideSlideHoldHook {
             HookUtil.hook(injectBack, chain -> {
                 GestureState state = stateFor(chain.getThisObject());
                 if (state.policy.shouldConsumeBack()) {
-                    MainHook.log(TAG + " suppress vendor Back after acknowledged Sidebar show");
+                    MainHook.log(TAG + " suppress vendor Back after armed Sidebar release");
                     return null;
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
             installed = true;
-            MainHook.log(TAG + " installed");
+            MainHook.log(TAG + " installed class=" + stub.getName());
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " unavailable on target Launcher: " + error);
@@ -109,17 +109,37 @@ final class Launcher450SideSlideHoldHook {
             state.downX = event.getRawX();
             state.policy.onDown(event.getRawX(), event.getRawY(), eventTime);
             state.scheduledGeneration = Integer.MIN_VALUE;
+            DisplayMetrics dm = view.getResources().getDisplayMetrics();
+            MainHook.log(TAG + " DOWN sideStub=" + state.sideStub
+                    + " view=" + view.getWidth() + "x" + view.getHeight()
+                    + " screen=" + dm.widthPixels + "x" + dm.heightPixels
+                    + " sw=" + view.getResources().getConfiguration().smallestScreenWidthDp
+                    + " raw=" + state.lastRawX + "," + state.lastRawY);
             return;
         }
         if (!state.sideStub) return;
+
+        if (action == MotionEvent.ACTION_UP) {
+            if (state.policy.shouldConsumeBack()) {
+                MainHook.log(TAG + " UP armed=true -> dispatch show before vendor Back decision");
+                dispatchShow(view, state);
+            } else {
+                MainHook.log(TAG + " UP armed=false -> stock Back remains authoritative");
+            }
+            return;
+        }
+        if (action == MotionEvent.ACTION_CANCEL) {
+            MainHook.log(TAG + " CANCEL");
+            return;
+        }
         if (action != MotionEvent.ACTION_MOVE) return;
 
         int beforeGeneration = state.policy.generation();
         state.policy.onMove(event.getRawX(), event.getRawY(), eventTime);
         int generation = state.policy.generation();
 
-        boolean completedBack = Math.abs(event.getRawX() - state.downX)
-                >= SideSlideHoldPolicy.BACK_COMPLETE_DISTANCE_PX;
+        float distance = Math.abs(event.getRawX() - state.downX);
+        boolean completedBack = distance >= SideSlideHoldPolicy.BACK_COMPLETE_DISTANCE_PX;
         if (!completedBack) {
             cancelScheduled(view, state);
             state.scheduledGeneration = generation;
@@ -127,6 +147,9 @@ final class Launcher450SideSlideHoldHook {
         }
 
         if (generation != beforeGeneration || state.scheduledGeneration != generation) {
+            MainHook.log(TAG + " completion reached distance=" + distance
+                    + " generation=" + generation + " -> dwell "
+                    + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms");
             scheduleDwell(view, state, generation);
         }
     }
@@ -145,34 +168,34 @@ final class Launcher450SideSlideHoldHook {
         Runnable runnable = () -> {
             if (state.scheduledGeneration != generation) return;
             if (!state.policy.shouldRequestSidebar(SystemClock.uptimeMillis())) return;
-            sendSidebarRequest(view, state, generation);
+            MainHook.log(TAG + " dwell elapsed generation=" + generation + " -> SC preflight");
+            sendSidebarPrepare(view, state, generation);
         };
         state.dwellRunnable = runnable;
         view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
     }
 
-    private static void sendSidebarRequest(View view, GestureState state, int generation) {
+    private static void sendSidebarPrepare(View view, GestureState state, int generation) {
         Context context = view.getContext();
-        if (context == null) return;
-        int[] geometry = sourceGeometry(view, state.lastRawX, state.lastRawY);
-        Intent intent = new Intent(SidebarCommandContract.ACTION_SHOW)
-                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
-                .putExtra(SidebarCommandContract.EXTRA_X, geometry[0])
-                .putExtra(SidebarCommandContract.EXTRA_Y, geometry[1])
-                .putExtra(SidebarCommandContract.EXTRA_WIDTH, geometry[2])
-                .putExtra(SidebarCommandContract.EXTRA_HEIGHT, geometry[3])
-                .putExtra(SidebarCommandContract.EXTRA_RADIUS, geometry[4]);
-
+        if (context == null) {
+            state.policy.onSidebarResult(false, generation);
+            return;
+        }
+        Intent intent = new Intent(SidebarCommandContract.ACTION_PREPARE)
+                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE);
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
-                boolean shown = getResultCode() == SidebarCommandContract.RESULT_SHOWN;
-                state.policy.onSidebarResult(shown, generation);
-                if (shown && state.policy.shouldConsumeBack()) {
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                    MainHook.log(TAG + " Sidebar acknowledged generation=" + generation);
+                boolean ready = getResultCode() == SidebarCommandContract.RESULT_READY;
+                state.policy.onSidebarResult(ready, generation);
+                if (ready && state.policy.shouldConsumeBack()) {
+                    // Diagnostic mapping for the recovered OS4 hold-commit CLICK feedback.
+                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    MainHook.log(TAG + " ARMED generation=" + generation
+                            + " preflight=ready haptic=VIRTUAL_KEY");
                 } else {
-                    MainHook.log(TAG + " Sidebar unavailable generation=" + generation);
+                    MainHook.log(TAG + " preflight unavailable generation=" + generation
+                            + " result=" + getResultCode());
                 }
             }
         };
@@ -187,7 +210,28 @@ final class Launcher450SideSlideHoldHook {
                     null);
         } catch (Throwable error) {
             state.policy.onSidebarResult(false, generation);
-            MainHook.log(TAG + " command dispatch failed: " + error);
+            MainHook.log(TAG + " preflight dispatch failed: " + error);
+        }
+    }
+
+    private static void dispatchShow(View view, GestureState state) {
+        Context context = view.getContext();
+        if (context == null) return;
+        int[] geometry = sourceGeometry(view, state.lastRawX, state.lastRawY);
+        Intent intent = new Intent(SidebarCommandContract.ACTION_SHOW)
+                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
+                .putExtra(SidebarCommandContract.EXTRA_X, geometry[0])
+                .putExtra(SidebarCommandContract.EXTRA_Y, geometry[1])
+                .putExtra(SidebarCommandContract.EXTRA_WIDTH, geometry[2])
+                .putExtra(SidebarCommandContract.EXTRA_HEIGHT, geometry[3])
+                .putExtra(SidebarCommandContract.EXTRA_RADIUS, geometry[4]);
+        try {
+            context.sendBroadcast(intent);
+            MainHook.log(TAG + " SHOW dispatched geometry="
+                    + geometry[0] + "," + geometry[1] + " "
+                    + geometry[2] + "x" + geometry[3] + " r=" + geometry[4]);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " show dispatch failed after arm: " + error);
         }
     }
 
