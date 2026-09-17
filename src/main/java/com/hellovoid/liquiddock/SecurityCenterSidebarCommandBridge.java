@@ -9,14 +9,16 @@ import android.content.ServiceConnection;
 import android.os.IBinder;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Security Center :ui bridge for Launcher-triggered Sidebar commands.
  *
  * <p>It binds the vendor's exported DockWindowManagerService inside the same Security Center
- * process, validates the stable AIDL descriptor, and resolves the Sidebar show operation by its
- * unique structural signature {@code void(int,int,int,int,int)}. No R8/JADX member name is used.
- * If any part of the contract is unavailable or ambiguous the bridge fails closed.</p>
+ * process, validates the stable AIDL descriptor, and resolves Sidebar operations only by stable
+ * structural signatures. No R8/JADX member name is used. If any part of the contract is
+ * unavailable or ambiguous the bridge fails closed.</p>
  */
 final class SecurityCenterSidebarCommandBridge {
     private static final String TAG = "[DC][SidebarBridge]";
@@ -25,6 +27,7 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile Context appContext;
     private static volatile IBinder sidebarBinder;
     private static volatile Method showMethod;
+    private static volatile Method[] stateMethods;
 
     private static final ServiceConnection CONNECTION = new ServiceConnection() {
         @Override
@@ -40,13 +43,16 @@ final class SecurityCenterSidebarCommandBridge {
                     return;
                 }
                 Method candidate = resolveShowMethod(service.getClass());
-                if (candidate == null) {
-                    clearBinder("show method unavailable or ambiguous");
+                Method[] states = resolveStateMethods(service.getClass());
+                if (candidate == null || states == null) {
+                    clearBinder("Sidebar structural contract unavailable or ambiguous");
                     return;
                 }
                 candidate.setAccessible(true);
+                for (Method state : states) state.setAccessible(true);
                 sidebarBinder = service;
                 showMethod = candidate;
+                stateMethods = states;
                 MainHook.log(TAG + " ready descriptor=" + descriptor
                         + " owner=" + service.getClass().getName());
             } catch (Throwable error) {
@@ -138,8 +144,8 @@ final class SecurityCenterSidebarCommandBridge {
 
     private static Method resolveShowMethod(Class<?> binderClass) {
         Method match = null;
-        for (Method method : binderClass.getMethods()) {
-            if (method.getReturnType() != void.class) continue;
+        for (Method method : binderClass.getDeclaredMethods()) {
+            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
             Class<?>[] params = method.getParameterTypes();
             if (params.length != 5) continue;
             boolean allInts = true;
@@ -160,10 +166,27 @@ final class SecurityCenterSidebarCommandBridge {
         return match;
     }
 
+    private static Method[] resolveStateMethods(Class<?> binderClass) {
+        List<Method> matches = new ArrayList<>(2);
+        for (Method method : binderClass.getDeclaredMethods()) {
+            if (method.isSynthetic()) continue;
+            if (method.getReturnType() != boolean.class) continue;
+            if (method.getParameterTypes().length != 0) continue;
+            matches.add(method);
+        }
+        if (matches.size() != 2) {
+            MainHook.log(TAG + " expected two boolean() Sidebar state methods, found="
+                    + matches.size());
+            return null;
+        }
+        return matches.toArray(new Method[0]);
+    }
+
     private static boolean showSidebar(int x, int y, int width, int height, int radius) {
         IBinder binder = sidebarBinder;
         Method method = showMethod;
-        if (binder == null || method == null || !binder.isBinderAlive()) {
+        Method[] states = stateMethods;
+        if (binder == null || method == null || states == null || !binder.isBinderAlive()) {
             MainHook.log(TAG + " show rejected: binder unavailable");
             Context context = appContext;
             if (context != null) bindVendorService(context);
@@ -175,6 +198,15 @@ final class SecurityCenterSidebarCommandBridge {
             return false;
         }
         try {
+            boolean availableOrShowing = false;
+            for (Method state : states) {
+                Object value = state.invoke(binder);
+                if (Boolean.TRUE.equals(value)) availableOrShowing = true;
+            }
+            if (!availableOrShowing) {
+                MainHook.log(TAG + " show rejected: vendor reports unavailable and not showing");
+                return false;
+            }
             method.invoke(binder, x, y, width, height, radius);
             MainHook.log(TAG + " show accepted x=" + x + " y=" + y
                     + " w=" + width + " h=" + height + " r=" + radius);
@@ -188,6 +220,7 @@ final class SecurityCenterSidebarCommandBridge {
     private static void clearBinder(String reason) {
         sidebarBinder = null;
         showMethod = null;
+        stateMethods = null;
         MainHook.log(TAG + " not ready: " + reason);
     }
 }
