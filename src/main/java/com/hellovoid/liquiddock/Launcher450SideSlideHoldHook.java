@@ -100,6 +100,9 @@ final class Launcher450SideSlideHoldHook {
     private static void beforeTouch(View view, MotionEvent event, GestureState state) {
         int action = event.getActionMasked();
         long eventTime = event.getEventTime();
+        state.lastRawX = event.getRawX();
+        state.lastRawY = event.getRawY();
+
         if (action == MotionEvent.ACTION_DOWN) {
             cancelScheduled(view, state);
             state.sideStub = isPadSideStub(view);
