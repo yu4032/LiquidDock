@@ -15,10 +15,9 @@ import java.util.List;
 /**
  * Security Center :ui bridge for Launcher-triggered Sidebar commands.
  *
- * <p>It binds the vendor's exported DockWindowManagerService inside the same Security Center
- * process, validates the stable AIDL descriptor, and resolves Sidebar operations only by stable
- * structural signatures. No R8/JADX member name is used. If any part of the contract is
- * unavailable or ambiguous the bridge fails closed.</p>
+ * <p>Diagnostic compatibility bridge. It binds the vendor DockWindowManagerService inside the
+ * Security Center :ui process and validates the stable AIDL descriptor. Final production code
+ * must replace structural method discovery with the recovered stable Binder contract.</p>
  */
 final class SecurityCenterSidebarCommandBridge {
     private static final String TAG = "[DC][SidebarBridge]";
@@ -83,10 +82,18 @@ final class SecurityCenterSidebarCommandBridge {
     private static final BroadcastReceiver RECEIVER = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent == null
-                    || !SidebarCommandContract.ACTION_SHOW.equals(intent.getAction())) {
+            if (intent == null) return;
+            String action = intent.getAction();
+            if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
+                boolean ready = vendorAvailableOrShowing();
+                MainHook.log(TAG + " prepare result=" + ready);
+                setResultCode(ready
+                        ? SidebarCommandContract.RESULT_READY
+                        : SidebarCommandContract.RESULT_UNAVAILABLE);
                 return;
             }
+            if (!SidebarCommandContract.ACTION_SHOW.equals(action)) return;
+
             boolean shown = showSidebar(
                     intent.getIntExtra(SidebarCommandContract.EXTRA_X, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_Y, 0),
@@ -116,11 +123,13 @@ final class SecurityCenterSidebarCommandBridge {
         if (context == null) context = (Context) application;
         appContext = context;
         try {
-            IntentFilter filter = new IntentFilter(SidebarCommandContract.ACTION_SHOW);
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(SidebarCommandContract.ACTION_PREPARE);
+            filter.addAction(SidebarCommandContract.ACTION_SHOW);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             installed = true;
             bindVendorService(context);
-            MainHook.log(TAG + " installed");
+            MainHook.log(TAG + " installed process=" + android.os.Process.myPid());
             return true;
         } catch (Throwable error) {
             installed = false;
@@ -136,6 +145,7 @@ final class SecurityCenterSidebarCommandBridge {
                             SidebarCommandContract.SECURITY_CENTER_PACKAGE,
                             SidebarCommandContract.SERVICE_CLASS));
             boolean bound = context.bindService(intent, CONNECTION, Context.BIND_AUTO_CREATE);
+            MainHook.log(TAG + " bindService requested result=" + bound);
             if (!bound) clearBinder("bindService returned false");
         } catch (Throwable error) {
             clearBinder("bindService failed: " + error);
@@ -182,11 +192,33 @@ final class SecurityCenterSidebarCommandBridge {
         return matches.toArray(new Method[0]);
     }
 
+    private static boolean vendorAvailableOrShowing() {
+        IBinder binder = sidebarBinder;
+        Method[] states = stateMethods;
+        if (binder == null || states == null || !binder.isBinderAlive()) {
+            MainHook.log(TAG + " prepare rejected: binder unavailable");
+            Context context = appContext;
+            if (context != null) bindVendorService(context);
+            return false;
+        }
+        try {
+            boolean any = false;
+            for (Method state : states) {
+                Object value = state.invoke(binder);
+                MainHook.log(TAG + " state " + state.getName() + "=" + value);
+                if (Boolean.TRUE.equals(value)) any = true;
+            }
+            return any;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " state query failed: " + error);
+            return false;
+        }
+    }
+
     private static boolean showSidebar(int x, int y, int width, int height, int radius) {
         IBinder binder = sidebarBinder;
         Method method = showMethod;
-        Method[] states = stateMethods;
-        if (binder == null || method == null || states == null || !binder.isBinderAlive()) {
+        if (binder == null || method == null || !binder.isBinderAlive()) {
             MainHook.log(TAG + " show rejected: binder unavailable");
             Context context = appContext;
             if (context != null) bindVendorService(context);
@@ -197,16 +229,11 @@ final class SecurityCenterSidebarCommandBridge {
                     + x + "," + y + " " + width + "x" + height + " r=" + radius);
             return false;
         }
+        if (!vendorAvailableOrShowing()) {
+            MainHook.log(TAG + " show rejected: vendor reports unavailable and not showing");
+            return false;
+        }
         try {
-            boolean availableOrShowing = false;
-            for (Method state : states) {
-                Object value = state.invoke(binder);
-                if (Boolean.TRUE.equals(value)) availableOrShowing = true;
-            }
-            if (!availableOrShowing) {
-                MainHook.log(TAG + " show rejected: vendor reports unavailable and not showing");
-                return false;
-            }
             method.invoke(binder, x, y, width, height, radius);
             MainHook.log(TAG + " show accepted x=" + x + " y=" + y
                     + " w=" + width + " h=" + height + " r=" + radius);
