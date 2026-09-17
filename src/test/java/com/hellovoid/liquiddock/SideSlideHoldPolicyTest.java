@@ -51,6 +51,20 @@ public class SideSlideHoldPolicyTest {
     }
 
     @Test
+    public void retreatBelowCompletionInvalidatesPendingHold() {
+        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
+        policy.onDown(0f, 400f, 0L);
+        policy.onMove(190f, 400f, 100L);
+        int generation = policy.generation();
+
+        policy.onMove(150f, 400f, 500L);
+        assertFalse(policy.shouldRequestSidebar(1200L));
+
+        policy.onSidebarResult(true, generation);
+        assertFalse(policy.shouldConsumeBack());
+    }
+
+    @Test
     public void failedOrStaleSidebarResultNeverConsumesBack() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown(0f, 400f, 0L);
