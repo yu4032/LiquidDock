@@ -8,7 +8,6 @@ final class SideSlideHoldPolicy {
 
     private boolean active;
     private float downX;
-    private float downY;
     private float anchorX;
     private float anchorY;
     private long eligibleSinceMs = -1L;
@@ -19,7 +18,6 @@ final class SideSlideHoldPolicy {
     void onDown(float x, float y, long nowMs) {
         active = true;
         downX = x;
-        downY = y;
         anchorX = x;
         anchorY = y;
         eligibleSinceMs = -1L;
@@ -32,7 +30,11 @@ final class SideSlideHoldPolicy {
         if (!active || consumeBack) return;
 
         if (Math.abs(x - downX) < BACK_COMPLETE_DISTANCE_PX) {
-            resetEligibility();
+            if (eligibleSinceMs >= 0L || requestIssued) {
+                resetEligibility();
+                consumeBack = false;
+                generation++;
+            }
             return;
         }
 
