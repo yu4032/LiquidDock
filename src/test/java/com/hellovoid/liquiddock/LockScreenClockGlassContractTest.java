@@ -83,7 +83,6 @@ public class LockScreenClockGlassContractTest {
         assertTrue(mask.contains("findAlphaBounds"));
         assertTrue(mask.contains("maskToRoot"));
         assertTrue(mask.contains("glyphLocalMatrix"));
-        assertTrue(session.contains("glUniformMatrix3fv"));
         assertTrue(mask.contains("insideTimeContainer"));
         assertTrue(hook.contains("suspendForScene"));
         assertTrue(hook.contains("resumeForScene"));
@@ -98,7 +97,8 @@ public class LockScreenClockGlassContractTest {
         assertTrue(renderer.contains("PrismalMaskShapeShader.apply"));
         assertTrue(renderer.contains("drawMaskGlass("));
         assertTrue(renderer.contains("u_shapeSdfEnabled"));
-        assertTrue(maskShape.contains("Prismal - Liquid Glass"));
+        assertTrue(renderer.contains("glUniformMatrix3fv"));
+        assertTrue(maskShape.contains("canonical Prismal fragment shader"));
         assertTrue(maskShape.contains("distMask = d0"));
         assertTrue(maskShape.contains("gradLens ="));
         assertTrue(maskShape.contains("all Fresnel, refraction, chromatic, specular"));
