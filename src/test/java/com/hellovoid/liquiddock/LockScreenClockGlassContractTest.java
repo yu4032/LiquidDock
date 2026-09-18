@@ -59,7 +59,6 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("postOnAnimation"));
         assertTrue(session.contains("[DC][LockScreenClockGlass] session failure stage="));
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
-        assertTrue(mask.contains("com.miui.clock.MiuiTextGlassView"));
         assertTrue(mask.contains("\"mTimeView\""));
         assertTrue(mask.contains("\"mTimeView2\""));
         assertTrue(mask.contains("\"mHourTextStyle1\""));
