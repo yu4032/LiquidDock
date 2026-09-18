@@ -48,6 +48,12 @@ public class LockScreenClockGlassContractTest {
         assertTrue(nativeHook.contains("setClockEffectsContainer"));
         assertTrue(nativeHook.contains("boolean.class, boolean.class"));
         assertTrue(nativeHook.contains("native member/container route"));
+        assertTrue(nativeHook.contains("com.miui.clock.MiuiTextGlassView"));
+        assertTrue(nativeHook.contains("\"onDraw\""));
+        assertTrue(nativeHook.contains("MiBlurBridge.drawClockGlassText"));
+        assertTrue(blur.contains("paint.getTextPath"));
+        assertTrue(blur.contains("canvas.drawPath"));
+        assertTrue(blur.contains("bounds.left - 50f"));
         assertTrue(nativeHook.contains("date"));
         assertTrue(nativeHook.contains("weather"));
         assertTrue(nativeHook.contains("notification"));
