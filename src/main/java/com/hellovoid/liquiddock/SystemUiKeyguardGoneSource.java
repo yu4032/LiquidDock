@@ -87,7 +87,17 @@ final class SystemUiKeyguardGoneSource {
         // Keep a strict SystemUI-local scene gate for optional lockscreen rendering. Only the
         // actual LOCKSCREEN destination is authorized; AOD/DOZING/BOUNCER/OCCLUDED/GONE and all
         // other keyguard scenes fail closed.
-        LOCKSCREEN_SCENE.set("LOCKSCREEN".equals(to));
+        boolean nextLockscreenScene = "LOCKSCREEN".equals(to);
+        boolean previousLockscreenScene = LOCKSCREEN_SCENE.getAndSet(nextLockscreenScene);
+        if (previousLockscreenScene != nextLockscreenScene) {
+            try {
+                LockScreenClockGlassHook.onLockscreenSceneChanged(nextLockscreenScene);
+            } catch (Throwable error) {
+                try {
+                    Api101Bridge.log("[DC][LockScreenClockGlass] scene callback failed", error);
+                } catch (Throwable ignored) {}
+            }
+        }
 
         if (!SystemUiKeyguardGonePolicy.isGoneTransitionAttempt(from, to)) return;
 
