@@ -104,6 +104,17 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             float cornerRadius,
             Listener listener,
             PassBlurDomain domain) {
+        this(root, glassConfig, appearance, cornerRadius, listener, domain, null);
+    }
+
+    MiuiSearchboxGlassSession(
+            View root,
+            LiquidDockConfig.Glass glassConfig,
+            ThirdPartyGlassAppearance appearance,
+            float cornerRadius,
+            Listener listener,
+            PassBlurDomain domain,
+            LockScreenClockGlyphMaskSource explicitGlyphMaskSource) {
         if (root == null) throw new IllegalArgumentException("root == null");
         View sourceRoot = root.getRootView();
         if (sourceRoot == null) throw new IllegalArgumentException("sourceRoot == null");
@@ -111,7 +122,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         this.listener = listener;
         this.cornerRadius = Math.max(0f, cornerRadius);
         this.glyphMaskSource = domain == PassBlurDomain.LOCKSCREEN_CLOCK
-                ? LockScreenClockGlyphMaskSource.resolve(root)
+                ? (explicitGlyphMaskSource != null
+                        ? explicitGlyphMaskSource
+                        : LockScreenClockGlyphMaskSource.resolve(root))
                 : null;
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
