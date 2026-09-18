@@ -78,6 +78,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private float glyphMaskTop;
     private float glyphMaskWidth;
     private float glyphMaskHeight;
+    private int glyphMaskPixelWidth;
+    private int glyphMaskPixelHeight;
     private OutputState output;
 
     MiuiSearchboxGlassSession(
@@ -414,6 +416,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             glyphMaskTop = mask.top / Math.max(1f, mask.rootHeight);
             glyphMaskWidth = mask.width / Math.max(1f, mask.rootWidth);
             glyphMaskHeight = mask.height / Math.max(1f, mask.rootHeight);
+            glyphMaskPixelWidth = Math.max(1, mask.bitmap.getWidth());
+            glyphMaskPixelHeight = Math.max(1, mask.bitmap.getHeight());
         } finally {
             if (!mask.bitmap.isRecycled()) mask.bitmap.recycle();
         }
@@ -439,6 +443,24 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 0f, 0f, 1f, 1f);
         GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphRect"),
                 glyphMaskLeft, glyphMaskTop, glyphMaskWidth, glyphMaskHeight);
+        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphTexel"),
+                1f / Math.max(1, glyphMaskPixelWidth),
+                1f / Math.max(1, glyphMaskPixelHeight));
+        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uOutputTexel"),
+                1f / Math.max(1, current.width),
+                1f / Math.max(1, current.height));
+        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphLightDir"),
+                prismalParams.lightDirX, prismalParams.lightDirY);
+        float glyphRefractionPx = Math.max(1f,
+                prismalParams.glassThicknessPx * prismalParams.displacementScale * 0.35f);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphRefractionPx"),
+                glyphRefractionPx);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphNormalStrength"),
+                Math.max(0.25f, prismalParams.normalStrength));
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphHighlightWidth"),
+                Math.max(0.08f, Math.min(0.8f, prismalParams.highlightWidth / 12f)));
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphHighlightStrength"),
+                Math.max(0f, prismalParams.specular + prismalParams.rimStrength) * 0.35f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(glyphCompositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
