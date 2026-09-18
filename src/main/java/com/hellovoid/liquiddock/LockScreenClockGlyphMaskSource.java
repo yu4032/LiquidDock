@@ -47,23 +47,63 @@ final class LockScreenClockGlyphMaskSource {
 
     static LockScreenClockGlyphMaskSource resolve(View clockRoot) {
         if (clockRoot == null) return null;
+        ArrayList<View> roots = new ArrayList<>();
+        roots.add(clockRoot);
+        return resolve(roots);
+    }
+
+    static LockScreenClockGlyphMaskSource resolve(List<View> clockRoots) {
+        if (clockRoots == null || clockRoots.isEmpty()) return null;
+        ArrayList<View> roots = new ArrayList<>();
         ArrayList<View> glyphs = new ArrayList<>();
+        for (View clockRoot : clockRoots) {
+            if (clockRoot == null) continue;
+            roots.add(clockRoot);
+            addSemanticField(clockRoot, "mTimeView", glyphs);
+            addSemanticField(clockRoot, "mTimeView2", glyphs);
+            addSemanticField(clockRoot, "mHourTextStyle1", glyphs);
+            addSemanticField(clockRoot, "mHourTextStyle2", glyphs);
+            addSemanticField(clockRoot, "mMinuteTextStyle1", glyphs);
+            addSemanticField(clockRoot, "mMinuteTextStyle2", glyphs);
+            collectSemanticTimeViews(clockRoot, glyphs, false);
+        }
+        if (roots.isEmpty() || glyphs.isEmpty()) return null;
+        View host = lowestCommonAncestor(roots);
+        if (host == null) host = roots.get(0).getRootView();
+        if (host == null) return null;
+        return new LockScreenClockGlyphMaskSource(host, glyphs);
+    }
 
-        // OS3 Classic clock implementations expose semantic, non-obfuscated time fields.
-        // Prefer those over tree timing/resource-name discovery because addClockView() can run
-        // while inflation/updateTime are still settling.
-        addSemanticField(clockRoot, "mTimeView", glyphs);
-        addSemanticField(clockRoot, "mTimeView2", glyphs);
-        addSemanticField(clockRoot, "mHourTextStyle1", glyphs);
-        addSemanticField(clockRoot, "mHourTextStyle2", glyphs);
-        addSemanticField(clockRoot, "mMinuteTextStyle1", glyphs);
-        addSemanticField(clockRoot, "mMinuteTextStyle2", glyphs);
+    private static View lowestCommonAncestor(List<View> roots) {
+        if (roots == null || roots.isEmpty()) return null;
+        ArrayList<View> chain = new ArrayList<>();
+        View current = roots.get(0);
+        while (current != null) {
+            chain.add(current);
+            android.view.ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        for (View candidate : chain) {
+            boolean common = true;
+            for (int i = 1; i < roots.size(); i++) {
+                if (!isAncestor(candidate, roots.get(i))) {
+                    common = false;
+                    break;
+                }
+            }
+            if (common) return candidate;
+        }
+        return null;
+    }
 
-        // Resource semantics cover the remaining OS3 clock families without depending on
-        // decompiler-generated class/member names.
-        collectSemanticTimeViews(clockRoot, glyphs, false);
-        if (glyphs.isEmpty()) return null;
-        return new LockScreenClockGlyphMaskSource(clockRoot, glyphs);
+    private static boolean isAncestor(View ancestor, View view) {
+        View current = view;
+        while (current != null) {
+            if (current == ancestor) return true;
+            android.view.ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
     }
 
     Mask capture() {
