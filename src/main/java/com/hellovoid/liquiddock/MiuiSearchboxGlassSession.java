@@ -183,6 +183,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void updateGeometry() {
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            throw new IllegalStateException("updateGeometry must run on main thread");
+        }
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         View sourceRoot = root.getRootView();
@@ -286,7 +289,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             }
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
-            updateGeometry();
+            // View/glyph geometry is captured on the main thread by refresh/preDraw before
+            // requestFreshCapture(). The EGL callback must consume only that immutable snapshot.
             sourceBackend.makePbufferCurrent();
             prismalRenderer.prepareBackdrop(
                     frame.normalizedTextureId,
@@ -335,12 +339,10 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
 
     private void renderCurrent() {
         OutputState current = output;
-        View root = rootRef.get();
         MiuiSearchboxGlassGeometry currentGeometry = geometry;
         if (shuttingDown || !backdropPrepared || current == null
                 || currentGeometry == null
                 || current.eglSurface == EGL14.EGL_NO_SURFACE
-                || root == null || !root.isAttachedToWindow()
                 || logicalWidth <= 0 || logicalHeight <= 0
                 || currentGeometry.rootWidth != logicalWidth
                 || currentGeometry.rootHeight != logicalHeight) return;
