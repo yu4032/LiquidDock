@@ -74,6 +74,11 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private int glyphCompositeProgram;
     private int glyphMaskTexture;
     private long uploadedGlyphMaskSignature = Long.MIN_VALUE;
+    private final float[] glyphRootPxToMaskUv = new float[]{
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f
+    };
     private float glyphMaskLeft;
     private float glyphMaskTop;
     private float glyphMaskWidth;
@@ -180,9 +185,10 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         if (glyphMaskSource != null) {
             LockScreenClockGlyphMaskSource.Mask mask = glyphMaskSource.capture();
             if (mask == null) return;
+            float[] bounds = transformedUnitBounds(mask.maskToRoot);
             next = MiuiSearchboxGlassGeometry.fromWindowBounds(
                     mask.rootWidth, mask.rootHeight,
-                    mask.left, mask.top, mask.width, mask.height, 0f);
+                    bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1], 0f);
             if (next == null) {
                 mask.bitmap.recycle();
                 return;
@@ -401,6 +407,24 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (mask == null) return;
         try {
+            android.graphics.Matrix maskToRoot =
+                    new android.graphics.Matrix();
+            maskToRoot.setValues(mask.maskToRoot);
+            android.graphics.Matrix rootToMask =
+                    new android.graphics.Matrix();
+            if (!maskToRoot.invert(rootToMask)) {
+                throw new IllegalStateException("glyph transform not invertible");
+            }
+            rootToMask.getValues(glyphRootPxToMaskUv);
+
+            float[] bounds = transformedUnitBounds(mask.maskToRoot);
+            glyphMaskLeft = bounds[0] / Math.max(1f, mask.rootWidth);
+            glyphMaskTop = bounds[1] / Math.max(1f, mask.rootHeight);
+            glyphMaskWidth = (bounds[2] - bounds[0]) / Math.max(1f, mask.rootWidth);
+            glyphMaskHeight = (bounds[3] - bounds[1]) / Math.max(1f, mask.rootHeight);
+            glyphMaskPixelWidth = Math.max(1, mask.bitmap.getWidth());
+            glyphMaskPixelHeight = Math.max(1, mask.bitmap.getHeight());
+
             if (mask.signature == uploadedGlyphMaskSignature && glyphMaskTexture != 0) return;
             if (glyphMaskTexture == 0) {
                 int[] textures = new int[1];
@@ -420,18 +444,31 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
             }
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, mask.bitmap, 0);
-            Api101Bridge.log("[DC][LockScreenClockGlass] glyph mask uploaded "
+            Api101Bridge.log("[DC][LockScreenClockGlass] glyph mask content uploaded "
                     + mask.bitmap.getWidth() + "x" + mask.bitmap.getHeight());
             uploadedGlyphMaskSignature = mask.signature;
-            glyphMaskLeft = mask.left / Math.max(1f, mask.rootWidth);
-            glyphMaskTop = mask.top / Math.max(1f, mask.rootHeight);
-            glyphMaskWidth = mask.width / Math.max(1f, mask.rootWidth);
-            glyphMaskHeight = mask.height / Math.max(1f, mask.rootHeight);
-            glyphMaskPixelWidth = Math.max(1, mask.bitmap.getWidth());
-            glyphMaskPixelHeight = Math.max(1, mask.bitmap.getHeight());
         } finally {
             if (!mask.bitmap.isRecycled()) mask.bitmap.recycle();
         }
+    }
+
+    private static float[] transformedUnitBounds(float[] m) {
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float[][] points = new float[][]{
+                {0f, 0f}, {1f, 0f}, {0f, 1f}, {1f, 1f}
+        };
+        for (float[] p : points) {
+            float x = m[0] * p[0] + m[1] * p[1] + m[2];
+            float y = m[3] * p[0] + m[4] * p[1] + m[5];
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        }
+        return new float[]{minX, minY, maxX, maxY};
     }
 
     private void presentGlyphMasked(
@@ -462,6 +499,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
 
         GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphRect"),
                 glyphMaskLeft, glyphMaskTop, glyphMaskWidth, glyphMaskHeight);
+        GLES20.glUniformMatrix3fv(
+                requireUniform(glyphCompositeProgram, "uRootPxToMaskUv"),
+                1, false, glyphRootPxToMaskUv, 0);
         GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphTexel"),
                 1f / Math.max(1, glyphMaskPixelWidth),
                 1f / Math.max(1, glyphMaskPixelHeight));
@@ -486,6 +526,18 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 Math.max(0.08f, Math.min(0.8f, prismalParams.highlightWidth / 12f)));
         GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphHighlightStrength"),
                 Math.max(0f, prismalParams.specular + prismalParams.rimStrength) * 0.35f);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uRimStrength"),
+                prismalParams.rimStrength);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uPlainHighlight"),
+                prismalParams.plainHighlight);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentLitRim"),
+                highlightProfile.litRim ? 1f : 0f);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentOppositeRim"),
+                highlightProfile.oppositeRim ? 1f : 0f);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentFaceSheen"),
+                highlightProfile.faceSheen ? 1f : 0f);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentPlainHighlight"),
+                highlightProfile.plainHighlight ? 1f : 0f);
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(glyphCompositeProgram);
