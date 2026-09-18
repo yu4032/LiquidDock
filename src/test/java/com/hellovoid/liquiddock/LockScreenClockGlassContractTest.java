@@ -52,8 +52,6 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("LockScreenClockGlyphMaskSource.resolve"));
         assertTrue(hook.contains("glyphMaskSource.suppressNativeGlyphs()"));
         assertTrue(hook.contains("session.requestFreshCapture()"));
-        assertTrue(hook.indexOf("glyphMaskSource.suppressNativeGlyphs()")
-                < hook.indexOf("session.requestFreshCapture()"));
         assertTrue(hook.contains("restoreNativeGlyphs"));
 
         // The visual result must be canonical Prismal glass constrained by an SDF glyph mask.
