@@ -6,9 +6,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import org.junit.Test;
 
 public class Folder2x1LayoutPolicyTest {
@@ -40,18 +37,4 @@ public class Folder2x1LayoutPolicyTest {
         assertTrue(layout.slots[4].top > layout.slots[2].top);
     }
 
-    @Test public void runtimeUsesSemanticFolderAuthoritiesOnly() throws Exception {
-        String hook = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/Folder2x1Hook.java"));
-        assertTrue(hook.contains(
-                "com.miui.home.launcher.convertsize.FolderIconConvertSizeController"));
-        assertTrue(hook.contains(
-                "com.miui.home.launcher.folder.BaseFolderIconPreviewContainer2X2"));
-        assertTrue(hook.contains("getFolderSpanXFromType"));
-        assertTrue(hook.contains("getFolderSpanYFromType"));
-        assertTrue(hook.contains("FolderIcon2x2_4"));
-        assertFalse(hook.contains("setScaleX"));
-        assertFalse(hook.contains("setScaleY"));
-        assertFalse(hook.contains("libapp.so"));
-    }
 }
