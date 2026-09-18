@@ -19,9 +19,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Reuses SystemUI's own advanced clock-material routing.
  *
- * <p>ClockEffectUtils already knows the exact native container/member Views for every clock style.
- * LiquidDock only remaps those existing Views onto the configured glass material while LOCKSCREEN
- * is active. No overlay, glyph bitmap, TextureView, Surface or private EGL thread is created.</p>
+ * <p>LiquidDock observes ClockEffectUtils' native container/member routing where available and
+ * falls back to the owning MiuiBaseClock2 root for styles that do not publish a backdrop route.
+ * Only the existing clock Views are remapped while LOCKSCREEN is active; no overlay, bitmap,
+ * TextureView, Surface or private EGL thread is created.</p>
  */
 final class LockScreenClockNativeMaterialHook {
     private static final String TAG = "[DC][LockScreenClockGlass]";
@@ -44,6 +45,7 @@ final class LockScreenClockNativeMaterialHook {
     private static Method SET_MI_GLASS_CLIP;
     private static Method CLEAR_GLASS_BLUR_CONTAINER;
     private static Method CLEAR_GLASS_EFFECT_METHOD;
+    private static Method CHOOSE_BACKGROUND_BLUR_CONTAINER;
 
     private LockScreenClockNativeMaterialHook() {}
 
@@ -100,6 +102,7 @@ final class LockScreenClockNativeMaterialHook {
                     blurUtils,
                     "chooseBackgroundBlurContainer",
                     new Class<?>[]{View.class, View.class});
+            CHOOSE_BACKGROUND_BLUR_CONTAINER = choose;
             HookUtil.hook(choose, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
@@ -336,6 +339,16 @@ final class LockScreenClockNativeMaterialHook {
                 if (!ensureMemberMaterial(member)) {
                     return chain.proceed(args);
                 }
+                Runtime drawRuntime = runtime();
+                if (drawRuntime == null
+                        || !setNativeGlassMember(
+                                member,
+                                drawRuntime.appearance.tintR,
+                                drawRuntime.appearance.tintG,
+                                drawRuntime.appearance.tintB,
+                                drawRuntime.appearance.tintAlpha)) {
+                    return chain.proceed(args);
+                }
                 if (drawNativeGlassText((TextView) self, (Canvas) args[0])) {
                     return null;
                 }
@@ -376,12 +389,9 @@ final class LockScreenClockNativeMaterialHook {
     }
 
     private static boolean chooseNativeBackgroundBlurContainer(View member, View container) {
-        if (member == null || container == null) return false;
+        Method choose = CHOOSE_BACKGROUND_BLUR_CONTAINER;
+        if (choose == null || member == null || container == null) return false;
         try {
-            Method choose = HookUtil.findMethodExact(
-                    Class.forName(MIUI_BLUR_UTILS, false, member.getClass().getClassLoader()),
-                    "chooseBackgroundBlurContainer",
-                    new Class<?>[]{View.class, View.class});
             choose.invoke(null, member, container);
             return true;
         } catch (Throwable error) {
