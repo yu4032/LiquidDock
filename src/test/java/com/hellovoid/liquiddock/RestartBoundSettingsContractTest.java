@@ -80,20 +80,23 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
-    public void systemUiRestartIsOnlyRenderedOnHomePage() throws Exception {
+    public void systemUiRestartIsRenderedOnlyOnHomeAndLockScreenClockPages() throws Exception {
         String source = Files.readString(UI);
         int actionsAt = source.indexOf("actions = {");
-        int launcherRestartAt = source.indexOf("action_restart_launcher", actionsAt);
-        int systemUiRestartAt = source.indexOf("action_restart_system_ui", actionsAt);
-        int homeGuardAt = source.lastIndexOf("if (page == Page.Home)", systemUiRestartAt);
+        int clockGuardAt = source.indexOf("if (page == Page.LockScreenClock)", actionsAt);
+        int clockRestartAt = source.indexOf("action_restart_system_ui", clockGuardAt);
+        int homeGuardAt = source.indexOf("if (page == Page.Home)", clockRestartAt);
+        int homeRestartAt = source.indexOf("action_restart_system_ui", homeGuardAt);
 
         assertTrue("top app bar actions must exist", actionsAt >= 0);
-        assertTrue("launcher restart must remain visible on every page", launcherRestartAt > actionsAt);
-        assertTrue("SystemUI restart must still exist", systemUiRestartAt > launcherRestartAt);
-        assertTrue("SystemUI restart must be guarded by the Home page",
-                homeGuardAt > launcherRestartAt && homeGuardAt < systemUiRestartAt);
-        assertTrue("Home-page guard must directly wrap the SystemUI action",
-                systemUiRestartAt - homeGuardAt < 300);
+        assertTrue("clock page must expose SystemUI restart",
+                clockGuardAt > actionsAt && clockRestartAt > clockGuardAt
+                        && clockRestartAt - clockGuardAt < 300);
+        assertTrue("Home page must retain SystemUI restart",
+                homeGuardAt > clockRestartAt && homeRestartAt > homeGuardAt
+                        && homeRestartAt - homeGuardAt < 300);
+        assertTrue("exactly two SystemUI restart actions are expected",
+                source.indexOf("action_restart_system_ui", homeRestartAt + 1) < 0);
     }
 
     private static String stringValue(String xml, String name) {
