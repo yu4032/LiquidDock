@@ -336,17 +336,20 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrame();
-            prismalRenderer.drawGlass(
-                    currentGeometry.toPrismalGeometry(),
-                    prismalParams,
-                    highlightProfile,
-                    PrismalInteractionState.IDLE);
             if (glyphMaskSource != null) {
                 uploadPendingGlyphMask();
                 if (glyphMaskTexture == 0) return;
-                presentGlyphMasked(prismalRenderer.outputTexture(), current);
+                presentGlyphMasked(
+                        prismalRenderer.normalizedBackdropTexture(),
+                        prismalRenderer.blurredBackdropTexture(),
+                        current);
             } else {
+                prismalRenderer.beginGlassFrame();
+                prismalRenderer.drawGlass(
+                        currentGeometry.toPrismalGeometry(),
+                        prismalParams,
+                        highlightProfile,
+                        PrismalInteractionState.IDLE);
                 presentFull(prismalRenderer.outputTexture(), current);
             }
             swapSucceeded = true;
@@ -431,7 +434,10 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentGlyphMasked(int sceneTexture, OutputState current) {
+    private void presentGlyphMasked(
+            int backdropTexture,
+            int blurredBackdropTexture,
+            OutputState current) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -441,14 +447,19 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(glyphCompositeProgram);
         bindQuad(glyphCompositeProgram);
+
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uTexture"), 0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, backdropTexture);
+        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uBackdrop"), 0);
+
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, blurredBackdropTexture);
+        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uBlurredBackdrop"), 1);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
-        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uGlyphMask"), 1);
-        GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uCropRect"),
-                0f, 0f, 1f, 1f);
+        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uGlyphMask"), 2);
+
         GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphRect"),
                 glyphMaskLeft, glyphMaskTop, glyphMaskWidth, glyphMaskHeight);
         GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphTexel"),
@@ -459,6 +470,12 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 1f / Math.max(1, current.height));
         GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphLightDir"),
                 prismalParams.lightDirX, prismalParams.lightDirY);
+        GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphTint"),
+                prismalParams.tintR, prismalParams.tintG,
+                prismalParams.tintB, prismalParams.tintA);
+        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphBrightness"),
+                prismalParams.brightness);
+
         float glyphRefractionPx = Math.max(1f,
                 prismalParams.glassThicknessPx * prismalParams.displacementScale * 0.35f);
         GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphRefractionPx"),
@@ -469,10 +486,11 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 Math.max(0.08f, Math.min(0.8f, prismalParams.highlightWidth / 12f)));
         GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphHighlightStrength"),
                 Math.max(0f, prismalParams.specular + prismalParams.rimStrength) * 0.35f);
+
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(glyphCompositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
-        Api101Bridge.log("[DC][LockScreenClockGlass] glyph-masked swap success");
+        Api101Bridge.log("[DC][LockScreenClockGlass] glyph-backdrop swap success");
     }
 
     private void releaseOutput(OutputState current) {
