@@ -153,13 +153,31 @@ final class LockScreenClockNativeMaterialHook {
     }
 
     static void onLockscreenSceneChanged(boolean lockscreen) {
-        if (!lockscreen) return;
         ArrayList<View> containers;
         ArrayList<View> members;
         synchronized (LOCK) {
             containers = new ArrayList<>(CONTAINERS.keySet());
             members = new ArrayList<>(MEMBERS.keySet());
         }
+
+        if (!lockscreen) {
+            // These clock Views can survive a KEYGUARD -> AOD/other-scene transition. Remove only
+            // the LiquidDock Glass state so no forced material leaks outside the real lockscreen.
+            for (View view : members) {
+                if (view != null) {
+                    try { view.post(() -> MiBlurBridge.clearClockGlassMember(view)); }
+                    catch (Throwable ignored) {}
+                }
+            }
+            for (View view : containers) {
+                if (view != null) {
+                    try { view.post(() -> MiBlurBridge.clearClockGlassContainer(view)); }
+                    catch (Throwable ignored) {}
+                }
+            }
+            return;
+        }
+
         for (View view : containers) {
             if (view != null && view.isAttachedToWindow()) {
                 try { view.post(() -> applyContainer(view)); } catch (Throwable ignored) {}
