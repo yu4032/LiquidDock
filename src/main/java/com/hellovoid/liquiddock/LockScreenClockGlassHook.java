@@ -7,6 +7,7 @@ import android.view.ViewTreeObserver;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.WeakHashMap;
 
 /**
@@ -29,6 +30,7 @@ final class LockScreenClockGlassHook {
 
     private static final class State implements View.OnAttachStateChangeListener,
             MiuiSearchboxGlassSession.Listener {
+        final ArrayList<View> clockViews;
         final View clockView;
         final ViewGroup outputHost;
         final int outputIndex;
@@ -41,25 +43,37 @@ final class LockScreenClockGlassHook {
         boolean suspended;
 
         State(
-                View clockView,
+                List<View> clockViews,
                 ViewGroup outputHost,
                 int outputIndex,
                 LiquidDockConfig.Glass glassConfig,
                 ThirdPartyGlassAppearance appearance) {
-            this.clockView = clockView;
+            if (clockViews == null || clockViews.isEmpty()) {
+                throw new UnsupportedClockShapeException("clock group unavailable");
+            }
+            this.clockViews = new ArrayList<>(clockViews);
+            this.clockView = this.clockViews.get(0);
             this.outputHost = outputHost;
             this.outputIndex = outputIndex;
-            this.glyphMaskSource = LockScreenClockGlyphMaskSource.resolve(clockView);
+            this.glyphMaskSource = LockScreenClockGlyphMaskSource.resolve(this.clockViews);
             if (glyphMaskSource == null || glyphMaskSource.glyphCount() == 0) {
                 throw new UnsupportedClockShapeException("native time glyph views unavailable");
             }
             this.session = new MiuiSearchboxGlassSession(
-                    clockView, glassConfig, appearance, 0f, this, PassBlurDomain.LOCKSCREEN_CLOCK);
+                    clockView,
+                    glassConfig,
+                    appearance,
+                    0f,
+                    this,
+                    PassBlurDomain.LOCKSCREEN_CLOCK,
+                    glyphMaskSource);
             this.glassView = new MiuiSearchboxGlassView(clockView.getContext(), session);
         }
 
         void attach() {
-            clockView.addOnAttachStateChangeListener(this);
+            for (View candidate : clockViews) {
+                candidate.addOnAttachStateChangeListener(this);
+            }
             outputHost.addView(
                     glassView,
                     Math.max(0, Math.min(outputIndex + 1, outputHost.getChildCount())),
@@ -160,14 +174,27 @@ final class LockScreenClockGlassHook {
         }
 
         @Override public void onViewDetachedFromWindow(View v) {
+            boolean anyAttached = false;
+            for (View candidate : clockViews) {
+                if (candidate != null && candidate.isAttachedToWindow()) {
+                    anyAttached = true;
+                    break;
+                }
+            }
+            if (anyAttached) return;
             try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            synchronized (STATES) {
+                for (View candidate : clockViews) KNOWN_CLOCKS.remove(candidate);
+            }
             safePost(clockView, () -> dispose(true), "detach-dispose");
         }
 
         void dispose(boolean restoreNative) {
             if (disposed) return;
             disposed = true;
-            try { clockView.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
+            for (View candidate : clockViews) {
+                try { candidate.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
+            }
             if (observer != null && preDraw != null) {
                 try { if (observer.isAlive()) observer.removeOnPreDrawListener(preDraw); }
                 catch (Throwable ignored) {}
@@ -175,8 +202,9 @@ final class LockScreenClockGlassHook {
             observer = null;
             preDraw = null;
             synchronized (STATES) {
-                if (STATES.get(clockView) == this) STATES.remove(clockView);
-                KNOWN_CLOCKS.remove(clockView);
+                for (View candidate : clockViews) {
+                    if (STATES.get(candidate) == this) STATES.remove(candidate);
+                }
             }
             try { glassView.dispose(); } catch (Throwable error) {
                 Api101Bridge.log(TAG + " glass view dispose failed", error);
@@ -230,7 +258,9 @@ final class LockScreenClockGlassHook {
         ArrayList<State> states = new ArrayList<>();
         synchronized (STATES) {
             known.addAll(KNOWN_CLOCKS.keySet());
-            states.addAll(STATES.values());
+            for (State state : STATES.values()) {
+                if (state != null && !states.contains(state)) states.add(state);
+            }
         }
         if (!lockscreen) {
             for (State state : states) {
@@ -263,7 +293,24 @@ final class LockScreenClockGlassHook {
             if (Boolean.TRUE.equals(PENDING_ATTACH.get(clockView))) return;
             PENDING_ATTACH.put(clockView, Boolean.TRUE);
         }
-        safePost(clockView, () -> tryAttachFailClosed(clockView), "attach");
+        try {
+            clockView.postOnAnimation(() -> tryAttachFailClosed(clockView));
+        } catch (Throwable error) {
+            clearPending(clockView);
+            Api101Bridge.log(TAG + " group attach scheduling failed; native clock retained", error);
+        }
+    }
+
+    private static ArrayList<View> collectClockGroup(View root) {
+        ArrayList<View> result = new ArrayList<>();
+        synchronized (STATES) {
+            for (View candidate : KNOWN_CLOCKS.keySet()) {
+                if (candidate == null || !candidate.isAttachedToWindow()) continue;
+                if (candidate.getRootView() != root) continue;
+                result.add(candidate);
+            }
+        }
+        return result;
     }
 
     private static void tryAttachFailClosed(View clockView) {
@@ -312,18 +359,42 @@ final class LockScreenClockGlassHook {
                     + " layerId=" + endpoint.rootLayerId
                     + " surfaceSeq=" + endpoint.surfaceSequenceId);
 
+            ArrayList<View> group = collectClockGroup(root);
+            if (group.isEmpty()) group.add(clockView);
+
             State next;
             synchronized (STATES) {
-                State old = STATES.get(clockView);
-                if (old != null && !old.disposed) {
-                    old.refresh();
-                    return;
+                State old = null;
+                for (View candidate : group) {
+                    State mapped = STATES.get(candidate);
+                    if (mapped != null && !mapped.disposed) {
+                        old = mapped;
+                        break;
+                    }
                 }
-                next = new State(clockView, parent, index, config.glass, appearance);
-                STATES.put(clockView, next);
-                PENDING_ATTACH.remove(clockView);
-                Api101Bridge.log(TAG + " attach candidate class="
-                        + clockView.getClass().getName()
+                if (old != null) {
+                    boolean complete = old.clockViews.containsAll(group)
+                            && group.containsAll(old.clockViews);
+                    if (complete) {
+                        for (View candidate : group) PENDING_ATTACH.remove(candidate);
+                        old.refresh();
+                        return;
+                    }
+                    old.dispose(true);
+                }
+
+                next = new State(group, parent, index, config.glass, appearance);
+                for (View candidate : group) {
+                    STATES.put(candidate, next);
+                    PENDING_ATTACH.remove(candidate);
+                }
+                StringBuilder classes = new StringBuilder();
+                for (View candidate : group) {
+                    if (classes.length() > 0) classes.append(",");
+                    classes.append(candidate.getClass().getName());
+                }
+                Api101Bridge.log(TAG + " attach group candidates=" + group.size()
+                        + " classes=" + classes
                         + " glyphs=" + next.glyphMaskSource.glyphCount()
                         + " root=" + parent.getClass().getName());
             }
@@ -332,7 +403,9 @@ final class LockScreenClockGlassHook {
                 next.attach();
             } catch (Throwable error) {
                 synchronized (STATES) {
-                    if (STATES.get(clockView) == next) STATES.remove(clockView);
+                    for (View candidate : next.clockViews) {
+                        if (STATES.get(candidate) == next) STATES.remove(candidate);
+                    }
                 }
                 try { next.dispose(true); } catch (Throwable ignored) {}
                 Api101Bridge.log(TAG + " attach failed; native clock retained", error);
