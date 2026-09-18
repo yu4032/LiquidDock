@@ -39,6 +39,11 @@ public class LockScreenClockGlassContractTest {
         assertFalse(hook.contains("setMiGlass"));
         assertFalse(hook.contains("clockEffect"));
         assertTrue(module.contains("LockScreenClockGlassHook.install"));
+        assertTrue(hook.contains("scheduleAttach(candidate)"));
+        assertTrue(hook.contains("post-create inspection failed; native clock retained"));
+        assertTrue(hook.contains("tryAttachFailClosed"));
+        assertTrue(hook.contains("pre-draw failed; native clock retained"));
+        assertTrue(hook.contains("presentation handoff failed; native clock retained"));
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
         String session = Files.readString(MAIN.resolve("MiuiSearchboxGlassSession.java"));
         String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
@@ -48,5 +53,9 @@ public class LockScreenClockGlassContractTest {
         assertTrue(session.contains("uploadPendingGlyphMask"));
         assertTrue(composite.contains("uGlyphMask"));
         assertTrue(composite.contains("glass.a * alpha"));
+
+        String prefs = Files.readString(MAIN.resolve("LockScreenClockGlassPreferences.java"));
+        assertTrue(prefs.contains("glyph_enabled_v2"));
+        assertFalse(prefs.contains("key(PROFILE_ID, \"enabled\")"));
     }
 }
