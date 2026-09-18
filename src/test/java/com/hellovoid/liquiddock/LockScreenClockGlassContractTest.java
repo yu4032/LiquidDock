@@ -31,11 +31,11 @@ public class LockScreenClockGlassContractTest {
         String nativeHook = Files.readString(
                 MAIN.resolve("LockScreenClockNativeMaterialHook.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
         String sceneSource = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
         String prefs = Files.readString(MAIN.resolve("LockScreenClockGlassPreferences.java"));
 
         assertTrue(nativeHook.contains("com.miui.clock.utils.ClockEffectUtils"));
+        assertTrue(nativeHook.contains("com.miui.clock.utils.MiuiBlurUtils"));
         assertTrue(nativeHook.contains("setClockEffectsContainer"));
         assertTrue(nativeHook.contains("setClockEffectsView"));
         assertTrue(nativeHook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
@@ -45,15 +45,35 @@ public class LockScreenClockGlassContractTest {
         assertTrue(nativeHook.contains("chooseBackgroundBlurContainer"));
         assertTrue(nativeHook.contains("MEMBER_CONTAINERS"));
         assertTrue(nativeHook.contains("ROOT_CONTAINERS"));
-        assertTrue(nativeHook.contains("setClockEffectsContainer"));
-        assertTrue(nativeHook.contains("boolean.class, boolean.class"));
         assertTrue(nativeHook.contains("native member/container route"));
-        assertTrue(nativeHook.contains("com.miui.clock.MiuiTextGlassView"));
+
+        // HyperOS native Glass wrappers recovered from the decompiled clock package.
+        assertTrue(nativeHook.contains("setGlassBlurContainer"));
+        assertTrue(nativeHook.contains("setGlassEffectMethod"));
+        assertTrue(nativeHook.contains("setPaintGlassEffect"));
+        assertTrue(nativeHook.contains("setMiGlassClip"));
+        assertTrue(nativeHook.contains("clearGlassBlurContainer"));
+        assertTrue(nativeHook.contains("clearGlassEffectMethod"));
+
+        // Draw hooks are installed lazily from the actual runtime time-view class. This covers
+        // MiuiTextGlassView as well as pad clock TextViews without guessing a style class.
+        assertTrue(nativeHook.contains("ensureDrawHook(view.getClass())"));
         assertTrue(nativeHook.contains("\"onDraw\""));
-        assertTrue(nativeHook.contains("MiBlurBridge.drawClockGlassText"));
-        assertTrue(blur.contains("paint.getTextPath"));
-        assertTrue(blur.contains("canvas.drawPath"));
-        assertTrue(blur.contains("bounds.left - 50f"));
+        assertTrue(nativeHook.contains("DRAW_HOOKS"));
+        assertTrue(nativeHook.contains("paint.getTextPath"));
+        assertTrue(nativeHook.contains("canvas.drawPath"));
+        assertTrue(nativeHook.contains("bounds.left - 50f"));
+        assertTrue(nativeHook.contains("setNativeGlassMember("));
+
+        // Styles that do not publish chooseBackgroundBlurContainer still resolve their owning
+        // MiuiBaseClock2 root as the native backdrop container.
+        assertTrue(nativeHook.contains("resolveClockRootContainer"));
+        assertTrue(nativeHook.contains("com.miui.clock.MiuiBaseClock2"));
+
+        // Scene cleanup must remove only LiquidDock's forced Glass state.
+        assertTrue(nativeHook.contains("clearNativeGlassMember"));
+        assertTrue(nativeHook.contains("clearNativeGlassContainer"));
+
         assertTrue(nativeHook.contains("date"));
         assertTrue(nativeHook.contains("weather"));
         assertTrue(nativeHook.contains("notification"));
@@ -67,27 +87,8 @@ public class LockScreenClockGlassContractTest {
         assertFalse(sceneSource.contains(
                 "LockScreenClockGlassHook.onLockscreenSceneChanged"));
 
-        assertTrue(blur.contains("applyClockMaterialContainer"));
-        assertTrue(blur.contains("applyClockMaterialMember"));
-        assertTrue(blur.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
-        assertTrue(blur.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1)"));
-        assertTrue(blur.contains("setMiGlassBlurRadius"));
-        assertTrue(blur.contains("SET_MI_GLASS_BLUR_RADIUS.invoke(view, safeRadius, safeRadius)"));
-        assertTrue(blur.contains("setMiViewMaterialType"));
-        assertTrue(blur.contains("setMiGlass"));
-        assertTrue(blur.contains("setMiCustomSurfaceColorType"));
-        assertTrue(blur.contains("setMiGlassClip"));
-        assertTrue(blur.contains("Paint.class, \"setGlassEffect\""));
-        assertTrue(blur.contains("SET_MI_VIEW_MATERIAL_TYPE.invoke(view, 1)"));
-        assertTrue(blur.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 3)"));
-        assertTrue(blur.contains("SET_MI_CUSTOM_SURFACE_COLOR_TYPE.invoke(view, 16)"));
-        assertTrue(blur.contains("SET_PAINT_GLASS_EFFECT.invoke(paint, true)"));
-        assertTrue(blur.contains("30.0f"));
-        assertTrue(blur.contains("new Point(tint, 101)"));
-        assertTrue(blur.contains("CHOOSE_BACKGROUND_BLUR_CONTAINER"));
-        assertTrue(blur.contains("chooseClockBackgroundBlurContainer"));
-        assertTrue(nativeHook.contains("clearClockGlassMember"));
-        assertTrue(nativeHook.contains("clearClockGlassContainer"));
+        assertFalse(nativeHook.contains("MiBlurBridge.applyClockMaterialContainer"));
+        assertFalse(nativeHook.contains("MiBlurBridge.applyClockMaterialMember"));
 
         // Native material path must not create a second clock renderer.
         assertFalse(nativeHook.contains("import android.view.TextureView"));
