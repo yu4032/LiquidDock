@@ -200,17 +200,15 @@ final class LockScreenClockGlassHook {
             if (Boolean.TRUE.equals(PENDING_ATTACH.get(clockView))) return;
             PENDING_ATTACH.put(clockView, Boolean.TRUE);
         }
-        safePost(clockView, () -> {
-            synchronized (STATES) {
-                PENDING_ATTACH.remove(clockView);
-            }
-            tryAttachFailClosed(clockView);
-        }, "attach");
+        safePost(clockView, () -> tryAttachFailClosed(clockView), "attach");
     }
 
     private static void tryAttachFailClosed(View clockView) {
         try {
-            if (clockView == null || !clockView.isAttachedToWindow()) return;
+            if (clockView == null || !clockView.isAttachedToWindow()) {
+                clearPending(clockView);
+                return;
+            }
 
             ConfigReader reader = ConfigReader.load();
             LiquidDockConfig config = LiquidDockConfig.from(reader);
@@ -220,16 +218,30 @@ final class LockScreenClockGlassHook {
                 Api101Bridge.log(TAG + " skipped by config module=" + config.enabled
                         + " glass=" + config.glass.enabled
                         + " clock=" + appearance.enabled);
+                clearPending(clockView);
                 return;
             }
 
             View root = clockView.getRootView();
             if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) {
-                Api101Bridge.log(TAG + " root unavailable; native clock retained");
+                Api101Bridge.log(TAG + " root unavailable; waiting for next frame");
+                postEndpointRetry(clockView);
+                return;
+            }
+            RootPassBlurEndpointBridge.Endpoint endpoint =
+                    RootPassBlurEndpointBridge.inspect(root);
+            if (endpoint == null || !endpoint.isValid()) {
+                Api101Bridge.log(TAG + " root endpoint not ready; waiting for next frame");
+                postEndpointRetry(clockView);
                 return;
             }
             ViewGroup parent = (ViewGroup) root;
             int index = parent.getChildCount() - 1;
+            Api101Bridge.log(TAG + " root endpoint ready surface="
+                    + endpoint.surfaceWidth + "x" + endpoint.surfaceHeight
+                    + " buffer=" + endpoint.bufferWidth + "x" + endpoint.bufferHeight
+                    + " layerId=" + endpoint.rootLayerId
+                    + " surfaceSeq=" + endpoint.surfaceSequenceId);
 
             State next;
             synchronized (STATES) {
@@ -240,6 +252,7 @@ final class LockScreenClockGlassHook {
                 }
                 next = new State(clockView, parent, index, config.glass, appearance);
                 STATES.put(clockView, next);
+                PENDING_ATTACH.remove(clockView);
                 Api101Bridge.log(TAG + " attach candidate class="
                         + clockView.getClass().getName()
                         + " glyphs=" + next.glyphMaskSource.glyphCount()
@@ -256,10 +269,40 @@ final class LockScreenClockGlassHook {
                 Api101Bridge.log(TAG + " attach failed; native clock retained", error);
             }
         } catch (UnsupportedClockShapeException unsupported) {
+            clearPending(clockView);
             Api101Bridge.log(TAG + " unsupported clock shape; native clock retained");
         } catch (Throwable error) {
+            clearPending(clockView);
             // Absolute process boundary: this feature must never kill SystemUI.
             Api101Bridge.log(TAG + " attach path failed closed; native clock retained", error);
+        }
+    }
+
+    private static void postEndpointRetry(View clockView) {
+        if (clockView == null) return;
+        try {
+            clockView.postOnAnimation(() -> {
+                try {
+                    if (!clockView.isAttachedToWindow()) {
+                        clearPending(clockView);
+                        return;
+                    }
+                    tryAttachFailClosed(clockView);
+                } catch (Throwable error) {
+                    clearPending(clockView);
+                    Api101Bridge.log(TAG + " endpoint wait failed closed; native clock retained", error);
+                }
+            });
+        } catch (Throwable error) {
+            clearPending(clockView);
+            Api101Bridge.log(TAG + " endpoint wait scheduling failed; native clock retained", error);
+        }
+    }
+
+    private static void clearPending(View view) {
+        if (view == null) return;
+        synchronized (STATES) {
+            PENDING_ATTACH.remove(view);
         }
     }
 
