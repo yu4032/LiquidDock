@@ -56,6 +56,7 @@ public class LockScreenClockGlassContractTest {
 
         String prefs = Files.readString(MAIN.resolve("LockScreenClockGlassPreferences.java"));
         assertTrue(prefs.contains("glyph_enabled_v2"));
-        assertFalse(prefs.contains("key(PROFILE_ID, \"enabled\")"));
+        assertTrue(prefs.contains("reader.b(ENABLED_KEY, ENABLED_DEFAULT)"));
+        assertFalse(prefs.contains("ENABLED_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, \"enabled\")"));
     }
 }
