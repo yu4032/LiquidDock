@@ -36,12 +36,20 @@ final class DockMirrorShortcutHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Float> APPLIED_X_OFFSETS =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static int configuredDockSpacingPx;
     private static boolean installed;
 
     private DockMirrorShortcutHook() {}
 
-    static synchronized void install(ClassLoader classLoader) {
+    static synchronized void install(ClassLoader classLoader, LiquidDockConfig.Dock dockConfig) {
         if (installed || classLoader == null) return;
+        if (dockConfig != null && dockConfig.enabled) {
+            float scale = dockConfig.dimensionsDp
+                    ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
+            configuredDockSpacingPx = Math.round(dockConfig.spacing * scale);
+        } else {
+            configuredDockSpacingPx = 0;
+        }
         installAdapterVisibilityHook(classLoader);
         installDecorationCollapseHook(classLoader);
         installed = true;
@@ -264,6 +272,17 @@ final class DockMirrorShortcutHook {
             }
         }
 
+        if (mirrorGeometry != null
+                && VisualRuntimeState.isDockCustomizationEnabled()
+                && configuredDockSpacingPx != 0) {
+            int hiddenCount = 0;
+            for (Map.Entry<View, HiddenGeometry> entry : snapshot) {
+                View itemView = entry.getKey();
+                if (itemView != null && itemView.getParent() == recyclerView) hiddenCount++;
+            }
+            hiddenFootprint += hiddenCount * configuredDockSpacingPx * 2f;
+        }
+
         float targetOffset = 0f;
         if (mirrorGeometry != null && hiddenFootprint > 0f) {
             boolean rtl = recyclerView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
@@ -293,6 +312,26 @@ final class DockMirrorShortcutHook {
         view.setTranslationX(base + targetOffset);
         if (Math.abs(targetOffset) < 0.01f) APPLIED_X_OFFSETS.remove(view);
         else APPLIED_X_OFFSETS.put(view, targetOffset);
+    }
+
+    static boolean isCollapsedItemView(View view) {
+        return view != null && HIDDEN_ITEMS.containsKey(view);
+    }
+
+    static int visibleSpacingItemCount(Object layoutManager, int fallbackItemCount) {
+        if (layoutManager == null || fallbackItemCount <= 0) return Math.max(0, fallbackItemCount);
+        try {
+            int childCount = ((Number) HookUtil.requireInvoke(layoutManager, "getChildCount")).intValue();
+            int collapsed = 0;
+            for (int i = 0; i < childCount; i++) {
+                Object child = HookUtil.requireInvoke(layoutManager, "getChildAt", i);
+                if (child instanceof View && isCollapsedItemView((View) child)) collapsed++;
+            }
+            return Math.max(0, fallbackItemCount - collapsed);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " visible spacing count fallback: " + error);
+            return fallbackItemCount;
+        }
     }
 
     static void onRuntimeVisibilityChanged() {
