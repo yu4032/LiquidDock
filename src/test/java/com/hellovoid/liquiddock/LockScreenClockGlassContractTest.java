@@ -52,6 +52,10 @@ public class LockScreenClockGlassContractTest {
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
         String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
         assertTrue(mask.contains("com.miui.clock.MiuiTextGlassView"));
+        assertTrue(mask.contains("\"time_view\""));
+        assertTrue(mask.contains("\"time_view2\""));
+        assertTrue(mask.contains("getResourceEntryName"));
+        assertFalse(mask.contains("text.length() > 0"));
         assertTrue(mask.contains("glyph.draw(canvas)"));
         assertTrue(session.contains("GLYPH_MASK_FRAGMENT"));
         assertTrue(session.contains("uploadPendingGlyphMask"));
