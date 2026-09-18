@@ -377,9 +377,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
-        if (glyphMaskSource != null) {
-            Api101Bridge.log("[DC][LockScreenClockGlass] glyph-masked swap success");
-        }
     }
 
 
@@ -445,6 +442,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(glyphCompositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
+        Api101Bridge.log("[DC][LockScreenClockGlass] glyph-masked swap success");
     }
 
     private void releaseOutput(OutputState current) {
