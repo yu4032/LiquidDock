@@ -74,7 +74,20 @@ public class LockScreenClockGlassContractTest {
         assertTrue(session.contains("GLYPH_MASK_FRAGMENT"));
         assertTrue(session.contains("uploadPendingGlyphMask"));
         assertTrue(composite.contains("uGlyphMask"));
-        assertTrue(composite.contains("glass.a * alpha"));
+        assertTrue(composite.contains("uBackdrop"));
+        assertTrue(composite.contains("uBlurredBackdrop"));
+        assertTrue(composite.contains("gl_FragColor = vec4(glass * alpha, alpha)"));
+        assertTrue(session.contains("normalizedBackdropTexture()"));
+        assertTrue(session.contains("blurredBackdropTexture()"));
+        assertTrue(mask.contains("View.INVISIBLE"));
+        assertTrue(mask.contains("originalVisibility"));
+        assertTrue(mask.contains("findAlphaBounds"));
+        assertTrue(mask.contains("insideTimeContainer"));
+        assertTrue(hook.contains("suspendForScene"));
+        assertTrue(hook.contains("resumeForScene"));
+        assertTrue(hook.contains("KNOWN_CLOCKS"));
+        String sceneSource = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
+        assertTrue(sceneSource.contains("LockScreenClockGlassHook.onLockscreenSceneChanged"));
 
         String prefs = Files.readString(MAIN.resolve("LockScreenClockGlassPreferences.java"));
         assertTrue(prefs.contains("glyph_enabled_v2"));
