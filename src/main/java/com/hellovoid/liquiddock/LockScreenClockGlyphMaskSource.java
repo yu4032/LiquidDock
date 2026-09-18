@@ -114,8 +114,17 @@ final class LockScreenClockGlyphMaskSource {
             drawMatrix.postTranslate(-left, -top);
             int save = canvas.save();
             canvas.concat(drawMatrix);
-            glyph.draw(canvas);
-            canvas.restoreToCount(save);
+            float currentAlpha = glyph.getAlpha();
+            Float nativeAlpha = originalAlpha.get(glyph);
+            float captureAlpha = nativeAlpha != null ? nativeAlpha : currentAlpha;
+            if (captureAlpha <= 0f) captureAlpha = 1f;
+            if (currentAlpha != captureAlpha) glyph.setAlpha(captureAlpha);
+            try {
+                glyph.draw(canvas);
+            } finally {
+                if (glyph.getAlpha() != currentAlpha) glyph.setAlpha(currentAlpha);
+                canvas.restoreToCount(save);
+            }
         }
         return new Mask(bitmap, left, top, width, height,
                 windowRoot.getWidth(), windowRoot.getHeight(), signature);
