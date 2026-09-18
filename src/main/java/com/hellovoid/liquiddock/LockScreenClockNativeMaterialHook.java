@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Canvas;
 import android.view.View;
+import android.widget.TextView;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ final class LockScreenClockNativeMaterialHook {
     private static final String EFFECT_UTILS = "com.miui.clock.utils.ClockEffectUtils";
     private static final String STYLE_INFO = "com.miui.clock.module.ClockStyleInfo";
     private static final String MIUI_BLUR_UTILS = "com.miui.clock.utils.MiuiBlurUtils";
+    private static final String TEXT_GLASS_VIEW = "com.miui.clock.MiuiTextGlassView";
     private static final AtomicBoolean INSTALLED = new AtomicBoolean();
 
     private static final Object LOCK = new Object();
@@ -94,6 +97,39 @@ final class LockScreenClockNativeMaterialHook {
                 return result;
             });
             hooks++;
+
+            // ClassicMax and several legacy clock styles use MiuiTextGlassView, whose stock
+            // onDraw still delegates to TextView/drawText. HyperOS' actual Glass glyph renderer
+            // (AllInOne.TimeView) converts text to a Path and draws it with Paint#setGlassEffect.
+            // Replace only the draw call while the real lockscreen scene is authoritative.
+            try {
+                Class<?> textGlassView = Class.forName(TEXT_GLASS_VIEW, false, classLoader);
+                Method onDraw = HookUtil.findMethodExact(
+                        textGlassView, "onDraw", new Class<?>[]{Canvas.class});
+                HookUtil.hook(onDraw, chain -> {
+                    Object self = chain.getThisObject();
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    if (!(self instanceof TextView)
+                            || args.length == 0
+                            || !(args[0] instanceof Canvas)
+                            || !isTimeMember((View) self)
+                            || runtime() == null) {
+                        return chain.proceed(args);
+                    }
+                    View member = (View) self;
+                    if (!applyMember(member)) {
+                        return chain.proceed(args);
+                    }
+                    if (MiBlurBridge.drawClockGlassText(
+                            (TextView) self, (Canvas) args[0])) {
+                        return null;
+                    }
+                    return chain.proceed(args);
+                });
+                hooks++;
+            } catch (NoSuchMethodException | ClassNotFoundException ignored) {
+                // Some styles/builds do not ship MiuiTextGlassView; their native path remains.
+            }
 
             if (hooks == 0) throw new IllegalStateException("no clock material overloads hooked");
             Api101Bridge.log(TAG + " installed native ClockEffectUtils material remap hooks=" + hooks);
@@ -190,11 +226,11 @@ final class LockScreenClockNativeMaterialHook {
         }
     }
 
-    private static void applyContainer(View view) {
+    private static boolean applyContainer(View view) {
         Runtime runtime = runtime();
-        if (runtime == null || view == null) return;
+        if (runtime == null || view == null) return false;
         int radius = Math.max(0, Math.min(400, Math.round(runtime.appearance.blur)));
-        if (!MiBlurBridge.applyClockMaterialContainer(view, radius)) return;
+        if (!MiBlurBridge.applyClockMaterialContainer(view, radius)) return false;
         synchronized (LOCK) {
             CONTAINERS.put(view, Boolean.TRUE);
             View root = view.getRootView();
@@ -204,11 +240,12 @@ final class LockScreenClockNativeMaterialHook {
                 + view.getClass().getName()
                 + " id=" + resourceEntryName(view)
                 + " radius=" + radius);
+        return true;
     }
 
-    private static void applyMember(View view) {
+    private static boolean applyMember(View view) {
         Runtime runtime = runtime();
-        if (runtime == null || view == null || !isTimeMember(view)) return;
+        if (runtime == null || view == null || !isTimeMember(view)) return false;
         ThirdPartyGlassAppearance appearance = runtime.appearance;
         View container;
         synchronized (LOCK) {
@@ -219,23 +256,23 @@ final class LockScreenClockNativeMaterialHook {
             }
         }
         if (container != null) {
-            applyContainer(container);
+            if (!applyContainer(container)) return false;
             if (!MiBlurBridge.chooseClockBackgroundBlurContainer(view, container)) {
                 Api101Bridge.log(TAG + " native time member has no backdrop route id="
                         + resourceEntryName(view));
-                return;
+                return false;
             }
         } else {
             Api101Bridge.log(TAG + " native time member waiting for backdrop route id="
                     + resourceEntryName(view));
-            return;
+            return false;
         }
         if (!MiBlurBridge.applyClockMaterialMember(
                 view,
                 appearance.tintR,
                 appearance.tintG,
                 appearance.tintB,
-                appearance.tintAlpha)) return;
+                appearance.tintAlpha)) return false;
         synchronized (LOCK) {
             MEMBERS.put(view, Boolean.TRUE);
         }
@@ -243,6 +280,7 @@ final class LockScreenClockNativeMaterialHook {
                 + view.getClass().getName()
                 + " id=" + resourceEntryName(view)
                 + " container=" + container.getClass().getName());
+        return true;
     }
 
     private static Runtime runtime() {
