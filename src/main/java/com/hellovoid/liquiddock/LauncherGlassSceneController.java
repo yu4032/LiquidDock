@@ -614,13 +614,23 @@ final class LauncherGlassSceneController {
                 + " sceneGeneration=" + state.generation());
     }
 
+    static boolean shouldHardCoverWorkspacePresentation(
+            boolean folderCovered, boolean unlockCapturePending,
+            boolean rotationPresentationPending) {
+        // Unlock is intentionally capture-only here. PREPARE still freezes/rebinds the Workspace
+        // producer so lockscreen pixels cannot become a new backdrop, but the already-authoritative
+        // HOME cache must remain presentable while MIUI scales the Workspace into view.
+        return folderCovered || rotationPresentationPending;
+    }
+
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Recents, HOME and wallpaper-settle are capture/freshness barriers only. Rotation is
-            // different: resized output cannot safely present pixels from the previous orientation.
-            boolean hardPresentationCover = folderCovered || unlockTransitionPending
-                    || state.isRotationPresentationPending();
+            // Recents, HOME, unlock and wallpaper-settle are capture/freshness barriers only.
+            // Rotation is different: resized output cannot safely present pixels from the previous
+            // orientation. Folder remains a real LiquidDock presentation cover.
+            boolean hardPresentationCover = shouldHardCoverWorkspacePresentation(
+                    folderCovered, unlockTransitionPending, state.isRotationPresentationPending());
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }
