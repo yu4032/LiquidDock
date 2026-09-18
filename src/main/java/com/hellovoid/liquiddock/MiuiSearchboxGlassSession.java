@@ -71,7 +71,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
-    private int glyphCompositeProgram;
     private int glyphMaskTexture;
     private long uploadedGlyphMaskSignature = Long.MIN_VALUE;
     private final float[] glyphRootPxToMaskUv = new float[]{
@@ -79,12 +78,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             0f, 1f, 0f,
             0f, 0f, 1f
     };
-    private float glyphMaskLeft;
-    private float glyphMaskTop;
-    private float glyphMaskWidth;
-    private float glyphMaskHeight;
-    private int glyphMaskPixelWidth;
-    private int glyphMaskPixelHeight;
     private float glyphSdfRangePx = 32f;
     private OutputState output;
 
@@ -326,10 +319,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 prismalRenderer = null;
             }
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
-            if (glyphCompositeProgram != 0) GLES20.glDeleteProgram(glyphCompositeProgram);
             if (glyphMaskTexture != 0) GLES20.glDeleteTextures(1, new int[]{glyphMaskTexture}, 0);
             compositeProgram = 0;
-            glyphCompositeProgram = 0;
             glyphMaskTexture = 0;
             synchronized (glyphMaskLock) {
                 if (pendingGlyphMask != null && !pendingGlyphMask.bitmap.isRecycled()) {
@@ -443,13 +434,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             glyphRootPxToMaskUv[7] = androidMatrix[5];
             glyphRootPxToMaskUv[8] = androidMatrix[8];
 
-            float[] bounds = transformedUnitBounds(mask.maskToRoot);
-            glyphMaskLeft = bounds[0] / Math.max(1f, mask.rootWidth);
-            glyphMaskTop = bounds[1] / Math.max(1f, mask.rootHeight);
-            glyphMaskWidth = (bounds[2] - bounds[0]) / Math.max(1f, mask.rootWidth);
-            glyphMaskHeight = (bounds[3] - bounds[1]) / Math.max(1f, mask.rootHeight);
-            glyphMaskPixelWidth = Math.max(1, mask.bitmap.getWidth());
-            glyphMaskPixelHeight = Math.max(1, mask.bitmap.getHeight());
             glyphSdfRangePx = Math.max(1f, mask.sdfRangePx);
 
             if (mask.signature == uploadedGlyphMaskSignature && glyphMaskTexture != 0) return;
@@ -498,81 +482,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         return new float[]{minX, minY, maxX, maxY};
     }
 
-    private void presentGlyphMasked(
-            int backdropTexture,
-            int blurredBackdropTexture,
-            OutputState current) {
-        sourceBackend.makeCurrent(current.eglSurface);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        GLES20.glViewport(0, 0, current.width, current.height);
-        GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        GLES20.glUseProgram(glyphCompositeProgram);
-        bindQuad(glyphCompositeProgram);
-
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, backdropTexture);
-        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uBackdrop"), 0);
-
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, blurredBackdropTexture);
-        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uBlurredBackdrop"), 1);
-
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
-        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uGlyphMask"), 2);
-
-        GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphRect"),
-                glyphMaskLeft, glyphMaskTop, glyphMaskWidth, glyphMaskHeight);
-        GLES20.glUniformMatrix3fv(
-                requireUniform(glyphCompositeProgram, "uRootPxToMaskUv"),
-                1, false, glyphRootPxToMaskUv, 0);
-        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uRootSize"),
-                Math.max(1, logicalWidth), Math.max(1, logicalHeight));
-        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphTexel"),
-                1f / Math.max(1, glyphMaskPixelWidth),
-                1f / Math.max(1, glyphMaskPixelHeight));
-        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uOutputTexel"),
-                1f / Math.max(1, current.width),
-                1f / Math.max(1, current.height));
-        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphLightDir"),
-                prismalParams.lightDirX, prismalParams.lightDirY);
-        GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphTint"),
-                prismalParams.tintR, prismalParams.tintG,
-                prismalParams.tintB, prismalParams.tintA);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphBrightness"),
-                prismalParams.brightness);
-
-        float glyphRefractionPx = Math.max(1f,
-                prismalParams.glassThicknessPx * prismalParams.displacementScale * 0.35f);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphRefractionPx"),
-                glyphRefractionPx);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphNormalStrength"),
-                Math.max(0.25f, prismalParams.normalStrength));
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphHighlightWidth"),
-                Math.max(0.08f, Math.min(0.8f, prismalParams.highlightWidth / 12f)));
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uGlyphHighlightStrength"),
-                Math.max(0f, prismalParams.specular + prismalParams.rimStrength) * 0.35f);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uRimStrength"),
-                prismalParams.rimStrength);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uPlainHighlight"),
-                prismalParams.plainHighlight);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentLitRim"),
-                highlightProfile.litRim ? 1f : 0f);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentOppositeRim"),
-                highlightProfile.oppositeRim ? 1f : 0f);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentFaceSheen"),
-                highlightProfile.faceSheen ? 1f : 0f);
-        GLES20.glUniform1f(requireUniform(glyphCompositeProgram, "uComponentPlainHighlight"),
-                highlightProfile.plainHighlight ? 1f : 0f);
-
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(glyphCompositeProgram);
-        sourceBackend.swapBuffers(current.eglSurface);
-        Api101Bridge.log("[DC][LockScreenClockGlass] glyph-backdrop swap success");
-    }
 
     private void releaseOutput(OutputState current) {
         if (current == null) return;
