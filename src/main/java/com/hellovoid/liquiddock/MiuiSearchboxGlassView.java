@@ -41,6 +41,8 @@ final class MiuiSearchboxGlassView extends TextureView
         if (disposed) return;
         Surface surface = new Surface(surfaceTexture);
         outputSurface = surface;
+        Api101Bridge.log("[DC][LockScreenClockGlass] output surface available "
+                + width + "x" + height);
         session.attachOutput(surface, width, height);
     }
 
