@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.view.View;
 import android.widget.TextView;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.WeakHashMap;
@@ -50,7 +51,14 @@ final class LockScreenClockGlyphMaskSource {
     static LockScreenClockGlyphMaskSource resolve(View clockRoot) {
         if (clockRoot == null) return null;
         ArrayList<View> glyphs = new ArrayList<>();
-        collectSemanticTimeViews(clockRoot, glyphs);
+
+        // OS3 Classic clock implementations expose semantic, non-obfuscated time fields.
+        // Prefer those over tree timing/resource-name discovery because addClockView() can run
+        // while inflation/updateTime are still settling.
+        addSemanticField(clockRoot, "mTimeView", glyphs);
+        addSemanticField(clockRoot, "mTimeView2", glyphs);
+
+        if (glyphs.isEmpty()) collectSemanticTimeViews(clockRoot, glyphs);
         if (glyphs.isEmpty()) return null;
         return new LockScreenClockGlyphMaskSource(clockRoot, glyphs);
     }
@@ -155,6 +163,34 @@ final class LockScreenClockGlyphMaskSource {
 
     int glyphCount() {
         return glyphViews.size();
+    }
+
+
+    private static void addSemanticField(View clockRoot, String fieldName, List<View> out) {
+        Field field = findField(clockRoot.getClass(), fieldName);
+        if (field == null) return;
+        try {
+            field.setAccessible(true);
+            Object value = field.get(clockRoot);
+            if (!(value instanceof TextView)) return;
+            View view = (View) value;
+            String className = view.getClass().getName();
+            if (!className.equals("com.miui.clock.MiuiTextGlassView")
+                    && !className.endsWith(".TimeView")) return;
+            if (!out.contains(view)) out.add(view);
+        } catch (Throwable ignored) {}
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        return null;
     }
 
     private static void collectSemanticTimeViews(View root, List<View> out) {
