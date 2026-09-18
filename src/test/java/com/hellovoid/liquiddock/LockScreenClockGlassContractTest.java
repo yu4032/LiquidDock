@@ -19,7 +19,9 @@ public class LockScreenClockGlassContractTest {
         String scene = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
 
-        assertTrue(hook.contains("displayType != 0"));
+        assertTrue(hook.contains("displayType != 0 && displayType != 64"));
+        assertTrue(hook.contains("isMinuteCompanion"));
+        assertTrue(hook.contains("clock-group-expanded"));
         assertTrue(hook.contains("NotificationShadeWindowView"));
         assertTrue(hook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
         assertTrue(hook.contains("disposeNow(true, \"scene-left-lockscreen\")"));
@@ -36,6 +38,8 @@ public class LockScreenClockGlassContractTest {
 
         assertTrue(source.contains("Stable local-space SDF"));
         assertTrue(source.contains("contentSignature(glyph)"));
+        assertTrue(source.contains("semanticLeaf"));
+        assertTrue(source.contains("colon_view"));
         assertTrue(source.contains("lastContentSignatures"));
         assertTrue(source.contains("glyph.transformMatrixToGlobal"));
         assertTrue(source.contains("maskToRoot"));
