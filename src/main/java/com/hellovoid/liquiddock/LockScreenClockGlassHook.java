@@ -20,6 +20,7 @@ final class LockScreenClockGlassHook {
     private static final String CLOCK_BEAN = "com.miui.clock.module.ClockBean";
 
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
+    private static final WeakHashMap<View, Boolean> PENDING_ATTACH = new WeakHashMap<>();
     private static boolean installed;
 
     private LockScreenClockGlassHook() {}
@@ -47,7 +48,7 @@ final class LockScreenClockGlassHook {
             this.outputIndex = outputIndex;
             this.glyphMaskSource = LockScreenClockGlyphMaskSource.resolve(clockView);
             if (glyphMaskSource == null || glyphMaskSource.glyphCount() == 0) {
-                throw new IllegalStateException("native time glyph views unavailable");
+                throw new UnsupportedClockShapeException("native time glyph views unavailable");
             }
             this.session = new MiuiSearchboxGlassSession(
                     clockView, glassConfig, appearance, 0f, this, PassBlurDomain.LOCKSCREEN_CLOCK);
@@ -139,9 +140,13 @@ final class LockScreenClockGlassHook {
             HookUtil.hook(addClockView, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
-                Object owner = chain.getThisObject();
-                if (owner != null) {
-                    tryAttach(clockViewField.get(owner));
+                try {
+                    Object owner = chain.getThisObject();
+                    Object candidate = owner != null ? clockViewField.get(owner) : null;
+                    scheduleAttach(candidate);
+                } catch (Throwable error) {
+                    // Never allow optional clock glass to escape into SystemUI's clock creation.
+                    Api101Bridge.log(TAG + " post-create inspection failed; native clock retained", error);
                 }
                 return result;
             });
@@ -154,33 +159,96 @@ final class LockScreenClockGlassHook {
         }
     }
 
-    private static void tryAttach(Object candidate) {
+    private static void scheduleAttach(Object candidate) {
         if (!(candidate instanceof View)) return;
         View clockView = (View) candidate;
-
-        ConfigReader reader = ConfigReader.load();
-        LiquidDockConfig config = LiquidDockConfig.from(reader);
-        ThirdPartyGlassAppearance appearance =
-                LockScreenClockGlassPreferences.resolve(reader, config.glass);
-        if (!config.enabled || !config.glass.enabled || !appearance.enabled) return;
-
-        View root = clockView.getRootView();
-        if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) {
-            clockView.post(() -> tryAttach(clockView));
-            return;
-        }
-        ViewGroup parent = (ViewGroup) root;
-        int index = parent.getChildCount() - 1;
-
         synchronized (STATES) {
-            State old = STATES.get(clockView);
-            if (old != null && !old.disposed) {
-                old.refresh();
+            State existing = STATES.get(clockView);
+            if (existing != null && !existing.disposed) {
+                safePost(clockView, existing::refresh, "refresh");
                 return;
             }
-            State next = new State(clockView, parent, index, config.glass, appearance);
-            STATES.put(clockView, next);
-            next.attach();
+            if (Boolean.TRUE.equals(PENDING_ATTACH.get(clockView))) return;
+            PENDING_ATTACH.put(clockView, Boolean.TRUE);
+        }
+        safePost(clockView, () -> {
+            synchronized (STATES) {
+                PENDING_ATTACH.remove(clockView);
+            }
+            tryAttachFailClosed(clockView);
+        }, "attach");
+    }
+
+    private static void tryAttachFailClosed(View clockView) {
+        try {
+            if (clockView == null || !clockView.isAttachedToWindow()) return;
+
+            ConfigReader reader = ConfigReader.load();
+            LiquidDockConfig config = LiquidDockConfig.from(reader);
+            ThirdPartyGlassAppearance appearance =
+                    LockScreenClockGlassPreferences.resolve(reader, config.glass);
+            if (!config.enabled || !config.glass.enabled || !appearance.enabled) return;
+
+            View root = clockView.getRootView();
+            if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) return;
+            ViewGroup parent = (ViewGroup) root;
+            int index = parent.getChildCount() - 1;
+
+            State next;
+            synchronized (STATES) {
+                State old = STATES.get(clockView);
+                if (old != null && !old.disposed) {
+                    old.refresh();
+                    return;
+                }
+                next = new State(clockView, parent, index, config.glass, appearance);
+                STATES.put(clockView, next);
+            }
+
+            try {
+                next.attach();
+            } catch (Throwable error) {
+                synchronized (STATES) {
+                    if (STATES.get(clockView) == next) STATES.remove(clockView);
+                }
+                try { next.dispose(true); } catch (Throwable ignored) {}
+                Api101Bridge.log(TAG + " attach failed; native clock retained", error);
+            }
+        } catch (UnsupportedClockShapeException unsupported) {
+            Api101Bridge.log(TAG + " unsupported clock shape; native clock retained");
+        } catch (Throwable error) {
+            // Absolute process boundary: this feature must never kill SystemUI.
+            Api101Bridge.log(TAG + " attach path failed closed; native clock retained", error);
+        }
+    }
+
+    private static void safePost(View view, Runnable action, String stage) {
+        try {
+            if (!view.post(() -> {
+                try {
+                    action.run();
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " posted " + stage
+                            + " failed; native clock retained", error);
+                }
+            })) {
+                synchronized (STATES) {
+                    PENDING_ATTACH.remove(view);
+                }
+                Api101Bridge.log(TAG + " posted " + stage + " rejected; native clock retained");
+            }
+        } catch (Throwable error) {
+            synchronized (STATES) {
+                PENDING_ATTACH.remove(view);
+            }
+            Api101Bridge.log(TAG + " scheduling " + stage
+                    + " failed; native clock retained", error);
+        }
+    }
+
+    private static final class UnsupportedClockShapeException extends RuntimeException {
+        UnsupportedClockShapeException(String message) {
+            super(message);
         }
     }
 
