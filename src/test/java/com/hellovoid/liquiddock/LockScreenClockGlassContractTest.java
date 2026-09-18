@@ -47,11 +47,14 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("presentation handoff failed; native clock retained"));
         assertTrue(hook.contains("RootPassBlurEndpointBridge.inspect(root)"));
         assertTrue(hook.contains("root endpoint not ready; waiting for next frame"));
+        assertTrue(hook.contains("classic time glyph source not ready; waiting for next frame"));
         assertTrue(hook.contains("postOnAnimation"));
         assertTrue(session.contains("[DC][LockScreenClockGlass] session failure stage="));
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
         String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
         assertTrue(mask.contains("com.miui.clock.MiuiTextGlassView"));
+        assertTrue(mask.contains("\"mTimeView\""));
+        assertTrue(mask.contains("\"mTimeView2\""));
         assertTrue(mask.contains("\"time_view\""));
         assertTrue(mask.contains("\"time_view2\""));
         assertTrue(mask.contains("getResourceEntryName"));
