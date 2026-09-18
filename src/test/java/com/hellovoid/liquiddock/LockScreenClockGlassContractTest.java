@@ -26,82 +26,53 @@ public class LockScreenClockGlassContractTest {
         assertTrue(compose.contains("openLockScreenClock"));
     }
 
-    @Test public void runtimeReusesSystemUiNativeClockMaterialWithoutOverlayRenderer()
+    @Test public void runtimeUsesLiquidDockPrismalMaskGlassInsteadOfVendorClockMaterial()
             throws Exception {
-        String nativeHook = Files.readString(
-                MAIN.resolve("LockScreenClockNativeMaterialHook.java"));
+        String hook = Files.readString(MAIN.resolve("LockScreenClockGlassHook.java"));
+        String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
+        String session = Files.readString(MAIN.resolve("MiuiSearchboxGlassSession.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
         String sceneSource = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
+        String authority = Files.readString(
+                MAIN.resolve("LockScreenClockPassBlurContinuousAuthority.java"));
         String prefs = Files.readString(MAIN.resolve("LockScreenClockGlassPreferences.java"));
 
-        assertTrue(nativeHook.contains("com.miui.clock.utils.ClockEffectUtils"));
-        assertTrue(nativeHook.contains("com.miui.clock.utils.MiuiBlurUtils"));
-        assertTrue(nativeHook.contains("setClockEffectsContainer"));
-        assertTrue(nativeHook.contains("setClockEffectsView"));
-        assertTrue(nativeHook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
-        assertTrue(nativeHook.contains("int aodIndex"));
-        assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[aodIndex])"));
-        assertTrue(nativeHook.contains("isTimeMember"));
-        assertTrue(nativeHook.contains("chooseBackgroundBlurContainer"));
-        assertTrue(nativeHook.contains("MEMBER_CONTAINERS"));
-        assertTrue(nativeHook.contains("ROOT_CONTAINERS"));
-        assertTrue(nativeHook.contains("native member/container route"));
-
-        // HyperOS native Glass wrappers recovered from the decompiled clock package.
-        assertTrue(nativeHook.contains("setGlassBlurContainer"));
-        assertTrue(nativeHook.contains("setGlassEffectMethod"));
-        assertTrue(nativeHook.contains("setPaintGlassEffect"));
-        assertTrue(nativeHook.contains("setMiGlassClip"));
-        assertTrue(nativeHook.contains("clearGlassBlurContainer"));
-        assertTrue(nativeHook.contains("clearGlassEffectMethod"));
-
-        // Draw hooks are installed lazily from the actual runtime time-view class. This covers
-        // MiuiTextGlassView as well as pad clock TextViews without guessing a style class.
-        assertTrue(nativeHook.contains("ensureDrawHook(view.getClass())"));
-        assertTrue(nativeHook.contains("\"onDraw\""));
-        assertTrue(nativeHook.contains("DRAW_HOOKS"));
-        assertTrue(nativeHook.contains("paint.getTextPath"));
-        assertTrue(nativeHook.contains("canvas.drawPath"));
-        assertTrue(nativeHook.contains("bounds.left - 50f"));
-        assertTrue(nativeHook.contains("setNativeGlassMember("));
-
-        // Styles that do not publish chooseBackgroundBlurContainer still resolve their owning
-        // MiuiBaseClock2 root as the native backdrop container.
-        assertTrue(nativeHook.contains("resolveClockRootContainer"));
-        assertTrue(nativeHook.contains("com.miui.clock.MiuiBaseClock2"));
-
-        // Scene cleanup must remove only LiquidDock's forced Glass state.
-        assertTrue(nativeHook.contains("clearNativeGlassMember"));
-        assertTrue(nativeHook.contains("clearNativeGlassContainer"));
-
-        assertTrue(nativeHook.contains("date"));
-        assertTrue(nativeHook.contains("weather"));
-        assertTrue(nativeHook.contains("notification"));
-
-        assertTrue(module.contains("LockScreenClockNativeMaterialHook.install"));
-        assertFalse(module.contains("LockScreenClockGlassHook.install"));
-        assertFalse(module.contains("LockScreenClockPassBlurContinuousAuthority.install"));
-
+        // The runtime must use LiquidDock's own rendering stack, not HyperOS clock materials.
+        assertTrue(module.contains("LockScreenClockPassBlurContinuousAuthority.install"));
+        assertTrue(module.contains("LockScreenClockGlassHook.install"));
+        assertFalse(module.contains("LockScreenClockNativeMaterialHook.install"));
         assertTrue(sceneSource.contains(
-                "LockScreenClockNativeMaterialHook.onLockscreenSceneChanged"));
-        assertFalse(sceneSource.contains(
                 "LockScreenClockGlassHook.onLockscreenSceneChanged"));
+        assertFalse(sceneSource.contains(
+                "LockScreenClockNativeMaterialHook.onLockscreenSceneChanged"));
 
-        assertFalse(nativeHook.contains("MiBlurBridge.applyClockMaterialContainer"));
-        assertFalse(nativeHook.contains("MiBlurBridge.applyClockMaterialMember"));
+        // Clock discovery is semantic and fail-closed inside the real lockscreen scene.
+        assertTrue(hook.contains("MiuiClockController#addClockView"));
+        assertTrue(hook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
+        assertTrue(hook.contains("LockScreenClockGlyphMaskSource.resolve"));
+        assertTrue(hook.contains("glyphMaskSource.suppressNativeGlyphs()"));
+        assertTrue(hook.contains("session.requestFreshCapture()"));
+        assertTrue(hook.indexOf("glyphMaskSource.suppressNativeGlyphs()")
+                < hook.indexOf("session.requestFreshCapture()"));
+        assertTrue(hook.contains("restoreNativeGlyphs"));
 
-        // Native material path must not create a second clock renderer.
-        assertFalse(nativeHook.contains("import android.view.TextureView"));
-        assertFalse(nativeHook.contains("new TextureView("));
-        assertFalse(nativeHook.contains("import android.view.Surface"));
-        assertFalse(nativeHook.contains("EGL14"));
-        assertFalse(nativeHook.contains("Bitmap.createBitmap"));
-        assertFalse(nativeHook.contains("RootPassBlurBackend"));
-        assertFalse(nativeHook.contains("LockScreenClockGlyphMaskSource"));
-        assertFalse(nativeHook.contains("MiuiSearchboxGlassSession"));
+        // The visual result must be canonical Prismal glass constrained by an SDF glyph mask.
+        assertTrue(mask.contains("toSignedDistanceBitmap"));
+        assertTrue(mask.contains("sdfRangePx"));
+        assertTrue(mask.contains("maskToRoot"));
+        assertTrue(session.contains("PrismalRenderer"));
+        assertTrue(session.contains("prepareBackdrop"));
+        assertTrue(session.contains("drawMaskGlass"));
+        assertTrue(session.contains("glyphMaskTexture"));
+        assertTrue(session.contains("presentFull"));
+
+        // Producer authority is LiquidDock-owned and isolated to the clock PassBlur domain.
+        assertTrue(authority.contains("SetPassBlurSurface"));
+        assertTrue(authority.contains("setUpdateTextureFlag"));
+        assertTrue(session.contains("PassBlurDomain.LOCKSCREEN_CLOCK"));
+        assertTrue(session.contains("PassBlurBindRequest.lockScreenClock"));
 
         assertTrue(prefs.contains("glyph_enabled_v2"));
         assertTrue(prefs.contains("reader.b(ENABLED_KEY, ENABLED_DEFAULT)"));
     }
-
 }
