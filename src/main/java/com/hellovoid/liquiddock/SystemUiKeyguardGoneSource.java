@@ -91,7 +91,7 @@ final class SystemUiKeyguardGoneSource {
         boolean previousLockscreenScene = LOCKSCREEN_SCENE.getAndSet(nextLockscreenScene);
         if (previousLockscreenScene != nextLockscreenScene) {
             try {
-                LockScreenClockNativeMaterialHook.onLockscreenSceneChanged(nextLockscreenScene);
+                LockScreenClockGlassHook.onLockscreenSceneChanged(nextLockscreenScene);
             } catch (Throwable error) {
                 try {
                     Api101Bridge.log("[DC][LockScreenClockGlass] scene callback failed", error);
