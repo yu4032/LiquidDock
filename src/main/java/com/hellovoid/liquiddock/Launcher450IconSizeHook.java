@@ -59,8 +59,6 @@ final class Launcher450IconSizeHook {
                     smallFolder, "onMeasure", new Class<?>[]{int.class, int.class});
             Method getIconSize = HookUtil.findMethodExact(
                     gridConfig, "getIconSize", new Class<?>[0]);
-            Method getDockIconWidth = HookUtil.findMethodExact(
-                    gridConfig, "getDockIconWidth", new Class<?>[0]);
 
             HookUtil.hook(shortcutMeasure, chain -> {
                 Object owner = chain.getThisObject();
@@ -96,22 +94,14 @@ final class Launcher450IconSizeHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
                 if (!enabled || domain == null || !(result instanceof Integer)) return result;
+
+                // Keep Dock slot geometry vendor-owned. Launcher 4.50 computes getDockIconWidth()
+                // from GridConfig.iconSize directly, while ShortcutIcon centers its drawable with
+                // (measuredWidth - getIconSize()) / 2. Scaling the slot width as well as the
+                // drawable makes the measured child width diverge from HotSeatsListContentLayoutManager's
+                // vendor mViewWidths table, so a scaled icon no longer stays anchored to its
+                // original slot center. Only the visual icon size is overridden here.
                 return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
-            });
-            HookUtil.hook(getDockIconWidth, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (!enabled || ACTIVE_DOMAIN.get() != MeasureDomain.DOCK) return result;
-                Object grid = chain.getThisObject();
-                if (grid == null) return result;
-                try {
-                    int baseIcon = HookUtil.getIntField(grid, "iconSize");
-                    int dockBarHeight = HookUtil.getIntField(grid, "dockBarHeight");
-                    int scaledIcon = Launcher450IconSizePolicy.scaledPx(baseIcon, true, percent);
-                    return scaledIcon + ((dockBarHeight - scaledIcon) / 2);
-                } catch (Throwable error) {
-                    MainHook.log(TAG + " getDockIconWidth fallback: " + error);
-                    return result;
-                }
             });
 
             installed = true;
