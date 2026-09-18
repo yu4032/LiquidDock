@@ -36,7 +36,7 @@ public final class ModuleMain extends XposedModule {
                 ThirdPartyGlassAppearance clockAppearance =
                         LockScreenClockGlassPreferences.resolve(systemUiReader, systemUiConfig.glass);
                 if (systemUiConfig.enabled && systemUiConfig.glass.enabled && clockAppearance.enabled) {
-                    if (MiuiSearchboxPassBlurContinuousAuthority.install()) {
+                    if (LockScreenClockPassBlurContinuousAuthority.install()) {
                         LockScreenClockGlassHook.install(param.getClassLoader());
                     } else {
                         Api101Bridge.log(
