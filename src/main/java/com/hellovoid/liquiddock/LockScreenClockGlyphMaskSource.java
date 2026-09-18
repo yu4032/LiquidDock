@@ -159,17 +159,32 @@ final class LockScreenClockGlyphMaskSource {
 
     private static void collectSemanticTimeViews(View root, List<View> out) {
         String className = root.getClass().getName();
-        boolean semanticTimeView = className.equals("com.miui.clock.MiuiTextGlassView")
-                || className.endsWith(".TimeView");
-        if (semanticTimeView && root instanceof TextView) {
-            CharSequence text = ((TextView) root).getText();
-            if (text != null && text.length() > 0) out.add(root);
-        }
+        boolean textGlass = root instanceof TextView
+                && (className.equals("com.miui.clock.MiuiTextGlassView")
+                || className.endsWith(".TimeView"));
+        String resourceName = resourceEntryName(root);
+        boolean semanticTimeId = "time_view".equals(resourceName)
+                || "time_view2".equals(resourceName);
+
+        // OS3 ClassicClockView binds mTimeView from R.id.time_view during onFinishInflate().
+        // The controller can publish the clock before updateTime() fills the text, so an empty
+        // TextView is still the authoritative glyph source and must not be rejected here.
+        if (textGlass && semanticTimeId) out.add(root);
+
         if (root instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) root;
             for (int i = 0; i < group.getChildCount(); i++) {
                 collectSemanticTimeViews(group.getChildAt(i), out);
             }
+        }
+    }
+
+    private static String resourceEntryName(View view) {
+        if (view == null || view.getId() == View.NO_ID) return null;
+        try {
+            return view.getResources().getResourceEntryName(view.getId());
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
