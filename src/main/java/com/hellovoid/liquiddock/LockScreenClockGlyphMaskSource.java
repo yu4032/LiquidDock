@@ -98,6 +98,8 @@ final class LockScreenClockGlyphMaskSource {
             glyph.transformMatrixToGlobal(glyphToGlobal);
             Matrix glyphToClock = new Matrix();
             glyphToClock.setConcat(globalToClock, glyphToGlobal);
+            float[] glyphLocalMatrix = new float[9];
+            glyphToClock.getValues(glyphLocalMatrix);
 
             int save = canvas.save();
             canvas.concat(glyphToClock);
@@ -122,6 +124,9 @@ final class LockScreenClockGlyphMaskSource {
 
             signature = mix(signature, glyph.getWidth());
             signature = mix(signature, glyph.getHeight());
+            for (float value : glyphLocalMatrix) {
+                signature = mix(signature, Float.floatToIntBits(value));
+            }
             if (glyph instanceof TextView) {
                 CharSequence text = ((TextView) glyph).getText();
                 signature = mix(signature, text == null ? 0 : text.toString().hashCode());
