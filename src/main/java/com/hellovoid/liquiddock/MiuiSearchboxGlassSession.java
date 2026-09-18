@@ -459,7 +459,12 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || failureSignaled) return;
         failureSignaled = true;
         try {
-            Api101Bridge.log(TAG + " session failure stage=" + stage + " cause=" + failureSummary(error));
+            String summary = failureSummary(error);
+            Api101Bridge.log(TAG + " session failure stage=" + stage + " cause=" + summary);
+            if (glyphMaskSource != null) {
+                Api101Bridge.log("[DC][LockScreenClockGlass] session failure stage="
+                        + stage + " cause=" + summary, error);
+            }
         } catch (Throwable ignored) {}
         mainHandler.post(() -> {
             if (!shuttingDown && listener != null) listener.onFailure(error);
