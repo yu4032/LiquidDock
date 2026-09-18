@@ -425,8 +425,9 @@ final class LockScreenClockGlyphMaskSource {
         try {
             field.setAccessible(true);
             Object value = field.get(clockRoot);
-            if (!(value instanceof TextView)) return;
+            if (!(value instanceof View)) return;
             View view = (View) value;
+            if (view instanceof android.view.ViewGroup) return;
             if (!out.contains(view)) out.add(view);
         } catch (Throwable ignored) {}
     }
@@ -457,8 +458,10 @@ final class LockScreenClockGlyphMaskSource {
                 || lower.contains("time_group"));
         boolean semanticTimeId = isTimeResourceName(resourceName);
 
-        if (root instanceof TextView && !excluded
-                && (semanticTimeId || timeContainer) && !out.contains(root)) {
+        boolean semanticLeaf = semanticTimeId
+                && !(root instanceof android.view.ViewGroup);
+        boolean textInsideTimeContainer = root instanceof TextView && timeContainer;
+        if (!excluded && (semanticLeaf || textInsideTimeContainer) && !out.contains(root)) {
             out.add(root);
         }
         if (root instanceof android.view.ViewGroup) {
@@ -486,7 +489,8 @@ final class LockScreenClockGlyphMaskSource {
                 || lower.contains("hour_text") || lower.contains("minute_text")
                 || lower.equals("tv_hour") || lower.equals("tv_minute")
                 || lower.equals("colon1") || lower.equals("colon2")
-                || lower.equals("colon_view") || lower.contains("time_colon")
+                || lower.equals("colon_view") || lower.equals("clock_colon")
+                || lower.endsWith("_colon") || lower.contains("time_colon")
                 || lower.contains("time_separator")
                 || lower.endsWith("_hour") || lower.endsWith("_minute");
     }
