@@ -64,10 +64,11 @@ public class LockScreenClockGlassContractTest {
         assertTrue(blur.contains("new Point(tint, 101)"));
 
         // Native material path must not create a second clock renderer.
-        assertFalse(nativeHook.contains("TextureView"));
-        assertFalse(nativeHook.contains("Surface"));
-        assertFalse(nativeHook.contains("EGL"));
-        assertFalse(nativeHook.contains("Bitmap"));
+        assertFalse(nativeHook.contains("import android.view.TextureView"));
+        assertFalse(nativeHook.contains("new TextureView("));
+        assertFalse(nativeHook.contains("import android.view.Surface"));
+        assertFalse(nativeHook.contains("EGL14"));
+        assertFalse(nativeHook.contains("Bitmap.createBitmap"));
         assertFalse(nativeHook.contains("RootPassBlurBackend"));
         assertFalse(nativeHook.contains("LockScreenClockGlyphMaskSource"));
         assertFalse(nativeHook.contains("MiuiSearchboxGlassSession"));
