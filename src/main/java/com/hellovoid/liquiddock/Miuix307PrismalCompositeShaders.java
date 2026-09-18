@@ -13,5 +13,24 @@ final class Miuix307PrismalCompositeShaders {
             }
             """;
 
+    static final String GLYPH_MASK_FRAGMENT = """
+            precision highp float;
+            uniform sampler2D uTexture;
+            uniform sampler2D uGlyphMask;
+            uniform vec4 uCropRect;
+            uniform vec4 uGlyphRect;
+            varying vec2 vUv;
+            void main() {
+                vec2 uv = uCropRect.xy + vUv * uCropRect.zw;
+                vec4 glass = texture2D(uTexture, uv);
+                vec2 screenUv = vUv;
+                vec2 local = (screenUv - uGlyphRect.xy) / uGlyphRect.zw;
+                float inside = step(0.0, local.x) * step(0.0, local.y)
+                        * step(local.x, 1.0) * step(local.y, 1.0);
+                float alpha = texture2D(uGlyphMask, clamp(local, 0.0, 1.0)).a * inside;
+                gl_FragColor = vec4(glass.rgb * alpha, glass.a * alpha);
+            }
+            """;
+
     private Miuix307PrismalCompositeShaders() {}
 }
