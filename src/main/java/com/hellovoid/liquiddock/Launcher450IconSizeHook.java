@@ -95,12 +95,8 @@ final class Launcher450IconSizeHook {
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
                 if (!enabled || domain == null || !(result instanceof Integer)) return result;
 
-                // Keep Dock slot geometry vendor-owned. Launcher 4.50 computes getDockIconWidth()
-                // from GridConfig.iconSize directly, while ShortcutIcon centers its drawable with
-                // (measuredWidth - getIconSize()) / 2. Scaling the slot width as well as the
-                // drawable makes the measured child width diverge from HotSeatsListContentLayoutManager's
-                // vendor mViewWidths table, so a scaled icon no longer stays anchored to its
-                // original slot center. Only the visual icon size is overridden here.
+                // Scale only the icon body. Dock slot width remains vendor-owned so the
+                // ShortcutIcon stays centered in the same Flexbox item.
                 return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
             });
 
