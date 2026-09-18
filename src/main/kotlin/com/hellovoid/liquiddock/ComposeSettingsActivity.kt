@@ -592,7 +592,7 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     prefs,
                     ConfigSchema.Grid.OS4_FOLDER_2X1,
                     "OS4 2×1 文件夹（实验）",
-                    "将四宫格大文件夹尺寸档改为 2×1；可视宽度严格等于两个桌面图标宽度，高度等于一个桌面图标高度；第 4 个内容起第三位切换为四宫格；重启桌面后生效",
+                    "在原生 1×1、2×2、3×3 之外新增 2×1 尺寸档；可视宽度严格等于两个桌面图标宽度，高度等于一个桌面图标高度；第 4 个内容起第三位切换为四宫格；重启桌面后生效",
                     masterEnabled,
                 )
             }
