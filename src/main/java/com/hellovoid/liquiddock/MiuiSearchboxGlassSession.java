@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
+import android.opengl.GLUtils;
 import android.os.Handler;
 import android.view.Surface;
 import android.view.View;
@@ -55,8 +56,11 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
     private final float cornerRadius;
+    private final LockScreenClockGlyphMaskSource glyphMaskSource;
+    private final Object glyphMaskLock = new Object();
 
     private volatile MiuiSearchboxGlassGeometry geometry;
+    private LockScreenClockGlyphMaskSource.Mask pendingGlyphMask;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
@@ -67,6 +71,13 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
+    private int glyphCompositeProgram;
+    private int glyphMaskTexture;
+    private long uploadedGlyphMaskSignature = Long.MIN_VALUE;
+    private float glyphMaskLeft;
+    private float glyphMaskTop;
+    private float glyphMaskWidth;
+    private float glyphMaskHeight;
     private OutputState output;
 
     MiuiSearchboxGlassSession(
@@ -91,6 +102,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         rootRef = new WeakReference<>(root);
         this.listener = listener;
         this.cornerRadius = Math.max(0f, cornerRadius);
+        this.glyphMaskSource = domain == PassBlurDomain.LOCKSCREEN_CLOCK
+                ? LockScreenClockGlyphMaskSource.resolve(root)
+                : null;
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -151,12 +165,33 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         if (root == null || !root.isAttachedToWindow()) return;
         View sourceRoot = root.getRootView();
         if (sourceRoot == null || !sourceRoot.isAttachedToWindow()) return;
-        MiuiSearchboxGlassGeometry next = MiuiSearchboxGlassGeometry.capture(
-                sourceRoot, root, cornerRadius);
-        if (next == null) return;
+
+        MiuiSearchboxGlassGeometry next;
+        if (glyphMaskSource != null) {
+            LockScreenClockGlyphMaskSource.Mask mask = glyphMaskSource.capture();
+            if (mask == null) return;
+            next = MiuiSearchboxGlassGeometry.fromWindowBounds(
+                    mask.rootWidth, mask.rootHeight,
+                    mask.left, mask.top, mask.width, mask.height, 0f);
+            if (next == null) {
+                mask.bitmap.recycle();
+                return;
+            }
+            synchronized (glyphMaskLock) {
+                LockScreenClockGlyphMaskSource.Mask previous = pendingGlyphMask;
+                pendingGlyphMask = mask;
+                if (previous != null && previous != mask && !previous.bitmap.isRecycled()) {
+                    previous.bitmap.recycle();
+                }
+            }
+        } else {
+            next = MiuiSearchboxGlassGeometry.capture(sourceRoot, root, cornerRadius);
+            if (next == null) return;
+        }
+
         MiuiSearchboxGlassGeometry old = geometry;
-        if (old != null && old.sameAs(next)) return;
         geometry = next;
+        if (old != null && old.sameAs(next) && glyphMaskSource == null) return;
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
@@ -257,7 +292,17 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 prismalRenderer = null;
             }
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
+            if (glyphCompositeProgram != 0) GLES20.glDeleteProgram(glyphCompositeProgram);
+            if (glyphMaskTexture != 0) GLES20.glDeleteTextures(1, new int[]{glyphMaskTexture}, 0);
             compositeProgram = 0;
+            glyphCompositeProgram = 0;
+            glyphMaskTexture = 0;
+            synchronized (glyphMaskLock) {
+                if (pendingGlyphMask != null && !pendingGlyphMask.bitmap.isRecycled()) {
+                    pendingGlyphMask.bitmap.recycle();
+                }
+                pendingGlyphMask = null;
+            }
             sourceBackend.shutdown();
         });
         if (!queued) sourceBackend.shutdown();
@@ -283,7 +328,13 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
-            presentFull(prismalRenderer.outputTexture(), current);
+            if (glyphMaskSource != null) {
+                uploadPendingGlyphMask();
+                if (glyphMaskTexture == 0) return;
+                presentGlyphMasked(prismalRenderer.outputTexture(), current);
+            } else {
+                presentFull(prismalRenderer.outputTexture(), current);
+            }
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -297,6 +348,11 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
+        }
+        if (glyphMaskSource != null && glyphCompositeProgram == 0) {
+            glyphCompositeProgram = createProgram(
+                    Miuix307PassBlurShaders.QUAD_VERTEX,
+                    Miuix307PrismalCompositeShaders.GLYPH_MASK_FRAGMENT);
         }
     }
 
@@ -316,6 +372,69 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
+        sourceBackend.swapBuffers(current.eglSurface);
+    }
+
+
+    private void uploadPendingGlyphMask() {
+        LockScreenClockGlyphMaskSource.Mask mask;
+        synchronized (glyphMaskLock) {
+            mask = pendingGlyphMask;
+            pendingGlyphMask = null;
+        }
+        if (mask == null) return;
+        try {
+            if (mask.signature == uploadedGlyphMaskSignature && glyphMaskTexture != 0) return;
+            if (glyphMaskTexture == 0) {
+                int[] textures = new int[1];
+                GLES20.glGenTextures(1, textures, 0);
+                glyphMaskTexture = textures[0];
+                if (glyphMaskTexture == 0) throw new IllegalStateException("glyph mask texture=0");
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                        GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                        GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                        GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                        GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            } else {
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
+            }
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, mask.bitmap, 0);
+            uploadedGlyphMaskSignature = mask.signature;
+            glyphMaskLeft = mask.left / Math.max(1f, mask.rootWidth);
+            glyphMaskTop = mask.top / Math.max(1f, mask.rootHeight);
+            glyphMaskWidth = mask.width / Math.max(1f, mask.rootWidth);
+            glyphMaskHeight = mask.height / Math.max(1f, mask.rootHeight);
+        } finally {
+            if (!mask.bitmap.isRecycled()) mask.bitmap.recycle();
+        }
+    }
+
+    private void presentGlyphMasked(int sceneTexture, OutputState current) {
+        sourceBackend.makeCurrent(current.eglSurface);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glViewport(0, 0, current.width, current.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUseProgram(glyphCompositeProgram);
+        bindQuad(glyphCompositeProgram);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
+        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uTexture"), 0);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
+        GLES20.glUniform1i(requireUniform(glyphCompositeProgram, "uGlyphMask"), 1);
+        GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uCropRect"),
+                0f, 0f, 1f, 1f);
+        GLES20.glUniform4f(requireUniform(glyphCompositeProgram, "uGlyphRect"),
+                glyphMaskLeft, glyphMaskTop, glyphMaskWidth, glyphMaskHeight);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindQuad(glyphCompositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
     }
 
