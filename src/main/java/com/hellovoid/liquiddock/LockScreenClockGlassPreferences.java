@@ -3,7 +3,9 @@ package com.hellovoid.liquiddock;
 /** Bounded settings for the forced OS3 lockscreen clock replacement. */
 final class LockScreenClockGlassPreferences {
     static final String PROFILE_ID = "systemui.lockscreen_clock";
-    static final String ENABLED_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, "enabled");
+    // v2 deliberately does not inherit the first experimental enable bit. The v1 runtime could
+    // crash-loop SystemUI; requiring one explicit re-enable after upgrade is the recovery barrier.
+    static final String ENABLED_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, "glyph_enabled_v2");
     static final String BLUR_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, "blur");
     static final String TINT_RED_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, "tint_r");
     static final String TINT_GREEN_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, "tint_g");
