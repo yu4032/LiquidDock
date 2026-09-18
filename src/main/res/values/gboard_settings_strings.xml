@@ -2,6 +2,7 @@
 <resources>
     <string name="page_third_party_apps">第三方应用适配</string>
     <string name="page_gboard">Gboard</string>
+    <string name="page_lockscreen_clock">锁屏时钟</string>
     <string name="page_searchbox">系统搜索</string>
     <string name="action_restart_searchbox">重启搜索</string>
 </resources>
