@@ -31,12 +31,15 @@ public final class ModuleMain extends XposedModule {
             try {
                 SystemUiKeyguardGoneSource.install(param.getClassLoader());
                 SystemUiHomeTransitionSource.install(param.getClassLoader());
-                // Reuse SystemUI's own advanced clock-material routing. The native hook
-                // remaps the existing clock container/member Views and does not create a
-                // TextureView, Surface, PassBlur producer or EGL renderer.
-                if (!LockScreenClockNativeMaterialHook.install(param.getClassLoader())) {
+                // HyperOS clock materials are not LiquidDock glass. Keep vendor clock code only
+                // as the semantic/lifecycle source, and render the replacement through LiquidDock's
+                // own Prismal + PassBlur pipeline. Enablement is re-read at attach time so the hook
+                // can remain installed safely for the lifetime of SystemUI.
+                if (LockScreenClockPassBlurContinuousAuthority.install()) {
+                    LockScreenClockGlassHook.install(param.getClassLoader());
+                } else {
                     Api101Bridge.log(
-                            "[DC][LockScreenClockGlass] native clock material hook unavailable; original clock retained");
+                            "[DC][LockScreenClockGlass] PassBlur authority unavailable; native clock retained");
                 }
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI timing source init failed", error);
