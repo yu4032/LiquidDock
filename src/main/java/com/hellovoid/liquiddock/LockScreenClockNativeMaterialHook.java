@@ -117,7 +117,7 @@ final class LockScreenClockNativeMaterialHook {
                         return chain.proceed(args);
                     }
                     View member = (View) self;
-                    if (!applyMember(member)) {
+                    if (!ensureMemberMaterial(member)) {
                         return chain.proceed(args);
                     }
                     if (MiBlurBridge.drawClockGlassText(
@@ -241,6 +241,17 @@ final class LockScreenClockNativeMaterialHook {
                 + " id=" + resourceEntryName(view)
                 + " radius=" + radius);
         return true;
+    }
+
+    private static boolean ensureMemberMaterial(View view) {
+        if (view == null) return false;
+        synchronized (LOCK) {
+            if (Boolean.TRUE.equals(MEMBERS.get(view))
+                    && MEMBER_CONTAINERS.get(view) != null) {
+                return true;
+            }
+        }
+        return applyMember(view);
     }
 
     private static boolean applyMember(View view) {
