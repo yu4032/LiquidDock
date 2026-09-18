@@ -4,7 +4,6 @@ import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -19,11 +18,14 @@ final class LockScreenClockNativeMaterialHook {
     private static final String TAG = "[DC][LockScreenClockGlass]";
     private static final String EFFECT_UTILS = "com.miui.clock.utils.ClockEffectUtils";
     private static final String STYLE_INFO = "com.miui.clock.module.ClockStyleInfo";
+    private static final String MIUI_BLUR_UTILS = "com.miui.clock.utils.MiuiBlurUtils";
     private static final AtomicBoolean INSTALLED = new AtomicBoolean();
 
     private static final Object LOCK = new Object();
     private static final WeakHashMap<View, Boolean> CONTAINERS = new WeakHashMap<>();
     private static final WeakHashMap<View, Boolean> MEMBERS = new WeakHashMap<>();
+    private static final WeakHashMap<View, View> MEMBER_CONTAINERS = new WeakHashMap<>();
+    private static final WeakHashMap<View, View> ROOT_CONTAINERS = new WeakHashMap<>();
 
     private LockScreenClockNativeMaterialHook() {}
 
@@ -33,29 +35,67 @@ final class LockScreenClockNativeMaterialHook {
         try {
             Class<?> utils = Class.forName(EFFECT_UTILS, false, classLoader);
             Class<?> styleInfo = Class.forName(STYLE_INFO, false, classLoader);
+            Class<?> blurUtils = Class.forName(MIUI_BLUR_UTILS, false, classLoader);
 
-            Method container = HookUtil.findMethodExact(
-                    utils,
-                    "setClockEffectsContainer",
-                    new Class<?>[]{View.class, int.class, styleInfo, boolean.class});
-            HookUtil.hook(container, chain -> {
+            int hooks = 0;
+            hooks += hookContainerIfPresent(utils, styleInfo,
+                    new Class<?>[]{View.class, int.class, styleInfo, boolean.class}, 3);
+            hooks += hookContainerIfPresent(utils, styleInfo,
+                    new Class<?>[]{View.class, int.class, styleInfo, boolean.class, boolean.class}, 3);
+
+            hooks += hookMemberIfPresent(utils,
+                    new Class<?>[]{View.class, styleInfo, boolean.class,
+                            int.class, int.class, int.class, boolean.class}, 6);
+            hooks += hookMemberIfPresent(utils,
+                    new Class<?>[]{View.class, styleInfo, boolean.class,
+                            int.class, int.class, int.class, boolean.class, int.class}, 6);
+
+            hooks += hookMemberIfPresent(utils,
+                    new Class<?>[]{View.class, styleInfo, boolean.class,
+                            int.class, int.class, boolean.class, boolean.class}, 5);
+            hooks += hookMemberIfPresent(utils,
+                    new Class<?>[]{View.class, styleInfo, boolean.class,
+                            int.class, int.class, int.class, boolean.class, boolean.class}, 6);
+            hooks += hookMemberIfPresent(utils,
+                    new Class<?>[]{View.class, styleInfo, boolean.class,
+                            int.class, int.class, int.class, boolean.class, boolean.class, int.class}, 6);
+
+            Method choose = HookUtil.findMethodExact(
+                    blurUtils,
+                    "chooseBackgroundBlurContainer",
+                    new Class<?>[]{View.class, View.class});
+            HookUtil.hook(choose, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 try {
-                    if (args.length >= 4 && args[0] instanceof View
-                            && !Boolean.TRUE.equals(args[3])) {
-                        applyContainer((View) args[0]);
+                    if (args.length >= 2 && args[0] instanceof View && args[1] instanceof View) {
+                        View member = (View) args[0];
+                        View container = (View) args[1];
+                        if (isTimeMember(member)) {
+                            synchronized (LOCK) {
+                                MEMBER_CONTAINERS.put(member, container);
+                                CONTAINERS.put(container, Boolean.TRUE);
+                                View root = container.getRootView();
+                                if (root != null) ROOT_CONTAINERS.put(root, container);
+                            }
+                            if (runtime() != null) {
+                                applyContainer(container);
+                                applyMember(member);
+                            }
+                            Api101Bridge.log(TAG + " native member/container route member="
+                                    + resourceEntryName(member)
+                                    + " container=" + container.getClass().getName());
+                        }
                     }
                 } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " native container remap failed", error);
+                    Api101Bridge.log(TAG + " native member/container route failed", error);
                 }
                 return result;
             });
+            hooks++;
 
-            hookMemberOverload(utils, styleInfo, false);
-            hookMemberOverload(utils, styleInfo, true);
-
-            Api101Bridge.log(TAG + " installed native ClockEffectUtils material remap");
+            if (hooks == 0) throw new IllegalStateException("no clock material overloads hooked");
+            Api101Bridge.log(TAG + " installed native ClockEffectUtils material remap hooks=" + hooks);
             return true;
         } catch (Throwable error) {
             INSTALLED.set(false);
@@ -64,29 +104,51 @@ final class LockScreenClockNativeMaterialHook {
         }
     }
 
-    private static void hookMemberOverload(
-            Class<?> utils, Class<?> styleInfo, boolean hasTextDarkAlpha) throws Exception {
-        Class<?>[] signature = hasTextDarkAlpha
-                ? new Class<?>[]{
-                        View.class, styleInfo, boolean.class,
-                        int.class, int.class, int.class, boolean.class, int.class}
-                : new Class<?>[]{
-                        View.class, styleInfo, boolean.class,
-                        int.class, int.class, int.class, boolean.class};
-        Method method = HookUtil.findMethodExact(utils, "setClockEffectsView", signature);
-        HookUtil.hook(method, chain -> {
-            Object[] args = chain.getArgs().toArray(new Object[0]);
-            Object result = chain.proceed(args);
-            try {
-                if (args.length >= 7 && args[0] instanceof View
-                        && !Boolean.TRUE.equals(args[6])) {
-                    applyMember((View) args[0]);
+    private static int hookContainerIfPresent(
+            Class<?> utils, Class<?> styleInfo, Class<?>[] signature, int aodIndex) {
+        try {
+            Method method = HookUtil.findMethodExact(
+                    utils, "setClockEffectsContainer", signature);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                try {
+                    if (args.length > aodIndex && args[0] instanceof View
+                            && !Boolean.TRUE.equals(args[aodIndex])) {
+                        applyContainer((View) args[0]);
+                    }
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native container remap failed", error);
                 }
-            } catch (Throwable error) {
-                Api101Bridge.log(TAG + " native member remap failed", error);
-            }
-            return result;
-        });
+                return result;
+            });
+            return 1;
+        } catch (NoSuchMethodException ignored) {
+            return 0;
+        }
+    }
+
+    private static int hookMemberIfPresent(
+            Class<?> utils, Class<?>[] signature, int aodIndex) {
+        try {
+            Method method = HookUtil.findMethodExact(utils, "setClockEffectsView", signature);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                try {
+                    if (args.length > aodIndex && args[0] instanceof View
+                            && !Boolean.TRUE.equals(args[aodIndex])) {
+                        applyMember((View) args[0]);
+                    }
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native member remap failed", error);
+                }
+                return result;
+            });
+            return 1;
+        } catch (NoSuchMethodException ignored) {
+            return 0;
+        }
     }
 
     static void onLockscreenSceneChanged(boolean lockscreen) {
@@ -111,20 +173,44 @@ final class LockScreenClockNativeMaterialHook {
 
     private static void applyContainer(View view) {
         Runtime runtime = runtime();
-        if (runtime == null || view == null || !isClockContainer(view)) return;
+        if (runtime == null || view == null) return;
         int radius = Math.max(0, Math.min(400, Math.round(runtime.appearance.blur)));
         if (!MiBlurBridge.applyClockMaterialContainer(view, radius)) return;
         synchronized (LOCK) {
             CONTAINERS.put(view, Boolean.TRUE);
+            View root = view.getRootView();
+            if (root != null) ROOT_CONTAINERS.put(root, view);
         }
         Api101Bridge.log(TAG + " native container material class="
-                + view.getClass().getName() + " radius=" + radius);
+                + view.getClass().getName()
+                + " id=" + resourceEntryName(view)
+                + " radius=" + radius);
     }
 
     private static void applyMember(View view) {
         Runtime runtime = runtime();
         if (runtime == null || view == null || !isTimeMember(view)) return;
         ThirdPartyGlassAppearance appearance = runtime.appearance;
+        View container;
+        synchronized (LOCK) {
+            container = MEMBER_CONTAINERS.get(view);
+            if (container == null) {
+                View root = view.getRootView();
+                if (root != null) container = ROOT_CONTAINERS.get(root);
+            }
+        }
+        if (container != null) {
+            applyContainer(container);
+            if (!MiBlurBridge.chooseClockBackgroundBlurContainer(view, container)) {
+                Api101Bridge.log(TAG + " native time member has no backdrop route id="
+                        + resourceEntryName(view));
+                return;
+            }
+        } else {
+            Api101Bridge.log(TAG + " native time member waiting for backdrop route id="
+                    + resourceEntryName(view));
+            return;
+        }
         if (!MiBlurBridge.applyClockMaterialMember(
                 view,
                 appearance.tintR,
@@ -135,7 +221,9 @@ final class LockScreenClockNativeMaterialHook {
             MEMBERS.put(view, Boolean.TRUE);
         }
         Api101Bridge.log(TAG + " native time member material class="
-                + view.getClass().getName() + " id=" + resourceEntryName(view));
+                + view.getClass().getName()
+                + " id=" + resourceEntryName(view)
+                + " container=" + container.getClass().getName());
     }
 
     private static Runtime runtime() {
@@ -166,19 +254,6 @@ final class LockScreenClockNativeMaterialHook {
         return false;
     }
 
-    static boolean isClockContainer(View view) {
-        if (view == null) return false;
-        String className = view.getClass().getName().toLowerCase(Locale.ROOT);
-        String resource = normalizedResourceName(view);
-        if (isExcluded(resource)
-                || className.contains("datesignature")
-                || className.contains("notification")
-                || className.contains("weather")) return false;
-        return className.contains(".clock.")
-                || className.endsWith("clock")
-                || className.contains("clockview")
-                || isTimeContainerSemantic(resource);
-    }
 
     private static View parentView(View view) {
         android.view.ViewParent parent = view.getParent();
