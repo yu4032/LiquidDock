@@ -145,6 +145,8 @@ public class MainHook {
                             if (workstationMode || !VisualRuntimeState.isDockCustomizationEnabled()) {
                                 return r;
                             }
+                            View itemView = (View) chain.getArgs().get(1);
+                            if (DockMirrorShortcutHook.isCollapsedItemView(itemView)) return r;
                             Rect out = (Rect) chain.getArgs().get(0);
                             out.left += spacing;
                             out.right += spacing;
@@ -161,6 +163,8 @@ public class MainHook {
                                 }
                                 int itemCount = (Integer) HookUtil.requireInvoke(
                                         chain.getThisObject(), "getItemCount");
+                                itemCount = DockMirrorShortcutHook.visibleSpacingItemCount(
+                                        chain.getThisObject(), itemCount);
                                 if (itemCount > 0) {
                                     Object[] args = chain.getArgs().toArray(new Object[0]);
                                     args[1] = (Integer) args[1] + spacing * 2 * itemCount;
