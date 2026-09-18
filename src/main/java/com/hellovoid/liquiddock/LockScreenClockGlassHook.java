@@ -66,7 +66,15 @@ final class LockScreenClockGlassHook {
                             ViewGroup.LayoutParams.MATCH_PARENT));
             ViewTreeObserver next = outputHost.getViewTreeObserver();
             preDraw = () -> {
-                if (!disposed) session.updateGeometry();
+                if (!disposed) {
+                    try {
+                        session.updateGeometry();
+                    } catch (Throwable error) {
+                        Api101Bridge.log(TAG + " pre-draw failed; native clock retained", error);
+                        try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+                        safePost(clockView, () -> dispose(true), "pre-draw-dispose");
+                    }
+                }
                 return true;
             };
             if (next.isAlive()) {
@@ -78,33 +86,50 @@ final class LockScreenClockGlassHook {
 
         void refresh() {
             if (disposed || !clockView.isAttachedToWindow()) return;
-            glassView.setAlpha(0f);
-            glyphMaskSource.restoreNativeGlyphs();
-            session.updateGeometry();
-            session.reconcileRoot();
-            session.requestFreshCapture();
+            try {
+                glassView.setAlpha(0f);
+                glyphMaskSource.restoreNativeGlyphs();
+                session.updateGeometry();
+                session.reconcileRoot();
+                session.requestFreshCapture();
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " refresh failed; native clock retained", error);
+                try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+                safePost(clockView, () -> dispose(true), "refresh-dispose");
+            }
         }
 
         @Override
         public void onPresented() {
             if (disposed) return;
-            glassView.setAlpha(1f);
-            glyphMaskSource.suppressNativeGlyphs();
-            Api101Bridge.log(TAG + " presented; native time glyphs suppressed");
+            try {
+                glyphMaskSource.suppressNativeGlyphs();
+                glassView.setAlpha(1f);
+                Api101Bridge.log(TAG + " presented; native time glyphs suppressed");
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " presentation handoff failed; native clock retained", error);
+                try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+                try { glassView.setAlpha(0f); } catch (Throwable ignored) {}
+                safePost(clockView, () -> dispose(true), "present-dispose");
+            }
         }
 
         @Override
         public void onFailure(Throwable error) {
-            Api101Bridge.log(TAG + " failed; native clock restored", error);
-            dispose(true);
+            try {
+                Api101Bridge.log(TAG + " failed; native clock restored", error);
+            } catch (Throwable ignored) {}
+            try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            safePost(clockView, () -> dispose(true), "failure-dispose");
         }
 
         @Override public void onViewAttachedToWindow(View v) {
-            if (!disposed) clockView.post(this::refresh);
+            if (!disposed) safePost(clockView, this::refresh, "reattach-refresh");
         }
 
         @Override public void onViewDetachedFromWindow(View v) {
-            dispose(true);
+            try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            safePost(clockView, () -> dispose(true), "detach-dispose");
         }
 
         void dispose(boolean restoreNative) {
@@ -120,9 +145,17 @@ final class LockScreenClockGlassHook {
             synchronized (STATES) {
                 if (STATES.get(clockView) == this) STATES.remove(clockView);
             }
-            glassView.dispose();
-            session.shutdown();
-            if (restoreNative) glyphMaskSource.restoreNativeGlyphs();
+            try { glassView.dispose(); } catch (Throwable error) {
+                Api101Bridge.log(TAG + " glass view dispose failed", error);
+            }
+            try { session.shutdown(); } catch (Throwable error) {
+                Api101Bridge.log(TAG + " session shutdown failed", error);
+            }
+            if (restoreNative) {
+                try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native glyph restore failed", error);
+                }
+            }
         }
     }
 
