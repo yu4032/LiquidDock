@@ -48,6 +48,13 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("RootPassBlurEndpointBridge.inspect(root)"));
         assertTrue(hook.contains("root endpoint not ready; waiting for next frame"));
         assertTrue(hook.contains("classic time glyph source not ready; waiting for next frame"));
+        assertTrue(hook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
+        assertTrue(hook.contains("native time glyphs suppressed before fresh capture"));
+        assertTrue(session.contains("uGlyphRefractionPx"));
+        assertTrue(session.contains("uGlyphHighlightStrength"));
+        assertTrue(composite.contains("uGlyphTexel"));
+        assertTrue(composite.contains("uGlyphRefractionPx"));
+        assertTrue(composite.contains("vec2 grad"));
         assertTrue(hook.contains("postOnAnimation"));
         assertTrue(session.contains("[DC][LockScreenClockGlass] session failure stage="));
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
@@ -55,6 +62,11 @@ public class LockScreenClockGlassContractTest {
         assertTrue(mask.contains("com.miui.clock.MiuiTextGlassView"));
         assertTrue(mask.contains("\"mTimeView\""));
         assertTrue(mask.contains("\"mTimeView2\""));
+        assertTrue(mask.contains("\"mHourTextStyle1\""));
+        assertTrue(mask.contains("\"mMinuteTextStyle1\""));
+        assertTrue(mask.contains("isTimeResourceName"));
+        assertTrue(mask.contains("lower.contains(\"date\")"));
+        assertTrue(mask.contains("lower.contains(\"weather\")"));
         assertTrue(mask.contains("\"time_view\""));
         assertTrue(mask.contains("\"time_view2\""));
         assertTrue(mask.contains("getResourceEntryName"));
