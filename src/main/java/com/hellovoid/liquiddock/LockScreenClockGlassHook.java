@@ -99,6 +99,11 @@ final class LockScreenClockGlassHook {
                 // them before requesting a fresh backdrop so PassBlur can never sample the digits
                 // we are replacing.
                 session.updateGeometry();
+                if (!session.hasRenderableGlyphGeometry()) {
+                    glyphMaskSource.restoreNativeGlyphs();
+                    clockView.postOnAnimation(this::refresh);
+                    return;
+                }
                 glyphMaskSource.suppressNativeGlyphs();
                 session.reconcileRoot();
                 session.requestFreshCapture();
