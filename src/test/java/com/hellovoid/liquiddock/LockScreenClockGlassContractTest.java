@@ -26,91 +26,54 @@ public class LockScreenClockGlassContractTest {
         assertTrue(compose.contains("openLockScreenClock"));
     }
 
-    @Test public void runtimeDirectlyReplacesClockWithoutVendorGlassCapability() throws Exception {
-        String hook = Files.readString(MAIN.resolve("LockScreenClockGlassHook.java"));
+    @Test public void runtimeReusesSystemUiNativeClockMaterialWithoutOverlayRenderer()
+            throws Exception {
+        String nativeHook = Files.readString(
+                MAIN.resolve("LockScreenClockNativeMaterialHook.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        String session = Files.readString(MAIN.resolve("MiuiSearchboxGlassSession.java"));
-        String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
-
-        assertTrue(hook.contains("com.miui.clock.MiuiClockController"));
-        assertTrue(hook.contains("addClockView"));
-        assertTrue(hook.contains("glyphMaskSource.suppressNativeGlyphs()"));
-        assertTrue(hook.contains("glyphMaskSource.restoreNativeGlyphs()"));
-        assertFalse(hook.contains("supportGlassEffect"));
-        assertFalse(hook.contains("isGlassEffectEnable"));
-        assertFalse(hook.contains("setMiGlass"));
-        assertFalse(hook.contains("clockEffect"));
-        assertTrue(module.contains("LockScreenClockGlassHook.install"));
-        assertTrue(hook.contains("scheduleAttach(candidate)"));
-        assertTrue(hook.contains("post-create inspection failed; native clock retained"));
-        assertTrue(hook.contains("tryAttachFailClosed"));
-        assertTrue(hook.contains("pre-draw failed; native clock retained"));
-        assertTrue(hook.contains("presentation handoff failed; native clock retained"));
-        assertTrue(hook.contains("RootPassBlurEndpointBridge.inspect(root)"));
-        assertTrue(hook.contains("root endpoint not ready; waiting for next frame"));
-        assertTrue(hook.contains("classic time glyph source not ready; waiting for next frame"));
-        assertTrue(hook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
-        assertTrue(hook.contains("native time glyphs suppressed before fresh capture"));
-        assertTrue(session.contains("drawMaskGlass("));
-        assertTrue(session.contains("updateGeometry must run on main thread"));
-        assertFalse(session.contains(
-                "logicalHeight = frame.logicalHeight;\n            updateGeometry();"));
-        assertFalse(session.contains(
-                "|| root == null || !root.isAttachedToWindow()"));
-        assertFalse(session.contains("presentGlyphMasked("));
-        assertFalse(session.contains("glyphCompositeProgram"));
-        assertFalse(session.contains("uGlyphRect"));
-        assertTrue(hook.contains("postOnAnimation"));
-        assertTrue(session.contains("[DC][LockScreenClockGlass] session failure stage="));
-        String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
-        assertTrue(mask.contains("\"mTimeView\""));
-        assertTrue(mask.contains("\"mTimeView2\""));
-        assertTrue(mask.contains("\"mHourTextStyle1\""));
-        assertTrue(mask.contains("\"mMinuteTextStyle1\""));
-        assertTrue(mask.contains("isTimeResourceName"));
-        assertTrue(mask.contains("lower.contains(\"date\")"));
-        assertTrue(mask.contains("lower.contains(\"weather\")"));
-        assertTrue(mask.contains("\"time_view\""));
-        assertTrue(mask.contains("\"time_view2\""));
-        assertTrue(mask.contains("getResourceEntryName"));
-        assertFalse(mask.contains("text.length() > 0"));
-        assertTrue(mask.contains("glyph.draw(canvas)"));
-        assertTrue(session.contains("uploadPendingGlyphMask"));
-        assertTrue(session.contains("glyph SDF content uploaded"));
-        assertTrue(mask.contains("toSignedDistanceBitmap"));
-        assertTrue(mask.contains("sdfRangePx"));
-        assertTrue(hook.contains("attach group candidates="));
-        assertTrue(hook.contains("collectClockGroup"));
-        assertTrue(hook.contains("new State(group"));
-        assertTrue(mask.contains("lowestCommonAncestor"));
-        assertTrue(mask.contains("View.INVISIBLE"));
-        assertTrue(mask.contains("originalVisibility"));
-        assertTrue(mask.contains("findAlphaBounds"));
-        assertTrue(mask.contains("maskToRoot"));
-        assertTrue(mask.contains("glyphLocalMatrix"));
-        assertTrue(mask.contains("insideTimeContainer"));
-        assertTrue(hook.contains("suspendForScene"));
-        assertTrue(hook.contains("resumeForScene"));
-        assertTrue(hook.contains("KNOWN_CLOCKS"));
+        String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
         String sceneSource = Files.readString(MAIN.resolve("SystemUiKeyguardGoneSource.java"));
-        assertTrue(sceneSource.contains("LockScreenClockGlassHook.onLockscreenSceneChanged"));
-
-        String renderer = Files.readString(Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
-        String maskShape = Files.readString(Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalMaskShapeShader.java"));
-        assertTrue(renderer.contains("PrismalMaskShapeShader.apply"));
-        assertTrue(renderer.contains("drawMaskGlass("));
-        assertTrue(renderer.contains("u_shapeSdfEnabled"));
-        assertTrue(renderer.contains("glUniformMatrix3fv"));
-        assertTrue(maskShape.contains("canonical Prismal fragment shader"));
-        assertTrue(maskShape.contains("distMask = d0"));
-        assertTrue(maskShape.contains("gradLens ="));
-        assertTrue(maskShape.contains("all Fresnel, refraction, chromatic, specular"));
-
         String prefs = Files.readString(MAIN.resolve("LockScreenClockGlassPreferences.java"));
+
+        assertTrue(nativeHook.contains("com.miui.clock.utils.ClockEffectUtils"));
+        assertTrue(nativeHook.contains("setClockEffectsContainer"));
+        assertTrue(nativeHook.contains("setClockEffectsView"));
+        assertTrue(nativeHook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
+        assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[3])"));
+        assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[6])"));
+        assertTrue(nativeHook.contains("isTimeMember"));
+        assertTrue(nativeHook.contains("isClockContainer"));
+        assertTrue(nativeHook.contains("date"));
+        assertTrue(nativeHook.contains("weather"));
+        assertTrue(nativeHook.contains("notification"));
+
+        assertTrue(module.contains("LockScreenClockNativeMaterialHook.install"));
+        assertFalse(module.contains("LockScreenClockGlassHook.install"));
+        assertFalse(module.contains("LockScreenClockPassBlurContinuousAuthority.install"));
+
+        assertTrue(sceneSource.contains(
+                "LockScreenClockNativeMaterialHook.onLockscreenSceneChanged"));
+        assertFalse(sceneSource.contains(
+                "LockScreenClockGlassHook.onLockscreenSceneChanged"));
+
+        assertTrue(blur.contains("applyClockMaterialContainer"));
+        assertTrue(blur.contains("applyClockMaterialMember"));
+        assertTrue(blur.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
+        assertTrue(blur.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1)"));
+        assertTrue(blur.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 3)"));
+        assertTrue(blur.contains("new Point(tint, 101)"));
+
+        // Native material path must not create a second clock renderer.
+        assertFalse(nativeHook.contains("TextureView"));
+        assertFalse(nativeHook.contains("Surface"));
+        assertFalse(nativeHook.contains("EGL"));
+        assertFalse(nativeHook.contains("Bitmap"));
+        assertFalse(nativeHook.contains("RootPassBlurBackend"));
+        assertFalse(nativeHook.contains("LockScreenClockGlyphMaskSource"));
+        assertFalse(nativeHook.contains("MiuiSearchboxGlassSession"));
+
         assertTrue(prefs.contains("glyph_enabled_v2"));
         assertTrue(prefs.contains("reader.b(ENABLED_KEY, ENABLED_DEFAULT)"));
-        assertFalse(prefs.contains("ENABLED_KEY = ThirdPartyGlassProfiles.key(PROFILE_ID, \"enabled\")"));
     }
+
 }
