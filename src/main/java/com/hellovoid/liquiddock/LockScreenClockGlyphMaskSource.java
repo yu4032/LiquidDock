@@ -152,8 +152,13 @@ final class LockScreenClockGlyphMaskSource {
         // Two consecutive identical frame observations form a semantic stability barrier without
         // an arbitrary wall-clock delay. Text changes bypass the barrier so minute updates remain live.
         boolean contentChanged = contentSignature != lastContentSignature;
-        if (!contentChanged && stableGeometryFrames < 2) return null;
-        if (contentChanged && lastContentSignature != Long.MIN_VALUE && stableGeometryFrames < 1) return null;
+        if (lastContentSignature == Long.MIN_VALUE) {
+            if (stableGeometryFrames < 2) return null;
+        } else if (contentChanged) {
+            if (stableGeometryFrames < 1) return null;
+        } else if (stableGeometryFrames < 2) {
+            return null;
+        }
         lastContentSignature = contentSignature;
 
         signature = mix(signature, left);
