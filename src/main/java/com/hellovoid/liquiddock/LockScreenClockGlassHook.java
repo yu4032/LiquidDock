@@ -47,7 +47,7 @@ final class LockScreenClockGlassHook {
             this.outputIndex = outputIndex;
             this.originalAlpha = clockView.getAlpha();
             this.session = new MiuiSearchboxGlassSession(
-                    clockView, glassConfig, appearance, 0f, this);
+                    clockView, glassConfig, appearance, 0f, this, PassBlurDomain.LOCKSCREEN_CLOCK);
             this.glassView = new MiuiSearchboxGlassView(clockView.getContext(), session);
             glassView.setAlpha(0f);
         }
