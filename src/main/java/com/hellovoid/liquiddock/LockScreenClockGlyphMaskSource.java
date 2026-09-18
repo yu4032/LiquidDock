@@ -57,8 +57,14 @@ final class LockScreenClockGlyphMaskSource {
         // while inflation/updateTime are still settling.
         addSemanticField(clockRoot, "mTimeView", glyphs);
         addSemanticField(clockRoot, "mTimeView2", glyphs);
+        addSemanticField(clockRoot, "mHourTextStyle1", glyphs);
+        addSemanticField(clockRoot, "mHourTextStyle2", glyphs);
+        addSemanticField(clockRoot, "mMinuteTextStyle1", glyphs);
+        addSemanticField(clockRoot, "mMinuteTextStyle2", glyphs);
 
-        if (glyphs.isEmpty()) collectSemanticTimeViews(clockRoot, glyphs);
+        // Resource semantics cover the remaining OS3 clock families without depending on
+        // decompiler-generated class/member names.
+        collectSemanticTimeViews(clockRoot, glyphs);
         if (glyphs.isEmpty()) return null;
         return new LockScreenClockGlyphMaskSource(clockRoot, glyphs);
     }
@@ -174,9 +180,6 @@ final class LockScreenClockGlyphMaskSource {
             Object value = field.get(clockRoot);
             if (!(value instanceof TextView)) return;
             View view = (View) value;
-            String className = view.getClass().getName();
-            if (!className.equals("com.miui.clock.MiuiTextGlassView")
-                    && !className.endsWith(".TimeView")) return;
             if (!out.contains(view)) out.add(view);
         } catch (Throwable ignored) {}
     }
@@ -194,18 +197,12 @@ final class LockScreenClockGlyphMaskSource {
     }
 
     private static void collectSemanticTimeViews(View root, List<View> out) {
-        String className = root.getClass().getName();
-        boolean textGlass = root instanceof TextView
-                && (className.equals("com.miui.clock.MiuiTextGlassView")
-                || className.endsWith(".TimeView"));
         String resourceName = resourceEntryName(root);
-        boolean semanticTimeId = "time_view".equals(resourceName)
-                || "time_view2".equals(resourceName);
+        boolean semanticTimeId = isTimeResourceName(resourceName);
 
-        // OS3 ClassicClockView binds mTimeView from R.id.time_view during onFinishInflate().
-        // The controller can publish the clock before updateTime() fills the text, so an empty
-        // TextView is still the authoritative glyph source and must not be rejected here.
-        if (textGlass && semanticTimeId) out.add(root);
+        // Only text-bearing time/hour/minute nodes are replaced. Date, week, weather and other
+        // clock decorations stay native even when they share the same overall clock container.
+        if (root instanceof TextView && semanticTimeId && !out.contains(root)) out.add(root);
 
         if (root instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) root;
@@ -213,6 +210,19 @@ final class LockScreenClockGlyphMaskSource {
                 collectSemanticTimeViews(group.getChildAt(i), out);
             }
         }
+    }
+
+    private static boolean isTimeResourceName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("date") || lower.contains("week") || lower.contains("weather")
+                || lower.contains("signature") || lower.contains("notification")) return false;
+        return lower.equals("time_view") || lower.equals("time_view2")
+                || lower.equals("time") || lower.equals("tv_time")
+                || lower.contains("time_hour") || lower.contains("time_minute")
+                || lower.contains("hour_text") || lower.contains("minute_text")
+                || lower.equals("tv_hour") || lower.equals("tv_minute")
+                || lower.endsWith("_hour") || lower.endsWith("_minute");
     }
 
     private static String resourceEntryName(View view) {
