@@ -81,6 +81,29 @@ public class LauncherGlassSceneControllerTest {
     }
 
     @Test
+    public void unlockCaptureBarrierKeepsCachedHomeGlassPresentable() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+
+        // PREPARE invalidates source freshness, but it must not erase the already-authoritative
+        // HOME presentation that MIUI is about to scale into view.
+        state.onGenerationInvalidated();
+        assertTrue(state.isLayerVisible());
+        assertFalse(LauncherGlassSceneController.shouldHardCoverWorkspacePresentation(
+                false, true, false));
+
+        assertTrue("Folder still owns a real presentation cover",
+                LauncherGlassSceneController.shouldHardCoverWorkspacePresentation(
+                        true, true, false));
+        assertTrue("Rotation still hides incompatible cached pixels",
+                LauncherGlassSceneController.shouldHardCoverWorkspacePresentation(
+                        false, true, true));
+    }
+
+    @Test
     public void acceptedWorkstationRolloverStillWaitsForFreshSceneWithoutHidingCache() {
         WorkstationRecentsRecoveryPolicy.Decision recovery =
                 WorkstationRecentsRecoveryPolicy.onRecentsReturn(true, true);
