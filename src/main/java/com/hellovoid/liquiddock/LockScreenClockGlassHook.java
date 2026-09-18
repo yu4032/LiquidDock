@@ -216,10 +216,18 @@ final class LockScreenClockGlassHook {
             LiquidDockConfig config = LiquidDockConfig.from(reader);
             ThirdPartyGlassAppearance appearance =
                     LockScreenClockGlassPreferences.resolve(reader, config.glass);
-            if (!config.enabled || !config.glass.enabled || !appearance.enabled) return;
+            if (!config.enabled || !config.glass.enabled || !appearance.enabled) {
+                Api101Bridge.log(TAG + " skipped by config module=" + config.enabled
+                        + " glass=" + config.glass.enabled
+                        + " clock=" + appearance.enabled);
+                return;
+            }
 
             View root = clockView.getRootView();
-            if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) return;
+            if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) {
+                Api101Bridge.log(TAG + " root unavailable; native clock retained");
+                return;
+            }
             ViewGroup parent = (ViewGroup) root;
             int index = parent.getChildCount() - 1;
 
@@ -232,6 +240,10 @@ final class LockScreenClockGlassHook {
                 }
                 next = new State(clockView, parent, index, config.glass, appearance);
                 STATES.put(clockView, next);
+                Api101Bridge.log(TAG + " attach candidate class="
+                        + clockView.getClass().getName()
+                        + " glyphs=" + next.glyphMaskSource.glyphCount()
+                        + " root=" + parent.getClass().getName());
             }
 
             try {
