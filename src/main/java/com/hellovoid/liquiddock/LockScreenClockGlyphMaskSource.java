@@ -4,7 +4,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
-import android.graphics.RectF;
 import android.view.View;
 import android.widget.TextView;
 
@@ -17,24 +16,18 @@ import java.util.WeakHashMap;
 final class LockScreenClockGlyphMaskSource {
     static final class Mask {
         final Bitmap bitmap;
-        final float left;
-        final float top;
-        final float width;
-        final float height;
         final int rootWidth;
         final int rootHeight;
         final long signature;
+        /** Android Matrix values mapping normalized mask coordinates into root pixel coordinates. */
+        final float[] maskToRoot;
 
-        Mask(Bitmap bitmap, float left, float top, float width, float height,
-             int rootWidth, int rootHeight, long signature) {
+        Mask(Bitmap bitmap, int rootWidth, int rootHeight, long signature, float[] maskToRoot) {
             this.bitmap = bitmap;
-            this.left = left;
-            this.top = top;
-            this.width = width;
-            this.height = height;
             this.rootWidth = rootWidth;
             this.rootHeight = rootHeight;
             this.signature = signature;
+            this.maskToRoot = maskToRoot;
         }
     }
 
@@ -43,12 +36,6 @@ final class LockScreenClockGlyphMaskSource {
     private final WeakHashMap<View, Float> originalAlpha = new WeakHashMap<>();
     private final WeakHashMap<View, Integer> originalVisibility = new WeakHashMap<>();
     private long lastSignature = Long.MIN_VALUE;
-    private long lastContentSignature = Long.MIN_VALUE;
-    private int lastObservedLeft = Integer.MIN_VALUE;
-    private int lastObservedTop = Integer.MIN_VALUE;
-    private int lastObservedRight = Integer.MIN_VALUE;
-    private int lastObservedBottom = Integer.MIN_VALUE;
-    private int stableGeometryFrames;
 
     LockScreenClockGlyphMaskSource(View clockRoot, List<View> glyphViews) {
         this.clockRoot = clockRoot;
@@ -79,18 +66,26 @@ final class LockScreenClockGlyphMaskSource {
     Mask capture() {
         View windowRoot = clockRoot.getRootView();
         if (windowRoot == null || !windowRoot.isAttachedToWindow()
-                || windowRoot.getWidth() <= 0 || windowRoot.getHeight() <= 0) return null;
+                || windowRoot.getWidth() <= 0 || windowRoot.getHeight() <= 0
+                || clockRoot.getWidth() <= 0 || clockRoot.getHeight() <= 0) return null;
 
-        Matrix rootToGlobal = new Matrix();
-        windowRoot.transformMatrixToGlobal(rootToGlobal);
-        Matrix globalToRoot = new Matrix();
-        if (!rootToGlobal.invert(globalToRoot)) return null;
+        // Keep the mask in clock-local coordinates. Its bitmap size is therefore stable while the
+        // native clock animates; only maskToRoot changes frame-to-frame.
+        Bitmap bitmap = Bitmap.createBitmap(
+                clockRoot.getWidth(), clockRoot.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.TRANSPARENT);
 
-        RectF union = null;
-        ArrayList<Matrix> transforms = new ArrayList<>();
-        ArrayList<View> visible = new ArrayList<>();
+        Matrix clockToGlobal = new Matrix();
+        clockRoot.transformMatrixToGlobal(clockToGlobal);
+        Matrix globalToClock = new Matrix();
+        if (!clockToGlobal.invert(globalToClock)) {
+            bitmap.recycle();
+            return null;
+        }
+
         long signature = 1469598103934665603L;
-
+        int drawn = 0;
         for (View glyph : glyphViews) {
             if (glyph == null || !glyph.isAttachedToWindow()
                     || glyph.getWidth() <= 0 || glyph.getHeight() <= 0) continue;
@@ -98,136 +93,95 @@ final class LockScreenClockGlyphMaskSource {
             int effectiveVisibility = nativeVisibility != null
                     ? nativeVisibility : glyph.getVisibility();
             if (effectiveVisibility != View.VISIBLE) continue;
-            Matrix localToGlobal = new Matrix();
-            glyph.transformMatrixToGlobal(localToGlobal);
-            Matrix localToRoot = new Matrix();
-            localToRoot.setConcat(globalToRoot, localToGlobal);
 
-            RectF bounds = new RectF(0f, 0f, glyph.getWidth(), glyph.getHeight());
-            localToRoot.mapRect(bounds);
-            if (bounds.width() <= 0f || bounds.height() <= 0f) continue;
-            if (union == null) union = new RectF(bounds);
-            else union.union(bounds);
-            transforms.add(localToRoot);
-            visible.add(glyph);
+            Matrix glyphToGlobal = new Matrix();
+            glyph.transformMatrixToGlobal(glyphToGlobal);
+            Matrix glyphToClock = new Matrix();
+            glyphToClock.setConcat(globalToClock, glyphToGlobal);
 
-            signature = mix(signature, glyph.getWidth());
-            signature = mix(signature, glyph.getHeight());
-            signature = mix(signature, Float.floatToIntBits(bounds.left));
-            signature = mix(signature, Float.floatToIntBits(bounds.top));
-            if (glyph instanceof TextView) {
-                CharSequence text = ((TextView) glyph).getText();
-                signature = mix(signature, text == null ? 0 : text.toString().hashCode());
-            }
-        }
-
-        if (union == null || visible.isEmpty()) return null;
-        int left = Math.max(0, (int) Math.floor(union.left));
-        int top = Math.max(0, (int) Math.floor(union.top));
-        int right = Math.min(windowRoot.getWidth(), (int) Math.ceil(union.right));
-        int bottom = Math.min(windowRoot.getHeight(), (int) Math.ceil(union.bottom));
-        int width = right - left;
-        int height = bottom - top;
-        if (width <= 0 || height <= 0) return null;
-
-        long contentSignature = 1469598103934665603L;
-        for (View glyph : visible) {
-            if (glyph instanceof TextView) {
-                CharSequence text = ((TextView) glyph).getText();
-                contentSignature = mix(contentSignature, text == null ? 0 : text.toString().hashCode());
-            }
-            contentSignature = mix(contentSignature, glyph.getWidth());
-            contentSignature = mix(contentSignature, glyph.getHeight());
-        }
-
-        boolean sameObservedGeometry = left == lastObservedLeft && top == lastObservedTop
-                && right == lastObservedRight && bottom == lastObservedBottom;
-        if (sameObservedGeometry) {
-            stableGeometryFrames++;
-        } else {
-            lastObservedLeft = left;
-            lastObservedTop = top;
-            lastObservedRight = right;
-            lastObservedBottom = bottom;
-            stableGeometryFrames = 0;
-        }
-
-        // Do not publish a replacement mask while the native clock is still transforming.
-        // Two consecutive identical frame observations form a semantic stability barrier without
-        // an arbitrary wall-clock delay. Text changes bypass the barrier so minute updates remain live.
-        boolean contentChanged = contentSignature != lastContentSignature;
-        if (lastContentSignature == Long.MIN_VALUE) {
-            if (stableGeometryFrames < 2) return null;
-        } else if (contentChanged) {
-            if (stableGeometryFrames < 1) return null;
-        } else if (stableGeometryFrames < 2) {
-            return null;
-        }
-        lastContentSignature = contentSignature;
-
-        signature = mix(signature, left);
-        signature = mix(signature, top);
-        signature = mix(signature, right);
-        signature = mix(signature, bottom);
-        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.TRANSPARENT);
-        for (int i = 0; i < visible.size(); i++) {
-            View glyph = visible.get(i);
-            Matrix drawMatrix = new Matrix(transforms.get(i));
-            drawMatrix.postTranslate(-left, -top);
             int save = canvas.save();
-            canvas.concat(drawMatrix);
+            canvas.concat(glyphToClock);
             float currentAlpha = glyph.getAlpha();
             int currentVisibility = glyph.getVisibility();
             Float nativeAlpha = originalAlpha.get(glyph);
-            Integer nativeVisibility = originalVisibility.get(glyph);
+            Integer storedVisibility = originalVisibility.get(glyph);
             float captureAlpha = nativeAlpha != null ? nativeAlpha : currentAlpha;
-            int captureVisibility = nativeVisibility != null ? nativeVisibility : currentVisibility;
+            int captureVisibility = storedVisibility != null ? storedVisibility : currentVisibility;
             if (captureAlpha <= 0f) captureAlpha = 1f;
             if (captureVisibility != View.VISIBLE) captureVisibility = View.VISIBLE;
             if (currentVisibility != captureVisibility) glyph.setVisibility(captureVisibility);
             if (currentAlpha != captureAlpha) glyph.setAlpha(captureAlpha);
             try {
                 glyph.draw(canvas);
+                drawn++;
             } finally {
                 if (glyph.getAlpha() != currentAlpha) glyph.setAlpha(currentAlpha);
                 if (glyph.getVisibility() != currentVisibility) glyph.setVisibility(currentVisibility);
                 canvas.restoreToCount(save);
             }
+
+            signature = mix(signature, glyph.getWidth());
+            signature = mix(signature, glyph.getHeight());
+            if (glyph instanceof TextView) {
+                CharSequence text = ((TextView) glyph).getText();
+                signature = mix(signature, text == null ? 0 : text.toString().hashCode());
+            }
         }
+
+        if (drawn == 0) {
+            bitmap.recycle();
+            return null;
+        }
+
         int[] tight = findAlphaBounds(bitmap);
         if (tight == null) {
             bitmap.recycle();
             return null;
         }
-        int tightLeft = tight[0];
-        int tightTop = tight[1];
-        int tightRight = tight[2];
-        int tightBottom = tight[3];
-        int tightWidth = tightRight - tightLeft;
-        int tightHeight = tightBottom - tightTop;
-        if (tightWidth <= 0 || tightHeight <= 0) {
+        int left = tight[0];
+        int top = tight[1];
+        int right = tight[2];
+        int bottom = tight[3];
+        int width = right - left;
+        int height = bottom - top;
+        if (width <= 0 || height <= 0) {
             bitmap.recycle();
             return null;
         }
 
-        Bitmap tightBitmap = bitmap;
-        if (tightLeft != 0 || tightTop != 0 || tightWidth != width || tightHeight != height) {
-            tightBitmap = Bitmap.createBitmap(bitmap, tightLeft, tightTop, tightWidth, tightHeight);
-            bitmap.recycle();
-        }
-        float tightRootLeft = left + tightLeft;
-        float tightRootTop = top + tightTop;
-        long tightSignature = mix(mix(signature, tightLeft), tightTop);
-        tightSignature = mix(mix(tightSignature, tightWidth), tightHeight);
-        if (tightSignature == lastSignature) {
+        Bitmap tightBitmap = Bitmap.createBitmap(bitmap, left, top, width, height);
+        bitmap.recycle();
+
+        // Map normalized tight-mask coordinates -> clock local pixels -> window-root pixels.
+        Matrix maskToClock = new Matrix();
+        maskToClock.setScale(width, height);
+        maskToClock.postTranslate(left, top);
+
+        Matrix rootToGlobal = new Matrix();
+        windowRoot.transformMatrixToGlobal(rootToGlobal);
+        Matrix globalToRoot = new Matrix();
+        if (!rootToGlobal.invert(globalToRoot)) {
             tightBitmap.recycle();
             return null;
         }
-        lastSignature = tightSignature;
-        return new Mask(tightBitmap, tightRootLeft, tightRootTop, tightWidth, tightHeight,
-                windowRoot.getWidth(), windowRoot.getHeight(), tightSignature);
+        Matrix clockToRoot = new Matrix();
+        clockToRoot.setConcat(globalToRoot, clockToGlobal);
+        Matrix maskToRootMatrix = new Matrix();
+        maskToRootMatrix.setConcat(clockToRoot, maskToClock);
+        float[] values = new float[9];
+        maskToRootMatrix.getValues(values);
+
+        long bitmapSignature = mix(mix(mix(mix(signature, left), top), width), height);
+        // Bitmap content only changes when text/layout changes; transform animation is carried by
+        // maskToRoot and intentionally excluded from the upload signature.
+        if (bitmapSignature == lastSignature) {
+            // Preserve transform updates without forcing a texture upload. Return the bitmap as a
+            // disposable carrier; the session will ignore duplicate texture content.
+        } else {
+            lastSignature = bitmapSignature;
+        }
+        return new Mask(tightBitmap, windowRoot.getWidth(), windowRoot.getHeight(),
+                bitmapSignature, values);
     }
 
     void suppressNativeGlyphs() {
