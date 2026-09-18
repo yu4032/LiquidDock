@@ -230,7 +230,8 @@ final class Folder2x1Hook {
         SheetState old = SHEETS.get(sheet);
         if (old != null && old.customCheckBox.getParent() == group) return;
 
-        ViewGroup checkBox = newVendorViewGroup(visualCheckBoxClass, context);
+        LinearLayout checkBox =
+                (LinearLayout) newVendorViewGroup(visualCheckBoxClass, context);
         checkBox.setId(View.generateViewId());
         checkBox.setGravity(Gravity.CENTER_HORIZONTAL);
         checkBox.setContentDescription("2×1");
@@ -242,7 +243,8 @@ final class Folder2x1Hook {
         checkBox.setLayoutParams(new ViewGroup.MarginLayoutParams(
                 optionWidth, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        ViewGroup border = newVendorViewGroup(borderLayoutClass, context);
+        LinearLayout border =
+                (LinearLayout) newVendorViewGroup(borderLayoutClass, context);
         border.setGravity(Gravity.CENTER);
         int borderSize = Math.max(dp(context, 54), Math.min(dp(context, 72), optionWidth - dp(context, 8)));
         border.setLayoutParams(new LinearLayout.LayoutParams(borderSize, borderSize));
