@@ -257,6 +257,10 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 || frame.generation != GENERATION || !snapshotState.acceptFreshFrame()) return;
         try {
             ensureGl();
+            if (glyphMaskSource != null) {
+                Api101Bridge.log("[DC][LockScreenClockGlass] fresh PassBlur frame "
+                        + frame.logicalWidth + "x" + frame.logicalHeight);
+            }
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
             updateGeometry();
@@ -373,6 +377,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
+        if (glyphMaskSource != null) {
+            Api101Bridge.log("[DC][LockScreenClockGlass] glyph-masked swap success");
+        }
     }
 
 
@@ -403,6 +410,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
             }
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, mask.bitmap, 0);
+            Api101Bridge.log("[DC][LockScreenClockGlass] glyph mask uploaded "
+                    + mask.bitmap.getWidth() + "x" + mask.bitmap.getHeight());
             uploadedGlyphMaskSignature = mask.signature;
             glyphMaskLeft = mask.left / Math.max(1f, mask.rootWidth);
             glyphMaskTop = mask.top / Math.max(1f, mask.rootHeight);
