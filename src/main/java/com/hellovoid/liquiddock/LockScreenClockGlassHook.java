@@ -6,6 +6,7 @@ import android.view.ViewTreeObserver;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.WeakHashMap;
 
 /**
@@ -21,6 +22,7 @@ final class LockScreenClockGlassHook {
 
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
     private static final WeakHashMap<View, Boolean> PENDING_ATTACH = new WeakHashMap<>();
+    private static final WeakHashMap<View, Boolean> KNOWN_CLOCKS = new WeakHashMap<>();
     private static boolean installed;
 
     private LockScreenClockGlassHook() {}
@@ -36,6 +38,7 @@ final class LockScreenClockGlassHook {
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDraw;
         boolean disposed;
+        boolean suspended;
 
         State(
                 View clockView,
@@ -67,7 +70,7 @@ final class LockScreenClockGlassHook {
             preDraw = () -> {
                 if (!disposed) {
                     if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
-                        safePost(clockView, () -> dispose(true), "scene-exit-dispose");
+                        suspendForScene();
                         return true;
                     }
                     try {
@@ -90,10 +93,10 @@ final class LockScreenClockGlassHook {
         void refresh() {
             if (disposed || !clockView.isAttachedToWindow()) return;
             if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
-                Api101Bridge.log(TAG + " scene gate closed; native clock retained");
-                dispose(true);
+                suspendForScene();
                 return;
             }
+            suspended = false;
             try {
                 // Capture glyph geometry/mask while native digits are still drawable, then remove
                 // them before requesting a fresh backdrop so PassBlur can never sample the digits
@@ -117,7 +120,7 @@ final class LockScreenClockGlassHook {
 
         @Override
         public void onPresented() {
-            if (disposed) return;
+            if (disposed || suspended || !SystemUiKeyguardGoneSource.isLockscreenScene()) return;
             try {
                 glyphMaskSource.suppressNativeGlyphs();
                 Api101Bridge.log(TAG + " presented; native time glyphs suppressed");
@@ -135,6 +138,21 @@ final class LockScreenClockGlassHook {
             } catch (Throwable ignored) {}
             try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
             safePost(clockView, () -> dispose(true), "failure-dispose");
+        }
+
+        void suspendForScene() {
+            if (disposed || suspended) return;
+            suspended = true;
+            try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            try { glassView.setVisibility(View.INVISIBLE); } catch (Throwable ignored) {}
+            Api101Bridge.log(TAG + " suspended outside LOCKSCREEN");
+        }
+
+        void resumeForScene() {
+            if (disposed || !clockView.isAttachedToWindow()) return;
+            suspended = false;
+            try { glassView.setVisibility(View.VISIBLE); } catch (Throwable ignored) {}
+            safePost(clockView, this::refresh, "scene-resume-refresh");
         }
 
         @Override public void onViewAttachedToWindow(View v) {
@@ -158,6 +176,7 @@ final class LockScreenClockGlassHook {
             preDraw = null;
             synchronized (STATES) {
                 if (STATES.get(clockView) == this) STATES.remove(clockView);
+                KNOWN_CLOCKS.remove(clockView);
             }
             try { glassView.dispose(); } catch (Throwable error) {
                 Api101Bridge.log(TAG + " glass view dispose failed", error);
@@ -206,10 +225,36 @@ final class LockScreenClockGlassHook {
         }
     }
 
+    static void onLockscreenSceneChanged(boolean lockscreen) {
+        ArrayList<View> known = new ArrayList<>();
+        ArrayList<State> states = new ArrayList<>();
+        synchronized (STATES) {
+            known.addAll(KNOWN_CLOCKS.keySet());
+            states.addAll(STATES.values());
+        }
+        if (!lockscreen) {
+            for (State state : states) {
+                if (state != null && !state.disposed) {
+                    safePost(state.clockView, state::suspendForScene, "scene-suspend");
+                }
+            }
+            return;
+        }
+        for (State state : states) {
+            if (state != null && !state.disposed) {
+                safePost(state.clockView, state::resumeForScene, "scene-resume");
+            }
+        }
+        for (View clock : known) {
+            if (clock != null && clock.isAttachedToWindow()) scheduleAttach(clock);
+        }
+    }
+
     private static void scheduleAttach(Object candidate) {
         if (!(candidate instanceof View)) return;
         View clockView = (View) candidate;
         synchronized (STATES) {
+            KNOWN_CLOCKS.put(clockView, Boolean.TRUE);
             State existing = STATES.get(clockView);
             if (existing != null && !existing.disposed) {
                 safePost(clockView, existing::refresh, "refresh");
@@ -229,7 +274,7 @@ final class LockScreenClockGlassHook {
             }
             if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
                 clearPending(clockView);
-                Api101Bridge.log(TAG + " scene gate rejected class="
+                Api101Bridge.log(TAG + " scene gate deferred class="
                         + clockView.getClass().getName());
                 return;
             }
