@@ -19,14 +19,17 @@ final class LockScreenClockGlyphMaskSource {
         final int rootWidth;
         final int rootHeight;
         final long signature;
+        final float sdfRangePx;
         /** Android Matrix values mapping normalized mask coordinates into root pixel coordinates. */
         final float[] maskToRoot;
 
-        Mask(Bitmap bitmap, int rootWidth, int rootHeight, long signature, float[] maskToRoot) {
+        Mask(Bitmap bitmap, int rootWidth, int rootHeight, long signature,
+             float sdfRangePx, float[] maskToRoot) {
             this.bitmap = bitmap;
             this.rootWidth = rootWidth;
             this.rootHeight = rootHeight;
             this.signature = signature;
+            this.sdfRangePx = sdfRangePx;
             this.maskToRoot = maskToRoot;
         }
     }
@@ -185,8 +188,12 @@ final class LockScreenClockGlyphMaskSource {
         } else {
             lastSignature = bitmapSignature;
         }
-        return new Mask(tightBitmap, windowRoot.getWidth(), windowRoot.getHeight(),
-                bitmapSignature, values);
+        final float sdfRangePx = 32f;
+        Bitmap sdfBitmap = toSignedDistanceBitmap(tightBitmap, sdfRangePx);
+        tightBitmap.recycle();
+        if (sdfBitmap == null) return null;
+        return new Mask(sdfBitmap, windowRoot.getWidth(), windowRoot.getHeight(),
+                bitmapSignature, sdfRangePx, values);
     }
 
     void suppressNativeGlyphs() {
@@ -303,6 +310,67 @@ final class LockScreenClockGlyphMaskSource {
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static Bitmap toSignedDistanceBitmap(Bitmap alphaBitmap, float rangePx) {
+        if (alphaBitmap == null || alphaBitmap.isRecycled()) return null;
+        int width = alphaBitmap.getWidth();
+        int height = alphaBitmap.getHeight();
+        int count = width * height;
+        if (count <= 0) return null;
+
+        int[] pixels = new int[count];
+        alphaBitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        boolean[] inside = new boolean[count];
+        for (int i = 0; i < count; i++) inside[i] = ((pixels[i] >>> 24) & 0xff) >= 96;
+
+        float[] toInside = chamferDistance(inside, width, height, true);
+        float[] toOutside = chamferDistance(inside, width, height, false);
+        int[] sdf = new int[count];
+        float safeRange = Math.max(1f, rangePx);
+        for (int i = 0; i < count; i++) {
+            float signed = inside[i] ? -toOutside[i] : toInside[i];
+            signed = Math.max(-safeRange, Math.min(safeRange, signed));
+            float encoded = 0.5f - signed / (2f * safeRange);
+            int a = Math.max(0, Math.min(255, Math.round(encoded * 255f)));
+            sdf[i] = (a << 24) | 0x00ffffff;
+        }
+        Bitmap out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        out.setPixels(sdf, 0, width, 0, 0, width, height);
+        return out;
+    }
+
+    private static float[] chamferDistance(
+            boolean[] inside, int width, int height, boolean targetInside) {
+        final float inf = 1_000_000f;
+        final float diag = 1.41421356f;
+        int count = width * height;
+        float[] d = new float[count];
+        for (int i = 0; i < count; i++) d[i] = inside[i] == targetInside ? 0f : inf;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int i = y * width + x;
+                float v = d[i];
+                if (x > 0) v = Math.min(v, d[i - 1] + 1f);
+                if (y > 0) v = Math.min(v, d[i - width] + 1f);
+                if (x > 0 && y > 0) v = Math.min(v, d[i - width - 1] + diag);
+                if (x + 1 < width && y > 0) v = Math.min(v, d[i - width + 1] + diag);
+                d[i] = v;
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            for (int x = width - 1; x >= 0; x--) {
+                int i = y * width + x;
+                float v = d[i];
+                if (x + 1 < width) v = Math.min(v, d[i + 1] + 1f);
+                if (y + 1 < height) v = Math.min(v, d[i + width] + 1f);
+                if (x + 1 < width && y + 1 < height) v = Math.min(v, d[i + width + 1] + diag);
+                if (x > 0 && y + 1 < height) v = Math.min(v, d[i + width - 1] + diag);
+                d[i] = v;
+            }
+        }
+        return d;
     }
 
     private static int[] findAlphaBounds(Bitmap bitmap) {
