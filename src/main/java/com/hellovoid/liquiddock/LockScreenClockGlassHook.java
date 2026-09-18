@@ -161,13 +161,13 @@ final class LockScreenClockGlassHook {
                 LockScreenClockGlassPreferences.resolve(reader, config.glass);
         if (!config.enabled || !config.glass.enabled || !appearance.enabled) return;
 
-        if (!(clockView.getParent() instanceof ViewGroup)) {
+        View root = clockView.getRootView();
+        if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) {
             clockView.post(() -> tryAttach(clockView));
             return;
         }
-        ViewGroup parent = (ViewGroup) clockView.getParent();
-        int index = parent.indexOfChild(clockView);
-        if (index < 0) return;
+        ViewGroup parent = (ViewGroup) root;
+        int index = parent.getChildCount() - 1;
 
         synchronized (STATES) {
             State old = STATES.get(clockView);
