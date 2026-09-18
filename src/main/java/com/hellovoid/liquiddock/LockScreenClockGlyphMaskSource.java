@@ -41,6 +41,7 @@ final class LockScreenClockGlyphMaskSource {
     private final View clockRoot;
     private final List<View> glyphViews;
     private final WeakHashMap<View, Float> originalAlpha = new WeakHashMap<>();
+    private final WeakHashMap<View, Integer> originalVisibility = new WeakHashMap<>();
     private long lastSignature = Long.MIN_VALUE;
     private long lastContentSignature = Long.MIN_VALUE;
     private int lastObservedLeft = Integer.MIN_VALUE;
@@ -92,8 +93,11 @@ final class LockScreenClockGlyphMaskSource {
 
         for (View glyph : glyphViews) {
             if (glyph == null || !glyph.isAttachedToWindow()
-                    || glyph.getWidth() <= 0 || glyph.getHeight() <= 0
-                    || glyph.getVisibility() != View.VISIBLE) continue;
+                    || glyph.getWidth() <= 0 || glyph.getHeight() <= 0) continue;
+            Integer nativeVisibility = originalVisibility.get(glyph);
+            int effectiveVisibility = nativeVisibility != null
+                    ? nativeVisibility : glyph.getVisibility();
+            if (effectiveVisibility != View.VISIBLE) continue;
             Matrix localToGlobal = new Matrix();
             glyph.transformMatrixToGlobal(localToGlobal);
             Matrix localToRoot = new Matrix();
@@ -175,14 +179,20 @@ final class LockScreenClockGlyphMaskSource {
             int save = canvas.save();
             canvas.concat(drawMatrix);
             float currentAlpha = glyph.getAlpha();
+            int currentVisibility = glyph.getVisibility();
             Float nativeAlpha = originalAlpha.get(glyph);
+            Integer nativeVisibility = originalVisibility.get(glyph);
             float captureAlpha = nativeAlpha != null ? nativeAlpha : currentAlpha;
+            int captureVisibility = nativeVisibility != null ? nativeVisibility : currentVisibility;
             if (captureAlpha <= 0f) captureAlpha = 1f;
+            if (captureVisibility != View.VISIBLE) captureVisibility = View.VISIBLE;
+            if (currentVisibility != captureVisibility) glyph.setVisibility(captureVisibility);
             if (currentAlpha != captureAlpha) glyph.setAlpha(captureAlpha);
             try {
                 glyph.draw(canvas);
             } finally {
                 if (glyph.getAlpha() != currentAlpha) glyph.setAlpha(currentAlpha);
+                if (glyph.getVisibility() != currentVisibility) glyph.setVisibility(currentVisibility);
                 canvas.restoreToCount(save);
             }
         }
@@ -224,15 +234,24 @@ final class LockScreenClockGlyphMaskSource {
         for (View glyph : glyphViews) {
             if (glyph == null) continue;
             if (!originalAlpha.containsKey(glyph)) originalAlpha.put(glyph, glyph.getAlpha());
-            glyph.setAlpha(0f);
+            if (!originalVisibility.containsKey(glyph)) {
+                originalVisibility.put(glyph, glyph.getVisibility());
+            }
+            // INVISIBLE preserves layout/measurement but removes the native clock pixels entirely.
+            glyph.setVisibility(View.INVISIBLE);
         }
     }
 
     void restoreNativeGlyphs() {
-        for (View glyph : new ArrayList<>(originalAlpha.keySet())) {
+        ArrayList<View> views = new ArrayList<>(originalVisibility.keySet());
+        for (View glyph : views) {
+            Integer visibility = originalVisibility.get(glyph);
             Float alpha = originalAlpha.get(glyph);
-            if (glyph != null && alpha != null) glyph.setAlpha(alpha);
+            if (glyph == null) continue;
+            if (alpha != null) glyph.setAlpha(alpha);
+            if (visibility != null) glyph.setVisibility(visibility);
         }
+        originalVisibility.clear();
         originalAlpha.clear();
     }
 
@@ -291,6 +310,9 @@ final class LockScreenClockGlyphMaskSource {
                 || lower.contains("time_hour") || lower.contains("time_minute")
                 || lower.contains("hour_text") || lower.contains("minute_text")
                 || lower.equals("tv_hour") || lower.equals("tv_minute")
+                || lower.equals("colon1") || lower.equals("colon2")
+                || lower.equals("colon_view") || lower.contains("time_colon")
+                || lower.contains("time_separator")
                 || lower.endsWith("_hour") || lower.endsWith("_minute");
     }
 
