@@ -162,6 +162,14 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         if (!shuttingDown) sourceBackend.reconcileRoot();
     }
 
+    boolean hasRenderableGlyphGeometry() {
+        if (glyphMaskSource == null) return true;
+        if (geometry == null) return false;
+        synchronized (glyphMaskLock) {
+            return pendingGlyphMask != null || glyphMaskTexture != 0;
+        }
+    }
+
     void updateGeometry() {
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
