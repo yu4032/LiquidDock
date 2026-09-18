@@ -104,7 +104,7 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.dock.shadowEnabled,
                     runtimeConfig.dock.strokeShadow,
                     runtimeConfig.divider.enabled);
-            DockMirrorShortcutHook.install(classLoader);
+            DockMirrorShortcutHook.install(classLoader, runtimeConfig.dock);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
             Launcher450IconSizeHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
