@@ -53,7 +53,6 @@ final class LockScreenClockGlassHook {
             this.session = new MiuiSearchboxGlassSession(
                     clockView, glassConfig, appearance, 0f, this, PassBlurDomain.LOCKSCREEN_CLOCK);
             this.glassView = new MiuiSearchboxGlassView(clockView.getContext(), session);
-            glassView.setAlpha(0f);
         }
 
         void attach() {
@@ -87,7 +86,6 @@ final class LockScreenClockGlassHook {
         void refresh() {
             if (disposed || !clockView.isAttachedToWindow()) return;
             try {
-                glassView.setAlpha(0f);
                 glyphMaskSource.restoreNativeGlyphs();
                 session.updateGeometry();
                 session.reconcileRoot();
@@ -104,12 +102,10 @@ final class LockScreenClockGlassHook {
             if (disposed) return;
             try {
                 glyphMaskSource.suppressNativeGlyphs();
-                glassView.setAlpha(1f);
                 Api101Bridge.log(TAG + " presented; native time glyphs suppressed");
             } catch (Throwable error) {
                 Api101Bridge.log(TAG + " presentation handoff failed; native clock retained", error);
                 try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
-                try { glassView.setAlpha(0f); } catch (Throwable ignored) {}
                 safePost(clockView, () -> dispose(true), "present-dispose");
             }
         }
