@@ -77,7 +77,7 @@ public class LockScreenClockGlassContractTest {
         assertTrue(blur.contains("setMiGlass"));
         assertTrue(blur.contains("setMiCustomSurfaceColorType"));
         assertTrue(blur.contains("setMiGlassClip"));
-        assertTrue(blur.contains("Paint.class.getMethod(\"setGlassEffect\""));
+        assertTrue(blur.contains("Paint.class, \"setGlassEffect\""));
         assertTrue(blur.contains("SET_MI_VIEW_MATERIAL_TYPE.invoke(view, 1)"));
         assertTrue(blur.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 3)"));
         assertTrue(blur.contains("SET_MI_CUSTOM_SURFACE_COLOR_TYPE.invoke(view, 16)"));
