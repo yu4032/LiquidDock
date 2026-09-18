@@ -10,6 +10,7 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.WeakHashMap;
 
 /** Captures only the native time glyph alpha into a small root-coordinate mask bitmap. */
 final class LockScreenClockGlyphMaskSource {
@@ -38,6 +39,7 @@ final class LockScreenClockGlyphMaskSource {
 
     private final View clockRoot;
     private final List<View> glyphViews;
+    private final WeakHashMap<View, Float> originalAlpha = new WeakHashMap<>();
 
     LockScreenClockGlyphMaskSource(View clockRoot, List<View> glyphViews) {
         this.clockRoot = clockRoot;
@@ -71,9 +73,10 @@ final class LockScreenClockGlyphMaskSource {
             if (glyph == null || !glyph.isAttachedToWindow()
                     || glyph.getWidth() <= 0 || glyph.getHeight() <= 0
                     || glyph.getVisibility() != View.VISIBLE) continue;
+            Matrix localToGlobal = new Matrix();
+            glyph.transformMatrixToGlobal(localToGlobal);
             Matrix localToRoot = new Matrix();
-            glyph.transformMatrixToGlobal(localToRoot);
-            localToRoot.postConcat(globalToRoot);
+            localToRoot.setConcat(globalToRoot, localToGlobal);
 
             RectF bounds = new RectF(0f, 0f, glyph.getWidth(), glyph.getHeight());
             localToRoot.mapRect(bounds);
@@ -118,14 +121,24 @@ final class LockScreenClockGlyphMaskSource {
                 windowRoot.getWidth(), windowRoot.getHeight(), signature);
     }
 
-    RectF currentBounds() {
-        Mask mask = capture();
-        if (mask == null) return null;
-        try {
-            return new RectF(mask.left, mask.top, mask.left + mask.width, mask.top + mask.height);
-        } finally {
-            mask.bitmap.recycle();
+    void suppressNativeGlyphs() {
+        for (View glyph : glyphViews) {
+            if (glyph == null) continue;
+            if (!originalAlpha.containsKey(glyph)) originalAlpha.put(glyph, glyph.getAlpha());
+            glyph.setAlpha(0f);
         }
+    }
+
+    void restoreNativeGlyphs() {
+        for (View glyph : new ArrayList<>(originalAlpha.keySet())) {
+            Float alpha = originalAlpha.get(glyph);
+            if (glyph != null && alpha != null) glyph.setAlpha(alpha);
+        }
+        originalAlpha.clear();
+    }
+
+    int glyphCount() {
+        return glyphViews.size();
     }
 
     private static void collectSemanticTimeViews(View root, List<View> out) {
