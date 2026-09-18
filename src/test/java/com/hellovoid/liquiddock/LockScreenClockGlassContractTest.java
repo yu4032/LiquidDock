@@ -30,6 +30,7 @@ public class LockScreenClockGlassContractTest {
         String hook = Files.readString(MAIN.resolve("LockScreenClockGlassHook.java"));
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
         String session = Files.readString(MAIN.resolve("MiuiSearchboxGlassSession.java"));
+        String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
 
         assertTrue(hook.contains("com.miui.clock.MiuiClockController"));
         assertTrue(hook.contains("addClockView"));
@@ -58,7 +59,6 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("postOnAnimation"));
         assertTrue(session.contains("[DC][LockScreenClockGlass] session failure stage="));
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
-        String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
         assertTrue(mask.contains("com.miui.clock.MiuiTextGlassView"));
         assertTrue(mask.contains("\"mTimeView\""));
         assertTrue(mask.contains("\"mTimeView2\""));
