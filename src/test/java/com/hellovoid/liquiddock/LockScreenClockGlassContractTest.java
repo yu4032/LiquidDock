@@ -32,12 +32,21 @@ public class LockScreenClockGlassContractTest {
 
         assertTrue(hook.contains("com.miui.clock.MiuiClockController"));
         assertTrue(hook.contains("addClockView"));
-        assertTrue(hook.contains("clockView.setAlpha(0f)"));
-        assertTrue(hook.contains("clockView.setAlpha(originalAlpha)"));
+        assertTrue(hook.contains("glyphMaskSource.suppressNativeGlyphs()"));
+        assertTrue(hook.contains("glyphMaskSource.restoreNativeGlyphs()"));
         assertFalse(hook.contains("supportGlassEffect"));
         assertFalse(hook.contains("isGlassEffectEnable"));
         assertFalse(hook.contains("setMiGlass"));
         assertFalse(hook.contains("clockEffect"));
         assertTrue(module.contains("LockScreenClockGlassHook.install"));
+        String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
+        String session = Files.readString(MAIN.resolve("MiuiSearchboxGlassSession.java"));
+        String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
+        assertTrue(mask.contains("com.miui.clock.MiuiTextGlassView"));
+        assertTrue(mask.contains("glyph.draw(canvas)"));
+        assertTrue(session.contains("GLYPH_MASK_FRAGMENT"));
+        assertTrue(session.contains("uploadPendingGlyphMask"));
+        assertTrue(composite.contains("uGlyphMask"));
+        assertTrue(composite.contains("glass.a * alpha"));
     }
 }
