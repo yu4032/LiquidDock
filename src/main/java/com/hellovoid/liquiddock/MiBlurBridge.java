@@ -1,7 +1,11 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Point;
+import android.graphics.RectF;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.TextView;
 
@@ -90,31 +94,23 @@ final class MiBlurBridge {
         CHOOSE_BACKGROUND_BLUR_CONTAINER = chooseBackgroundBlurContainer;
         PASS_BLUR_AVAILABLE = passAvailable;
 
-        Method glassBlurRadius = null;
-        Method viewMaterialType = null;
-        Method glass = null;
-        Method customSurfaceColorType = null;
-        Method glassClip = null;
-        Method disableContainBelow = null;
-        Method paintGlassEffect = null;
-        boolean glassAvailable = false;
-        try {
-            glassBlurRadius = View.class.getMethod(
-                    "setMiGlassBlurRadius", int.class, int.class);
-            viewMaterialType = View.class.getMethod("setMiViewMaterialType", int.class);
-            glass = View.class.getMethod("setMiGlass", float[].class);
-            customSurfaceColorType = View.class.getMethod(
-                    "setMiCustomSurfaceColorType", int.class);
-            glassClip = View.class.getMethod(
-                    "setMiGlassClip",
-                    float.class, float.class, float.class, float.class);
-            disableContainBelow = View.class.getMethod(
-                    "disableMiBackgroundContainBelow", boolean.class);
-            paintGlassEffect = Paint.class.getMethod("setGlassEffect", boolean.class);
-            glassAvailable = true;
-        } catch (Throwable ignored) {
-            // Glass is an OS3-only extension. Keep all other blur paths independently usable.
-        }
+        // Resolve Glass APIs independently. HyperOS exposes some of these extensions only on
+        // selected framework builds; one optional helper must never disable the entire material.
+        Method glassBlurRadius = publicMethodOrNull(
+                View.class, "setMiGlassBlurRadius", int.class, int.class);
+        Method viewMaterialType = publicMethodOrNull(
+                View.class, "setMiViewMaterialType", int.class);
+        Method glass = publicMethodOrNull(View.class, "setMiGlass", float[].class);
+        Method customSurfaceColorType = publicMethodOrNull(
+                View.class, "setMiCustomSurfaceColorType", int.class);
+        Method glassClip = publicMethodOrNull(
+                View.class, "setMiGlassClip",
+                float.class, float.class, float.class, float.class);
+        Method disableContainBelow = publicMethodOrNull(
+                View.class, "disableMiBackgroundContainBelow", boolean.class);
+        Method paintGlassEffect = publicMethodOrNull(
+                Paint.class, "setGlassEffect", boolean.class);
+
         SET_MI_GLASS_BLUR_RADIUS = glassBlurRadius;
         SET_MI_VIEW_MATERIAL_TYPE = viewMaterialType;
         SET_MI_GLASS = glass;
@@ -122,10 +118,25 @@ final class MiBlurBridge {
         SET_MI_GLASS_CLIP = glassClip;
         DISABLE_MI_BACKGROUND_CONTAIN_BELOW = disableContainBelow;
         SET_PAINT_GLASS_EFFECT = paintGlassEffect;
-        GLASS_MATERIAL_AVAILABLE = passAvailable && glassAvailable;
+        GLASS_MATERIAL_AVAILABLE = passAvailable
+                && glassBlurRadius != null
+                && viewMaterialType != null
+                && glass != null
+                && customSurfaceColorType != null
+                && glassClip != null
+                && paintGlassEffect != null;
     }
 
     private MiBlurBridge() {}
+
+    private static Method publicMethodOrNull(
+            Class<?> owner, String name, Class<?>... parameterTypes) {
+        try {
+            return owner.getMethod(name, parameterTypes);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
 
     static boolean isAvailable() {
         return LEGACY_AVAILABLE;
@@ -235,7 +246,9 @@ final class MiBlurBridge {
             // not setMiBackgroundBlurRadius(), which is the ordinary blur-mix material.
             SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1);
             SET_MI_GLASS_BLUR_RADIUS.invoke(view, safeRadius, safeRadius);
-            DISABLE_MI_BACKGROUND_CONTAIN_BELOW.invoke(view, true);
+            if (DISABLE_MI_BACKGROUND_CONTAIN_BELOW != null) {
+                DISABLE_MI_BACKGROUND_CONTAIN_BELOW.invoke(view, true);
+            }
             return true;
         } catch (Throwable error) {
             MainHook.log("[DC][LockScreenClockGlass] native glass container failed: " + error);
@@ -323,6 +336,53 @@ final class MiBlurBridge {
         data[14] = alpha;
         data[16] = alpha;
         return data;
+    }
+
+    static boolean drawClockGlassText(TextView view, Canvas canvas) {
+        if (!GLASS_MATERIAL_AVAILABLE || view == null || canvas == null) return false;
+        CharSequence value = view.getText();
+        if (value == null || value.length() == 0) return false;
+        try {
+            String text = value.toString();
+            Paint paint = view.getPaint();
+            SET_PAINT_GLASS_EFFECT.invoke(paint, true);
+            paint.setColor(view.getCurrentTextColor());
+
+            float textWidth = paint.measureText(text);
+            int absoluteGravity = Gravity.getAbsoluteGravity(
+                    view.getGravity(), view.getLayoutDirection());
+            int horizontal = absoluteGravity & Gravity.HORIZONTAL_GRAVITY_MASK;
+            float contentLeft = view.getCompoundPaddingLeft();
+            float contentRight = view.getWidth() - view.getCompoundPaddingRight();
+            float x;
+            if (horizontal == Gravity.RIGHT) {
+                x = contentRight - textWidth;
+            } else if (horizontal == Gravity.CENTER_HORIZONTAL) {
+                x = contentLeft + Math.max(0f, (contentRight - contentLeft - textWidth) * 0.5f);
+            } else {
+                x = contentLeft;
+            }
+            float baseline = view.getBaseline();
+
+            Path path = new Path();
+            paint.getTextPath(text, 0, text.length(), x, baseline, path);
+            RectF bounds = new RectF();
+            path.computeBounds(bounds, true);
+            if (bounds.isEmpty()) return false;
+
+            // HyperOS AllInOne.TimeView expands the native Glass clip by exactly 50 px.
+            SET_MI_GLASS_CLIP.invoke(
+                    view,
+                    bounds.left - 50f,
+                    bounds.top - 50f,
+                    bounds.right + 50f,
+                    bounds.bottom + 50f);
+            canvas.drawPath(path, paint);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native path draw failed: " + error);
+            return false;
+        }
     }
 
     static void clearClockGlassContainer(View view) {
