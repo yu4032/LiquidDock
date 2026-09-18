@@ -436,12 +436,6 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page == Page.Liquid) {
                         TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
                     }
-                    if (page == Page.LockScreenClock) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_system_ui),
-                            onClick = { activity.restartSystemUi() },
-                        )
-                    }
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
                     if (descriptor != null) {
                         TextButton(
@@ -453,7 +447,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                                 )
                             },
                         )
-                    } else if (page != Page.LockScreenClock) {
+                    } else {
                         TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
                     }
                     if (page == Page.Home) {
