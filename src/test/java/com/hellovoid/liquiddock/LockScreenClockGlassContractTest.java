@@ -39,8 +39,8 @@ public class LockScreenClockGlassContractTest {
         assertTrue(nativeHook.contains("setClockEffectsContainer"));
         assertTrue(nativeHook.contains("setClockEffectsView"));
         assertTrue(nativeHook.contains("SystemUiKeyguardGoneSource.isLockscreenScene()"));
-        assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[3])"));
-        assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[6])"));
+        assertTrue(nativeHook.contains("int aodIndex"));
+        assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[aodIndex])"));
         assertTrue(nativeHook.contains("isTimeMember"));
         assertTrue(nativeHook.contains("chooseBackgroundBlurContainer"));
         assertTrue(nativeHook.contains("MEMBER_CONTAINERS"));
