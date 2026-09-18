@@ -44,6 +44,10 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("tryAttachFailClosed"));
         assertTrue(hook.contains("pre-draw failed; native clock retained"));
         assertTrue(hook.contains("presentation handoff failed; native clock retained"));
+        assertTrue(hook.contains("RootPassBlurEndpointBridge.inspect(root)"));
+        assertTrue(hook.contains("root endpoint not ready; waiting for next frame"));
+        assertTrue(hook.contains("postOnAnimation"));
+        assertTrue(session.contains("[DC][LockScreenClockGlass] session failure stage="));
         String mask = Files.readString(MAIN.resolve("LockScreenClockGlyphMaskSource.java"));
         String session = Files.readString(MAIN.resolve("MiuiSearchboxGlassSession.java"));
         String composite = Files.readString(MAIN.resolve("Miuix307PrismalCompositeShaders.java"));
