@@ -85,6 +85,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private float glyphMaskHeight;
     private int glyphMaskPixelWidth;
     private int glyphMaskPixelHeight;
+    private float glyphSdfRangePx = 32f;
     private OutputState output;
 
     MiuiSearchboxGlassSession(
@@ -342,15 +343,19 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
+            prismalRenderer.beginGlassFrame();
             if (glyphMaskSource != null) {
                 uploadPendingGlyphMask();
                 if (glyphMaskTexture == 0) return;
-                presentGlyphMasked(
-                        prismalRenderer.normalizedBackdropTexture(),
-                        prismalRenderer.blurredBackdropTexture(),
-                        current);
+                prismalRenderer.drawMaskGlass(
+                        currentGeometry.toPrismalGeometry(),
+                        prismalParams,
+                        highlightProfile,
+                        glyphMaskTexture,
+                        glyphRootPxToMaskUv,
+                        glyphSdfRangePx);
+                presentFull(prismalRenderer.outputTexture(), current);
             } else {
-                prismalRenderer.beginGlassFrame();
                 prismalRenderer.drawGlass(
                         currentGeometry.toPrismalGeometry(),
                         prismalParams,
@@ -372,11 +377,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
         }
-        if (glyphMaskSource != null && glyphCompositeProgram == 0) {
-            glyphCompositeProgram = createProgram(
-                    Miuix307PassBlurShaders.QUAD_VERTEX,
-                    Miuix307PrismalCompositeShaders.GLYPH_MASK_FRAGMENT);
-        }
+        // Lockscreen glyphs render inside PrismalRenderer through drawMaskGlass(); no secondary
+        // material/composite program is allowed here.
     }
 
     private void presentFull(int sceneTexture, OutputState current) {
@@ -435,6 +437,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             glyphMaskHeight = (bounds[3] - bounds[1]) / Math.max(1f, mask.rootHeight);
             glyphMaskPixelWidth = Math.max(1, mask.bitmap.getWidth());
             glyphMaskPixelHeight = Math.max(1, mask.bitmap.getHeight());
+            glyphSdfRangePx = Math.max(1f, mask.sdfRangePx);
 
             if (mask.signature == uploadedGlyphMaskSignature && glyphMaskTexture != 0) return;
             if (glyphMaskTexture == 0) {
@@ -455,7 +458,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glyphMaskTexture);
             }
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, mask.bitmap, 0);
-            Api101Bridge.log("[DC][LockScreenClockGlass] glyph mask content uploaded "
+            Api101Bridge.log("[DC][LockScreenClockGlass] glyph SDF content uploaded "
                     + mask.bitmap.getWidth() + "x" + mask.bitmap.getHeight());
             uploadedGlyphMaskSignature = mask.signature;
         } finally {
