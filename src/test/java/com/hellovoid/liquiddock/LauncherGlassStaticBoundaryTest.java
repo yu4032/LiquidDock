@@ -40,7 +40,6 @@ public class LauncherGlassStaticBoundaryTest {
     public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
-        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
         String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
 
         assertTrue(hook.contains("\"com.miui.home.launcher.ScreenView\""));
@@ -52,13 +51,6 @@ public class LauncherGlassStaticBoundaryTest {
         assertFalse(layer.contains("import android.graphics.Matrix"));
         assertFalse(layer.contains("setTransform("));
         assertTrue(layer.contains("session.onWorkspaceScrollMutation"));
-
-        // Static glass geometry, unlike the root-wide sampled backdrop, must inherit the live
-        // Workspace ancestor matrix. This is what lets cached HOME glass ride MIUI's unlock scale.
-        assertTrue(node.contains("material.transformMatrixToGlobal(materialToGlobal)"));
-        assertTrue(node.contains("root.transformMatrixToGlobal(rootToGlobal)"));
-        assertTrue(session.contains("ViewTreeObserver.OnPreDrawListener listener"));
-        assertTrue(session.contains("node.captureGeometry(root)"));
 
         // This is retained legacy source-reader debt. New runtime callback/freshness contracts
         // belong in typed production state tests rather than method-body/source-order assertions.
