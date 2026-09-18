@@ -16,10 +16,24 @@ final class LockScreenClockGlassPreferences {
     private LockScreenClockGlassPreferences() {}
 
     static ThirdPartyGlassAppearance resolve(ConfigReader reader, LiquidDockConfig.Glass base) {
-        return ThirdPartyGlassProfiles.resolve(
+        if (reader == null) reader = ConfigReader.load();
+        ThirdPartyGlassAppearance appearance = ThirdPartyGlassProfiles.resolve(
                 reader,
                 PROFILE_ID,
                 base,
                 new ThirdPartyGlassProfiles.Defaults(ENABLED_DEFAULT, true, 0f));
+        return new ThirdPartyGlassAppearance(
+                reader.b(ENABLED_KEY, ENABLED_DEFAULT),
+                appearance.hasAppearanceOverride,
+                appearance.blur,
+                appearance.tintR,
+                appearance.tintG,
+                appearance.tintB,
+                appearance.tintAlpha,
+                appearance.captureScalePercent,
+                appearance.renderFps,
+                appearance.cornerRadiusOverrideDp,
+                appearance.highlightProfile,
+                appearance.freshOnResume);
     }
 }
