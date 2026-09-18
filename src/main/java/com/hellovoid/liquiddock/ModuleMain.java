@@ -31,6 +31,12 @@ public final class ModuleMain extends XposedModule {
             try {
                 SystemUiKeyguardGoneSource.install(param.getClassLoader());
                 SystemUiHomeTransitionSource.install(param.getClassLoader());
+                if (LockScreenClockPassBlurContinuousAuthority.install()) {
+                    LockScreenClockGlassHook.install(param.getClassLoader());
+                } else {
+                    Api101Bridge.log(
+                            "[DC][LockScreenClockGlass] PassBlur authority unavailable; native clock retained");
+                }
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI timing source init failed", error);
             }
