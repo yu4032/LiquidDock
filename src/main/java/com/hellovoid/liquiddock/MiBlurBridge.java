@@ -23,6 +23,7 @@ final class MiBlurBridge {
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
     private static final Method SET_MI_BACKGROUND_BLEND_COLORS;
     private static final Method CLEAR_MI_BACKGROUND_BLEND_COLOR;
+    private static final Method CHOOSE_BACKGROUND_BLUR_CONTAINER;
     private static final boolean PASS_BLUR_AVAILABLE;
 
     static volatile boolean liquidGlassActive;
@@ -52,6 +53,7 @@ final class MiBlurBridge {
         Method backgroundRadius = null;
         Method backgroundBlendColors = null;
         Method clearBackgroundBlendColor = null;
+        Method chooseBackgroundBlurContainer = null;
         boolean passAvailable = false;
         try {
             passEnabled = View.class.getMethod("setPassWindowBlurEnabled", boolean.class);
@@ -61,6 +63,8 @@ final class MiBlurBridge {
             backgroundBlendColors = View.class.getMethod(
                     "setMiBackgroundBlendColors", ArrayList.class);
             clearBackgroundBlendColor = View.class.getMethod("clearMiBackgroundBlendColor");
+            chooseBackgroundBlurContainer = View.class.getMethod(
+                    "chooseBackgroundBlurContainer", View.class);
             passAvailable = true;
         } catch (Throwable ignored) {
             // Some older builds expose only self blur. MiuiX caller will fall back cleanly.
@@ -71,6 +75,7 @@ final class MiBlurBridge {
         SET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadius;
         SET_MI_BACKGROUND_BLEND_COLORS = backgroundBlendColors;
         CLEAR_MI_BACKGROUND_BLEND_COLOR = clearBackgroundBlendColor;
+        CHOOSE_BACKGROUND_BLUR_CONTAINER = chooseBackgroundBlurContainer;
         PASS_BLUR_AVAILABLE = passAvailable;
     }
 
@@ -186,6 +191,19 @@ final class MiBlurBridge {
             return true;
         } catch (Throwable error) {
             MainHook.log("[DC][LockScreenClockGlass] native clock container material failed: " + error);
+            return false;
+        }
+    }
+
+    /** Bind a native clock material member to the exact backdrop container chosen by SystemUI. */
+    static boolean chooseClockBackgroundBlurContainer(View member, View container) {
+        if (!PASS_BLUR_AVAILABLE || member == null || container == null
+                || CHOOSE_BACKGROUND_BLUR_CONTAINER == null) return false;
+        try {
+            CHOOSE_BACKGROUND_BLUR_CONTAINER.invoke(member, container);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native clock member/container bind failed: " + error);
             return false;
         }
     }
