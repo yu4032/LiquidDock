@@ -289,6 +289,8 @@ final class Miuix307MaterialPipeline {
                         chain -> {
                             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                             if (MainHook.isWorkstationMode()) return result;
+                            View itemView = (View) chain.getArgs().get(1);
+                            if (DockMirrorShortcutHook.isCollapsedItemView(itemView)) return result;
                             android.graphics.Rect out = (android.graphics.Rect) chain.getArgs().get(0);
                             out.left += spacing;
                             out.right += spacing;
@@ -306,6 +308,8 @@ final class Miuix307MaterialPipeline {
                             }
                             int itemCount = (Integer) HookUtil.requireInvoke(
                                     chain.getThisObject(), "getItemCount");
+                            itemCount = DockMirrorShortcutHook.visibleSpacingItemCount(
+                                    chain.getThisObject(), itemCount);
                             Object[] args = chain.getArgs().toArray(new Object[0]);
                             if (itemCount > 0) args[1] = (Integer) args[1] + spacing * 2 * itemCount;
                             return chain.proceed(args);
