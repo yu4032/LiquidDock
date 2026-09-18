@@ -65,10 +65,23 @@ public class LockScreenClockGlassContractTest {
         assertTrue(blur.contains("applyClockMaterialMember"));
         assertTrue(blur.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
         assertTrue(blur.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1)"));
+        assertTrue(blur.contains("setMiGlassBlurRadius"));
+        assertTrue(blur.contains("SET_MI_GLASS_BLUR_RADIUS.invoke(view, safeRadius, safeRadius)"));
+        assertTrue(blur.contains("setMiViewMaterialType"));
+        assertTrue(blur.contains("setMiGlass"));
+        assertTrue(blur.contains("setMiCustomSurfaceColorType"));
+        assertTrue(blur.contains("setMiGlassClip"));
+        assertTrue(blur.contains("Paint.class.getMethod(\"setGlassEffect\""));
+        assertTrue(blur.contains("SET_MI_VIEW_MATERIAL_TYPE.invoke(view, 1)"));
         assertTrue(blur.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 3)"));
+        assertTrue(blur.contains("SET_MI_CUSTOM_SURFACE_COLOR_TYPE.invoke(view, 16)"));
+        assertTrue(blur.contains("SET_PAINT_GLASS_EFFECT.invoke(paint, true)"));
+        assertTrue(blur.contains("30.0f"));
         assertTrue(blur.contains("new Point(tint, 101)"));
         assertTrue(blur.contains("CHOOSE_BACKGROUND_BLUR_CONTAINER"));
         assertTrue(blur.contains("chooseClockBackgroundBlurContainer"));
+        assertTrue(nativeHook.contains("clearClockGlassMember"));
+        assertTrue(nativeHook.contains("clearClockGlassContainer"));
 
         // Native material path must not create a second clock renderer.
         assertFalse(nativeHook.contains("import android.view.TextureView"));
