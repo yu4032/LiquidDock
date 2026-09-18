@@ -453,7 +453,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                                 )
                             },
                         )
-                    } else {
+                    } else if (page != Page.LockScreenClock) {
                         TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
                     }
                     if (page == Page.Home) {
