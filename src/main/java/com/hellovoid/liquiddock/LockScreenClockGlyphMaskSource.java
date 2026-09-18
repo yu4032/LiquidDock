@@ -71,7 +71,7 @@ final class LockScreenClockGlyphMaskSource {
 
         // Resource semantics cover the remaining OS3 clock families without depending on
         // decompiler-generated class/member names.
-        collectSemanticTimeViews(clockRoot, glyphs);
+        collectSemanticTimeViews(clockRoot, glyphs, false);
         if (glyphs.isEmpty()) return null;
         return new LockScreenClockGlyphMaskSource(clockRoot, glyphs);
     }
@@ -284,27 +284,48 @@ final class LockScreenClockGlyphMaskSource {
         return null;
     }
 
-    private static void collectSemanticTimeViews(View root, List<View> out) {
+    private static void collectSemanticTimeViews(
+            View root, List<View> out, boolean insideTimeContainer) {
         String resourceName = resourceEntryName(root);
+        String lower = resourceName == null
+                ? "" : resourceName.toLowerCase(java.util.Locale.ROOT);
+        boolean excluded = isExcludedClockMetadataName(lower);
+        boolean timeContainer = !excluded && (insideTimeContainer
+                || lower.equals("time_container")
+                || lower.equals("hour_container")
+                || lower.equals("minute_container")
+                || lower.contains("clock_time")
+                || lower.contains("time_content")
+                || lower.contains("time_group"));
         boolean semanticTimeId = isTimeResourceName(resourceName);
 
-        // Only text-bearing time/hour/minute nodes are replaced. Date, week, weather and other
-        // clock decorations stay native even when they share the same overall clock container.
-        if (root instanceof TextView && semanticTimeId && !out.contains(root)) out.add(root);
+        // A text node is authoritative when its own resource name identifies time/hour/minute,
+        // or when it belongs to an explicitly named time/hour/minute container. This catches
+        // split digits and separators without pulling date/weather metadata into the mask.
+        if (root instanceof TextView && !excluded
+                && (semanticTimeId || timeContainer) && !out.contains(root)) {
+            out.add(root);
+        }
 
         if (root instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) root;
             for (int i = 0; i < group.getChildCount(); i++) {
-                collectSemanticTimeViews(group.getChildAt(i), out);
+                collectSemanticTimeViews(group.getChildAt(i), out, timeContainer);
             }
         }
+    }
+
+    private static boolean isExcludedClockMetadataName(String lower) {
+        if (lower == null || lower.isEmpty()) return false;
+        return lower.contains("date") || lower.contains("week")
+                || lower.contains("weather") || lower.contains("signature")
+                || lower.contains("notification") || lower.contains("lunar");
     }
 
     private static boolean isTimeResourceName(String name) {
         if (name == null || name.isEmpty()) return false;
         String lower = name.toLowerCase(java.util.Locale.ROOT);
-        if (lower.contains("date") || lower.contains("week") || lower.contains("weather")
-                || lower.contains("signature") || lower.contains("notification")) return false;
+        if (isExcludedClockMetadataName(lower)) return false;
         return lower.equals("time_view") || lower.equals("time_view2")
                 || lower.equals("time") || lower.equals("tv_time")
                 || lower.contains("time_hour") || lower.contains("time_minute")
