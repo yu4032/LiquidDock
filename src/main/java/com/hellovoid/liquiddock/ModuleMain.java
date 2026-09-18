@@ -31,17 +31,14 @@ public final class ModuleMain extends XposedModule {
             try {
                 SystemUiKeyguardGoneSource.install(param.getClassLoader());
                 SystemUiHomeTransitionSource.install(param.getClassLoader());
-                ConfigReader systemUiReader = ConfigReader.load();
-                LiquidDockConfig systemUiConfig = LiquidDockConfig.from(systemUiReader);
-                ThirdPartyGlassAppearance clockAppearance =
-                        LockScreenClockGlassPreferences.resolve(systemUiReader, systemUiConfig.glass);
-                if (systemUiConfig.enabled && systemUiConfig.glass.enabled && clockAppearance.enabled) {
-                    if (LockScreenClockPassBlurContinuousAuthority.install()) {
-                        LockScreenClockGlassHook.install(param.getClassLoader());
-                    } else {
-                        Api101Bridge.log(
-                                "[DC][LockScreenClockGlass] PassBlur authority unavailable; native clock retained");
-                    }
+                // Install the semantic clock hook independently of the current toggle state.
+                // Enablement is re-read at attach time inside LockScreenClockGlassHook so changing
+                // the setting cannot strand SystemUI in a permanently unhooked process.
+                if (LockScreenClockPassBlurContinuousAuthority.install()) {
+                    LockScreenClockGlassHook.install(param.getClassLoader());
+                } else {
+                    Api101Bridge.log(
+                            "[DC][LockScreenClockGlass] PassBlur authority unavailable; native clock retained");
                 }
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI timing source init failed", error);
