@@ -77,6 +77,7 @@ final class Miuix307PassBlurBridge {
         boolean securityCenterClaimed = false;
         boolean gboardClaimed = false;
         boolean searchboxClaimed = false;
+        boolean lockscreenClockClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -127,6 +128,10 @@ final class Miuix307PassBlurBridge {
                 MiuiSearchboxPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 searchboxClaimed = true;
             }
+            if (domain == PassBlurDomain.LOCKSCREEN_CLOCK) {
+                LockScreenClockPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
+                lockscreenClockClaimed = true;
+            }
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -170,6 +175,9 @@ final class Miuix307PassBlurBridge {
             if (searchboxClaimed && rootSurface != null) {
                 MiuiSearchboxPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
+            if (lockscreenClockClaimed && rootSurface != null) {
+                LockScreenClockPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
             MainHook.log(TAG + " PassBlur bind unavailable: " + error);
             return null;
         }
@@ -198,7 +206,8 @@ final class Miuix307PassBlurBridge {
         }
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
                 || binding.domain == PassBlurDomain.GBOARD_FLOATING
-                || binding.domain == PassBlurDomain.MIUI_SEARCHBOX;
+                || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
+                || binding.domain == PassBlurDomain.LOCKSCREEN_CLOCK;
         setUpdatesEnabled(binding, true, force);
     }
 
@@ -225,6 +234,10 @@ final class Miuix307PassBlurBridge {
         if (!force && binding.updatesEnabled == enabled) return;
         if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
             MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
+                    binding.rootSurface, enabled);
+        }
+        if (binding.domain == PassBlurDomain.LOCKSCREEN_CLOCK) {
+            LockScreenClockPassBlurContinuousAuthority.setUpdatesEnabled(
                     binding.rootSurface, enabled);
         }
         try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
@@ -256,6 +269,10 @@ final class Miuix307PassBlurBridge {
         }
         if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
             MiuiSearchboxPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.LOCKSCREEN_CLOCK) {
+            LockScreenClockPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         try {
