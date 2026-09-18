@@ -42,6 +42,12 @@ final class LockScreenClockGlyphMaskSource {
     private final List<View> glyphViews;
     private final WeakHashMap<View, Float> originalAlpha = new WeakHashMap<>();
     private long lastSignature = Long.MIN_VALUE;
+    private long lastContentSignature = Long.MIN_VALUE;
+    private int lastObservedLeft = Integer.MIN_VALUE;
+    private int lastObservedTop = Integer.MIN_VALUE;
+    private int lastObservedRight = Integer.MIN_VALUE;
+    private int lastObservedBottom = Integer.MIN_VALUE;
+    private int stableGeometryFrames;
 
     LockScreenClockGlyphMaskSource(View clockRoot, List<View> glyphViews) {
         this.clockRoot = clockRoot;
@@ -119,13 +125,41 @@ final class LockScreenClockGlyphMaskSource {
         int width = right - left;
         int height = bottom - top;
         if (width <= 0 || height <= 0) return null;
+
+        long contentSignature = 1469598103934665603L;
+        for (View glyph : visible) {
+            if (glyph instanceof TextView) {
+                CharSequence text = ((TextView) glyph).getText();
+                contentSignature = mix(contentSignature, text == null ? 0 : text.toString().hashCode());
+            }
+            contentSignature = mix(contentSignature, glyph.getWidth());
+            contentSignature = mix(contentSignature, glyph.getHeight());
+        }
+
+        boolean sameObservedGeometry = left == lastObservedLeft && top == lastObservedTop
+                && right == lastObservedRight && bottom == lastObservedBottom;
+        if (sameObservedGeometry) {
+            stableGeometryFrames++;
+        } else {
+            lastObservedLeft = left;
+            lastObservedTop = top;
+            lastObservedRight = right;
+            lastObservedBottom = bottom;
+            stableGeometryFrames = 0;
+        }
+
+        // Do not publish a replacement mask while the native clock is still transforming.
+        // Two consecutive identical frame observations form a semantic stability barrier without
+        // an arbitrary wall-clock delay. Text changes bypass the barrier so minute updates remain live.
+        boolean contentChanged = contentSignature != lastContentSignature;
+        if (!contentChanged && stableGeometryFrames < 2) return null;
+        if (contentChanged && lastContentSignature != Long.MIN_VALUE && stableGeometryFrames < 1) return null;
+        lastContentSignature = contentSignature;
+
         signature = mix(signature, left);
         signature = mix(signature, top);
         signature = mix(signature, right);
         signature = mix(signature, bottom);
-        if (signature == lastSignature) return null;
-        lastSignature = signature;
-
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);
@@ -147,8 +181,38 @@ final class LockScreenClockGlyphMaskSource {
                 canvas.restoreToCount(save);
             }
         }
-        return new Mask(bitmap, left, top, width, height,
-                windowRoot.getWidth(), windowRoot.getHeight(), signature);
+        int[] tight = findAlphaBounds(bitmap);
+        if (tight == null) {
+            bitmap.recycle();
+            return null;
+        }
+        int tightLeft = tight[0];
+        int tightTop = tight[1];
+        int tightRight = tight[2];
+        int tightBottom = tight[3];
+        int tightWidth = tightRight - tightLeft;
+        int tightHeight = tightBottom - tightTop;
+        if (tightWidth <= 0 || tightHeight <= 0) {
+            bitmap.recycle();
+            return null;
+        }
+
+        Bitmap tightBitmap = bitmap;
+        if (tightLeft != 0 || tightTop != 0 || tightWidth != width || tightHeight != height) {
+            tightBitmap = Bitmap.createBitmap(bitmap, tightLeft, tightTop, tightWidth, tightHeight);
+            bitmap.recycle();
+        }
+        float tightRootLeft = left + tightLeft;
+        float tightRootTop = top + tightTop;
+        long tightSignature = mix(mix(signature, tightLeft), tightTop);
+        tightSignature = mix(mix(tightSignature, tightWidth), tightHeight);
+        if (tightSignature == lastSignature) {
+            tightBitmap.recycle();
+            return null;
+        }
+        lastSignature = tightSignature;
+        return new Mask(tightBitmap, tightRootLeft, tightRootTop, tightWidth, tightHeight,
+                windowRoot.getWidth(), windowRoot.getHeight(), tightSignature);
     }
 
     void suppressNativeGlyphs() {
@@ -232,6 +296,34 @@ final class LockScreenClockGlyphMaskSource {
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static int[] findAlphaBounds(Bitmap bitmap) {
+        if (bitmap == null || bitmap.isRecycled()) return null;
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int minX = width;
+        int minY = height;
+        int maxX = -1;
+        int maxY = -1;
+        int[] row = new int[width];
+        for (int y = 0; y < height; y++) {
+            bitmap.getPixels(row, 0, width, 0, y, width, 1);
+            for (int x = 0; x < width; x++) {
+                if ((row[x] >>> 24) == 0) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+        if (maxX < minX || maxY < minY) return null;
+        // One-pixel guard keeps antialiased edge samples complete.
+        minX = Math.max(0, minX - 1);
+        minY = Math.max(0, minY - 1);
+        maxX = Math.min(width - 1, maxX + 1);
+        maxY = Math.min(height - 1, maxY + 1);
+        return new int[]{minX, minY, maxX + 1, maxY + 1};
     }
 
     private static long mix(long hash, int value) {
