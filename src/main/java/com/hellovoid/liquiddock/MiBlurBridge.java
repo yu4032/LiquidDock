@@ -167,6 +167,56 @@ final class MiBlurBridge {
         }
     }
 
+    /**
+     * Apply the same container protocol used by SystemUI's native advanced clock material.
+     * The caller owns scene/clock semantics; this method only maps LiquidDock appearance into
+     * stable MIUI View material APIs.
+     */
+    static boolean applyClockMaterialContainer(View view, int radiusPx) {
+        if (!PASS_BLUR_AVAILABLE || view == null) return false;
+        int safeRadius = Math.max(0, Math.min(400, radiusPx));
+        try {
+            Object enabled = SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
+            if (enabled instanceof Boolean && !((Boolean) enabled)) return false;
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1);
+            SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, safeRadius);
+            if (SET_PASS_TEXTURE_SCALE != null) {
+                try { SET_PASS_TEXTURE_SCALE.invoke(view, 0f); } catch (Throwable ignored) {}
+            }
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native clock container material failed: " + error);
+            return false;
+        }
+    }
+
+    /**
+     * Turn the original clock glyph View itself into the MIUI blur member. No overlay View,
+     * bitmap mask, TextureView, Surface or EGL renderer is involved.
+     */
+    static boolean applyClockMaterialMember(
+            View view, int tintR, int tintG, int tintB, int tintAlpha) {
+        if (!PASS_BLUR_AVAILABLE || view == null) return false;
+        try {
+            int a = Math.max(0, Math.min(255, tintAlpha));
+            int r = Math.max(0, Math.min(255, tintR));
+            int g = Math.max(0, Math.min(255, tintG));
+            int b = Math.max(0, Math.min(255, tintB));
+            int tint = android.graphics.Color.argb(a, r, g, b);
+            ArrayList<Point> blend = new ArrayList<>();
+            // These are the same compositor blend slots used by SystemUI MiuiBlurUtils.
+            blend.add(new Point(tint, 101));
+            blend.add(new Point(android.graphics.Color.argb(0, 0, 0, 0), 103));
+
+            SET_MI_VIEW_BLUR_MODE.invoke(view, 3);
+            SET_MI_BACKGROUND_BLEND_COLORS.invoke(view, blend);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native clock member material failed: " + error);
+            return false;
+        }
+    }
+
     static void clearPassWindowBlur(View view) {
         if (!PASS_BLUR_AVAILABLE || view == null) return;
         try {
