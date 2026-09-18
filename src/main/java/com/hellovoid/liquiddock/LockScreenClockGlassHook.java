@@ -14,10 +14,11 @@ import java.util.WeakHashMap;
 /**
  * Strict primary-lockscreen clock replacement.
  *
- * <p>Only displayType == 0 clocks created by MiuiClockController inside
- * NotificationShadeWindowView are eligible, and a renderer may exist only while the SystemUI
- * transition source reports LOCKSCREEN/FINISHED. Preview, AOD, full-AOD, notification,
- * secondary, bouncer, occluded and gone scenes fail closed.</p>
+ * <p>The primary displayType == 0 clock establishes authority. A displayType == 64 controller
+ * may join only when its concrete runtime clock is a minute companion (for split hour/minute
+ * templates such as ClassicMax/PadExclusiveC/AllInOne) under the same NotificationShadeWindowView.
+ * A renderer may exist only while SystemUI reports LOCKSCREEN/FINISHED. Preview, AOD, full-AOD,
+ * notification, unrelated secondary clocks, bouncer, occluded and gone scenes fail closed.</p>
  */
 final class LockScreenClockGlassHook {
     private static final String TAG = "[DC][LockScreenClockGlass]";
@@ -288,8 +289,9 @@ final class LockScreenClockGlassHook {
             int displayType = displayTypeField.getInt(owner);
             // Decompiled ClockStyleInfo flags:
             // AOD=1, notification=2, preview=8, full-AOD=32, secondary=64.
-            // Primary keyguard clock is exactly displayType 0.
-            if (displayType != 0) return;
+            // The primary keyguard clock is displayType 0. Split minute companions use the
+            // secondary channel and are admitted only after inspecting the concrete runtime View.
+            if (displayType != 0 && displayType != 64) return;
 
             Object containerValue = containerField.get(owner);
             if (!(containerValue instanceof ViewGroup)) return;
@@ -301,9 +303,12 @@ final class LockScreenClockGlassHook {
                     if (!(candidate instanceof View)) return;
                     View clockView = (View) candidate;
                     if (!isAuthorizedRoot(clockView)) return;
+                    if (displayType == 64 && !isMinuteCompanion(clockView)) return;
                     synchronized (STATES) {
                         AUTHORIZED_CLOCKS.put(clockView, Boolean.TRUE);
                     }
+                    Api101Bridge.log(TAG + " authorized clock displayType=" + displayType
+                            + " class=" + clockView.getClass().getName());
                     if (SystemUiKeyguardGoneSource.isLockscreenScene()) {
                         scheduleAttach(clockView);
                     }
@@ -329,8 +334,6 @@ final class LockScreenClockGlassHook {
         if (clockView == null || !clockView.isAttachedToWindow()) return;
         synchronized (STATES) {
             if (!Boolean.TRUE.equals(AUTHORIZED_CLOCKS.get(clockView))) return;
-            State existing = STATES.get(clockView);
-            if (existing != null && !existing.disposed) return;
             if (Boolean.TRUE.equals(PENDING_ATTACH.get(clockView))) return;
             PENDING_ATTACH.put(clockView, Boolean.TRUE);
         }
@@ -374,9 +377,8 @@ final class LockScreenClockGlassHook {
             ArrayList<View> group = collectAuthorizedClockGroup(root);
             if (group.isEmpty()) group.add(clockView);
 
-            State next;
+            State existing = null;
             synchronized (STATES) {
-                State existing = null;
                 for (View candidate : group) {
                     State mapped = STATES.get(candidate);
                     if (mapped != null && !mapped.disposed) {
@@ -384,11 +386,22 @@ final class LockScreenClockGlassHook {
                         break;
                     }
                 }
-                if (existing != null) {
-                    for (View candidate : group) PENDING_ATTACH.remove(candidate);
+            }
+            if (existing != null) {
+                boolean complete = existing.clockViews.size() == group.size()
+                        && existing.clockViews.containsAll(group)
+                        && group.containsAll(existing.clockViews);
+                if (complete) {
+                    synchronized (STATES) {
+                        for (View candidate : group) PENDING_ATTACH.remove(candidate);
+                    }
                     return;
                 }
+                existing.disposeNow(true, "clock-group-expanded");
+            }
 
+            State next;
+            synchronized (STATES) {
                 next = new State(group, (ViewGroup) root, config.glass, appearance);
                 for (View candidate : group) {
                     STATES.put(candidate, next);
@@ -398,8 +411,8 @@ final class LockScreenClockGlassHook {
 
             try {
                 next.attach();
-                Api101Bridge.log(TAG + " attached primary lockscreen glyphs="
-                        + next.glyphSource.glyphCount());
+                Api101Bridge.log(TAG + " attached lockscreen clock group="
+                        + next.clockViews.size() + " glyphs=" + next.glyphSource.glyphCount());
             } catch (Throwable error) {
                 next.disposeNow(true, "attach-failure");
                 Api101Bridge.log(TAG + " attach failed; native clock retained", error);
@@ -438,6 +451,34 @@ final class LockScreenClockGlassHook {
             });
         } catch (Throwable ignored) {
             clearPending(clockView);
+        }
+    }
+
+    private static boolean isMinuteCompanion(View clockView) {
+        if (clockView == null) return false;
+        Class<?> type = clockView.getClass();
+        while (type != null) {
+            String name = type.getName();
+            if (name != null && name.toLowerCase(java.util.Locale.ROOT).contains("minute")) {
+                return true;
+            }
+            type = type.getSuperclass();
+        }
+        // Stable resource semantics cover vendor minute roots whose concrete class name is shared.
+        String resourceName = resourceEntryName(clockView);
+        if (resourceName != null) {
+            String lower = resourceName.toLowerCase(java.util.Locale.ROOT);
+            if (lower.contains("minute")) return true;
+        }
+        return false;
+    }
+
+    private static String resourceEntryName(View view) {
+        if (view == null || view.getId() == View.NO_ID) return null;
+        try {
+            return view.getResources().getResourceEntryName(view.getId());
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
