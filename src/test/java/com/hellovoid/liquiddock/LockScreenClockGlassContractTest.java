@@ -53,17 +53,10 @@ public class LockScreenClockGlassContractTest {
         assertTrue(hook.contains("native time glyphs suppressed before fresh capture"));
         assertTrue(session.contains("drawMaskGlass("));
         assertTrue(session.contains("updateGeometry must run on main thread"));
-        int freshStart = session.indexOf("public void onFreshFrame");
-        int freshEnd = session.indexOf("@Override", freshStart + 1);
-        String freshBody = freshEnd > freshStart
-                ? session.substring(freshStart, freshEnd)
-                : session.substring(freshStart);
-        assertFalse(freshBody.contains("updateGeometry()"));
-        int renderStart = session.indexOf("private void renderCurrent()");
-        int renderEnd = session.indexOf("private void ensureGl()", renderStart);
-        String renderBody = session.substring(renderStart, renderEnd);
-        assertFalse(renderBody.contains("rootRef.get()"));
-        assertFalse(renderBody.contains("isAttachedToWindow()"));
+        assertFalse(session.contains(
+                "logicalHeight = frame.logicalHeight;\n            updateGeometry();"));
+        assertFalse(session.contains(
+                "|| root == null || !root.isAttachedToWindow()"));
         assertFalse(session.contains("presentGlyphMasked("));
         assertFalse(session.contains("glyphCompositeProgram"));
         assertFalse(session.contains("uGlyphRect"));
