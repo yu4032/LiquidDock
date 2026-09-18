@@ -75,6 +75,16 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             ThirdPartyGlassAppearance appearance,
             float cornerRadius,
             Listener listener) {
+        this(root, glassConfig, appearance, cornerRadius, listener, PassBlurDomain.MIUI_SEARCHBOX);
+    }
+
+    MiuiSearchboxGlassSession(
+            View root,
+            LiquidDockConfig.Glass glassConfig,
+            ThirdPartyGlassAppearance appearance,
+            float cornerRadius,
+            Listener listener,
+            PassBlurDomain domain) {
         if (root == null) throw new IllegalArgumentException("root == null");
         View sourceRoot = root.getRootView();
         if (sourceRoot == null) throw new IllegalArgumentException("sourceRoot == null");
@@ -107,13 +117,19 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 : (glassConfig != null
                     ? glassConfig.passBlurRenderFps
                     : PassBlurQualityPolicy.DEFAULT_RENDER_FPS);
+        PassBlurBindRequest bindRequest = domain == PassBlurDomain.LOCKSCREEN_CLOCK
+                ? PassBlurBindRequest.lockScreenClock(sourceRoot)
+                : PassBlurBindRequest.miuiSearchbox(sourceRoot);
+        String threadName = domain == PassBlurDomain.LOCKSCREEN_CLOCK
+                ? "LiquidDock-LockScreenClock-EGL"
+                : "LiquidDock-MiuiSearchbox-EGL";
         sourceBackend = new RootPassBlurBackend(
                 sourceRoot,
-                PassBlurBindRequest.miuiSearchbox(sourceRoot),
+                bindRequest,
                 scalePercent,
                 renderFps,
                 this,
-                "LiquidDock-MiuiSearchbox-EGL");
+                threadName);
     }
 
     void requestFreshCapture() {
