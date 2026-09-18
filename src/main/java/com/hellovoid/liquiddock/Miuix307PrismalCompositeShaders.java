@@ -23,8 +23,8 @@ final class Miuix307PrismalCompositeShaders {
             void main() {
                 vec2 uv = uCropRect.xy + vUv * uCropRect.zw;
                 vec4 glass = texture2D(uTexture, uv);
-                vec2 screenUv = vUv;
-                vec2 local = (screenUv - uGlyphRect.xy) / uGlyphRect.zw;
+                vec2 screenUvTopLeft = vec2(vUv.x, 1.0 - vUv.y);
+                vec2 local = (screenUvTopLeft - uGlyphRect.xy) / uGlyphRect.zw;
                 float inside = step(0.0, local.x) * step(0.0, local.y)
                         * step(local.x, 1.0) * step(local.y, 1.0);
                 float alpha = texture2D(uGlyphMask, clamp(local, 0.0, 1.0)).a * inside;
