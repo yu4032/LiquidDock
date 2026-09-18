@@ -314,24 +314,19 @@ final class LockScreenClockGlyphMaskSource {
         z[0] = Float.NEGATIVE_INFINITY;
         z[1] = Float.POSITIVE_INFINITY;
         for (int q = 1; q < n; q++) {
-            float s;
-            do {
-                int vk = v[k];
+            int vk = v[k];
+            float s = ((f[q] + q * q) - (f[vk] + vk * vk))
+                    / (2f * (q - vk));
+            while (s <= z[k]) {
+                k--;
+                vk = v[k];
                 s = ((f[q] + q * q) - (f[vk] + vk * vk))
                         / (2f * (q - vk));
-                if (s <= z[k]) k--;
-            } while (s <= z[k] && k >= 0);
-            if (k < 0) {
-                k = 0;
-                v[0] = q;
-                z[0] = Float.NEGATIVE_INFINITY;
-                z[1] = Float.POSITIVE_INFINITY;
-            } else {
-                k++;
-                v[k] = q;
-                z[k] = s;
-                z[k + 1] = Float.POSITIVE_INFINITY;
             }
+            k++;
+            v[k] = q;
+            z[k] = s;
+            z[k + 1] = Float.POSITIVE_INFINITY;
         }
         k = 0;
         for (int q = 0; q < n; q++) {
