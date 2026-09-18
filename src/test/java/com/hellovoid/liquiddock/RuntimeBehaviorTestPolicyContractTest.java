@@ -53,6 +53,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherRecentsCapsuleGlassContractTest.java",
             "LauncherWallpaperFreshnessHookContractTest.java",
             "LauncherWidgetBackgroundControllerContractTest.java",
+            "LockScreenClockGlassContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",
             "Miuix307MaterialHandoffContractTest.java",
             "R8ReleaseKeepContractTest.java",
