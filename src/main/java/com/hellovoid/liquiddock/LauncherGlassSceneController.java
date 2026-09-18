@@ -617,10 +617,11 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Recents, HOME and wallpaper-settle are capture/freshness barriers only. Rotation is
-            // different: resized output cannot safely present pixels from the previous orientation.
-            boolean hardPresentationCover = folderCovered || unlockTransitionPending
-                    || state.isRotationPresentationPending();
+            // Recents, HOME, unlock and wallpaper-settle are capture/freshness barriers only.
+            // Rotation is different: resized output cannot safely present pixels from the previous
+            // orientation. Folder remains a real LiquidDock presentation cover.
+            boolean hardPresentationCover =
+                    folderCovered || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }
