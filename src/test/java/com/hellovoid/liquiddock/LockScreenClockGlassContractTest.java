@@ -42,7 +42,12 @@ public class LockScreenClockGlassContractTest {
         assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[3])"));
         assertTrue(nativeHook.contains("!Boolean.TRUE.equals(args[6])"));
         assertTrue(nativeHook.contains("isTimeMember"));
-        assertTrue(nativeHook.contains("isClockContainer"));
+        assertTrue(nativeHook.contains("chooseBackgroundBlurContainer"));
+        assertTrue(nativeHook.contains("MEMBER_CONTAINERS"));
+        assertTrue(nativeHook.contains("ROOT_CONTAINERS"));
+        assertTrue(nativeHook.contains("setClockEffectsContainer"));
+        assertTrue(nativeHook.contains("boolean.class, boolean.class"));
+        assertTrue(nativeHook.contains("native member/container route"));
         assertTrue(nativeHook.contains("date"));
         assertTrue(nativeHook.contains("weather"));
         assertTrue(nativeHook.contains("notification"));
@@ -62,6 +67,8 @@ public class LockScreenClockGlassContractTest {
         assertTrue(blur.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1)"));
         assertTrue(blur.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 3)"));
         assertTrue(blur.contains("new Point(tint, 101)"));
+        assertTrue(blur.contains("CHOOSE_BACKGROUND_BLUR_CONTAINER"));
+        assertTrue(blur.contains("chooseClockBackgroundBlurContainer"));
 
         // Native material path must not create a second clock renderer.
         assertFalse(nativeHook.contains("import android.view.TextureView"));
