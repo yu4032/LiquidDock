@@ -415,7 +415,18 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             if (!maskToRoot.invert(rootToMask)) {
                 throw new IllegalStateException("glyph transform not invertible");
             }
-            rootToMask.getValues(glyphRootPxToMaskUv);
+            float[] androidMatrix = new float[9];
+            rootToMask.getValues(androidMatrix);
+            // android.graphics.Matrix is row-major; GLES mat3 upload is column-major.
+            glyphRootPxToMaskUv[0] = androidMatrix[0];
+            glyphRootPxToMaskUv[1] = androidMatrix[3];
+            glyphRootPxToMaskUv[2] = androidMatrix[6];
+            glyphRootPxToMaskUv[3] = androidMatrix[1];
+            glyphRootPxToMaskUv[4] = androidMatrix[4];
+            glyphRootPxToMaskUv[5] = androidMatrix[7];
+            glyphRootPxToMaskUv[6] = androidMatrix[2];
+            glyphRootPxToMaskUv[7] = androidMatrix[5];
+            glyphRootPxToMaskUv[8] = androidMatrix[8];
 
             float[] bounds = transformedUnitBounds(mask.maskToRoot);
             glyphMaskLeft = bounds[0] / Math.max(1f, mask.rootWidth);
@@ -502,6 +513,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniformMatrix3fv(
                 requireUniform(glyphCompositeProgram, "uRootPxToMaskUv"),
                 1, false, glyphRootPxToMaskUv, 0);
+        GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uRootSize"),
+                Math.max(1, logicalWidth), Math.max(1, logicalHeight));
         GLES20.glUniform2f(requireUniform(glyphCompositeProgram, "uGlyphTexel"),
                 1f / Math.max(1, glyphMaskPixelWidth),
                 1f / Math.max(1, glyphMaskPixelHeight));
