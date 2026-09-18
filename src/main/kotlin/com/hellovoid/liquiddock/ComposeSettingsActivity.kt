@@ -75,6 +75,7 @@ private enum class Page(val titleRes: Int) {
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     Liquid(R.string.page_liquid),
     ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
+    LockScreenClock(R.string.page_lockscreen_clock),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
     Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
@@ -83,7 +84,7 @@ private enum class Page(val titleRes: Int) {
 }
 
 private fun parentPage(page: Page): Page = when (page) {
-    Page.Gboard -> Page.ThirdPartyApps
+    Page.Gboard, Page.LockScreenClock -> Page.ThirdPartyApps
     Page.ThirdPartyApps, Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
     else -> Page.Home
 }
@@ -435,6 +436,12 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page == Page.Liquid) {
                         TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
                     }
+                    if (page == Page.LockScreenClock) {
+                        TextButton(
+                            text = stringResource(R.string.action_restart_system_ui),
+                            onClick = { activity.restartSystemUi() },
+                        )
+                    }
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
                     if (descriptor != null) {
                         TextButton(
@@ -446,7 +453,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                                 )
                             },
                         )
-                    } else {
+                    } else if (page != Page.LockScreenClock) {
                         TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
                     }
                     if (page == Page.Home) {
@@ -493,8 +500,10 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     prefs = prefs,
                     masterEnabled = masterEnabled,
                     openGboard = { page = Page.Gboard },
+                    openLockScreenClock = { page = Page.LockScreenClock },
                 )
                 Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                Page.LockScreenClock -> LockScreenClockSettingsPage(padding, prefs, masterEnabled)
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
