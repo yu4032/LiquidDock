@@ -2,6 +2,14 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory android:title="Launcher 4.50 Gestures">
+        <SwitchPreference
+            android:key="launcher450_side_slide_hold"
+            android:title="Side-swipe hold to open Sidebar"
+            android:summary="Hold a completed Back swipe for about 600 ms, then release to open the Security Center Sidebar; restart Launcher and Security Center after changing"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="Home Screen Grid">
 
         <SwitchPreference
