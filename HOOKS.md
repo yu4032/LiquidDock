@@ -99,7 +99,8 @@ Security Center 不执行 Launcher migration，也不调用 `MainHook.install()`
 | `FolderIconPreviewContainer1X1` | `onMeasure()` | small-folder preview independent remeasure |
 | `ShortcutIcon` / `BaseProgressShortcutIcon` | `scaleDownToFolder(boolean)` | folder transition sizing |
 | `GridConfig` | `getIconSize()` | only when a measure domain is active |
-| `GridConfig` | `getDockIconWidth()` | Dock domain only |
+
+Dock 的 `getDockIconWidth()` 保持 vendor authority，不随自定义 icon size 改写。Launcher 原生以固定 Dock slot 承载 `ShortcutIcon`，再通过 `(measuredWidth - iconSize) / 2` 居中图标；这样缩放只改变视觉尺寸，不改变 item 槽中心，也保持 `HotSeatsListContentLayoutManager` 的 `mViewWidths` 与实际 child 测量一致。
 
 共享 `GridConfig` 不被修改，因此普通 All Apps / Search 不会因为全局 mutation 被缩放。
 
