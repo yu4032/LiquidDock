@@ -40,6 +40,7 @@ final class LockScreenClockGlyphMaskSource {
     private final View clockRoot;
     private final List<View> glyphViews;
     private final WeakHashMap<View, Float> originalAlpha = new WeakHashMap<>();
+    private long lastSignature = Long.MIN_VALUE;
 
     LockScreenClockGlyphMaskSource(View clockRoot, List<View> glyphViews) {
         this.clockRoot = clockRoot;
@@ -104,6 +105,12 @@ final class LockScreenClockGlyphMaskSource {
         int width = right - left;
         int height = bottom - top;
         if (width <= 0 || height <= 0) return null;
+        signature = mix(signature, left);
+        signature = mix(signature, top);
+        signature = mix(signature, right);
+        signature = mix(signature, bottom);
+        if (signature == lastSignature) return null;
+        lastSignature = signature;
 
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
