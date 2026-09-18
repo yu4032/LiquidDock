@@ -59,8 +59,6 @@ final class Launcher450IconSizeHook {
                     smallFolder, "onMeasure", new Class<?>[]{int.class, int.class});
             Method getIconSize = HookUtil.findMethodExact(
                     gridConfig, "getIconSize", new Class<?>[0]);
-            Method getDockIconWidth = HookUtil.findMethodExact(
-                    gridConfig, "getDockIconWidth", new Class<?>[0]);
 
             HookUtil.hook(shortcutMeasure, chain -> {
                 Object owner = chain.getThisObject();
@@ -96,22 +94,10 @@ final class Launcher450IconSizeHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
                 if (!enabled || domain == null || !(result instanceof Integer)) return result;
+
+                // Scale only the icon body. Dock slot width remains vendor-owned so the
+                // ShortcutIcon stays centered in the same Flexbox item.
                 return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
-            });
-            HookUtil.hook(getDockIconWidth, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (!enabled || ACTIVE_DOMAIN.get() != MeasureDomain.DOCK) return result;
-                Object grid = chain.getThisObject();
-                if (grid == null) return result;
-                try {
-                    int baseIcon = HookUtil.getIntField(grid, "iconSize");
-                    int dockBarHeight = HookUtil.getIntField(grid, "dockBarHeight");
-                    int scaledIcon = Launcher450IconSizePolicy.scaledPx(baseIcon, true, percent);
-                    return scaledIcon + ((dockBarHeight - scaledIcon) / 2);
-                } catch (Throwable error) {
-                    MainHook.log(TAG + " getDockIconWidth fallback: " + error);
-                    return result;
-                }
             });
 
             installed = true;

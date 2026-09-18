@@ -41,7 +41,6 @@ public class Launcher450IconSizeContractTest {
         assertTrue(source.contains("com.miui.home.launcher.grid.GridConfig"));
         assertTrue(source.contains("onMeasure"));
         assertTrue(source.contains("getIconSize"));
-        assertTrue(source.contains("getDockIconWidth"));
         assertTrue(source.contains("ThreadLocal"));
         assertTrue(source.contains("finally"));
 
@@ -51,6 +50,19 @@ public class Launcher450IconSizeContractTest {
                 source.contains("setScaleX") || source.contains("setScaleY"));
         assertFalse("4.50 implementation must not hook OS4/native Flutter paths",
                 source.contains("libapp_launcher.so") || source.contains("Flutter"));
+    }
+
+    @Test
+    public void dockIconScalingPreservesVendorSlotWidth() throws Exception {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java"));
+
+        assertTrue("Dock icon pixels still scale through the scoped getIconSize authority",
+                source.contains("getIconSize"));
+        assertFalse("Dock slot width must remain vendor-owned so scaled icons stay centered",
+                source.contains("\"getDockIconWidth\""));
+        assertFalse("Do not reconstruct GridConfig private slot geometry in LiquidDock",
+                source.contains("dockBarHeight") || source.contains("getIntField(grid, \"iconSize\")"));
     }
 
     @Test
