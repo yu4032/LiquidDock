@@ -66,6 +66,10 @@ final class LockScreenClockGlassHook {
             ViewTreeObserver next = outputHost.getViewTreeObserver();
             preDraw = () -> {
                 if (!disposed) {
+                    if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
+                        safePost(clockView, () -> dispose(true), "scene-exit-dispose");
+                        return true;
+                    }
                     try {
                         session.updateGeometry();
                     } catch (Throwable error) {
@@ -85,11 +89,20 @@ final class LockScreenClockGlassHook {
 
         void refresh() {
             if (disposed || !clockView.isAttachedToWindow()) return;
+            if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
+                Api101Bridge.log(TAG + " scene gate closed; native clock retained");
+                dispose(true);
+                return;
+            }
             try {
-                glyphMaskSource.restoreNativeGlyphs();
+                // Capture glyph geometry/mask while native digits are still drawable, then remove
+                // them before requesting a fresh backdrop so PassBlur can never sample the digits
+                // we are replacing.
                 session.updateGeometry();
+                glyphMaskSource.suppressNativeGlyphs();
                 session.reconcileRoot();
                 session.requestFreshCapture();
+                Api101Bridge.log(TAG + " native time glyphs suppressed before fresh capture");
             } catch (Throwable error) {
                 Api101Bridge.log(TAG + " refresh failed; native clock retained", error);
                 try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
@@ -207,6 +220,12 @@ final class LockScreenClockGlassHook {
         try {
             if (clockView == null || !clockView.isAttachedToWindow()) {
                 clearPending(clockView);
+                return;
+            }
+            if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
+                clearPending(clockView);
+                Api101Bridge.log(TAG + " scene gate rejected class="
+                        + clockView.getClass().getName());
                 return;
             }
 
