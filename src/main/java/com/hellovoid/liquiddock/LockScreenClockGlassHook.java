@@ -29,7 +29,7 @@ final class LockScreenClockGlassHook {
         final View clockView;
         final ViewGroup outputHost;
         final int outputIndex;
-        final float originalAlpha;
+        final LockScreenClockGlyphMaskSource glyphMaskSource;
         final MiuiSearchboxGlassSession session;
         final MiuiSearchboxGlassView glassView;
         ViewTreeObserver observer;
@@ -45,7 +45,10 @@ final class LockScreenClockGlassHook {
             this.clockView = clockView;
             this.outputHost = outputHost;
             this.outputIndex = outputIndex;
-            this.originalAlpha = clockView.getAlpha();
+            this.glyphMaskSource = LockScreenClockGlyphMaskSource.resolve(clockView);
+            if (glyphMaskSource == null || glyphMaskSource.glyphCount() == 0) {
+                throw new IllegalStateException("native time glyph views unavailable");
+            }
             this.session = new MiuiSearchboxGlassSession(
                     clockView, glassConfig, appearance, 0f, this, PassBlurDomain.LOCKSCREEN_CLOCK);
             this.glassView = new MiuiSearchboxGlassView(clockView.getContext(), session);
@@ -75,7 +78,7 @@ final class LockScreenClockGlassHook {
         void refresh() {
             if (disposed || !clockView.isAttachedToWindow()) return;
             glassView.setAlpha(0f);
-            clockView.setAlpha(originalAlpha);
+            glyphMaskSource.restoreNativeGlyphs();
             session.updateGeometry();
             session.reconcileRoot();
             session.requestFreshCapture();
@@ -85,8 +88,8 @@ final class LockScreenClockGlassHook {
         public void onPresented() {
             if (disposed) return;
             glassView.setAlpha(1f);
-            clockView.setAlpha(0f);
-            Api101Bridge.log(TAG + " presented; native clock suppressed");
+            glyphMaskSource.suppressNativeGlyphs();
+            Api101Bridge.log(TAG + " presented; native time glyphs suppressed");
         }
 
         @Override
@@ -118,7 +121,7 @@ final class LockScreenClockGlassHook {
             }
             glassView.dispose();
             session.shutdown();
-            if (restoreNative) clockView.setAlpha(originalAlpha);
+            if (restoreNative) glyphMaskSource.restoreNativeGlyphs();
         }
     }
 
