@@ -269,8 +269,16 @@ final class LockScreenClockGlassHook {
                 Api101Bridge.log(TAG + " attach failed; native clock retained", error);
             }
         } catch (UnsupportedClockShapeException unsupported) {
+            String className = clockView != null ? clockView.getClass().getName() : "";
+            if (className.equals("com.miui.clock.classic.ClassicClockView")
+                    || className.equals("com.miui.clock.classic.ClassicPlusClockView")) {
+                Api101Bridge.log(TAG + " classic time glyph source not ready; waiting for next frame");
+                postEndpointRetry(clockView);
+                return;
+            }
             clearPending(clockView);
-            Api101Bridge.log(TAG + " unsupported clock shape; native clock retained");
+            Api101Bridge.log(TAG + " unsupported clock shape class=" + className
+                    + "; native clock retained");
         } catch (Throwable error) {
             clearPending(clockView);
             // Absolute process boundary: this feature must never kill SystemUI.
