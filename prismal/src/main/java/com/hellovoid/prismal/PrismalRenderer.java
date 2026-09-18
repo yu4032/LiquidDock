@@ -261,6 +261,13 @@ public final class PrismalRenderer implements AutoCloseable {
     }
 
     public int outputTexture() { return outputTexture; }
+
+    /** Read-only normalized full-frame backdrop for specialized shape compositors. */
+    public int normalizedBackdropTexture() { return sourceTexture; }
+
+    /** Read-only blurred full-frame backdrop for specialized shape compositors. */
+    public int blurredBackdropTexture() { return blurTextureV; }
+
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }
 
