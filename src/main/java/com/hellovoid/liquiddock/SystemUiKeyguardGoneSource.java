@@ -19,6 +19,7 @@ final class SystemUiKeyguardGoneSource {
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean();
     private static final AtomicBoolean GONE_FINISHED_SENT = new AtomicBoolean();
+    private static final AtomicBoolean LOCKSCREEN_SCENE = new AtomicBoolean();
 
     private SystemUiKeyguardGoneSource() {}
 
@@ -82,6 +83,26 @@ final class SystemUiKeyguardGoneSource {
         String from = token(read(step, "getFrom", "from"));
         String to = token(read(step, "getTo", "to"));
         String state = token(read(step, "getTransitionState", "transitionState"));
+
+        // Keep a strict SystemUI-local scene gate for optional lockscreen rendering. Only the
+        // actual LOCKSCREEN destination is authorized; AOD/DOZING/BOUNCER/OCCLUDED/GONE and all
+        // other keyguard scenes fail closed.
+        // Strict presentation authority: become active only after the transition has fully
+        // reached LOCKSCREEN. Any transition whose destination is AOD/DOZING/BOUNCER/OCCLUDED/
+        // GONE clears authority immediately on its first step.
+        boolean nextLockscreenScene = "LOCKSCREEN".equals(to)
+                && "FINISHED".equals(state);
+        boolean previousLockscreenScene = LOCKSCREEN_SCENE.getAndSet(nextLockscreenScene);
+        if (previousLockscreenScene != nextLockscreenScene) {
+            try {
+                LockScreenClockGlassHook.onLockscreenSceneChanged(nextLockscreenScene);
+            } catch (Throwable error) {
+                try {
+                    Api101Bridge.log("[DC][LockScreenClockGlass] scene callback failed", error);
+                } catch (Throwable ignored) {}
+            }
+        }
+
         if (!SystemUiKeyguardGonePolicy.isGoneTransitionAttempt(from, to)) return;
 
         if (!SystemUiKeyguardGonePolicy.shouldPublishFinished(from, to, state)) {
@@ -91,6 +112,10 @@ final class SystemUiKeyguardGoneSource {
         }
         if (!GONE_FINISHED_SENT.compareAndSet(false, true)) return;
         publishFinished(from);
+    }
+
+    static boolean isLockscreenScene() {
+        return LOCKSCREEN_SCENE.get();
     }
 
     private static Object read(Object owner, String getter, String field) {
