@@ -14,7 +14,8 @@ public class SecurityCenterLauncherStylePresentationContractTest {
 
     @Test public void customOwnershipClearsDockToolboxAndAllAppsButKeepsTurboAsSourceHost() throws Exception {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
-        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String policy = SourceContractText.read(
+                MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         assertTrue("Dock, upper toolbox and All Apps are the claimed carriers",
                 bridge.contains("dockLayout, boxMaterialView, allAppsLayout"));
         assertTrue("Dock vendor material must be cleared before module material is applied",
@@ -36,7 +37,8 @@ public class SecurityCenterLauncherStylePresentationContractTest {
     @Test public void customShaderUsesSharedPassBlurSourceAndTypedVendorClaim() throws Exception {
         String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
-        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String policy = SourceContractText.read(
+                MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
 
         assertFalse("custom glass must not self-blur the TextureView sink",
@@ -97,7 +99,8 @@ public class SecurityCenterLauncherStylePresentationContractTest {
 
     @Test public void dockShapeUsesLiveOutlineInsteadOfBackgroundHeuristic() throws Exception {
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
-        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        String sink = SourceContractText.read(
+                MAIN.resolve("SecurityCenterGlassSinkView.java"));
         assertTrue(coordinator.contains("dock.getClipToOutline()"));
         assertTrue(coordinator.contains("dock.getOutlineProvider()"));
         assertTrue(coordinator.contains("outline.getRadius()"));
@@ -115,7 +118,8 @@ public class SecurityCenterLauncherStylePresentationContractTest {
     }
 
     @Test public void perNodeOutputPreservesPrismalOuterEdgePixelsWithoutResizingRootSpaceOutput() throws Exception {
-        String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
+        String sink = SourceContractText.read(
+                MAIN.resolve("SecurityCenterGlassSinkView.java"));
         String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
         assertTrue("Prismal edge shell reaches about 2.2 logical pixels outside the SDF",
                 sink.contains("OPTICAL_OUTSET_PX = 3f"));
