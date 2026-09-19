@@ -13,7 +13,7 @@ public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test public void shortcutMenuRendezvousDoesNotRequireSourceSessionBeforeShow() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
@@ -48,9 +48,10 @@ public class ShortcutSecondaryGlassContractTest {
     }
 
     @Test public void dismissStartsFastFadeWithoutDestroyingGlassResources() throws Exception {
-        String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String hook = SourceContractText.read(
+                MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
-        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+        String layer = SourceContractText.read(MAIN.resolve("ShortcutPopupGlassLayer.java"));
 
         assertTrue(hook.contains(
                 "Object menu = chain.getThisObject();\n"
@@ -77,7 +78,7 @@ public class ShortcutSecondaryGlassContractTest {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
-        String settings = Files.readString(Path.of(
+        String settings = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
         assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));
@@ -91,7 +92,7 @@ public class ShortcutSecondaryGlassContractTest {
     @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingAfterGlassToggle() throws Exception {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
-        String settings = Files.readString(Path.of(
+        String settings = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
         assertTrue(schema.contains("SHORTCUT_POPUP_DARK_TEXT = bool("));

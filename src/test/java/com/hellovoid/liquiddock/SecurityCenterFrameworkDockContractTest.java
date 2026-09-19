@@ -14,7 +14,8 @@ public class SecurityCenterFrameworkDockContractTest {
 
     @Test
     public void securityCenterAlwaysUsesCustomShaderBackend() throws Exception {
-        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String policy = SourceContractText.read(
+                MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
 
         assertFalse("Security Center must not inherit Launcher's persisted shader selection",
                 policy.contains("ConfigReader config = ConfigReader.load()"));
@@ -71,7 +72,8 @@ public class SecurityCenterFrameworkDockContractTest {
 
     @Test
     public void frameworkOwnershipCoversDockToolboxAndAllAppsButNeverTheTurboRoot() throws Exception {
-        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String policy = SourceContractText.read(
+                MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
 
         assertFalse("policy must not revive the removed advanced-material carriers",
@@ -128,7 +130,8 @@ public class SecurityCenterFrameworkDockContractTest {
     @Test
     public void customGlassReplacesAdvancedDockMaterialAtTheTypedClaimBoundary()
             throws Exception {
-        String policy = Files.readString(MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
+        String policy = SourceContractText.read(
+                MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String prepare = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
         String session = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));

@@ -11,7 +11,7 @@ public class MiuiSearchboxGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     private static String read(Path path) throws Exception {
-        return Files.readString(path);
+        return SourceContractText.read(path);
     }
 
     @Test

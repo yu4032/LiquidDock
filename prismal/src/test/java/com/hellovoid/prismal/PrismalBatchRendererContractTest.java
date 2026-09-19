@@ -16,7 +16,9 @@ public class PrismalBatchRendererContractTest {
         Path repoRelative = Path.of(
                 "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java");
         Path path = Files.exists(moduleRelative) ? moduleRelative : repoRelative;
-        return Files.readString(path, StandardCharsets.UTF_8);
+        return Files.readString(path, StandardCharsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
     }
 
     @Test

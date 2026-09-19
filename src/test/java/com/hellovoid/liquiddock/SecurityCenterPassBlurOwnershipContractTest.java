@@ -65,7 +65,7 @@ public class SecurityCenterPassBlurOwnershipContractTest {
     @Test
     public void securityCenterUsesPassBlurAsPrismalInputAndReplacesVendorMaterial()
             throws Exception {
-        String policy = Files.readString(
+        String policy = SourceContractText.read(
                 MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String coordinator = Files.readString(
                 MAIN.resolve("SecurityCenterGlassCoordinator.java"));
