@@ -84,6 +84,21 @@ public class RecentsWallpaperSettleStateTest {
     }
 
     @Test
+    public void repeatedHideSupersedesOlderCompletionAuthority() {
+        RecentsWallpaperSettleState state = new RecentsWallpaperSettleState();
+        long first = state.onReturnStarted();
+        assertTrue(state.armCompletionAuthority(first));
+
+        long second = state.onReturnStarted();
+
+        assertFalse(state.onWallpaperSettled(first));
+        assertTrue(state.isPending());
+        assertTrue(state.armCompletionAuthority(second));
+        assertTrue(state.onWallpaperSettled(second));
+        assertFalse(state.isPending());
+    }
+
+    @Test
     public void rejectedWorkstationReturnCanCancelOnlyCurrentSerial() {
         RecentsWallpaperSettleState state = new RecentsWallpaperSettleState();
         long first = state.onReturnStarted();
