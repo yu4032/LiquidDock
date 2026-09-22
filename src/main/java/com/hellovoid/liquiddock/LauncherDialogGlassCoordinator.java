@@ -16,11 +16,13 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Cross-ViewRoot glass ownership for Launcher-owned uninstall dialogs.
+ * Dialog-root glass ownership for Launcher uninstall/remove confirmation windows.
  *
- * <p>The custom UninstallDialogViewContainer is content only. HyperOS 4.50 places the visible
- * MIUIX window material on DialogParentPanel2 (@id/parentPanel). The Launcher Activity remains the
- * sole PassBlur source authority and the Dialog ViewRoot hosts output only.</p>
+ * <p>The custom UninstallDialogViewContainer is content only. HyperOS places the visible MIUIX
+ * material on DialogParentPanel2 (@id/parentPanel). The Dialog ViewRoot is the PassBlur authority:
+ * excluding that root surface captures the real Launcher window below the dialog instead of the
+ * Launcher window's own behind-content (normally the wallpaper). Keeping source, geometry sync and
+ * output in the same ViewRoot also makes the glass follow the dialog's real frame animation.</p>
  */
 final class LauncherDialogGlassCoordinator {
     private static final String TAG = "[DC][LauncherDialogGlass]";
@@ -36,9 +38,9 @@ final class LauncherDialogGlassCoordinator {
     private LauncherDialogGlassCoordinator() {}
 
     /**
-     * Observe one exact BaseUninstallDialog instance without taking over its vendor show/dismiss
+     * Observe one exact BaseUninstallDialog instance without replacing vendor show/dismiss
      * listeners. Constructor callers may immediately invoke create()/show(), so rendezvous is
-     * deferred to the main queue and completed from real attach/layout events.
+     * deferred to attach/layout authority rather than a fixed delay.
      */
     static void watchUninstallDialog(
             Activity launcher, Dialog dialog, LiquidDockConfig.Glass glassConfig, String source) {
@@ -46,11 +48,11 @@ final class LauncherDialogGlassCoordinator {
                 || !GlassRuntimeState.isEnabled()) {
             return;
         }
-        MAIN.post(() -> watchOnMain(launcher, dialog, glassConfig, source));
+        MAIN.post(() -> watchOnMain(dialog, glassConfig, source));
     }
 
     private static synchronized void watchOnMain(
-            Activity launcher, Dialog dialog, LiquidDockConfig.Glass glassConfig, String source) {
+            Dialog dialog, LiquidDockConfig.Glass glassConfig, String source) {
         if (!GlassRuntimeState.isEnabled()) return;
 
         Binding previous = BINDINGS.remove(dialog);
@@ -64,7 +66,7 @@ final class LauncherDialogGlassCoordinator {
             return;
         }
 
-        Binding binding = new Binding(launcher, dialog, decor, glassConfig, source);
+        Binding binding = new Binding(dialog, decor, glassConfig, source);
         BINDINGS.put(dialog, binding);
         View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
@@ -103,18 +105,14 @@ final class LauncherDialogGlassCoordinator {
     }
 
     /**
-     * Wait for MIUIX to install its own content hierarchy. No fixed delay is involved: async
-     * inflation, create() and show() all converge through attach/global-layout.
+     * Wait for MIUIX to install the exact uninstall hierarchy, then bind PassBlur to the dialog
+     * ViewRoot. No Launcher-root producer and no fixed timing heuristic participate.
      */
     private static synchronized void tryAttach(Binding binding) {
         if (binding == null || binding.released || binding.bound) return;
         View decor = binding.decorRef.get();
-        Activity launcher = binding.launcherRef.get();
         Dialog dialog = binding.dialogRef.get();
-        if (decor == null || launcher == null || dialog == null
-                || !decor.isAttachedToWindow()) {
-            return;
-        }
+        if (decor == null || dialog == null || !decor.isAttachedToWindow()) return;
 
         View uninstallContent = findExactClass(decor, UNINSTALL_CONTENT);
         View panel = findExactClass(decor, DIALOG_PARENT_PANEL);
@@ -134,22 +132,40 @@ final class LauncherDialogGlassCoordinator {
             return;
         }
 
-        View authorityAnchor = launcher.findViewById(android.R.id.content);
-        if (authorityAnchor == null || !authorityAnchor.isAttachedToWindow()) {
+        View dialogRoot = decor.getRootView();
+        if (dialogRoot == null || !dialogRoot.isAttachedToWindow()
+                || dialogRoot.getWidth() <= 0 || dialogRoot.getHeight() <= 0
+                || dialogRoot.getWindowToken() == null) {
             if (!binding.authorityUnavailableLogged) {
                 binding.authorityUnavailableLogged = true;
-                MainHook.log(TAG + " launcher authority unavailable source=" + binding.source);
+                MainHook.log(TAG + " dialog ViewRoot unavailable source=" + binding.source);
             }
             return;
         }
-        LauncherGlassSession authority =
-                LauncherGlassSessionRegistry.acquire(authorityAnchor, binding.glassConfig);
-        if (authority == null || authority.isShutdown()) {
-            if (!binding.authorityUnavailableLogged) {
-                binding.authorityUnavailableLogged = true;
-                MainHook.log(TAG + " shared launcher session unavailable source=" + binding.source);
+
+        LauncherGlassSession authority = binding.dialogSession;
+        if (authority == null || authority.isShutdown() || !authority.ownsRoot(dialogRoot)) {
+            if (authority != null) authority.shutdown();
+            try {
+                authority = new LauncherGlassSession(
+                        dialogRoot,
+                        binding.glassConfig,
+                        PassBlurBindRequest.launcherDialog(dialogRoot));
+                binding.dialogSession = authority;
+                LauncherGlassSession observed = authority;
+                observed.setTerminalFailureListener(
+                        () -> releaseObserved(binding, "source-terminal-failure"));
+                MainHook.log(TAG + " dialog source created source=" + binding.source
+                        + " root=" + dialogRoot.getClass().getName()
+                        + " size=" + dialogRoot.getWidth() + "x" + dialogRoot.getHeight());
+            } catch (Throwable error) {
+                if (!binding.authorityUnavailableLogged) {
+                    binding.authorityUnavailableLogged = true;
+                    MainHook.log(TAG + " dialog source unavailable source=" + binding.source
+                            + " error=" + error);
+                }
+                return;
             }
-            return;
         }
 
         float radiusPx = resolveDialogCornerRadius(panel);
@@ -167,6 +183,7 @@ final class LauncherDialogGlassCoordinator {
         binding.sink = sink;
         binding.bound = true;
         sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
+        sink.runWhenOutputLost(() -> releaseObserved(binding, "output-surface-lost"));
         removeLayoutRendezvous(binding);
 
         sink.runWhenFirstFramePresented(() -> {
@@ -175,18 +192,24 @@ final class LauncherDialogGlassCoordinator {
             else releaseBinding(binding, "first-frame-orphan");
         });
         sink.requestLifecycleRefresh();
-        View launcherRoot = authorityAnchor.getRootView();
-        if (launcherRoot != null) LauncherGlassSceneController.requestFreshForRoot(launcherRoot);
+        authority.requestFreshBackdrop();
 
         MainHook.log(TAG + " bound source=" + binding.source
                 + " dialog=" + binding.dialogType
+                + " authority=DIALOG_VIEW_ROOT"
                 + " panel=" + panel.getClass().getName()
                 + " id=" + panelId
                 + " background=" + className(panel.getBackground())
-                + " size=" + panel.getWidth() + "x" + panel.getHeight()
+                + " panelSize=" + panel.getWidth() + "x" + panel.getHeight()
+                + " rootSize=" + dialogRoot.getWidth() + "x" + dialogRoot.getHeight()
                 + " radiusPx=" + radiusPx);
     }
 
+    /**
+     * Hand off material ownership only after the first replacement frame has reached the dialog.
+     * The original Drawable is never alpha-mutated: a transparent clone is installed only when
+     * the vendor fallback is currently opaque, so release can restore the exact vendor object.
+     */
     private static synchronized void claimVendorMaterial(Dialog dialog, Binding expected) {
         Binding binding = BINDINGS.get(dialog);
         if (binding != expected || binding.released || binding.claimed) return;
@@ -205,22 +228,98 @@ final class LauncherDialogGlassCoordinator {
         }
 
         Drawable background = panel.getBackground();
-        binding.originalBackground = background;
-        binding.originalBackgroundAlpha = background != null ? background.getAlpha() : -1;
-        binding.vendorPassBlurEnabled = vendorPassBlur;
-        if (vendorPassBlur && !MiBlurBridge.setPassWindowBlurEnabled(panel, false)) {
-            MainHook.log(TAG + " vendor pass-window gate could not be paused; stock material retained"
-                    + " source=" + binding.source);
-            releaseObserved(binding, "pass-window-pause-failed");
-            return;
+        int backgroundAlpha = background != null ? background.getAlpha() : -1;
+        Drawable transparentBackground = null;
+        if (background != null && backgroundAlpha > 0) {
+            transparentBackground = cloneTransparent(background, panel);
+            if (transparentBackground == null) {
+                MainHook.log(TAG + " background clone unavailable; stock material retained source="
+                        + binding.source + " background=" + className(background));
+                releaseObserved(binding, "background-clone-unavailable");
+                return;
+            }
         }
-        if (background != null) background.setAlpha(0);
+
+        binding.originalBackground = background;
+        binding.vendorPassBlurEnabled = vendorPassBlur;
+        if (vendorPassBlur) {
+            if (!MiBlurBridge.setPassWindowBlurEnabled(panel, false)) {
+                MainHook.log(TAG
+                        + " vendor pass-window gate could not be paused; stock material retained"
+                        + " source=" + binding.source);
+                releaseObserved(binding, "pass-window-pause-failed");
+                return;
+            }
+            binding.vendorGatePaused = true;
+        }
+
+        if (transparentBackground != null) {
+            try {
+                panel.setBackground(transparentBackground);
+                binding.transparentBackground = transparentBackground;
+                binding.backgroundReplaced = true;
+            } catch (Throwable error) {
+                MainHook.log(TAG + " transparent background install failed source="
+                        + binding.source + " error=" + error);
+                releaseObserved(binding, "background-install-failed");
+                return;
+            }
+        }
+
         binding.claimed = true;
+        installMaterialGuard(binding);
         MainHook.log(TAG + " first glass frame presented; MIUIX material paused source="
                 + binding.source
                 + " vendorPassBlur=" + vendorPassBlur
-                + " background=" + className(background)
-                + " backgroundAlpha=" + binding.originalBackgroundAlpha);
+                + " originalBackground=" + className(background)
+                + " originalBackgroundAlpha=" + backgroundAlpha
+                + " backgroundReplaced=" + binding.backgroundReplaced);
+    }
+
+    /**
+     * MIUIX can touch the pass-window gate again while its show/dismiss animator is active. Keep
+     * our claimed gate suppressed from the dialog's own pre-draw signal; a failed reassertion
+     * releases immediately back to the stock material.
+     */
+    private static void installMaterialGuard(Binding binding) {
+        if (binding == null || binding.released || binding.materialGuard != null) return;
+        View decor = binding.decorRef.get();
+        if (decor == null) return;
+        ViewTreeObserver observer = decor.getViewTreeObserver();
+        if (!observer.isAlive()) return;
+        ViewTreeObserver.OnPreDrawListener listener = () -> {
+            if (binding.released || !binding.claimed) return true;
+            View panel = binding.panelRef.get();
+            if (panel == null || !panel.isAttachedToWindow()) return true;
+            Boolean enabled = MiBlurBridge.getPassWindowBlurEnabled(panel);
+            if (Boolean.TRUE.equals(enabled)) {
+                boolean suppressed = MiBlurBridge.setPassWindowBlurEnabled(panel, false);
+                MainHook.log(TAG + " vendor pass-window gate reassert source=" + binding.source
+                        + " result=" + suppressed);
+                if (!suppressed) {
+                    MAIN.post(() -> releaseObserved(binding, "pass-window-reassert-failed"));
+                }
+            }
+            return true;
+        };
+        binding.materialGuardObserver = observer;
+        binding.materialGuard = listener;
+        observer.addOnPreDrawListener(listener);
+    }
+
+    private static void removeMaterialGuard(Binding binding) {
+        ViewTreeObserver observer = binding != null ? binding.materialGuardObserver : null;
+        ViewTreeObserver.OnPreDrawListener listener =
+                binding != null ? binding.materialGuard : null;
+        if (binding != null) {
+            binding.materialGuardObserver = null;
+            binding.materialGuard = null;
+        }
+        if (observer != null && listener != null) {
+            try {
+                if (observer.isAlive()) observer.removeOnPreDrawListener(listener);
+            } catch (Throwable ignored) {}
+        }
     }
 
     static synchronized void releaseAll() {
@@ -240,6 +339,7 @@ final class LauncherDialogGlassCoordinator {
         if (binding == null || binding.released) return;
         binding.released = true;
         removeLayoutRendezvous(binding);
+        removeMaterialGuard(binding);
 
         View decor = binding.decorRef.get();
         if (decor != null && binding.attachListener != null) {
@@ -249,23 +349,34 @@ final class LauncherDialogGlassCoordinator {
         binding.attachListener = null;
 
         View panel = binding.panelRef.get();
-        if (binding.claimed) {
-            Drawable background = binding.originalBackground;
-            if (background != null && binding.originalBackgroundAlpha >= 0) {
-                background.setAlpha(binding.originalBackgroundAlpha);
-            }
-            if (panel != null && binding.vendorPassBlurEnabled) {
-                boolean restored = MiBlurBridge.setPassWindowBlurEnabled(panel, true);
-                MainHook.log(TAG + " vendor pass-window gate restore source=" + binding.source
-                        + " result=" + restored);
+        if (panel != null && binding.backgroundReplaced) {
+            try {
+                panel.setBackground(binding.originalBackground);
+            } catch (Throwable error) {
+                MainHook.log(TAG + " vendor background restore failed source=" + binding.source
+                        + " error=" + error);
             }
         }
+        if (panel != null && binding.vendorGatePaused && binding.vendorPassBlurEnabled) {
+            boolean restored = MiBlurBridge.setPassWindowBlurEnabled(panel, true);
+            MainHook.log(TAG + " vendor pass-window gate restore source=" + binding.source
+                    + " result=" + restored);
+        }
+
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
         if (sink != null) sink.dispose();
 
+        LauncherGlassSession authority = binding.dialogSession;
+        binding.dialogSession = null;
+        if (authority != null) {
+            authority.setTerminalFailureListener(null);
+            authority.shutdown();
+        }
+
         MainHook.log(TAG + " released source=" + binding.source + " reason=" + reason
-                + " claimed=" + binding.claimed);
+                + " claimed=" + binding.claimed
+                + " authority=DIALOG_VIEW_ROOT");
     }
 
     private static void removeLayoutRendezvous(Binding binding) {
@@ -280,6 +391,23 @@ final class LauncherDialogGlassCoordinator {
             try {
                 if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener);
             } catch (Throwable ignored) {}
+        }
+    }
+
+    private static Drawable cloneTransparent(Drawable source, View owner) {
+        if (source == null || owner == null) return null;
+        try {
+            Drawable.ConstantState state = source.getConstantState();
+            if (state == null) return null;
+            Drawable clone = state.newDrawable(
+                    owner.getResources(), owner.getContext().getTheme());
+            if (clone == null) return null;
+            clone = clone.mutate();
+            clone.setAlpha(0);
+            return clone;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " transparent background clone failed: " + error);
+            return null;
         }
     }
 
@@ -348,20 +476,24 @@ final class LauncherDialogGlassCoordinator {
     }
 
     private static final class Binding {
-        final WeakReference<Activity> launcherRef;
         final WeakReference<Dialog> dialogRef;
         final WeakReference<View> decorRef;
         WeakReference<View> panelRef = new WeakReference<>(null);
         final LiquidDockConfig.Glass glassConfig;
         final String source;
         final String dialogType;
+        LauncherGlassSession dialogSession;
         LauncherGlassSinkView sink;
         View.OnAttachStateChangeListener attachListener;
         ViewTreeObserver layoutObserver;
         ViewTreeObserver.OnGlobalLayoutListener layoutListener;
+        ViewTreeObserver materialGuardObserver;
+        ViewTreeObserver.OnPreDrawListener materialGuard;
         Drawable originalBackground;
-        int originalBackgroundAlpha = -1;
+        Drawable transparentBackground;
         boolean vendorPassBlurEnabled;
+        boolean vendorGatePaused;
+        boolean backgroundReplaced;
         boolean targetsMissingLogged;
         boolean authorityUnavailableLogged;
         boolean sinkUnavailableLogged;
@@ -370,12 +502,10 @@ final class LauncherDialogGlassCoordinator {
         boolean released;
 
         Binding(
-                Activity launcher,
                 Dialog dialog,
                 View decor,
                 LiquidDockConfig.Glass glassConfig,
                 String source) {
-            launcherRef = new WeakReference<>(launcher);
             dialogRef = new WeakReference<>(dialog);
             decorRef = new WeakReference<>(decor);
             this.glassConfig = glassConfig;
