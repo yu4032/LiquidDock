@@ -7,29 +7,24 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
-import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Replaces the stock Material backgrounds of the WMShell app-handle popup pills with Prismal glass.
+ * Replaces the stock Material background of WMShell HandleMenu's windowing pill with Prismal.
  *
- * <p>HyperOS creates and styles HandleMenuView inside
- * DesktopModeWindowDecoration.onAssistContentReceived(). Hook after that vendor method returns so
- * surfaceBright tinting is already complete. The menu's native layout, click listeners, animation
- * and AdditionalViewContainer remain untouched.</p>
+ * <p>HyperOS creates and theme-tints HandleMenuView inside
+ * DesktopModeWindowDecoration.onAssistContentReceived(). We bind after that method returns, so the
+ * vendor remains authoritative for layout, button actions, animation and theme selection. Only the
+ * background of {@code windowing_pill} changes after a real Prismal frame is presented.</p>
  */
 final class SystemUiHandleMenuGlassHook {
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String WINDOW_DECORATION =
             "com.android.wm.shell.windowdecor.DesktopModeWindowDecoration";
-
-    private static final String APP_INFO_PILL = "app_info_pill";
     private static final String WINDOWING_PILL = "windowing_pill";
-    private static final String MORE_ACTIONS_PILL = "more_actions_pill";
-    private static final String OPEN_IN_APP_PILL = "open_in_app_or_browser_pill";
 
     private static final Map<Object, PendingBinding> PENDING =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -65,7 +60,7 @@ final class SystemUiHandleMenuGlassHook {
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
             installed = true;
-            log("vendor HandleMenu lifecycle hooks installed");
+            log("windowing-pill lifecycle hooks installed");
         } catch (Throwable error) {
             glassConfig = null;
             log("hook unavailable: " + error);
@@ -78,13 +73,11 @@ final class SystemUiHandleMenuGlassHook {
                 || !glass.systemUiHandleMenuEnabled) return;
 
         releaseOwner(decoration, "menu-replaced");
-        final Object handleMenu;
-        final Object handleMenuView;
         final View root;
         try {
-            handleMenu = HookUtil.getField(decoration, "mHandleMenu");
+            Object handleMenu = HookUtil.getField(decoration, "mHandleMenu");
             if (handleMenu == null) return;
-            handleMenuView = HookUtil.getField(handleMenu, "handleMenuView");
+            Object handleMenuView = HookUtil.getField(handleMenu, "handleMenuView");
             if (handleMenuView == null) return;
             Object rootValue = HookUtil.getField(handleMenuView, "rootView");
             if (!(rootValue instanceof View)) return;
@@ -136,33 +129,22 @@ final class SystemUiHandleMenuGlassHook {
                 return;
             }
 
-            View appInfo = findByResourceName(root, APP_INFO_PILL);
             View windowing = findByResourceName(root, WINDOWING_PILL);
-            View moreActions = findByResourceName(root, MORE_ACTIONS_PILL);
-            View openInApp = findByResourceName(root, OPEN_IN_APP_PILL);
-            if (appInfo == null || windowing == null || moreActions == null
-                    || openInApp == null) {
-                log("stable HandleMenu pill ids unavailable; stock retained");
-                release();
+            if (!(windowing instanceof ViewGroup)) {
+                log("stable windowing_pill unavailable; stock retained");
                 PENDING.remove(owner);
+                release();
                 return;
             }
 
-            release();
             PENDING.remove(owner);
+            release();
             try {
-                Binding binding = new Binding(
-                        owner,
-                        root,
-                        sourceRoot,
-                        appInfo,
-                        windowing,
-                        moreActions,
-                        openInApp,
-                        glass);
+                Binding binding = new Binding(owner, root, sourceRoot, windowing, glass);
                 ACTIVE.put(owner, binding);
                 binding.start();
-                log("menu attached root=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
+                log("windowing pill bind started root="
+                        + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             } catch (Throwable error) {
                 log("glass bind failed; stock retained: " + error);
                 Binding active = ACTIVE.remove(owner);
@@ -179,7 +161,8 @@ final class SystemUiHandleMenuGlassHook {
 
         @Override public void onViewAttachedToWindow(View view) { tryBind(); }
 
-        @Override public void onViewDetachedFromWindow(View view) {
+        @Override
+        public void onViewDetachedFromWindow(View view) {
             if (PENDING.get(owner) == this) PENDING.remove(owner);
             release();
         }
@@ -204,14 +187,13 @@ final class SystemUiHandleMenuGlassHook {
         final Object owner;
         final View root;
         final View sourceRoot;
-        final View[] targets = new View[SystemUiHandleMenuGlassSession.Target.values().length];
-        final Drawable[] stockBackgrounds = new Drawable[targets.length];
-        final SystemUiHandleMenuGlassSinkView[] sinks =
-                new SystemUiHandleMenuGlassSinkView[targets.length];
-        final boolean[] presented = new boolean[targets.length];
+        final View windowing;
+        final Drawable stockBackground;
         final SystemUiHandleMenuGlassSession session;
+        SystemUiHandleMenuGlassSinkView sink;
 
         boolean captureRequested;
+        boolean presented;
         boolean failed;
         boolean released;
 
@@ -219,45 +201,22 @@ final class SystemUiHandleMenuGlassHook {
                 Object owner,
                 View root,
                 View sourceRoot,
-                View appInfo,
                 View windowing,
-                View moreActions,
-                View openInApp,
                 LiquidDockConfig.Glass glass) {
             this.owner = owner;
             this.root = root;
             this.sourceRoot = sourceRoot;
-            targets[SystemUiHandleMenuGlassSession.Target.APP_INFO.ordinal()] = appInfo;
-            targets[SystemUiHandleMenuGlassSession.Target.WINDOWING.ordinal()] = windowing;
-            targets[SystemUiHandleMenuGlassSession.Target.MORE_ACTIONS.ordinal()] = moreActions;
-            targets[SystemUiHandleMenuGlassSession.Target.OPEN_IN_APP.ordinal()] = openInApp;
-            for (int i = 0; i < targets.length; i++) {
-                stockBackgrounds[i] = targets[i].getBackground();
-            }
+            this.windowing = windowing;
+            stockBackground = windowing.getBackground();
             session = new SystemUiHandleMenuGlassSession(sourceRoot, glass, this);
         }
 
         void start() {
-            for (SystemUiHandleMenuGlassSession.Target target
-                    : SystemUiHandleMenuGlassSession.Target.values()) {
-                View nativePill = targets[target.ordinal()];
-                sinks[target.ordinal()] = SystemUiHandleMenuGlassSinkView.attachInsideTarget(
-                        nativePill, session, target);
-                if (sinks[target.ordinal()] == null) {
-                    break;
-                }
-            }
+            sink = SystemUiHandleMenuGlassSinkView.attachInsideTarget(windowing, session);
             root.addOnAttachStateChangeListener(this);
             root.getViewTreeObserver().addOnPreDrawListener(this);
-            boolean allSinksReady = true;
-            for (SystemUiHandleMenuGlassSinkView sink : sinks) {
-                if (sink == null) {
-                    allSinksReady = false;
-                    break;
-                }
-            }
-            if (!allSinksReady) {
-                onFailure(new IllegalStateException("HandleMenu pill host unavailable"));
+            if (sink == null) {
+                onFailure(new IllegalStateException("windowing_pill local host unavailable"));
                 return;
             }
             refreshGeometry();
@@ -265,39 +224,29 @@ final class SystemUiHandleMenuGlassHook {
 
         @Override
         public boolean onPreDraw() {
-            if (released) return true;
-            refreshGeometry();
+            if (!released) refreshGeometry();
             return true;
         }
 
         void refreshGeometry() {
-            if (released || failed) return;
-            SystemUiHandleMenuGlassSession.GeometrySet geometry =
-                    new SystemUiHandleMenuGlassSession.GeometrySet();
-            for (SystemUiHandleMenuGlassSession.Target target
-                    : SystemUiHandleMenuGlassSession.Target.values()) {
-                SystemUiHandleMenuGlassSinkView sink = sinks[target.ordinal()];
-                if (sink != null) {
-                    sink.syncFromTarget();
-                    geometry.put(target, sink.captureGeometry(sourceRoot));
-                }
-            }
+            if (released || failed || sink == null) return;
+            sink.syncFromTarget();
+            LauncherGlassGeometry.Snapshot geometry = sink.captureGeometry(sourceRoot);
+            if (geometry == null) return;
             session.updateGeometry(geometry);
-            if (!captureRequested && geometry.hasVisibleTarget()) {
+            if (!captureRequested) {
                 captureRequested = true;
                 session.requestInitialCapture();
             }
         }
 
         @Override
-        public void onFirstFramePresented(SystemUiHandleMenuGlassSession.Target target) {
-            if (released || failed || target == null) return;
-            int index = target.ordinal();
-            if (presented[index]) return;
-            presented[index] = true;
-            targets[index].setBackground(null);
-            if (sinks[index] != null) sinks[index].reveal();
-            log("Prismal presented target=" + target);
+        public void onFirstFramePresented() {
+            if (released || failed || presented) return;
+            presented = true;
+            windowing.setBackground(null);
+            if (sink != null) sink.reveal();
+            log("Prismal presented windowing_pill");
         }
 
         @Override
@@ -305,25 +254,15 @@ final class SystemUiHandleMenuGlassHook {
             if (released || failed) return;
             failed = true;
             log("Prismal unavailable; stock retained: " + error);
-            restoreStockBackgrounds();
-            disposeSinks();
+            restoreStockBackground();
+            if (sink != null) sink.dispose();
+            sink = null;
             session.shutdown();
         }
 
-        void restoreStockBackgrounds() {
-            for (int i = 0; i < targets.length; i++) {
-                if (targets[i] != null && targets[i].getBackground() == null) {
-                    targets[i].setBackground(stockBackgrounds[i]);
-                }
-                presented[i] = false;
-            }
-        }
-
-        void disposeSinks() {
-            for (int i = 0; i < sinks.length; i++) {
-                if (sinks[i] != null) sinks[i].dispose();
-                sinks[i] = null;
-            }
+        void restoreStockBackground() {
+            if (windowing.getBackground() == null) windowing.setBackground(stockBackground);
+            presented = false;
         }
 
         void release() {
@@ -332,8 +271,9 @@ final class SystemUiHandleMenuGlassHook {
             ViewTreeObserver observer = root.getViewTreeObserver();
             if (observer.isAlive()) observer.removeOnPreDrawListener(this);
             root.removeOnAttachStateChangeListener(this);
-            restoreStockBackgrounds();
-            disposeSinks();
+            restoreStockBackground();
+            if (sink != null) sink.dispose();
+            sink = null;
             session.shutdown();
         }
 
