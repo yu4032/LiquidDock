@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -79,9 +78,6 @@ final class Miuix307MaterialPipeline {
                         try {
                             Object launcher = chain.getThisObject();
                             launcherRef = new WeakReference<>(launcher);
-                            if (launcher instanceof Context) {
-                                LauncherWallpaperFreshnessHook.attachContext((Context) launcher);
-                            }
                             Object hotSeats = HookUtil.getField(launcher, "mHotSeats");
                             hotSeatsRef = new WeakReference<>(hotSeats);
                             View background = resolveBackground(hotSeats);
