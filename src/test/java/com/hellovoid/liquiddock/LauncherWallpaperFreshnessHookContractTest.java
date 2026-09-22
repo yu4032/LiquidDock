@@ -29,20 +29,26 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(source.contains("onWallpaperColorChanged"));
     }
 
-    @Test public void wallpaperChangeItselfStartsCacheRefreshWithoutColorCallbackDependency()
+    @Test public void systemWallpaperAuthorityBackstopsMissingVendorChangeCallback()
             throws Exception {
+        String source = hook();
         String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
-        assertTrue(scene.contains(
-                "requestWallpaperPulse(wallpaperContentState.onCandidateBoundary(generation))"));
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+
+        assertTrue(source.contains("Intent.ACTION_WALLPAPER_CHANGED"));
+        assertTrue(source.contains("WallpaperManager.getInstance"));
+        assertTrue(source.contains("getWallpaperId(WallpaperManager.FLAG_SYSTEM)"));
+        assertTrue(source.contains("addOnColorsChangedListener"));
+        assertTrue(source.contains("WallpaperChangeIdentityState"));
+        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperCandidateForAll()"));
+        assertTrue(scene.contains("static void onWallpaperCandidateForAll()"));
+        assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.attachContext"));
     }
 
     @Test public void bridgeDoesNotIntroducePollingOrDelayedFallbackApis() throws Exception {
         String source = hook();
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
         assertFalse(source.contains("postDelayed"));
-        assertFalse(source.contains("BroadcastReceiver"));
-        assertFalse(source.contains("IntentFilter"));
-        assertFalse(source.contains("ACTION_WALLPAPER_CHANGED"));
         assertFalse(source.contains("Timer"));
         assertFalse(source.contains("ScheduledExecutor"));
 
