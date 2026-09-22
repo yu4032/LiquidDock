@@ -112,7 +112,40 @@ public class ShortcutSecondaryGlassContractTest {
                         + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
     }
 
-    @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
+
+    @Test public void launcherUninstallDialogUsesScopedCrossRootGlass() throws Exception {
+        String hook = Files.readString(MAIN.resolve("LauncherUninstallDialogGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("LauncherDialogGlassCoordinator.java"));
+        String sink = Files.readString(MAIN.resolve("LauncherGlassSinkView.java"));
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String settings = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        assertTrue(hook.contains("com.miui.home.launcher.uninstall.UninstallController"));
+        assertTrue(hook.contains("\"showDialog\""));
+        assertTrue(hook.contains("\"hideAppWidthDialog\""));
+        assertTrue(hook.contains("\"mDeleteDialog\""));
+        assertTrue(hook.contains("\"mRemoveDialog\""));
+        assertFalse(hook.contains("android.app.AlertDialog"));
+        assertFalse(hook.contains("Dialog.class"));
+        assertTrue(coordinator.contains(
+                "com.miui.home.launcher.uninstall.UninstallDialogViewContainer"));
+        assertTrue(coordinator.contains("LauncherGlassSessionRegistry.acquire(authorityAnchor"));
+        assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
+        assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
+        assertTrue(coordinator.contains("material.setBackground(null)"));
+        assertTrue(coordinator.contains("material.setBackground(binding.originalBackground)"));
+        assertFalse(coordinator.contains("postDelayed("));
+        assertTrue(sink.contains("void runWhenFirstFramePresented(Runnable listener)"));
+        assertTrue(sink.contains("public void onSurfaceTextureUpdated(SurfaceTexture surface)"));
+        assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
+        assertTrue(schema.contains("\"liquid_uninstall_dialog_glass\", true, true, true"));
+        assertTrue(settings.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
+        assertTrue(settings.contains("桌面卸载弹窗玻璃背景"));
+    }
+
+@Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String controller = Files.readString(MAIN.resolve("ShortcutMenuDarkModeController.java"));
 
