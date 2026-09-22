@@ -134,8 +134,8 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(scene.contains("vendorRecentsWallpaperSettlePending = false;"));
         assertTrue(scene.contains(
                 "recents wallpaper presentation superseded by new content generation"));
-        assertTrue(source.indexOf("LauncherGlassRecentsHook.onWallpaperContentChanged()")
-                < source.indexOf("LauncherGlassSceneController.onWallpaperChangedForAll()"));
+        // Runtime ordering/ownership is exercised by typed state tests; this contract only checks
+        // that the vendor Binder bridge wires both generation-supersession participants.
     }
 
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
