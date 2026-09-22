@@ -17,6 +17,7 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String CORNER_RADIUS_RESOURCE = "desktop_mode_handle_menu_corner_radius";
 
+    private final WeakReference<ViewGroup> hostRef;
     private final WeakReference<View> targetRef;
     private final SystemUiHandleMenuGlassSession session;
     private Surface outputSurface;
@@ -24,8 +25,12 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
     private boolean disposed;
 
     private SystemUiHandleMenuGlassSinkView(
-            Context context, View target, SystemUiHandleMenuGlassSession session) {
+            Context context,
+            ViewGroup host,
+            View target,
+            SystemUiHandleMenuGlassSession session) {
         super(context);
+        hostRef = new WeakReference<>(host);
         targetRef = new WeakReference<>(target);
         this.session = session;
         setOpaque(false);
@@ -36,27 +41,33 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
         setSurfaceTextureListener(this);
     }
 
-    static SystemUiHandleMenuGlassSinkView attachInsideTarget(
-            View target, SystemUiHandleMenuGlassSession session) {
-        if (!(target instanceof ViewGroup) || session == null) return null;
-        ViewGroup group = (ViewGroup) target;
+    static SystemUiHandleMenuGlassSinkView attachInsideHost(
+            ViewGroup host, View target, SystemUiHandleMenuGlassSession session) {
+        if (host == null || target == null || session == null) return null;
         SystemUiHandleMenuGlassSinkView sink =
-                new SystemUiHandleMenuGlassSinkView(target.getContext(), target, session);
-        group.addView(sink, 0, new ViewGroup.LayoutParams(0, 0));
+                new SystemUiHandleMenuGlassSinkView(host.getContext(), host, target, session);
+        host.addView(sink, 0, new ViewGroup.LayoutParams(0, 0));
         sink.syncFromTarget();
         return sink;
     }
 
     boolean syncFromTarget() {
+        ViewGroup host = hostRef.get();
         View target = targetRef.get();
-        if (disposed || target == null || getParent() != target) return false;
-        int width = Math.max(1, target.getWidth());
-        int height = Math.max(1, target.getHeight());
-        boolean changed = getLeft() != 0 || getTop() != 0
-                || getRight() != width || getBottom() != height;
+        if (disposed || host == null || target == null || getParent() != host) return false;
+        Rect targetRect = new Rect();
+        Rect hostRect = new Rect();
+        if (!target.getGlobalVisibleRect(targetRect) || !host.getGlobalVisibleRect(hostRect)
+                || targetRect.width() <= 0 || targetRect.height() <= 0) return false;
+        int left = targetRect.left - hostRect.left;
+        int top = targetRect.top - hostRect.top;
+        int right = left + targetRect.width();
+        int bottom = top + targetRect.height();
+        boolean changed = getLeft() != left || getTop() != top
+                || getRight() != right || getBottom() != bottom;
         if (changed) {
-            // Keep layout params at 0x0 so this child never changes the vendor LinearLayout.
-            layout(0, 0, width, height);
+            // Keep layout params at 0x0 so this child never participates in vendor measurement.
+            layout(left, top, right, bottom);
         }
         float desiredAlpha = presented ? 1f : 0f;
         if (getAlpha() != desiredAlpha) {
