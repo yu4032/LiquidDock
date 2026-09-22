@@ -2,22 +2,30 @@ package com.hellovoid.liquiddock;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
-import java.util.List;
+import java.lang.reflect.Constructor;
 
 /**
  * HyperOS Launcher uninstall/remove confirmation dialog glass.
  *
- * <p>Hooks only source-verified UninstallController entry points. It deliberately does not hook
- * framework Dialog.show(), AlertDialog, or MiuiX globally.</p>
+ * <p>The stable lifecycle anchor is BaseUninstallDialog construction. DeleteDialog, RemoveDialog
+ * and SecondConfirmDialog all extend that semantic vendor class. This avoids relying on one caller
+ * such as UninstallController.showDialog(), which may be inlined or bypassed by runtime variants,
+ * while still avoiding any global Dialog/AlertDialog hook.</p>
  */
 final class LauncherUninstallDialogGlassHook {
     private static final String TAG = "[DC][LauncherUninstallDialogGlass]";
-    private static final String UNINSTALL_CONTROLLER =
-            "com.miui.home.launcher.uninstall.UninstallController";
-    private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
+    private static final String BASE_UNINSTALL_DIALOG =
+            "com.miui.home.launcher.uninstall.BaseUninstallDialog";
+    private static final String DELETE_DIALOG =
+            "com.miui.home.launcher.uninstall.DeleteDialog";
+    private static final String REMOVE_DIALOG =
+            "com.miui.home.launcher.uninstall.RemoveDialog";
+    private static final String SECOND_CONFIRM_DIALOG =
+            "com.miui.home.launcher.uninstall.SecondConfirmDialog";
     private static boolean installed;
 
     private LauncherUninstallDialogGlassHook() {}
@@ -38,38 +46,42 @@ final class LauncherUninstallDialogGlassHook {
 
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
-            HookUtil.hookMethod(
-                    classLoader,
-                    UNINSTALL_CONTROLLER,
-                    "showDialog",
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
-                        Object launcher = args.length > 0 ? args[0] : null;
-                        bindDeleteDialog(launcher, glassConfig);
+            Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
+            int hooked = 0;
+            for (Constructor<?> constructor : base.getDeclaredConstructors()) {
+                Class<?>[] parameters = constructor.getParameterTypes();
+                if (parameters.length == 0 || !Context.class.isAssignableFrom(parameters[0])) {
+                    continue;
+                }
+                HookUtil.hook(constructor, chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object result = chain.proceed(args);
+                    Object owner = chain.getThisObject();
+                    String type = owner != null ? owner.getClass().getName() : "<null>";
+                    MainHook.log(TAG + " constructor hit type=" + type
+                            + " args=" + args.length);
+                    if (!(owner instanceof Dialog) || args.length == 0
+                            || !(args[0] instanceof Activity) || !isSupportedDialog(type)) {
+                        MainHook.log(TAG + " constructor ignored type=" + type
+                                + " context=" + (args.length > 0 && args[0] != null
+                                ? args[0].getClass().getName() : "<null>"));
                         return result;
-                    },
-                    LAUNCHER,
-                    List.class);
-
-            HookUtil.hookMethod(
-                    classLoader,
-                    UNINSTALL_CONTROLLER,
-                    "hideAppWidthDialog",
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object controller = chain.getThisObject();
-                        Object result = chain.proceed(args);
-                        Object launcher = args.length > 1 ? args[1] : null;
-                        bindDialog(controller, launcher, "mRemoveDialog",
-                                "remove-dialog", glassConfig);
-                        return result;
-                    },
-                    List.class,
-                    LAUNCHER);
-
+                    }
+                    LauncherDialogGlassCoordinator.watchUninstallDialog(
+                            (Activity) args[0],
+                            (Dialog) owner,
+                            glassConfig,
+                            sourceFor(type));
+                    return result;
+                });
+                hooked++;
+            }
+            if (hooked == 0) {
+                MainHook.log(TAG + " no compatible BaseUninstallDialog constructor");
+                return false;
+            }
             installed = true;
-            MainHook.log(TAG + " hooks installed");
+            MainHook.log(TAG + " constructor hooks installed count=" + hooked);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -77,42 +89,16 @@ final class LauncherUninstallDialogGlassHook {
         }
     }
 
-    private static void bindDeleteDialog(Object launcher, LiquidDockConfig.Glass glassConfig) {
-        if (launcher == null) return;
-        HookUtil.InvocationResult<Object> controller =
-                HookUtil.tryInvoke(launcher, "getUninstallController");
-        if (!controller.succeeded()) {
-            MainHook.log(TAG + " getUninstallController unavailable: " + controller.failure());
-            return;
-        }
-        bindDialog(controller.value(), launcher, "mDeleteDialog", "delete-dialog", glassConfig);
+    private static boolean isSupportedDialog(String type) {
+        return DELETE_DIALOG.equals(type)
+                || REMOVE_DIALOG.equals(type)
+                || SECOND_CONFIRM_DIALOG.equals(type);
     }
 
-    private static void bindDialog(
-            Object controller,
-            Object launcher,
-            String fieldName,
-            String source,
-            LiquidDockConfig.Glass glassConfig) {
-        if (!(launcher instanceof Activity) || controller == null) {
-            MainHook.log(TAG + " owner unavailable source=" + source);
-            return;
-        }
-        try {
-            Object dialogObject = HookUtil.getField(controller, fieldName);
-            if (!(dialogObject instanceof Dialog)) {
-                MainHook.log(TAG + " field is not Dialog source=" + source
-                        + " field=" + fieldName);
-                return;
-            }
-            boolean bound = LauncherDialogGlassCoordinator.attachUninstallDialog(
-                    (Activity) launcher, (Dialog) dialogObject, glassConfig, source);
-            if (!bound) {
-                MainHook.log(TAG + " glass not claimed; stock material retained source=" + source);
-            }
-        } catch (Throwable error) {
-            MainHook.log(TAG + " bind failed; stock material retained source=" + source
-                    + " error=" + error);
-        }
+    private static String sourceFor(String type) {
+        if (DELETE_DIALOG.equals(type)) return "delete-dialog";
+        if (REMOVE_DIALOG.equals(type)) return "remove-dialog";
+        if (SECOND_CONFIRM_DIALOG.equals(type)) return "second-confirm-dialog";
+        return "unknown";
     }
 }
