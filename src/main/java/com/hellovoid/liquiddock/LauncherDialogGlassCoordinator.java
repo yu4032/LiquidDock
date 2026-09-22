@@ -291,6 +291,31 @@ final class LauncherDialogGlassCoordinator {
             if (binding.released || !binding.claimed) return true;
             View panel = binding.panelRef.get();
             if (panel == null || !panel.isAttachedToWindow()) return true;
+            if (binding.backgroundReplaced && binding.transparentBackground != null) {
+                Drawable current = panel.getBackground();
+                if (current != binding.transparentBackground) {
+                    // MIUIX may write its fallback Drawable again while the window animator runs.
+                    // Preserve the latest vendor object for fail-closed restoration, but keep the
+                    // replacement slot transparent for as long as our glass owns the material.
+                    binding.originalBackground = current;
+                    try {
+                        panel.setBackground(binding.transparentBackground);
+                    } catch (Throwable error) {
+                        MainHook.log(TAG + " transparent background reassert failed source="
+                                + binding.source + " error=" + error);
+                        MAIN.post(() -> releaseObserved(
+                                binding, "background-reassert-failed"));
+                        return true;
+                    }
+                }
+                // MIUIX can animate background alpha through panel.getBackground(). Reset the
+                // transparent clone every pre-draw so such writes cannot create a half-opaque
+                // fallback layer over the live glass.
+                if (binding.transparentBackground.getAlpha() != 0) {
+                    binding.transparentBackground.setAlpha(0);
+                }
+            }
+
             Boolean enabled = MiBlurBridge.getPassWindowBlurEnabled(panel);
             if (Boolean.TRUE.equals(enabled)) {
                 boolean suppressed = MiBlurBridge.setPassWindowBlurEnabled(panel, false);
