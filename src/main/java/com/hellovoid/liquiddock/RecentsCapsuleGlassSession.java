@@ -120,6 +120,17 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
     }
 
+    /**
+     * Recents visibility is a real live-source authority. Workspace coverage may have toggled the
+     * same root's SurfaceControl update flag off, so reassert continuous updates after the vendor
+     * show boundary and request a generation-fenced frame before presenting new motion.
+     */
+    void onRecentsShown() {
+        if (shuttingDown) return;
+        sourceBackend.setUpdatesEnabled(true, "recents-capsule-visible");
+        sourceBackend.requestFresh(GENERATION);
+    }
+
     void updateGeometry(GeometrySet next) {
         if (shuttingDown || next == null) return;
         GeometrySet old = geometry;

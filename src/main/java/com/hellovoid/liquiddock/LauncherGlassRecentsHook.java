@@ -38,7 +38,12 @@ final class LauncherGlassRecentsHook {
                 WALLPAPER_SETTLE.onRecentsShown();
                 LauncherGlassSceneController.setRecentsCoveredForAll(true);
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                // Workspace coverage intentionally suspends its producer. The Recents capsules are
+                // a separate live owner, so reclaim the root update flag only after vendor show
+                // handling has completed and any competing pause has already happened.
+                LauncherRecentsCapsuleGlassHook.onRecentsShown();
+                return result;
             });
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewHide", chain -> {
                 boolean workstationMode = MainHook.isWorkstationMode();

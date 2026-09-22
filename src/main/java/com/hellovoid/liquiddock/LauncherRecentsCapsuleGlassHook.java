@@ -50,6 +50,17 @@ final class LauncherRecentsCapsuleGlassHook {
         if (decorations != null) scheduleBinding(decorations);
     }
 
+    static void onRecentsShown() {
+        if (!GlassRuntimeState.isRecentsCapsuleEnabled()) return;
+        Binding binding = activeBinding;
+        if (binding != null) {
+            binding.onRecentsShown();
+            return;
+        }
+        ViewGroup decorations = lastDecorationsRef.get();
+        if (decorations != null) scheduleBinding(decorations);
+    }
+
     /**
      * findAndSetupViews runs during RecentsContainer inflation, before this subtree has a usable
      * ViewRoot/layout. Keep the stable discovery hook, but wait for real attach/layout authority
@@ -244,6 +255,10 @@ final class LauncherRecentsCapsuleGlassHook {
                 MainHook.log(TAG + " capsule local host unavailable; keeping native blur fallback");
                 session.shutdown();
             }
+        }
+
+        void onRecentsShown() {
+            if (!released && !prismalFailed) session.onRecentsShown();
         }
 
         private RecentsCapsuleGlassSinkView installSink(
