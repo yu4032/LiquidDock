@@ -560,6 +560,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> BACKGROUND_BLUR_PERCENT = integer(
                 "recents_background_blur_percent", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> DISABLE_WALLPAPER_DIMMING = bool(
+                "recents_disable_wallpaper_dimming", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
 
         private Recents() {}
     }
@@ -679,7 +682,7 @@ public final class ConfigSchema {
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET,
                 Workstation.LEGACY_ALL_APPS_HORIZONTAL_OFFSET,
                 Workstation.LEGACY_ALL_APPS_VERTICAL_OFFSET);
-        add(keys, Recents.BACKGROUND_BLUR_PERCENT);
+        add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);
     }

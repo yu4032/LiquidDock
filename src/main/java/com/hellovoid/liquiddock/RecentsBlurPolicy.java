@@ -11,4 +11,8 @@ final class RecentsBlurPolicy {
     static float scaleGestureRatio(float systemRatio, int percent) {
         return Math.max(0f, Math.min(1f, systemRatio)) * ratioFromPercent(percent);
     }
+
+    static float resolveDimming(float vendorDimming, boolean disableDimming) {
+        return disableDimming ? 0f : vendorDimming;
+    }
 }

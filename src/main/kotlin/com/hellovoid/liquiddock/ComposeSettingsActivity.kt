@@ -650,6 +650,13 @@ private fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, master
         stringResource(R.string.recents_header_summary),
     ) {
         IntSetting(prefs, recentsBlurSpec, masterEnabled)
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING,
+            "取消壁纸压暗",
+            "进入多任务时保留系统背景模糊与过渡动画，仅移除壁纸黑色压暗；重启桌面后生效",
+            masterEnabled,
+        )
     }
 }
 
