@@ -30,13 +30,13 @@ public class SystemUiHandleMenuGlassContractTest {
     @Test
     public void hookUsesVerifiedVendorLifecycleAndStablePillIds() throws Exception {
         String hook = read("SystemUiHandleMenuGlassHook.java");
-        assertTrue(hook.contains(
-                "com.android.wm.shell.windowdecor.HandleMenu$HandleMenuView"));
-        assertTrue(hook.contains("getDeclaredConstructors()"));
-        assertTrue(hook.contains("isCanonicalHandleMenuViewConstructor"));
-        assertTrue(hook.contains("chain.getThisObject()"));
-        assertTrue(hook.contains("\"rootView\""));
+        assertTrue(hook.contains("LayoutInflater.class"));
+        assertTrue(hook.contains("\"inflate\""));
+        assertTrue(hook.contains("\"desktop_mode_window_decor_handle_menu\""));
+        assertTrue(hook.contains("getResourceEntryName(resourceId)"));
         assertTrue(hook.contains("\"windowing_pill\""));
+        assertFalse(hook.contains("getDeclaredConstructors()"));
+        assertFalse(hook.contains("\"rootView\""));
         assertFalse(hook.contains("\"onAssistContentReceived\""));
         assertFalse(hook.contains("\"app_info_pill\""));
         assertFalse(hook.contains("\"more_actions_pill\""));
