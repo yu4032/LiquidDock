@@ -1,203 +1,111 @@
 package com.hellovoid.liquiddock;
 
-import android.app.WallpaperColors;
-import android.app.WallpaperManager;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 
 import java.lang.reflect.Method;
 
 /**
- * Bridges system and HyperOS wallpaper lifecycle boundaries into Workspace glass freshness.
+ * Bridges the decompiled HyperOS 4.50 DesktopWallpaperManager refresh transaction into Workspace
+ * glass freshness.
  *
- * <p>The public system wallpaper identity/change signals are the stable content authority. HyperOS
- * callbacks remain useful early/compositor boundaries, but a missing vendor callback can no longer
- * leave Workspace glass permanently bound to an old cached backdrop.</p>
+ * <p>Launcher itself treats {@code DesktopWallpaperManager.updateWallpaperInfo()} as the repeated
+ * wallpaper-change transaction entry. Its background WallpaperInfoUpdateTask rereads MIUI
+ * wallpaper metadata and then posts ColorModeRefreshTask to Workspace; that task reaches
+ * {@code notifyWallpaperColorChanged()} only when Launcher is ready to notify wallpaper-derived
+ * UI. LiquidDock mirrors those two concrete vendor boundaries instead of inferring wallpaper
+ * identity from framework IDs or generic broadcasts.</p>
  */
 final class LauncherWallpaperFreshnessHook {
     private static final String TAG = "[DC][WallpaperFreshness]";
+    private static final String DESKTOP_MANAGER_CLASS =
+            "com.miui.home.launcher.wallpaper.DesktopWallpaperManager";
     private static final String CALLBACK_CLASS =
             "com.miui.home.launcher.wallpaper.DesktopWallpaperManager$MiuiWallpaperManagerCallbackStub";
-    private static final String WORKSPACE_CLASS = "com.miui.home.launcher.Workspace";
-    private static final WallpaperChangeIdentityState CHANGE_IDENTITY =
-            new WallpaperChangeIdentityState();
 
     private static volatile Handler mainHandler;
-    private static Context applicationContext;
-    private static WallpaperManager wallpaperManager;
-    private static BroadcastReceiver wallpaperReceiver;
-    private static WallpaperManager.OnColorsChangedListener colorsListener;
     private static boolean installed;
 
     private LauncherWallpaperFreshnessHook() {}
 
     static synchronized void install(ClassLoader classLoader) {
         if (installed || classLoader == null) return;
-        installWallpaperChanged(classLoader);
-        installCandidate(classLoader);
-        installFirstFrameRendered(classLoader);
-        installDrawFrameEnd(classLoader);
+        installWallpaperUpdateTransaction(classLoader);
+        installWallpaperNotifyCompletion(classLoader);
+        // onDrawFrameEnd remains a separate Recents-return wallpaper-settle authority. The
+        // decompiled DesktopWallpaperManager callback stub intentionally leaves this method empty,
+        // so it is not used as Workspace wallpaper-content freshness authority.
+        installDrawFrameEndForRecents(classLoader);
         installed = true;
-        MainHook.log(TAG + " HyperOS wallpaper freshness hooks installed");
+        MainHook.log(TAG + " HyperOS DesktopWallpaperManager transaction hooks installed");
     }
 
     /**
-     * Called once Launcher.setupViews has a real Context. This system-level authority is deliberately
-     * separate from the optional vendor callback bridge installed above.
+     * Decompiled source fact:
+     * MiuiWallpaperManagerCallbackStub.onWallpaperChanged(...) calls updateWallpaperInfo()
+     * unconditionally. The legacy broadcast path does the same. updateWallpaperInfo() removes the
+     * previously queued WallpaperInfoUpdateTask and enqueues the latest one, so every transaction
+     * entry invalidates the previous wallpaper-content generation while duplicate rapid updates
+     * naturally coalesce at the vendor task layer.
      */
-    static synchronized void attachContext(Context context) {
-        if (context == null) return;
-        Context app = context.getApplicationContext();
-        if (app == null) app = context;
-
-        if (applicationContext != app || wallpaperManager == null) {
-            applicationContext = app;
-            try {
-                wallpaperManager = WallpaperManager.getInstance(app);
-                CHANGE_IDENTITY.initialize(readSystemWallpaperId(wallpaperManager));
-            } catch (Throwable error) {
-                wallpaperManager = null;
-                MainHook.log(TAG + " WallpaperManager authority unavailable: " + error);
-            }
-        }
-
-        if (wallpaperReceiver == null) {
-            try {
-                BroadcastReceiver receiver = new BroadcastReceiver() {
-                    @Override public void onReceive(Context receiverContext, Intent intent) {
-                        if (intent == null
-                                || !Intent.ACTION_WALLPAPER_CHANGED.equals(intent.getAction())) {
-                            return;
-                        }
-                        dispatchToMain(() ->
-                                dispatchWallpaperBoundary("system-broadcast", true));
-                    }
-                };
-                app.registerReceiver(
-                        receiver,
-                        new IntentFilter(Intent.ACTION_WALLPAPER_CHANGED),
-                        Context.RECEIVER_NOT_EXPORTED);
-                wallpaperReceiver = receiver;
-                MainHook.log(TAG + " system wallpaper-change authority registered");
-            } catch (Throwable error) {
-                MainHook.log(TAG + " system wallpaper-change authority unavailable: " + error);
-            }
-        }
-
-        if (colorsListener == null && wallpaperManager != null) {
-            try {
-                WallpaperManager.OnColorsChangedListener listener = (colors, which) -> {
-                    if ((which & WallpaperManager.FLAG_SYSTEM) == 0) return;
-                    dispatchToMain(() -> dispatchWallpaperBoundary("system-colors", true));
-                };
-                wallpaperManager.addOnColorsChangedListener(listener, mainHandler());
-                colorsListener = listener;
-                MainHook.log(TAG + " system wallpaper-colors authority registered");
-            } catch (Throwable error) {
-                MainHook.log(TAG + " system wallpaper-colors authority unavailable: " + error);
-            }
-        }
-    }
-
-    private static void installWallpaperChanged(ClassLoader classLoader) {
+    private static void installWallpaperUpdateTransaction(ClassLoader classLoader) {
         try {
-            Class<?> callback = Class.forName(CALLBACK_CLASS, false, classLoader);
-            Method method = callback.getDeclaredMethod(
-                    "onWallpaperChanged", WallpaperColors.class, String.class, int.class);
+            Class<?> manager = Class.forName(DESKTOP_MANAGER_CLASS, false, classLoader);
+            Method method = manager.getDeclaredMethod("updateWallpaperInfo");
             HookUtil.hook(method, chain -> {
-                // The vendor callback can arrive before WallpaperManager publishes the new ID.
-                // Identity coalescing therefore treats it as an early boundary; the later public
-                // broadcast/colors callback remains sufficient even when this hook never fires.
-                dispatchToMain(() -> dispatchWallpaperBoundary("vendor-callback", false));
+                dispatchToMain(() -> {
+                    LauncherGlassSceneController.onWallpaperChangedForAll();
+                    MainHook.log(TAG + " vendor updateWallpaperInfo -> content generation");
+                });
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
-            MainHook.log(TAG + " onWallpaperChanged installed");
+            MainHook.log(TAG + " DesktopWallpaperManager.updateWallpaperInfo installed");
         } catch (Throwable error) {
-            MainHook.log(TAG + " onWallpaperChanged unavailable: " + error);
+            MainHook.log(TAG + " DesktopWallpaperManager.updateWallpaperInfo unavailable: " + error);
         }
     }
 
-    private static void installCandidate(ClassLoader classLoader) {
+    /**
+     * Decompiled source fact:
+     * WallpaperInfoUpdateTask.run() rereads MIUI wallpaper colors/info, then calls
+     * DesktopWallpaperManager.onDarkModeChange(); ColorModeRefreshTask runs on Workspace and, once
+     * Launcher is not loading, calls notifyWallpaperColorChanged(). Hook after that method returns
+     * so the vendor listener fan-out has completed before requesting the fresh PassBlur frame.
+     *
+     * A pure dark-mode refresh can also call notifyWallpaperColorChanged(), but without a preceding
+     * updateWallpaperInfo() the wallpaper state machine has no pending generation and coalesces it.
+     */
+    private static void installWallpaperNotifyCompletion(ClassLoader classLoader) {
         try {
-            Class<?> workspace = Class.forName(WORKSPACE_CLASS, false, classLoader);
-            Method method = workspace.getDeclaredMethod("onWallpaperColorChanged");
+            Class<?> manager = Class.forName(DESKTOP_MANAGER_CLASS, false, classLoader);
+            Method method = manager.getDeclaredMethod("notifyWallpaperColorChanged");
             HookUtil.hook(method, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                Object owner = chain.getThisObject();
-                if (owner instanceof View) {
-                    View workspaceView = (View) owner;
-                    dispatchToMain(() ->
-                            LauncherGlassSceneController.onWallpaperCandidate(workspaceView));
-                }
+                dispatchToMain(() -> {
+                    LauncherGlassSceneController.onWallpaperCandidateForAll();
+                    MainHook.log(TAG + " vendor notifyWallpaperColorChanged -> fresh candidate");
+                });
                 return result;
             });
-            MainHook.log(TAG + " Workspace.onWallpaperColorChanged installed");
+            MainHook.log(TAG + " DesktopWallpaperManager.notifyWallpaperColorChanged installed");
         } catch (Throwable error) {
-            MainHook.log(TAG + " Workspace.onWallpaperColorChanged unavailable: " + error);
+            MainHook.log(TAG + " DesktopWallpaperManager.notifyWallpaperColorChanged unavailable: "
+                    + error);
         }
     }
 
-    private static void installFirstFrameRendered(ClassLoader classLoader) {
-        try {
-            Class<?> callback = Class.forName(CALLBACK_CLASS, false, classLoader);
-            Method method = callback.getDeclaredMethod("onWallpaperFirstFrameRendered", int.class);
-            HookUtil.hook(method, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                dispatchToMain(LauncherGlassSceneController::onWallpaperAuthoritativeForAll);
-                return result;
-            });
-            MainHook.log(TAG + " onWallpaperFirstFrameRendered installed");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " onWallpaperFirstFrameRendered unavailable: " + error);
-        }
-    }
-
-    private static void installDrawFrameEnd(ClassLoader classLoader) {
+    private static void installDrawFrameEndForRecents(ClassLoader classLoader) {
         try {
             Class<?> callback = Class.forName(CALLBACK_CLASS, false, classLoader);
             Method method = callback.getDeclaredMethod("onDrawFrameEnd");
             HookUtil.hook(method, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                dispatchToMain(() -> {
-                    LauncherGlassRecentsHook.onSystemWallpaperDrawFrameEnd();
-                    LauncherGlassSceneController.onWallpaperAuthoritativeForAll();
-                });
+                dispatchToMain(LauncherGlassRecentsHook::onSystemWallpaperDrawFrameEnd);
                 return result;
             });
-            MainHook.log(TAG + " onDrawFrameEnd installed");
+            MainHook.log(TAG + " onDrawFrameEnd installed for Recents settle only");
         } catch (Throwable error) {
             MainHook.log(TAG + " onDrawFrameEnd unavailable: " + error);
-        }
-    }
-
-    private static void dispatchWallpaperBoundary(String authority, boolean candidateReady) {
-        WallpaperManager manager = wallpaperManager;
-        int wallpaperId = readSystemWallpaperId(manager);
-        boolean advanced = CHANGE_IDENTITY.shouldAdvance(wallpaperId);
-        if (advanced) {
-            LauncherGlassSceneController.onWallpaperChangedForAll();
-        }
-        if (candidateReady) {
-            LauncherGlassSceneController.onWallpaperCandidateForAll();
-        }
-        MainHook.log(TAG + " boundary=" + authority
-                + " wallpaperId=" + wallpaperId
-                + " advanced=" + advanced
-                + " candidate=" + candidateReady);
-    }
-
-    private static int readSystemWallpaperId(WallpaperManager manager) {
-        if (manager == null) return -1;
-        try {
-            return manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
-        } catch (Throwable error) {
-            MainHook.log(TAG + " system wallpaper ID unavailable: " + error);
-            return -1;
         }
     }
 

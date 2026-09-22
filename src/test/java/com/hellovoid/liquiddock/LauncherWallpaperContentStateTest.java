@@ -25,6 +25,26 @@ public class LauncherWallpaperContentStateTest {
         assertFalse(candidate.requested());
     }
 
+
+    @Test public void secondVendorRefreshTransactionCanRequestFreshAfterFirstCandidateFrame() {
+        LauncherWallpaperContentState state = new LauncherWallpaperContentState();
+
+        long firstGeneration = state.onWallpaperChanged();
+        LauncherWallpaperContentState.Pulse first =
+                state.onCandidateBoundary(firstGeneration);
+        state.onCandidateFrameConsumed(firstGeneration);
+
+        long secondGeneration = state.onWallpaperChanged();
+        LauncherWallpaperContentState.Pulse second =
+                state.onCandidateBoundary(secondGeneration);
+
+        assertTrue(first.requested());
+        assertTrue(second.requested());
+        assertTrue(secondGeneration > firstGeneration);
+        assertEquals(secondGeneration, second.generation);
+        assertFalse(second.authoritative);
+    }
+
     @Test public void candidateBoundaryRequestsAtMostOnePulsePerGeneration() {
         LauncherWallpaperContentState state = new LauncherWallpaperContentState();
         long generation = state.onWallpaperChanged();
