@@ -122,21 +122,38 @@ public class ShortcutSecondaryGlassContractTest {
         String settings = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
-        assertTrue(hook.contains("com.miui.home.launcher.uninstall.UninstallController"));
-        assertTrue(hook.contains("\"showDialog\""));
-        assertTrue(hook.contains("\"hideAppWidthDialog\""));
-        assertTrue(hook.contains("\"mDeleteDialog\""));
-        assertTrue(hook.contains("\"mRemoveDialog\""));
+        // Canonical HyperOS 4.50: Delete/Remove/SecondConfirm all extend BaseUninstallDialog.
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.BaseUninstallDialog"));
+        assertTrue(hook.contains("base.getDeclaredConstructors()"));
+        assertTrue(hook.contains("HookUtil.hook(constructor"));
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.DeleteDialog"));
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.RemoveDialog"));
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.SecondConfirmDialog"));
+        assertFalse(hook.contains("\"showDialog\""));
+        assertFalse(hook.contains("\"mDeleteDialog\""));
+        assertFalse(hook.contains("\"mRemoveDialog\""));
         assertFalse(hook.contains("android.app.AlertDialog"));
-        assertFalse(hook.contains("Dialog.class"));
+
+        // UninstallDialogViewContainer is semantic scope proof only; MIUIX parentPanel owns bg.
         assertTrue(coordinator.contains(
                 "com.miui.home.launcher.uninstall.UninstallDialogViewContainer"));
+        assertTrue(coordinator.contains(
+                "miuix.appcompat.internal.widget.DialogParentPanel2"));
+        assertTrue(coordinator.contains("DIALOG_PARENT_PANEL_ID = \"parentPanel\""));
+        assertTrue(coordinator.contains("findExactClass(decor, UNINSTALL_CONTENT)"));
+        assertTrue(coordinator.contains("findExactClass(decor, DIALOG_PARENT_PANEL)"));
         assertTrue(coordinator.contains("LauncherGlassSessionRegistry.acquire(authorityAnchor"));
         assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
         assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
-        assertTrue(coordinator.contains("material.setBackground(null)"));
-        assertTrue(coordinator.contains("material.setBackground(binding.originalBackground)"));
+        assertTrue(coordinator.contains("panel.setBackground(null)"));
+        assertTrue(coordinator.contains("panel.setBackground(binding.originalBackground)"));
+        assertTrue(coordinator.contains("OnGlobalLayoutListener"));
         assertFalse(coordinator.contains("postDelayed("));
+
         assertTrue(sink.contains("void runWhenFirstFramePresented(Runnable listener)"));
         assertTrue(sink.contains("public void onSurfaceTextureUpdated(SurfaceTexture surface)"));
         assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
@@ -145,7 +162,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("桌面卸载弹窗玻璃背景"));
     }
 
-@Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
+    @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String controller = Files.readString(MAIN.resolve("ShortcutMenuDarkModeController.java"));
 
