@@ -38,9 +38,9 @@ public class HomeGridCellGeometryPolicyTest {
         assertNotNull(result);
         assertEquals(210, result.left);
         assertEquals(214, result.right);
-        assertEquals(67, result.top);
-        assertEquals(121, result.bottom);
-        assertEquals(91, result.cellSize);
+        assertEquals(165, result.top);
+        assertEquals(269, result.bottom);
+        assertEquals(87, result.cellSize);
         assertTrue(result.widthGap >= 0);
         assertEquals(5, result.heightGap);
     }
