@@ -98,6 +98,26 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(session.contains("g.cropBottom"));
     }
 
+    @Test public void recentsShowReclaimsContinuousSourceAfterWorkspaceCoverage() throws Exception {
+        String recents = read("LauncherGlassRecentsHook.java");
+        String capsule = read("LauncherRecentsCapsuleGlassHook.java");
+        String session = read("RecentsCapsuleGlassSession.java");
+        String bridge = read("Miuix307PassBlurBridge.java");
+
+        assertTrue(recents.contains("LauncherRecentsCapsuleGlassHook.onRecentsShown()"));
+        assertTrue(capsule.contains("binding.onRecentsShown()"));
+        assertTrue(session.contains(
+                "sourceBackend.setUpdatesEnabled(true, \"recents-capsule-visible\")"));
+        assertTrue(session.contains("sourceBackend.requestFresh(GENERATION)"));
+        assertTrue(bridge.contains("binding.domain == PassBlurDomain.RECENTS_CAPSULE"));
+
+        int proceed = recents.indexOf(
+                "Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));");
+        int reclaim = recents.indexOf("LauncherRecentsCapsuleGlassHook.onRecentsShown()");
+        assertTrue("capsule authority must be reclaimed after vendor show handling",
+                proceed >= 0 && reclaim > proceed);
+    }
+
     @Test public void nativeBlurStaysUntilPrismalActuallyPresents() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         assertTrue(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
