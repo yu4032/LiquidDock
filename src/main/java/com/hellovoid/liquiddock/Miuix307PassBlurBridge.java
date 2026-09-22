@@ -199,10 +199,7 @@ final class Miuix307PassBlurBridge {
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
                 || binding.domain == PassBlurDomain.GBOARD_FLOATING
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
-                || binding.domain == PassBlurDomain.RECENTS_CAPSULE
-                || (binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
-                && WorkstationProducerPolicy.shouldForceWorkspaceResume(
-                        MainHook.isWorkstationMode()));
+                || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
         setUpdatesEnabled(binding, true, force);
     }
 
