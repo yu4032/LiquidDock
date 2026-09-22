@@ -29,6 +29,13 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(source.contains("onWallpaperColorChanged"));
     }
 
+    @Test public void wallpaperChangeItselfStartsCacheRefreshWithoutColorCallbackDependency()
+            throws Exception {
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        assertTrue(scene.contains(
+                "requestWallpaperPulse(wallpaperContentState.onCandidateBoundary(generation))"));
+    }
+
     @Test public void bridgeDoesNotIntroducePollingOrDelayedFallbackApis() throws Exception {
         String source = hook();
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
