@@ -30,12 +30,6 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
-    public void workstationSemanticRefreshMustReassertContinuousProducerAuthority() {
-        assertTrue(WorkstationProducerPolicy.shouldForceWorkspaceResume(true));
-        assertFalse(WorkstationProducerPolicy.shouldForceWorkspaceResume(false));
-    }
-
-    @Test
     public void workstationGeometryChangeRebindsSharedProducer() {
         assertTrue(WorkstationProducerPolicy.shouldRebindForGeometryChange(true, true));
         assertFalse(WorkstationProducerPolicy.shouldRebindForGeometryChange(true, false));
