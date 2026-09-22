@@ -241,6 +241,18 @@ final class LauncherGlassRecentsHook {
         }
     }
 
+    /**
+     * A new wallpaper content generation supersedes any Recents settle authority that belongs to
+     * the previous wallpaper. Keeping that old serial pending would make the new cache-ready
+     * generation wait for an animation completion which can no longer validate its pixels.
+     */
+    static void onWallpaperContentChanged() {
+        long serial = WALLPAPER_SETTLE.pendingSerial();
+        if (serial > 0L) {
+            cancelWallpaperSettle(serial, "wallpaper-content-generation-changed");
+        }
+    }
+
     /** Called by the existing typed MIUI wallpaper callback bridge on vendor onDrawFrameEnd(). */
     static void onSystemWallpaperDrawFrameEnd() {
         long serial;
