@@ -946,7 +946,7 @@ internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun BooleanSetting(
+internal fun BooleanSetting(
     prefs: SharedPreferences, config: ConfigKey<Boolean>, title: String, summary: String? = null,
     enabled: Boolean = true, default: Boolean = config.uiDefault(), onChanged: (Boolean) -> Unit = {},
 ) {
