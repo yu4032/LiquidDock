@@ -31,11 +31,13 @@ public class SystemUiHandleMenuGlassContractTest {
     public void hookUsesVerifiedVendorLifecycleAndStablePillIds() throws Exception {
         String hook = read("SystemUiHandleMenuGlassHook.java");
         assertTrue(hook.contains(
-                "com.android.wm.shell.windowdecor.DesktopModeWindowDecoration"));
-        assertTrue(hook.contains("\"onAssistContentReceived\""));
-        assertTrue(hook.contains("AssistContent.class"));
-        assertTrue(hook.contains("\"closeHandleMenu\""));
+                "com.android.wm.shell.windowdecor.HandleMenu$HandleMenuView"));
+        assertTrue(hook.contains("getDeclaredConstructors()"));
+        assertTrue(hook.contains("isCanonicalHandleMenuViewConstructor"));
+        assertTrue(hook.contains("chain.getThisObject()"));
+        assertTrue(hook.contains("\"rootView\""));
         assertTrue(hook.contains("\"windowing_pill\""));
+        assertFalse(hook.contains("\"onAssistContentReceived\""));
         assertFalse(hook.contains("\"app_info_pill\""));
         assertFalse(hook.contains("\"more_actions_pill\""));
         assertFalse(hook.contains("\"open_in_app_or_browser_pill\""));
