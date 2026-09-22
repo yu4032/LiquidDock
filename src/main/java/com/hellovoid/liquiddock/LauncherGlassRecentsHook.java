@@ -57,7 +57,13 @@ final class LauncherGlassRecentsHook {
 
                 // Arm before vendor hide handling. Launcher can start the wallpaper HOME spring
                 // from inside onRecentViewHide(), so arming afterwards can miss the real start.
+                final long supersededSerial = WALLPAPER_SETTLE.pendingSerial();
                 final long serial = WALLPAPER_SETTLE.onReturnStarted();
+                if (supersededSerial > 0L) {
+                    discardWallpaperAuthorities(supersededSerial);
+                    MainHook.log(TAG + " Recents wallpaper return superseded oldSerial="
+                            + supersededSerial + " newSerial=" + serial);
+                }
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(true);
 
                 Object result;
@@ -162,6 +168,8 @@ final class LauncherGlassRecentsHook {
                             synchronized (LOCAL_SPRING_SERIALS) {
                                 LOCAL_SPRING_SERIALS.put(chain.getThisObject(), serial);
                             }
+                            MainHook.log(TAG + " Recents wallpaper authority=local-spring serial="
+                                    + serial);
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
@@ -212,6 +220,10 @@ final class LauncherGlassRecentsHook {
                         if (armed && !WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
                             rollbackSystemDrawEnd(serial);
                             armed = false;
+                        }
+                        if (armed) {
+                            MainHook.log(TAG + " Recents wallpaper authority=system-draw-end serial="
+                                    + serial);
                         }
                         try {
                             return chain.proceed(chain.getArgs().toArray(new Object[0]));
