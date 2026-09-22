@@ -66,7 +66,12 @@ public class MiuiSearchboxGlassContractTest {
         assertTrue(view.contains("Stable full-screen"));
 
         // Geometry must follow the current animated Searchbox position while backdrop stays fixed.
-        assertTrue(session.contains("MiuiSearchboxGlassGeometry.capture(\n                sourceRoot, root, cornerRadius)"));
+        assertTrue(session.contains("MiuiSearchboxGlassGeometry.capture(sourceRoot, root, cornerRadius)")
+                || session.contains("MiuiSearchboxGlassGeometry.capture(\n                    sourceRoot, root, cornerRadius)"));
+        assertTrue(session.contains("domain == PassBlurDomain.LOCKSCREEN_CLOCK"));
+        assertTrue(session.contains(": PassBlurBindRequest.miuiSearchbox(sourceRoot)"));
+        assertTrue(session.contains("glyphMaskSource != null"));
+        assertTrue(session.contains("else {\n            next = MiuiSearchboxGlassGeometry.capture"));
         assertFalse(geometry.contains("cumulativeTranslation("));
         assertFalse(geometry.contains("settledCoordinate("));
 

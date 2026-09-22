@@ -1,7 +1,13 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Point;
+import android.graphics.RectF;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.TextView;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -23,7 +29,18 @@ final class MiBlurBridge {
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
     private static final Method SET_MI_BACKGROUND_BLEND_COLORS;
     private static final Method CLEAR_MI_BACKGROUND_BLEND_COLOR;
+    private static final Method CHOOSE_BACKGROUND_BLUR_CONTAINER;
     private static final boolean PASS_BLUR_AVAILABLE;
+
+    // HyperOS 3 native glass material path used by lockscreen clock glyphs.
+    private static final Method SET_MI_GLASS_BLUR_RADIUS;
+    private static final Method SET_MI_VIEW_MATERIAL_TYPE;
+    private static final Method SET_MI_GLASS;
+    private static final Method SET_MI_CUSTOM_SURFACE_COLOR_TYPE;
+    private static final Method SET_MI_GLASS_CLIP;
+    private static final Method DISABLE_MI_BACKGROUND_CONTAIN_BELOW;
+    private static final Method SET_PAINT_GLASS_EFFECT;
+    private static final boolean GLASS_MATERIAL_AVAILABLE;
 
     static volatile boolean liquidGlassActive;
 
@@ -52,6 +69,7 @@ final class MiBlurBridge {
         Method backgroundRadius = null;
         Method backgroundBlendColors = null;
         Method clearBackgroundBlendColor = null;
+        Method chooseBackgroundBlurContainer = null;
         boolean passAvailable = false;
         try {
             passEnabled = View.class.getMethod("setPassWindowBlurEnabled", boolean.class);
@@ -61,6 +79,8 @@ final class MiBlurBridge {
             backgroundBlendColors = View.class.getMethod(
                     "setMiBackgroundBlendColors", ArrayList.class);
             clearBackgroundBlendColor = View.class.getMethod("clearMiBackgroundBlendColor");
+            chooseBackgroundBlurContainer = View.class.getMethod(
+                    "chooseBackgroundBlurContainer", View.class);
             passAvailable = true;
         } catch (Throwable ignored) {
             // Some older builds expose only self blur. MiuiX caller will fall back cleanly.
@@ -71,10 +91,52 @@ final class MiBlurBridge {
         SET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadius;
         SET_MI_BACKGROUND_BLEND_COLORS = backgroundBlendColors;
         CLEAR_MI_BACKGROUND_BLEND_COLOR = clearBackgroundBlendColor;
+        CHOOSE_BACKGROUND_BLUR_CONTAINER = chooseBackgroundBlurContainer;
         PASS_BLUR_AVAILABLE = passAvailable;
+
+        // Resolve Glass APIs independently. HyperOS exposes some of these extensions only on
+        // selected framework builds; one optional helper must never disable the entire material.
+        Method glassBlurRadius = publicMethodOrNull(
+                View.class, "setMiGlassBlurRadius", int.class, int.class);
+        Method viewMaterialType = publicMethodOrNull(
+                View.class, "setMiViewMaterialType", int.class);
+        Method glass = publicMethodOrNull(View.class, "setMiGlass", float[].class);
+        Method customSurfaceColorType = publicMethodOrNull(
+                View.class, "setMiCustomSurfaceColorType", int.class);
+        Method glassClip = publicMethodOrNull(
+                View.class, "setMiGlassClip",
+                float.class, float.class, float.class, float.class);
+        Method disableContainBelow = publicMethodOrNull(
+                View.class, "disableMiBackgroundContainBelow", boolean.class);
+        Method paintGlassEffect = publicMethodOrNull(
+                Paint.class, "setGlassEffect", boolean.class);
+
+        SET_MI_GLASS_BLUR_RADIUS = glassBlurRadius;
+        SET_MI_VIEW_MATERIAL_TYPE = viewMaterialType;
+        SET_MI_GLASS = glass;
+        SET_MI_CUSTOM_SURFACE_COLOR_TYPE = customSurfaceColorType;
+        SET_MI_GLASS_CLIP = glassClip;
+        DISABLE_MI_BACKGROUND_CONTAIN_BELOW = disableContainBelow;
+        SET_PAINT_GLASS_EFFECT = paintGlassEffect;
+        GLASS_MATERIAL_AVAILABLE = passAvailable
+                && glassBlurRadius != null
+                && viewMaterialType != null
+                && glass != null
+                && customSurfaceColorType != null
+                && glassClip != null
+                && paintGlassEffect != null;
     }
 
     private MiBlurBridge() {}
+
+    private static Method publicMethodOrNull(
+            Class<?> owner, String name, Class<?>... parameterTypes) {
+        try {
+            return owner.getMethod(name, parameterTypes);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
 
     static boolean isAvailable() {
         return LEGACY_AVAILABLE;
@@ -165,6 +227,184 @@ final class MiBlurBridge {
             MainHook.log("[DC] pass window blur failed: " + e);
             return false;
         }
+    }
+
+    /**
+     * Apply the same container protocol used by SystemUI's native advanced clock material.
+     * The caller owns scene/clock semantics; this method only maps LiquidDock appearance into
+     * stable MIUI View material APIs.
+     */
+    static boolean applyClockMaterialContainer(View view, int radiusPx) {
+        if (!GLASS_MATERIAL_AVAILABLE || view == null) return false;
+        int safeRadius = Math.max(0, Math.min(400, radiusPx));
+        try {
+            Object enabled = SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
+            if (enabled instanceof Boolean && !((Boolean) enabled)) return false;
+
+            // Decompiled HyperOS 3 MiuiBlurUtils#setGlassBlurContainer:
+            // pass-window owner + background mode + dedicated glass radius. This is deliberately
+            // not setMiBackgroundBlurRadius(), which is the ordinary blur-mix material.
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1);
+            SET_MI_GLASS_BLUR_RADIUS.invoke(view, safeRadius, safeRadius);
+            if (DISABLE_MI_BACKGROUND_CONTAIN_BELOW != null) {
+                DISABLE_MI_BACKGROUND_CONTAIN_BELOW.invoke(view, true);
+            }
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native glass container failed: " + error);
+            return false;
+        }
+    }
+
+    /** Bind a native clock material member to the exact backdrop container chosen by SystemUI. */
+    static boolean chooseClockBackgroundBlurContainer(View member, View container) {
+        if (!PASS_BLUR_AVAILABLE || member == null || container == null
+                || CHOOSE_BACKGROUND_BLUR_CONTAINER == null) return false;
+        try {
+            CHOOSE_BACKGROUND_BLUR_CONTAINER.invoke(member, container);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native clock member/container bind failed: " + error);
+            return false;
+        }
+    }
+
+    /**
+     * Turn the original clock glyph View itself into the MIUI blur member. No overlay View,
+     * bitmap mask, TextureView, Surface or EGL renderer is involved.
+     */
+    static boolean applyClockMaterialMember(
+            View view, int tintR, int tintG, int tintB, int tintAlpha) {
+        if (!GLASS_MATERIAL_AVAILABLE || view == null) return false;
+        try {
+            int a = Math.max(0, Math.min(255, tintAlpha));
+            int r = Math.max(0, Math.min(255, tintR));
+            int g = Math.max(0, Math.min(255, tintG));
+            int b = Math.max(0, Math.min(255, tintB));
+            int tint = android.graphics.Color.argb(a, r, g, b);
+
+            // Native TimeView.kt glassData (42 floats). Keep the compositor/refraction/highlight
+            // profile identical to HyperOS and only map LiquidDock's existing tint controls.
+            float[] glassData = nativeClockGlassData(r, g, b, a);
+
+            // Decompiled MiuiBlurUtils#setGlassEffectMethod.
+            SET_MI_VIEW_MATERIAL_TYPE.invoke(view, 1);
+            SET_MI_GLASS.invoke(view, (Object) glassData);
+            SET_MI_VIEW_BLUR_MODE.invoke(view, 3);
+            SET_MI_CUSTOM_SURFACE_COLOR_TYPE.invoke(view, 16);
+
+            // Native TimeView expands the glyph glass clip by 50 px. MiuiTextGlassView is a
+            // TextView rather than TimeView, so use its measured local bounds as the safe clip.
+            float right = Math.max(1, view.getWidth()) + 50f;
+            float bottom = Math.max(1, view.getHeight()) + 50f;
+            SET_MI_GLASS_CLIP.invoke(view, -50f, -50f, right, bottom);
+
+            // TimeView#handleParams enables the hidden glass raster path on its Paint before
+            // drawPath(). MiuiTextGlassView draws with the TextView paint, so mirror that state.
+            if (view instanceof TextView) {
+                Paint paint = ((TextView) view).getPaint();
+                SET_PAINT_GLASS_EFFECT.invoke(paint, true);
+                paint.setStrokeWidth(glassData[19]);
+                paint.setStrokeMiter(glassData[20]);
+            }
+
+            // ClockEffectUtils still applies member blend colors for both blur-mix and glass.
+            ArrayList<Point> blend = new ArrayList<>();
+            blend.add(new Point(tint, 101));
+            blend.add(new Point(android.graphics.Color.argb(0, 0, 0, 0), 103));
+            SET_MI_BACKGROUND_BLEND_COLORS.invoke(view, blend);
+            view.invalidate();
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native glass member failed: " + error);
+            return false;
+        }
+    }
+
+    private static float[] nativeClockGlassData(int r, int g, int b, int a) {
+        float[] data = new float[]{
+                0.05f, 0.35f, 0.5f, 0.55f, 1.0f, 2.0f, 0.3f, 0.0f, 0.0f, 1.0f,
+                0.05f, 1.0f, 1.0f, 1.0f, 0.4f, 0.8f, 0.0f, 1.1f, 1.0f, 30.0f,
+                2.0f, 200.0f, 400.0f, 0.3f, 2.0f, -2.0f, 2.0f, -1.0f, 6.0f, 3.0f,
+                0.3f, 1.1764705f, 1.33f, 1.0f, 1.0f, 1.0f, 0.0f, 0.8f, 0.82f,
+                0.0f, 0.0f, 0.0f
+        };
+        data[11] = r / 255f;
+        data[12] = g / 255f;
+        data[13] = b / 255f;
+        float alpha = a / 255f;
+        data[14] = alpha;
+        data[16] = alpha;
+        return data;
+    }
+
+    static boolean drawClockGlassText(TextView view, Canvas canvas) {
+        if (!GLASS_MATERIAL_AVAILABLE || view == null || canvas == null) return false;
+        CharSequence value = view.getText();
+        if (value == null || value.length() == 0) return false;
+        try {
+            String text = value.toString();
+            Paint paint = view.getPaint();
+            SET_PAINT_GLASS_EFFECT.invoke(paint, true);
+            paint.setColor(view.getCurrentTextColor());
+
+            float textWidth = paint.measureText(text);
+            int absoluteGravity = Gravity.getAbsoluteGravity(
+                    view.getGravity(), view.getLayoutDirection());
+            int horizontal = absoluteGravity & Gravity.HORIZONTAL_GRAVITY_MASK;
+            float contentLeft = view.getCompoundPaddingLeft();
+            float contentRight = view.getWidth() - view.getCompoundPaddingRight();
+            float x;
+            if (horizontal == Gravity.RIGHT) {
+                x = contentRight - textWidth;
+            } else if (horizontal == Gravity.CENTER_HORIZONTAL) {
+                x = contentLeft + Math.max(0f, (contentRight - contentLeft - textWidth) * 0.5f);
+            } else {
+                x = contentLeft;
+            }
+            float baseline = view.getBaseline();
+
+            Path path = new Path();
+            paint.getTextPath(text, 0, text.length(), x, baseline, path);
+            RectF bounds = new RectF();
+            path.computeBounds(bounds, true);
+            if (bounds.isEmpty()) return false;
+
+            // HyperOS AllInOne.TimeView expands the native Glass clip by exactly 50 px.
+            SET_MI_GLASS_CLIP.invoke(
+                    view,
+                    bounds.left - 50f,
+                    bounds.top - 50f,
+                    bounds.right + 50f,
+                    bounds.bottom + 50f);
+            canvas.drawPath(path, paint);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][LockScreenClockGlass] native path draw failed: " + error);
+            return false;
+        }
+    }
+
+    static void clearClockGlassContainer(View view) {
+        if (!GLASS_MATERIAL_AVAILABLE || view == null) return;
+        try { SET_MI_GLASS_BLUR_RADIUS.invoke(view, 0, 0); } catch (Throwable ignored) {}
+        try { SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 0); } catch (Throwable ignored) {}
+        try { SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, false); } catch (Throwable ignored) {}
+    }
+
+    static void clearClockGlassMember(View view) {
+        if (!GLASS_MATERIAL_AVAILABLE || view == null) return;
+        try { SET_MI_VIEW_MATERIAL_TYPE.invoke(view, 0); } catch (Throwable ignored) {}
+        try { SET_MI_GLASS.invoke(view, (Object) new float[42]); } catch (Throwable ignored) {}
+        try { SET_MI_VIEW_BLUR_MODE.invoke(view, 0); } catch (Throwable ignored) {}
+        try { SET_MI_GLASS_BLUR_RADIUS.invoke(view, 0, 0); } catch (Throwable ignored) {}
+        try { SET_MI_CUSTOM_SURFACE_COLOR_TYPE.invoke(view, 4); } catch (Throwable ignored) {}
+        if (view instanceof TextView) {
+            try { SET_PAINT_GLASS_EFFECT.invoke(((TextView) view).getPaint(), false); }
+            catch (Throwable ignored) {}
+        }
+        try { CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view); } catch (Throwable ignored) {}
+        try { view.invalidate(); } catch (Throwable ignored) {}
     }
 
     static void clearPassWindowBlur(View view) {

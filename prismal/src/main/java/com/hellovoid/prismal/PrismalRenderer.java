@@ -20,6 +20,17 @@ import java.util.Map;
  * rendered glass. It has no dependency on View, SurfaceTexture, OES, Dock, Xposed, HyperOS, Context, or Resources.</p>
  */
 public final class PrismalRenderer implements AutoCloseable {
+    private static final class MaskShape {
+        final int sdfTexture;
+        final float[] rootPxToUv;
+        final float sdfRangePx;
+
+        MaskShape(int sdfTexture, float[] rootPxToUv, float sdfRangePx) {
+            this.sdfTexture = sdfTexture;
+            this.rootPxToUv = rootPxToUv;
+            this.sdfRangePx = sdfRangePx;
+        }
+    }
     private static final float BLUR_FBO_SCALE = 0.5f;
 
     private static final float[] FULL_QUAD = new float[]{
@@ -232,7 +243,7 @@ public final class PrismalRenderer implements AutoCloseable {
         float safeOpacity = Float.isFinite(opacity)
                 ? Math.max(0f, Math.min(1f, opacity)) : 1f;
         renderGlassNode(geometry, params, highlightProfile, interactionState,
-                !legacySingleDraw || glassDrawCount > 0, safeOpacity);
+                !legacySingleDraw || glassDrawCount > 0, safeOpacity, null);
         glassDrawCount++;
     }
 
@@ -256,11 +267,54 @@ public final class PrismalRenderer implements AutoCloseable {
         float safeOpacity = Float.isFinite(opacity)
                 ? Math.max(0f, Math.min(1f, opacity)) : 1f;
         renderGlassNode(geometry, params, highlightProfile, null,
-                !legacySingleDraw || glassDrawCount > 0, safeOpacity);
+                !legacySingleDraw || glassDrawCount > 0, safeOpacity, null);
+        glassDrawCount++;
+    }
+
+    /**
+     * Append one arbitrary SDF-shaped glass node while preserving the canonical Prismal optical
+     * model. The SDF texture encodes signed pixel distance in alpha: 0.5 is the boundary,
+     * values above 0.5 are inside, and values below 0.5 are outside.
+     */
+    public void drawMaskGlass(
+            PrismalGeometry geometry,
+            PrismalParams params,
+            PrismalHighlightProfile highlightProfile,
+            int sdfTexture,
+            float[] rootPxToUv,
+            float sdfRangePx) {
+        if (geometry == null) throw new IllegalArgumentException("geometry == null");
+        if (!glassFrameBegun) {
+            throw new IllegalStateException("beginGlassFrame must be called before drawMaskGlass");
+        }
+        if (geometry.framebufferWidth != width || geometry.framebufferHeight != height) {
+            throw new IllegalArgumentException("geometry framebuffer does not match prepared backdrop");
+        }
+        if (sdfTexture == 0) throw new IllegalArgumentException("sdfTexture == 0");
+        if (rootPxToUv == null || rootPxToUv.length != 9) {
+            throw new IllegalArgumentException("rootPxToUv must be mat3");
+        }
+        if (params == null) params = PrismalParams.builder().build();
+        if (highlightProfile == null) highlightProfile = PrismalHighlightProfile.ALL_ENABLED;
+        renderGlassNode(
+                geometry,
+                params,
+                highlightProfile,
+                PrismalInteractionState.IDLE,
+                !legacySingleDraw || glassDrawCount > 0,
+                1f,
+                new MaskShape(sdfTexture, rootPxToUv.clone(), Math.max(1f, sdfRangePx)));
         glassDrawCount++;
     }
 
     public int outputTexture() { return outputTexture; }
+
+    /** Read-only normalized full-frame backdrop for specialized shape compositors. */
+    public int normalizedBackdropTexture() { return sourceTexture; }
+
+    /** Read-only blurred full-frame backdrop for specialized shape compositors. */
+    public int blurredBackdropTexture() { return blurTextureV; }
+
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }
 
@@ -271,9 +325,10 @@ public final class PrismalRenderer implements AutoCloseable {
         sourceProgram = createProgram(SOURCE_VERTEX, SOURCE_FRAGMENT);
         blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_H);
         blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_V);
-        String glassFragment = PrismalComponentGateShader.apply(
-                PrismalOpticalEdgeShader.apply(
-                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
+        String glassFragment = PrismalMaskShapeShader.apply(
+                PrismalComponentGateShader.apply(
+                        PrismalOpticalEdgeShader.apply(
+                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         glassProgram = createProgram(glassVertex, glassFragment);
         glassUniformLocations.clear();
@@ -360,7 +415,8 @@ public final class PrismalRenderer implements AutoCloseable {
     private void renderGlassNode(PrismalGeometry g, PrismalParams p,
                                  PrismalHighlightProfile highlights,
                                  PrismalInteractionState interactionState,
-                                 boolean composite, float opacity) {
+                                 boolean composite, float opacity,
+                                 MaskShape maskShape) {
         highlights = highlights.withOs4EdgeReplacingLegacyEdge();
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
         GLES20.glViewport(0, 0, outputWidth, outputHeight);
@@ -437,6 +493,19 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_glowStrength", p.glowStrength);
         uniform1i("u_showNormals", p.showNormals ? 1 : 0);
 
+        if (maskShape != null) {
+            uniform1i("u_shapeSdfEnabled", 1);
+            uniform1f("u_shapeSdfRangePx", maskShape.sdfRangePx);
+            int matrixLocation = glassUniformLocation("u_rootPxToShapeUv");
+            GLES20.glUniformMatrix3fv(matrixLocation, 1, false, maskShape.rootPxToUv, 0);
+        } else {
+            uniform1i("u_shapeSdfEnabled", 0);
+            uniform1f("u_shapeSdfRangePx", 1f);
+            int matrixLocation = glassUniformLocation("u_rootPxToShapeUv");
+            GLES20.glUniformMatrix3fv(matrixLocation, 1, false,
+                    new float[]{1f,0f,0f,0f,1f,0f,0f,0f,1f}, 0);
+        }
+
         uniform1f("u_componentSkyHaze", highlights.skyHaze ? 1f : 0f);
         uniform1f("u_componentSpecular", highlights.specular ? 1f : 0f);
         uniform1f("u_componentLitRim", highlights.litRim ? 1f : 0f);
@@ -455,6 +524,9 @@ public final class PrismalRenderer implements AutoCloseable {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, blurTextureV);
         GLES20.glUniform1i(glassUniformLocation("u_blurredTexture"), 1);
         GLES20.glUniform1i(glassUniformLocation("u_useBlurredTexture"), 1);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskShape != null ? maskShape.sdfTexture : 0);
+        GLES20.glUniform1i(glassUniformLocation("u_shapeSdfTexture"), 2);
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
         GLES20.glDisableVertexAttribArray(position);

@@ -32,6 +32,7 @@ internal fun ThirdPartyAppsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     openGboard: () -> Unit,
+    openLockScreenClock: () -> Unit,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -58,6 +59,17 @@ internal fun ThirdPartyAppsPage(
                 )
             }
         }
+        item { SmallTitle("系统界面") }
+        item {
+            GboardSettingsCard {
+                ArrowPreference(
+                    title = "锁屏时钟",
+                    summary = "强制用 LiquidDock 液态玻璃替换 OS3 锁屏时钟；不依赖原厂 Glass 支持",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = openLockScreenClock,
+                )
+            }
+        }
         item { SmallTitle("输入法") }
         item {
             GboardSettingsCard {
@@ -66,6 +78,184 @@ internal fun ThirdPartyAppsPage(
                     summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = openGboard,
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+internal fun LockScreenClockSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var enabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                LockScreenClockGlassPreferences.ENABLED_KEY,
+                LockScreenClockGlassPreferences.ENABLED_DEFAULT,
+            ),
+        )
+    }
+
+    fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
+        prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
+    } else {
+        prefs.getInt(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.uiDefault()).toFloat()
+    }
+    fun globalChannel(key: String, fallback: Int): Float = prefs.getInt(key, fallback).toFloat()
+
+    var blur by remember {
+        mutableStateOf(
+            if (prefs.contains(LockScreenClockGlassPreferences.BLUR_KEY))
+                prefs.getFloat(LockScreenClockGlassPreferences.BLUR_KEY, globalBlur())
+            else globalBlur(),
+        )
+    }
+    var tintR by remember {
+        mutableStateOf(
+            if (prefs.contains(LockScreenClockGlassPreferences.TINT_RED_KEY))
+                prefs.getInt(LockScreenClockGlassPreferences.TINT_RED_KEY, 0).toFloat()
+            else globalChannel(ConfigSchema.Glass.TINT_RED.name(), ConfigSchema.Glass.TINT_RED.uiDefault()),
+        )
+    }
+    var tintG by remember {
+        mutableStateOf(
+            if (prefs.contains(LockScreenClockGlassPreferences.TINT_GREEN_KEY))
+                prefs.getInt(LockScreenClockGlassPreferences.TINT_GREEN_KEY, 0).toFloat()
+            else globalChannel(ConfigSchema.Glass.TINT_GREEN.name(), ConfigSchema.Glass.TINT_GREEN.uiDefault()),
+        )
+    }
+    var tintB by remember {
+        mutableStateOf(
+            if (prefs.contains(LockScreenClockGlassPreferences.TINT_BLUE_KEY))
+                prefs.getInt(LockScreenClockGlassPreferences.TINT_BLUE_KEY, 255).toFloat()
+            else globalChannel(ConfigSchema.Glass.TINT_BLUE.name(), ConfigSchema.Glass.TINT_BLUE.uiDefault()),
+        )
+    }
+    var tintAlpha by remember {
+        mutableStateOf(
+            if (prefs.contains(LockScreenClockGlassPreferences.TINT_ALPHA_KEY))
+                prefs.getInt(LockScreenClockGlassPreferences.TINT_ALPHA_KEY, 35).toFloat()
+            else globalChannel(ConfigSchema.Glass.TINT_ALPHA.name(), ConfigSchema.Glass.TINT_ALPHA.uiDefault()),
+        )
+    }
+    var appearanceGeneration by remember { mutableStateOf(0) }
+    val controlsEnabled = masterEnabled && liquidEnabled && enabled
+    val hasAppearanceOverride = appearanceGeneration.let {
+        prefs.contains(LockScreenClockGlassPreferences.BLUR_KEY) ||
+            prefs.contains(LockScreenClockGlassPreferences.TINT_RED_KEY) ||
+            prefs.contains(LockScreenClockGlassPreferences.TINT_GREEN_KEY) ||
+            prefs.contains(LockScreenClockGlassPreferences.TINT_BLUE_KEY) ||
+            prefs.contains(LockScreenClockGlassPreferences.TINT_ALPHA_KEY)
+    }
+
+    fun clearAppearanceOverrides() {
+        prefs.edit()
+            .remove(LockScreenClockGlassPreferences.BLUR_KEY)
+            .remove(LockScreenClockGlassPreferences.TINT_RED_KEY)
+            .remove(LockScreenClockGlassPreferences.TINT_GREEN_KEY)
+            .remove(LockScreenClockGlassPreferences.TINT_BLUE_KEY)
+            .remove(LockScreenClockGlassPreferences.TINT_ALPHA_KEY)
+            .apply()
+        blur = globalBlur()
+        tintR = globalChannel(ConfigSchema.Glass.TINT_RED.name(), ConfigSchema.Glass.TINT_RED.uiDefault())
+        tintG = globalChannel(ConfigSchema.Glass.TINT_GREEN.name(), ConfigSchema.Glass.TINT_GREEN.uiDefault())
+        tintB = globalChannel(ConfigSchema.Glass.TINT_BLUE.name(), ConfigSchema.Glass.TINT_BLUE.uiDefault())
+        tintAlpha = globalChannel(ConfigSchema.Glass.TINT_ALPHA.name(), ConfigSchema.Glass.TINT_ALPHA.uiDefault())
+        appearanceGeneration++
+    }
+
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            GboardPageHeader(
+                "锁屏时钟",
+                "OS3 强制替换模式：忽略系统与锁屏的 Glass 支持判断，SystemUI 创建时钟后由 LiquidDock 直接接管。修改后建议重启系统界面。",
+            )
+        }
+        item { SmallTitle("功能") }
+        item {
+            GboardSettingsCard {
+                SwitchPreference(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        prefs.edit()
+                            .putBoolean(LockScreenClockGlassPreferences.ENABLED_KEY, it)
+                            .apply()
+                    },
+                    title = "锁屏时钟液态玻璃",
+                    summary = "关闭时保留 OS3 原生时钟；开启后无条件尝试用 LiquidDock Prismal 替换",
+                    enabled = masterEnabled && liquidEnabled,
+                )
+            }
+        }
+        item { SmallTitle("自定义") }
+        item {
+            GboardSettingsCard {
+                GboardValueSlider(
+                    key = LockScreenClockGlassPreferences.TINT_RED_KEY,
+                    title = "红",
+                    value = tintR,
+                    onValueChange = { tintR = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                GboardValueSlider(
+                    key = LockScreenClockGlassPreferences.TINT_GREEN_KEY,
+                    title = "绿",
+                    value = tintG,
+                    onValueChange = { tintG = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                GboardValueSlider(
+                    key = LockScreenClockGlassPreferences.TINT_BLUE_KEY,
+                    title = "蓝",
+                    value = tintB,
+                    onValueChange = { tintB = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                GboardValueSlider(
+                    key = LockScreenClockGlassPreferences.TINT_ALPHA_KEY,
+                    title = "不透明度",
+                    value = tintAlpha,
+                    onValueChange = { tintAlpha = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                SliderPreference(
+                    value = blur,
+                    onValueChange = {
+                        val next = it.coerceIn(0f, 60f)
+                        blur = next
+                        prefs.edit()
+                            .putFloat(LockScreenClockGlassPreferences.BLUR_KEY, next)
+                            .apply()
+                    },
+                    title = "玻璃模糊",
+                    summary = "未单独设置时继承全局液态玻璃",
+                    valueText = String.format(java.util.Locale.ROOT, "%.1f px", blur),
+                    enabled = controlsEnabled,
+                    valueRange = 0f..60f,
+                    steps = 0,
+                )
+                ArrowPreference(
+                    title = "恢复继承全局外观",
+                    summary = "删除锁屏时钟的颜色与模糊覆盖，重新跟随全局液态玻璃参数",
+                    enabled = controlsEnabled && hasAppearanceOverride,
+                    onClick = { clearAppearanceOverrides() },
                 )
             }
         }

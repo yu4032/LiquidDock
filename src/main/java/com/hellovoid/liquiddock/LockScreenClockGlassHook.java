@@ -1,0 +1,502 @@
+package com.hellovoid.liquiddock;
+
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.WeakHashMap;
+
+/**
+ * Unconditionally replaces the OS3 SystemUI lockscreen clock host with LiquidDock Prismal glass.
+ *
+ * <p>No vendor glass capability or effect flag is consulted. Native clock content is hidden only
+ * after the LiquidDock output has presented successfully and is restored on any failure/teardown.</p>
+ */
+final class LockScreenClockGlassHook {
+    private static final String TAG = "[DC][LockScreenClockGlass]";
+    private static final String CONTROLLER = "com.miui.clock.MiuiClockController";
+    private static final String CLOCK_BEAN = "com.miui.clock.module.ClockBean";
+
+    private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
+    private static final WeakHashMap<View, Boolean> PENDING_ATTACH = new WeakHashMap<>();
+    private static final WeakHashMap<View, Boolean> KNOWN_CLOCKS = new WeakHashMap<>();
+    private static boolean installed;
+
+    private LockScreenClockGlassHook() {}
+
+    private static final class State implements View.OnAttachStateChangeListener,
+            MiuiSearchboxGlassSession.Listener {
+        final ArrayList<View> clockViews;
+        final View clockView;
+        final ViewGroup outputHost;
+        final int outputIndex;
+        final LockScreenClockGlyphMaskSource glyphMaskSource;
+        final MiuiSearchboxGlassSession session;
+        final MiuiSearchboxGlassView glassView;
+        ViewTreeObserver observer;
+        ViewTreeObserver.OnPreDrawListener preDraw;
+        boolean disposed;
+        boolean suspended;
+
+        State(
+                List<View> clockViews,
+                ViewGroup outputHost,
+                int outputIndex,
+                LiquidDockConfig.Glass glassConfig,
+                ThirdPartyGlassAppearance appearance) {
+            if (clockViews == null || clockViews.isEmpty()) {
+                throw new UnsupportedClockShapeException("clock group unavailable");
+            }
+            this.clockViews = new ArrayList<>(clockViews);
+            this.clockView = this.clockViews.get(0);
+            this.outputHost = outputHost;
+            this.outputIndex = outputIndex;
+            this.glyphMaskSource = LockScreenClockGlyphMaskSource.resolve(this.clockViews);
+            if (glyphMaskSource == null || glyphMaskSource.glyphCount() == 0) {
+                throw new UnsupportedClockShapeException("native time glyph views unavailable");
+            }
+            this.session = new MiuiSearchboxGlassSession(
+                    clockView,
+                    glassConfig,
+                    appearance,
+                    0f,
+                    this,
+                    PassBlurDomain.LOCKSCREEN_CLOCK,
+                    glyphMaskSource);
+            this.glassView = new MiuiSearchboxGlassView(clockView.getContext(), session);
+        }
+
+        void attach() {
+            for (View candidate : clockViews) {
+                candidate.addOnAttachStateChangeListener(this);
+            }
+            outputHost.addView(
+                    glassView,
+                    Math.max(0, Math.min(outputIndex + 1, outputHost.getChildCount())),
+                    new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
+            ViewTreeObserver next = outputHost.getViewTreeObserver();
+            preDraw = () -> {
+                if (!disposed) {
+                    if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
+                        suspendForScene();
+                        return true;
+                    }
+                    try {
+                        session.updateGeometry();
+                    } catch (Throwable error) {
+                        Api101Bridge.log(TAG + " pre-draw failed; native clock retained", error);
+                        try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+                        safePost(clockView, () -> dispose(true), "pre-draw-dispose");
+                    }
+                }
+                return true;
+            };
+            if (next.isAlive()) {
+                next.addOnPreDrawListener(preDraw);
+                observer = next;
+            }
+            clockView.post(this::refresh);
+        }
+
+        void refresh() {
+            if (disposed || !clockView.isAttachedToWindow()) return;
+            if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
+                suspendForScene();
+                return;
+            }
+            suspended = false;
+            try {
+                // Capture glyph geometry/mask while native digits are still drawable, then remove
+                // them before requesting a fresh backdrop so PassBlur can never sample the digits
+                // we are replacing.
+                session.updateGeometry();
+                if (!session.hasRenderableGlyphGeometry()) {
+                    glyphMaskSource.restoreNativeGlyphs();
+                    clockView.postOnAnimation(this::refresh);
+                    return;
+                }
+                glyphMaskSource.suppressNativeGlyphs();
+                session.reconcileRoot();
+                session.requestFreshCapture();
+                Api101Bridge.log(TAG + " native time glyphs suppressed before fresh capture");
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " refresh failed; native clock retained", error);
+                try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+                safePost(clockView, () -> dispose(true), "refresh-dispose");
+            }
+        }
+
+        @Override
+        public void onPresented() {
+            if (disposed || suspended || !SystemUiKeyguardGoneSource.isLockscreenScene()) return;
+            try {
+                glyphMaskSource.suppressNativeGlyphs();
+                Api101Bridge.log(TAG + " presented; native time glyphs suppressed");
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " presentation handoff failed; native clock retained", error);
+                try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+                safePost(clockView, () -> dispose(true), "present-dispose");
+            }
+        }
+
+        @Override
+        public void onFailure(Throwable error) {
+            try {
+                Api101Bridge.log(TAG + " failed; native clock restored", error);
+            } catch (Throwable ignored) {}
+            try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            safePost(clockView, () -> dispose(true), "failure-dispose");
+        }
+
+        void suspendForScene() {
+            if (disposed || suspended) return;
+            suspended = true;
+            try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            try { glassView.setVisibility(View.INVISIBLE); } catch (Throwable ignored) {}
+            Api101Bridge.log(TAG + " suspended outside LOCKSCREEN");
+        }
+
+        void resumeForScene() {
+            if (disposed || !clockView.isAttachedToWindow()) return;
+            suspended = false;
+            try { glassView.setVisibility(View.VISIBLE); } catch (Throwable ignored) {}
+            safePost(clockView, this::refresh, "scene-resume-refresh");
+        }
+
+        @Override public void onViewAttachedToWindow(View v) {
+            if (!disposed) safePost(clockView, this::refresh, "reattach-refresh");
+        }
+
+        @Override public void onViewDetachedFromWindow(View v) {
+            boolean anyAttached = false;
+            for (View candidate : clockViews) {
+                if (candidate != null && candidate.isAttachedToWindow()) {
+                    anyAttached = true;
+                    break;
+                }
+            }
+            if (anyAttached) return;
+            try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable ignored) {}
+            synchronized (STATES) {
+                for (View candidate : clockViews) KNOWN_CLOCKS.remove(candidate);
+            }
+            safePost(clockView, () -> dispose(true), "detach-dispose");
+        }
+
+        void dispose(boolean restoreNative) {
+            if (disposed) return;
+            disposed = true;
+            for (View candidate : clockViews) {
+                try { candidate.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
+            }
+            if (observer != null && preDraw != null) {
+                try { if (observer.isAlive()) observer.removeOnPreDrawListener(preDraw); }
+                catch (Throwable ignored) {}
+            }
+            observer = null;
+            preDraw = null;
+            synchronized (STATES) {
+                for (View candidate : clockViews) {
+                    if (STATES.get(candidate) == this) STATES.remove(candidate);
+                }
+            }
+            try { glassView.dispose(); } catch (Throwable error) {
+                Api101Bridge.log(TAG + " glass view dispose failed", error);
+            }
+            try { session.shutdown(); } catch (Throwable error) {
+                Api101Bridge.log(TAG + " session shutdown failed", error);
+            }
+            if (restoreNative) {
+                try { glyphMaskSource.restoreNativeGlyphs(); } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native glyph restore failed", error);
+                }
+            }
+        }
+    }
+
+    static boolean install(ClassLoader classLoader) {
+        if (installed) return true;
+        if (classLoader == null) return false;
+        try {
+            Class<?> controllerClass = Class.forName(CONTROLLER, false, classLoader);
+            Class<?> beanClass = Class.forName(CLOCK_BEAN, false, classLoader);
+            Method addClockView = controllerClass.getDeclaredMethod(
+                    "addClockView", beanClass, Boolean.TYPE);
+            addClockView.setAccessible(true);
+            Field clockViewField = findField(controllerClass, "mClockView");
+
+            HookUtil.hook(addClockView, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                try {
+                    Object owner = chain.getThisObject();
+                    Object candidate = owner != null ? clockViewField.get(owner) : null;
+                    scheduleAttach(candidate);
+                } catch (Throwable error) {
+                    // Never allow optional clock glass to escape into SystemUI's clock creation.
+                    Api101Bridge.log(TAG + " post-create inspection failed; native clock retained", error);
+                }
+                return result;
+            });
+            installed = true;
+            Api101Bridge.log(TAG + " installed on MiuiClockController#addClockView");
+            return true;
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " unavailable; native OS3 clock retained", error);
+            return false;
+        }
+    }
+
+    static void onLockscreenSceneChanged(boolean lockscreen) {
+        ArrayList<View> known = new ArrayList<>();
+        ArrayList<State> states = new ArrayList<>();
+        synchronized (STATES) {
+            known.addAll(KNOWN_CLOCKS.keySet());
+            for (State state : STATES.values()) {
+                if (state != null && !states.contains(state)) states.add(state);
+            }
+        }
+        if (!lockscreen) {
+            for (State state : states) {
+                if (state != null && !state.disposed) {
+                    safePost(state.clockView, state::suspendForScene, "scene-suspend");
+                }
+            }
+            return;
+        }
+        for (State state : states) {
+            if (state != null && !state.disposed) {
+                safePost(state.clockView, state::resumeForScene, "scene-resume");
+            }
+        }
+        for (View clock : known) {
+            if (clock != null && clock.isAttachedToWindow()) scheduleAttach(clock);
+        }
+    }
+
+    private static void scheduleAttach(Object candidate) {
+        if (!(candidate instanceof View)) return;
+        View clockView = (View) candidate;
+        synchronized (STATES) {
+            KNOWN_CLOCKS.put(clockView, Boolean.TRUE);
+            State existing = STATES.get(clockView);
+            if (existing != null && !existing.disposed) {
+                safePost(clockView, existing::refresh, "refresh");
+                return;
+            }
+            if (Boolean.TRUE.equals(PENDING_ATTACH.get(clockView))) return;
+            PENDING_ATTACH.put(clockView, Boolean.TRUE);
+        }
+        try {
+            clockView.postOnAnimation(() -> tryAttachFailClosed(clockView));
+        } catch (Throwable error) {
+            clearPending(clockView);
+            Api101Bridge.log(TAG + " group attach scheduling failed; native clock retained", error);
+        }
+    }
+
+    private static ArrayList<View> collectClockGroup(View root) {
+        ArrayList<View> result = new ArrayList<>();
+        synchronized (STATES) {
+            for (View candidate : KNOWN_CLOCKS.keySet()) {
+                if (candidate == null || !candidate.isAttachedToWindow()) continue;
+                if (candidate.getRootView() != root) continue;
+                result.add(candidate);
+            }
+        }
+        return result;
+    }
+
+    private static void tryAttachFailClosed(View clockView) {
+        try {
+            if (clockView == null || !clockView.isAttachedToWindow()) {
+                clearPending(clockView);
+                return;
+            }
+            if (!SystemUiKeyguardGoneSource.isLockscreenScene()) {
+                clearPending(clockView);
+                Api101Bridge.log(TAG + " scene gate deferred class="
+                        + clockView.getClass().getName());
+                return;
+            }
+
+            ConfigReader reader = ConfigReader.load();
+            LiquidDockConfig config = LiquidDockConfig.from(reader);
+            ThirdPartyGlassAppearance appearance =
+                    LockScreenClockGlassPreferences.resolve(reader, config.glass);
+            if (!config.enabled || !config.glass.enabled || !appearance.enabled) {
+                Api101Bridge.log(TAG + " skipped by config module=" + config.enabled
+                        + " glass=" + config.glass.enabled
+                        + " clock=" + appearance.enabled);
+                clearPending(clockView);
+                return;
+            }
+
+            View root = clockView.getRootView();
+            if (!(root instanceof ViewGroup) || !root.isAttachedToWindow()) {
+                Api101Bridge.log(TAG + " root unavailable; waiting for next frame");
+                postEndpointRetry(clockView);
+                return;
+            }
+            RootPassBlurEndpointBridge.Endpoint endpoint =
+                    RootPassBlurEndpointBridge.inspect(root);
+            if (endpoint == null || !endpoint.isValid()) {
+                Api101Bridge.log(TAG + " root endpoint not ready; waiting for next frame");
+                postEndpointRetry(clockView);
+                return;
+            }
+            ViewGroup parent = (ViewGroup) root;
+            int index = parent.getChildCount() - 1;
+            Api101Bridge.log(TAG + " root endpoint ready surface="
+                    + endpoint.surfaceWidth + "x" + endpoint.surfaceHeight
+                    + " buffer=" + endpoint.bufferWidth + "x" + endpoint.bufferHeight
+                    + " layerId=" + endpoint.rootLayerId
+                    + " surfaceSeq=" + endpoint.surfaceSequenceId);
+
+            ArrayList<View> group = collectClockGroup(root);
+            if (group.isEmpty()) group.add(clockView);
+
+            State next;
+            synchronized (STATES) {
+                State old = null;
+                for (View candidate : group) {
+                    State mapped = STATES.get(candidate);
+                    if (mapped != null && !mapped.disposed) {
+                        old = mapped;
+                        break;
+                    }
+                }
+                if (old != null) {
+                    boolean complete = old.clockViews.containsAll(group)
+                            && group.containsAll(old.clockViews);
+                    if (complete) {
+                        for (View candidate : group) PENDING_ATTACH.remove(candidate);
+                        old.refresh();
+                        return;
+                    }
+                    old.dispose(true);
+                }
+
+                next = new State(group, parent, index, config.glass, appearance);
+                for (View candidate : group) {
+                    STATES.put(candidate, next);
+                    PENDING_ATTACH.remove(candidate);
+                }
+                StringBuilder classes = new StringBuilder();
+                for (View candidate : group) {
+                    if (classes.length() > 0) classes.append(",");
+                    classes.append(candidate.getClass().getName());
+                }
+                Api101Bridge.log(TAG + " attach group candidates=" + group.size()
+                        + " classes=" + classes
+                        + " glyphs=" + next.glyphMaskSource.glyphCount()
+                        + " root=" + parent.getClass().getName());
+            }
+
+            try {
+                next.attach();
+            } catch (Throwable error) {
+                synchronized (STATES) {
+                    for (View candidate : next.clockViews) {
+                        if (STATES.get(candidate) == next) STATES.remove(candidate);
+                    }
+                }
+                try { next.dispose(true); } catch (Throwable ignored) {}
+                Api101Bridge.log(TAG + " attach failed; native clock retained", error);
+            }
+        } catch (UnsupportedClockShapeException unsupported) {
+            String className = clockView != null ? clockView.getClass().getName() : "";
+            if (className.equals("com.miui.clock.classic.ClassicClockView")
+                    || className.equals("com.miui.clock.classic.ClassicPlusClockView")) {
+                Api101Bridge.log(TAG + " classic time glyph source not ready; waiting for next frame");
+                postEndpointRetry(clockView);
+                return;
+            }
+            clearPending(clockView);
+            Api101Bridge.log(TAG + " unsupported clock shape class=" + className
+                    + "; native clock retained");
+        } catch (Throwable error) {
+            clearPending(clockView);
+            // Absolute process boundary: this feature must never kill SystemUI.
+            Api101Bridge.log(TAG + " attach path failed closed; native clock retained", error);
+        }
+    }
+
+    private static void postEndpointRetry(View clockView) {
+        if (clockView == null) return;
+        try {
+            clockView.postOnAnimation(() -> {
+                try {
+                    if (!clockView.isAttachedToWindow()) {
+                        clearPending(clockView);
+                        return;
+                    }
+                    tryAttachFailClosed(clockView);
+                } catch (Throwable error) {
+                    clearPending(clockView);
+                    Api101Bridge.log(TAG + " endpoint wait failed closed; native clock retained", error);
+                }
+            });
+        } catch (Throwable error) {
+            clearPending(clockView);
+            Api101Bridge.log(TAG + " endpoint wait scheduling failed; native clock retained", error);
+        }
+    }
+
+    private static void clearPending(View view) {
+        if (view == null) return;
+        synchronized (STATES) {
+            PENDING_ATTACH.remove(view);
+        }
+    }
+
+    private static void safePost(View view, Runnable action, String stage) {
+        try {
+            if (!view.post(() -> {
+                try {
+                    action.run();
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " posted " + stage
+                            + " failed; native clock retained", error);
+                }
+            })) {
+                synchronized (STATES) {
+                    PENDING_ATTACH.remove(view);
+                }
+                Api101Bridge.log(TAG + " posted " + stage + " rejected; native clock retained");
+            }
+        } catch (Throwable error) {
+            synchronized (STATES) {
+                PENDING_ATTACH.remove(view);
+            }
+            Api101Bridge.log(TAG + " scheduling " + stage
+                    + " failed; native clock retained", error);
+        }
+    }
+
+    private static final class UnsupportedClockShapeException extends RuntimeException {
+        UnsupportedClockShapeException(String message) {
+            super(message);
+        }
+    }
+
+    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                Field field = current.getDeclaredField(name);
+                field.setAccessible(true);
+                return field;
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(type.getName() + "#" + name);
+    }
+}
