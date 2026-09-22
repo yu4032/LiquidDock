@@ -94,7 +94,10 @@ final class LauncherWallpaperFreshnessHook {
             Method method = callback.getDeclaredMethod("onDrawFrameEnd");
             HookUtil.hook(method, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                dispatchToMain(LauncherGlassSceneController::onWallpaperAuthoritativeForAll);
+                dispatchToMain(() -> {
+                    LauncherGlassRecentsHook.onSystemWallpaperDrawFrameEnd();
+                    LauncherGlassSceneController.onWallpaperAuthoritativeForAll();
+                });
                 return result;
             });
             MainHook.log(TAG + " onDrawFrameEnd installed");
