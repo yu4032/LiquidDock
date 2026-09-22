@@ -244,13 +244,19 @@ final class SystemUiHandleMenuGlassHook {
                 sinks[target.ordinal()] = SystemUiHandleMenuGlassSinkView.attachInsideTarget(
                         nativePill, session, target);
                 if (sinks[target.ordinal()] == null) {
-                    failed = true;
                     break;
                 }
             }
             root.addOnAttachStateChangeListener(this);
             root.getViewTreeObserver().addOnPreDrawListener(this);
-            if (failed) {
+            boolean allSinksReady = true;
+            for (SystemUiHandleMenuGlassSinkView sink : sinks) {
+                if (sink == null) {
+                    allSinksReady = false;
+                    break;
+                }
+            }
+            if (!allSinksReady) {
                 onFailure(new IllegalStateException("HandleMenu pill host unavailable"));
                 return;
             }
