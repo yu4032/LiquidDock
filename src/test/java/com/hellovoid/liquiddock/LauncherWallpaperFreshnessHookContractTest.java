@@ -124,11 +124,16 @@ public class LauncherWallpaperFreshnessHookContractTest {
             throws Exception {
         String source = hook();
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
 
         assertTrue(source.contains("LauncherGlassRecentsHook.onWallpaperContentChanged()"));
         assertTrue(recents.contains("static void onWallpaperContentChanged()"));
+        assertTrue(recents.contains("WALLPAPER_SETTLE.cancelReturn(serial)"));
         assertTrue(recents.contains(
-                "cancelWallpaperSettle(serial, \"wallpaper-content-generation-changed\")"));
+                "Recents wallpaper authority superseded by content generation"));
+        assertTrue(scene.contains("vendorRecentsWallpaperSettlePending = false;"));
+        assertTrue(scene.contains(
+                "recents wallpaper presentation superseded by new content generation"));
         assertTrue(source.indexOf("LauncherGlassRecentsHook.onWallpaperContentChanged()")
                 < source.indexOf("LauncherGlassSceneController.onWallpaperChangedForAll()"));
     }
