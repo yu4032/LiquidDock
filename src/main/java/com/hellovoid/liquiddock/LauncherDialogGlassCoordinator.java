@@ -196,12 +196,31 @@ final class LauncherDialogGlassCoordinator {
             return;
         }
 
-        binding.originalBackground = panel.getBackground();
-        panel.setBackground(null);
+        Boolean vendorPassBlur = MiBlurBridge.getPassWindowBlurEnabled(panel);
+        if (vendorPassBlur == null) {
+            MainHook.log(TAG + " pass-window state unavailable; stock material retained source="
+                    + binding.source);
+            releaseObserved(binding, "pass-window-state-unavailable");
+            return;
+        }
+
+        Drawable background = panel.getBackground();
+        binding.originalBackground = background;
+        binding.originalBackgroundAlpha = background != null ? background.getAlpha() : -1;
+        binding.vendorPassBlurEnabled = vendorPassBlur;
+        if (vendorPassBlur && !MiBlurBridge.setPassWindowBlurEnabled(panel, false)) {
+            MainHook.log(TAG + " vendor pass-window gate could not be paused; stock material retained"
+                    + " source=" + binding.source);
+            releaseObserved(binding, "pass-window-pause-failed");
+            return;
+        }
+        if (background != null) background.setAlpha(0);
         binding.claimed = true;
-        MainHook.log(TAG + " first glass frame presented; MIUIX parentPanel background released"
-                + " source=" + binding.source
-                + " original=" + className(binding.originalBackground));
+        MainHook.log(TAG + " first glass frame presented; MIUIX material paused source="
+                + binding.source
+                + " vendorPassBlur=" + vendorPassBlur
+                + " background=" + className(background)
+                + " backgroundAlpha=" + binding.originalBackgroundAlpha);
     }
 
     static synchronized void releaseAll() {
@@ -230,8 +249,16 @@ final class LauncherDialogGlassCoordinator {
         binding.attachListener = null;
 
         View panel = binding.panelRef.get();
-        if (panel != null && binding.claimed) {
-            panel.setBackground(binding.originalBackground);
+        if (binding.claimed) {
+            Drawable background = binding.originalBackground;
+            if (background != null && binding.originalBackgroundAlpha >= 0) {
+                background.setAlpha(binding.originalBackgroundAlpha);
+            }
+            if (panel != null && binding.vendorPassBlurEnabled) {
+                boolean restored = MiBlurBridge.setPassWindowBlurEnabled(panel, true);
+                MainHook.log(TAG + " vendor pass-window gate restore source=" + binding.source
+                        + " result=" + restored);
+            }
         }
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
@@ -333,6 +360,8 @@ final class LauncherDialogGlassCoordinator {
         ViewTreeObserver layoutObserver;
         ViewTreeObserver.OnGlobalLayoutListener layoutListener;
         Drawable originalBackground;
+        int originalBackgroundAlpha = -1;
+        boolean vendorPassBlurEnabled;
         boolean targetsMissingLogged;
         boolean authorityUnavailableLogged;
         boolean sinkUnavailableLogged;
