@@ -228,8 +228,24 @@ public class ConfigCodecTest {
                 ((Number) exported.get(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.name())).doubleValue(),
                 0.0001d);
         assertEquals(100, exported.get(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()));
+        assertEquals(Boolean.FALSE,
+                exported.get(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name()));
         assertEquals(450, exported.get(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name()));
         assertEquals(300, exported.get(ConfigSchema.Animation.SETTINGS_PAGE.name()));
+    }
+
+    @Test
+    public void recentsWallpaperDimmingSwitchRoundTrips() {
+        Map<String, Object> prefs = new HashMap<>();
+        prefs.put(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name(), true);
+
+        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
+        assertEquals(Boolean.TRUE,
+                exported.get(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name()));
+
+        Map<String, Object> imported = ConfigCodec.importValues(exported);
+        assertEquals(Boolean.TRUE,
+                imported.get(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name()));
     }
 
     @Test

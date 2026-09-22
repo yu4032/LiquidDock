@@ -55,11 +55,15 @@ final class LiquidDockConfig {
 
     static final class Recents {
         final int backgroundBlurPercent;
+        final boolean disableWallpaperDimming;
 
         Recents(ConfigReader c) {
             backgroundBlurPercent = Math.max(0, Math.min(100, c.i(
                     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
                     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.runtimeFallback())));
+            disableWallpaperDimming = c.b(
+                    ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name(),
+                    ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.runtimeFallback());
         }
     }
 
