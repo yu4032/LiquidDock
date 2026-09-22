@@ -46,31 +46,25 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void glassUsesRootPassBlurAndKeepsStockBackgroundUntilFirstPresentation()
+    public void glassUsesNativePassWindowBackdropAndNeverBindsPopupRootProducer()
             throws Exception {
         String hook = read("SystemUiHandleMenuGlassHook.java");
-        String session = read("SystemUiHandleMenuGlassSession.java");
-        String sink = read("SystemUiHandleMenuGlassSinkView.java");
-        assertTrue(session.contains("RootPassBlurBackend"));
-        assertTrue(session.contains("PassBlurBindRequest.systemUiHandleMenu(sourceRoot)"));
-        assertTrue(session.contains("PrismalRenderer"));
-        assertTrue(sink.contains("setOpaque(false)"));
-        assertTrue(sink.contains("host.addView(sink, 0, new ViewGroup.LayoutParams(0, 0))"));
-        assertTrue(hook.contains("attachInsideHost"));
-        assertTrue(hook.contains("onFirstFramePresented"));
+        assertTrue(hook.contains("MiBlurBridge.applyPassWindowBlur"));
+        assertTrue(hook.contains("MiBlurBridge.clearPassWindowBlur"));
         assertTrue(hook.contains("target.setBackground(null)"));
+        assertTrue(hook.contains("Windowless caption menus are not safe RootPassBlur producer roots"));
+        assertFalse(hook.contains("new SystemUiHandleMenuGlassSession"));
+        assertFalse(hook.contains("requestInitialCapture()"));
         assertTrue(hook.contains("restoreStockBackground()"));
     }
 
     @Test
     public void implementationDoesNotIntroduceCpuCaptureOrTimingFallback() throws Exception {
         String hook = read("SystemUiHandleMenuGlassHook.java");
-        String session = read("SystemUiHandleMenuGlassSession.java");
-        String all = hook + session;
-        assertFalse(all.contains("PixelCopy"));
-        assertFalse(all.contains("Bitmap"));
-        assertFalse(all.contains("postDelayed"));
-        assertFalse(all.contains("Thread.sleep"));
+        assertFalse(hook.contains("PixelCopy"));
+        assertFalse(hook.contains("Bitmap"));
+        assertFalse(hook.contains("postDelayed"));
+        assertFalse(hook.contains("Thread.sleep"));
     }
 
     @Test
