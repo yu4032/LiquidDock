@@ -18,36 +18,44 @@ public class LauncherWallpaperFreshnessHookContractTest {
         return Files.readString(HOOK);
     }
 
-    @Test public void usesExactHyperOs450VendorWallpaperBoundaries() throws Exception {
+    @Test public void followsExactDesktopWallpaperManagerRefreshTransaction() throws Exception {
         String source = hook();
+
         assertTrue(source.contains(
-                "com.miui.home.launcher.wallpaper.DesktopWallpaperManager$MiuiWallpaperManagerCallbackStub"));
-        assertTrue(source.contains("com.miui.home.launcher.Workspace"));
-        assertTrue(source.contains("onWallpaperChanged"));
-        assertTrue(source.contains("onWallpaperFirstFrameRendered"));
-        assertTrue(source.contains("onDrawFrameEnd"));
-        assertTrue(source.contains("onWallpaperColorChanged"));
+                "com.miui.home.launcher.wallpaper.DesktopWallpaperManager"));
+        assertTrue(source.contains("\"updateWallpaperInfo\""));
+        assertTrue(source.contains("\"notifyWallpaperColorChanged\""));
+        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperChangedForAll()"));
+        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperCandidateForAll()"));
     }
 
-    @Test public void systemWallpaperAuthorityBackstopsMissingVendorChangeCallback()
+    @Test public void workspaceFreshnessDoesNotInferIdentityFromFrameworkWallpaperSignals()
             throws Exception {
         String source = hook();
-        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
 
-        assertTrue(source.contains("Intent.ACTION_WALLPAPER_CHANGED"));
-        assertTrue(source.contains("WallpaperManager.getInstance"));
-        assertTrue(source.contains("getWallpaperId(WallpaperManager.FLAG_SYSTEM)"));
-        assertTrue(source.contains("addOnColorsChangedListener"));
-        assertTrue(source.contains("WallpaperChangeIdentityState"));
-        assertTrue(source.contains("LauncherGlassSceneController.onWallpaperCandidateForAll()"));
-        assertTrue(scene.contains("static void onWallpaperCandidateForAll()"));
-        assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.attachContext"));
+        assertFalse(source.contains("ACTION_WALLPAPER_CHANGED"));
+        assertFalse(source.contains("WallpaperManager.getInstance"));
+        assertFalse(source.contains("getWallpaperId"));
+        assertFalse(source.contains("OnColorsChangedListener"));
+        assertFalse(source.contains("WallpaperChangeIdentityState"));
+        assertFalse(pipeline.contains("LauncherWallpaperFreshnessHook.attachContext"));
+    }
+
+    @Test public void firstFrameAndDrawEndAreNotWorkspaceWallpaperCompletionAuthorities()
+            throws Exception {
+        String source = hook();
+
+        assertFalse(source.contains("onWallpaperFirstFrameRendered"));
+        assertFalse(source.contains("LauncherGlassSceneController.onWallpaperAuthoritativeForAll()"));
+        // The same callback still has a proven, separate Recents-return settle role.
+        assertTrue(source.contains("LauncherGlassRecentsHook::onSystemWallpaperDrawFrameEnd"));
     }
 
     @Test public void bridgeDoesNotIntroducePollingOrDelayedFallbackApis() throws Exception {
         String source = hook();
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+
         assertFalse(source.contains("postDelayed"));
         assertFalse(source.contains("Timer"));
         assertFalse(source.contains("ScheduledExecutor"));
@@ -59,7 +67,7 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertFalse(recents.contains("Bitmap"));
     }
 
-    @Test public void recentsReturnUsesVendorAnimationCompletionBoundaries() throws Exception {
+    @Test public void recentsReturnStillUsesVendorAnimationCompletionBoundaries() throws Exception {
         String source = hook();
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
 
@@ -69,7 +77,7 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(recents.contains("com.miui.home.recents.anim.MultiSpringDynamicAnimation"));
         assertTrue(recents.contains("\"doAnimationFrame\""));
         assertTrue(recents.contains("\"setFinalPosition\""));
-        assertTrue(source.contains("LauncherGlassRecentsHook.onSystemWallpaperDrawFrameEnd()"));
+        assertTrue(source.contains("LauncherGlassRecentsHook::onSystemWallpaperDrawFrameEnd"));
         assertTrue(recents.contains("onSystemWallpaperDrawFrameEnd"));
     }
 

@@ -221,7 +221,7 @@ Workstation return may roll over a retired PassBlur producer even when the Java 
 
 ### `LauncherWallpaperFreshnessHook`
 
-Tracks wallpaper-content authority from both Android system wallpaper signals and HyperOS vendor lifecycle callbacks. `WallpaperManager.getWallpaperId(FLAG_SYSTEM)` coalesces duplicate system/vendor change notifications; `ACTION_WALLPAPER_CHANGED` and `OnColorsChangedListener` backstop missing vendor callbacks. This remains event-driven freshness, not a generic `invalidate()` hook or timer.
+Tracks the exact HyperOS 4.50 `DesktopWallpaperManager` refresh transaction observed in the canonical OS3 Launcher Pad decompilation. `updateWallpaperInfo()` advances wallpaper-content generation; after its background `WallpaperInfoUpdateTask` rereads MIUI wallpaper metadata and the Workspace-side `ColorModeRefreshTask` completes, `notifyWallpaperColorChanged()` requests the fresh PassBlur frame. Framework wallpaper IDs/broadcasts are not freshness authority. `onDrawFrameEnd()` remains wired only for the separate Recents-return wallpaper-settle path.
 
 ### `RecentsBackgroundBlurHook`
 
