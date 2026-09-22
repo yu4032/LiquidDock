@@ -6,7 +6,6 @@ import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 
 import java.util.Collections;
 import java.util.Map;
@@ -191,8 +190,8 @@ final class SystemUiHandleMenuGlassHook {
                 Binding binding = new Binding(root, sourceRoot, target, glass);
                 ACTIVE.put(root, binding);
                 binding.start();
-                log("caption menu glass bind started target=" + targetLabel(target)
-                        + " sourceRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
+                log("caption menu native glass bind started target=" + targetLabel(target)
+                        + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             } catch (Throwable error) {
                 log("glass bind failed; stock retained: " + error);
                 Binding active = ACTIVE.remove(root);
@@ -234,18 +233,20 @@ final class SystemUiHandleMenuGlassHook {
         }
     }
 
-    private static final class Binding implements ViewTreeObserver.OnPreDrawListener,
-            View.OnAttachStateChangeListener, SystemUiHandleMenuGlassSession.Listener {
+    /**
+     * Windowless caption menus are not safe RootPassBlur producer roots on this HyperOS build.
+     * Use HyperOS' own pass-window backdrop material directly on the menu target. This still
+     * samples compositor content behind the popup, but never calls SetPassBlurSurface on the
+     * menu-local 758x147 ViewRoot that was observed to kill SystemUI.
+     */
+    private static final class Binding implements View.OnAttachStateChangeListener {
         final View root;
         final View sourceRoot;
         final View target;
         final Drawable stockBackground;
-        final SystemUiHandleMenuGlassSession session;
-        SystemUiHandleMenuGlassSinkView sink;
+        final int nativeBlurRadiusPx;
 
-        boolean captureRequested;
-        boolean presented;
-        boolean failed;
+        boolean nativeGlassApplied;
         boolean released;
 
         Binding(
@@ -257,86 +258,55 @@ final class SystemUiHandleMenuGlassHook {
             this.sourceRoot = sourceRoot;
             this.target = target;
             stockBackground = target.getBackground();
-            session = new SystemUiHandleMenuGlassSession(sourceRoot, glass, this);
+            nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
         }
 
         void start() {
-            sink = SystemUiHandleMenuGlassSinkView.attachInsideHost(
-                    (ViewGroup) root, target, session);
             root.addOnAttachStateChangeListener(this);
-            root.getViewTreeObserver().addOnPreDrawListener(this);
-            if (sink == null) {
-                onFailure(new IllegalStateException("caption menu local glass host unavailable"));
+            applyNativeGlass();
+        }
+
+        private void applyNativeGlass() {
+            if (released || nativeGlassApplied || !root.isAttachedToWindow()
+                    || !target.isAttachedToWindow()) return;
+            boolean applied = MiBlurBridge.applyPassWindowBlur(target, nativeBlurRadiusPx);
+            if (!applied) {
+                log("native pass-window glass unavailable; stock retained"
+                        + " target=" + targetLabel(target));
                 return;
             }
-            refreshGeometry();
-        }
-
-        @Override
-        public boolean onPreDraw() {
-            if (!released) refreshGeometry();
-            return true;
-        }
-
-        void refreshGeometry() {
-            if (released || failed || sink == null) return;
-            sink.syncFromTarget();
-            LauncherGlassGeometry.Snapshot geometry = sink.captureGeometry(sourceRoot);
-            if (geometry == null) return;
-            session.updateGeometry(geometry);
-            if (!captureRequested) {
-                captureRequested = true;
-                log("requesting first PassBlur frame");
-                session.requestInitialCapture();
-            }
-        }
-
-        @Override
-        public void onFirstFramePresented() {
-            if (released || failed || presented) return;
-            presented = true;
+            nativeGlassApplied = true;
             target.setBackground(null);
-            if (sink != null) sink.reveal();
-            log("Prismal presented target=" + targetLabel(target));
+            target.invalidate();
+            log("native pass-window glass presented target=" + targetLabel(target)
+                    + " blur=" + nativeBlurRadiusPx
+                    + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         }
 
-        @Override
-        public void onFailure(Throwable error) {
-            if (released || failed) return;
-            failed = true;
-            log("Prismal unavailable; stock retained: " + error);
-            restoreStockBackground();
-            if (sink != null) sink.dispose();
-            sink = null;
-            session.shutdown();
-        }
-
-        void restoreStockBackground() {
+        private void restoreStockBackground() {
+            if (nativeGlassApplied) {
+                MiBlurBridge.clearPassWindowBlur(target);
+                nativeGlassApplied = false;
+            }
             if (target.getBackground() == null) target.setBackground(stockBackground);
-            presented = false;
         }
 
         void release() {
             if (released) return;
             released = true;
-            ViewTreeObserver observer = root.getViewTreeObserver();
-            if (observer.isAlive()) observer.removeOnPreDrawListener(this);
             root.removeOnAttachStateChangeListener(this);
             restoreStockBackground();
-            if (sink != null) sink.dispose();
-            sink = null;
-            session.shutdown();
         }
 
         @Override
         public void onViewAttachedToWindow(View view) {
-            refreshGeometry();
+            applyNativeGlass();
         }
 
         @Override
         public void onViewDetachedFromWindow(View view) {
             if (ACTIVE.get(root) == this) ACTIVE.remove(root);
-            log("HandleMenuView detached");
+            log("caption menu detached");
             release();
         }
     }
