@@ -47,6 +47,9 @@ final class SystemUiHandleMenuGlassHook {
                 || !glass.enabled || !glass.systemUiHandleMenuEnabled) return;
         glassConfig = glass;
 
+        // Read-only probe only. Never creates or mutates a PassBlur producer.
+        SystemUiHandleMenuBackdropProbe.install(classLoader);
+
         int installedCount = 0;
         try {
             Class<?> miuiDecorationDot = Class.forName(MIUI_DECORATION_DOT, false, classLoader);
@@ -264,6 +267,7 @@ final class SystemUiHandleMenuGlassHook {
 
         void start() {
             root.addOnAttachStateChangeListener(this);
+            SystemUiHandleMenuBackdropProbe.logMenuSnapshot(root, target);
             applyNativeGlass();
         }
 
