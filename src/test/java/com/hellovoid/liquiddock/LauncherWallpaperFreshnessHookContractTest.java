@@ -18,15 +18,29 @@ public class LauncherWallpaperFreshnessHookContractTest {
         return Files.readString(HOOK);
     }
 
-    @Test public void followsExactDesktopWallpaperManagerRefreshTransaction() throws Exception {
+    @Test public void followsRawBinderCallbackAndVendorCacheTask() throws Exception {
         String source = hook();
 
         assertTrue(source.contains(
-                "com.miui.home.launcher.wallpaper.DesktopWallpaperManager"));
-        assertTrue(source.contains("\"updateWallpaperInfo\""));
-        assertTrue(source.contains("\"notifyWallpaperColorChanged\""));
+                "DesktopWallpaperManager$MiuiWallpaperManagerCallbackStub"));
+        assertTrue(source.contains(
+                "DesktopWallpaperManager$WallpaperInfoUpdateTask"));
+        assertTrue(source.contains(
+                "\"onWallpaperChanged\", WallpaperColors.class, String.class, int.class"));
+        assertTrue(source.contains("task.getDeclaredMethod(\"run\")"));
         assertTrue(source.contains("LauncherGlassSceneController.onWallpaperChangedForAll()"));
         assertTrue(source.contains("LauncherGlassSceneController.onWallpaperCandidateForAll()"));
+        assertTrue(source.contains("LauncherWallpaperTransactionState"));
+    }
+
+    @Test public void freshnessDoesNotDependOnInlineableManagerHelperHooks() throws Exception {
+        String source = hook();
+
+        assertFalse(source.contains("getDeclaredMethod(\"updateWallpaperInfo\")"));
+        assertFalse(source.contains("getDeclaredMethod(\"notifyWallpaperColorChanged\")"));
+        assertTrue(source.contains("TRANSACTION.onWallpaperChanged()"));
+        assertTrue(source.contains("TRANSACTION.onTaskStarted()"));
+        assertTrue(source.contains("TRANSACTION.shouldPublishTaskCompletion(serial)"));
     }
 
     @Test public void workspaceFreshnessDoesNotInferIdentityFromFrameworkWallpaperSignals()
@@ -79,23 +93,6 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(recents.contains("\"setFinalPosition\""));
         assertTrue(source.contains("LauncherGlassRecentsHook::onSystemWallpaperDrawFrameEnd"));
         assertTrue(recents.contains("onSystemWallpaperDrawFrameEnd"));
-    }
-
-    @Test public void workstationWallpaperPulseReassertsSurfaceFlingerUpdateAuthority()
-            throws Exception {
-        String source = hook();
-        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
-        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
-
-        // Vendor completion remains notifyWallpaperColorChanged; do not invent a timer/rebind boundary.
-        assertTrue(source.contains("\"notifyWallpaperColorChanged\""));
-        assertTrue(scene.contains("LauncherWallpaperContentState.Pulse"));
-        assertTrue(session.contains("sourceBackend.requestFresh("));
-        assertTrue(bridge.contains("binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE"));
-        assertTrue(bridge.contains("WorkstationProducerPolicy.shouldForceWorkspaceResume("));
-        assertFalse(source.contains("postDelayed"));
-        assertFalse(source.contains("requestRebind"));
     }
 
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
