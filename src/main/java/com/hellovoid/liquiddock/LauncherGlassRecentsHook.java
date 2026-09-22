@@ -35,7 +35,9 @@ final class LauncherGlassRecentsHook {
         installWallpaperSettleAuthority(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
+                long staleReturn = WALLPAPER_SETTLE.pendingSerial();
                 WALLPAPER_SETTLE.onRecentsShown();
+                if (staleReturn > 0L) discardSystemDrawEnd(staleReturn);
                 LauncherGlassSceneController.setRecentsCoveredForAll(true);
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -62,9 +64,17 @@ final class LauncherGlassRecentsHook {
                 try {
                     result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 } catch (Throwable error) {
-                    WALLPAPER_SETTLE.cancelReturn(serial);
-                    LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+                    cancelWallpaperSettle(serial, "vendor-hide-exception");
                     throw error;
+                }
+
+                // If vendor hide handling did not bind this return serial to either the Local
+                // spring-end path or the System wallpaper draw-end path, no future callback can
+                // legally release this barrier. Fail closed only for the duration of vendor hide
+                // handling, then drop the impossible fence instead of wedging future HOME/wallpaper
+                // freshness indefinitely.
+                if (!WALLPAPER_SETTLE.hasCompletionAuthority(serial)) {
+                    cancelWallpaperSettle(serial, "no-vendor-wallpaper-authority");
                 }
 
                 boolean rolloverAccepted = true;
@@ -79,8 +89,7 @@ final class LauncherGlassRecentsHook {
                         WorkstationRecentsRecoveryPolicy.onRecentsReturn(
                                 workstationMode, rolloverAccepted);
                 if (!recovery.allowUncover) {
-                    WALLPAPER_SETTLE.cancelReturn(serial);
-                    LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+                    cancelWallpaperSettle(serial, "workstation-rollover-rejected");
                     MainHook.log(TAG
                             + " Workstation Recents producer rollover rejected; HOME remains covered"
                             + " serial=" + serial);
@@ -129,7 +138,8 @@ final class LauncherGlassRecentsHook {
                     new Class<?>[]{String.class, float.class}, chain -> {
                         Long serial = LOCAL_WALLPAPER_SERIAL.get();
                         Object type = chain.getArg(0);
-                        if (serial != null && serial > 0L && "zoom".equals(String.valueOf(type))) {
+                        if (serial != null && serial > 0L && "zoom".equals(String.valueOf(type))
+                                && WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
                             synchronized (LOCAL_SPRING_SERIALS) {
                                 LOCAL_SPRING_SERIALS.put(chain.getThisObject(), serial);
                             }
@@ -165,10 +175,17 @@ final class LauncherGlassRecentsHook {
                     new Class<?>[]{wallpaperParam}, chain -> {
                         long serial = WALLPAPER_SETTLE.pendingSerial();
                         boolean armed = serial > 0L && armSystemDrawEnd(serial);
+                        if (armed && !WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
+                            rollbackSystemDrawEnd(serial);
+                            armed = false;
+                        }
                         try {
                             return chain.proceed(chain.getArgs().toArray(new Object[0]));
                         } catch (Throwable error) {
-                            if (armed) rollbackSystemDrawEnd(serial);
+                            if (armed) {
+                                rollbackSystemDrawEnd(serial);
+                                WALLPAPER_SETTLE.revokeCompletionAuthority(serial);
+                            }
                             throw error;
                         }
                     });
@@ -204,6 +221,23 @@ final class LauncherGlassRecentsHook {
             Long tail = SYSTEM_DRAW_END_SERIALS.peekLast();
             if (tail != null && tail == serial) SYSTEM_DRAW_END_SERIALS.removeLast();
         }
+    }
+
+    private static void discardSystemDrawEnd(long serial) {
+        if (serial <= 0L) return;
+        synchronized (SYSTEM_DRAW_END_SERIALS) {
+            SYSTEM_DRAW_END_SERIALS.removeIf(
+                    queued -> queued != null && queued.longValue() == serial);
+        }
+    }
+
+    private static boolean cancelWallpaperSettle(long serial, String reason) {
+        if (!WALLPAPER_SETTLE.cancelReturn(serial)) return false;
+        discardSystemDrawEnd(serial);
+        LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
+        MainHook.log(TAG + " Recents wallpaper settle cancelled reason=" + reason
+                + " serial=" + serial);
+        return true;
     }
 
     private static void releaseWallpaperSettle(long serial, String authority) {
