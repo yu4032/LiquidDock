@@ -20,4 +20,11 @@ public class RecentsBlurPolicyTest {
         assertEquals(0.2f, RecentsBlurPolicy.scaleGestureRatio(0.5f, 40), EPSILON);
         assertEquals(0.4f, RecentsBlurPolicy.scaleGestureRatio(1f, 40), EPSILON);
     }
+
+    @Test
+    public void wallpaperDimmingCanBeRemovedWithoutChangingVendorValueWhenDisabled() {
+        assertEquals(0f, RecentsBlurPolicy.resolveDimming(0.5f, true), EPSILON);
+        assertEquals(0f, RecentsBlurPolicy.resolveDimming(1.0f, true), EPSILON);
+        assertEquals(0.5f, RecentsBlurPolicy.resolveDimming(0.5f, false), EPSILON);
+    }
 }
