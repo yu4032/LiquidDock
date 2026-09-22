@@ -23,4 +23,18 @@ public class DockShadowArchitectureTest {
         assertFalse(source.contains("nativeShadowInternalCall"));
         assertFalse(source.contains("captureVendorDockShadow"));
     }
+    @Test
+    public void mainHookDoesNotOwnFeatureRuntimeState() throws Exception {
+        String source = Files.readString(MAIN);
+
+        assertFalse(source.contains("nativeShadowConfig"));
+        assertFalse(source.contains("hotSeatsShadowOwnerRef"));
+        assertFalse(source.contains("oldBgRef"));
+        assertFalse(source.contains("normalLayoutBackup"));
+        assertFalse(source.contains("dockResizeAnimators"));
+        assertFalse(source.contains("workstationModeHookConfirmed"));
+        assertFalse(source.contains("private static volatile boolean workstationMode"));
+        assertFalse(source.contains("HookUtil."));
+    }
+
 }
