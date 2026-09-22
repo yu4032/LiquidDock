@@ -717,6 +717,13 @@ private fun LiquidPage(
             "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
             masterEnabled && liquidGlass,
         )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS,
+            "桌面卸载弹窗玻璃背景",
+            "替换桌面卸载与移除确认弹窗背景；只接管 Launcher 自有弹窗，失败时保留系统原生材质，重启桌面后生效",
+            masterEnabled && liquidGlass,
+        )
         BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
         BooleanSetting(
             prefs,
