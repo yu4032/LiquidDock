@@ -257,6 +257,26 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> UNINSTALL_DIALOG_GLASS = bool(
                 "liquid_uninstall_dialog_glass", true, true, true,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> DIALOG_DISABLE_DIMMING = bool(
+                "liquid_dialog_disable_dimming", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
+        // Appearance overrides are IF_PRESENT so an untouched dialog profile follows the
+        // current global Prismal material instead of freezing a copied default.
+        public static final ConfigKey<Integer> DIALOG_BLUR = integer(
+                "liquid_dialog_blur", 0, null, 0, 0, 60,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> DIALOG_TINT_RED = integer(
+                "liquid_dialog_tint_r", 0, null, 0, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> DIALOG_TINT_GREEN = integer(
+                "liquid_dialog_tint_g", 0, null, 0, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> DIALOG_TINT_BLUE = integer(
+                "liquid_dialog_tint_b", 255, null, 255, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> DIALOG_TINT_ALPHA = integer(
+                "liquid_dialog_tint_alpha", 35, null, 35, 0, 255,
+                ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> FOLDER_GLASS = bool(
                 "liquid_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_GLASS = bool(
@@ -621,7 +641,10 @@ public final class ConfigSchema {
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
-                Glass.UNINSTALL_DIALOG_GLASS, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
+                Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,
+                Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
+                Glass.DIALOG_TINT_BLUE, Glass.DIALOG_TINT_ALPHA,
+                Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.FOLDER_CORNER_RADIUS,
