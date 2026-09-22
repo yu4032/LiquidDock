@@ -76,7 +76,11 @@ final class LauncherDialogGlassCoordinator {
             @Override public void onViewAttachedToWindow(View v) {}
 
             @Override public void onViewDetachedFromWindow(View v) {
-                MAIN.post(() -> release(dialog, binding, "material-detached"));
+                MAIN.post(() -> {
+                    Dialog owner = binding.dialogRef.get();
+                    if (owner != null) release(owner, binding, "material-detached");
+                    else releaseBinding(binding, "material-detached-orphan");
+                });
             }
         };
         binding.detachListener = detachListener;
