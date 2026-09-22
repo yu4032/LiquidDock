@@ -12,6 +12,7 @@
     <string name="page_workstation">工作台 Dock</string>
     <string name="page_recents">多任务</string>
     <string name="page_liquid">液态玻璃</string>
+    <string name="page_dialog_customization">对话弹窗自定义</string>
     <string name="page_widget_components">小组件组件</string>
     <string name="page_widget_component_detail">小组件组件详情</string>
     <string name="widget_components_entry">小组件组件隐藏</string>
