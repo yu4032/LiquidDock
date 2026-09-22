@@ -81,6 +81,23 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(recents.contains("onSystemWallpaperDrawFrameEnd"));
     }
 
+    @Test public void workstationWallpaperPulseReassertsSurfaceFlingerUpdateAuthority()
+            throws Exception {
+        String source = hook();
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        // Vendor completion remains notifyWallpaperColorChanged; do not invent a timer/rebind boundary.
+        assertTrue(source.contains("\"notifyWallpaperColorChanged\""));
+        assertTrue(scene.contains("LauncherWallpaperContentState.Pulse"));
+        assertTrue(session.contains("sourceBackend.requestFresh("));
+        assertTrue(bridge.contains("binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE"));
+        assertTrue(bridge.contains("WorkstationProducerPolicy.shouldForceWorkspaceResume("));
+        assertFalse(source.contains("postDelayed"));
+        assertFalse(source.contains("requestRebind"));
+    }
+
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
