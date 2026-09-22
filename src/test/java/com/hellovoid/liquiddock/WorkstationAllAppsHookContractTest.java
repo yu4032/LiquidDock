@@ -14,7 +14,14 @@ import static org.junit.Assert.assertTrue;
 /** Wiring regression for the laptop All Apps CellLayout. */
 public class WorkstationAllAppsHookContractTest {
     private static String source() throws IOException {
-        Path path = Paths.get("src/main/java/com/hellovoid/liquiddock/HomeGridHook.java");
+        Path path = Paths.get(
+                "src/main/java/com/hellovoid/liquiddock/HomeGridCellGeometryHook.java");
+        return Files.readString(path, StandardCharsets.UTF_8);
+    }
+
+    private static String policy() throws IOException {
+        Path path = Paths.get(
+                "src/main/java/com/hellovoid/liquiddock/HomeGridCellGeometryPolicy.java");
         return Files.readString(path, StandardCharsets.UTF_8);
     }
 
@@ -51,11 +58,12 @@ public class WorkstationAllAppsHookContractTest {
     @Test
     public void verticalSpacingControlsBothOuterEdgesInsteadOfOnlyTheTopOrigin() throws IOException {
         String source = source();
+        String policy = policy();
         assertTrue("All Apps must derive an inner height from the two absolute edge spacings",
-                source.contains("int allAppsInnerHeight = Math.max(countY, height - top - bottom);"));
+                policy.contains("int allAppsInnerHeight = Math.max(in.countY, in.height - top - bottom);"));
         assertTrue("All Apps must redistribute the remaining vertical span into row gaps",
-                source.contains("if (workstationAllApps && countY > 1)"));
-        assertTrue("the final height gap must be written to CellLayout",
-                source.contains("HookUtil.setIntField(cellLayout, \"mHeightGap\", heightGap);"));
+                policy.contains("if (in.workstationAllApps && in.countY > 1)"));
+        assertTrue("the final policy height gap must be written to CellLayout",
+                source.contains("HookUtil.setIntField(cellLayout, \"mHeightGap\", geometry.heightGap);"));
     }
 }
