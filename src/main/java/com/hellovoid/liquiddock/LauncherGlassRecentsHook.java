@@ -248,9 +248,13 @@ final class LauncherGlassRecentsHook {
      */
     static void onWallpaperContentChanged() {
         long serial = WALLPAPER_SETTLE.pendingSerial();
-        if (serial > 0L) {
-            cancelWallpaperSettle(serial, "wallpaper-content-generation-changed");
-        }
+        if (serial <= 0L || !WALLPAPER_SETTLE.cancelReturn(serial)) return;
+        discardWallpaperAuthorities(serial);
+        // SceneController clears its capture barrier as part of onWallpaperChangedForAll(), without
+        // requesting a frame. The matching WallpaperInfoUpdateTask completion remains the sole
+        // cache-ready authority allowed to start the new wallpaper pulse.
+        MainHook.log(TAG + " Recents wallpaper authority superseded by content generation serial="
+                + serial);
     }
 
     /** Called by the existing typed MIUI wallpaper callback bridge on vendor onDrawFrameEnd(). */
