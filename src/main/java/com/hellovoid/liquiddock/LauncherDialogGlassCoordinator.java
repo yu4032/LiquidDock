@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 
 import java.lang.ref.WeakReference;
@@ -15,141 +16,254 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Cross-ViewRoot glass ownership for Launcher-owned dialogs.
+ * Cross-ViewRoot glass ownership for Launcher-owned uninstall dialogs.
  *
- * <p>The Launcher Activity remains the sole PassBlur source authority. Dialog windows only host
- * output sinks, so they never sample themselves and can fail closed to the vendor material.</p>
+ * <p>The custom UninstallDialogViewContainer is content only. HyperOS 4.50 places the visible
+ * MIUIX window material on DialogParentPanel2 (@id/parentPanel). The Launcher Activity remains the
+ * sole PassBlur source authority and the Dialog ViewRoot hosts output only.</p>
  */
 final class LauncherDialogGlassCoordinator {
     private static final String TAG = "[DC][LauncherDialogGlass]";
-    private static final String UNINSTALL_CONTAINER =
+    private static final String UNINSTALL_CONTENT =
             "com.miui.home.launcher.uninstall.UninstallDialogViewContainer";
-    private static final int MAX_TREE_LOG_NODES = 24;
+    private static final String DIALOG_PARENT_PANEL =
+            "miuix.appcompat.internal.widget.DialogParentPanel2";
+    private static final String DIALOG_PARENT_PANEL_ID = "parentPanel";
+    private static final int MAX_TREE_LOG_NODES = 32;
     private static final Map<Dialog, Binding> BINDINGS = new WeakHashMap<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private LauncherDialogGlassCoordinator() {}
 
-    static synchronized boolean attachUninstallDialog(
+    /**
+     * Observe one exact BaseUninstallDialog instance without taking over its vendor show/dismiss
+     * listeners. Constructor callers may immediately invoke create()/show(), so rendezvous is
+     * deferred to the main queue and completed from real attach/layout events.
+     */
+    static void watchUninstallDialog(
             Activity launcher, Dialog dialog, LiquidDockConfig.Glass glassConfig, String source) {
         if (launcher == null || dialog == null || glassConfig == null
-                || !GlassRuntimeState.isEnabled() || !dialog.isShowing()) {
-            return false;
+                || !GlassRuntimeState.isEnabled()) {
+            return;
         }
+        MAIN.post(() -> watchOnMain(launcher, dialog, glassConfig, source));
+    }
+
+    private static synchronized void watchOnMain(
+            Activity launcher, Dialog dialog, LiquidDockConfig.Glass glassConfig, String source) {
+        if (!GlassRuntimeState.isEnabled()) return;
 
         Binding previous = BINDINGS.remove(dialog);
-        if (previous != null) releaseBinding(previous, "replace");
+        if (previous != null) releaseBinding(previous, "watch-replace");
 
-        Window dialogWindow = dialog.getWindow();
-        View decor = dialogWindow != null ? dialogWindow.getDecorView() : null;
-        View material = findExactClass(decor, UNINSTALL_CONTAINER);
-        if (material == null || !(material.getParent() instanceof ViewGroup)) {
-            MainHook.log(TAG + " target unavailable source=" + source
-                    + " decor=" + className(decor));
-            logTree(decor);
-            return false;
+        Window window = dialog.getWindow();
+        View decor = window != null ? window.getDecorView() : null;
+        if (decor == null) {
+            MainHook.log(TAG + " decor unavailable source=" + source
+                    + " type=" + dialog.getClass().getName());
+            return;
+        }
+
+        Binding binding = new Binding(launcher, dialog, decor, glassConfig, source);
+        BINDINGS.put(dialog, binding);
+        View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) {
+                MainHook.log(TAG + " decor attached source=" + binding.source
+                        + " type=" + binding.dialogType);
+                armLayoutRendezvous(binding);
+            }
+
+            @Override public void onViewDetachedFromWindow(View v) {
+                MAIN.post(() -> releaseObserved(binding, "decor-detached"));
+            }
+        };
+        binding.attachListener = attachListener;
+        decor.addOnAttachStateChangeListener(attachListener);
+
+        MainHook.log(TAG + " watching source=" + binding.source
+                + " type=" + binding.dialogType
+                + " attached=" + decor.isAttachedToWindow());
+        if (decor.isAttachedToWindow()) armLayoutRendezvous(binding);
+    }
+
+    private static void armLayoutRendezvous(Binding binding) {
+        if (binding == null || binding.released || binding.bound || binding.layoutListener != null) {
+            return;
+        }
+        View decor = binding.decorRef.get();
+        if (decor == null) return;
+        ViewTreeObserver observer = decor.getViewTreeObserver();
+        if (!observer.isAlive()) return;
+
+        ViewTreeObserver.OnGlobalLayoutListener listener = () -> tryAttach(binding);
+        binding.layoutObserver = observer;
+        binding.layoutListener = listener;
+        observer.addOnGlobalLayoutListener(listener);
+        tryAttach(binding);
+    }
+
+    /**
+     * Wait for MIUIX to install its own content hierarchy. No fixed delay is involved: async
+     * inflation, create() and show() all converge through attach/global-layout.
+     */
+    private static synchronized void tryAttach(Binding binding) {
+        if (binding == null || binding.released || binding.bound) return;
+        View decor = binding.decorRef.get();
+        Activity launcher = binding.launcherRef.get();
+        Dialog dialog = binding.dialogRef.get();
+        if (decor == null || launcher == null || dialog == null
+                || !decor.isAttachedToWindow()) {
+            return;
+        }
+
+        View uninstallContent = findExactClass(decor, UNINSTALL_CONTENT);
+        View panel = findExactClass(decor, DIALOG_PARENT_PANEL);
+        if (uninstallContent == null || panel == null) {
+            logMissingTargetsOnce(binding, decor, uninstallContent, panel);
+            return;
+        }
+        String panelId = resourceEntryName(panel);
+        if (!DIALOG_PARENT_PANEL_ID.equals(panelId)) {
+            MainHook.log(TAG + " panel identity mismatch source=" + binding.source
+                    + " class=" + panel.getClass().getName() + " id=" + panelId);
+            removeLayoutRendezvous(binding);
+            return;
+        }
+        if (!(panel.getParent() instanceof ViewGroup)
+                || panel.getWidth() <= 0 || panel.getHeight() <= 0) {
+            return;
         }
 
         View authorityAnchor = launcher.findViewById(android.R.id.content);
         if (authorityAnchor == null || !authorityAnchor.isAttachedToWindow()) {
-            MainHook.log(TAG + " launcher authority unavailable source=" + source);
-            return false;
+            if (!binding.authorityUnavailableLogged) {
+                binding.authorityUnavailableLogged = true;
+                MainHook.log(TAG + " launcher authority unavailable source=" + binding.source);
+            }
+            return;
         }
         LauncherGlassSession authority =
-                LauncherGlassSessionRegistry.acquire(authorityAnchor, glassConfig);
+                LauncherGlassSessionRegistry.acquire(authorityAnchor, binding.glassConfig);
         if (authority == null || authority.isShutdown()) {
-            MainHook.log(TAG + " shared launcher session unavailable source=" + source);
-            return false;
-        }
-
-        float radiusPx = resolveDialogCornerRadius(material);
-        LauncherGlassSinkView sink = LauncherGlassSinkView.attachToExternalMaterial(
-                material, authority, radiusPx, glassConfig);
-        if (sink == null) {
-            MainHook.log(TAG + " output sink unavailable source=" + source);
-            return false;
-        }
-        sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
-
-        Binding binding = new Binding(dialog, material, sink, source);
-        View.OnAttachStateChangeListener detachListener = new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View v) {}
-
-            @Override public void onViewDetachedFromWindow(View v) {
-                MAIN.post(() -> {
-                    Dialog owner = binding.dialogRef.get();
-                    if (owner != null) release(owner, binding, "material-detached");
-                    else releaseBinding(binding, "material-detached-orphan");
-                });
+            if (!binding.authorityUnavailableLogged) {
+                binding.authorityUnavailableLogged = true;
+                MainHook.log(TAG + " shared launcher session unavailable source=" + binding.source);
             }
-        };
-        binding.detachListener = detachListener;
-        material.addOnAttachStateChangeListener(detachListener);
-        BINDINGS.put(dialog, binding);
+            return;
+        }
 
-        sink.runWhenFirstFramePresented(() -> claimVendorMaterial(dialog, binding));
+        float radiusPx = resolveDialogCornerRadius(panel);
+        LauncherGlassSinkView sink = LauncherGlassSinkView.attachToExternalMaterial(
+                panel, authority, radiusPx, binding.glassConfig);
+        if (sink == null) {
+            if (!binding.sinkUnavailableLogged) {
+                binding.sinkUnavailableLogged = true;
+                MainHook.log(TAG + " output sink unavailable source=" + binding.source);
+            }
+            return;
+        }
+
+        binding.panelRef = new WeakReference<>(panel);
+        binding.sink = sink;
+        binding.bound = true;
+        sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
+        removeLayoutRendezvous(binding);
+
+        sink.runWhenFirstFramePresented(() -> {
+            Dialog owner = binding.dialogRef.get();
+            if (owner != null) claimVendorMaterial(owner, binding);
+            else releaseBinding(binding, "first-frame-orphan");
+        });
         sink.requestLifecycleRefresh();
         View launcherRoot = authorityAnchor.getRootView();
         if (launcherRoot != null) LauncherGlassSceneController.requestFreshForRoot(launcherRoot);
 
-        MainHook.log(TAG + " bound source=" + source
-                + " target=" + material.getClass().getName()
-                + " parent=" + className(material.getParent())
-                + " background=" + className(material.getBackground())
+        MainHook.log(TAG + " bound source=" + binding.source
+                + " dialog=" + binding.dialogType
+                + " panel=" + panel.getClass().getName()
+                + " id=" + panelId
+                + " background=" + className(panel.getBackground())
+                + " size=" + panel.getWidth() + "x" + panel.getHeight()
                 + " radiusPx=" + radiusPx);
-        return true;
     }
 
     private static synchronized void claimVendorMaterial(Dialog dialog, Binding expected) {
         Binding binding = BINDINGS.get(dialog);
         if (binding != expected || binding.released || binding.claimed) return;
-        View material = binding.materialRef.get();
-        if (material == null || !material.isAttachedToWindow()) {
-            release(dialog, binding, "first-frame-without-material");
+        View panel = binding.panelRef.get();
+        if (panel == null || !panel.isAttachedToWindow()) {
+            releaseObserved(binding, "first-frame-without-panel");
             return;
         }
 
-        binding.originalBackground = material.getBackground();
-        material.setBackground(null);
+        binding.originalBackground = panel.getBackground();
+        panel.setBackground(null);
         binding.claimed = true;
-        MainHook.log(TAG + " first glass frame presented; vendor background released source="
-                + binding.source);
+        MainHook.log(TAG + " first glass frame presented; MIUIX parentPanel background released"
+                + " source=" + binding.source
+                + " original=" + className(binding.originalBackground));
     }
 
     static synchronized void releaseAll() {
-        ArrayList<Map.Entry<Dialog, Binding>> snapshot =
-                new ArrayList<>(BINDINGS.entrySet());
+        ArrayList<Binding> snapshot = new ArrayList<>(BINDINGS.values());
         BINDINGS.clear();
-        for (Map.Entry<Dialog, Binding> entry : snapshot) {
-            releaseBinding(entry.getValue(), "runtime-teardown");
-        }
+        for (Binding binding : snapshot) releaseBinding(binding, "runtime-teardown");
     }
 
-    private static synchronized void release(Dialog dialog, Binding expected, String reason) {
-        Binding binding = BINDINGS.get(dialog);
-        if (binding != expected) return;
-        BINDINGS.remove(dialog);
+    private static synchronized void releaseObserved(Binding binding, String reason) {
+        if (binding == null || binding.released) return;
+        Dialog dialog = binding.dialogRef.get();
+        if (dialog != null && BINDINGS.get(dialog) == binding) BINDINGS.remove(dialog);
         releaseBinding(binding, reason);
     }
 
     private static void releaseBinding(Binding binding, String reason) {
         if (binding == null || binding.released) return;
         binding.released = true;
-        View material = binding.materialRef.get();
-        if (material != null) {
-            if (binding.detachListener != null) {
-                try { material.removeOnAttachStateChangeListener(binding.detachListener); }
-                catch (Throwable ignored) {}
-            }
-            if (binding.claimed) {
-                material.setBackground(binding.originalBackground);
-            }
+        removeLayoutRendezvous(binding);
+
+        View decor = binding.decorRef.get();
+        if (decor != null && binding.attachListener != null) {
+            try { decor.removeOnAttachStateChangeListener(binding.attachListener); }
+            catch (Throwable ignored) {}
         }
-        binding.detachListener = null;
+        binding.attachListener = null;
+
+        View panel = binding.panelRef.get();
+        if (panel != null && binding.claimed) {
+            panel.setBackground(binding.originalBackground);
+        }
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
         if (sink != null) sink.dispose();
-        MainHook.log(TAG + " released source=" + binding.source + " reason=" + reason);
+
+        MainHook.log(TAG + " released source=" + binding.source + " reason=" + reason
+                + " claimed=" + binding.claimed);
+    }
+
+    private static void removeLayoutRendezvous(Binding binding) {
+        ViewTreeObserver observer = binding != null ? binding.layoutObserver : null;
+        ViewTreeObserver.OnGlobalLayoutListener listener =
+                binding != null ? binding.layoutListener : null;
+        if (binding != null) {
+            binding.layoutObserver = null;
+            binding.layoutListener = null;
+        }
+        if (observer != null && listener != null) {
+            try {
+                if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void logMissingTargetsOnce(
+            Binding binding, View decor, View uninstallContent, View panel) {
+        if (binding.targetsMissingLogged) return;
+        binding.targetsMissingLogged = true;
+        MainHook.log(TAG + " awaiting MIUIX hierarchy source=" + binding.source
+                + " uninstallContent=" + className(uninstallContent)
+                + " panel=" + className(panel));
+        logTree(decor);
     }
 
     private static View findExactClass(View root, String className) {
@@ -164,16 +278,16 @@ final class LauncherDialogGlassCoordinator {
         return null;
     }
 
-    private static float resolveDialogCornerRadius(View material) {
+    private static float resolveDialogCornerRadius(View panel) {
         try {
-            int id = material.getResources().getIdentifier(
+            int id = panel.getResources().getIdentifier(
                     "miuix_appcompat_dialog_bg_corner_radius", "dimen", "com.miui.home");
-            if (id != 0) return material.getResources().getDimension(id);
-            id = material.getResources().getIdentifier(
+            if (id != 0) return panel.getResources().getDimension(id);
+            id = panel.getResources().getIdentifier(
                     "miuix_appcompat_window_dialog_radius", "dimen", "com.miui.home");
-            if (id != 0) return material.getResources().getDimension(id);
+            if (id != 0) return panel.getResources().getDimension(id);
         } catch (Throwable ignored) {}
-        return 28f * material.getResources().getDisplayMetrics().density;
+        return 28f * panel.getResources().getDisplayMetrics().density;
     }
 
     private static void logTree(View root) {
@@ -207,20 +321,37 @@ final class LauncherDialogGlassCoordinator {
     }
 
     private static final class Binding {
+        final WeakReference<Activity> launcherRef;
         final WeakReference<Dialog> dialogRef;
-        final WeakReference<View> materialRef;
+        final WeakReference<View> decorRef;
+        WeakReference<View> panelRef = new WeakReference<>(null);
+        final LiquidDockConfig.Glass glassConfig;
         final String source;
+        final String dialogType;
         LauncherGlassSinkView sink;
-        View.OnAttachStateChangeListener detachListener;
+        View.OnAttachStateChangeListener attachListener;
+        ViewTreeObserver layoutObserver;
+        ViewTreeObserver.OnGlobalLayoutListener layoutListener;
         Drawable originalBackground;
+        boolean targetsMissingLogged;
+        boolean authorityUnavailableLogged;
+        boolean sinkUnavailableLogged;
+        boolean bound;
         boolean claimed;
         boolean released;
 
-        Binding(Dialog dialog, View material, LauncherGlassSinkView sink, String source) {
+        Binding(
+                Activity launcher,
+                Dialog dialog,
+                View decor,
+                LiquidDockConfig.Glass glassConfig,
+                String source) {
+            launcherRef = new WeakReference<>(launcher);
             dialogRef = new WeakReference<>(dialog);
-            materialRef = new WeakReference<>(material);
-            this.sink = sink;
+            decorRef = new WeakReference<>(decor);
+            this.glassConfig = glassConfig;
             this.source = source != null ? source : "unknown";
+            dialogType = dialog.getClass().getName();
         }
     }
 }
