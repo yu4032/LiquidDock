@@ -35,6 +35,14 @@ final class PassBlurBindRequest {
                 NO_EXTRA_EXCLUSIONS);
     }
 
+    static PassBlurBindRequest launcherDialog(View authoritativeRoot) {
+        return new PassBlurBindRequest(
+                authoritativeRoot,
+                PassBlurDomain.LAUNCHER_DIALOG,
+                1.0f,
+                NO_EXTRA_EXCLUSIONS);
+    }
+
     static PassBlurBindRequest shortcutPopup(View authoritativeRoot) {
         return new PassBlurBindRequest(
                 authoritativeRoot,
