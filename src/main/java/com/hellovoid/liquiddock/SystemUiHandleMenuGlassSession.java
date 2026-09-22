@@ -16,50 +16,12 @@ import com.hellovoid.prismal.PrismalRenderer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.util.EnumMap;
 
-/** One zero-copy Prismal scene for the independent SystemUI app-handle popup window. */
+/** One-output zero-copy Prismal scene for SystemUI HandleMenu's windowing pill. */
 final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consumer {
-    enum Target {
-        APP_INFO,
-        WINDOWING,
-        MORE_ACTIONS,
-        OPEN_IN_APP
-    }
-
     interface Listener {
-        void onFirstFramePresented(Target target);
+        void onFirstFramePresented();
         void onFailure(Throwable error);
-    }
-
-    static final class GeometrySet {
-        private final EnumMap<Target, LauncherGlassGeometry.Snapshot> values =
-                new EnumMap<>(Target.class);
-
-        void put(Target target, LauncherGlassGeometry.Snapshot geometry) {
-            if (target != null) values.put(target, geometry);
-        }
-
-        LauncherGlassGeometry.Snapshot get(Target target) {
-            return target != null ? values.get(target) : null;
-        }
-
-        boolean hasVisibleTarget() {
-            for (Target target : Target.values()) {
-                if (values.get(target) != null) return true;
-            }
-            return false;
-        }
-
-        boolean sameAs(GeometrySet other) {
-            if (other == null) return false;
-            for (Target target : Target.values()) {
-                LauncherGlassGeometry.Snapshot a = values.get(target);
-                LauncherGlassGeometry.Snapshot b = other.values.get(target);
-                if (a == null ? b != null : !a.sameAs(b)) return false;
-            }
-            return true;
-        }
     }
 
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
@@ -71,33 +33,23 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
              1f,  1f, 1f, 1f
     };
 
-    private static final class OutputState {
-        final Surface surface;
-        EGLSurface eglSurface = EGL14.EGL_NO_SURFACE;
-        int width;
-        int height;
-
-        OutputState(Surface surface, int width, int height) {
-            this.surface = surface;
-            this.width = width;
-            this.height = height;
-        }
-    }
-
     private final Handler mainHandler;
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
-    private final EnumMap<Target, OutputState> outputs = new EnumMap<>(Target.class);
-    private final EnumMap<Target, Boolean> firstPresentation = new EnumMap<>(Target.class);
 
-    private volatile GeometrySet geometry;
+    private volatile LauncherGlassGeometry.Snapshot geometry;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
+    private Surface outputSurface;
+    private EGLSurface outputEglSurface = EGL14.EGL_NO_SURFACE;
+    private int outputWidth;
+    private int outputHeight;
+    private boolean presentationSignaled;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
 
@@ -134,20 +86,20 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
                 "LiquidDock-SystemUiHandleMenu-EGL");
     }
 
-    void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
-    }
-
-    void updateGeometry(GeometrySet next) {
+    void updateGeometry(LauncherGlassGeometry.Snapshot next) {
         if (shuttingDown || next == null) return;
-        GeometrySet previous = geometry;
+        LauncherGlassGeometry.Snapshot previous = geometry;
         if (previous != null && previous.sameAs(next)) return;
         geometry = next;
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
-    void attachOutput(Target target, Surface surface, int width, int height) {
-        if (target == null || surface == null || shuttingDown) {
+    void requestInitialCapture() {
+        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+    }
+
+    void attachOutput(Surface surface, int width, int height) {
+        if (surface == null || shuttingDown) {
             if (surface != null) surface.release();
             return;
         }
@@ -158,11 +110,11 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
             }
             try {
                 ensureGl();
-                releaseOutput(outputs.remove(target));
-                OutputState next = new OutputState(
-                        surface, Math.max(1, width), Math.max(1, height));
-                next.eglSurface = sourceBackend.createWindowSurface(surface);
-                outputs.put(target, next);
+                releaseOutput();
+                outputSurface = surface;
+                outputWidth = Math.max(1, width);
+                outputHeight = Math.max(1, height);
+                outputEglSurface = sourceBackend.createWindowSurface(surface);
                 renderCurrent();
             } catch (Throwable error) {
                 try { surface.release(); } catch (Throwable ignored) {}
@@ -173,24 +125,21 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
         }
     }
 
-    void resizeOutput(Target target, int width, int height) {
-        if (target == null || shuttingDown) return;
+    void resizeOutput(int width, int height) {
+        if (shuttingDown) return;
         sourceBackend.postToRenderThread(() -> {
-            OutputState current = outputs.get(target);
-            if (current == null) return;
-            current.width = Math.max(1, width);
-            current.height = Math.max(1, height);
+            if (outputSurface == null) return;
+            outputWidth = Math.max(1, width);
+            outputHeight = Math.max(1, height);
             renderCurrent();
         });
     }
 
-    void detachOutput(Target target, Surface surface) {
-        if (target == null || surface == null) return;
+    void detachOutput(Surface surface) {
+        if (surface == null) return;
         if (shuttingDown || !sourceBackend.postToRenderThread(() -> {
-            OutputState current = outputs.get(target);
-            if (current != null && current.surface == surface) {
-                outputs.remove(target);
-                releaseOutput(current);
+            if (outputSurface == surface) {
+                releaseOutput();
             } else {
                 try { surface.release(); } catch (Throwable ignored) {}
             }
@@ -228,81 +177,59 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
     }
 
     private void renderCurrent() {
-        GeometrySet currentGeometry = geometry;
-        if (shuttingDown || !backdropPrepared || currentGeometry == null
-                || logicalWidth <= 0 || logicalHeight <= 0) return;
+        LauncherGlassGeometry.Snapshot current = geometry;
+        if (shuttingDown || !backdropPrepared || current == null
+                || logicalWidth <= 0 || logicalHeight <= 0
+                || outputSurface == null || outputEglSurface == EGL14.EGL_NO_SURFACE) return;
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
             prismalRenderer.beginGlassFrame();
-            for (Target target : Target.values()) {
-                LauncherGlassGeometry.Snapshot value = currentGeometry.get(target);
-                if (value != null) drawGlass(value);
-            }
-            int sceneTexture = prismalRenderer.outputTexture();
-            for (Target target : Target.values()) {
-                presentTarget(
-                        target,
-                        sceneTexture,
-                        currentGeometry.get(target),
-                        outputs.get(target));
-            }
+            prismalRenderer.drawGlass(
+                    new PrismalGeometry(
+                            logicalWidth,
+                            logicalHeight,
+                            current.centerX,
+                            current.centerY,
+                            current.width,
+                            current.height,
+                            current.cornerRadius),
+                    prismalParams,
+                    highlightProfile,
+                    PrismalInteractionState.IDLE);
+
+            sourceBackend.makeCurrent(outputEglSurface);
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+            GLES20.glViewport(0, 0, outputWidth, outputHeight);
+            GLES20.glDisable(GLES20.GL_BLEND);
+            GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+            GLES20.glClearColor(0f, 0f, 0f, 0f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            GLES20.glUseProgram(compositeProgram);
+            bindQuad(compositeProgram);
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.outputTexture());
+            GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+            GLES20.glUniform4f(
+                    requireUniform(compositeProgram, "uCropRect"),
+                    current.cropLeft,
+                    current.cropBottom,
+                    current.cropWidth,
+                    current.cropHeight);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+            unbindQuad(compositeProgram);
+            sourceBackend.swapBuffers(outputEglSurface);
+            signalPresented();
         } catch (Throwable error) {
             notifyFailure(error);
         }
     }
 
-    private void drawGlass(LauncherGlassGeometry.Snapshot geometry) {
-        prismalRenderer.drawGlass(
-                new PrismalGeometry(
-                        logicalWidth,
-                        logicalHeight,
-                        geometry.centerX,
-                        geometry.centerY,
-                        geometry.width,
-                        geometry.height,
-                        geometry.cornerRadius),
-                prismalParams,
-                highlightProfile,
-                PrismalInteractionState.IDLE);
-    }
-
-    private void presentTarget(
-            Target target,
-            int sceneTexture,
-            LauncherGlassGeometry.Snapshot geometry,
-            OutputState current) {
-        if (target == null || geometry == null || current == null
-                || current.eglSurface == EGL14.EGL_NO_SURFACE) return;
-        sourceBackend.makeCurrent(current.eglSurface);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        GLES20.glViewport(0, 0, current.width, current.height);
-        GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(
-                requireUniform(compositeProgram, "uCropRect"),
-                geometry.cropLeft,
-                geometry.cropBottom,
-                geometry.cropWidth,
-                geometry.cropHeight);
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
-        sourceBackend.swapBuffers(current.eglSurface);
-        signalPresented(target);
-    }
-
-    private void signalPresented(Target target) {
-        if (Boolean.TRUE.equals(firstPresentation.get(target))) return;
-        firstPresentation.put(target, Boolean.TRUE);
+    private void signalPresented() {
+        if (presentationSignaled) return;
+        presentationSignaled = true;
         mainHandler.post(() -> {
-            if (!shuttingDown && listener != null) listener.onFirstFramePresented(target);
+            if (!shuttingDown && listener != null) listener.onFirstFramePresented();
         });
     }
 
@@ -310,8 +237,7 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
         if (shuttingDown) return;
         shuttingDown = true;
         boolean queued = sourceBackend.postToRenderThread(() -> {
-            for (OutputState current : outputs.values()) releaseOutput(current);
-            outputs.clear();
+            releaseOutput();
             if (prismalRenderer != null) {
                 try { prismalRenderer.close(); } catch (Throwable ignored) {}
                 prismalRenderer = null;
@@ -333,14 +259,17 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
         }
     }
 
-    private void releaseOutput(OutputState current) {
-        if (current == null) return;
-        if (current.eglSurface != EGL14.EGL_NO_SURFACE) {
-            try { sourceBackend.destroyWindowSurface(current.eglSurface); }
+    private void releaseOutput() {
+        Surface surface = outputSurface;
+        outputSurface = null;
+        if (outputEglSurface != EGL14.EGL_NO_SURFACE) {
+            try { sourceBackend.destroyWindowSurface(outputEglSurface); }
             catch (Throwable ignored) {}
-            current.eglSurface = EGL14.EGL_NO_SURFACE;
+            outputEglSurface = EGL14.EGL_NO_SURFACE;
         }
-        try { current.surface.release(); } catch (Throwable ignored) {}
+        if (surface != null) {
+            try { surface.release(); } catch (Throwable ignored) {}
+        }
     }
 
     private void notifyFailure(Throwable error) {
@@ -354,9 +283,7 @@ final class SystemUiHandleMenuGlassSession implements RootPassBlurBackend.Consum
     private void bindQuad(int program) {
         int position = GLES20.glGetAttribLocation(program, "aPosition");
         int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) {
-            throw new IllegalStateException("quad attribute unavailable");
-        }
+        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
         quadBuffer.position(0);
         GLES20.glEnableVertexAttribArray(position);
         GLES20.glVertexAttribPointer(
