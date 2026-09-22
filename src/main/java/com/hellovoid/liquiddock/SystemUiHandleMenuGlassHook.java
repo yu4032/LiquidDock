@@ -12,14 +12,15 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Replaces HyperOS app-caption popup backgrounds with Prismal while preserving native controls.
+ * Replaces HyperOS app-caption popup backgrounds with compositor-backed native glass while
+ * preserving native controls.
  *
  * <p>HyperOS has two menu implementations in the SystemUI/WMShell stack. Xiaomi's primary path
  * creates a {@code MiuiCaptionContainerView} and passes it through
  * {@code MiuiDecorationDot.addWindow(...)} into a dedicated captionMenu SurfaceControlViewHost.
  * AOSP/WMShell builds use {@code desktop_mode_window_decor_handle_menu}. Both creation boundaries
- * are observed; glass binding still waits for the real attach/layout boundary and never relies on
- * fixed delays.</p>
+ * are observed; glass binding waits for real attach/layout authority and never binds a
+ * RootPassBlur producer to the menu-local Windowless ViewRoot.</p>
  */
 final class SystemUiHandleMenuGlassHook {
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
