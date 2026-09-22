@@ -11,10 +11,7 @@ import android.view.ViewGroup;
 
 import java.lang.ref.WeakReference;
 
-/**
- * Output-only TextureView inserted behind one native SystemUI HandleMenu pill without taking any
- * measured layout space or changing the vendor interaction tree.
- */
+/** Output-only glass layer inserted behind SystemUI HandleMenu's native windowing controls. */
 final class SystemUiHandleMenuGlassSinkView extends TextureView
         implements TextureView.SurfaceTextureListener {
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
@@ -22,20 +19,15 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
 
     private final WeakReference<View> targetRef;
     private final SystemUiHandleMenuGlassSession session;
-    private final SystemUiHandleMenuGlassSession.Target targetId;
     private Surface outputSurface;
     private boolean presented;
     private boolean disposed;
 
     private SystemUiHandleMenuGlassSinkView(
-            Context context,
-            View target,
-            SystemUiHandleMenuGlassSession session,
-            SystemUiHandleMenuGlassSession.Target targetId) {
+            Context context, View target, SystemUiHandleMenuGlassSession session) {
         super(context);
         targetRef = new WeakReference<>(target);
         this.session = session;
-        this.targetId = targetId;
         setOpaque(false);
         setAlpha(0f);
         setClickable(false);
@@ -45,13 +37,11 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
     }
 
     static SystemUiHandleMenuGlassSinkView attachInsideTarget(
-            View target,
-            SystemUiHandleMenuGlassSession session,
-            SystemUiHandleMenuGlassSession.Target targetId) {
-        if (!(target instanceof ViewGroup) || session == null || targetId == null) return null;
+            View target, SystemUiHandleMenuGlassSession session) {
+        if (!(target instanceof ViewGroup) || session == null) return null;
         ViewGroup group = (ViewGroup) target;
-        SystemUiHandleMenuGlassSinkView sink = new SystemUiHandleMenuGlassSinkView(
-                target.getContext(), target, session, targetId);
+        SystemUiHandleMenuGlassSinkView sink =
+                new SystemUiHandleMenuGlassSinkView(target.getContext(), target, session);
         group.addView(sink, 0, new ViewGroup.LayoutParams(0, 0));
         sink.syncFromTarget();
         return sink;
@@ -65,8 +55,7 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
         boolean changed = getLeft() != 0 || getTop() != 0
                 || getRight() != width || getBottom() != height;
         if (changed) {
-            // Preserve 0x0 LayoutParams so the extra TextureView never participates in the
-            // vendor LinearLayout measurement. Direct layout only controls its visual frame.
+            // Keep layout params at 0x0 so this child never changes the vendor LinearLayout.
             layout(0, 0, width, height);
         }
         float desiredAlpha = presented ? 1f : 0f;
@@ -74,9 +63,8 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
             setAlpha(desiredAlpha);
             changed = true;
         }
-        int desiredVisibility = target.getVisibility();
-        if (getVisibility() != desiredVisibility) {
-            setVisibility(desiredVisibility);
+        if (getVisibility() != target.getVisibility()) {
+            setVisibility(target.getVisibility());
             changed = true;
         }
         return changed;
@@ -96,25 +84,16 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
         int[] rootLocation = new int[2];
         root.getLocationOnScreen(rootLocation);
         LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
-                rootLocation[0],
-                rootLocation[1],
-                targetRect.left,
-                targetRect.top,
-                targetRect.right,
-                targetRect.bottom);
+                rootLocation[0], rootLocation[1],
+                targetRect.left, targetRect.top, targetRect.right, targetRect.bottom);
 
         float visualScale = Math.min(
                 targetRect.width() / (float) Math.max(1, target.getWidth()),
                 targetRect.height() / (float) Math.max(1, target.getHeight()));
         float radius = resolveCornerRadius(target) * Math.max(0.01f, visualScale);
         return LauncherGlassGeometry.resolve(
-                root.getWidth(),
-                root.getHeight(),
-                bounds.left,
-                bounds.top,
-                bounds.right,
-                bounds.bottom,
-                radius);
+                root.getWidth(), root.getHeight(),
+                bounds.left, bounds.top, bounds.right, bounds.bottom, radius);
     }
 
     private static float resolveCornerRadius(View target) {
@@ -123,9 +102,8 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
             int id = resources.getIdentifier(
                     CORNER_RADIUS_RESOURCE, "dimen", SYSTEM_UI_PACKAGE);
             if (id != 0) {
-                try {
-                    return Math.max(0f, resources.getDimensionPixelSize(id));
-                } catch (Throwable ignored) {}
+                try { return Math.max(0f, resources.getDimensionPixelSize(id)); }
+                catch (Throwable ignored) {}
             }
         }
         return Math.min(target.getWidth(), target.getHeight()) * 0.5f;
@@ -142,7 +120,7 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
         disposed = true;
         Surface current = outputSurface;
         outputSurface = null;
-        if (current != null) session.detachOutput(targetId, current);
+        if (current != null) session.detachOutput(current);
         if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
     }
 
@@ -152,26 +130,23 @@ final class SystemUiHandleMenuGlassSinkView extends TextureView
         Surface next = new Surface(texture);
         Surface previous = outputSurface;
         outputSurface = next;
-        if (previous != null) session.detachOutput(targetId, previous);
-        session.attachOutput(targetId, next, Math.max(1, width), Math.max(1, height));
+        if (previous != null) session.detachOutput(previous);
+        session.attachOutput(next, Math.max(1, width), Math.max(1, height));
     }
 
     @Override
     public void onSurfaceTextureSizeChanged(
             SurfaceTexture texture, int width, int height) {
-        if (!disposed) {
-            session.resizeOutput(targetId, Math.max(1, width), Math.max(1, height));
-        }
+        if (!disposed) session.resizeOutput(Math.max(1, width), Math.max(1, height));
     }
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
         Surface current = outputSurface;
         outputSurface = null;
-        if (current != null) session.detachOutput(targetId, current);
+        if (current != null) session.detachOutput(current);
         return true;
     }
 
-    @Override
-    public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
+    @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
 }
