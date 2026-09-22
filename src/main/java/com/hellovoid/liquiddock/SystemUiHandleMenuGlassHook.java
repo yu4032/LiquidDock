@@ -13,19 +13,24 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Replaces the stock Material background of WMShell HandleMenu's windowing pill with Prismal.
+ * Replaces HyperOS app-caption popup backgrounds with Prismal while preserving native controls.
  *
- * <p>The decompiled creation path inflates {@code desktop_mode_window_decor_handle_menu} before
- * vendor tinting and before the menu-local SurfaceControlViewHost is attached. Constructor and
- * AssistContent hooks proved unreliable on-device, so the stable observation boundary is the
- * framework LayoutInflater call filtered by that exact SystemUI layout resource. The inflated root
- * is then bound only at the real attach/layout boundary.</p>
+ * <p>HyperOS has two menu implementations in the SystemUI/WMShell stack. Xiaomi's primary path
+ * creates a {@code MiuiCaptionContainerView} and passes it through
+ * {@code MiuiDecorationDot.addWindow(...)} into a dedicated captionMenu SurfaceControlViewHost.
+ * AOSP/WMShell builds use {@code desktop_mode_window_decor_handle_menu}. Both creation boundaries
+ * are observed; glass binding still waits for the real attach/layout boundary and never relies on
+ * fixed delays.</p>
  */
 final class SystemUiHandleMenuGlassHook {
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
+    private static final String MIUI_DECORATION_DOT =
+            "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.decoration.MiuiDecorationDot";
     private static final String HANDLE_MENU_LAYOUT = "desktop_mode_window_decor_handle_menu";
+    private static final String CAPTION_MENU_CONTAINER = "caption_menu_container";
     private static final String WINDOWING_PILL = "windowing_pill";
+    private static final String MIUI_CAPTION_CONTAINER_SIMPLE_NAME = "MiuiCaptionContainerView";
 
     private static final Map<View, PendingBinding> PENDING =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -41,6 +46,39 @@ final class SystemUiHandleMenuGlassHook {
         if (installed || classLoader == null || glass == null
                 || !glass.enabled || !glass.systemUiHandleMenuEnabled) return;
         glassConfig = glass;
+
+        int installedCount = 0;
+        try {
+            Class<?> miuiDecorationDot = Class.forName(MIUI_DECORATION_DOT, false, classLoader);
+            HookUtil.hookMethod(
+                    miuiDecorationDot,
+                    "addWindow",
+                    new Class<?>[]{
+                            View.class,
+                            int.class, int.class, int.class, int.class,
+                            int.class, int.class,
+                            boolean.class
+                    },
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        View menuRoot = args.length > 0 && args[0] instanceof View
+                                ? (View) args[0]
+                                : null;
+                        Object result = chain.proceed(args);
+                        if (menuRoot != null) {
+                            log("MIUI caption menu window created root="
+                                    + menuRoot.getClass().getName()
+                                    + " attached=" + menuRoot.isAttachedToWindow());
+                            observeMenu(menuRoot, "miui-caption-window");
+                        }
+                        return result;
+                    });
+            installedCount++;
+            log("MIUI captionMenu addWindow hook installed");
+        } catch (Throwable error) {
+            log("MIUI captionMenu hook unavailable: " + error);
+        }
+
         try {
             HookUtil.hookMethod(
                     LayoutInflater.class,
@@ -56,22 +94,23 @@ final class SystemUiHandleMenuGlassHook {
                                 : 0;
                         boolean target = isTargetHandleMenuLayout(inflater, resourceId);
                         Object result = chain.proceed(args);
-                        if (target) {
-                            if (result instanceof View) {
-                                View root = (View) result;
-                                log("target layout inflated root=" + root.getClass().getName());
-                                observeInflatedMenu(root);
-                            } else {
-                                log("target layout inflation returned no View; stock retained");
-                            }
+                        if (target && result instanceof View) {
+                            View root = (View) result;
+                            log("AOSP HandleMenu layout inflated root=" + root.getClass().getName());
+                            observeMenu(root, "aosp-handle-menu");
                         }
                         return result;
                     });
-            installed = true;
-            log("HandleMenu layout inflation hook installed");
+            installedCount++;
+            log("AOSP HandleMenu layout inflation hook installed");
         } catch (Throwable error) {
+            log("AOSP HandleMenu hook unavailable: " + error);
+        }
+
+        installed = installedCount > 0;
+        if (!installed) {
             glassConfig = null;
-            log("hook unavailable: " + error);
+            log("no supported HyperOS caption-menu hook available");
         }
     }
 
@@ -87,7 +126,7 @@ final class SystemUiHandleMenuGlassHook {
         }
     }
 
-    private static void observeInflatedMenu(View root) {
+    private static void observeMenu(View root, String source) {
         LiquidDockConfig.Glass glass = glassConfig;
         if (root == null || glass == null || !glass.enabled
                 || !glass.systemUiHandleMenuEnabled) return;
@@ -96,7 +135,9 @@ final class SystemUiHandleMenuGlassHook {
         PendingBinding pending = new PendingBinding(root, glass);
         PENDING.put(root, pending);
         pending.start();
-        log("HandleMenu root observed attached=" + root.isAttachedToWindow()
+        log("menu root observed source=" + source
+                + " class=" + root.getClass().getName()
+                + " attached=" + root.isAttachedToWindow()
                 + " size=" + root.getWidth() + "x" + root.getHeight());
     }
 
@@ -135,9 +176,10 @@ final class SystemUiHandleMenuGlassHook {
                 return;
             }
 
-            View windowing = findByResourceName(root, WINDOWING_PILL);
-            if (!(windowing instanceof ViewGroup)) {
-                log("stable windowing_pill unavailable; stock retained");
+            View target = resolveGlassTarget(root);
+            if (!(target instanceof ViewGroup)) {
+                log("caption menu background target unavailable; stock retained"
+                        + " rootClass=" + root.getClass().getName());
                 PENDING.remove(root);
                 release();
                 return;
@@ -146,11 +188,11 @@ final class SystemUiHandleMenuGlassHook {
             PENDING.remove(root);
             release();
             try {
-                Binding binding = new Binding(root, sourceRoot, windowing, glass);
+                Binding binding = new Binding(root, sourceRoot, target, glass);
                 ACTIVE.put(root, binding);
                 binding.start();
-                log("windowing pill bind started root="
-                        + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
+                log("caption menu glass bind started target=" + targetLabel(target)
+                        + " sourceRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             } catch (Throwable error) {
                 log("glass bind failed; stock retained: " + error);
                 Binding active = ACTIVE.remove(root);
@@ -196,7 +238,7 @@ final class SystemUiHandleMenuGlassHook {
             View.OnAttachStateChangeListener, SystemUiHandleMenuGlassSession.Listener {
         final View root;
         final View sourceRoot;
-        final View windowing;
+        final View target;
         final Drawable stockBackground;
         final SystemUiHandleMenuGlassSession session;
         SystemUiHandleMenuGlassSinkView sink;
@@ -209,21 +251,21 @@ final class SystemUiHandleMenuGlassHook {
         Binding(
                 View root,
                 View sourceRoot,
-                View windowing,
+                View target,
                 LiquidDockConfig.Glass glass) {
             this.root = root;
             this.sourceRoot = sourceRoot;
-            this.windowing = windowing;
-            stockBackground = windowing.getBackground();
+            this.target = target;
+            stockBackground = target.getBackground();
             session = new SystemUiHandleMenuGlassSession(sourceRoot, glass, this);
         }
 
         void start() {
-            sink = SystemUiHandleMenuGlassSinkView.attachInsideTarget(windowing, session);
+            sink = SystemUiHandleMenuGlassSinkView.attachInsideTarget(target, session);
             root.addOnAttachStateChangeListener(this);
             root.getViewTreeObserver().addOnPreDrawListener(this);
             if (sink == null) {
-                onFailure(new IllegalStateException("windowing_pill local host unavailable"));
+                onFailure(new IllegalStateException("caption menu local host unavailable"));
                 return;
             }
             refreshGeometry();
@@ -252,9 +294,9 @@ final class SystemUiHandleMenuGlassHook {
         public void onFirstFramePresented() {
             if (released || failed || presented) return;
             presented = true;
-            windowing.setBackground(null);
+            target.setBackground(null);
             if (sink != null) sink.reveal();
-            log("Prismal presented windowing_pill");
+            log("Prismal presented target=" + targetLabel(target));
         }
 
         @Override
@@ -269,7 +311,7 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         void restoreStockBackground() {
-            if (windowing.getBackground() == null) windowing.setBackground(stockBackground);
+            if (target.getBackground() == null) target.setBackground(stockBackground);
             presented = false;
         }
 
@@ -296,6 +338,29 @@ final class SystemUiHandleMenuGlassHook {
             log("HandleMenuView detached");
             release();
         }
+    }
+
+    private static View resolveGlassTarget(View root) {
+        View miui = findByResourceName(root, CAPTION_MENU_CONTAINER);
+        if (miui instanceof ViewGroup) return miui;
+
+        View aosp = findByResourceName(root, WINDOWING_PILL);
+        if (aosp instanceof ViewGroup) return aosp;
+
+        if (root instanceof ViewGroup
+                && MIUI_CAPTION_CONTAINER_SIMPLE_NAME.equals(root.getClass().getSimpleName())) {
+            return root;
+        }
+        return null;
+    }
+
+    private static String targetLabel(View target) {
+        if (target == null) return "<null>";
+        try {
+            int id = target.getId();
+            if (id != View.NO_ID) return target.getResources().getResourceEntryName(id);
+        } catch (Throwable ignored) {}
+        return target.getClass().getSimpleName();
     }
 
     private static View findByResourceName(View root, String name) {
