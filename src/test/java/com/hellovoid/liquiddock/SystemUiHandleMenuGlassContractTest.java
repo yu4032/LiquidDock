@@ -55,9 +55,10 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("PassBlurBindRequest.systemUiHandleMenu(sourceRoot)"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(sink.contains("setOpaque(false)"));
-        assertTrue(sink.contains("group.addView(sink, 0, new ViewGroup.LayoutParams(0, 0))"));
+        assertTrue(sink.contains("host.addView(sink, 0, new ViewGroup.LayoutParams(0, 0))"));
+        assertTrue(hook.contains("attachInsideHost"));
         assertTrue(hook.contains("onFirstFramePresented"));
-        assertTrue(hook.contains("windowing.setBackground(null)"));
+        assertTrue(hook.contains("target.setBackground(null)"));
         assertTrue(hook.contains("restoreStockBackground()"));
     }
 
