@@ -95,6 +95,18 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(recents.contains("onSystemWallpaperDrawFrameEnd"));
     }
 
+    @Test public void recentsReturnWithoutVendorWallpaperAuthorityCannotWedgeFreshness()
+            throws Exception {
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+
+        assertTrue(recents.contains("WALLPAPER_SETTLE.hasCompletionAuthority(serial)"));
+        assertTrue(recents.contains(
+                "cancelWallpaperSettle(serial, \"no-vendor-wallpaper-authority\")"));
+        assertTrue(recents.contains("WALLPAPER_SETTLE.armCompletionAuthority(serial)"));
+        assertFalse(recents.contains("RECENTS_WALLPAPER_SETTLE_MS"));
+        assertFalse(recents.contains("postDelayed("));
+    }
+
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
