@@ -35,10 +35,10 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("\"onAssistContentReceived\""));
         assertTrue(hook.contains("AssistContent.class"));
         assertTrue(hook.contains("\"closeHandleMenu\""));
-        assertTrue(hook.contains("\"app_info_pill\""));
         assertTrue(hook.contains("\"windowing_pill\""));
-        assertTrue(hook.contains("\"more_actions_pill\""));
-        assertTrue(hook.contains("\"open_in_app_or_browser_pill\""));
+        assertFalse(hook.contains("\"app_info_pill\""));
+        assertFalse(hook.contains("\"more_actions_pill\""));
+        assertFalse(hook.contains("\"open_in_app_or_browser_pill\""));
     }
 
     @Test
@@ -53,7 +53,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(sink.contains("setOpaque(false)"));
         assertTrue(sink.contains("group.addView(sink, 0, new ViewGroup.LayoutParams(0, 0))"));
         assertTrue(hook.contains("onFirstFramePresented"));
-        assertTrue(hook.contains("targets[index].setBackground(null)"));
+        assertTrue(hook.contains("windowing.setBackground(null)"));
         assertTrue(hook.contains("restoreStockBackgrounds()"));
     }
 
