@@ -21,13 +21,15 @@ Model wallpaper content freshness explicitly so a same-size, same-rotation, same
 
 Add a dedicated `LauncherWallpaperFreshnessHook` and Android-free `LauncherWallpaperContentState`.
 
-`LauncherWallpaperFreshnessHook` observes HyperOS 4.50 wallpaper lifecycle boundaries and routes them to the active Workspace root:
+`LauncherWallpaperFreshnessHook` mirrors the concrete HyperOS 4.50 Launcher refresh transaction proven by the canonical OS3 Launcher Pad decompilation:
 
-1. `DesktopWallpaperManager` wallpaper-change boundary increments wallpaper content generation.
-2. `Workspace.onWallpaperColorChanged()` may issue one candidate refresh for the current pending generation.
-3. `onWallpaperFirstFrameRendered(int)` and `onDrawFrameEnd()` act as compositor-ready boundaries and may issue one authoritative refresh for the current generation.
+1. `DesktopWallpaperManager.MiuiWallpaperManagerCallbackStub.onWallpaperChanged(...)` unconditionally calls `DesktopWallpaperManager.updateWallpaperInfo()`.
+2. `updateWallpaperInfo()` removes any previously queued `WallpaperInfoUpdateTask`, reinitializes it, and enqueues the latest task on `Executors.BACKGROUND_EXECUTOR`.
+3. `WallpaperInfoUpdateTask.run()` rereads `getWallpaperColors(1)`, desktop wallpaper info/type/scrollability and then invokes `DesktopWallpaperManager.onDarkModeChange()`.
+4. `onDarkModeChange()` posts `ColorModeRefreshTask` to Workspace. Once Launcher is not loading, that task calls `notifyWallpaperColorChanged()`.
+5. LiquidDock advances wallpaper content generation at `updateWallpaperInfo()` and requests the fresh PassBlur pulse only after `notifyWallpaperColorChanged()` returns, so all vendor wallpaper listener fan-out for that transaction has completed.
 
-The state machine coalesces duplicate notifications and exposes tokens describing whether a candidate or authoritative pulse should be requested. An authoritative boundary is allowed to request a second pulse even if a candidate pulse already happened, because the candidate may have captured the final old wallpaper frame.
+The Launcher callback stub's `onWallpaperFirstFrameRendered(int)` and `onDrawFrameEnd()` bodies are empty in this build, so they are not used as Workspace wallpaper-content completion authority. `onDrawFrameEnd()` remains separately consumed by the Recents-return wallpaper-settle implementation.
 
 `LauncherGlassSceneController` remains the root router. Wallpaper content invalidation does not change scene visibility or increment scene generation; it forwards the wallpaper token to the matching `LauncherGlassSession`.
 
@@ -46,16 +48,15 @@ Rapid transitions `A → B → C` produce monotonically increasing generations. 
 
 ## Hook Strategy
 
-Device-validated authority model (2026-09-22):
+Canonical decompilation authority model (OS3 Launcher Pad 4.50.0.1204, analysis identity `46532f3bdcce8939...`):
 
-- Android `Intent.ACTION_WALLPAPER_CHANGED` is a system content-change fallback for real wallpaper replacements.
-- `WallpaperManager.getWallpaperId(FLAG_SYSTEM)` deduplicates system and vendor change notifications for the same replacement.
-- `WallpaperManager.OnColorsChangedListener` provides a system candidate-ready boundary.
-- `com.miui.home.launcher.wallpaper.DesktopWallpaperManager` remains an optional early vendor change boundary.
-- `com.miui.home.launcher.Workspace.onWallpaperColorChanged()` remains an optional root-specific candidate notification.
-- vendor callbacks `onWallpaperFirstFrameRendered(int)` / `onDrawFrameEnd()` remain compositor-ready authoritative boundaries when present.
+- transaction start: `DesktopWallpaperManager.updateWallpaperInfo()`;
+- transaction completion for Launcher wallpaper-derived UI: `DesktopWallpaperManager.notifyWallpaperColorChanged()`;
+- registration source: `WallpaperManagerCompatVT.initMiuiWallpaperManager(...)` registers the callback through `MiuiWallpaperManager.registerWallpaperChangeListener(callback, 1)`;
+- Workspace is explicitly added to `DesktopWallpaperManager`'s wallpaper-color listener list in `Launcher.setupViews()`;
+- no framework `WallpaperManager.getWallpaperId()`, generic wallpaper broadcast, or fixed-delay retry is used by LiquidDock as content authority.
 
-The system fallback was added after device validation showed the HyperOS internal change callback can be absent for a real wallpaper replacement. The path remains event-driven: no fixed-delay timer, polling loop, screenshot capture, or CPU wallpaper readback is permitted.
+The path remains event-driven and GPU-only: no polling loop, screenshot capture, PixelCopy, Bitmap wallpaper readback, or fixed timing fallback is permitted.
 
 ## Testing
 
