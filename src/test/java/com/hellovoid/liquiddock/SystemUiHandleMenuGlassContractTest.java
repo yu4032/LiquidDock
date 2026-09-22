@@ -59,6 +59,19 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
+    public void backdropProbeIsReadOnlyAndCannotCreateAProducer() throws Exception {
+        String hook = read("SystemUiHandleMenuGlassHook.java");
+        String probe = read("SystemUiHandleMenuBackdropProbe.java");
+        assertTrue(hook.contains("SystemUiHandleMenuBackdropProbe.install(classLoader)"));
+        assertTrue(hook.contains("SystemUiHandleMenuBackdropProbe.logMenuSnapshot(root, target)"));
+        assertTrue(probe.contains("RootPassBlurEndpointBridge.inspect(view)"));
+        assertFalse(probe.contains("PassBlurBindRequest"));
+        assertFalse(probe.contains("Miuix307PassBlurBridge.bind"));
+        assertFalse(probe.contains("new RootPassBlurBackend"));
+        assertFalse(probe.contains("SystemUiHandleMenuGlassSession"));
+    }
+
+    @Test
     public void implementationDoesNotIntroduceCpuCaptureOrTimingFallback() throws Exception {
         String hook = read("SystemUiHandleMenuGlassHook.java");
         assertFalse(hook.contains("PixelCopy"));
