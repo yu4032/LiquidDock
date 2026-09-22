@@ -933,7 +933,7 @@ private fun SettingsList(
 }
 
 @Composable
-private fun PageHeader(title: String, summary: String? = null) {
+internal fun PageHeader(title: String, summary: String? = null) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
         Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
         if (!summary.isNullOrBlank()) Text(summary, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
@@ -941,7 +941,7 @@ private fun PageHeader(title: String, summary: String? = null) {
 }
 
 @Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { Column(content = content) }
 }
 
