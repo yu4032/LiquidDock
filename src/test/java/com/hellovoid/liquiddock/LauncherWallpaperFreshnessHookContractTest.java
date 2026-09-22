@@ -95,6 +95,19 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(recents.contains("onSystemWallpaperDrawFrameEnd"));
     }
 
+    @Test public void vendorWallpaperSetToRetiresArmedRecentsSettleFence()
+            throws Exception {
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+
+        assertTrue(recents.contains("HookUtil.hookMethod(localWallpaper, \"setTo\""));
+        assertTrue(recents.contains(
+                "cancelWallpaperSettle(serial, \"local-wallpaper-setTo\")"));
+        assertTrue(recents.contains("HookUtil.hookMethod(systemWallpaper, \"setTo\""));
+        assertTrue(recents.contains(
+                "cancelWallpaperSettle(serial, \"system-wallpaper-setTo\")"));
+        assertTrue(recents.contains("discardWallpaperAuthorities(serial)"));
+    }
+
     @Test public void recentsReturnWithoutVendorWallpaperAuthorityCannotWedgeFreshness()
             throws Exception {
         String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
