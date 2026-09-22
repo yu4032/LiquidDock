@@ -8,6 +8,8 @@ final class PassBlurBindRequest {
     private static final String[] DOCK_EXTRA_EXCLUSIONS = {"DockAssistantView"};
     private static final String[] MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {"MiuiSearchboxGlassView"};
     private static final String[] RECENTS_CAPSULE_EXTRA_EXCLUSIONS = {"RecentsCapsuleGlassSinkView"};
+    private static final String[] SYSTEMUI_HANDLE_MENU_EXTRA_EXCLUSIONS =
+            {"SystemUiHandleMenuGlassSinkView"};
 
     private final View host;
     private final PassBlurDomain domain;
@@ -89,6 +91,14 @@ final class PassBlurBindRequest {
                 PassBlurDomain.RECENTS_CAPSULE,
                 1.0f,
                 RECENTS_CAPSULE_EXTRA_EXCLUSIONS);
+    }
+
+    static PassBlurBindRequest systemUiHandleMenu(View authoritativeRoot) {
+        return new PassBlurBindRequest(
+                authoritativeRoot,
+                PassBlurDomain.SYSTEMUI_HANDLE_MENU,
+                1.0f,
+                SYSTEMUI_HANDLE_MENU_EXTRA_EXCLUSIONS);
     }
 
     View host() {
