@@ -235,6 +235,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         terminalFailureListener = listener;
     }
 
+    void setPrismalParams(PrismalParams params) {
+        if (shuttingDown || params == null) return;
+        prismalParams = params;
+        if (backdropPrepared) requestFreshBackdrop(sceneGeneration);
+    }
+
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
         if (shuttingDown) return;
         applyGlassConfig(glassConfig);
