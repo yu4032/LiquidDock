@@ -20,15 +20,6 @@ final class WorkstationProducerPolicy {
     }
 
     /**
-     * Workstation keeps the shared Workspace producer continuously enabled, so the local
-     * updatesEnabled bit is not a sufficient refresh edge. Semantic refresh requests must
-     * re-submit the root update transaction even when the binding already reports enabled.
-     */
-    static boolean shouldForceWorkspaceResume(boolean workstationMode) {
-        return workstationMode;
-    }
-
-    /**
      * Workstation edit mode can resize the root capture surface without replacing its
      * SurfaceControl. PassBlur must be rebound in that case or frame callbacks can stop.
      */
