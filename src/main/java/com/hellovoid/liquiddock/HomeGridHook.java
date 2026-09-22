@@ -21,6 +21,10 @@ final class HomeGridHook {
         HomeGridCellGeometryHook.setWorkstationConfig(config);
     }
 
+    static void scheduleAllPageRefresh() {
+        HomeGridRotationRefreshHook.scheduleAllPageRefresh();
+    }
+
     static void install(ClassLoader classLoader, HomeGridInstallConfig config) {
         if (config == null || !config.enabled) {
             MainHook.log("[DC] home grid customization disabled; using stock layout");
