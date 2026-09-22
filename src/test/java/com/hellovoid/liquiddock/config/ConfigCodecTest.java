@@ -206,6 +206,8 @@ public class ConfigCodecTest {
 
         assertEquals(expectedAlwaysKeys, exported.keySet());
         assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.ENABLED.name()));
+        assertEquals(Boolean.FALSE,
+                exported.get(ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name()));
         assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.MIUIX_307_PIPELINE.name()));
         assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.WIDGET_DARK_CONTENT.name()));
         assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.FOLDER_GLASS.name()));
