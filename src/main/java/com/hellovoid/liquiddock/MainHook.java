@@ -75,27 +75,30 @@ public class MainHook {
             landGap -= dp ? 1 : 3; portGap -= dp ? 1 : 3;
         }
         DockDividerHook.install(classLoader);
-        HomeGridHook.install(classLoader, grid8x4,
-            Math.round(landLeft * gridScale), Math.round(landRight * gridScale),
-            Math.round(landTop * gridScale), Math.round(landBottom * gridScale),
-            Math.round(portLeft * gridScale), Math.round(portRight * gridScale),
-            Math.round(portTop * gridScale), Math.round(portBottom * gridScale),
-            Math.round(landGap * gridScale), Math.round(portGap * gridScale),
-            Math.round(grid.landscapeIndicatorY * gridScale),
-            Math.round(grid.portraitIndicatorY * gridScale));
-        HomeGridHook.setWorkstationHorizontalOffset(Math.round(
-                config.workstation.gridHorizontalOffset * gridScale));
-        // All Apps controls are absolute edge spacing in dp. They must not inherit the
-        // ordinary grid_margins_dp unit switch, otherwise the same spacing setting changes
-        // meaning when the normal desktop grid unit mode changes.
-        float workstationAllAppsScale = android.content.res.Resources.getSystem().getDisplayMetrics().density;
-        HomeGridHook.setWorkstationAllAppsOffsets(
-                Math.round(config.workstation.allAppsLandscapeHorizontalOffset * workstationAllAppsScale),
-                Math.round(config.workstation.allAppsLandscapeTopSpacing * workstationAllAppsScale),
-                Math.round(config.workstation.allAppsLandscapeBottomSpacing * workstationAllAppsScale),
-                Math.round(config.workstation.allAppsPortraitHorizontalOffset * workstationAllAppsScale),
-                Math.round(config.workstation.allAppsPortraitTopSpacing * workstationAllAppsScale),
-                Math.round(config.workstation.allAppsPortraitBottomSpacing * workstationAllAppsScale));
+        float displayDensity =
+                android.content.res.Resources.getSystem().getDisplayMetrics().density;
+        HomeGridInstallConfig homeGridConfig = new HomeGridInstallConfig(
+                grid8x4,
+                Math.round(landLeft * gridScale), Math.round(landRight * gridScale),
+                Math.round(landTop * gridScale), Math.round(landBottom * gridScale),
+                Math.round(portLeft * gridScale), Math.round(portRight * gridScale),
+                Math.round(portTop * gridScale), Math.round(portBottom * gridScale),
+                Math.round(landGap * gridScale), Math.round(portGap * gridScale),
+                Math.round(grid.landscapeIndicatorY * gridScale),
+                Math.round(grid.portraitIndicatorY * gridScale),
+                displayDensity);
+        HomeGridHook.install(classLoader, homeGridConfig);
+
+        // All Apps controls are absolute edge spacing in dp. They deliberately do not inherit the
+        // ordinary grid_margins_dp unit switch.
+        HomeGridHook.setWorkstationGeometryConfig(new HomeGridWorkstationGeometryConfig(
+                Math.round(config.workstation.gridHorizontalOffset * gridScale),
+                Math.round(config.workstation.allAppsLandscapeHorizontalOffset * displayDensity),
+                Math.round(config.workstation.allAppsLandscapeTopSpacing * displayDensity),
+                Math.round(config.workstation.allAppsLandscapeBottomSpacing * displayDensity),
+                Math.round(config.workstation.allAppsPortraitHorizontalOffset * displayDensity),
+                Math.round(config.workstation.allAppsPortraitTopSpacing * displayDensity),
+                Math.round(config.workstation.allAppsPortraitBottomSpacing * displayDensity)));
 
         boolean dockCustomization = config.dock.enabled;
         // Keep HotSeats itself as the only authority for the whole-Dock native shadow.
