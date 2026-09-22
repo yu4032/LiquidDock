@@ -54,7 +54,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(sink.contains("group.addView(sink, 0, new ViewGroup.LayoutParams(0, 0))"));
         assertTrue(hook.contains("onFirstFramePresented"));
         assertTrue(hook.contains("windowing.setBackground(null)"));
-        assertTrue(hook.contains("restoreStockBackgrounds()"));
+        assertTrue(hook.contains("restoreStockBackground()"));
     }
 
     @Test
