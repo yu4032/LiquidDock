@@ -149,8 +149,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("LauncherGlassSessionRegistry.acquire(authorityAnchor"));
         assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
         assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
-        assertTrue(coordinator.contains("panel.setBackground(null)"));
-        assertTrue(coordinator.contains("panel.setBackground(binding.originalBackground)"));
+        assertTrue(coordinator.contains("MiBlurBridge.getPassWindowBlurEnabled(panel)"));
+        assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, false)"));
+        assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, true)"));
+        assertTrue(coordinator.contains("background.setAlpha(0)"));
+        assertTrue(coordinator.contains("background.setAlpha(binding.originalBackgroundAlpha)"));
         assertTrue(coordinator.contains("OnGlobalLayoutListener"));
         assertFalse(coordinator.contains("postDelayed("));
 
