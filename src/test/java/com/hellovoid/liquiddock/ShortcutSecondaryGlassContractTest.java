@@ -190,8 +190,73 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_uninstall_dialog_glass\", true, true, true"));
-        assertTrue(settings.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
-        assertTrue(settings.contains("桌面卸载弹窗玻璃背景"));
+        assertTrue(settings.contains("Page.DialogCustomization -> DialogGlassSettingsPage("));
+        assertTrue(settings.contains("openDialogCustomization = { page = Page.DialogCustomization }"));
+    }
+
+    @Test public void launcherDialogGlassMatchesWindowDimAndHasIndependentAppearancePage()
+            throws Exception {
+        String coordinator = Files.readString(MAIN.resolve("LauncherDialogGlassCoordinator.java"));
+        String preferences = Files.readString(MAIN.resolve("LauncherDialogGlassPreferences.java"));
+        String hook = Files.readString(MAIN.resolve("LauncherUninstallDialogGlassHook.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String settings = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String dialogPage = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
+        String params = Files.readString(Path.of(
+                "prismal/src/main/java/com/hellovoid/prismal/PrismalParams.java"));
+
+        // WindowManager DIM_BEHIND lives outside the dialog ViewRoot, so the glass material must
+        // apply the same target attenuation to its sampled Launcher backdrop.
+        assertTrue(coordinator.contains("WindowManager.LayoutParams.FLAG_DIM_BEHIND"));
+        assertTrue(coordinator.contains("attributes.dimAmount"));
+        assertTrue(coordinator.contains("syncDialogDim(binding, dialog, false)"));
+        assertTrue(coordinator.contains("syncDialogDim(binding, owner, true)"));
+        assertTrue(coordinator.contains("applyDialogMaterial(binding, dialogRoot, effectiveDim)"));
+        assertTrue(coordinator.contains("restoreWindowDim(binding)"));
+        assertTrue(preferences.contains(
+                "out.brightness = source.brightness * (1f - safeDim)"));
+        assertTrue(session.contains("void setPrismalParams(PrismalParams params)"));
+        assertTrue(params.contains("public static Builder builder(PrismalParams source)"));
+
+        // The opt-out removes both compositor dimming and the glass-local attenuation.
+        assertTrue(schema.contains("DIALOG_DISABLE_DIMMING = bool("));
+        assertTrue(schema.contains("\"liquid_dialog_disable_dimming\", false, false, false"));
+        assertTrue(coordinator.contains(
+                "window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)"));
+        assertTrue(coordinator.contains("binding.dimSuppressed = true"));
+        assertTrue(dialogPage.contains("关闭对话时背景压暗"));
+
+        // Blur/color are optional dialog-local overrides; absence means inheritance from global.
+        assertTrue(schema.contains("DIALOG_BLUR = integer("));
+        assertTrue(schema.contains("\"liquid_dialog_blur\", 0, null, 0, 0, 60"));
+        assertTrue(schema.contains("DIALOG_TINT_RED = integer("));
+        assertTrue(schema.contains("DIALOG_TINT_GREEN = integer("));
+        assertTrue(schema.contains("DIALOG_TINT_BLUE = integer("));
+        assertTrue(schema.contains("DIALOG_TINT_ALPHA = integer("));
+        assertTrue(preferences.contains("reader.has(BLUR_KEY) ? reader.f(BLUR_KEY, baseBlur) : baseBlur"));
+        assertTrue(preferences.contains("out.blurRadiusPx = resolved.blur"));
+        assertTrue(preferences.contains("out.tintR = resolved.tintR / 255f"));
+        assertTrue(preferences.contains("out.tintA = resolved.tintAlpha / 255f"));
+
+        // Settings are resolved for every new dialog rather than frozen at Launcher hook install.
+        assertTrue(hook.contains("ConfigReader liveReader = ConfigReader.load()"));
+        assertTrue(hook.contains("LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader)"));
+        assertTrue(hook.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name()"));
+
+        // UI lives under Liquid Glass as the requested child page.
+        assertTrue(settings.contains("DialogCustomization(R.string.page_dialog_customization)"));
+        assertTrue(settings.contains(
+                "Page.DialogCustomization, Page.ThirdPartyApps,"));
+        assertTrue(settings.contains("title = stringResource(R.string.page_dialog_customization)"));
+        assertTrue(dialogPage.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
+        assertTrue(dialogPage.contains("ConfigSchema.Glass.DIALOG_DISABLE_DIMMING"));
+        assertTrue(dialogPage.contains("GlassAppearanceValueSlider("));
+        assertTrue(dialogPage.contains("对话背景模糊"));
+        assertTrue(dialogPage.contains("恢复继承全局外观"));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
