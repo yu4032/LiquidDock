@@ -248,6 +248,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> SECURITY_CENTER_GLASS = bool(
                 "liquid_security_center_glass", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SYSTEMUI_HANDLE_MENU_GLASS = bool(
+                "liquid_systemui_handle_menu_glass", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SHORTCUT_POPUP_GLASS = bool(
                 "liquid_shortcut_popup_glass", true, true, true,
                 ConfigKey.ExportMode.ALWAYS);
@@ -617,7 +620,8 @@ public final class ConfigSchema {
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
-        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
+        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
+                Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
