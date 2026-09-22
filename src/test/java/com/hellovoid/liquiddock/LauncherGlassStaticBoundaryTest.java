@@ -37,6 +37,17 @@ public class LauncherGlassStaticBoundaryTest {
     }
 
     @Test
+    public void unlockRecoveryHasNoTimerBasedSourceAuthority() throws Exception {
+        String hook = Files.readString(MAIN.resolve("LauncherGlassHomePresentationHook.java"));
+
+        assertFalse(hook.contains("UNLOCK_CAPTURE_FAIL_OPEN_MS"));
+        assertFalse(hook.contains("failOpenUnlockBarrier"));
+        assertFalse(hook.contains("postDelayed("));
+        assertFalse(hook.contains("unlock-timeout"));
+        assertTrue(hook.contains("failClosedUnlockCapture()"));
+    }
+
+    @Test
     public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
