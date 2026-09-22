@@ -221,7 +221,7 @@ Workstation return may roll over a retired PassBlur producer even when the Java 
 
 ### `LauncherWallpaperFreshnessHook`
 
-Tracks vendor wallpaper lifecycle and advances wallpaper-content authority. It is not a generic redraw hook and must not be replaced by `invalidate()`-based freshness.
+Tracks wallpaper-content authority from both Android system wallpaper signals and HyperOS vendor lifecycle callbacks. `WallpaperManager.getWallpaperId(FLAG_SYSTEM)` coalesces duplicate system/vendor change notifications; `ACTION_WALLPAPER_CHANGED` and `OnColorsChangedListener` backstop missing vendor callbacks. This remains event-driven freshness, not a generic `invalidate()` hook or timer.
 
 ### `RecentsBackgroundBlurHook`
 

@@ -46,13 +46,16 @@ Rapid transitions `A → B → C` produce monotonically increasing generations. 
 
 ## Hook Strategy
 
-Primary vendor events:
+Device-validated authority model (2026-09-22):
 
-- `com.miui.home.launcher.wallpaper.DesktopWallpaperManager` wallpaper change callback path.
-- `com.miui.home.launcher.Workspace.onWallpaperColorChanged()` candidate UI notification.
-- vendor callback methods `onWallpaperFirstFrameRendered(int)` / `onDrawFrameEnd()` when present.
+- Android `Intent.ACTION_WALLPAPER_CHANGED` is a system content-change fallback for real wallpaper replacements.
+- `WallpaperManager.getWallpaperId(FLAG_SYSTEM)` deduplicates system and vendor change notifications for the same replacement.
+- `WallpaperManager.OnColorsChangedListener` provides a system candidate-ready boundary.
+- `com.miui.home.launcher.wallpaper.DesktopWallpaperManager` remains an optional early vendor change boundary.
+- `com.miui.home.launcher.Workspace.onWallpaperColorChanged()` remains an optional root-specific candidate notification.
+- vendor callbacks `onWallpaperFirstFrameRendered(int)` / `onDrawFrameEnd()` remain compositor-ready authoritative boundaries when present.
 
-Hook installation must be reflective and version-tolerant: missing optional callbacks are logged and do not disable the rest of the pipeline. No broadcast receiver or timer is used as the primary mechanism.
+The system fallback was added after device validation showed the HyperOS internal change callback can be absent for a real wallpaper replacement. The path remains event-driven: no fixed-delay timer, polling loop, screenshot capture, or CPU wallpaper readback is permitted.
 
 ## Testing
 
