@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.Window;
+import android.view.WindowManager;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -67,6 +68,8 @@ final class LauncherDialogGlassCoordinator {
         }
 
         Binding binding = new Binding(dialog, decor, glassConfig, source);
+        binding.appearance = LauncherDialogGlassPreferences.resolve(
+                ConfigReader.load(), glassConfig);
         BINDINGS.put(dialog, binding);
         View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
@@ -143,6 +146,8 @@ final class LauncherDialogGlassCoordinator {
             return;
         }
 
+        float effectiveDim = syncDialogDim(binding, dialog, false);
+
         LauncherGlassSession authority = binding.dialogSession;
         if (authority == null || authority.isShutdown() || !authority.ownsRoot(dialogRoot)) {
             if (authority != null) authority.shutdown();
@@ -167,6 +172,8 @@ final class LauncherDialogGlassCoordinator {
                 return;
             }
         }
+
+        applyDialogMaterial(binding, dialogRoot, effectiveDim);
 
         float radiusPx = resolveDialogCornerRadius(panel);
         LauncherGlassSinkView sink = LauncherGlassSinkView.attachToExternalMaterial(
@@ -202,7 +209,10 @@ final class LauncherDialogGlassCoordinator {
                 + " background=" + className(panel.getBackground())
                 + " panelSize=" + panel.getWidth() + "x" + panel.getHeight()
                 + " rootSize=" + dialogRoot.getWidth() + "x" + dialogRoot.getHeight()
-                + " radiusPx=" + radiusPx);
+                + " radiusPx=" + radiusPx
+                + " dimAmount=" + binding.appliedDimAmount
+                + " dimDisabled=" + binding.appearance.disableDimming
+                + " dialogAppearanceOverride=" + binding.appearance.hasAppearanceOverride);
     }
 
     /**
@@ -291,6 +301,8 @@ final class LauncherDialogGlassCoordinator {
             if (binding.released || !binding.claimed) return true;
             View panel = binding.panelRef.get();
             if (panel == null || !panel.isAttachedToWindow()) return true;
+            Dialog owner = binding.dialogRef.get();
+            if (owner != null) syncDialogDim(binding, owner, true);
             if (binding.backgroundReplaced && binding.transparentBackground != null) {
                 Drawable current = panel.getBackground();
                 if (current != binding.transparentBackground) {
@@ -387,6 +399,7 @@ final class LauncherDialogGlassCoordinator {
             MainHook.log(TAG + " vendor pass-window gate restore source=" + binding.source
                     + " result=" + restored);
         }
+        restoreWindowDim(binding);
 
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
@@ -417,6 +430,81 @@ final class LauncherDialogGlassCoordinator {
                 if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener);
             } catch (Throwable ignored) {}
         }
+    }
+
+    private static float syncDialogDim(
+            Binding binding, Dialog dialog, boolean updateMaterial) {
+        if (binding == null || dialog == null) return 0f;
+        Window window = dialog.getWindow();
+        if (window == null) return 0f;
+        WindowManager.LayoutParams attributes = window.getAttributes();
+        if (!binding.windowDimCaptured) {
+            binding.windowDimCaptured = true;
+            binding.originalWindowFlags = attributes.flags;
+            binding.originalDimAmount = attributes.dimAmount;
+        }
+
+        LauncherDialogGlassPreferences.Appearance appearance = binding.appearance;
+        boolean disableDimming = appearance != null && appearance.disableDimming;
+        if (disableDimming
+                && (attributes.flags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            attributes = window.getAttributes();
+            binding.dimSuppressed = true;
+        }
+
+        float effectiveDim = !disableDimming
+                && (attributes.flags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
+                ? clamp01(attributes.dimAmount) : 0f;
+        if (updateMaterial && Math.abs(effectiveDim - binding.appliedDimAmount) > 0.001f) {
+            View decor = binding.decorRef.get();
+            View root = decor != null ? decor.getRootView() : null;
+            if (root != null) applyDialogMaterial(binding, root, effectiveDim);
+        }
+        return effectiveDim;
+    }
+
+    private static void applyDialogMaterial(Binding binding, View root, float effectiveDim) {
+        if (binding == null || root == null) return;
+        LauncherGlassSession session = binding.dialogSession;
+        if (session == null || session.isShutdown()) return;
+        LauncherDialogGlassPreferences.Appearance appearance = binding.appearance;
+        if (appearance == null) {
+            appearance = LauncherDialogGlassPreferences.resolve(
+                    ConfigReader.load(), binding.glassConfig);
+            binding.appearance = appearance;
+        }
+        session.setPrismalParams(LauncherDialogGlassPreferences.material(
+                binding.glassConfig,
+                appearance,
+                root.getResources().getDisplayMetrics().density,
+                effectiveDim));
+        binding.appliedDimAmount = effectiveDim;
+    }
+
+    private static void restoreWindowDim(Binding binding) {
+        if (binding == null || !binding.windowDimCaptured || !binding.dimSuppressed) return;
+        Dialog dialog = binding.dialogRef.get();
+        Window window = dialog != null ? dialog.getWindow() : null;
+        if (window == null) return;
+        try {
+            window.setDimAmount(binding.originalDimAmount);
+            if ((binding.originalWindowFlags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            }
+            MainHook.log(TAG + " dialog dim restored source=" + binding.source
+                    + " dimAmount=" + binding.originalDimAmount);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " dialog dim restore failed source=" + binding.source
+                    + " error=" + error);
+        }
+    }
+
+    private static float clamp01(float value) {
+        if (!Float.isFinite(value)) return 0f;
+        return Math.max(0f, Math.min(1f, value));
     }
 
     private static Drawable cloneTransparent(Drawable source, View owner) {
@@ -516,6 +604,12 @@ final class LauncherDialogGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener materialGuard;
         Drawable originalBackground;
         Drawable transparentBackground;
+        LauncherDialogGlassPreferences.Appearance appearance;
+        int originalWindowFlags;
+        float originalDimAmount;
+        float appliedDimAmount = Float.NaN;
+        boolean windowDimCaptured;
+        boolean dimSuppressed;
         boolean vendorPassBlurEnabled;
         boolean vendorGatePaused;
         boolean backgroundReplaced;
