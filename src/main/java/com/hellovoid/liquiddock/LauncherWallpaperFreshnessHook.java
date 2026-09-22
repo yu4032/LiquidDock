@@ -69,6 +69,7 @@ final class LauncherWallpaperFreshnessHook {
             HookUtil.hook(method, chain -> {
                 long serial = TRANSACTION.onWallpaperChanged();
                 dispatchToMain(() -> {
+                    LauncherGlassRecentsHook.onWallpaperContentChanged();
                     LauncherGlassSceneController.onWallpaperChangedForAll();
                     MainHook.log(TAG + " binder onWallpaperChanged -> content generation serial="
                             + serial);
