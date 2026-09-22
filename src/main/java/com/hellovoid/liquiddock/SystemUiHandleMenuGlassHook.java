@@ -3,11 +3,11 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
-import java.lang.reflect.Constructor;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -15,17 +15,16 @@ import java.util.WeakHashMap;
 /**
  * Replaces the stock Material background of WMShell HandleMenu's windowing pill with Prismal.
  *
- * <p>The stable creation boundary is HandleMenu.HandleMenuView itself. HyperOS constructs this
- * object for every app-handle menu, then applies the vendor theme and later attaches rootView to
- * either an AdditionalViewHostViewContainer or AdditionalSystemViewContainer. We register the
- * freshly constructed root and wait for real attach/layout before binding glass, so AssistContent
- * caching and menu-creation branch selection cannot bypass this integration.</p>
+ * <p>The decompiled creation path inflates {@code desktop_mode_window_decor_handle_menu} before
+ * vendor tinting and before the menu-local SurfaceControlViewHost is attached. Constructor and
+ * AssistContent hooks proved unreliable on-device, so the stable observation boundary is the
+ * framework LayoutInflater call filtered by that exact SystemUI layout resource. The inflated root
+ * is then bound only at the real attach/layout boundary.</p>
  */
 final class SystemUiHandleMenuGlassHook {
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
-    private static final String HANDLE_MENU_VIEW =
-            "com.android.wm.shell.windowdecor.HandleMenu$HandleMenuView";
+    private static final String HANDLE_MENU_LAYOUT = "desktop_mode_window_decor_handle_menu";
     private static final String WINDOWING_PILL = "windowing_pill";
 
     private static final Map<View, PendingBinding> PENDING =
@@ -43,66 +42,62 @@ final class SystemUiHandleMenuGlassHook {
                 || !glass.enabled || !glass.systemUiHandleMenuEnabled) return;
         glassConfig = glass;
         try {
-            Class<?> type = Class.forName(HANDLE_MENU_VIEW, false, classLoader);
-            int hooked = 0;
-            for (Constructor<?> constructor : type.getDeclaredConstructors()) {
-                if (!isCanonicalHandleMenuViewConstructor(constructor)) continue;
-                HookUtil.hook(constructor, chain -> {
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    observeConstructedMenu(chain.getThisObject());
-                    return result;
-                });
-                hooked++;
-            }
-            if (hooked == 0) {
-                throw new NoSuchMethodException("canonical HandleMenuView constructor");
-            }
+            HookUtil.hookMethod(
+                    LayoutInflater.class,
+                    "inflate",
+                    new Class<?>[]{int.class, ViewGroup.class},
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        LayoutInflater inflater = chain.getThisObject() instanceof LayoutInflater
+                                ? (LayoutInflater) chain.getThisObject()
+                                : null;
+                        int resourceId = args.length > 0 && args[0] instanceof Integer
+                                ? (Integer) args[0]
+                                : 0;
+                        boolean target = isTargetHandleMenuLayout(inflater, resourceId);
+                        Object result = chain.proceed(args);
+                        if (target) {
+                            if (result instanceof View) {
+                                View root = (View) result;
+                                log("target layout inflated root=" + root.getClass().getName());
+                                observeInflatedMenu(root);
+                            } else {
+                                log("target layout inflation returned no View; stock retained");
+                            }
+                        }
+                        return result;
+                    });
             installed = true;
-            log("HandleMenuView constructor hook installed count=" + hooked);
+            log("HandleMenu layout inflation hook installed");
         } catch (Throwable error) {
             glassConfig = null;
             log("hook unavailable: " + error);
         }
     }
 
-    private static boolean isCanonicalHandleMenuViewConstructor(Constructor<?> constructor) {
-        if (constructor == null) return false;
-        Class<?>[] types = constructor.getParameterTypes();
-        if (types.length != 12
-                || types[0] != Context.class
-                || types[2] != int.class
-                || types[3] != int.class) {
+    private static boolean isTargetHandleMenuLayout(LayoutInflater inflater, int resourceId) {
+        if (inflater == null || resourceId == 0) return false;
+        try {
+            Resources resources = inflater.getContext().getResources();
+            return SYSTEM_UI_PACKAGE.equals(resources.getResourcePackageName(resourceId))
+                    && "layout".equals(resources.getResourceTypeName(resourceId))
+                    && HANDLE_MENU_LAYOUT.equals(resources.getResourceEntryName(resourceId));
+        } catch (Throwable ignored) {
             return false;
         }
-        for (int i = 4; i < types.length; i++) {
-            if (types[i] != boolean.class) return false;
-        }
-        return true;
     }
 
-    private static void observeConstructedMenu(Object handleMenuView) {
+    private static void observeInflatedMenu(View root) {
         LiquidDockConfig.Glass glass = glassConfig;
-        if (handleMenuView == null || glass == null || !glass.enabled
+        if (root == null || glass == null || !glass.enabled
                 || !glass.systemUiHandleMenuEnabled) return;
-
-        final View root;
-        try {
-            Object value = HookUtil.getField(handleMenuView, "rootView");
-            if (!(value instanceof View)) {
-                log("constructed HandleMenuView has no rootView; stock retained");
-                return;
-            }
-            root = (View) value;
-        } catch (Throwable error) {
-            log("constructed menu discovery failed: " + error);
-            return;
-        }
 
         releaseRoot(root, "menu-replaced");
         PendingBinding pending = new PendingBinding(root, glass);
         PENDING.put(root, pending);
         pending.start();
-        log("HandleMenuView constructed root=" + root.getClass().getName());
+        log("HandleMenu root observed attached=" + root.isAttachedToWindow()
+                + " size=" + root.getWidth() + "x" + root.getHeight());
     }
 
     private static void releaseRoot(View root, String reason) {
