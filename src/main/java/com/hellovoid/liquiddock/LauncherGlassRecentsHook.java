@@ -73,7 +73,9 @@ final class LauncherGlassRecentsHook {
                 // legally release this barrier. Fail closed only for the duration of vendor hide
                 // handling, then drop the impossible fence instead of wedging future HOME/wallpaper
                 // freshness indefinitely.
-                if (!WALLPAPER_SETTLE.hasCompletionAuthority(serial)) {
+                boolean wallpaperAuthorityArmed =
+                        WALLPAPER_SETTLE.hasCompletionAuthority(serial);
+                if (!wallpaperAuthorityArmed) {
                     cancelWallpaperSettle(serial, "no-vendor-wallpaper-authority");
                 }
 
@@ -97,7 +99,11 @@ final class LauncherGlassRecentsHook {
                 }
 
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
-                MainHook.log(TAG + " Recents HOME return armed wallpaper authority serial=" + serial);
+                MainHook.log(TAG + " Recents HOME return "
+                        + (wallpaperAuthorityArmed
+                        ? "armed wallpaper authority"
+                        : "without wallpaper authority")
+                        + " serial=" + serial);
                 return result;
             });
             installed = true;
