@@ -120,6 +120,19 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertFalse(recents.contains("postDelayed("));
     }
 
+    @Test public void newWallpaperGenerationSupersedesOlderRecentsSettleAuthority()
+            throws Exception {
+        String source = hook();
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+
+        assertTrue(source.contains("LauncherGlassRecentsHook.onWallpaperContentChanged()"));
+        assertTrue(recents.contains("static void onWallpaperContentChanged()"));
+        assertTrue(recents.contains(
+                "cancelWallpaperSettle(serial, \"wallpaper-content-generation-changed\")"));
+        assertTrue(source.indexOf("LauncherGlassRecentsHook.onWallpaperContentChanged()")
+                < source.indexOf("LauncherGlassSceneController.onWallpaperChangedForAll()"));
+    }
+
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
