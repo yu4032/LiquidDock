@@ -1,100 +1,123 @@
 package com.hellovoid.liquiddock;
 
+import android.app.WallpaperColors;
 import android.os.Handler;
 import android.os.Looper;
 
 import java.lang.reflect.Method;
 
 /**
- * Bridges the decompiled HyperOS 4.50 DesktopWallpaperManager refresh transaction into Workspace
- * glass freshness.
+ * Bridges the decompiled HyperOS 4.50 wallpaper-service transaction into Workspace glass
+ * freshness without relying on framework wallpaper IDs, generic broadcasts, or fixed timing.
  *
- * <p>Launcher itself treats {@code DesktopWallpaperManager.updateWallpaperInfo()} as the repeated
- * wallpaper-change transaction entry. Its background WallpaperInfoUpdateTask rereads MIUI
- * wallpaper metadata and then posts ColorModeRefreshTask to Workspace; that task reaches
- * {@code notifyWallpaperColorChanged()} only when Launcher is ready to notify wallpaper-derived
- * UI. LiquidDock mirrors those two concrete vendor boundaries instead of inferring wallpaper
- * identity from framework IDs or generic broadcasts.</p>
+ * <p>The target Launcher registers
+ * {@code DesktopWallpaperManager.MiuiWallpaperManagerCallbackStub} directly with
+ * {@code MiuiWallpaperManager.registerWallpaperChangeListener(..., 1)}. The callback is the raw
+ * cross-process wallpaper-change boundary. Launcher then schedules
+ * {@code WallpaperInfoUpdateTask}; in Laptop mode that task calls
+ * {@code Utilities.updateCurrentWallpaperBitmap("laptop")} before it returns. LiquidDock records
+ * content generation at the Binder callback and requests a fresh PassBlur frame only after the
+ * matching background task has completed, so the vendor wallpaper cache is already current.</p>
  */
 final class LauncherWallpaperFreshnessHook {
     private static final String TAG = "[DC][WallpaperFreshness]";
-    private static final String DESKTOP_MANAGER_CLASS =
-            "com.miui.home.launcher.wallpaper.DesktopWallpaperManager";
     private static final String CALLBACK_CLASS =
             "com.miui.home.launcher.wallpaper.DesktopWallpaperManager$MiuiWallpaperManagerCallbackStub";
+    private static final String WALLPAPER_INFO_TASK_CLASS =
+            "com.miui.home.launcher.wallpaper.DesktopWallpaperManager$WallpaperInfoUpdateTask";
+
+    private static final LauncherWallpaperTransactionState TRANSACTION =
+            new LauncherWallpaperTransactionState();
 
     private static volatile Handler mainHandler;
-    private static boolean installed;
+    private static boolean callbackHookInstalled;
+    private static boolean taskHookInstalled;
+    private static boolean drawFrameEndHookInstalled;
 
     private LauncherWallpaperFreshnessHook() {}
 
     static synchronized void install(ClassLoader classLoader) {
-        if (installed || classLoader == null) return;
-        installWallpaperUpdateTransaction(classLoader);
-        installWallpaperNotifyCompletion(classLoader);
-        // onDrawFrameEnd remains a separate Recents-return wallpaper-settle authority. The
-        // decompiled DesktopWallpaperManager callback stub intentionally leaves this method empty,
-        // so it is not used as Workspace wallpaper-content freshness authority.
-        installDrawFrameEndForRecents(classLoader);
-        installed = true;
-        MainHook.log(TAG + " HyperOS DesktopWallpaperManager transaction hooks installed");
+        if (classLoader == null) return;
+        if (!callbackHookInstalled) {
+            callbackHookInstalled = installWallpaperChangedCallback(classLoader);
+        }
+        if (!taskHookInstalled) {
+            taskHookInstalled = installWallpaperInfoTaskCompletion(classLoader);
+        }
+        if (!drawFrameEndHookInstalled) {
+            drawFrameEndHookInstalled = installDrawFrameEndForRecents(classLoader);
+        }
+
+        if (callbackHookInstalled && taskHookInstalled) {
+            MainHook.log(TAG + " raw callback + wallpaper-cache completion hooks installed");
+        } else {
+            MainHook.log(TAG + " ERROR: wallpaper freshness authority incomplete callback="
+                    + callbackHookInstalled + " task=" + taskHookInstalled);
+        }
     }
 
     /**
-     * Decompiled source fact:
-     * MiuiWallpaperManagerCallbackStub.onWallpaperChanged(...) calls updateWallpaperInfo()
-     * unconditionally. The legacy broadcast path does the same. updateWallpaperInfo() removes the
-     * previously queued WallpaperInfoUpdateTask and enqueues the latest one, so every transaction
-     * entry invalidates the previous wallpaper-content generation while duplicate rapid updates
-     * naturally coalesce at the vendor task layer.
+     * Raw vendor authority. This method is entered from the MIUI wallpaper Binder callback before
+     * DesktopWallpaperManager.updateWallpaperInfo() is invoked, so it cannot be lost if ART/JIT
+     * later inlines the manager's same-class helper call.
      */
-    private static void installWallpaperUpdateTransaction(ClassLoader classLoader) {
+    private static boolean installWallpaperChangedCallback(ClassLoader classLoader) {
         try {
-            Class<?> manager = Class.forName(DESKTOP_MANAGER_CLASS, false, classLoader);
-            Method method = manager.getDeclaredMethod("updateWallpaperInfo");
+            Class<?> callback = Class.forName(CALLBACK_CLASS, false, classLoader);
+            Method method = callback.getDeclaredMethod(
+                    "onWallpaperChanged", WallpaperColors.class, String.class, int.class);
             HookUtil.hook(method, chain -> {
+                long serial = TRANSACTION.onWallpaperChanged();
                 dispatchToMain(() -> {
+                    LauncherGlassRecentsHook.onWallpaperContentChanged();
                     LauncherGlassSceneController.onWallpaperChangedForAll();
-                    MainHook.log(TAG + " vendor updateWallpaperInfo -> content generation");
+                    MainHook.log(TAG + " binder onWallpaperChanged -> content generation serial="
+                            + serial);
                 });
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
-            MainHook.log(TAG + " DesktopWallpaperManager.updateWallpaperInfo installed");
+            MainHook.log(TAG + " MiuiWallpaperManagerCallbackStub.onWallpaperChanged installed");
+            return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " DesktopWallpaperManager.updateWallpaperInfo unavailable: " + error);
+            MainHook.log(TAG + " onWallpaperChanged unavailable: " + error);
+            return false;
         }
     }
 
     /**
-     * Decompiled source fact:
-     * WallpaperInfoUpdateTask.run() rereads MIUI wallpaper colors/info, then calls
-     * DesktopWallpaperManager.onDarkModeChange(); ColorModeRefreshTask runs on Workspace and, once
-     * Launcher is not loading, calls notifyWallpaperColorChanged(). Hook after that method returns
-     * so the vendor listener fan-out has completed before requesting the fresh PassBlur frame.
-     *
-     * A pure dark-mode refresh can also call notifyWallpaperColorChanged(), but without a preceding
-     * updateWallpaperInfo() the wallpaper state machine has no pending generation and coalesces it.
+     * Cache-ready authority. The decompiled task refreshes wallpaper metadata and, in Laptop mode,
+     * executes Utilities.updateCurrentWallpaperBitmap("laptop") before calling onDarkModeChange().
+     * A task that was already running when a newer Binder callback arrived is stale and must not
+     * authorize the newer wallpaper generation.
      */
-    private static void installWallpaperNotifyCompletion(ClassLoader classLoader) {
+    private static boolean installWallpaperInfoTaskCompletion(ClassLoader classLoader) {
         try {
-            Class<?> manager = Class.forName(DESKTOP_MANAGER_CLASS, false, classLoader);
-            Method method = manager.getDeclaredMethod("notifyWallpaperColorChanged");
+            Class<?> task = Class.forName(WALLPAPER_INFO_TASK_CLASS, false, classLoader);
+            Method method = task.getDeclaredMethod("run");
             HookUtil.hook(method, chain -> {
+                long serial = TRANSACTION.onTaskStarted();
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                dispatchToMain(() -> {
-                    LauncherGlassSceneController.onWallpaperCandidateForAll();
-                    MainHook.log(TAG + " vendor notifyWallpaperColorChanged -> fresh candidate");
-                });
+                if (TRANSACTION.shouldPublishTaskCompletion(serial)) {
+                    dispatchToMain(() -> {
+                        LauncherGlassSceneController.onWallpaperCandidateForAll();
+                        MainHook.log(TAG + " WallpaperInfoUpdateTask complete -> fresh candidate"
+                                + " serial=" + serial);
+                    });
+                } else if (serial > 0L) {
+                    MainHook.log(TAG + " stale WallpaperInfoUpdateTask completion ignored serial="
+                            + serial + " latest=" + TRANSACTION.latestChangeSerial());
+                }
                 return result;
             });
-            MainHook.log(TAG + " DesktopWallpaperManager.notifyWallpaperColorChanged installed");
+            MainHook.log(TAG + " WallpaperInfoUpdateTask.run installed");
+            return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " DesktopWallpaperManager.notifyWallpaperColorChanged unavailable: "
-                    + error);
+            MainHook.log(TAG + " WallpaperInfoUpdateTask.run unavailable: " + error);
+            return false;
         }
     }
 
-    private static void installDrawFrameEndForRecents(ClassLoader classLoader) {
+    private static boolean installDrawFrameEndForRecents(ClassLoader classLoader) {
         try {
             Class<?> callback = Class.forName(CALLBACK_CLASS, false, classLoader);
             Method method = callback.getDeclaredMethod("onDrawFrameEnd");
@@ -104,8 +127,10 @@ final class LauncherWallpaperFreshnessHook {
                 return result;
             });
             MainHook.log(TAG + " onDrawFrameEnd installed for Recents settle only");
+            return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " onDrawFrameEnd unavailable: " + error);
+            return false;
         }
     }
 
