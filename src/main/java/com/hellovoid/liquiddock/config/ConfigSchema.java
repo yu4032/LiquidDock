@@ -254,6 +254,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> SHORTCUT_POPUP_DARK_TEXT = bool(
                 "liquid_shortcut_popup_dark_text", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> UNINSTALL_DIALOG_GLASS = bool(
+                "liquid_uninstall_dialog_glass", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FOLDER_GLASS = bool(
                 "liquid_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_GLASS = bool(
@@ -618,7 +621,7 @@ public final class ConfigSchema {
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
-                Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
+                Glass.UNINSTALL_DIALOG_GLASS, Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.FOLDER_CORNER_RADIUS,
