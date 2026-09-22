@@ -16,6 +16,9 @@ public class PassBlurBindPolicyTest {
         assertEquals(1.0f,
                 PassBlurBindPolicy.nativeScale(PassBlurDomain.LAUNCHER_WORKSPACE, 0.75f),
                 0.0001f);
+        assertEquals(1.0f,
+                PassBlurBindPolicy.nativeScale(PassBlurDomain.SYSTEMUI_HANDLE_MENU, 0.25f),
+                0.0001f);
     }
 
     @Test
@@ -23,6 +26,7 @@ public class PassBlurBindPolicyTest {
         assertTrue(PassBlurBindPolicy.requiresUnlockGate(PassBlurDomain.LAUNCHER_WORKSPACE));
         assertFalse(PassBlurBindPolicy.requiresUnlockGate(PassBlurDomain.DOCK));
         assertFalse(PassBlurBindPolicy.requiresUnlockGate(PassBlurDomain.SECURITY_CENTER));
+        assertFalse(PassBlurBindPolicy.requiresUnlockGate(PassBlurDomain.SYSTEMUI_HANDLE_MENU));
     }
 
     @Test
