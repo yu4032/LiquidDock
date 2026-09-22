@@ -177,8 +177,8 @@ final class SystemUiHandleMenuGlassHook {
             }
 
             View target = resolveGlassTarget(root);
-            if (!(target instanceof ViewGroup)) {
-                log("caption menu background target unavailable; stock retained"
+            if (!(root instanceof ViewGroup) || target == null) {
+                log("caption menu glass host/target unavailable; stock retained"
                         + " rootClass=" + root.getClass().getName());
                 PENDING.remove(root);
                 release();
@@ -261,11 +261,12 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         void start() {
-            sink = SystemUiHandleMenuGlassSinkView.attachInsideTarget(target, session);
+            sink = SystemUiHandleMenuGlassSinkView.attachInsideHost(
+                    (ViewGroup) root, target, session);
             root.addOnAttachStateChangeListener(this);
             root.getViewTreeObserver().addOnPreDrawListener(this);
             if (sink == null) {
-                onFailure(new IllegalStateException("caption menu local host unavailable"));
+                onFailure(new IllegalStateException("caption menu local glass host unavailable"));
                 return;
             }
             refreshGeometry();
