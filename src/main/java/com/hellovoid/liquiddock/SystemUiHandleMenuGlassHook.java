@@ -1,12 +1,13 @@
 package com.hellovoid.liquiddock;
 
-import android.app.assist.AssistContent;
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
+import java.lang.reflect.Constructor;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -14,21 +15,22 @@ import java.util.WeakHashMap;
 /**
  * Replaces the stock Material background of WMShell HandleMenu's windowing pill with Prismal.
  *
- * <p>HyperOS creates and theme-tints HandleMenuView inside
- * DesktopModeWindowDecoration.onAssistContentReceived(). We bind after that method returns, so the
- * vendor remains authoritative for layout, button actions, animation and theme selection. Only the
- * background of {@code windowing_pill} changes after a real Prismal frame is presented.</p>
+ * <p>The stable creation boundary is HandleMenu.HandleMenuView itself. HyperOS constructs this
+ * object for every app-handle menu, then applies the vendor theme and later attaches rootView to
+ * either an AdditionalViewHostViewContainer or AdditionalSystemViewContainer. We register the
+ * freshly constructed root and wait for real attach/layout before binding glass, so AssistContent
+ * caching and menu-creation branch selection cannot bypass this integration.</p>
  */
 final class SystemUiHandleMenuGlassHook {
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
-    private static final String WINDOW_DECORATION =
-            "com.android.wm.shell.windowdecor.DesktopModeWindowDecoration";
+    private static final String HANDLE_MENU_VIEW =
+            "com.android.wm.shell.windowdecor.HandleMenu$HandleMenuView";
     private static final String WINDOWING_PILL = "windowing_pill";
 
-    private static final Map<Object, PendingBinding> PENDING =
+    private static final Map<View, PendingBinding> PENDING =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<Object, Binding> ACTIVE =
+    private static final Map<View, Binding> ACTIVE =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private static boolean installed;
@@ -41,75 +43,84 @@ final class SystemUiHandleMenuGlassHook {
                 || !glass.enabled || !glass.systemUiHandleMenuEnabled) return;
         glassConfig = glass;
         try {
-            HookUtil.hookMethod(
-                    classLoader,
-                    WINDOW_DECORATION,
-                    "onAssistContentReceived",
-                    chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        schedule(chain.getThisObject());
-                        return result;
-                    },
-                    AssistContent.class);
-            HookUtil.hookMethod(
-                    classLoader,
-                    WINDOW_DECORATION,
-                    "closeHandleMenu",
-                    chain -> {
-                        releaseOwner(chain.getThisObject(), "vendor-close");
-                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    });
+            Class<?> type = Class.forName(HANDLE_MENU_VIEW, false, classLoader);
+            int hooked = 0;
+            for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+                if (!isCanonicalHandleMenuViewConstructor(constructor)) continue;
+                HookUtil.hook(constructor, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    observeConstructedMenu(chain.getThisObject());
+                    return result;
+                });
+                hooked++;
+            }
+            if (hooked == 0) {
+                throw new NoSuchMethodException("canonical HandleMenuView constructor");
+            }
             installed = true;
-            log("windowing-pill lifecycle hooks installed");
+            log("HandleMenuView constructor hook installed count=" + hooked);
         } catch (Throwable error) {
             glassConfig = null;
             log("hook unavailable: " + error);
         }
     }
 
-    private static void schedule(Object decoration) {
+    private static boolean isCanonicalHandleMenuViewConstructor(Constructor<?> constructor) {
+        if (constructor == null) return false;
+        Class<?>[] types = constructor.getParameterTypes();
+        if (types.length != 12
+                || types[0] != Context.class
+                || types[2] != int.class
+                || types[3] != int.class) {
+            return false;
+        }
+        for (int i = 4; i < types.length; i++) {
+            if (types[i] != boolean.class) return false;
+        }
+        return true;
+    }
+
+    private static void observeConstructedMenu(Object handleMenuView) {
         LiquidDockConfig.Glass glass = glassConfig;
-        if (decoration == null || glass == null || !glass.enabled
+        if (handleMenuView == null || glass == null || !glass.enabled
                 || !glass.systemUiHandleMenuEnabled) return;
 
-        releaseOwner(decoration, "menu-replaced");
         final View root;
         try {
-            Object handleMenu = HookUtil.getField(decoration, "mHandleMenu");
-            if (handleMenu == null) return;
-            Object handleMenuView = HookUtil.getField(handleMenu, "handleMenuView");
-            if (handleMenuView == null) return;
-            Object rootValue = HookUtil.getField(handleMenuView, "rootView");
-            if (!(rootValue instanceof View)) return;
-            root = (View) rootValue;
+            Object value = HookUtil.getField(handleMenuView, "rootView");
+            if (!(value instanceof View)) {
+                log("constructed HandleMenuView has no rootView; stock retained");
+                return;
+            }
+            root = (View) value;
         } catch (Throwable error) {
-            log("menu discovery failed: " + error);
+            log("constructed menu discovery failed: " + error);
             return;
         }
 
-        PendingBinding pending = new PendingBinding(decoration, root, glass);
-        PENDING.put(decoration, pending);
+        releaseRoot(root, "menu-replaced");
+        PendingBinding pending = new PendingBinding(root, glass);
+        PENDING.put(root, pending);
         pending.start();
+        log("HandleMenuView constructed root=" + root.getClass().getName());
     }
 
-    private static void releaseOwner(Object decoration, String reason) {
-        if (decoration == null) return;
-        PendingBinding pending = PENDING.remove(decoration);
+    private static void releaseRoot(View root, String reason) {
+        if (root == null) return;
+        PendingBinding pending = PENDING.remove(root);
         if (pending != null) pending.release();
-        Binding active = ACTIVE.remove(decoration);
+        Binding active = ACTIVE.remove(root);
         if (active != null) active.release();
         if (pending != null || active != null) log("released reason=" + reason);
     }
 
     private static final class PendingBinding implements View.OnAttachStateChangeListener,
             View.OnLayoutChangeListener {
-        final Object owner;
         final View root;
         final LiquidDockConfig.Glass glass;
         boolean released;
 
-        PendingBinding(Object owner, View root, LiquidDockConfig.Glass glass) {
-            this.owner = owner;
+        PendingBinding(View root, LiquidDockConfig.Glass glass) {
             this.root = root;
             this.glass = glass;
         }
@@ -121,7 +132,7 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         void tryBind() {
-            if (released || PENDING.get(owner) != this) return;
+            if (released || PENDING.get(root) != this) return;
             View sourceRoot = root.getRootView();
             if (!root.isAttachedToWindow() || root.getWidth() <= 0 || root.getHeight() <= 0
                     || sourceRoot == null || !sourceRoot.isAttachedToWindow()
@@ -132,22 +143,22 @@ final class SystemUiHandleMenuGlassHook {
             View windowing = findByResourceName(root, WINDOWING_PILL);
             if (!(windowing instanceof ViewGroup)) {
                 log("stable windowing_pill unavailable; stock retained");
-                PENDING.remove(owner);
+                PENDING.remove(root);
                 release();
                 return;
             }
 
-            PENDING.remove(owner);
+            PENDING.remove(root);
             release();
             try {
-                Binding binding = new Binding(owner, root, sourceRoot, windowing, glass);
-                ACTIVE.put(owner, binding);
+                Binding binding = new Binding(root, sourceRoot, windowing, glass);
+                ACTIVE.put(root, binding);
                 binding.start();
                 log("windowing pill bind started root="
                         + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             } catch (Throwable error) {
                 log("glass bind failed; stock retained: " + error);
-                Binding active = ACTIVE.remove(owner);
+                Binding active = ACTIVE.remove(root);
                 if (active != null) active.release();
             }
         }
@@ -159,11 +170,15 @@ final class SystemUiHandleMenuGlassHook {
             root.removeOnLayoutChangeListener(this);
         }
 
-        @Override public void onViewAttachedToWindow(View view) { tryBind(); }
+        @Override
+        public void onViewAttachedToWindow(View view) {
+            log("HandleMenuView attached");
+            tryBind();
+        }
 
         @Override
         public void onViewDetachedFromWindow(View view) {
-            if (PENDING.get(owner) == this) PENDING.remove(owner);
+            if (PENDING.get(root) == this) PENDING.remove(root);
             release();
         }
 
@@ -184,7 +199,6 @@ final class SystemUiHandleMenuGlassHook {
 
     private static final class Binding implements ViewTreeObserver.OnPreDrawListener,
             View.OnAttachStateChangeListener, SystemUiHandleMenuGlassSession.Listener {
-        final Object owner;
         final View root;
         final View sourceRoot;
         final View windowing;
@@ -198,12 +212,10 @@ final class SystemUiHandleMenuGlassHook {
         boolean released;
 
         Binding(
-                Object owner,
                 View root,
                 View sourceRoot,
                 View windowing,
                 LiquidDockConfig.Glass glass) {
-            this.owner = owner;
             this.root = root;
             this.sourceRoot = sourceRoot;
             this.windowing = windowing;
@@ -236,6 +248,7 @@ final class SystemUiHandleMenuGlassHook {
             session.updateGeometry(geometry);
             if (!captureRequested) {
                 captureRequested = true;
+                log("requesting first PassBlur frame");
                 session.requestInitialCapture();
             }
         }
@@ -277,11 +290,15 @@ final class SystemUiHandleMenuGlassHook {
             session.shutdown();
         }
 
-        @Override public void onViewAttachedToWindow(View view) { refreshGeometry(); }
+        @Override
+        public void onViewAttachedToWindow(View view) {
+            refreshGeometry();
+        }
 
         @Override
         public void onViewDetachedFromWindow(View view) {
-            if (ACTIVE.get(owner) == this) ACTIVE.remove(owner);
+            if (ACTIVE.get(root) == this) ACTIVE.remove(root);
+            log("HandleMenuView detached");
             release();
         }
     }
