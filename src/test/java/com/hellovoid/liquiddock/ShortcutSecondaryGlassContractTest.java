@@ -113,10 +113,13 @@ public class ShortcutSecondaryGlassContractTest {
     }
 
 
-    @Test public void launcherUninstallDialogUsesScopedCrossRootGlass() throws Exception {
+    @Test public void launcherUninstallDialogUsesDialogRootBehindContentAuthority() throws Exception {
         String hook = Files.readString(MAIN.resolve("LauncherUninstallDialogGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("LauncherDialogGlassCoordinator.java"));
         String sink = Files.readString(MAIN.resolve("LauncherGlassSinkView.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String bindRequest = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
+        String domains = Files.readString(MAIN.resolve("PassBlurDomain.java"));
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String settings = SourceContractText.read(Path.of(
@@ -138,7 +141,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("\"mRemoveDialog\""));
         assertFalse(hook.contains("android.app.AlertDialog"));
 
-        // UninstallDialogViewContainer is semantic scope proof only; MIUIX parentPanel owns bg.
+        // Scope remains uninstall-only and MIUIX parentPanel remains the visual material host.
         assertTrue(coordinator.contains(
                 "com.miui.home.launcher.uninstall.UninstallDialogViewContainer"));
         assertTrue(coordinator.contains(
@@ -146,19 +149,43 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("DIALOG_PARENT_PANEL_ID = \"parentPanel\""));
         assertTrue(coordinator.contains("findExactClass(decor, UNINSTALL_CONTENT)"));
         assertTrue(coordinator.contains("findExactClass(decor, DIALOG_PARENT_PANEL)"));
-        assertTrue(coordinator.contains("LauncherGlassSessionRegistry.acquire(authorityAnchor"));
+
+        // The dialog ViewRoot, not the Launcher Activity root, is the behind-content authority.
+        assertTrue(domains.contains("LAUNCHER_DIALOG"));
+        assertTrue(bindRequest.contains(
+                "static PassBlurBindRequest launcherDialog(View authoritativeRoot)"));
+        assertTrue(bindRequest.contains("PassBlurDomain.LAUNCHER_DIALOG"));
+        assertTrue(coordinator.contains("View dialogRoot = decor.getRootView()"));
+        assertTrue(coordinator.contains("PassBlurBindRequest.launcherDialog(dialogRoot)"));
+        assertTrue(coordinator.contains("new LauncherGlassSession("));
+        assertTrue(coordinator.contains("authority.requestFreshBackdrop()"));
+        assertFalse(coordinator.contains("LauncherGlassSessionRegistry.acquire("));
+        assertFalse(coordinator.contains("LauncherGlassSceneController.requestFreshForRoot"));
+
+        // Output is in the same dialog ViewRoot, so its own pre-draw drives animation geometry.
         assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
         assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
+        assertTrue(coordinator.contains("sink.runWhenOutputLost"));
+        assertTrue(coordinator.contains("setTerminalFailureListener"));
+        assertTrue(coordinator.contains("installMaterialGuard(binding)"));
+        assertTrue(coordinator.contains("OnPreDrawListener"));
+        assertTrue(session.contains("void setTerminalFailureListener(Runnable listener)"));
+        assertTrue(session.contains("void requestFreshBackdrop()"));
+        assertTrue(sink.contains("void runWhenOutputLost(Runnable listener)"));
+        assertTrue(sink.contains("public void onSurfaceTextureUpdated(SurfaceTexture surface)"));
+
+        // Stock MIUIX material is handed off only after a real frame and restored exactly.
         assertTrue(coordinator.contains("MiBlurBridge.getPassWindowBlurEnabled(panel)"));
         assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, false)"));
         assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, true)"));
-        assertTrue(coordinator.contains("background.setAlpha(0)"));
-        assertTrue(coordinator.contains("background.setAlpha(binding.originalBackgroundAlpha)"));
+        assertTrue(coordinator.contains("cloneTransparent(background, panel)"));
+        assertTrue(coordinator.contains("panel.setBackground(transparentBackground)"));
+        assertTrue(coordinator.contains("panel.setBackground(binding.originalBackground)"));
+        assertFalse(coordinator.contains("background.setAlpha(0)"));
+        assertFalse(coordinator.contains("originalBackgroundAlpha"));
         assertTrue(coordinator.contains("OnGlobalLayoutListener"));
         assertFalse(coordinator.contains("postDelayed("));
 
-        assertTrue(sink.contains("void runWhenFirstFramePresented(Runnable listener)"));
-        assertTrue(sink.contains("public void onSurfaceTextureUpdated(SurfaceTexture surface)"));
         assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_uninstall_dialog_glass\", true, true, true"));
         assertTrue(settings.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
