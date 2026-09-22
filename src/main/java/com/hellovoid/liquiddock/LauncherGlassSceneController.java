@@ -290,6 +290,11 @@ final class LauncherGlassSceneController {
     static void onWallpaperChangedForAll() {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
+            // A new wallpaper content generation invalidates any Recents settle fence that belongs
+            // to the previous wallpaper. Do not route through the ordinary settle path here: that
+            // path requests a fresh frame immediately, before WallpaperInfoUpdateTask has refreshed
+            // the vendor cache.
+            vendorRecentsWallpaperSettlePending = false;
             snapshot = new ArrayList<>(BY_ROOT.values());
         }
         for (LauncherGlassSceneController controller : snapshot) {
@@ -404,6 +409,10 @@ final class LauncherGlassSceneController {
     }
 
     private synchronized void onWallpaperChanged() {
+        if (recentsWallpaperSettlePending) {
+            recentsWallpaperSettlePending = false;
+            MainHook.log(TAG + " recents wallpaper presentation superseded by new content generation");
+        }
         long generation = wallpaperContentState.onWallpaperChanged();
         LauncherWallpaperContentState.Pulse deferred = deferredWallpaperPulse;
         if (deferred.requested() && deferred.generation < generation) {
