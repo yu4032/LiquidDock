@@ -186,7 +186,7 @@ internal fun SearchboxSettingsPage(
         item { SmallTitle("玻璃颜色") }
         item {
             GboardSettingsCard {
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = MiuiSearchboxGlassPreferences.TINT_RED_KEY,
                     title = "红",
                     value = tintR,
@@ -195,7 +195,7 @@ internal fun SearchboxSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = MiuiSearchboxGlassPreferences.TINT_GREEN_KEY,
                     title = "绿",
                     value = tintG,
@@ -204,7 +204,7 @@ internal fun SearchboxSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = MiuiSearchboxGlassPreferences.TINT_BLUE_KEY,
                     title = "蓝",
                     value = tintB,
@@ -213,7 +213,7 @@ internal fun SearchboxSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = MiuiSearchboxGlassPreferences.TINT_ALPHA_KEY,
                     title = "不透明度",
                     value = tintAlpha,
@@ -227,7 +227,7 @@ internal fun SearchboxSettingsPage(
         item { SmallTitle("模糊") }
         item {
             GboardSettingsCard {
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = MiuiSearchboxGlassPreferences.BLUR_KEY,
                     title = "玻璃模糊",
                     value = blur,
@@ -380,7 +380,7 @@ internal fun GboardSettingsPage(
         item { SmallTitle("玻璃颜色") }
         item {
             GboardSettingsCard {
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = GboardGlassPreferences.TINT_RED_KEY,
                     title = "红",
                     value = tintR,
@@ -389,7 +389,7 @@ internal fun GboardSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = GboardGlassPreferences.TINT_GREEN_KEY,
                     title = "绿",
                     value = tintG,
@@ -398,7 +398,7 @@ internal fun GboardSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = GboardGlassPreferences.TINT_BLUE_KEY,
                     title = "蓝",
                     value = tintB,
@@ -407,7 +407,7 @@ internal fun GboardSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = GboardGlassPreferences.TINT_ALPHA_KEY,
                     title = "不透明度",
                     value = tintAlpha,
@@ -421,7 +421,7 @@ internal fun GboardSettingsPage(
         item { SmallTitle("模糊") }
         item {
             GboardSettingsCard {
-                GboardValueSlider(
+                GlassAppearanceValueSlider(
                     key = GboardGlassPreferences.BLUR_KEY,
                     title = "玻璃模糊",
                     value = blur,
@@ -443,7 +443,7 @@ internal fun GboardSettingsPage(
 }
 
 @Composable
-private fun GboardValueSlider(
+internal fun GlassAppearanceValueSlider(
     key: String,
     title: String,
     value: Float,
