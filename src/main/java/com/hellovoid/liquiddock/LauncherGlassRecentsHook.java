@@ -37,7 +37,7 @@ final class LauncherGlassRecentsHook {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
                 WALLPAPER_SETTLE.onRecentsShown();
-                if (staleReturn > 0L) discardSystemDrawEnd(staleReturn);
+                if (staleReturn > 0L) discardWallpaperAuthorities(staleReturn);
                 LauncherGlassSceneController.setRecentsCoveredForAll(true);
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -125,6 +125,19 @@ final class LauncherGlassRecentsHook {
             Class<?> hyperSpring = Class.forName(HYPER_SPRING, false, classLoader);
             Class<?> multiSpring = Class.forName(MULTI_SPRING, false, classLoader);
 
+            // Vendor LocalWallpaperElement.setTo() cancels a running spring first, then writes the
+            // snapped zoom value synchronously. That snap supersedes any return animation which had
+            // armed our settle fence, so release only after vendor setTo() has applied the final
+            // wallpaper target.
+            HookUtil.hookMethod(localWallpaper, "setTo", new Class<?>[]{wallpaperParam}, chain -> {
+                long serial = WALLPAPER_SETTLE.pendingSerial();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (serial > 0L) {
+                    cancelWallpaperSettle(serial, "local-wallpaper-setTo");
+                }
+                return result;
+            });
+
             HookUtil.hookMethod(localWallpaper, "animTo", new Class<?>[]{wallpaperParam}, chain -> {
                 long serial = WALLPAPER_SETTLE.pendingSerial();
                 Long previous = LOCAL_WALLPAPER_SERIAL.get();
@@ -154,8 +167,8 @@ final class LauncherGlassRecentsHook {
                     });
 
             // MultiSpringDynamicAnimation.doAnimationFrame() returns true only when every bundle
-            // reached its final spring state and endAnimationInternal(false) ran. Cancellation does
-            // not travel through this natural-completion branch.
+            // reached its final spring state and endAnimationInternal(false) ran. The distinct
+            // LocalWallpaperElement.setTo() hook above owns the vendor cancellation/snap path.
             HookUtil.hookMethod(multiSpring, "doAnimationFrame",
                     new Class<?>[]{long.class}, chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -177,6 +190,21 @@ final class LauncherGlassRecentsHook {
         try {
             Class<?> wallpaperParam = Class.forName(WALLPAPER_PARAM, false, classLoader);
             Class<?> systemWallpaper = Class.forName(SYSTEM_WALLPAPER, false, classLoader);
+
+            // SystemWallpaperElement.setTo() sends the explicit "setTo" command to
+            // miui.wallpaper.animation. It semantically replaces a prior startAnim command and is
+            // the only Launcher-side terminal signal when the wallpaper service emits no draw-end
+            // for a superseded/no-op spring.
+            HookUtil.hookMethod(systemWallpaper, "setTo",
+                    new Class<?>[]{wallpaperParam}, chain -> {
+                        long serial = WALLPAPER_SETTLE.pendingSerial();
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (serial > 0L) {
+                            cancelWallpaperSettle(serial, "system-wallpaper-setTo");
+                        }
+                        return result;
+                    });
+
             HookUtil.hookMethod(systemWallpaper, "animTo",
                     new Class<?>[]{wallpaperParam}, chain -> {
                         long serial = WALLPAPER_SETTLE.pendingSerial();
@@ -237,9 +265,22 @@ final class LauncherGlassRecentsHook {
         }
     }
 
+    private static void discardLocalSpring(long serial) {
+        if (serial <= 0L) return;
+        synchronized (LOCAL_SPRING_SERIALS) {
+            LOCAL_SPRING_SERIALS.entrySet().removeIf(
+                    entry -> entry.getValue() != null && entry.getValue().longValue() == serial);
+        }
+    }
+
+    private static void discardWallpaperAuthorities(long serial) {
+        discardLocalSpring(serial);
+        discardSystemDrawEnd(serial);
+    }
+
     private static boolean cancelWallpaperSettle(long serial, String reason) {
         if (!WALLPAPER_SETTLE.cancelReturn(serial)) return false;
-        discardSystemDrawEnd(serial);
+        discardWallpaperAuthorities(serial);
         LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
         MainHook.log(TAG + " Recents wallpaper settle cancelled reason=" + reason
                 + " serial=" + serial);
@@ -252,6 +293,7 @@ final class LauncherGlassRecentsHook {
                     + " serial=" + serial + " active=" + WALLPAPER_SETTLE.activeSerial());
             return;
         }
+        discardWallpaperAuthorities(serial);
         LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
         MainHook.log(TAG + " Recents wallpaper settled authority=" + authority
                 + " serial=" + serial);
