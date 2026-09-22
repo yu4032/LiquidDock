@@ -399,6 +399,12 @@ final class LauncherGlassSceneController {
         if (deferred.requested() && deferred.generation < generation) {
             deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
         }
+
+        // The vendor wallpaper-change callback is itself the content authority. Do not require
+        // Workspace.onWallpaperColorChanged() to arrive before invalidating the cached backdrop:
+        // some HyperOS paths update wallpaper content without emitting that UI/color callback.
+        // A later Workspace callback is still useful, but the state machine coalesces it.
+        requestWallpaperPulse(wallpaperContentState.onCandidateBoundary(generation));
         MainHook.log(TAG + " wallpaper changed contentGeneration=" + generation);
     }
 
