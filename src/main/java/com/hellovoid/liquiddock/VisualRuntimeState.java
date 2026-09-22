@@ -93,7 +93,7 @@ final class VisualRuntimeState {
             if (dockShadowStyleChanged || strokeShadowStyleChanged) {
                 runOnMain(() -> {
                     DockNativeShadowBridge.refreshConfig();
-                    MainHook.onRuntimeDockShadowEnabled();
+                    DockShadowOwnership.onRuntimeDockShadowEnabled();
                 });
             }
         };
@@ -168,7 +168,7 @@ final class VisualRuntimeState {
         logState("updated");
 
         if (transition.dockCustomizationDisabled) {
-            runOnMain(() -> MainHook.onRuntimeDockCustomizationDisabled());
+            runOnMain(() -> DockShadowOwnership.onRuntimeDockCustomizationDisabled());
         }
         if (transition.strokeDisabled) {
             runOnMain(() -> DockStrokeRenderer.onRuntimeStrokeDisabled());
@@ -179,20 +179,20 @@ final class VisualRuntimeState {
         if (transition.dockShadowDisabled) {
             runOnMain(() -> {
                 DockNativeShadowBridge.refreshConfig();
-                MainHook.onRuntimeDockShadowDisabled();
+                DockShadowOwnership.onRuntimeDockShadowDisabled();
             });
         }
         if (transition.dockShadowEnabled) {
             runOnMain(() -> {
                 DockNativeShadowBridge.refreshConfig();
-                MainHook.onRuntimeDockShadowEnabled();
+                DockShadowOwnership.onRuntimeDockShadowEnabled();
             });
         }
         if (transition.strokeShadowChanged) {
             runOnMain(() -> {
                 DockStrokeRenderer.refreshInstalledFromCurrentConfig();
                 DockNativeShadowBridge.refreshConfig();
-                MainHook.onRuntimeDockShadowEnabled();
+                DockShadowOwnership.onRuntimeDockShadowEnabled();
             });
         }
         if (transition.dividerDisabled) {
