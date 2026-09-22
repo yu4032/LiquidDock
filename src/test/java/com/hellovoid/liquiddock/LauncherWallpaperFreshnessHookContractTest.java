@@ -31,12 +31,33 @@ public class LauncherWallpaperFreshnessHookContractTest {
 
     @Test public void bridgeDoesNotIntroducePollingOrDelayedFallbackApis() throws Exception {
         String source = hook();
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
         assertFalse(source.contains("postDelayed"));
         assertFalse(source.contains("BroadcastReceiver"));
         assertFalse(source.contains("IntentFilter"));
         assertFalse(source.contains("ACTION_WALLPAPER_CHANGED"));
         assertFalse(source.contains("Timer"));
         assertFalse(source.contains("ScheduledExecutor"));
+
+        assertFalse(recents.contains("RECENTS_WALLPAPER_SETTLE_MS"));
+        assertFalse(recents.contains("postDelayed("));
+        assertFalse(recents.contains("PixelCopy"));
+        assertFalse(recents.contains("ScreenCapture"));
+        assertFalse(recents.contains("Bitmap"));
+    }
+
+    @Test public void recentsReturnUsesVendorAnimationCompletionBoundaries() throws Exception {
+        String source = hook();
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+
+        assertTrue(recents.contains("com.miui.home.recents.anim.LocalWallpaperElement"));
+        assertTrue(recents.contains("com.miui.home.recents.anim.SystemWallpaperElement"));
+        assertTrue(recents.contains("com.miui.home.recents.anim.HyperSpringAnimation"));
+        assertTrue(recents.contains("com.miui.home.recents.anim.MultiSpringDynamicAnimation"));
+        assertTrue(recents.contains("\"doAnimationFrame\""));
+        assertTrue(recents.contains("\"setFinalPosition\""));
+        assertTrue(source.contains("LauncherGlassRecentsHook.onSystemWallpaperDrawFrameEnd()"));
+        assertTrue(recents.contains("onSystemWallpaperDrawFrameEnd"));
     }
 
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
