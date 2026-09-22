@@ -35,16 +35,6 @@ final class LauncherUninstallDialogGlassHook {
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
-        ConfigReader preferences = ConfigReader.load();
-        boolean enabled = preferences.b(
-                ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
-                ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
-        if (!enabled) {
-            MainHook.log(TAG + " disabled by setting");
-            return false;
-        }
-
-        LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
             int hooked = 0;
@@ -67,10 +57,19 @@ final class LauncherUninstallDialogGlassHook {
                                 ? args[0].getClass().getName() : "<null>"));
                         return result;
                     }
+                    ConfigReader liveReader = ConfigReader.load();
+                    LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
+                    boolean enabled = liveReader.b(
+                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
+                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
+                    if (!liveConfig.enabled || !liveConfig.glass.enabled || !enabled) {
+                        MainHook.log(TAG + " dialog skipped by live setting type=" + type);
+                        return result;
+                    }
                     LauncherDialogGlassCoordinator.watchUninstallDialog(
                             (Activity) args[0],
                             (Dialog) owner,
-                            glassConfig,
+                            liveConfig.glass,
                             sourceFor(type));
                     return result;
                 });
