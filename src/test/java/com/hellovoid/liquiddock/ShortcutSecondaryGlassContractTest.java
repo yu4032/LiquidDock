@@ -276,13 +276,13 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(dialogPage.contains("对话背景模糊"));
         assertTrue(dialogPage.contains("恢复继承全局外观"));
 
-        // Dark mode is dialog-local, affects the glass material and content, and preserves
-        // MIUIX hierarchy/listeners instead of forcing a configuration/theme recreation.
+        // Dark mode is dialog-local and content-only: it must not alter the Prismal glass color
+        // or vendor icons, and it preserves MIUIX hierarchy/listeners.
         assertTrue(schema.contains("DIALOG_DARK_MODE = bool("));
         assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
         assertTrue(dialogPage.contains("对话框深色模式"));
         assertTrue(dialogPage.contains("图标和玻璃颜色保持原样"));
-        assertTrue(preferences.contains("resolved.darkMode"));
+        assertTrue(preferences.contains("ConfigSchema.Glass.DIALOG_DARK_MODE.name()"));
         assertFalse(preferences.contains("out.tintR *= 0.22f"));
         assertFalse(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
         assertTrue(coordinator.contains("LauncherDialogDarkModeController.attach(panel)"));
