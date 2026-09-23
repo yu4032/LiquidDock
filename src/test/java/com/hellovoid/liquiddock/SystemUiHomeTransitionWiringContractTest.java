@@ -33,7 +33,7 @@ public class SystemUiHomeTransitionWiringContractTest {
 
     @Test public void moduleInstallsSystemUiSourceAndLauncherReceiver() throws Exception {
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
-        assertTrue(module.contains("SystemUiHomeTransitionSource.install(param.getClassLoader())"));
+        assertTrue(module.contains("SystemUiHomeTransitionSource.install(classLoader)"));
         assertTrue(module.contains("SystemUiHomeTransitionRuntime.install()"));
     }
 }
