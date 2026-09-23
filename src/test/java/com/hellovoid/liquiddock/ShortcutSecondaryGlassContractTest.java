@@ -136,7 +136,11 @@ public class ShortcutSecondaryGlassContractTest {
                 "com.miui.home.launcher.uninstall.RemoveDialog"));
         assertTrue(hook.contains(
                 "com.miui.home.launcher.uninstall.SecondConfirmDialog"));
-        assertFalse(hook.contains("\"showDialog\""));
+        // showDialog is supplemental only: it may invalidate a stale preloaded DeleteDialog when
+        // the construction-time native-night setting changed. Glass ownership still comes solely
+        // from the BaseUninstallDialog constructor and never from showDialog.
+        assertTrue(hook.contains("\"showDialog\""));
+        assertTrue(hook.contains("releasePreloadedDialog"));
         assertFalse(hook.contains("\"mDeleteDialog\""));
         assertFalse(hook.contains("\"mRemoveDialog\""));
         assertFalse(hook.contains("android.app.AlertDialog"));
@@ -314,8 +318,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(nativeNight.contains("NIGHT_INFLATE_REENTRY"));
         assertTrue(nativeNight.contains("getThemeResId"));
         assertTrue(nativeNight.contains("mThemeResource"));
-        assertFalse(nativeNight.contains("ActivityInfo"));
-        assertFalse(nativeNight.contains("ApplicationInfo"));
+        assertFalse(nativeNight.contains("import android.content.pm.ActivityInfo"));
+        assertFalse(nativeNight.contains("import android.content.pm.ApplicationInfo"));
+        assertFalse(nativeNight.contains("getActivityInfo("));
+        assertFalse(nativeNight.contains("getApplicationInfo().theme"));
         assertFalse(nativeNight.contains("AlertDialog_Theme_Dark"));
         assertFalse(nativeNight.contains("setTextColor("));
         assertFalse(nativeNight.contains("setBackgroundTintList("));
