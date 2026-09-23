@@ -174,7 +174,15 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(sink.contains("void runWhenOutputLost(Runnable listener)"));
         assertTrue(sink.contains("public void onSurfaceTextureUpdated(SurfaceTexture surface)"));
 
-        // Stock MIUIX material is handed off only after a real frame and restored exactly.
+        // Stock MIUIX material is suppressed in the same layout pass that creates the
+        // replacement output, before first-frame presentation, so dialog open cannot flash stock.
+        int claimAt = coordinator.indexOf("claimVendorMaterial(dialog, binding);");
+        int firstFrameAt = coordinator.indexOf("sink.runWhenFirstFramePresented");
+        assertTrue(claimAt >= 0);
+        assertTrue(firstFrameAt > claimAt);
+        assertTrue(coordinator.contains("MIUIX material suppressed before first draw"));
+        assertFalse(coordinator.contains(
+                "if (owner != null) claimVendorMaterial(owner, binding)"));
         assertTrue(coordinator.contains("MiBlurBridge.getPassWindowBlurEnabled(panel)"));
         assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, false)"));
         assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, true)"));
