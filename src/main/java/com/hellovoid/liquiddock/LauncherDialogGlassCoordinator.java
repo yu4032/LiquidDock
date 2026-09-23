@@ -201,7 +201,7 @@ final class LauncherDialogGlassCoordinator {
         binding.sink = sink;
         binding.bound = true;
         if (binding.appearance != null && binding.appearance.darkMode) {
-            binding.darkModeSession = LauncherDialogDarkModeController.attach(panel);
+            logNativeNightSnapshot(binding, panel);
         }
         sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
         sink.runWhenOutputLost(() -> releaseObserved(binding, "output-surface-lost"));
@@ -327,7 +327,6 @@ final class LauncherDialogGlassCoordinator {
             if (panel == null || !panel.isAttachedToWindow()) return true;
             Dialog owner = binding.dialogRef.get();
             if (owner != null) syncDialogDim(binding, owner, true);
-            if (binding.darkModeSession != null) binding.darkModeSession.reapply();
             if (binding.backgroundReplaced && binding.transparentBackground != null) {
                 Drawable current = panel.getBackground();
                 if (current != binding.transparentBackground) {
@@ -409,11 +408,6 @@ final class LauncherDialogGlassCoordinator {
             catch (Throwable ignored) {}
         }
         binding.attachListener = null;
-
-        if (binding.darkModeSession != null) {
-            binding.darkModeSession.restore();
-            binding.darkModeSession = null;
-        }
 
         View panel = binding.panelRef.get();
         if (panel != null && binding.backgroundReplaced) {
@@ -667,6 +661,50 @@ final class LauncherDialogGlassCoordinator {
         return null;
     }
 
+    /**
+     * Read-only proof that the native MIUIX hierarchy was actually inflated from the spoofed
+     * night Context. This intentionally never mutates text, buttons, icons, drawables or tints.
+     */
+    private static void logNativeNightSnapshot(Binding binding, View panel) {
+        if (binding == null || panel == null || binding.nativeNightSnapshotLogged) return;
+        binding.nativeNightSnapshotLogged = true;
+
+        int panelNight = panel.getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        MainHook.log(TAG + " native-night snapshot source=" + binding.source
+                + " panelContext=" + panel.getContext().getClass().getName()
+                + " panelNight=0x" + Integer.toHexString(panelNight));
+        int[] remaining = {16};
+        logNativeNightTextTree(binding, panel, 0, remaining);
+    }
+
+    private static void logNativeNightTextTree(
+            Binding binding, View view, int depth, int[] remaining) {
+        if (view == null || remaining[0] <= 0) return;
+        if (view instanceof android.widget.TextView) {
+            remaining[0]--;
+            android.widget.TextView text = (android.widget.TextView) view;
+            android.content.res.ColorStateList tint = text.getBackgroundTintList();
+            int night = text.getResources().getConfiguration().uiMode
+                    & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+            MainHook.log(TAG + " native-night view source=" + binding.source
+                    + " depth=" + depth
+                    + " id=" + resourceEntryName(text)
+                    + " class=" + text.getClass().getName()
+                    + " context=" + text.getContext().getClass().getName()
+                    + " night=0x" + Integer.toHexString(night)
+                    + " text=0x" + Integer.toHexString(text.getCurrentTextColor())
+                    + " bgTint=" + (tint != null
+                        ? "0x" + Integer.toHexString(tint.getDefaultColor()) : "<null>")
+                    + " bg=" + className(text.getBackground()));
+        }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount() && remaining[0] > 0; i++) {
+            logNativeNightTextTree(binding, group.getChildAt(i), depth + 1, remaining);
+        }
+    }
+
     private static float resolveDialogCornerRadius(View panel) {
         try {
             int id = panel.getResources().getIdentifier(
@@ -719,7 +757,6 @@ final class LauncherDialogGlassCoordinator {
         final String dialogType;
         LauncherGlassSession dialogSession;
         LauncherGlassSinkView sink;
-        LauncherDialogDarkModeController.Session darkModeSession;
         View.OnAttachStateChangeListener attachListener;
         ViewTreeObserver layoutObserver;
         ViewTreeObserver.OnGlobalLayoutListener layoutListener;
@@ -744,6 +781,7 @@ final class LauncherDialogGlassCoordinator {
         boolean targetsMissingLogged;
         boolean authorityUnavailableLogged;
         boolean sinkUnavailableLogged;
+        boolean nativeNightSnapshotLogged;
         boolean bound;
         boolean claimed;
         boolean released;
