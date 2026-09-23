@@ -28,11 +28,16 @@ final class LauncherDialogDarkModeController {
     private static final int MAX_NEUTRAL_CHANNEL_SPREAD = 36;
     private static final int MAX_DARK_CHANNEL = 128;
 
-    // Lift only the vendor tint colors of buttons that already have a visible filled surface.
-    // Transparent destructive buttons remain transparent; alpha and hue are preserved.
-    private static final float BUTTON_RGB_SCALE = 1.08f;
-    private static final int BUTTON_RGB_OFFSET = 12;
-    private static final int MIN_VISIBLE_BUTTON_ALPHA = 24;
+    // Canonical MIUIX dark dialog tokens from HyperOS resources.
+    private static final int DARK_NEUTRAL_BUTTON_BG = 0x24FFFFFF;
+    private static final int DARK_NEUTRAL_BUTTON_BG_DISABLED = 0x14FFFFFF;
+    private static final int DARK_NEUTRAL_BUTTON_TEXT = 0xCCFFFFFF;
+    private static final int DARK_PRIMARY_BUTTON_BG = 0xFF4788FF;
+    private static final int DARK_PRIMARY_BUTTON_BG_PRESSED = 0xFF3885F8;
+    private static final int DARK_PRIMARY_BUTTON_BG_DISABLED = 0x4D4788FF;
+    private static final int DARK_PRIMARY_BUTTON_TEXT = 0xE6FFFFFF;
+    private static final int DARK_DANGER_BUTTON_TEXT = 0xFFFA4238;
+    private static final int DARK_DANGER_BUTTON_TEXT_DISABLED = 0x4DFA4238;
 
     private LauncherDialogDarkModeController() {}
 
@@ -93,7 +98,7 @@ final class LauncherDialogDarkModeController {
                 TextView text = (TextView) view;
                 applyText(text);
                 if (isDialogButton(text, buttonPanel)) {
-                    applyButtonSurface(text);
+                    applyButtonAppearance(text);
                 }
             }
 
@@ -130,26 +135,32 @@ final class LauncherDialogDarkModeController {
             text.setTextColor(textStates(replacement));
         }
 
-        private void applyButtonSurface(View button) {
+        private void applyButtonAppearance(TextView button) {
             ButtonSurfaceSnapshot snapshot = buttonSurfaceSnapshots.get(button);
             if (snapshot == null) {
-                ColorStateList originalTint = button.getBackgroundTintList();
-                snapshot = new ButtonSurfaceSnapshot(originalTint, liftVisibleButtonTint(originalTint));
+                TextSnapshot textSnapshot = textSnapshots.get(button);
+                ColorStateList originalText = textSnapshot != null
+                        ? textSnapshot.textColors : button.getTextColors();
+                ButtonRole role = resolveButtonRole(
+                        button,
+                        originalText != null ? originalText.getDefaultColor() : button.getCurrentTextColor(),
+                        button.getBackgroundTintList());
+                snapshot = new ButtonSurfaceSnapshot(
+                        button.getBackgroundTintList(),
+                        role,
+                        buttonBackgroundStates(role),
+                        buttonTextStates(role));
                 buttonSurfaceSnapshots.put(button, snapshot);
             }
 
-            if (snapshot.liftedBackgroundTint == null) {
-                // No framework tint or an originally transparent surface: preserve MIUIX exactly.
-                if (button.getBackgroundTintList() != snapshot.originalBackgroundTint) {
-                    button.setBackgroundTintList(snapshot.originalBackgroundTint);
-                }
-                return;
+            if (snapshot.darkBackgroundTint != null
+                    && button.getBackgroundTintList() != snapshot.darkBackgroundTint) {
+                // Preserve the vendor Drawable/shape/state machine; only substitute the MIUIX dark
+                // token colors that the night theme would have supplied.
+                button.setBackgroundTintList(snapshot.darkBackgroundTint);
             }
-
-            // Some MIUIX button implementations re-apply their style during layout. Reassert only
-            // the derived tint list; never replace the vendor Drawable or its state/shape logic.
-            if (button.getBackgroundTintList() != snapshot.liftedBackgroundTint) {
-                button.setBackgroundTintList(snapshot.liftedBackgroundTint);
+            if (snapshot.darkTextColors != null) {
+                button.setTextColor(snapshot.darkTextColors);
             }
         }
     }
@@ -162,61 +173,103 @@ final class LauncherDialogDarkModeController {
         }
     }
 
+    private enum ButtonRole {
+        NEUTRAL,
+        PRIMARY,
+        DANGER
+    }
+
     private static final class ButtonSurfaceSnapshot {
         final ColorStateList originalBackgroundTint;
-        final ColorStateList liftedBackgroundTint;
+        final ButtonRole role;
+        final ColorStateList darkBackgroundTint;
+        final ColorStateList darkTextColors;
 
         ButtonSurfaceSnapshot(
                 ColorStateList originalBackgroundTint,
-                ColorStateList liftedBackgroundTint) {
+                ButtonRole role,
+                ColorStateList darkBackgroundTint,
+                ColorStateList darkTextColors) {
             this.originalBackgroundTint = originalBackgroundTint;
-            this.liftedBackgroundTint = liftedBackgroundTint;
+            this.role = role;
+            this.darkBackgroundTint = darkBackgroundTint;
+            this.darkTextColors = darkTextColors;
         }
     }
 
-    private static ColorStateList liftVisibleButtonTint(ColorStateList original) {
-        if (original == null) return null;
+    private static ButtonRole resolveButtonRole(
+            TextView button,
+            int originalTextColor,
+            ColorStateList originalBackgroundTint) {
+        if (isDangerRed(originalTextColor)) return ButtonRole.DANGER;
 
-        int[] pressedState = new int[] {
+        int background = originalBackgroundTint != null
+                ? originalBackgroundTint.getDefaultColor() : Color.TRANSPARENT;
+        if (isPrimaryBlue(background)) return ButtonRole.PRIMARY;
+
+        // MIUIX AlertDialog uses button1 as the positive/primary slot. Destructive positive
+        // actions are already caught by the red-text test above, so they never become blue here.
+        if ("button1".equals(resourceEntryName(button))) return ButtonRole.PRIMARY;
+        return ButtonRole.NEUTRAL;
+    }
+
+    private static ColorStateList buttonBackgroundStates(ButtonRole role) {
+        int[] pressed = new int[] {
                 android.R.attr.state_enabled, android.R.attr.state_pressed};
-        int[] focusedState = new int[] {
-                android.R.attr.state_enabled, android.R.attr.state_focused};
-        int[] disabledState = new int[] {-android.R.attr.state_enabled};
-        int[] defaultState = new int[] {};
-
-        int defaultColor = original.getDefaultColor();
-        int pressed = original.getColorForState(pressedState, defaultColor);
-        int focused = original.getColorForState(focusedState, defaultColor);
-        int disabled = original.getColorForState(disabledState, defaultColor);
-
-        // Transparent destructive/neutral button surfaces are a semantic style, not a light-mode
-        // artifact. Preserve them exactly instead of exposing the drawable's fallback blue fill.
-        int maxAlpha = Math.max(
-                Math.max(Color.alpha(defaultColor), Color.alpha(pressed)),
-                Math.max(Color.alpha(focused), Color.alpha(disabled)));
-        if (maxAlpha < MIN_VISIBLE_BUTTON_ALPHA) return null;
-
+        int[] disabled = new int[] {-android.R.attr.state_enabled};
+        int[] normal = new int[] {};
+        if (role == ButtonRole.PRIMARY) {
+            return new ColorStateList(
+                    new int[][] {pressed, disabled, normal},
+                    new int[] {
+                            DARK_PRIMARY_BUTTON_BG_PRESSED,
+                            DARK_PRIMARY_BUTTON_BG_DISABLED,
+                            DARK_PRIMARY_BUTTON_BG
+                    });
+        }
+        // MIUIX danger buttons share the ordinary dialog button surface; only their text token is
+        // danger-colored. This is why "卸载" remains red instead of becoming a blue primary CTA.
         return new ColorStateList(
-                new int[][] {pressedState, focusedState, disabledState, defaultState},
+                new int[][] {pressed, disabled, normal},
                 new int[] {
-                        liftButtonColor(pressed),
-                        liftButtonColor(focused),
-                        liftButtonColor(disabled),
-                        liftButtonColor(defaultColor)
+                        DARK_NEUTRAL_BUTTON_BG,
+                        DARK_NEUTRAL_BUTTON_BG_DISABLED,
+                        DARK_NEUTRAL_BUTTON_BG
                 });
     }
 
-    private static int liftButtonColor(int color) {
-        int alpha = Color.alpha(color);
-        if (alpha < MIN_VISIBLE_BUTTON_ALPHA) return color;
-        int r = liftChannel(Color.red(color));
-        int g = liftChannel(Color.green(color));
-        int b = liftChannel(Color.blue(color));
-        return Color.argb(alpha, r, g, b);
+    private static ColorStateList buttonTextStates(ButtonRole role) {
+        int[] disabled = new int[] {-android.R.attr.state_enabled};
+        int[] normal = new int[] {};
+        if (role == ButtonRole.DANGER) {
+            return new ColorStateList(
+                    new int[][] {disabled, normal},
+                    new int[] {
+                            DARK_DANGER_BUTTON_TEXT_DISABLED,
+                            DARK_DANGER_BUTTON_TEXT
+                    });
+        }
+        int normalColor = role == ButtonRole.PRIMARY
+                ? DARK_PRIMARY_BUTTON_TEXT : DARK_NEUTRAL_BUTTON_TEXT;
+        return new ColorStateList(
+                new int[][] {disabled, normal},
+                new int[] {DISABLED_TEXT, normalColor});
     }
 
-    private static int liftChannel(int channel) {
-        return Math.min(255, Math.round(channel * BUTTON_RGB_SCALE) + BUTTON_RGB_OFFSET);
+    private static boolean isDangerRed(int color) {
+        if (Color.alpha(color) < MIN_VISIBLE_ALPHA) return false;
+        int r = Color.red(color);
+        int g = Color.green(color);
+        int b = Color.blue(color);
+        return r >= 180 && r >= g + 48 && r >= b + 32;
+    }
+
+    private static boolean isPrimaryBlue(int color) {
+        if (Color.alpha(color) < 96) return false;
+        int r = Color.red(color);
+        int g = Color.green(color);
+        int b = Color.blue(color);
+        return b >= 150 && b >= r + 48 && b >= g + 16;
     }
 
     private static boolean isDialogButton(TextView text, boolean inButtonPanel) {
