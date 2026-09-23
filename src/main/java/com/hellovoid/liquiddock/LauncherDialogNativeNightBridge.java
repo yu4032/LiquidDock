@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.view.ContextThemeWrapper;
+import android.view.LayoutInflater;
+import android.view.ViewGroup;
 import android.view.Window;
 
 import java.lang.reflect.Constructor;
@@ -27,8 +29,10 @@ final class LauncherDialogNativeNightBridge {
     private static final String TAG = "[DC][LauncherDialogNativeNight]";
     private static final String ALERT_CONTROLLER = "miuix.appcompat.app.AlertController";
     private static final String APP_COMPAT_DIALOG = "androidx.appcompat.app.AppCompatDialog";
+    private static final String UNINSTALL_LAYOUT = "shortcut_uninstall_dialog";
 
     private static final ThreadLocal<Integer> FORCE_NIGHT_DEPTH = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> NIGHT_INFLATE_REENTRY = new ThreadLocal<>();
     private static boolean installed;
 
     private LauncherDialogNativeNightBridge() {}
@@ -77,12 +81,110 @@ final class LauncherDialogNativeNightBridge {
                 return chain.proceed(args);
             });
 
+            installUninstallLayoutHooks();
+
             installed = true;
-            MainHook.log(TAG + " AlertController native-night bridge installed");
+            MainHook.log(TAG + " AlertController + uninstall-layout native-night bridge installed");
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " AlertController bridge unavailable: " + error);
             return false;
+        }
+    }
+
+    /**
+     * The Launcher owns a custom content layout in addition to MIUIX's parent panel. Inflate only
+     * this exact semantic layout from the same night-qualified context while BaseUninstallDialog
+     * is under construction; every other Launcher inflate remains untouched.
+     */
+    private static void installUninstallLayoutHooks() {
+        HookUtil.hookMethod(
+                LayoutInflater.class,
+                "inflate",
+                new Class<?>[]{int.class, ViewGroup.class},
+                chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object target = chain.getThisObject();
+                    if (!shouldInterceptUninstallInflate(target, args)) {
+                        return chain.proceed(args);
+                    }
+                    Object replacement = inflateUninstallInNight(
+                            (LayoutInflater) target, args, false);
+                    return replacement != null ? replacement : chain.proceed(args);
+                });
+
+        HookUtil.hookMethod(
+                LayoutInflater.class,
+                "inflate",
+                new Class<?>[]{int.class, ViewGroup.class, boolean.class},
+                chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Object target = chain.getThisObject();
+                    if (!shouldInterceptUninstallInflate(target, args)) {
+                        return chain.proceed(args);
+                    }
+                    Object replacement = inflateUninstallInNight(
+                            (LayoutInflater) target, args, true);
+                    return replacement != null ? replacement : chain.proceed(args);
+                });
+    }
+
+    private static boolean shouldInterceptUninstallInflate(Object target, Object[] args) {
+        if (!isForceNightActive()
+                || Boolean.TRUE.equals(NIGHT_INFLATE_REENTRY.get())
+                || !(target instanceof LayoutInflater)
+                || args == null || args.length < 2
+                || !(args[0] instanceof Integer)) {
+            return false;
+        }
+        LayoutInflater inflater = (LayoutInflater) target;
+        int resourceId = (Integer) args[0];
+        if (resourceId == 0) return false;
+        try {
+            Context context = inflater.getContext();
+            return context != null
+                    && "layout".equals(context.getResources().getResourceTypeName(resourceId))
+                    && UNINSTALL_LAYOUT.equals(
+                            context.getResources().getResourceEntryName(resourceId));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static Object inflateUninstallInNight(
+            LayoutInflater inflater, Object[] args, boolean threeArgs) {
+        Context original = inflater != null ? inflater.getContext() : null;
+        if (original == null) return null;
+        int themeResId = resolveThemeResId(original);
+        if (themeResId == 0) {
+            MainHook.log(TAG + " uninstall layout theme id unavailable; original inflater retained"
+                    + " context=" + original.getClass().getName());
+            return null;
+        }
+        Context forced = createForcedNightContext(original, themeResId);
+        if (forced == null) return null;
+
+        NIGHT_INFLATE_REENTRY.set(Boolean.TRUE);
+        try {
+            LayoutInflater nightInflater = inflater.cloneInContext(forced);
+            int resourceId = (Integer) args[0];
+            ViewGroup root = args[1] instanceof ViewGroup ? (ViewGroup) args[1] : null;
+            Object result = threeArgs
+                    ? nightInflater.inflate(
+                            resourceId,
+                            root,
+                            args.length > 2 && args[2] instanceof Boolean && (Boolean) args[2])
+                    : nightInflater.inflate(resourceId, root);
+            MainHook.log(TAG + " inflated native night uninstall content"
+                    + " theme=0x" + Integer.toHexString(themeResId)
+                    + " context=" + original.getClass().getName()
+                    + " night=0x" + Integer.toHexString(nightMask(forced)));
+            return result;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " native night uninstall inflate failed: " + error);
+            return null;
+        } finally {
+            NIGHT_INFLATE_REENTRY.remove();
         }
     }
 
