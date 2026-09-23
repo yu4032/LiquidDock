@@ -195,15 +195,18 @@ final class LauncherDialogDarkModeController {
                 button.setCompoundDrawableTintList(textSnapshot.compoundTint);
             }
 
-            Drawable replacement = makeDarkButtonBackground(
-                    button,
-                    buttonSnapshot.originalBackground,
-                    originalText,
-                    "button1".equals(resourceEntryName(button)));
+            Drawable replacement = buttonSnapshot.replacementBackground;
+            if (replacement == null) {
+                replacement = makeDarkButtonBackground(
+                        button,
+                        buttonSnapshot.originalBackground,
+                        originalText,
+                        "button1".equals(resourceEntryName(button)));
+                buttonSnapshot.replacementBackground = replacement;
+            }
             if (replacement != null) {
                 button.setBackgroundTintList(null);
                 if (button.getBackground() != replacement) button.setBackground(replacement);
-                buttonSnapshot.replacementBackground = replacement;
             } else {
                 button.setBackground(buttonSnapshot.originalBackground);
                 button.setBackgroundTintList(buttonSnapshot.originalBackgroundTint);
