@@ -214,8 +214,8 @@ public class ShortcutSecondaryGlassContractTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
         String params = Files.readString(Path.of(
                 "prismal/src/main/java/com/hellovoid/prismal/PrismalParams.java"));
-        String darkMode = Files.readString(
-                MAIN.resolve("LauncherDialogDarkModeController.java"));
+        String nativeNight = Files.readString(
+                MAIN.resolve("LauncherDialogNativeNightBridge.java"));
 
         // Canonical MIUIX immersive AlertDialog uses @id/dialog_dim_bg as the real dim
         // authority and animates its alpha. Window DIM_BEHIND remains fallback-only.
@@ -276,48 +276,35 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(dialogPage.contains("对话背景模糊"));
         assertTrue(dialogPage.contains("恢复继承全局外观"));
 
-        // Dark mode is dialog-local and content-only: it must not alter the Prismal glass color
-        // or vendor icons, and it preserves MIUIX hierarchy/listeners.
+        // Dark mode delegates to MIUIX itself. The BaseUninstallDialog hook opens a short
+        // ThreadLocal scope before vendor construction; only MIUIX AlertDialog's Context is
+        // replaced with a same-theme ContextThemeWrapper whose uiMode is forced to night.
         assertTrue(schema.contains("DIALOG_DARK_MODE = bool("));
         assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
         assertTrue(dialogPage.contains("对话框深色模式"));
-        assertTrue(dialogPage.contains("图标和玻璃颜色保持原样"));
         assertTrue(preferences.contains("ConfigSchema.Glass.DIALOG_DARK_MODE.name()"));
         assertFalse(preferences.contains("out.tintR *= 0.22f"));
         assertFalse(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
-        assertTrue(coordinator.contains("LauncherDialogDarkModeController.attach(panel)"));
-        assertTrue(coordinator.contains("binding.darkModeSession.reapply()"));
-        assertTrue(coordinator.contains("binding.darkModeSession.restore()"));
-        assertTrue(darkMode.contains("buttonPanel"));
-        assertTrue(darkMode.contains("isDialogButton"));
-        assertTrue(darkMode.contains("DARK_NEUTRAL_BUTTON_BG = 0x24FFFFFF"));
-        assertTrue(darkMode.contains("DARK_PRIMARY_BUTTON_BG = 0xFF4788FF"));
-        assertTrue(darkMode.contains("DARK_PRIMARY_BUTTON_BG_PRESSED = 0xFF3885F8"));
-        assertTrue(darkMode.contains("DARK_PRIMARY_BUTTON_BG_DISABLED = 0x4D4788FF"));
-        assertTrue(darkMode.contains("DARK_DANGER_BUTTON_TEXT = 0xFFFA4238"));
-        assertTrue(darkMode.contains("DARK_DANGER_BUTTON_TEXT_DISABLED = 0x4DFA4238"));
-        assertTrue(darkMode.contains("DARK_DISABLED_BUTTON_TEXT = 0x4DFFFFFF"));
-        assertTrue(darkMode.contains("resolveButtonRole"));
-        assertTrue(darkMode.contains("if (isDangerRed(originalTextColor)) return ButtonRole.DANGER"));
-        assertTrue(darkMode.contains("if (\"button1\".equals(resourceEntryName(button))) return ButtonRole.PRIMARY"));
-        assertTrue(darkMode.contains("button.setBackgroundTintList(snapshot.darkBackgroundTint)"));
-        assertTrue(darkMode.contains("view.setBackgroundTintList(snapshot.originalBackgroundTint)"));
-        assertTrue(darkMode.contains("button.setTextColor(snapshot.darkTextColors)"));
-        assertFalse(darkMode.contains("BUTTON_RGB_SCALE"));
-        assertFalse(darkMode.contains("BUTTON_RGB_OFFSET"));
-        assertFalse(darkMode.contains("liftVisibleButtonTint"));
-        assertFalse(darkMode.contains("button.setBackgroundTintList(null)"));
-        assertFalse(darkMode.contains("button.setBackground("));
-        assertFalse(darkMode.contains("ColorMatrixColorFilter"));
-        assertTrue(darkMode.contains("text.setTextColor(snapshot.textColors)"));
-        assertTrue(darkMode.contains("isNearBlackNeutral(original)"));
-        assertFalse(darkMode.contains("import android.widget.ImageView"));
-        assertFalse(darkMode.contains("instanceof ImageView"));
-        assertFalse(darkMode.contains("setImageTintList"));
-        assertFalse(darkMode.contains("setCompoundDrawableTintList"));
-        assertFalse(darkMode.contains("Bitmap.createBitmap"));
-        assertFalse(darkMode.contains("semanticButtonText"));
-        assertFalse(darkMode.contains("setOnClickListener"));
+        assertTrue(hook.contains("LauncherDialogNativeNightBridge.install(classLoader)"));
+        assertTrue(hook.contains("LauncherDialogNativeNightBridge.enter()"));
+        assertTrue(hook.contains("result = chain.proceed(args)"));
+        assertTrue(hook.contains("nightScope.close()"));
+        assertFalse(coordinator.contains("LauncherDialogDarkModeController"));
+        assertFalse(coordinator.contains("darkModeSession"));
+
+        assertTrue(nativeNight.contains("MIUIX_ALERT_DIALOG = \"miuix.appcompat.app.AlertDialog\""));
+        assertTrue(nativeNight.contains("ContextThemeWrapper"));
+        assertTrue(nativeNight.contains("applyOverrideConfiguration(override)"));
+        assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_YES"));
+        assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_MASK"));
+        assertTrue(nativeNight.contains("getActivityInfo("));
+        assertTrue(nativeNight.contains("ApplicationInfo"));
+        assertTrue(nativeNight.contains("FORCE_NIGHT_DEPTH"));
+        assertTrue(nativeNight.contains("parameters[0].isInstance(forced)"));
+        assertFalse(nativeNight.contains("setTextColor("));
+        assertFalse(nativeNight.contains("setBackgroundTintList("));
+        assertFalse(nativeNight.contains("setImageTintList("));
+        assertFalse(nativeNight.contains("setCompoundDrawableTintList("));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
