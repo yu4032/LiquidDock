@@ -36,6 +36,9 @@ final class LauncherUninstallDialogGlassHook {
             return false;
         }
         try {
+            // Install once at process startup. It remains inert unless the exact uninstall-dialog
+            // constructor scope below explicitly requests native night resources.
+            boolean nativeNightBridge = LauncherDialogNativeNightBridge.install(classLoader);
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
             int hooked = 0;
             for (Constructor<?> constructor : base.getDeclaredConstructors()) {
@@ -45,11 +48,38 @@ final class LauncherUninstallDialogGlassHook {
                 }
                 HookUtil.hook(constructor, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object result = chain.proceed(args);
+
+                    // Read live settings before chain.proceed(): the MIUIX AlertController is
+                    // constructed from the superclass chain inside this call.
+                    ConfigReader liveReader = ConfigReader.load();
+                    LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
+                    boolean enabled = liveReader.b(
+                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
+                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
+                    boolean darkMode = liveReader.b(
+                            ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
+                            ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback());
+                    boolean requestNativeNight = nativeNightBridge
+                            && liveConfig.enabled
+                            && liveConfig.glass.enabled
+                            && enabled
+                            && darkMode;
+
+                    LauncherDialogNativeNightBridge.Scope nightScope =
+                            requestNativeNight ? LauncherDialogNativeNightBridge.enter() : null;
+                    Object result;
+                    try {
+                        result = chain.proceed(args);
+                    } finally {
+                        if (nightScope != null) nightScope.close();
+                    }
+
                     Object owner = chain.getThisObject();
                     String type = owner != null ? owner.getClass().getName() : "<null>";
                     MainHook.log(TAG + " constructor hit type=" + type
-                            + " args=" + args.length);
+                            + " args=" + args.length
+                            + " nativeNightBridge=" + nativeNightBridge
+                            + " nativeNightRequested=" + requestNativeNight);
                     if (!(owner instanceof Dialog) || args.length == 0
                             || !(args[0] instanceof Activity) || !isSupportedDialog(type)) {
                         MainHook.log(TAG + " constructor ignored type=" + type
@@ -57,11 +87,6 @@ final class LauncherUninstallDialogGlassHook {
                                 ? args[0].getClass().getName() : "<null>"));
                         return result;
                     }
-                    ConfigReader liveReader = ConfigReader.load();
-                    LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
-                    boolean enabled = liveReader.b(
-                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
-                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
                     if (!liveConfig.enabled || !liveConfig.glass.enabled || !enabled) {
                         MainHook.log(TAG + " dialog skipped by live setting type=" + type);
                         return result;
@@ -80,7 +105,8 @@ final class LauncherUninstallDialogGlassHook {
                 return false;
             }
             installed = true;
-            MainHook.log(TAG + " constructor hooks installed count=" + hooked);
+            MainHook.log(TAG + " constructor hooks installed count=" + hooked
+                    + " nativeNightBridge=" + nativeNightBridge);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
