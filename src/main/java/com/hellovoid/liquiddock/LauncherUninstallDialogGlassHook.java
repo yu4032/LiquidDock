@@ -31,6 +31,7 @@ final class LauncherUninstallDialogGlassHook {
     private static final String LAUNCHER =
             "com.miui.home.launcher.Launcher";
     private static Boolean cachedDeleteDialogNativeNight;
+    private static boolean nativeNightBridgeAvailable;
     private static boolean installed;
 
     private LauncherUninstallDialogGlassHook() {}
@@ -43,7 +44,8 @@ final class LauncherUninstallDialogGlassHook {
         try {
             // Install once at process startup. It remains inert unless the exact uninstall-dialog
             // constructor scope below explicitly requests native night resources.
-            boolean nativeNightBridge = LauncherDialogNativeNightBridge.install(classLoader);
+            nativeNightBridgeAvailable = LauncherDialogNativeNightBridge.install(classLoader);
+            boolean nativeNightBridge = nativeNightBridgeAvailable;
             boolean cacheInvalidationHook = installDeleteDialogCacheInvalidationHook(classLoader);
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
             int hooked = 0;
@@ -161,7 +163,8 @@ final class LauncherUninstallDialogGlassHook {
         boolean darkMode = reader.b(
                 ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
                 ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback());
-        boolean desiredNight = config.enabled && config.glass.enabled && enabled && darkMode;
+        boolean desiredNight = nativeNightBridgeAvailable
+                && config.enabled && config.glass.enabled && enabled && darkMode;
 
         Boolean constructedNight = cachedDeleteDialogNativeNight;
         if (constructedNight == null || constructedNight.booleanValue() == desiredNight) return;
