@@ -33,8 +33,13 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 SystemUiKeyguardGoneSource.install(classLoader);
                 SystemUiHomeTransitionSource.install(classLoader);
+                SystemUiHandleMenuBackdropProbe.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                Api101Bridge.log("[DC][SystemUiHandleMenuProbe] config enabled="
+                        + runtimeConfig.enabled
+                        + " glass=" + runtimeConfig.glass.enabled
+                        + " handleMenu=" + runtimeConfig.glass.systemUiHandleMenuEnabled);
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled
                         && runtimeConfig.glass.systemUiHandleMenuEnabled) {
                     SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
