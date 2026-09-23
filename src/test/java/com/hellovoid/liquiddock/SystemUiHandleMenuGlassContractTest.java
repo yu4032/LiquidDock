@@ -60,9 +60,11 @@ public class SystemUiHandleMenuGlassContractTest {
 
     @Test
     public void backdropProbeIsReadOnlyAndCannotCreateAProducer() throws Exception {
+        String module = read("ModuleMain.java");
         String hook = read("SystemUiHandleMenuGlassHook.java");
         String probe = read("SystemUiHandleMenuBackdropProbe.java");
-        assertTrue(hook.contains("SystemUiHandleMenuBackdropProbe.install(classLoader)"));
+        assertTrue(module.contains("SystemUiHandleMenuBackdropProbe.install(classLoader)"));
+        assertTrue(module.contains("[DC][SystemUiHandleMenuProbe] config enabled="));
         assertTrue(hook.contains("SystemUiHandleMenuBackdropProbe.logMenuSnapshot(root, target)"));
         assertTrue(probe.contains("RootPassBlurEndpointBridge.inspect(view)"));
         assertFalse(probe.contains("PassBlurBindRequest"));
