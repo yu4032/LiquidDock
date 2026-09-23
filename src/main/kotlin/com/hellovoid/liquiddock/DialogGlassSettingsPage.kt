@@ -178,7 +178,7 @@ internal fun DialogGlassSettingsPage(
                     prefs,
                     ConfigSchema.Glass.DIALOG_DARK_MODE,
                     "对话框深色模式",
-                    "使用深色玻璃，并将标题、正文与按钮切换为适配深色背景的样式",
+                    "只适配文字与按钮可读性；图标和玻璃颜色保持原样，继续使用你的对话玻璃自定义",
                     controlsEnabled,
                 )
             }
