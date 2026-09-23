@@ -37,8 +37,6 @@ final class LauncherUninstallDialogGlassHook {
         }
         try {
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
-            final boolean nativeNightReady =
-                    LauncherDialogNativeNightBridge.install(classLoader);
             int hooked = 0;
             for (Constructor<?> constructor : base.getDeclaredConstructors()) {
                 Class<?>[] parameters = constructor.getParameterTypes();
@@ -58,26 +56,14 @@ final class LauncherUninstallDialogGlassHook {
                     boolean nativeDarkMode = liveReader.b(
                             ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
                             ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback());
-                    boolean forceNativeNight = nativeNightReady
-                            && liveConfig.enabled
-                            && liveConfig.glass.enabled
-                            && enabled
-                            && nativeDarkMode;
 
-                    Object result;
-                    LauncherDialogNativeNightBridge.Scope nightScope =
-                            forceNativeNight ? LauncherDialogNativeNightBridge.enter() : null;
-                    try {
-                        result = chain.proceed(args);
-                    } finally {
-                        if (nightScope != null) nightScope.close();
-                    }
+                    Object result = chain.proceed(args);
 
                     Object owner = chain.getThisObject();
                     String type = owner != null ? owner.getClass().getName() : "<null>";
                     MainHook.log(TAG + " constructor hit type=" + type
                             + " args=" + args.length
-                            + " nativeDark=" + forceNativeNight);
+                            + " nativeDark=" + nativeDarkMode);
                     if (!(owner instanceof Dialog) || args.length == 0
                             || !(args[0] instanceof Activity) || !isSupportedDialog(type)) {
                         MainHook.log(TAG + " constructor ignored type=" + type
@@ -89,9 +75,11 @@ final class LauncherUninstallDialogGlassHook {
                         MainHook.log(TAG + " dialog skipped by live setting type=" + type);
                         return result;
                     }
-                    if (nativeDarkMode && !nativeNightReady) {
-                        MainHook.log(TAG + " native dark requested but bridge unavailable type="
-                                + type);
+                    if (nativeDarkMode) {
+                        boolean applied =
+                                LauncherDialogNativeThemeBridge.applyDarkTheme((Dialog) owner);
+                        MainHook.log(TAG + " native dark theme apply type=" + type
+                                + " result=" + applied);
                     }
                     LauncherDialogGlassCoordinator.watchUninstallDialog(
                             (Activity) args[0],
