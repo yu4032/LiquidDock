@@ -37,6 +37,8 @@ final class LauncherUninstallDialogGlassHook {
         }
         try {
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
+            final boolean nativeNightReady =
+                    LauncherDialogNativeNightBridge.install(classLoader);
             int hooked = 0;
             for (Constructor<?> constructor : base.getDeclaredConstructors()) {
                 Class<?>[] parameters = constructor.getParameterTypes();
@@ -45,11 +47,37 @@ final class LauncherUninstallDialogGlassHook {
                 }
                 HookUtil.hook(constructor, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object result = chain.proceed(args);
+
+                    // Resolve live settings before the vendor constructor runs: MIUIX chooses its
+                    // theme/resources while AlertDialog and AlertController are being constructed.
+                    ConfigReader liveReader = ConfigReader.load();
+                    LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
+                    boolean enabled = liveReader.b(
+                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
+                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
+                    boolean nativeDarkMode = liveReader.b(
+                            ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
+                            ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback());
+                    boolean forceNativeNight = nativeNightReady
+                            && liveConfig.enabled
+                            && liveConfig.glass.enabled
+                            && enabled
+                            && nativeDarkMode;
+
+                    Object result;
+                    LauncherDialogNativeNightBridge.Scope nightScope =
+                            forceNativeNight ? LauncherDialogNativeNightBridge.enter() : null;
+                    try {
+                        result = chain.proceed(args);
+                    } finally {
+                        if (nightScope != null) nightScope.close();
+                    }
+
                     Object owner = chain.getThisObject();
                     String type = owner != null ? owner.getClass().getName() : "<null>";
                     MainHook.log(TAG + " constructor hit type=" + type
-                            + " args=" + args.length);
+                            + " args=" + args.length
+                            + " nativeDark=" + forceNativeNight);
                     if (!(owner instanceof Dialog) || args.length == 0
                             || !(args[0] instanceof Activity) || !isSupportedDialog(type)) {
                         MainHook.log(TAG + " constructor ignored type=" + type
@@ -57,14 +85,13 @@ final class LauncherUninstallDialogGlassHook {
                                 ? args[0].getClass().getName() : "<null>"));
                         return result;
                     }
-                    ConfigReader liveReader = ConfigReader.load();
-                    LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
-                    boolean enabled = liveReader.b(
-                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
-                            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
                     if (!liveConfig.enabled || !liveConfig.glass.enabled || !enabled) {
                         MainHook.log(TAG + " dialog skipped by live setting type=" + type);
                         return result;
+                    }
+                    if (nativeDarkMode && !nativeNightReady) {
+                        MainHook.log(TAG + " native dark requested but bridge unavailable type="
+                                + type);
                     }
                     LauncherDialogGlassCoordinator.watchUninstallDialog(
                             (Activity) args[0],
