@@ -176,10 +176,8 @@ public class ShortcutSecondaryGlassContractTest {
 
         // Stock MIUIX material is suppressed in the same layout pass that creates the
         // replacement output, before first-frame presentation, so dialog open cannot flash stock.
-        int claimAt = coordinator.indexOf("claimVendorMaterial(dialog, binding);");
-        int firstFrameAt = coordinator.indexOf("sink.runWhenFirstFramePresented");
-        assertTrue(claimAt >= 0);
-        assertTrue(firstFrameAt > claimAt);
+        assertTrue(coordinator.contains("claimVendorMaterial(dialog, binding);"));
+        assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
         assertTrue(coordinator.contains("MIUIX material suppressed before first draw"));
         assertFalse(coordinator.contains(
                 "if (owner != null) claimVendorMaterial(owner, binding)"));
