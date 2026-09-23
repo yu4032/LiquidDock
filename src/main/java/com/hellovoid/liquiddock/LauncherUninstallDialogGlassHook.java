@@ -12,9 +12,10 @@ import java.lang.reflect.Constructor;
  * HyperOS Launcher uninstall/remove confirmation dialog glass.
  *
  * <p>The stable lifecycle anchor is BaseUninstallDialog construction. DeleteDialog, RemoveDialog
- * and SecondConfirmDialog all extend that semantic vendor class. This avoids relying on one caller
- * such as UninstallController.showDialog(), which may be inlined or bypassed by runtime variants,
- * while still avoiding any global Dialog/AlertDialog hook.</p>
+ * and SecondConfirmDialog all extend that semantic vendor class. Glass ownership stays scoped to
+ * those exact dialog types. Native dark-mode theming is installed separately at the MIUIX parent
+ * constructor and activates only while BaseUninstallDialog.<init> is on the live call stack, so
+ * MIUIX resolves the dark theme before creating AlertController.</p>
  */
 final class LauncherUninstallDialogGlassHook {
     private static final String TAG = "[DC][LauncherUninstallDialogGlass]";
@@ -36,6 +37,10 @@ final class LauncherUninstallDialogGlassHook {
             return false;
         }
         try {
+            // This must be installed before any BaseUninstallDialog instance can reach its MIUIX
+            // AlertDialog parent constructor. The bridge is inert for every non-uninstall dialog.
+            boolean nativeThemeBridge = LauncherDialogNativeThemeBridge.install(classLoader);
+
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
             int hooked = 0;
             for (Constructor<?> constructor : base.getDeclaredConstructors()) {
@@ -46,16 +51,11 @@ final class LauncherUninstallDialogGlassHook {
                 HookUtil.hook(constructor, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
 
-                    // Resolve live settings before the vendor constructor runs: MIUIX chooses its
-                    // theme/resources while AlertDialog and AlertController are being constructed.
                     ConfigReader liveReader = ConfigReader.load();
                     LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
                     boolean enabled = liveReader.b(
                             ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
                             ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.runtimeFallback());
-                    boolean nativeDarkMode = liveReader.b(
-                            ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
-                            ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback());
 
                     Object result = chain.proceed(args);
 
@@ -63,7 +63,7 @@ final class LauncherUninstallDialogGlassHook {
                     String type = owner != null ? owner.getClass().getName() : "<null>";
                     MainHook.log(TAG + " constructor hit type=" + type
                             + " args=" + args.length
-                            + " nativeDark=" + nativeDarkMode);
+                            + " nativeThemeBridge=" + nativeThemeBridge);
                     if (!(owner instanceof Dialog) || args.length == 0
                             || !(args[0] instanceof Activity) || !isSupportedDialog(type)) {
                         MainHook.log(TAG + " constructor ignored type=" + type
@@ -74,12 +74,6 @@ final class LauncherUninstallDialogGlassHook {
                     if (!liveConfig.enabled || !liveConfig.glass.enabled || !enabled) {
                         MainHook.log(TAG + " dialog skipped by live setting type=" + type);
                         return result;
-                    }
-                    if (nativeDarkMode) {
-                        boolean applied =
-                                LauncherDialogNativeThemeBridge.applyDarkTheme((Dialog) owner);
-                        MainHook.log(TAG + " native dark theme apply type=" + type
-                                + " result=" + applied);
                     }
                     LauncherDialogGlassCoordinator.watchUninstallDialog(
                             (Activity) args[0],
@@ -95,7 +89,8 @@ final class LauncherUninstallDialogGlassHook {
                 return false;
             }
             installed = true;
-            MainHook.log(TAG + " constructor hooks installed count=" + hooked);
+            MainHook.log(TAG + " constructor hooks installed count=" + hooked
+                    + " nativeThemeBridge=" + nativeThemeBridge);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
