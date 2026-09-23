@@ -171,7 +171,7 @@ internal fun DialogGlassSettingsPage(
                     prefs,
                     ConfigSchema.Glass.DIALOG_DISABLE_DIMMING,
                     "关闭对话时背景压暗",
-                    "关闭系统 DIM_BEHIND；开启后弹窗周围与玻璃内部都不再额外压暗",
+                    "关闭 MIUIX 对话框背景压暗；开启后弹窗周围与玻璃内部都不再额外压暗",
                     controlsEnabled,
                 )
             }
