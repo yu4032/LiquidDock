@@ -286,11 +286,18 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("LauncherDialogDarkModeController.attach(panel)"));
         assertTrue(coordinator.contains("binding.darkModeSession.reapply()"));
         assertTrue(coordinator.contains("binding.darkModeSession.restore()"));
-        assertTrue(darkMode.contains("button.setBackgroundTintList"));
+        assertTrue(darkMode.contains("button.setBackgroundTintList(null)"));
+        assertTrue(darkMode.contains("button.setBackground(replacement)"));
         assertTrue(darkMode.contains("button.setTextColor"));
-        assertTrue(darkMode.contains("text.setTextColor"));
-        assertTrue(darkMode.contains("text.setCompoundDrawableTintList"));
-        assertTrue(darkMode.contains("semanticButtonText"));
+        assertTrue(darkMode.contains("text.setTextColor(snapshot.textColors)"));
+        assertTrue(darkMode.contains("isNearBlackNeutral(original)"));
+        assertTrue(darkMode.contains("hasNearBlackMonochromeDrawable"));
+        assertTrue(darkMode.contains("Bitmap.createBitmap"));
+        assertTrue(darkMode.contains("DRAWABLE_SAMPLE_CACHE"));
+        assertTrue(darkMode.contains("image.setImageTintList(snapshot.originalTint)"));
+        assertTrue(darkMode.contains("liftChromaticForDark"));
+        assertTrue(darkMode.contains("button.setBackground(snapshot.originalBackground)"));
+        assertFalse(darkMode.contains("semanticButtonText"));
         assertFalse(darkMode.contains("setOnClickListener"));
     }
 
