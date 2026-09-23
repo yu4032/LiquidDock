@@ -276,24 +276,36 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(dialogPage.contains("对话背景模糊"));
         assertTrue(dialogPage.contains("恢复继承全局外观"));
 
-        // Dark mode delegates to MIUIX itself. After BaseUninstallDialog construction and
-        // before show/installContent, the Dialog's own Context receives AlertDialog.Theme.Dark.
+        // Dark mode delegates to MIUIX itself at the parent constructor boundary. The bridge is
+        // installed before BaseUninstallDialog instances are created, then acts only while
+        // BaseUninstallDialog.<init> is on the live stack.
         assertTrue(schema.contains("DIALOG_DARK_MODE = bool("));
         assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
         assertTrue(dialogPage.contains("对话框深色模式"));
         assertTrue(preferences.contains("ConfigSchema.Glass.DIALOG_DARK_MODE.name()"));
         assertFalse(preferences.contains("out.tintR *= 0.22f"));
         assertFalse(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
-        assertTrue(hook.contains("LauncherDialogNativeThemeBridge.applyDarkTheme((Dialog) owner)"));
+        assertTrue(hook.contains("LauncherDialogNativeThemeBridge.install(classLoader)"));
         assertTrue(hook.contains("Object result = chain.proceed(args)"));
+        assertFalse(hook.contains("applyDarkTheme((Dialog) owner)"));
         assertFalse(hook.contains("LauncherDialogNativeNightBridge"));
         assertFalse(coordinator.contains("LauncherDialogDarkModeController"));
         assertFalse(coordinator.contains("darkModeSession"));
 
+        assertTrue(nativeTheme.contains("MIUIX_ALERT_DIALOG = \"miuix.appcompat.app.AlertDialog\""));
+        assertTrue(nativeTheme.contains("BASE_UNINSTALL_DIALOG"));
+        assertTrue(nativeTheme.contains("alertDialog.getDeclaredConstructors()"));
+        assertTrue(nativeTheme.contains("HookUtil.hook(constructor"));
+        assertTrue(nativeTheme.contains("isUninstallParentConstruction()"));
+        assertTrue(nativeTheme.contains("new NativeDarkContext(original, styleId)"));
+        assertTrue(nativeTheme.contains("parameterTypes[1] == int.class"));
+        assertTrue(nativeTheme.contains("args[1] = styleId"));
+        assertTrue(nativeTheme.contains("MIUIX_STYLE_CLASS = \"miuix.appcompat.R$style\""));
         assertTrue(nativeTheme.contains("DARK_STYLE_NAME = \"AlertDialog.Theme.Dark\""));
-        assertTrue(nativeTheme.contains("context.setTheme(styleId)"));
-        assertTrue(nativeTheme.contains("resources.getIdentifier(DARK_STYLE_NAME, \"style\", packageName)"));
         assertTrue(nativeTheme.contains("AlertDialog_Theme_Dark"));
+        assertTrue(nativeTheme.contains("chain.proceed(args)"));
+        assertFalse(nativeTheme.contains("context.setTheme(styleId)"));
+        assertFalse(nativeTheme.contains("UI_MODE_NIGHT_YES"));
         assertFalse(nativeTheme.contains("setTextColor("));
         assertFalse(nativeTheme.contains("setBackgroundTintList("));
         assertFalse(nativeTheme.contains("setImageTintList("));
