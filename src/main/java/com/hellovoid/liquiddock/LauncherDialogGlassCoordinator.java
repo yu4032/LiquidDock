@@ -460,19 +460,23 @@ final class LauncherDialogGlassCoordinator {
             if (!binding.dimViewCaptured) {
                 binding.dimViewCaptured = true;
                 binding.originalDimViewVisibility = dimBg.getVisibility();
+                binding.originalDimViewAlpha = dimBg.getAlpha();
+                binding.lastVendorDimAlpha = binding.originalDimViewAlpha;
                 MainHook.log(TAG + " dim authority=MIUIX_VIEW source=" + binding.source
                         + " id=" + resourceEntryName(dimBg)
                         + " visibility=" + binding.originalDimViewVisibility
-                        + " alpha=" + dimBg.getAlpha());
+                        + " alpha=" + binding.originalDimViewAlpha);
             }
 
             float animatedDim = dimBg.getVisibility() == View.VISIBLE
                     ? clamp01(dimBg.getAlpha()) : 0f;
+            if (animatedDim > 0.001f) binding.lastVendorDimAlpha = animatedDim;
             if (disableDimming && dimBg.getVisibility() == View.VISIBLE) {
-                // Preserve MIUIX's alpha property/animator as the source of truth. INVISIBLE only
-                // suppresses composition, so fail-closed restoration can reveal the vendor dim
-                // again without inventing an animation duration or alpha.
-                dimBg.setVisibility(View.INVISIBLE);
+                // MIUIX installs the outside-tap cancel listener on this exact View. Keep it
+                // VISIBLE/clickable and suppress only drawing; a fully transparent View still
+                // participates in hit testing, so "tap outside to dismiss" continues to work.
+                // Folme may write alpha again on every animation frame, hence the pre-draw guard.
+                if (dimBg.getAlpha() != 0f) dimBg.setAlpha(0f);
                 binding.dimViewSuppressed = true;
             }
 
@@ -558,9 +562,12 @@ final class LauncherDialogGlassCoordinator {
         if (dimBg != null && binding.dimViewCaptured && binding.dimViewSuppressed) {
             try {
                 dimBg.setVisibility(binding.originalDimViewVisibility);
+                float restoreAlpha = Float.isFinite(binding.lastVendorDimAlpha)
+                        ? binding.lastVendorDimAlpha : binding.originalDimViewAlpha;
+                dimBg.setAlpha(clamp01(restoreAlpha));
                 MainHook.log(TAG + " MIUIX dim view restored source=" + binding.source
                         + " visibility=" + binding.originalDimViewVisibility
-                        + " alpha=" + dimBg.getAlpha());
+                        + " alpha=" + restoreAlpha);
             } catch (Throwable error) {
                 MainHook.log(TAG + " MIUIX dim view restore failed source=" + binding.source
                         + " error=" + error);
@@ -704,6 +711,8 @@ final class LauncherDialogGlassCoordinator {
         LauncherDialogGlassPreferences.Appearance appearance;
         int originalWindowFlags;
         int originalDimViewVisibility = View.VISIBLE;
+        float originalDimViewAlpha = 1f;
+        float lastVendorDimAlpha = Float.NaN;
         float originalDimAmount;
         float appliedDimAmount = Float.NaN;
         boolean dimViewCaptured;
