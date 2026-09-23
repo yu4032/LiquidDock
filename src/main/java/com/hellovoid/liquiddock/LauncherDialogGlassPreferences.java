@@ -13,6 +13,7 @@ final class LauncherDialogGlassPreferences {
 
     static final class Appearance {
         final boolean disableDimming;
+        final boolean darkMode;
         final boolean hasAppearanceOverride;
         final float blur;
         final int tintR;
@@ -22,6 +23,7 @@ final class LauncherDialogGlassPreferences {
 
         Appearance(
                 boolean disableDimming,
+                boolean darkMode,
                 boolean hasAppearanceOverride,
                 float blur,
                 int tintR,
@@ -29,6 +31,7 @@ final class LauncherDialogGlassPreferences {
                 int tintB,
                 int tintAlpha) {
             this.disableDimming = disableDimming;
+            this.darkMode = darkMode;
             this.hasAppearanceOverride = hasAppearanceOverride;
             this.blur = Math.max(0f, blur);
             this.tintR = channel(tintR);
@@ -56,6 +59,9 @@ final class LauncherDialogGlassPreferences {
                 reader.b(
                         ConfigSchema.Glass.DIALOG_DISABLE_DIMMING.name(),
                         ConfigSchema.Glass.DIALOG_DISABLE_DIMMING.runtimeFallback()),
+                reader.b(
+                        ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
+                        ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback()),
                 hasAppearanceOverride,
                 reader.has(BLUR_KEY) ? reader.f(BLUR_KEY, baseBlur) : baseBlur,
                 reader.has(TINT_RED_KEY) ? reader.i(TINT_RED_KEY, baseR) : baseR,
@@ -79,9 +85,18 @@ final class LauncherDialogGlassPreferences {
         out.tintB = resolved.tintB / 255f;
         out.tintA = resolved.tintAlpha / 255f;
 
-        // WindowManager's DIM_BEHIND surface sits outside the dialog ViewRoot and is therefore not
-        // present in PassBlur's dialog-root source. Apply the same attenuation to the glass-local
-        // backdrop so pixels inside and outside the panel observe one visual dim authority.
+        // Dark mode keeps the user's selected hue but turns the dialog glass itself into a dark
+        // material so the light text/button treatment has stable contrast over bright wallpaper.
+        if (resolved.darkMode) {
+            out.tintR *= 0.22f;
+            out.tintG *= 0.22f;
+            out.tintB *= 0.22f;
+            out.tintA = Math.max(out.tintA, 0.58f);
+        }
+
+        // MIUIX immersive dialogs animate @id/dialog_dim_bg inside the Dialog ViewRoot. The
+        // PassBlur source deliberately excludes that root, so mirror the observed dim alpha into
+        // the glass-local backdrop. Non-immersive variants supply Window DIM_BEHIND as fallback.
         float safeDim = clamp01(dimAmount);
         out.brightness = source.brightness * (1f - safeDim);
         return out.build();
