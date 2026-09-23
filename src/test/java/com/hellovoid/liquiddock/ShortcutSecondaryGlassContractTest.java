@@ -292,6 +292,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("requestNativeNight"));
         assertTrue(hook.contains("result = chain.proceed(args)"));
         assertTrue(hook.contains("nightScope.close()"));
+        assertTrue(hook.contains("installDeleteDialogCacheInvalidationHook(classLoader)"));
+        assertTrue(hook.contains("\"showDialog\""));
+        assertTrue(hook.contains("releasePreloadedDialog"));
+        assertTrue(hook.contains("cachedDeleteDialogNativeNight"));
+        assertTrue(hook.contains("constructedNight.booleanValue() == desiredNight"));
 
         assertTrue(nativeNight.contains(
                 "ALERT_CONTROLLER = \"miuix.appcompat.app.AlertController\""));
