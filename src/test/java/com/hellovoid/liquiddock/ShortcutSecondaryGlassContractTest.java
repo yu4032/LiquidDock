@@ -303,6 +303,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_YES"));
         assertTrue(nativeNight.contains("resolveThemeResId(original)"));
         assertTrue(nativeNight.contains("new ForcedNightDialogContext(configured, themeResId)"));
+        assertTrue(nativeNight.contains("UNINSTALL_LAYOUT = \"shortcut_uninstall_dialog\""));
+        assertTrue(nativeNight.contains("LayoutInflater.class"));
+        assertTrue(nativeNight.contains("cloneInContext(forced)"));
+        assertTrue(nativeNight.contains("NIGHT_INFLATE_REENTRY"));
         assertTrue(nativeNight.contains("getThemeResId"));
         assertTrue(nativeNight.contains("mThemeResource"));
         assertFalse(nativeNight.contains("ActivityInfo"));
