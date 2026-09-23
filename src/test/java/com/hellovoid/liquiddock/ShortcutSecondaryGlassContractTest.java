@@ -214,8 +214,8 @@ public class ShortcutSecondaryGlassContractTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
         String params = Files.readString(Path.of(
                 "prismal/src/main/java/com/hellovoid/prismal/PrismalParams.java"));
-        String nativeNight = Files.readString(
-                MAIN.resolve("LauncherDialogNativeNightBridge.java"));
+        String nativeTheme = Files.readString(
+                MAIN.resolve("LauncherDialogNativeThemeBridge.java"));
 
         // Canonical MIUIX immersive AlertDialog uses @id/dialog_dim_bg as the real dim
         // authority and animates its alpha. Window DIM_BEHIND remains fallback-only.
@@ -276,35 +276,28 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(dialogPage.contains("对话背景模糊"));
         assertTrue(dialogPage.contains("恢复继承全局外观"));
 
-        // Dark mode delegates to MIUIX itself. The BaseUninstallDialog hook opens a short
-        // ThreadLocal scope before vendor construction; only MIUIX AlertDialog's Context is
-        // replaced with a same-theme ContextThemeWrapper whose uiMode is forced to night.
+        // Dark mode delegates to MIUIX itself. After BaseUninstallDialog construction and
+        // before show/installContent, the Dialog's own Context receives AlertDialog.Theme.Dark.
         assertTrue(schema.contains("DIALOG_DARK_MODE = bool("));
         assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
         assertTrue(dialogPage.contains("对话框深色模式"));
         assertTrue(preferences.contains("ConfigSchema.Glass.DIALOG_DARK_MODE.name()"));
         assertFalse(preferences.contains("out.tintR *= 0.22f"));
         assertFalse(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
-        assertTrue(hook.contains("LauncherDialogNativeNightBridge.install(classLoader)"));
-        assertTrue(hook.contains("LauncherDialogNativeNightBridge.enter()"));
-        assertTrue(hook.contains("result = chain.proceed(args)"));
-        assertTrue(hook.contains("nightScope.close()"));
+        assertTrue(hook.contains("LauncherDialogNativeThemeBridge.applyDarkTheme((Dialog) owner)"));
+        assertTrue(hook.contains("Object result = chain.proceed(args)"));
+        assertFalse(hook.contains("LauncherDialogNativeNightBridge"));
         assertFalse(coordinator.contains("LauncherDialogDarkModeController"));
         assertFalse(coordinator.contains("darkModeSession"));
 
-        assertTrue(nativeNight.contains("MIUIX_ALERT_DIALOG = \"miuix.appcompat.app.AlertDialog\""));
-        assertTrue(nativeNight.contains("ContextThemeWrapper"));
-        assertTrue(nativeNight.contains("applyOverrideConfiguration(override)"));
-        assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_YES"));
-        assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_MASK"));
-        assertTrue(nativeNight.contains("getActivityInfo("));
-        assertTrue(nativeNight.contains("ApplicationInfo"));
-        assertTrue(nativeNight.contains("FORCE_NIGHT_DEPTH"));
-        assertTrue(nativeNight.contains("parameters[0].isInstance(forced)"));
-        assertFalse(nativeNight.contains("setTextColor("));
-        assertFalse(nativeNight.contains("setBackgroundTintList("));
-        assertFalse(nativeNight.contains("setImageTintList("));
-        assertFalse(nativeNight.contains("setCompoundDrawableTintList("));
+        assertTrue(nativeTheme.contains("DARK_STYLE_NAME = \"AlertDialog.Theme.Dark\""));
+        assertTrue(nativeTheme.contains("context.setTheme(styleId)"));
+        assertTrue(nativeTheme.contains("resources.getIdentifier(DARK_STYLE_NAME, \"style\", packageName)"));
+        assertTrue(nativeTheme.contains("AlertDialog_Theme_Dark"));
+        assertFalse(nativeTheme.contains("setTextColor("));
+        assertFalse(nativeTheme.contains("setBackgroundTintList("));
+        assertFalse(nativeTheme.contains("setImageTintList("));
+        assertFalse(nativeTheme.contains("setCompoundDrawableTintList("));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
