@@ -81,10 +81,11 @@ final class LauncherDialogNativeNightBridge {
                 return chain.proceed(args);
             });
 
-            installUninstallLayoutHooks();
+            boolean layoutHooks = installUninstallLayoutHooks();
 
             installed = true;
-            MainHook.log(TAG + " AlertController + uninstall-layout native-night bridge installed");
+            MainHook.log(TAG + " AlertController native-night bridge installed"
+                    + " layoutHooks=" + layoutHooks);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " AlertController bridge unavailable: " + error);
@@ -97,36 +98,48 @@ final class LauncherDialogNativeNightBridge {
      * this exact semantic layout from the same night-qualified context while BaseUninstallDialog
      * is under construction; every other Launcher inflate remains untouched.
      */
-    private static void installUninstallLayoutHooks() {
-        HookUtil.hookMethod(
-                LayoutInflater.class,
-                "inflate",
-                new Class<?>[]{int.class, ViewGroup.class},
-                chain -> {
-                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object target = chain.getThisObject();
-                    if (!shouldInterceptUninstallInflate(target, args)) {
-                        return chain.proceed(args);
-                    }
-                    Object replacement = inflateUninstallInNight(
-                            (LayoutInflater) target, args, false);
-                    return replacement != null ? replacement : chain.proceed(args);
-                });
+    private static boolean installUninstallLayoutHooks() {
+        int hooked = 0;
+        try {
+            HookUtil.hookMethod(
+                    LayoutInflater.class,
+                    "inflate",
+                    new Class<?>[]{int.class, ViewGroup.class},
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object target = chain.getThisObject();
+                        if (!shouldInterceptUninstallInflate(target, args)) {
+                            return chain.proceed(args);
+                        }
+                        Object replacement = inflateUninstallInNight(
+                                (LayoutInflater) target, args, false);
+                        return replacement != null ? replacement : chain.proceed(args);
+                    });
+            hooked++;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " two-arg uninstall inflate hook unavailable: " + error);
+        }
 
-        HookUtil.hookMethod(
-                LayoutInflater.class,
-                "inflate",
-                new Class<?>[]{int.class, ViewGroup.class, boolean.class},
-                chain -> {
-                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object target = chain.getThisObject();
-                    if (!shouldInterceptUninstallInflate(target, args)) {
-                        return chain.proceed(args);
-                    }
-                    Object replacement = inflateUninstallInNight(
-                            (LayoutInflater) target, args, true);
-                    return replacement != null ? replacement : chain.proceed(args);
-                });
+        try {
+            HookUtil.hookMethod(
+                    LayoutInflater.class,
+                    "inflate",
+                    new Class<?>[]{int.class, ViewGroup.class, boolean.class},
+                    chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        Object target = chain.getThisObject();
+                        if (!shouldInterceptUninstallInflate(target, args)) {
+                            return chain.proceed(args);
+                        }
+                        Object replacement = inflateUninstallInNight(
+                                (LayoutInflater) target, args, true);
+                        return replacement != null ? replacement : chain.proceed(args);
+                    });
+            hooked++;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " three-arg uninstall inflate hook unavailable: " + error);
+        }
+        return hooked > 0;
     }
 
     private static boolean shouldInterceptUninstallInflate(Object target, Object[] args) {
