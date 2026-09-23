@@ -200,7 +200,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("openDialogCustomization = { page = Page.DialogCustomization }"));
     }
 
-    @Test public void launcherDialogGlassMatchesWindowDimAndHasIndependentAppearancePage()
+    @Test public void launcherDialogGlassFollowsMiuixDimViewAndHasIndependentAppearancePage()
             throws Exception {
         String coordinator = Files.readString(MAIN.resolve("LauncherDialogGlassCoordinator.java"));
         String preferences = Files.readString(MAIN.resolve("LauncherDialogGlassPreferences.java"));
@@ -215,25 +215,32 @@ public class ShortcutSecondaryGlassContractTest {
         String params = Files.readString(Path.of(
                 "prismal/src/main/java/com/hellovoid/prismal/PrismalParams.java"));
 
-        // WindowManager DIM_BEHIND lives outside the dialog ViewRoot, so the glass material must
-        // apply the same target attenuation to its sampled Launcher backdrop.
-        assertTrue(coordinator.contains("WindowManager.LayoutParams.FLAG_DIM_BEHIND"));
-        assertTrue(coordinator.contains("attributes.dimAmount"));
+        // Canonical MIUIX immersive AlertDialog uses @id/dialog_dim_bg as the real dim
+        // authority and animates its alpha. Window DIM_BEHIND remains fallback-only.
+        assertTrue(coordinator.contains("DIALOG_DIM_BG_ID = \"dialog_dim_bg\""));
+        assertTrue(coordinator.contains("findByResourceEntryName(decor, DIALOG_DIM_BG_ID)"));
+        assertTrue(coordinator.contains("dimBg.getAlpha()"));
         assertTrue(coordinator.contains("syncDialogDim(binding, dialog, false)"));
         assertTrue(coordinator.contains("syncDialogDim(binding, owner, true)"));
         assertTrue(coordinator.contains("applyDialogMaterial(binding, dialogRoot, effectiveDim)"));
-        assertTrue(coordinator.contains("restoreWindowDim(binding)"));
+        assertTrue(coordinator.contains("restoreDialogDim(binding)"));
+        assertTrue(coordinator.contains("WindowManager.LayoutParams.FLAG_DIM_BEHIND"));
+        assertTrue(coordinator.contains("attributes.dimAmount"));
         assertTrue(preferences.contains(
                 "out.brightness = source.brightness * (1f - safeDim)"));
         assertTrue(session.contains("void setPrismalParams(PrismalParams params)"));
+        assertTrue(session.contains("if (backdropPrepared) requestSceneRedraw();"));
         assertTrue(params.contains("public static Builder builder(PrismalParams source)"));
 
-        // The opt-out removes both compositor dimming and the glass-local attenuation.
+        // The opt-out suppresses the actual MIUIX dim View without destroying its animated alpha,
+        // while non-immersive variants retain the WindowManager fallback.
         assertTrue(schema.contains("DIALOG_DISABLE_DIMMING = bool("));
         assertTrue(schema.contains("\"liquid_dialog_disable_dimming\", false, false, false"));
+        assertTrue(coordinator.contains("dimBg.setVisibility(View.INVISIBLE)"));
+        assertTrue(coordinator.contains("binding.dimViewSuppressed = true"));
         assertTrue(coordinator.contains(
                 "window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)"));
-        assertTrue(coordinator.contains("binding.dimSuppressed = true"));
+        assertTrue(coordinator.contains("binding.windowDimSuppressed = true"));
         assertTrue(dialogPage.contains("关闭对话时背景压暗"));
 
         // Blur/color are optional dialog-local overrides; absence means inheritance from global.
