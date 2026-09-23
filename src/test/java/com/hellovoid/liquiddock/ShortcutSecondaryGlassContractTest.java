@@ -214,6 +214,8 @@ public class ShortcutSecondaryGlassContractTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
         String params = Files.readString(Path.of(
                 "prismal/src/main/java/com/hellovoid/prismal/PrismalParams.java"));
+        String darkMode = Files.readString(
+                MAIN.resolve("LauncherDialogDarkModeController.java"));
 
         // Canonical MIUIX immersive AlertDialog uses @id/dialog_dim_bg as the real dim
         // authority and animates its alpha. Window DIM_BEHIND remains fallback-only.
@@ -236,12 +238,15 @@ public class ShortcutSecondaryGlassContractTest {
         // while non-immersive variants retain the WindowManager fallback.
         assertTrue(schema.contains("DIALOG_DISABLE_DIMMING = bool("));
         assertTrue(schema.contains("\"liquid_dialog_disable_dimming\", false, false, false"));
-        assertTrue(coordinator.contains("dimBg.setVisibility(View.INVISIBLE)"));
+        assertTrue(coordinator.contains("dimBg.setAlpha(0f)"));
+        assertFalse(coordinator.contains("dimBg.setVisibility(View.INVISIBLE)"));
         assertTrue(coordinator.contains("binding.dimViewSuppressed = true"));
+        assertTrue(coordinator.contains("lastVendorDimAlpha"));
         assertTrue(coordinator.contains(
                 "window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)"));
         assertTrue(coordinator.contains("binding.windowDimSuppressed = true"));
         assertTrue(dialogPage.contains("关闭对话时背景压暗"));
+        assertTrue(dialogPage.contains("点击对话框外部关闭弹窗"));
 
         // Blur/color are optional dialog-local overrides; absence means inheritance from global.
         assertTrue(schema.contains("DIALOG_BLUR = integer("));
@@ -270,6 +275,23 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(dialogPage.contains("GlassAppearanceValueSlider("));
         assertTrue(dialogPage.contains("对话背景模糊"));
         assertTrue(dialogPage.contains("恢复继承全局外观"));
+
+        // Dark mode is dialog-local, affects the glass material and content, and preserves
+        // MIUIX hierarchy/listeners instead of forcing a configuration/theme recreation.
+        assertTrue(schema.contains("DIALOG_DARK_MODE = bool("));
+        assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
+        assertTrue(dialogPage.contains("对话框深色模式"));
+        assertTrue(preferences.contains("resolved.darkMode"));
+        assertTrue(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
+        assertTrue(coordinator.contains("LauncherDialogDarkModeController.attach(panel)"));
+        assertTrue(coordinator.contains("binding.darkModeSession.reapply()"));
+        assertTrue(coordinator.contains("binding.darkModeSession.restore()"));
+        assertTrue(darkMode.contains("button.setBackgroundTintList"));
+        assertTrue(darkMode.contains("button.setTextColor"));
+        assertTrue(darkMode.contains("text.setTextColor"));
+        assertTrue(darkMode.contains("text.setCompoundDrawableTintList"));
+        assertTrue(darkMode.contains("semanticButtonText"));
+        assertFalse(darkMode.contains("setOnClickListener"));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
