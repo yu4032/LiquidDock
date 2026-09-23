@@ -301,7 +301,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(darkMode.contains("if (isDangerRed(originalTextColor)) return ButtonRole.DANGER"));
         assertTrue(darkMode.contains("if (\"button1\".equals(resourceEntryName(button))) return ButtonRole.PRIMARY"));
         assertTrue(darkMode.contains("button.setBackgroundTintList(snapshot.darkBackgroundTint)"));
-        assertTrue(darkMode.contains("button.setBackgroundTintList(snapshot.originalBackgroundTint)"));
+        assertTrue(darkMode.contains("view.setBackgroundTintList(snapshot.originalBackgroundTint)"));
         assertTrue(darkMode.contains("button.setTextColor(snapshot.darkTextColors)"));
         assertFalse(darkMode.contains("BUTTON_RGB_SCALE"));
         assertFalse(darkMode.contains("BUTTON_RGB_OFFSET"));
