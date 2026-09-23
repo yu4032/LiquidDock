@@ -191,12 +191,18 @@ final class LauncherDialogGlassCoordinator {
         binding.bound = true;
         sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
         sink.runWhenOutputLost(() -> releaseObserved(binding, "output-surface-lost"));
-        removeLayoutRendezvous(binding);
 
+        // Suppress MIUIX before this layout reaches its first draw. Waiting for the replacement
+        // TextureView's first presented frame causes one stock-background flash at dialog open.
+        // The output/source objects already exist here, so any later producer/output failure can
+        // still fail closed through releaseObserved() and restore the exact vendor material.
+        claimVendorMaterial(dialog, binding);
+        if (binding.released || !binding.claimed) return;
+
+        removeLayoutRendezvous(binding);
         sink.runWhenFirstFramePresented(() -> {
-            Dialog owner = binding.dialogRef.get();
-            if (owner != null) claimVendorMaterial(owner, binding);
-            else releaseBinding(binding, "first-frame-orphan");
+            if (binding.released) return;
+            MainHook.log(TAG + " first glass frame presented source=" + binding.source);
         });
         sink.requestLifecycleRefresh();
         authority.requestFreshBackdrop();
@@ -216,16 +222,17 @@ final class LauncherDialogGlassCoordinator {
     }
 
     /**
-     * Hand off material ownership only after the first replacement frame has reached the dialog.
-     * The original Drawable is never alpha-mutated: a transparent clone is installed only when
-     * the vendor fallback is currently opaque, so release can restore the exact vendor object.
+     * Hand off material ownership as soon as the exact panel and replacement output exist, before
+     * the dialog layout is drawn. The original Drawable is never alpha-mutated: a transparent clone
+     * is installed only when the vendor fallback is currently opaque, so release can restore the
+     * exact vendor object if the replacement source/output later fails.
      */
     private static synchronized void claimVendorMaterial(Dialog dialog, Binding expected) {
         Binding binding = BINDINGS.get(dialog);
         if (binding != expected || binding.released || binding.claimed) return;
         View panel = binding.panelRef.get();
         if (panel == null || !panel.isAttachedToWindow()) {
-            releaseObserved(binding, "first-frame-without-panel");
+            releaseObserved(binding, "claim-without-panel");
             return;
         }
 
@@ -278,7 +285,7 @@ final class LauncherDialogGlassCoordinator {
 
         binding.claimed = true;
         installMaterialGuard(binding);
-        MainHook.log(TAG + " first glass frame presented; MIUIX material paused source="
+        MainHook.log(TAG + " MIUIX material suppressed before first draw source="
                 + binding.source
                 + " vendorPassBlur=" + vendorPassBlur
                 + " originalBackground=" + className(background)
