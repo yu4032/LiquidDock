@@ -73,6 +73,14 @@ final class LauncherDialogGlassCoordinator {
         Binding binding = new Binding(dialog, decor, glassConfig, source);
         binding.appearance = LauncherDialogGlassPreferences.resolve(
                 ConfigReader.load(), glassConfig);
+        MainHook.log(TAG + " appearance source=" + binding.source
+                + " darkMode=" + binding.appearance.darkMode
+                + " override=" + binding.appearance.hasAppearanceOverride
+                + " blur=" + binding.appearance.blur
+                + " tint=" + binding.appearance.tintR + ","
+                + binding.appearance.tintG + ","
+                + binding.appearance.tintB + ","
+                + binding.appearance.tintAlpha);
         BINDINGS.put(dialog, binding);
         View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
