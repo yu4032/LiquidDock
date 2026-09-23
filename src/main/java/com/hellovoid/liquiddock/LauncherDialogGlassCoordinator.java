@@ -192,9 +192,6 @@ final class LauncherDialogGlassCoordinator {
         binding.panelRef = new WeakReference<>(panel);
         binding.sink = sink;
         binding.bound = true;
-        if (binding.appearance != null && binding.appearance.darkMode) {
-            binding.darkModeSession = LauncherDialogDarkModeController.attach(panel);
-        }
         sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
         sink.runWhenOutputLost(() -> releaseObserved(binding, "output-surface-lost"));
 
@@ -319,7 +316,6 @@ final class LauncherDialogGlassCoordinator {
             if (panel == null || !panel.isAttachedToWindow()) return true;
             Dialog owner = binding.dialogRef.get();
             if (owner != null) syncDialogDim(binding, owner, true);
-            if (binding.darkModeSession != null) binding.darkModeSession.reapply();
             if (binding.backgroundReplaced && binding.transparentBackground != null) {
                 Drawable current = panel.getBackground();
                 if (current != binding.transparentBackground) {
@@ -401,11 +397,6 @@ final class LauncherDialogGlassCoordinator {
             catch (Throwable ignored) {}
         }
         binding.attachListener = null;
-
-        if (binding.darkModeSession != null) {
-            binding.darkModeSession.restore();
-            binding.darkModeSession = null;
-        }
 
         View panel = binding.panelRef.get();
         if (panel != null && binding.backgroundReplaced) {
@@ -711,7 +702,6 @@ final class LauncherDialogGlassCoordinator {
         final String dialogType;
         LauncherGlassSession dialogSession;
         LauncherGlassSinkView sink;
-        LauncherDialogDarkModeController.Session darkModeSession;
         View.OnAttachStateChangeListener attachListener;
         ViewTreeObserver layoutObserver;
         ViewTreeObserver.OnGlobalLayoutListener layoutListener;
