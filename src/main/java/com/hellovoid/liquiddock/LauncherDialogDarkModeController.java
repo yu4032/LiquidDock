@@ -15,8 +15,8 @@ import java.util.Map;
  *
  * <p>Dark mode only adapts text and the real MIUIX button surfaces. It never tints ImageViews or
  * TextView compound drawables, so app icons and semantic artwork remain vendor-owned. Chromatic
- * text (for example destructive red) is preserved exactly; only neutral dark text is promoted to
- * a light color for contrast.</p>
+ * non-button text keeps chromatic semantic colors while neutral dark text is promoted for
+ * contrast. Dialog buttons use the canonical MIUIX dark neutral/primary/danger tokens.</p>
  */
 final class LauncherDialogDarkModeController {
     private static final int PRIMARY_TEXT = 0xFFFFFFFF;
@@ -38,6 +38,7 @@ final class LauncherDialogDarkModeController {
     private static final int DARK_PRIMARY_BUTTON_TEXT = 0xE6FFFFFF;
     private static final int DARK_DANGER_BUTTON_TEXT = 0xFFFA4238;
     private static final int DARK_DANGER_BUTTON_TEXT_DISABLED = 0x4DFA4238;
+    private static final int DARK_DISABLED_BUTTON_TEXT = 0x4DFFFFFF;
 
     private LauncherDialogDarkModeController() {}
 
@@ -253,7 +254,7 @@ final class LauncherDialogDarkModeController {
                 ? DARK_PRIMARY_BUTTON_TEXT : DARK_NEUTRAL_BUTTON_TEXT;
         return new ColorStateList(
                 new int[][] {disabled, normal},
-                new int[] {DISABLED_TEXT, normalColor});
+                new int[] {DARK_DISABLED_BUTTON_TEXT, normalColor});
     }
 
     private static boolean isDangerRed(int color) {
