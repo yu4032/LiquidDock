@@ -32,6 +32,9 @@ final class LauncherDialogGlassCoordinator {
     private static final String DIALOG_PARENT_PANEL =
             "miuix.appcompat.internal.widget.DialogParentPanel2";
     private static final String DIALOG_PARENT_PANEL_ID = "parentPanel";
+    // Canonical MIUIX AlertController.installContent(): mDimBg = findViewById(dialog_dim_bg).
+    // Immersive dialogs animate this View's alpha while Window.dimAmount is explicitly 0.
+    private static final String DIALOG_DIM_BG_ID = "dialog_dim_bg";
     private static final int MAX_TREE_LOG_NODES = 32;
     private static final Map<Dialog, Binding> BINDINGS = new WeakHashMap<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -217,6 +220,8 @@ final class LauncherDialogGlassCoordinator {
                 + " rootSize=" + dialogRoot.getWidth() + "x" + dialogRoot.getHeight()
                 + " radiusPx=" + radiusPx
                 + " dimAmount=" + binding.appliedDimAmount
+                + " dimAuthority="
+                + (binding.dimBgRef.get() != null ? "MIUIX_VIEW" : "WINDOW_FALLBACK")
                 + " dimDisabled=" + binding.appearance.disableDimming
                 + " dialogAppearanceOverride=" + binding.appearance.hasAppearanceOverride);
     }
@@ -406,7 +411,7 @@ final class LauncherDialogGlassCoordinator {
             MainHook.log(TAG + " vendor pass-window gate restore source=" + binding.source
                     + " result=" + restored);
         }
-        restoreWindowDim(binding);
+        restoreDialogDim(binding);
 
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
@@ -442,6 +447,49 @@ final class LauncherDialogGlassCoordinator {
     private static float syncDialogDim(
             Binding binding, Dialog dialog, boolean updateMaterial) {
         if (binding == null || dialog == null) return 0f;
+
+        LauncherDialogGlassPreferences.Appearance appearance = binding.appearance;
+        boolean disableDimming = appearance != null && appearance.disableDimming;
+
+        // MIUIX immersive AlertDialog does not use Window DIM_BEHIND as its visual authority.
+        // AlertController.setupImmersiveWindow() sets window dimAmount to 0 and onStart() animates
+        // @id/dialog_dim_bg directly. Observe that real View every pre-draw so glass attenuation
+        // follows the exact vendor animation instead of a guessed/final WindowManager value.
+        View dimBg = resolveDimBackground(binding);
+        if (dimBg != null && dimBg.isAttachedToWindow()) {
+            if (!binding.dimViewCaptured) {
+                binding.dimViewCaptured = true;
+                binding.originalDimViewVisibility = dimBg.getVisibility();
+                MainHook.log(TAG + " dim authority=MIUIX_VIEW source=" + binding.source
+                        + " id=" + resourceEntryName(dimBg)
+                        + " visibility=" + binding.originalDimViewVisibility
+                        + " alpha=" + dimBg.getAlpha());
+            }
+
+            float animatedDim = dimBg.getVisibility() == View.VISIBLE
+                    ? clamp01(dimBg.getAlpha()) : 0f;
+            if (disableDimming && dimBg.getVisibility() == View.VISIBLE) {
+                // Preserve MIUIX's alpha property/animator as the source of truth. INVISIBLE only
+                // suppresses composition, so fail-closed restoration can reveal the vendor dim
+                // again without inventing an animation duration or alpha.
+                dimBg.setVisibility(View.INVISIBLE);
+                binding.dimViewSuppressed = true;
+            }
+
+            float effectiveDim = disableDimming ? 0f : animatedDim;
+            updateDialogMaterialIfNeeded(binding, effectiveDim, updateMaterial);
+            return effectiveDim;
+        }
+
+        // Non-immersive / unexpected MIUIX variants retain the standard WindowManager fallback.
+        return syncWindowDimFallback(binding, dialog, disableDimming, updateMaterial);
+    }
+
+    private static float syncWindowDimFallback(
+            Binding binding,
+            Dialog dialog,
+            boolean disableDimming,
+            boolean updateMaterial) {
         Window window = dialog.getWindow();
         if (window == null) return 0f;
         WindowManager.LayoutParams attributes = window.getAttributes();
@@ -449,26 +497,30 @@ final class LauncherDialogGlassCoordinator {
             binding.windowDimCaptured = true;
             binding.originalWindowFlags = attributes.flags;
             binding.originalDimAmount = attributes.dimAmount;
+            MainHook.log(TAG + " dim authority=WINDOW_DIM_BEHIND source=" + binding.source
+                    + " flags=" + attributes.flags + " dimAmount=" + attributes.dimAmount);
         }
 
-        LauncherDialogGlassPreferences.Appearance appearance = binding.appearance;
-        boolean disableDimming = appearance != null && appearance.disableDimming;
         if (disableDimming
                 && (attributes.flags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             attributes = window.getAttributes();
-            binding.dimSuppressed = true;
+            binding.windowDimSuppressed = true;
         }
 
         float effectiveDim = !disableDimming
                 && (attributes.flags & WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0
                 ? clamp01(attributes.dimAmount) : 0f;
-        if (updateMaterial && Math.abs(effectiveDim - binding.appliedDimAmount) > 0.001f) {
-            View decor = binding.decorRef.get();
-            View root = decor != null ? decor.getRootView() : null;
-            if (root != null) applyDialogMaterial(binding, root, effectiveDim);
-        }
+        updateDialogMaterialIfNeeded(binding, effectiveDim, updateMaterial);
         return effectiveDim;
+    }
+
+    private static void updateDialogMaterialIfNeeded(
+            Binding binding, float effectiveDim, boolean updateMaterial) {
+        if (!updateMaterial || Math.abs(effectiveDim - binding.appliedDimAmount) <= 0.001f) return;
+        View decor = binding.decorRef.get();
+        View root = decor != null ? decor.getRootView() : null;
+        if (root != null) applyDialogMaterial(binding, root, effectiveDim);
     }
 
     private static void applyDialogMaterial(Binding binding, View root, float effectiveDim) {
@@ -489,8 +541,33 @@ final class LauncherDialogGlassCoordinator {
         binding.appliedDimAmount = effectiveDim;
     }
 
-    private static void restoreWindowDim(Binding binding) {
-        if (binding == null || !binding.windowDimCaptured || !binding.dimSuppressed) return;
+    private static View resolveDimBackground(Binding binding) {
+        if (binding == null) return null;
+        View current = binding.dimBgRef.get();
+        if (current != null) return current;
+        View decor = binding.decorRef.get();
+        View resolved = findByResourceEntryName(decor, DIALOG_DIM_BG_ID);
+        if (resolved != null) binding.dimBgRef = new WeakReference<>(resolved);
+        return resolved;
+    }
+
+    private static void restoreDialogDim(Binding binding) {
+        if (binding == null) return;
+
+        View dimBg = binding.dimBgRef.get();
+        if (dimBg != null && binding.dimViewCaptured && binding.dimViewSuppressed) {
+            try {
+                dimBg.setVisibility(binding.originalDimViewVisibility);
+                MainHook.log(TAG + " MIUIX dim view restored source=" + binding.source
+                        + " visibility=" + binding.originalDimViewVisibility
+                        + " alpha=" + dimBg.getAlpha());
+            } catch (Throwable error) {
+                MainHook.log(TAG + " MIUIX dim view restore failed source=" + binding.source
+                        + " error=" + error);
+            }
+        }
+
+        if (!binding.windowDimCaptured || !binding.windowDimSuppressed) return;
         Dialog dialog = binding.dialogRef.get();
         Window window = dialog != null ? dialog.getWindow() : null;
         if (window == null) return;
@@ -501,10 +578,10 @@ final class LauncherDialogGlassCoordinator {
             } else {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             }
-            MainHook.log(TAG + " dialog dim restored source=" + binding.source
+            MainHook.log(TAG + " Window dim restored source=" + binding.source
                     + " dimAmount=" + binding.originalDimAmount);
         } catch (Throwable error) {
-            MainHook.log(TAG + " dialog dim restore failed source=" + binding.source
+            MainHook.log(TAG + " Window dim restore failed source=" + binding.source
                     + " error=" + error);
         }
     }
@@ -548,6 +625,18 @@ final class LauncherDialogGlassCoordinator {
         ViewGroup group = (ViewGroup) root;
         for (int i = 0; i < group.getChildCount(); i++) {
             View match = findExactClass(group.getChildAt(i), className);
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    private static View findByResourceEntryName(View root, String entryName) {
+        if (root == null || entryName == null) return null;
+        if (entryName.equals(resourceEntryName(root))) return root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View match = findByResourceEntryName(group.getChildAt(i), entryName);
             if (match != null) return match;
         }
         return null;
@@ -599,6 +688,7 @@ final class LauncherDialogGlassCoordinator {
         final WeakReference<Dialog> dialogRef;
         final WeakReference<View> decorRef;
         WeakReference<View> panelRef = new WeakReference<>(null);
+        WeakReference<View> dimBgRef = new WeakReference<>(null);
         final LiquidDockConfig.Glass glassConfig;
         final String source;
         final String dialogType;
@@ -613,10 +703,13 @@ final class LauncherDialogGlassCoordinator {
         Drawable transparentBackground;
         LauncherDialogGlassPreferences.Appearance appearance;
         int originalWindowFlags;
+        int originalDimViewVisibility = View.VISIBLE;
         float originalDimAmount;
         float appliedDimAmount = Float.NaN;
+        boolean dimViewCaptured;
+        boolean dimViewSuppressed;
         boolean windowDimCaptured;
-        boolean dimSuppressed;
+        boolean windowDimSuppressed;
         boolean vendorPassBlurEnabled;
         boolean vendorGatePaused;
         boolean backgroundReplaced;
