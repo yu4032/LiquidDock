@@ -85,15 +85,6 @@ final class LauncherDialogGlassPreferences {
         out.tintB = resolved.tintB / 255f;
         out.tintA = resolved.tintAlpha / 255f;
 
-        // Dark mode keeps the user's selected hue but turns the dialog glass itself into a dark
-        // material so the light text/button treatment has stable contrast over bright wallpaper.
-        if (resolved.darkMode) {
-            out.tintR *= 0.22f;
-            out.tintG *= 0.22f;
-            out.tintB *= 0.22f;
-            out.tintA = Math.max(out.tintA, 0.58f);
-        }
-
         // MIUIX immersive dialogs animate @id/dialog_dim_bg inside the Dialog ViewRoot. The
         // PassBlur source deliberately excludes that root, so mirror the observed dim alpha into
         // the glass-local backdrop. Non-immersive variants supply Window DIM_BEHIND as fallback.
