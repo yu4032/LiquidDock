@@ -238,7 +238,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void setPrismalParams(PrismalParams params) {
         if (shuttingDown || params == null) return;
         prismalParams = params;
-        if (backdropPrepared) requestFreshBackdrop(sceneGeneration);
+        // Material-only changes (for example MIUIX dialog dim alpha) do not invalidate the
+        // captured backdrop. Re-render the prepared scene instead of recapturing the producer.
+        if (backdropPrepared) requestSceneRedraw();
     }
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
