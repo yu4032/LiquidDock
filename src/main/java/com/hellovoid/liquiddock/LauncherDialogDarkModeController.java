@@ -2,9 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
-import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -31,10 +28,11 @@ final class LauncherDialogDarkModeController {
     private static final int MAX_NEUTRAL_CHANNEL_SPREAD = 36;
     private static final int MAX_DARK_CHANNEL = 128;
 
-    // A small additive/multiplicative lift keeps the vendor button recognizable while making its
-    // surface separate from a dark dialog. The original drawable/state machine is cloned intact.
+    // Lift only the vendor tint colors of buttons that already have a visible filled surface.
+    // Transparent destructive buttons remain transparent; alpha and hue are preserved.
     private static final float BUTTON_RGB_SCALE = 1.08f;
-    private static final float BUTTON_RGB_OFFSET = 12f;
+    private static final int BUTTON_RGB_OFFSET = 12;
+    private static final int MIN_VISIBLE_BUTTON_ALPHA = 24;
 
     private LauncherDialogDarkModeController() {}
 
@@ -71,7 +69,6 @@ final class LauncherDialogDarkModeController {
                 ButtonSurfaceSnapshot snapshot = entry.getValue();
                 if (view == null || snapshot == null) continue;
                 try {
-                    view.setBackground(snapshot.originalBackground);
                     view.setBackgroundTintList(snapshot.originalBackgroundTint);
                 } catch (Throwable ignored) {}
             }
@@ -136,22 +133,23 @@ final class LauncherDialogDarkModeController {
         private void applyButtonSurface(View button) {
             ButtonSurfaceSnapshot snapshot = buttonSurfaceSnapshots.get(button);
             if (snapshot == null) {
-                snapshot = new ButtonSurfaceSnapshot(
-                        button.getBackground(),
-                        button.getBackgroundTintList());
+                ColorStateList originalTint = button.getBackgroundTintList();
+                snapshot = new ButtonSurfaceSnapshot(originalTint, liftVisibleButtonTint(originalTint));
                 buttonSurfaceSnapshots.put(button, snapshot);
             }
 
-            if (snapshot.liftedBackground == null) {
-                snapshot.liftedBackground = makeLiftedBackground(button, snapshot.originalBackground);
+            if (snapshot.liftedBackgroundTint == null) {
+                // No framework tint or an originally transparent surface: preserve MIUIX exactly.
+                if (button.getBackgroundTintList() != snapshot.originalBackgroundTint) {
+                    button.setBackgroundTintList(snapshot.originalBackgroundTint);
+                }
+                return;
             }
-            if (snapshot.liftedBackground == null) return;
 
-            // Some MIUIX button implementations re-apply their style during layout. Reassert the
-            // cloned vendor drawable during pre-draw without replacing listeners or geometry.
-            button.setBackgroundTintList(null);
-            if (button.getBackground() != snapshot.liftedBackground) {
-                button.setBackground(snapshot.liftedBackground);
+            // Some MIUIX button implementations re-apply their style during layout. Reassert only
+            // the derived tint list; never replace the vendor Drawable or its state/shape logic.
+            if (button.getBackgroundTintList() != snapshot.liftedBackgroundTint) {
+                button.setBackgroundTintList(snapshot.liftedBackgroundTint);
             }
         }
     }
@@ -165,36 +163,60 @@ final class LauncherDialogDarkModeController {
     }
 
     private static final class ButtonSurfaceSnapshot {
-        final Drawable originalBackground;
         final ColorStateList originalBackgroundTint;
-        Drawable liftedBackground;
+        final ColorStateList liftedBackgroundTint;
 
         ButtonSurfaceSnapshot(
-                Drawable originalBackground,
-                ColorStateList originalBackgroundTint) {
-            this.originalBackground = originalBackground;
+                ColorStateList originalBackgroundTint,
+                ColorStateList liftedBackgroundTint) {
             this.originalBackgroundTint = originalBackgroundTint;
+            this.liftedBackgroundTint = liftedBackgroundTint;
         }
     }
 
-    private static Drawable makeLiftedBackground(View owner, Drawable original) {
-        if (owner == null || original == null) return null;
-        Drawable.ConstantState state = original.getConstantState();
-        if (state == null) return null;
-        try {
-            Drawable clone = state.newDrawable(
-                    owner.getResources(), owner.getContext().getTheme()).mutate();
-            ColorMatrix lift = new ColorMatrix(new float[] {
-                    BUTTON_RGB_SCALE, 0f, 0f, 0f, BUTTON_RGB_OFFSET,
-                    0f, BUTTON_RGB_SCALE, 0f, 0f, BUTTON_RGB_OFFSET,
-                    0f, 0f, BUTTON_RGB_SCALE, 0f, BUTTON_RGB_OFFSET,
-                    0f, 0f, 0f, 1f, 0f
-            });
-            clone.setColorFilter(new ColorMatrixColorFilter(lift));
-            return clone;
-        } catch (Throwable ignored) {
-            return null;
-        }
+    private static ColorStateList liftVisibleButtonTint(ColorStateList original) {
+        if (original == null) return null;
+
+        int[] pressedState = new int[] {
+                android.R.attr.state_enabled, android.R.attr.state_pressed};
+        int[] focusedState = new int[] {
+                android.R.attr.state_enabled, android.R.attr.state_focused};
+        int[] disabledState = new int[] {-android.R.attr.state_enabled};
+        int[] defaultState = new int[] {};
+
+        int defaultColor = original.getDefaultColor();
+        int pressed = original.getColorForState(pressedState, defaultColor);
+        int focused = original.getColorForState(focusedState, defaultColor);
+        int disabled = original.getColorForState(disabledState, defaultColor);
+
+        // Transparent destructive/neutral button surfaces are a semantic style, not a light-mode
+        // artifact. Preserve them exactly instead of exposing the drawable's fallback blue fill.
+        int maxAlpha = Math.max(
+                Math.max(Color.alpha(defaultColor), Color.alpha(pressed)),
+                Math.max(Color.alpha(focused), Color.alpha(disabled)));
+        if (maxAlpha < MIN_VISIBLE_BUTTON_ALPHA) return null;
+
+        return new ColorStateList(
+                new int[][] {pressedState, focusedState, disabledState, defaultState},
+                new int[] {
+                        liftButtonColor(pressed),
+                        liftButtonColor(focused),
+                        liftButtonColor(disabled),
+                        liftButtonColor(defaultColor)
+                });
+    }
+
+    private static int liftButtonColor(int color) {
+        int alpha = Color.alpha(color);
+        if (alpha < MIN_VISIBLE_BUTTON_ALPHA) return color;
+        int r = liftChannel(Color.red(color));
+        int g = liftChannel(Color.green(color));
+        int b = liftChannel(Color.blue(color));
+        return Color.argb(alpha, r, g, b);
+    }
+
+    private static int liftChannel(int channel) {
+        return Math.min(255, Math.round(channel * BUTTON_RGB_SCALE) + BUTTON_RGB_OFFSET);
     }
 
     private static boolean isDialogButton(TextView text, boolean inButtonPanel) {
