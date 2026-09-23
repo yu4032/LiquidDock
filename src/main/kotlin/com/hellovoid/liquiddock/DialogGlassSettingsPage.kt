@@ -178,7 +178,7 @@ internal fun DialogGlassSettingsPage(
                     prefs,
                     ConfigSchema.Glass.DIALOG_DARK_MODE,
                     "对话框深色模式",
-                    "让 MIUIX 对话框按原生深色主题解析文字、按钮与状态样式；不修改图标和玻璃颜色",
+                    "只适配文字与按钮可读性；图标和玻璃颜色保持原样，继续使用你的对话玻璃自定义",
                     controlsEnabled,
                 )
             }
