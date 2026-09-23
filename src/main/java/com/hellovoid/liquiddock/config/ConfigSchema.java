@@ -260,6 +260,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> DIALOG_DISABLE_DIMMING = bool(
                 "liquid_dialog_disable_dimming", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> DIALOG_DARK_MODE = bool(
+                "liquid_dialog_dark_mode", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         // Appearance overrides are IF_PRESENT so an untouched dialog profile follows the
         // current global Prismal material instead of freezing a copied default.
         public static final ConfigKey<Integer> DIALOG_BLUR = integer(
@@ -642,7 +645,7 @@ public final class ConfigSchema {
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,
-                Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
+                Glass.DIALOG_DARK_MODE, Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
                 Glass.DIALOG_TINT_BLUE, Glass.DIALOG_TINT_ALPHA,
                 Glass.FOLDER_GLASS, Glass.WIDGET_GLASS,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
