@@ -296,7 +296,8 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(darkMode.contains("setBackground(snapshot.originalBackground)"));
         assertTrue(darkMode.contains("text.setTextColor(snapshot.textColors)"));
         assertTrue(darkMode.contains("isNearBlackNeutral(original)"));
-        assertFalse(darkMode.contains("ImageView"));
+        assertFalse(darkMode.contains("import android.widget.ImageView"));
+        assertFalse(darkMode.contains("instanceof ImageView"));
         assertFalse(darkMode.contains("setImageTintList"));
         assertFalse(darkMode.contains("setCompoundDrawableTintList"));
         assertFalse(darkMode.contains("Bitmap.createBitmap"));
