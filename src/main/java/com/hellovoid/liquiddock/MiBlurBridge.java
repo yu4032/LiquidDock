@@ -117,6 +117,23 @@ final class MiBlurBridge {
      * Restore only the compositor backdrop radius without replaying the vendor blur mode or
      * pass-window enable state. HyperOS 307 rewrites this radius during HOME/RECENTS transitions.
      */
+    /**
+     * Update the compositor pass-texture resolution scale without changing blur/material ownership.
+     * Used by surfaces whose outer SurfaceControl is animated so the backdrop texture follows the
+     * real visible container size instead of scaling a full-size cached pass texture.
+     */
+    static boolean setPassTextureScale(View view, float textureScale) {
+        if (SET_PASS_TEXTURE_SCALE == null || view == null) return false;
+        float safeScale = Math.max(0.05f, Math.min(1f, textureScale));
+        try {
+            Object result = SET_PASS_TEXTURE_SCALE.invoke(view, safeScale);
+            return !(result instanceof Boolean) || (Boolean) result;
+        } catch (Throwable error) {
+            MainHook.log("[DC] pass texture scale update failed: " + error);
+            return false;
+        }
+    }
+
     static boolean setPassWindowBlurRadius(View view, int radiusPx) {
         if (!PASS_BLUR_AVAILABLE || view == null) return false;
         int safeRadius = Math.max(0, Math.min(400, radiusPx));
