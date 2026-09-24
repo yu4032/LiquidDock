@@ -456,10 +456,6 @@ final class SystemUiHandleMenuGlassHook {
                         new SystemUiHandleMenuPrismalSession(
                                 target,
                                 sourceRoot,
-                                menuX,
-                                menuY,
-                                menuWidth,
-                                menuHeight,
                                 glassConfig,
                                 new SystemUiHandleMenuPrismalSession.Listener() {
                                     @Override public void onFirstFramePresented() {
