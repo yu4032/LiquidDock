@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** One-shot workspace backdrop capture plus stable full-screen rendering for ShortcutMenu glass. */
+/** Continuous workspace backdrop plus stable full-screen rendering for ShortcutMenu glass. */
 final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -26,7 +26,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private static final String TAG = "[DC][ShortcutPopupGlass]";
-    private long nextGeneration = 1L;
+    private static final long GENERATION = 1L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -58,9 +58,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile LauncherGlassGeometry.Snapshot geometry;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
-    private volatile boolean sourceFrozen;
-    private volatile boolean captureSealed;
-    private volatile long captureGeneration = -1L;
+    private volatile int liveFrameCount;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -103,25 +101,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     void requestInitialCapture() {
         if (shuttingDown) return;
-        long generation = nextGeneration++;
-        captureGeneration = generation;
-        captureSealed = false;
-        sourceFrozen = false;
-        sourceBackend.setUpdatesEnabled(true, "shortcut-popup-refresh");
-        sourceBackend.requestFresh(generation);
+        sourceBackend.setUpdatesEnabled(true, "shortcut-popup-live");
+        sourceBackend.requestFresh(GENERATION);
     }
 
-    boolean sealForShow() {
-        if (shuttingDown) return false;
-        captureSealed = true;
-        captureGeneration = nextGeneration++;
-        sourceBackend.setUpdatesEnabled(false, "shortcut-popup-show-sealed");
-        sourceFrozen = backdropPrepared;
-        return backdropPrepared;
-    }
-
-    boolean hasFrozenBackdrop() {
-        return !shuttingDown && backdropPrepared && captureSealed;
+    boolean hasPreparedBackdrop() {
+        return !shuttingDown && backdropPrepared;
     }
 
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
@@ -182,7 +167,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || captureSealed || frame.generation != captureGeneration) return;
+                || frame.generation != GENERATION) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -196,10 +181,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            if (!sourceFrozen) {
-                sourceFrozen = true;
-                sourceBackend.setUpdatesEnabled(false, "shortcut-popup-frozen");
-                MainHook.log(TAG + " workspace backdrop frozen generation=" + frame.generation);
+            liveFrameCount++;
+            if (liveFrameCount == 2 || liveFrameCount % 60 == 0) {
+                MainHook.log(TAG + " live workspace frames=" + liveFrameCount
+                        + " generation=" + frame.generation);
             }
             renderCurrent();
         } catch (Throwable error) {
