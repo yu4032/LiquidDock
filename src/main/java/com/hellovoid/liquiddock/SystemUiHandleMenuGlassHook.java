@@ -302,6 +302,7 @@ final class SystemUiHandleMenuGlassHook {
         final View target;
         final Drawable stockBackground;
         final int nativeBlurRadiusPx;
+        final LiquidDockConfig.Glass glassConfig;
         final SystemUiHandleMenuAnimationProbe animationProbe;
         final Object controller;
         final SurfaceControl menuSurface;
@@ -310,6 +311,9 @@ final class SystemUiHandleMenuGlassHook {
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
+        boolean prismalPresented;
+        SystemUiHandleMenuPrismalSession prismalSession;
+        SystemUiHandleMenuGlassOutputView prismalOutput;
         volatile float pendingSurfaceAlpha;
         boolean fadeUpdatePosted;
         int lastAppliedBlurRadius = -1;
@@ -330,6 +334,7 @@ final class SystemUiHandleMenuGlassHook {
             this.menuSurface = menuSurface;
             this.trackNativeSurfaceAnimation = waitForNativeSurfaceScale && menuSurface != null;
             stockBackground = target.getBackground();
+            glassConfig = glass;
             nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
             animationProbe = new SystemUiHandleMenuAnimationProbe(root, sourceRoot, target);
             alphaListener = this::onNativeSurfaceAlpha;
@@ -345,6 +350,7 @@ final class SystemUiHandleMenuGlassHook {
                 SystemUiHandleMenuSurfaceProbe.registerAlphaListener(menuSurface, alphaListener);
                 log("replacement blur tracking native menu surface alpha surface=" + menuSurface);
             }
+            startPrismal();
         }
 
         private void onNativeSurfaceAlpha(float alpha) {
@@ -354,32 +360,37 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         private void postFadeUpdate() {
-            if (released || !replacementBlurApplied || !customPassBlurOwned || fadeUpdatePosted) {
-                return;
-            }
+            if (released || fadeUpdatePosted) return;
             fadeUpdatePosted = true;
             boolean posted = root.post(() -> {
                 try {
-                    if (!released && replacementBlurApplied && customPassBlurOwned) {
-                        applyBlurFade(pendingSurfaceAlpha);
-                    }
+                    if (!released) applyMaterialFade(pendingSurfaceAlpha);
                 } finally {
                     fadeUpdatePosted = false;
                 }
             });
             if (!posted) {
                 fadeUpdatePosted = false;
-                log("blur fade post rejected target=" + targetLabel(target));
+                log("material fade post rejected target=" + targetLabel(target));
             }
         }
 
-        private void applyBlurFade(float surfaceAlpha) {
-            // Keep the backdrop nearly invisible through most of the geometric scale animation,
-            // then fade it in smoothly near the settled size. The same curve naturally reverses
-            // during close because HyperOS drives alpha from 1 -> 0.
+        private float materialFade(float surfaceAlpha) {
+            // Suppress material visibility during most of the outer Surface scale animation, then
+            // reveal the finished glass near the settled size. Close naturally reverses this.
             float t = (surfaceAlpha - 0.80f) / 0.20f;
             t = Math.max(0f, Math.min(1f, t));
-            float eased = t * t * (3f - (2f * t));
+            return t * t * (3f - (2f * t));
+        }
+
+        private void applyMaterialFade(float surfaceAlpha) {
+            float eased = materialFade(surfaceAlpha);
+            SystemUiHandleMenuGlassOutputView output = prismalOutput;
+            if (prismalPresented && output != null) {
+                output.setMaterialAlpha(eased);
+                return;
+            }
+            if (!replacementBlurApplied || !customPassBlurOwned) return;
             int radius = Math.round(nativeBlurRadiusPx * eased);
             if (radius == lastAppliedBlurRadius) return;
             if (MiBlurBridge.setPassWindowBlurRadius(target, radius)) {
@@ -387,9 +398,78 @@ final class SystemUiHandleMenuGlassHook {
             }
         }
 
+        private void startPrismal() {
+            if (released || menuSurface == null || !menuSurface.isValid()
+                    || prismalSession != null || !(target instanceof ViewGroup)
+                    || target.getWidth() <= 0 || target.getHeight() <= 0) return;
+            try {
+                SystemUiHandleMenuPrismalSession session =
+                        new SystemUiHandleMenuPrismalSession(
+                                target,
+                                menuSurface,
+                                glassConfig,
+                                new SystemUiHandleMenuPrismalSession.Listener() {
+                                    @Override public void onFirstFramePresented() {
+                                        root.post(Binding.this::onPrismalPresented);
+                                    }
+
+                                    @Override public void onFailure(Throwable error) {
+                                        root.post(() -> onPrismalFailure(error));
+                                    }
+                                });
+                SystemUiHandleMenuGlassOutputView output =
+                        SystemUiHandleMenuGlassOutputView.attachInsideTarget(target, session);
+                if (output == null) {
+                    session.shutdown();
+                    return;
+                }
+                prismalSession = session;
+                prismalOutput = output;
+                output.setMaterialAlpha(0f);
+                session.start(target.getWidth(), target.getHeight());
+                log("Prismal pipeline armed source=" + menuSurface
+                        + " target=" + targetLabel(target)
+                        + " size=" + target.getWidth() + "x" + target.getHeight());
+            } catch (Throwable error) {
+                onPrismalFailure(error);
+            }
+        }
+
+        private void onPrismalPresented() {
+            if (released || prismalSession == null || prismalOutput == null) return;
+            prismalPresented = true;
+            if (customPassBlurOwned) {
+                MiBlurBridge.clearPassWindowBlur(target);
+                customPassBlurOwned = false;
+                replacementBlurApplied = false;
+                lastAppliedBlurRadius = -1;
+            }
+            target.setBackground(null);
+            prismalOutput.setMaterialAlpha(materialFade(pendingSurfaceAlpha));
+            target.invalidate();
+            log("full Prismal glass presented; native blur fallback released"
+                    + " target=" + targetLabel(target));
+        }
+
+        private void onPrismalFailure(Throwable error) {
+            if (released) return;
+            log("Prismal fallback to native blur: " + error);
+            SystemUiHandleMenuGlassOutputView output = prismalOutput;
+            prismalOutput = null;
+            if (output != null) output.dispose();
+            SystemUiHandleMenuPrismalSession session = prismalSession;
+            prismalSession = null;
+            if (session != null) session.shutdown();
+            prismalPresented = false;
+            if (!replacementBlurApplied || !customPassBlurOwned) {
+                applyReplacementBlur();
+            }
+            applyMaterialFade(pendingSurfaceAlpha);
+        }
+
         void prepareForNativeClose() {
             if (released) return;
-            log("native close boundary; replacement blur retained through surface scale-out");
+            log("native close boundary; glass material retained through surface scale-out");
         }
 
         private void applyReplacementBlur() {
@@ -440,12 +520,20 @@ final class SystemUiHandleMenuGlassHook {
                 SystemUiHandleMenuSurfaceProbe.unregisterAlphaListener(
                         menuSurface, alphaListener);
             }
+            SystemUiHandleMenuGlassOutputView output = prismalOutput;
+            prismalOutput = null;
+            if (output != null) output.dispose();
+            SystemUiHandleMenuPrismalSession session = prismalSession;
+            prismalSession = null;
+            if (session != null) session.shutdown();
+            prismalPresented = false;
             restoreStockBackground();
         }
 
         @Override
         public void onViewAttachedToWindow(View view) {
             applyReplacementBlur();
+            startPrismal();
         }
 
         @Override
