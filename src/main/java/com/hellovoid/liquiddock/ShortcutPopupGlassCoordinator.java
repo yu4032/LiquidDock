@@ -28,7 +28,15 @@ final class ShortcutPopupGlassCoordinator {
                 contentView, glassConfig, radius);
         if (effect == null) return false;
 
-        State state = new State(decorView, popupView, contentView, effect);
+        ShortcutPopupVendorMaterialBridge.Claim materialClaim =
+                ShortcutPopupVendorMaterialBridge.claim(popupView, contentView);
+        if (materialClaim == null) {
+            effect.dispose();
+            return false;
+        }
+
+        State state = new State(
+                decorView, popupView, contentView, effect, materialClaim);
         View.OnAttachStateChangeListener detachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {}
 
@@ -76,6 +84,7 @@ final class ShortcutPopupGlassCoordinator {
             catch (Throwable ignored) {}
         }
         state.effect.dispose();
+        ShortcutPopupVendorMaterialBridge.restoreIfVisible(state.materialClaim);
         MainHook.log(TAG + " released reason=" + reason);
     }
 
@@ -93,14 +102,21 @@ final class ShortcutPopupGlassCoordinator {
         final WeakReference<View> popupRef;
         final WeakReference<View> contentRef;
         final ShortcutPopupHwuiGlassEffect effect;
+        final ShortcutPopupVendorMaterialBridge.Claim materialClaim;
         View.OnAttachStateChangeListener detachListener;
         boolean released;
 
-        State(View decor, View popup, View content, ShortcutPopupHwuiGlassEffect effect) {
+        State(
+                View decor,
+                View popup,
+                View content,
+                ShortcutPopupHwuiGlassEffect effect,
+                ShortcutPopupVendorMaterialBridge.Claim materialClaim) {
             decorRef = new WeakReference<>(decor);
             popupRef = new WeakReference<>(popup);
             contentRef = new WeakReference<>(content);
             this.effect = effect;
+            this.materialClaim = materialClaim;
         }
     }
 }

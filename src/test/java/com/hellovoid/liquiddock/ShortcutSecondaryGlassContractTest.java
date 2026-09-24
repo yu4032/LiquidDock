@@ -18,6 +18,8 @@ public class ShortcutSecondaryGlassContractTest {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String effect = Files.readString(MAIN.resolve("ShortcutPopupHwuiGlassEffect.java"));
         String bridge = Files.readString(MAIN.resolve("MiBlurBridge.java"));
+        String vendorMaterial = Files.readString(
+                MAIN.resolve("ShortcutPopupVendorMaterialBridge.java"));
         String domains = Files.readString(MAIN.resolve("PassBlurDomain.java"));
 
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
@@ -27,6 +29,8 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("postDelayed("));
 
         assertTrue(coordinator.contains("ShortcutPopupHwuiGlassEffect.attach"));
+        assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.claim"));
+        assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.restoreIfVisible"));
         assertTrue(coordinator.contains("popupView.addOnAttachStateChangeListener"));
         assertFalse(coordinator.contains("ShortcutPopupSourceOverlay"));
         assertFalse(coordinator.contains("ShortcutPopupGlassSession"));
@@ -69,12 +73,27 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
         assertTrue(bridge.contains(
                 "// Do not rewrite any of those properties here. In particular, mode=2 belongs to"));
+        assertTrue(bridge.contains("\"getMiViewBlurMode\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlurMode\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlurRadius\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlendColors\""));
         assertTrue(bridge.contains("\"getPassTextureScale\""));
         assertTrue(bridge.contains("class BackdropRenderEffectState"));
         assertTrue(bridge.contains("restoreBackdropRenderEffect("));
+
+        // HyperOS PopupView advanced material is split: mMenuLayer keeps the real
+        // background-only blur, while mContentView element material must be removed.
+        assertTrue(vendorMaterial.contains("setMiBackgroundBlurMode"));
+        assertTrue(vendorMaterial.contains("setMiViewBlurMode"));
+        assertTrue(vendorMaterial.contains("clearMiBackgroundBlendColor"));
+        assertTrue(vendorMaterial.contains("setMiBloomStroke"));
+        assertTrue(vendorMaterial.contains("new float[21]"));
+        assertTrue(vendorMaterial.contains("isMaterialEnabled"));
+        assertTrue(vendorMaterial.contains("prepareHyperMaterial"));
+        assertTrue(vendorMaterial.contains("!popupView.isAttachedToWindow()"));
+        assertFalse(vendorMaterial.contains("setPassWindowBlurEnabled"));
+        assertFalse(vendorMaterial.contains("clearPassWindowBlur"));
+        assertFalse(vendorMaterial.contains("setBackground(null)"));
 
         assertFalse(domains.contains("SHORTCUT_POPUP"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));

@@ -20,6 +20,7 @@ final class MiBlurBridge {
     // Realtime pass-window/background blur used by the MiuiX dock.
     private static final Method SET_PASS_WINDOW_BLUR_ENABLED;
     private static final Method GET_PASS_WINDOW_BLUR_ENABLED;
+    private static final Method GET_MI_VIEW_BLUR_MODE;
     private static final Method GET_MI_BACKGROUND_BLUR_MODE;
     private static final Method GET_MI_BACKGROUND_BLUR_RADIUS;
     private static final Method GET_MI_BACKGROUND_BLEND_COLORS;
@@ -74,12 +75,14 @@ final class MiBlurBridge {
         } catch (Throwable ignored) {
             // Some older builds expose only self blur. MiuiX caller will fall back cleanly.
         }
+        Method viewBlurModeGetter = null;
         Method backgroundModeGetter = null;
         Method backgroundRadiusGetter = null;
         Method backgroundBlendColorsGetter = null;
         Method passTextureScaleGetter = null;
         try {
             passEnabledGetter = View.class.getMethod("getPassWindowBlurEnabled");
+            viewBlurModeGetter = View.class.getMethod("getMiViewBlurMode");
             backgroundModeGetter = View.class.getMethod("getMiBackgroundBlurMode");
             backgroundRadiusGetter = View.class.getMethod("getMiBackgroundBlurRadius");
             backgroundBlendColorsGetter = View.class.getMethod("getMiBackgroundBlendColors");
@@ -90,6 +93,7 @@ final class MiBlurBridge {
         }
         SET_PASS_WINDOW_BLUR_ENABLED = passEnabled;
         GET_PASS_WINDOW_BLUR_ENABLED = passEnabledGetter;
+        GET_MI_VIEW_BLUR_MODE = viewBlurModeGetter;
         GET_MI_BACKGROUND_BLUR_MODE = backgroundModeGetter;
         GET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadiusGetter;
         GET_MI_BACKGROUND_BLEND_COLORS = backgroundBlendColorsGetter;
@@ -118,6 +122,7 @@ final class MiBlurBridge {
 
     static final class BackdropRenderEffectState {
         final boolean passWindowBlurEnabled;
+        final int viewBlurMode;
         final int backgroundBlurMode;
         final int backgroundBlurRadius;
         final float passTextureScale;
@@ -125,11 +130,13 @@ final class MiBlurBridge {
 
         BackdropRenderEffectState(
                 boolean passWindowBlurEnabled,
+                int viewBlurMode,
                 int backgroundBlurMode,
                 int backgroundBlurRadius,
                 float passTextureScale,
                 ArrayList<Point> backgroundBlendColors) {
             this.passWindowBlurEnabled = passWindowBlurEnabled;
+            this.viewBlurMode = viewBlurMode;
             this.backgroundBlurMode = backgroundBlurMode;
             this.backgroundBlurRadius = backgroundBlurRadius;
             this.passTextureScale = passTextureScale;
@@ -187,6 +194,7 @@ final class MiBlurBridge {
     static BackdropRenderEffectState captureBackdropRenderEffectState(View view) {
         if (!PASS_BLUR_AVAILABLE || view == null
                 || GET_PASS_WINDOW_BLUR_ENABLED == null
+                || GET_MI_VIEW_BLUR_MODE == null
                 || GET_MI_BACKGROUND_BLUR_MODE == null
                 || GET_MI_BACKGROUND_BLUR_RADIUS == null
                 || GET_MI_BACKGROUND_BLEND_COLORS == null
@@ -196,11 +204,13 @@ final class MiBlurBridge {
         }
         try {
             Object passEnabled = GET_PASS_WINDOW_BLUR_ENABLED.invoke(view);
+            Object viewMode = GET_MI_VIEW_BLUR_MODE.invoke(view);
             Object mode = GET_MI_BACKGROUND_BLUR_MODE.invoke(view);
             Object radius = GET_MI_BACKGROUND_BLUR_RADIUS.invoke(view);
             Object scale = GET_PASS_TEXTURE_SCALE.invoke(view);
             Object blendColors = GET_MI_BACKGROUND_BLEND_COLORS.invoke(view);
             if (!(passEnabled instanceof Boolean)
+                    || !(viewMode instanceof Number)
                     || !(mode instanceof Number)
                     || !(radius instanceof Number)
                     || !(scale instanceof Number)
@@ -215,6 +225,7 @@ final class MiBlurBridge {
             }
             return new BackdropRenderEffectState(
                     (Boolean) passEnabled,
+                    ((Number) viewMode).intValue(),
                     ((Number) mode).intValue(),
                     ((Number) radius).intValue(),
                     ((Number) scale).floatValue(),
@@ -328,6 +339,9 @@ final class MiBlurBridge {
                 SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, false);
             } catch (Throwable ignored) {}
         }
+        try {
+            SET_MI_VIEW_BLUR_MODE.invoke(view, state.viewBlurMode);
+        } catch (Throwable ignored) {}
         try {
             SET_MI_BACKGROUND_BLUR_MODE.invoke(view, state.backgroundBlurMode);
         } catch (Throwable ignored) {}
