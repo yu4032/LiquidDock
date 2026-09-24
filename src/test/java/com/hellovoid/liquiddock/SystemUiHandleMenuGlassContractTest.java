@@ -101,6 +101,20 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
+    public void prismalStartupCannotMakeCurrentBeforeEglInitialization() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
+        String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
+
+        int start = hook.indexOf("session.start(target.getWidth(), target.getHeight())");
+        int attach = hook.indexOf("SystemUiHandleMenuGlassOutputView.attachInsideTarget");
+        assertTrue(start >= 0 && attach >= 0 && start < attach);
+
+        assertTrue(session.contains("if (!isEglReady()) return;"));
+        assertTrue(session.contains("private boolean isEglReady()"));
+        assertTrue(session.contains("attachInsideTarget() can publish the first visual size before start()"));
+    }
+
+    @Test
     public void animationProbeIsStrictlyReadOnlyAndOwnedByBindingLifetime() throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String probe = Files.readString(MAIN.resolve("SystemUiHandleMenuAnimationProbe.java"));
