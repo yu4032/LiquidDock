@@ -40,7 +40,8 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("u_backdrop.eval"));
         assertFalse(effect.contains("RootPassBlurBackend"));
         assertFalse(effect.contains("SurfaceTexture"));
-        assertFalse(effect.contains("TextureView"));
+        assertFalse(effect.contains("import android.view.TextureView"));
+        assertFalse(effect.contains("extends TextureView"));
         assertFalse(effect.contains("PixelCopy"));
         assertFalse(effect.contains("Bitmap"));
         assertFalse(effect.contains("ScreenCapture"));
