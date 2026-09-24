@@ -37,8 +37,12 @@ public final class ModuleMain extends XposedModule {
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled
                         && runtimeConfig.glass.systemUiHandleMenuEnabled) {
-                    SystemUiHandleMenuSurfaceProbe.install();
-                    SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
+                    if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                        SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
+                    } else {
+                        Api101Bridge.log(
+                                "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
+                    }
                 }
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI integration init failed", error);
