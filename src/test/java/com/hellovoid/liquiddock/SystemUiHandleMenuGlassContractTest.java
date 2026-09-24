@@ -34,7 +34,8 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void miuiBlurTracksNativeSurfaceScaleForEntireAnimation() throws Exception {
+    public void miuiBlurFadesUsingNativeSurfaceAlphaInsteadOfScalingBackdropTexture()
+            throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String probe = Files.readString(MAIN.resolve("SystemUiHandleMenuSurfaceProbe.java"));
         String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
@@ -43,26 +44,25 @@ public class SystemUiHandleMenuGlassContractTest {
                 "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.handlemenu.MiuiWindowController"));
         assertTrue(hook.contains("\"releaseViewWithAnim\""));
         assertTrue(hook.contains("SystemUiHandleMenuSurfaceProbe.trackController(result)"));
-        assertTrue(hook.contains("registerScaleListener(menuSurface, scaleListener)"));
+        assertTrue(hook.contains("registerAlphaListener(menuSurface, alphaListener)"));
         assertTrue(hook.contains("applyReplacementBlur();"));
-        assertTrue(hook.contains("pendingTextureScale = 0.05f"));
-        assertTrue(hook.contains("MiBlurBridge.setPassTextureScale(target, appliedScale)"));
-        assertTrue(hook.contains(
-                "replacement blur retained through surface scale-out"));
-        assertTrue(hook.contains("MiBlurBridge.setPassTextureScale(target, 1.0f)"));
+        assertTrue(hook.contains("pendingSurfaceAlpha = trackNativeSurfaceAnimation ? 0f : 1f"));
+        assertTrue(hook.contains("float t = (surfaceAlpha - 0.80f) / 0.20f"));
+        assertTrue(hook.contains("float eased = t * t * (3f - (2f * t))"));
+        assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurRadius(target, radius)"));
+        assertTrue(hook.contains("replacement blur retained through surface scale-out"));
+        assertTrue(hook.contains("initialRadius = trackNativeSurfaceAnimation ? 0 : nativeBlurRadiusPx"));
+        assertTrue(hook.contains("fadeStartAlpha=0.80"));
         assertTrue(hook.contains("customPassBlurOwned"));
-        assertFalse(hook.contains("if (scale < 0.9999f) return;"));
+
+        assertFalse(hook.contains("pendingTextureScale"));
+        assertFalse(hook.contains("setPassTextureScale(target"));
         assertFalse(hook.contains("stock background restored before surface scale-out"));
-        assertFalse(hook.contains("vendor pass-window material retained"));
+        assertFalse(blur.contains("static boolean setPassTextureScale(View view, float textureScale)"));
 
-        assertTrue(blur.contains("static boolean setPassTextureScale(View view, float textureScale)"));
-        assertTrue(blur.contains("SET_PASS_TEXTURE_SCALE.invoke(view, safeScale)"));
-
-        assertTrue(probe.contains("trackController(Object controller)"));
-        assertTrue(probe.contains("getWindowSurface"));
-        assertTrue(probe.contains("registerScaleListener"));
-        assertTrue(probe.contains("dispatchScale"));
-        assertTrue(probe.contains("Map<Integer, ScaleListener>"));
+        assertTrue(probe.contains("registerAlphaListener"));
+        assertTrue(probe.contains("dispatchAlpha"));
+        assertTrue(probe.contains("Map<Integer, AlphaListener>"));
         assertTrue(probe.contains("stableLayerId(surface)"));
     }
 
