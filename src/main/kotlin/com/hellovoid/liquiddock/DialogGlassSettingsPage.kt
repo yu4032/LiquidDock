@@ -11,10 +11,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SliderPreference
 
 /** Launcher-owned dialog glass controls. Appearance overrides inherit the global material by default. */
 @Composable
@@ -186,7 +190,7 @@ internal fun DialogGlassSettingsPage(
         item { SmallTitle("玻璃颜色") }
         item {
             SettingsCard {
-                GlassAppearanceValueSlider(
+                DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_RED.name(),
                     title = "红",
                     value = tintR,
@@ -195,7 +199,7 @@ internal fun DialogGlassSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GlassAppearanceValueSlider(
+                DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_GREEN.name(),
                     title = "绿",
                     value = tintG,
@@ -204,7 +208,7 @@ internal fun DialogGlassSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GlassAppearanceValueSlider(
+                DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_BLUE.name(),
                     title = "蓝",
                     value = tintB,
@@ -213,7 +217,7 @@ internal fun DialogGlassSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
-                GlassAppearanceValueSlider(
+                DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_ALPHA.name(),
                     title = "不透明度",
                     value = tintAlpha,
@@ -227,7 +231,7 @@ internal fun DialogGlassSettingsPage(
         item { SmallTitle("模糊") }
         item {
             SettingsCard {
-                GlassAppearanceValueSlider(
+                DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_BLUR.name(),
                     title = "对话背景模糊",
                     value = blur,
@@ -246,4 +250,45 @@ internal fun DialogGlassSettingsPage(
             }
         }
     }
+}
+
+
+@Composable
+private fun DialogAppearanceValueSlider(
+    key: String,
+    title: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    prefs: SharedPreferences,
+    enabled: Boolean,
+    max: Int,
+    unit: String = "",
+) {
+    val rounded = value.roundToInt().coerceIn(0, max)
+    SliderPreference(
+        value = rounded.toFloat(),
+        onValueChange = {
+            val next = it.roundToInt().coerceIn(0, max)
+            onValueChange(next.toFloat())
+            prefs.edit().putInt(key, next).apply()
+        },
+        title = title,
+        summary = "未单独设置时继承全局液态玻璃",
+        valueText = "",
+        enabled = enabled,
+        valueRange = 0f..max.toFloat(),
+        steps = (max - 1).coerceAtLeast(0),
+        endActions = {
+            Button(
+                onClick = {},
+                enabled = false,
+                minWidth = 62.dp,
+                minHeight = 32.dp,
+                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text("$rounded${if (unit.isBlank()) "" else " $unit"}")
+            }
+        },
+        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
+    )
 }
