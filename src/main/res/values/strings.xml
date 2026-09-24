@@ -12,6 +12,7 @@
     <string name="page_workstation">Workstation Dock</string>
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
+    <string name="page_dialog_customization">Dialog popup customization</string>
     <string name="page_widget_components">Widget components</string>
     <string name="page_widget_component_detail">Widget component detail</string>
     <string name="widget_components_entry">Widget component hiding</string>

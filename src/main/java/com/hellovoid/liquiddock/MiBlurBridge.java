@@ -18,6 +18,7 @@ final class MiBlurBridge {
 
     // Realtime pass-window/background blur used by the MiuiX dock.
     private static final Method SET_PASS_WINDOW_BLUR_ENABLED;
+    private static final Method GET_PASS_WINDOW_BLUR_ENABLED;
     private static final Method SET_MI_VIEW_BLUR_MODE;
     private static final Method SET_MI_BACKGROUND_BLUR_MODE;
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
@@ -47,6 +48,7 @@ final class MiBlurBridge {
         LEGACY_AVAILABLE = legacyAvailable;
 
         Method passEnabled = null;
+        Method passEnabledGetter = null;
         Method viewBlurMode = null;
         Method backgroundMode = null;
         Method backgroundRadius = null;
@@ -65,7 +67,13 @@ final class MiBlurBridge {
         } catch (Throwable ignored) {
             // Some older builds expose only self blur. MiuiX caller will fall back cleanly.
         }
+        try {
+            passEnabledGetter = View.class.getMethod("getPassWindowBlurEnabled");
+        } catch (Throwable ignored) {
+            // Optional state read used for reversible vendor-material ownership handoff.
+        }
         SET_PASS_WINDOW_BLUR_ENABLED = passEnabled;
+        GET_PASS_WINDOW_BLUR_ENABLED = passEnabledGetter;
         SET_MI_VIEW_BLUR_MODE = viewBlurMode;
         SET_MI_BACKGROUND_BLUR_MODE = backgroundMode;
         SET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadius;
@@ -120,6 +128,22 @@ final class MiBlurBridge {
             // when one repair attempt fails.
             MainHook.log("[DC] pass window blur radius repair failed: " + e);
             return false;
+        }
+    }
+
+    /**
+     * Read only the compositor pass-window gate. HyperOS MiuiBlurUtils uses this exact hidden
+     * View API, so callers can pause and later restore vendor material without clearing its
+     * radius/blend/material configuration.
+     */
+    static Boolean getPassWindowBlurEnabled(View view) {
+        if (GET_PASS_WINDOW_BLUR_ENABLED == null || view == null) return null;
+        try {
+            Object result = GET_PASS_WINDOW_BLUR_ENABLED.invoke(view);
+            return result instanceof Boolean ? (Boolean) result : null;
+        } catch (Throwable error) {
+            MainHook.log("[DC] pass window blur state read failed: " + error);
+            return null;
         }
     }
 
