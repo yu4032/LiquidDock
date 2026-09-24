@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Replaces HyperOS app-caption popup backgrounds with compositor-backed pass-window blur while
@@ -306,14 +305,14 @@ final class SystemUiHandleMenuGlassHook {
         final SystemUiHandleMenuAnimationProbe animationProbe;
         final Object controller;
         final SurfaceControl menuSurface;
-        final boolean waitForNativeSurfaceScale;
-        final SystemUiHandleMenuSurfaceProbe.ScaleListener scaleListener;
+        final boolean trackNativeSurfaceAnimation;
+        final SystemUiHandleMenuSurfaceProbe.AlphaListener alphaListener;
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
-        boolean dynamicTextureScaleAvailable;
-        volatile float pendingTextureScale = 1.0f;
-        final AtomicBoolean textureScalePostPending = new AtomicBoolean();
+        volatile float pendingSurfaceAlpha;
+        boolean fadeUpdatePosted;
+        int lastAppliedBlurRadius = -1;
         boolean released;
 
         Binding(
@@ -329,53 +328,62 @@ final class SystemUiHandleMenuGlassHook {
             this.target = target;
             this.controller = controller;
             this.menuSurface = menuSurface;
-            this.waitForNativeSurfaceScale = waitForNativeSurfaceScale && menuSurface != null;
+            this.trackNativeSurfaceAnimation = waitForNativeSurfaceScale && menuSurface != null;
             stockBackground = target.getBackground();
             nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
             animationProbe = new SystemUiHandleMenuAnimationProbe(root, sourceRoot, target);
-            scaleListener = this::onNativeSurfaceScale;
+            alphaListener = this::onNativeSurfaceAlpha;
         }
 
         void start() {
             root.addOnAttachStateChangeListener(this);
             animationProbe.start();
             if (controller != null) CONTROLLERS.put(controller, this);
-            if (waitForNativeSurfaceScale) {
-                pendingTextureScale = 0.05f;
-            }
+            pendingSurfaceAlpha = trackNativeSurfaceAnimation ? 0f : 1f;
             applyReplacementBlur();
-            if (waitForNativeSurfaceScale) {
-                SystemUiHandleMenuSurfaceProbe.registerScaleListener(menuSurface, scaleListener);
-                log("replacement blur tracking native menu surface scale surface=" + menuSurface);
+            if (trackNativeSurfaceAnimation) {
+                SystemUiHandleMenuSurfaceProbe.registerAlphaListener(menuSurface, alphaListener);
+                log("replacement blur tracking native menu surface alpha surface=" + menuSurface);
             }
         }
 
-        private void onNativeSurfaceScale(float scaleX, float scaleY) {
+        private void onNativeSurfaceAlpha(float alpha) {
             if (released) return;
-            pendingTextureScale = Math.max(0.05f, Math.min(1.0f, Math.min(scaleX, scaleY)));
-            postTextureScaleUpdate();
+            pendingSurfaceAlpha = Math.max(0f, Math.min(1f, alpha));
+            postFadeUpdate();
         }
 
-        private void postTextureScaleUpdate() {
-            if (released || !replacementBlurApplied || !customPassBlurOwned
-                    || !dynamicTextureScaleAvailable) return;
-            if (!textureScalePostPending.compareAndSet(false, true)) return;
+        private void postFadeUpdate() {
+            if (released || !replacementBlurApplied || !customPassBlurOwned || fadeUpdatePosted) {
+                return;
+            }
+            fadeUpdatePosted = true;
             boolean posted = root.post(() -> {
-                float appliedScale = pendingTextureScale;
                 try {
                     if (!released && replacementBlurApplied && customPassBlurOwned) {
-                        MiBlurBridge.setPassTextureScale(target, appliedScale);
+                        applyBlurFade(pendingSurfaceAlpha);
                     }
                 } finally {
-                    textureScalePostPending.set(false);
-                }
-                if (!released && Math.abs(pendingTextureScale - appliedScale) > 0.0005f) {
-                    postTextureScaleUpdate();
+                    fadeUpdatePosted = false;
                 }
             });
             if (!posted) {
-                textureScalePostPending.set(false);
-                log("dynamic blur texture-scale post rejected target=" + targetLabel(target));
+                fadeUpdatePosted = false;
+                log("blur fade post rejected target=" + targetLabel(target));
+            }
+        }
+
+        private void applyBlurFade(float surfaceAlpha) {
+            // Keep the backdrop nearly invisible through most of the geometric scale animation,
+            // then fade it in smoothly near the settled size. The same curve naturally reverses
+            // during close because HyperOS drives alpha from 1 -> 0.
+            float t = (surfaceAlpha - 0.80f) / 0.20f;
+            t = Math.max(0f, Math.min(1f, t));
+            float eased = t * t * (3f - (2f * t));
+            int radius = Math.round(nativeBlurRadiusPx * eased);
+            if (radius == lastAppliedBlurRadius) return;
+            if (MiBlurBridge.setPassWindowBlurRadius(target, radius)) {
+                lastAppliedBlurRadius = radius;
             }
         }
 
@@ -388,7 +396,8 @@ final class SystemUiHandleMenuGlassHook {
             if (released || replacementBlurApplied || !root.isAttachedToWindow()
                     || !target.isAttachedToWindow()) return;
 
-            boolean applied = MiBlurBridge.applyPassWindowBlur(target, nativeBlurRadiusPx);
+            int initialRadius = trackNativeSurfaceAnimation ? 0 : nativeBlurRadiusPx;
+            boolean applied = MiBlurBridge.applyPassWindowBlur(target, initialRadius);
             if (!applied) {
                 log("replacement pass-window blur unavailable; stock retained"
                         + " target=" + targetLabel(target));
@@ -396,27 +405,23 @@ final class SystemUiHandleMenuGlassHook {
             }
             replacementBlurApplied = true;
             customPassBlurOwned = true;
-            dynamicTextureScaleAvailable =
-                    MiBlurBridge.setPassTextureScale(target, pendingTextureScale);
+            lastAppliedBlurRadius = initialRadius;
             target.setBackground(null);
             target.invalidate();
-            log("replacement pass-window blur presented before surface animation target="
+            log("replacement pass-window blur armed before surface animation target="
                     + targetLabel(target)
-                    + " blur=" + nativeBlurRadiusPx
-                    + " textureScale=" + pendingTextureScale
-                    + " dynamicTextureScale=" + dynamicTextureScaleAvailable
+                    + " maxBlur=" + nativeBlurRadiusPx
+                    + " initialBlur=" + initialRadius
+                    + " fadeStartAlpha=0.80"
                     + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         }
 
         private void restoreStockBackground() {
             if (customPassBlurOwned) {
-                if (dynamicTextureScaleAvailable) {
-                    MiBlurBridge.setPassTextureScale(target, 1.0f);
-                }
                 MiBlurBridge.clearPassWindowBlur(target);
-                dynamicTextureScaleAvailable = false;
                 customPassBlurOwned = false;
             }
+            lastAppliedBlurRadius = -1;
             replacementBlurApplied = false;
             if (target.getBackground() == null && stockBackground != null) {
                 target.setBackground(stockBackground);
@@ -432,8 +437,8 @@ final class SystemUiHandleMenuGlassHook {
                 CONTROLLERS.remove(controller);
             }
             if (menuSurface != null) {
-                SystemUiHandleMenuSurfaceProbe.unregisterScaleListener(
-                        menuSurface, scaleListener);
+                SystemUiHandleMenuSurfaceProbe.unregisterAlphaListener(
+                        menuSurface, alphaListener);
             }
             restoreStockBackground();
         }
