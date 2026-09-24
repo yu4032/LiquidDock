@@ -54,16 +54,14 @@ final class ShortcutPopupVendorMaterialBridge {
 
     static Claim claim(View popupView, View contentView) {
         if (!AVAILABLE || popupView == null || contentView == null) return null;
-        boolean advancedMaterial = false;
         Method prepareHyperMaterial = null;
         try {
-            Method isMaterialEnabled = popupView.getClass().getMethod("isMaterialEnabled");
-            Object enabled = isMaterialEnabled.invoke(popupView);
-            if (!(enabled instanceof Boolean)) return null;
-            advancedMaterial = (Boolean) enabled;
-            prepareHyperMaterial = advancedMaterial
-                    ? popupView.getClass().getMethod("prepareHyperMaterial")
-                    : null;
+            // Do not query isMaterialEnabled() here. On the actual Launcher 4.50 build that
+            // member is not publicly exposed even though JADX reconstructs it as public.
+            // prepareHyperMaterial() is the vendor's own idempotent material gate: when called
+            // on restore it internally decides whether to apply or clear advanced material.
+            prepareHyperMaterial = HookUtil.findMethodExact(
+                    popupView.getClass(), "prepareHyperMaterial", new Class<?>[0]);
 
             // Do not touch pass-window enable. PopupView uses it as the gate for the parent
             // mMenuLayer background-only blur that remains our real backdrop substrate.
@@ -73,14 +71,13 @@ final class ShortcutPopupVendorMaterialBridge {
             invoke(SET_MI_BLOOM_STROKE, contentView, (Object) new float[21]);
             contentView.invalidate();
 
-            MainHook.log(TAG + " custom material claimed advanced=" + advancedMaterial
+            MainHook.log(TAG + " custom material claimed"
                     + " target=" + contentView.getClass().getName()
                     + " parent=" + (contentView.getParent() != null
                             ? contentView.getParent().getClass().getName() : "null"));
-            return new Claim(popupView, prepareHyperMaterial, advancedMaterial);
+            return new Claim(popupView, prepareHyperMaterial);
         } catch (Throwable error) {
-            if (advancedMaterial && prepareHyperMaterial != null
-                    && popupView.isAttachedToWindow()) {
+            if (prepareHyperMaterial != null && popupView.isAttachedToWindow()) {
                 try {
                     prepareHyperMaterial.invoke(popupView);
                 } catch (Throwable restoreError) {
@@ -96,9 +93,7 @@ final class ShortcutPopupVendorMaterialBridge {
         if (claim == null || claim.restored) return;
         claim.restored = true;
         View popupView = claim.popupRef.get();
-        if (!claim.advancedMaterial || popupView == null || !popupView.isAttachedToWindow()) {
-            return;
-        }
+        if (popupView == null || !popupView.isAttachedToWindow()) return;
         try {
             claim.prepareHyperMaterial.invoke(popupView);
             MainHook.log(TAG + " vendor advanced material restored");
@@ -110,13 +105,11 @@ final class ShortcutPopupVendorMaterialBridge {
     static final class Claim {
         final WeakReference<View> popupRef;
         final Method prepareHyperMaterial;
-        final boolean advancedMaterial;
         boolean restored;
 
-        Claim(View popupView, Method prepareHyperMaterial, boolean advancedMaterial) {
+        Claim(View popupView, Method prepareHyperMaterial) {
             this.popupRef = new WeakReference<>(popupView);
             this.prepareHyperMaterial = prepareHyperMaterial;
-            this.advancedMaterial = advancedMaterial;
         }
     }
 
