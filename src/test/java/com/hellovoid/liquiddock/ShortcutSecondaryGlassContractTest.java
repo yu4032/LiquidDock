@@ -36,6 +36,14 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("RuntimeShader"));
         assertTrue(effect.contains("RenderEffect.createRuntimeShaderEffect"));
         assertTrue(effect.contains("MiBlurBridge.applyBackdropRenderEffect"));
+        assertTrue(effect.contains("MiBlurBridge.captureBackdropRenderEffectState"));
+        assertTrue(effect.contains("MiBlurBridge.restoreBackdropRenderEffect"));
+        assertTrue(effect.contains("originalBackground"));
+        assertTrue(effect.contains("originalOutlineProvider"));
+        assertTrue(effect.contains("originalClipToOutline"));
+        assertTrue(effect.contains("target.setBackground(originalBackground)"));
+        assertTrue(effect.contains("target.setOutlineProvider(originalOutlineProvider)"));
+        assertTrue(effect.contains("target.setClipToOutline(originalClipToOutline)"));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
         assertFalse(effect.contains("RootPassBlurBackend"));
@@ -52,6 +60,12 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
         assertTrue(bridge.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
         assertTrue(bridge.contains("SET_BACKDROP_RENDER_EFFECT.invoke(view, effect)"));
+        assertTrue(bridge.contains("\"getMiBackgroundBlurMode\""));
+        assertTrue(bridge.contains("\"getMiBackgroundBlurRadius\""));
+        assertTrue(bridge.contains("\"getMiBackgroundBlendColors\""));
+        assertTrue(bridge.contains("\"getPassTextureScale\""));
+        assertTrue(bridge.contains("class BackdropRenderEffectState"));
+        assertTrue(bridge.contains("restoreBackdropRenderEffect("));
 
         assertFalse(domains.contains("SHORTCUT_POPUP"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));

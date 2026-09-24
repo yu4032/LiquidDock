@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 
@@ -157,17 +158,41 @@ final class ShortcutPopupHwuiGlassEffect {
     private final float cornerRadius;
     private final View.OnLayoutChangeListener layoutListener;
     private final ViewOutlineProvider outlineProvider;
+    private final MiBlurBridge.BackdropRenderEffectState originalBlurState;
+    private final Drawable originalBackground;
+    private final ViewOutlineProvider originalOutlineProvider;
+    private final boolean originalClipToOutline;
+    private final int originalPaddingLeft;
+    private final int originalPaddingTop;
+    private final int originalPaddingRight;
+    private final int originalPaddingBottom;
     private boolean disposed;
 
     private ShortcutPopupHwuiGlassEffect(
             View target,
             RuntimeShader shader,
             Miuix307PrismalMaterial.Params params,
-            float cornerRadius) {
+            float cornerRadius,
+            MiBlurBridge.BackdropRenderEffectState originalBlurState,
+            Drawable originalBackground,
+            ViewOutlineProvider originalOutlineProvider,
+            boolean originalClipToOutline,
+            int originalPaddingLeft,
+            int originalPaddingTop,
+            int originalPaddingRight,
+            int originalPaddingBottom) {
         this.target = target;
         this.shader = shader;
         this.params = params;
         this.cornerRadius = cornerRadius;
+        this.originalBlurState = originalBlurState;
+        this.originalBackground = originalBackground;
+        this.originalOutlineProvider = originalOutlineProvider;
+        this.originalClipToOutline = originalClipToOutline;
+        this.originalPaddingLeft = originalPaddingLeft;
+        this.originalPaddingTop = originalPaddingTop;
+        this.originalPaddingRight = originalPaddingRight;
+        this.originalPaddingBottom = originalPaddingBottom;
         this.outlineProvider = new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
                 outline.setRoundRect(
@@ -189,6 +214,20 @@ final class ShortcutPopupHwuiGlassEffect {
                 0.1f, target.getResources().getDisplayMetrics().density);
         Miuix307PrismalMaterial.Params params =
                 Miuix307PrismalMaterial.fromConfig(glassConfig, density);
+        MiBlurBridge.BackdropRenderEffectState originalBlurState =
+                MiBlurBridge.captureBackdropRenderEffectState(target);
+        if (originalBlurState == null) {
+            MainHook.log(TAG + " reversible vendor blur state unavailable; stock material retained");
+            return null;
+        }
+        Drawable originalBackground = target.getBackground();
+        ViewOutlineProvider originalOutlineProvider = target.getOutlineProvider();
+        boolean originalClipToOutline = target.getClipToOutline();
+        int originalPaddingLeft = target.getPaddingLeft();
+        int originalPaddingTop = target.getPaddingTop();
+        int originalPaddingRight = target.getPaddingRight();
+        int originalPaddingBottom = target.getPaddingBottom();
+        ShortcutPopupHwuiGlassEffect binding = null;
         try {
             RuntimeShader shader = new RuntimeShader(AGSL);
             RenderEffect effect =
@@ -200,26 +239,46 @@ final class ShortcutPopupHwuiGlassEffect {
                             glassConfig.passBlurCaptureScalePercent)
                     : PassBlurQualityPolicy.captureScale(
                             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT);
+            binding = new ShortcutPopupHwuiGlassEffect(
+                    target,
+                    shader,
+                    params,
+                    Math.max(0f, cornerRadius),
+                    originalBlurState,
+                    originalBackground,
+                    originalOutlineProvider,
+                    originalClipToOutline,
+                    originalPaddingLeft,
+                    originalPaddingTop,
+                    originalPaddingRight,
+                    originalPaddingBottom);
             if (!MiBlurBridge.applyBackdropRenderEffect(
                     target, effect, blurRadius, textureScale)) {
+                binding.restoreTargetState();
                 return null;
             }
 
-            ShortcutPopupHwuiGlassEffect binding =
-                    new ShortcutPopupHwuiGlassEffect(
-                            target, shader, params, Math.max(0f, cornerRadius));
             binding.applyStaticUniforms();
             binding.updateGeometry();
             target.setOutlineProvider(binding.outlineProvider);
             target.setClipToOutline(true);
             target.setBackgroundColor(Color.TRANSPARENT);
+            target.setPadding(
+                    originalPaddingLeft,
+                    originalPaddingTop,
+                    originalPaddingRight,
+                    originalPaddingBottom);
             target.addOnLayoutChangeListener(binding.layoutListener);
             MainHook.log(TAG + " attached target=" + target.getClass().getName()
                     + " size=" + target.getWidth() + "x" + target.getHeight()
                     + " blur=" + blurRadius + " scale=" + textureScale);
             return binding;
         } catch (Throwable error) {
-            MiBlurBridge.clearBackdropRenderEffect(target);
+            if (binding != null) {
+                binding.restoreTargetState();
+            } else {
+                MiBlurBridge.restoreBackdropRenderEffect(target, originalBlurState);
+            }
             MainHook.log(TAG + " unavailable; stock material retained: " + error);
             return null;
         }
@@ -228,11 +287,29 @@ final class ShortcutPopupHwuiGlassEffect {
     void dispose() {
         if (disposed) return;
         disposed = true;
+        restoreTargetState();
+        MainHook.log(TAG + " detached");
+    }
+
+    private void restoreTargetState() {
         try {
             target.removeOnLayoutChangeListener(layoutListener);
         } catch (Throwable ignored) {}
-        MiBlurBridge.clearBackdropRenderEffect(target);
-        MainHook.log(TAG + " detached");
+        MiBlurBridge.restoreBackdropRenderEffect(target, originalBlurState);
+        try {
+            target.setBackground(originalBackground);
+            target.setPadding(
+                    originalPaddingLeft,
+                    originalPaddingTop,
+                    originalPaddingRight,
+                    originalPaddingBottom);
+        } catch (Throwable ignored) {}
+        try {
+            target.setOutlineProvider(originalOutlineProvider);
+            target.setClipToOutline(originalClipToOutline);
+            target.invalidateOutline();
+        } catch (Throwable ignored) {}
+        target.invalidate();
     }
 
     private void applyStaticUniforms() {

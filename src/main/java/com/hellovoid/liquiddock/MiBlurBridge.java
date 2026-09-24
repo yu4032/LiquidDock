@@ -20,6 +20,10 @@ final class MiBlurBridge {
     // Realtime pass-window/background blur used by the MiuiX dock.
     private static final Method SET_PASS_WINDOW_BLUR_ENABLED;
     private static final Method GET_PASS_WINDOW_BLUR_ENABLED;
+    private static final Method GET_MI_BACKGROUND_BLUR_MODE;
+    private static final Method GET_MI_BACKGROUND_BLUR_RADIUS;
+    private static final Method GET_MI_BACKGROUND_BLEND_COLORS;
+    private static final Method GET_PASS_TEXTURE_SCALE;
     private static final Method SET_MI_VIEW_BLUR_MODE;
     private static final Method SET_MI_BACKGROUND_BLUR_MODE;
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
@@ -70,13 +74,26 @@ final class MiBlurBridge {
         } catch (Throwable ignored) {
             // Some older builds expose only self blur. MiuiX caller will fall back cleanly.
         }
+        Method backgroundModeGetter = null;
+        Method backgroundRadiusGetter = null;
+        Method backgroundBlendColorsGetter = null;
+        Method passTextureScaleGetter = null;
         try {
             passEnabledGetter = View.class.getMethod("getPassWindowBlurEnabled");
+            backgroundModeGetter = View.class.getMethod("getMiBackgroundBlurMode");
+            backgroundRadiusGetter = View.class.getMethod("getMiBackgroundBlurRadius");
+            backgroundBlendColorsGetter = View.class.getMethod("getMiBackgroundBlendColors");
+            passTextureScaleGetter = View.class.getMethod("getPassTextureScale");
         } catch (Throwable ignored) {
-            // Optional state read used for reversible vendor-material ownership handoff.
+            // A replacement path may only claim vendor material when the complete original state
+            // can be read back and restored exactly.
         }
         SET_PASS_WINDOW_BLUR_ENABLED = passEnabled;
         GET_PASS_WINDOW_BLUR_ENABLED = passEnabledGetter;
+        GET_MI_BACKGROUND_BLUR_MODE = backgroundModeGetter;
+        GET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadiusGetter;
+        GET_MI_BACKGROUND_BLEND_COLORS = backgroundBlendColorsGetter;
+        GET_PASS_TEXTURE_SCALE = passTextureScaleGetter;
         SET_MI_VIEW_BLUR_MODE = viewBlurMode;
         SET_MI_BACKGROUND_BLUR_MODE = backgroundMode;
         SET_MI_BACKGROUND_BLUR_RADIUS = backgroundRadius;
@@ -98,6 +115,27 @@ final class MiBlurBridge {
     }
 
     private MiBlurBridge() {}
+
+    static final class BackdropRenderEffectState {
+        final boolean passWindowBlurEnabled;
+        final int backgroundBlurMode;
+        final int backgroundBlurRadius;
+        final float passTextureScale;
+        final ArrayList<Point> backgroundBlendColors;
+
+        BackdropRenderEffectState(
+                boolean passWindowBlurEnabled,
+                int backgroundBlurMode,
+                int backgroundBlurRadius,
+                float passTextureScale,
+                ArrayList<Point> backgroundBlendColors) {
+            this.passWindowBlurEnabled = passWindowBlurEnabled;
+            this.backgroundBlurMode = backgroundBlurMode;
+            this.backgroundBlurRadius = backgroundBlurRadius;
+            this.passTextureScale = passTextureScale;
+            this.backgroundBlendColors = backgroundBlendColors;
+        }
+    }
 
     static boolean isAvailable() {
         return LEGACY_AVAILABLE;
@@ -143,6 +181,47 @@ final class MiBlurBridge {
             // when one repair attempt fails.
             MainHook.log("[DC] pass window blur radius repair failed: " + e);
             return false;
+        }
+    }
+
+    static BackdropRenderEffectState captureBackdropRenderEffectState(View view) {
+        if (!PASS_BLUR_AVAILABLE || view == null
+                || GET_PASS_WINDOW_BLUR_ENABLED == null
+                || GET_MI_BACKGROUND_BLUR_MODE == null
+                || GET_MI_BACKGROUND_BLUR_RADIUS == null
+                || GET_MI_BACKGROUND_BLEND_COLORS == null
+                || GET_PASS_TEXTURE_SCALE == null
+                || SET_PASS_TEXTURE_SCALE == null) {
+            return null;
+        }
+        try {
+            Object passEnabled = GET_PASS_WINDOW_BLUR_ENABLED.invoke(view);
+            Object mode = GET_MI_BACKGROUND_BLUR_MODE.invoke(view);
+            Object radius = GET_MI_BACKGROUND_BLUR_RADIUS.invoke(view);
+            Object scale = GET_PASS_TEXTURE_SCALE.invoke(view);
+            Object blendColors = GET_MI_BACKGROUND_BLEND_COLORS.invoke(view);
+            if (!(passEnabled instanceof Boolean)
+                    || !(mode instanceof Number)
+                    || !(radius instanceof Number)
+                    || !(scale instanceof Number)
+                    || !(blendColors instanceof ArrayList)) {
+                return null;
+            }
+            ArrayList<Point> colors = new ArrayList<>();
+            for (Object entry : (ArrayList<?>) blendColors) {
+                if (!(entry instanceof Point)) return null;
+                Point point = (Point) entry;
+                colors.add(new Point(point.x, point.y));
+            }
+            return new BackdropRenderEffectState(
+                    (Boolean) passEnabled,
+                    ((Number) mode).intValue(),
+                    ((Number) radius).intValue(),
+                    ((Number) scale).floatValue(),
+                    colors);
+        } catch (Throwable error) {
+            MainHook.log("[DC] backdrop material state capture failed: " + error);
+            return null;
         }
     }
 
@@ -231,10 +310,51 @@ final class MiBlurBridge {
             view.invalidate();
             return true;
         } catch (Throwable error) {
-            clearBackdropRenderEffect(view);
+            // The caller owns the pre-claim snapshot and performs the symmetric rollback. Do not
+            // clear unknown vendor state here after a partially successful reflective sequence.
             MainHook.log("[DC] HWUI backdrop effect unavailable: " + error);
             return false;
         }
+    }
+
+    static void restoreBackdropRenderEffect(
+            View view, BackdropRenderEffectState state) {
+        if (view == null || state == null) return;
+
+        if (SET_BACKDROP_RENDER_EFFECT != null) {
+            try {
+                SET_BACKDROP_RENDER_EFFECT.invoke(view, new Object[]{null});
+            } catch (Throwable ignored) {}
+        }
+
+        if (!state.passWindowBlurEnabled) {
+            try {
+                SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, false);
+            } catch (Throwable ignored) {}
+        }
+        try {
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, state.backgroundBlurMode);
+        } catch (Throwable ignored) {}
+        try {
+            SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, state.backgroundBlurRadius);
+        } catch (Throwable ignored) {}
+        try {
+            SET_PASS_TEXTURE_SCALE.invoke(view, state.passTextureScale);
+        } catch (Throwable ignored) {}
+        try {
+            if (state.backgroundBlendColors.isEmpty()) {
+                CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
+            } else {
+                SET_MI_BACKGROUND_BLEND_COLORS.invoke(
+                        view, new ArrayList<>(state.backgroundBlendColors));
+            }
+        } catch (Throwable ignored) {}
+        if (state.passWindowBlurEnabled) {
+            try {
+                SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
+            } catch (Throwable ignored) {}
+        }
+        view.invalidate();
     }
 
     static void clearBackdropRenderEffect(View view) {
