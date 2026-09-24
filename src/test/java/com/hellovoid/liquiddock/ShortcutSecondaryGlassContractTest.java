@@ -12,7 +12,8 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuRequiresFrozenWorkspaceBeforeNativeShow() throws Exception {
+    @Test public void shortcutMenuUsesContinuousWorkspaceSourceWithSelfExclusions()
+            throws Exception {
         String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
@@ -22,32 +23,29 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("\"setRequestingItemInfo\""));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
         assertTrue(hook.contains("ownerView.getRootView()"));
-        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.acceptPreShowBackdrop()"));
-        assertTrue(hook.contains(
-                "boolean glassReady = !popupGlassEnabled\n"
-                        + "                        || ShortcutPopupGlassCoordinator.acceptPreShowBackdrop();\n"
-                        + "                Object result = chain.proceed"));
-        assertTrue(hook.contains("popupGlassEnabled && glassReady"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
 
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
-        assertTrue(coordinator.contains("static synchronized boolean acceptPreShowBackdrop()"));
-        assertTrue(coordinator.contains("!state.session.hasFrozenBackdrop()"));
-        assertTrue(coordinator.contains("releaseLocked(\"pre-show-backdrop-not-ready\")"));
-        assertTrue(coordinator.contains("state.session == null"));
         assertTrue(coordinator.contains("ensurePopupOutput(state)"));
-        assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
-        assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
-        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
-        assertTrue(coordinator.contains("private static void onPresented(State state)"));
-        assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
+        assertTrue(coordinator.contains("hasPreparedBackdrop()"));
+        assertFalse(coordinator.contains("acceptPreShowBackdrop"));
+        assertFalse(coordinator.contains("pre-show-backdrop-not-ready"));
 
         assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
-        assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
-        assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
-        assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
-        assertFalse(hook.contains("attachToExternalMaterial"));
+        assertTrue(session.contains("setUpdatesEnabled(true, \"shortcut-popup-live\")"));
+        assertTrue(session.contains("live workspace frames="));
+        assertFalse(session.contains("shortcut-popup-frozen"));
+        assertFalse(session.contains("setUpdatesEnabled(false"));
+
+        assertTrue(request.contains("SHORTCUT_POPUP_EXTRA_EXCLUSIONS"));
+        assertTrue(request.contains("\"ShortcutMenuLayer\""));
+        assertTrue(request.contains("\"PopupView\""));
+        assertTrue(request.contains("\"ShortcutPopupGlassLayer\""));
+        assertTrue(request.contains("\"TextureView\""));
+
         assertFalse(hook.contains("postDelayed("));
+        assertFalse(hook.contains("PixelCopy"));
+        assertFalse(hook.contains("Bitmap"));
     }
 
     @Test public void popupDetachDefersCleanupOutsideVendorRemoveViewTraversal() throws Exception {
