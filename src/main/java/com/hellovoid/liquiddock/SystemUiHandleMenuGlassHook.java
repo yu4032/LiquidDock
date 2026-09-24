@@ -307,8 +307,10 @@ final class SystemUiHandleMenuGlassHook {
         final SurfaceControl menuSurface;
         final boolean waitForNativeSurfaceScale;
         final SystemUiHandleMenuSurfaceProbe.ScaleListener scaleListener;
+        final Boolean vendorPassBlurEnabled;
 
         boolean nativeGlassApplied;
+        boolean customPassBlurOwned;
         boolean closing;
         boolean released;
 
@@ -330,6 +332,7 @@ final class SystemUiHandleMenuGlassHook {
             nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
             animationProbe = new SystemUiHandleMenuAnimationProbe(root, sourceRoot, target);
             scaleListener = this::onNativeSurfaceScale;
+            vendorPassBlurEnabled = MiBlurBridge.getPassWindowBlurEnabled(target);
         }
 
         void start() {
@@ -365,6 +368,20 @@ final class SystemUiHandleMenuGlassHook {
         private void applyNativeGlass() {
             if (released || nativeGlassApplied || !root.isAttachedToWindow()
                     || !target.isAttachedToWindow()) return;
+
+            if (Boolean.TRUE.equals(vendorPassBlurEnabled)) {
+                // HyperOS already owns a material configured specifically for this surface-scale
+                // animation. Do not destructively replay/clear its blend state.
+                nativeGlassApplied = true;
+                log("vendor pass-window material retained across native surface animation target="
+                        + targetLabel(target));
+                return;
+            }
+            if (vendorPassBlurEnabled == null) {
+                log("pass-window state unavailable; stock retained target=" + targetLabel(target));
+                return;
+            }
+
             boolean applied = MiBlurBridge.applyPassWindowBlur(target, nativeBlurRadiusPx);
             if (!applied) {
                 log("native pass-window glass unavailable; stock retained"
@@ -372,6 +389,7 @@ final class SystemUiHandleMenuGlassHook {
                 return;
             }
             nativeGlassApplied = true;
+            customPassBlurOwned = true;
             target.setBackground(null);
             target.invalidate();
             log("native pass-window glass presented target=" + targetLabel(target)
@@ -380,11 +398,14 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         private void restoreStockBackground() {
-            if (nativeGlassApplied) {
+            if (customPassBlurOwned) {
                 MiBlurBridge.clearPassWindowBlur(target);
-                nativeGlassApplied = false;
+                customPassBlurOwned = false;
             }
-            if (target.getBackground() == null) target.setBackground(stockBackground);
+            nativeGlassApplied = false;
+            if (target.getBackground() == null && stockBackground != null) {
+                target.setBackground(stockBackground);
+            }
         }
 
         void release() {
