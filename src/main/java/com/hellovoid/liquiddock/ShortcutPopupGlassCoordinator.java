@@ -15,15 +15,10 @@ final class ShortcutPopupGlassCoordinator {
 
     private ShortcutPopupGlassCoordinator() {}
 
-    static synchronized void prewarm(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+    static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        releaseLocked("prepare-replace");
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
-        State existing = current;
-        if (existing != null && !existing.released
-                && existing.captureRootRef.get() == captureRoot) {
-            return;
-        }
-        releaseLocked("prewarm-replace");
         State state = new State(captureRoot, glassConfig);
         current = state;
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
@@ -40,17 +35,6 @@ final class ShortcutPopupGlassCoordinator {
                 });
         state.sourceOverlay = overlay;
         if (overlay == null) releaseLocked("source-overlay-unavailable");
-    }
-
-    static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        prewarm(captureRoot, glassConfig);
-        State state = current;
-        if (state == null || state.released || state.captureRootRef.get() != captureRoot) return;
-        ShortcutPopupGlassSession session = state.session;
-        if (session != null) {
-            session.requestInitialCapture();
-            MainHook.log(TAG + " prewarmed workspace refresh requested");
-        }
     }
 
     private static void startSession(State state, ShortcutPopupSourceOverlay sourceRoot) {
@@ -70,26 +54,15 @@ final class ShortcutPopupGlassCoordinator {
                         }
                     });
             state.session.requestInitialCapture();
-            MainHook.log(TAG + " idle workspace baseline requested");
+            boolean outputReady = ensurePopupOutput(state);
+            MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
         }
-    }
-
-    static synchronized boolean acceptPreShowBackdrop() {
-        State state = current;
-        if (state == null || state.released || state.session == null) return false;
-        boolean ready = state.session.sealForShow();
-        if (!ready) {
-            releaseLocked("pre-show-backdrop-not-ready");
-        }
-        return ready;
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
-        if (state == null || state.released || state.session == null
-                || !state.session.hasFrozenBackdrop()
-                || state.captureRootRef.get() != liveRoot
+        if (state == null || state.released || state.captureRootRef.get() != liveRoot
                 || popupView == null || contentView == null || !(decorView instanceof ViewGroup)) {
             return false;
         }
@@ -253,10 +226,6 @@ final class ShortcutPopupGlassCoordinator {
         current = null;
         if (state == null || state.released) return;
         state.released = true;
-        View prewarmRoot = state.captureRootRef.get();
-        LiquidDockConfig.Glass prewarmConfig = state.glassConfig;
-        boolean rewarmAfterRelease = "popup-detached".equals(reason)
-                || "popup-dismissed".equals(reason);
         View popup = state.popupRef.get();
         if (popup != null && state.popupDetachListener != null) {
             try { popup.removeOnAttachStateChangeListener(state.popupDetachListener); }
@@ -281,9 +250,6 @@ final class ShortcutPopupGlassCoordinator {
         state.sourceOverlay = null;
         if (source != null) source.dispose();
         MainHook.log(TAG + " released reason=" + reason);
-        if (rewarmAfterRelease && prewarmRoot != null && prewarmRoot.isAttachedToWindow()) {
-            prewarmRoot.post(() -> prewarm(prewarmRoot, prewarmConfig));
-        }
     }
 
     private static float resolveShortcutMenuCornerRadius(View contentView) {
