@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
 import android.view.View;
+import android.view.ViewGroup;
 
 /**
  * ShortcutMenu glass rendered inside the popup RenderNode.
@@ -148,92 +149,142 @@ final class ShortcutPopupHwuiGlassEffect {
             }
             """;
 
-    private final View target;
+    private final ViewGroup contentView;
+    private final View glassLayer;
     private final RuntimeShader shader;
     private final Miuix307PrismalMaterial.Params params;
     private final float cornerRadius;
     private final View.OnLayoutChangeListener layoutListener;
-    private final MiBlurBridge.BackdropRenderEffectState originalBlurState;
     private boolean disposed;
 
     private ShortcutPopupHwuiGlassEffect(
-            View target,
+            ViewGroup contentView,
+            View glassLayer,
             RuntimeShader shader,
             Miuix307PrismalMaterial.Params params,
-            float cornerRadius,
-            MiBlurBridge.BackdropRenderEffectState originalBlurState) {
-        this.target = target;
+            float cornerRadius) {
+        this.contentView = contentView;
+        this.glassLayer = glassLayer;
         this.shader = shader;
         this.params = params;
         this.cornerRadius = cornerRadius;
-        this.originalBlurState = originalBlurState;
         this.layoutListener = (v, left, top, right, bottom,
                                oldLeft, oldTop, oldRight, oldBottom) -> updateGeometry();
     }
 
     static ShortcutPopupHwuiGlassEffect attach(
             View target, LiquidDockConfig.Glass glassConfig, float cornerRadius) {
-        if (target == null || !target.isAttachedToWindow()) return null;
+        if (!(target instanceof ViewGroup) || !target.isAttachedToWindow()) return null;
+        ViewGroup contentView = (ViewGroup) target;
         float density = Math.max(
                 0.1f, target.getResources().getDisplayMetrics().density);
         Miuix307PrismalMaterial.Params params =
                 Miuix307PrismalMaterial.fromConfig(glassConfig, density);
-        MiBlurBridge.BackdropRenderEffectState originalBlurState =
+        MiBlurBridge.BackdropRenderEffectState vendorState =
                 MiBlurBridge.captureBackdropRenderEffectState(target);
-        if (originalBlurState == null) {
-            MainHook.log(TAG + " reversible vendor blur state unavailable; stock material retained");
+        if (vendorState == null) {
+            MainHook.log(TAG + " vendor blur state unavailable; stock material retained");
             return null;
         }
+
+        int blurRadius = resolveBackdropRadius(target, vendorState, density);
+        View glassLayer = new View(target.getContext());
+        glassLayer.setClickable(false);
+        glassLayer.setFocusable(false);
+        glassLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        glassLayer.setSaveEnabled(false);
+
         ShortcutPopupHwuiGlassEffect binding = null;
+        boolean added = false;
         try {
             RuntimeShader shader = new RuntimeShader(AGSL);
             RenderEffect effect =
                     RenderEffect.createRuntimeShaderEffect(shader, BACKDROP);
             binding = new ShortcutPopupHwuiGlassEffect(
-                    target,
+                    contentView,
+                    glassLayer,
                     shader,
                     params,
-                    Math.max(0f, cornerRadius),
-                    originalBlurState);
-            if (!MiBlurBridge.applyBackdropRenderEffect(target, effect)) {
-                binding.restoreTargetState();
+                    Math.max(0f, cornerRadius));
+
+            // Put the blur/material plane inside mContentView at index 0. It therefore inherits
+            // PopupAnimHelper transforms automatically while all launcher text/icons remain
+            // above it and are never processed by the optical RenderEffect.
+            contentView.addView(
+                    glassLayer,
+                    0,
+                    new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
+            added = true;
+
+            // Xiaomi's pass-window + background/view blur is the real backdrop producer/consumer.
+            // The standard RenderEffect is deliberately a *foreground* post-process of this owned
+            // background plane; it no longer tries to read Xiaomi's private pass texture as an
+            // Android BackdropRenderEffect child shader.
+            if (!MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)) {
+                binding.disposeOwnedLayer();
                 return null;
             }
+            glassLayer.setRenderEffect(effect);
 
             binding.applyStaticUniforms();
             binding.updateGeometry();
-            target.addOnLayoutChangeListener(binding.layoutListener);
-            MainHook.log(TAG + " attached target=" + target.getClass().getName()
-                    + " size=" + target.getWidth() + "x" + target.getHeight()
-                    + " vendorMode=" + originalBlurState.backgroundBlurMode
-                    + " vendorRadius=" + originalBlurState.backgroundBlurRadius
-                    + " pass=" + originalBlurState.passWindowBlurEnabled
-                    + " blends=" + originalBlurState.backgroundBlendColors.size());
+            contentView.addOnLayoutChangeListener(binding.layoutListener);
+            MainHook.log(TAG + " layer attached size="
+                    + target.getWidth() + "x" + target.getHeight()
+                    + " sourceMode=" + vendorState.backgroundBlurMode
+                    + " sourceRadius=" + vendorState.backgroundBlurRadius
+                    + " layerRadius=" + blurRadius
+                    + " sourcePass=" + vendorState.passWindowBlurEnabled
+                    + " sourceViewMode=" + vendorState.viewBlurMode);
             return binding;
         } catch (Throwable error) {
             if (binding != null) {
-                binding.restoreTargetState();
-            } else {
-                MiBlurBridge.restoreBackdropRenderEffect(target, originalBlurState);
+                binding.disposeOwnedLayer();
+            } else if (added) {
+                try { contentView.removeView(glassLayer); } catch (Throwable ignored) {}
             }
-            MainHook.log(TAG + " unavailable; stock material retained: " + error);
+            MainHook.log(TAG + " layer unavailable; stock material retained: " + error);
             return null;
         }
+    }
+
+    private static int resolveBackdropRadius(
+            View target, MiBlurBridge.BackdropRenderEffectState state, float density) {
+        if (state.backgroundBlurRadius > 0) return state.backgroundBlurRadius;
+        try {
+            int id = target.getResources().getIdentifier(
+                    "shortcut_menu_blur_radius", "dimen", "com.miui.home");
+            if (id != 0) {
+                int px = target.getResources().getDimensionPixelSize(id);
+                if (px > 0) return Math.min(400, px);
+            }
+        } catch (Throwable ignored) {}
+        return Math.min(400, Math.max(1, Math.round(40f * density)));
     }
 
     void dispose() {
         if (disposed) return;
         disposed = true;
-        restoreTargetState();
-        MainHook.log(TAG + " detached");
+        disposeOwnedLayer();
+        MainHook.log(TAG + " layer detached");
     }
 
-    private void restoreTargetState() {
+    private void disposeOwnedLayer() {
         try {
-            target.removeOnLayoutChangeListener(layoutListener);
+            contentView.removeOnLayoutChangeListener(layoutListener);
         } catch (Throwable ignored) {}
-        MiBlurBridge.restoreBackdropRenderEffect(target, originalBlurState);
-        target.invalidate();
+        try {
+            glassLayer.setRenderEffect(null);
+        } catch (Throwable ignored) {}
+        MiBlurBridge.clearPassWindowBlur(glassLayer);
+        try {
+            if (glassLayer.getParent() == contentView) {
+                contentView.removeView(glassLayer);
+            }
+        } catch (Throwable ignored) {}
+        contentView.invalidate();
     }
 
     private void applyStaticUniforms() {
@@ -263,8 +314,8 @@ final class ShortcutPopupHwuiGlassEffect {
         if (disposed) return;
         shader.setFloatUniform(
                 "u_size",
-                Math.max(1f, target.getWidth()),
-                Math.max(1f, target.getHeight()));
-        target.invalidate();
+                Math.max(1f, contentView.getWidth()),
+                Math.max(1f, contentView.getHeight()));
+        glassLayer.invalidate();
     }
 }
