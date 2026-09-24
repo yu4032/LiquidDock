@@ -15,15 +15,9 @@ import java.lang.reflect.Method;
 /**
  * Native MIUIX night-resource bridge for Launcher uninstall dialogs.
  *
- * <p>The authoritative boundary is {@code AlertController(Context, AppCompatDialog, Window)}.
- * MIUIX stores this Context, resolves {@code alertDialogStyle} from it, inflates the entire dialog
- * hierarchy with it, and later uses the resulting text colors / night configuration to select the
- * day/night material token. Spoofing AlertDialog after construction is therefore too late.</p>
- *
- * <p>While an exact BaseUninstallDialog constructor is active, this bridge replaces only the
- * AlertController Context with the same MIUIX dialog theme reapplied on a night-configuration
- * Context. No text color, button tint, drawable, icon, selector, or Prismal color is modified by
- * LiquidDock.</p>
+ * <p>While an exact BaseUninstallDialog constructor is active, the MIUIX AlertController and
+ * Launcher uninstall content are created from the same dialog theme on a night configuration.
+ * Native resources remain the sole authority for text, buttons, icons and selectors.</p>
  */
 final class LauncherDialogNativeNightBridge {
     private static final String TAG = "[DC][LauncherDialogNativeNight]";
@@ -54,38 +48,24 @@ final class LauncherDialogNativeNightBridge {
                 }
 
                 Context original = (Context) args[0];
-                int originalNight = nightMask(original);
                 int themeResId = resolveThemeResId(original);
                 if (themeResId == 0) {
-                    MainHook.log(TAG + " dialog theme id unavailable; original retained"
-                            + " context=" + original.getClass().getName()
-                            + " night=0x" + Integer.toHexString(originalNight));
+                    MainHook.log(TAG + " dialog theme id unavailable; original context retained");
                     return chain.proceed(args);
                 }
 
                 Context forced = createForcedNightContext(original, themeResId);
                 if (forced == null) {
-                    MainHook.log(TAG + " forced night context unavailable; original retained"
-                            + " context=" + original.getClass().getName()
-                            + " theme=0x" + Integer.toHexString(themeResId));
+                    MainHook.log(TAG + " forced night context unavailable; original context retained");
                     return chain.proceed(args);
                 }
 
                 args[0] = forced;
-                MainHook.log(TAG + " injected AlertController context"
-                        + " original=" + original.getClass().getName()
-                        + " forced=" + forced.getClass().getName()
-                        + " theme=0x" + Integer.toHexString(themeResId)
-                        + " night=0x" + Integer.toHexString(originalNight)
-                        + "->0x" + Integer.toHexString(nightMask(forced)));
                 return chain.proceed(args);
             });
 
-            boolean layoutHooks = installUninstallLayoutHooks();
-
+            installUninstallLayoutHooks();
             installed = true;
-            MainHook.log(TAG + " AlertController native-night bridge installed"
-                    + " layoutHooks=" + layoutHooks);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " AlertController bridge unavailable: " + error);
@@ -98,8 +78,7 @@ final class LauncherDialogNativeNightBridge {
      * this exact semantic layout from the same night-qualified context while BaseUninstallDialog
      * is under construction; every other Launcher inflate remains untouched.
      */
-    private static boolean installUninstallLayoutHooks() {
-        int hooked = 0;
+    private static void installUninstallLayoutHooks() {
         try {
             HookUtil.hookMethod(
                     LayoutInflater.class,
@@ -115,7 +94,6 @@ final class LauncherDialogNativeNightBridge {
                                 (LayoutInflater) target, args, false);
                         return replacement != null ? replacement : chain.proceed(args);
                     });
-            hooked++;
         } catch (Throwable error) {
             MainHook.log(TAG + " two-arg uninstall inflate hook unavailable: " + error);
         }
@@ -135,11 +113,9 @@ final class LauncherDialogNativeNightBridge {
                                 (LayoutInflater) target, args, true);
                         return replacement != null ? replacement : chain.proceed(args);
                     });
-            hooked++;
         } catch (Throwable error) {
             MainHook.log(TAG + " three-arg uninstall inflate hook unavailable: " + error);
         }
-        return hooked > 0;
     }
 
     private static boolean shouldInterceptUninstallInflate(Object target, Object[] args) {
@@ -170,8 +146,7 @@ final class LauncherDialogNativeNightBridge {
         if (original == null) return null;
         int themeResId = resolveThemeResId(original);
         if (themeResId == 0) {
-            MainHook.log(TAG + " uninstall layout theme id unavailable; original inflater retained"
-                    + " context=" + original.getClass().getName());
+            MainHook.log(TAG + " uninstall layout theme id unavailable; original inflater retained");
             return null;
         }
         Context forced = createForcedNightContext(original, themeResId);
@@ -188,10 +163,6 @@ final class LauncherDialogNativeNightBridge {
                             root,
                             args.length > 2 && args[2] instanceof Boolean && (Boolean) args[2])
                     : nightInflater.inflate(resourceId, root);
-            MainHook.log(TAG + " inflated native night uninstall content"
-                    + " theme=0x" + Integer.toHexString(themeResId)
-                    + " context=" + original.getClass().getName()
-                    + " night=0x" + Integer.toHexString(nightMask(forced)));
             return result;
         } catch (Throwable error) {
             MainHook.log(TAG + " native night uninstall inflate failed: " + error);
@@ -228,9 +199,7 @@ final class LauncherDialogNativeNightBridge {
             override.uiMode = (override.uiMode & ~Configuration.UI_MODE_NIGHT_MASK)
                     | Configuration.UI_MODE_NIGHT_YES;
 
-            // createConfigurationContext() is deliberately called on MIUIX's actual themed
-            // dialog context, not on the Launcher Activity/Application. The resulting Resources
-            // therefore keep the same package/overlay asset authority while selecting -night.
+            // Keep MIUIX's actual dialog resource/overlay authority while selecting -night.
             Context configured = original.createConfigurationContext(override);
             return new ForcedNightDialogContext(configured, themeResId);
         } catch (Throwable error) {
@@ -239,12 +208,7 @@ final class LauncherDialogNativeNightBridge {
         }
     }
 
-    /**
-     * Recover the theme that MIUIX already selected for this AlertDialog context.
-     *
-     * <p>Do not substitute ActivityInfo/ApplicationInfo.theme here: that was the old failed
-     * approach and drops MIUIX's dialog-specific theme layer.</p>
-     */
+    /** Recover the theme MIUIX selected for this dialog context. */
     private static int resolveThemeResId(Context context) {
         Context current = context;
         for (int depth = 0; depth < 8 && current != null; depth++) {
@@ -293,12 +257,6 @@ final class LauncherDialogNativeNightBridge {
             }
         }
         return 0;
-    }
-
-    private static int nightMask(Context context) {
-        if (context == null || context.getResources() == null) return 0;
-        return context.getResources().getConfiguration().uiMode
-                & Configuration.UI_MODE_NIGHT_MASK;
     }
 
     static final class Scope implements AutoCloseable {
