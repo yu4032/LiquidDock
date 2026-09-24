@@ -357,20 +357,6 @@ final class MiBlurBridge {
         view.invalidate();
     }
 
-    static void clearBackdropRenderEffect(View view) {
-        if (view == null) return;
-        if (SET_BACKDROP_RENDER_EFFECT != null) {
-            try {
-                SET_BACKDROP_RENDER_EFFECT.invoke(view, new Object[]{null});
-            } catch (Throwable ignored) {}
-        }
-        if (SET_PASS_TEXTURE_SCALE != null) {
-            try { SET_PASS_TEXTURE_SCALE.invoke(view, 1f); }
-            catch (Throwable ignored) {}
-        }
-        clearPassWindowBlur(view);
-    }
-
     static void clearPassWindowBlur(View view) {
         if (!PASS_BLUR_AVAILABLE || view == null) return;
         try {
