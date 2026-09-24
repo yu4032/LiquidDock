@@ -113,40 +113,6 @@ final class Miuix307PassBlurShaders {
             """;
 
     /**
-     * Handle Menu source mapping keeps SurfaceTexture's producer crop instead of neutralizing it.
-     * For the caption window that crop encodes the real on-screen backdrop region; cancelling it
-     * shifts the sampled app content even though the logical menu geometry is correct.
-     */
-    static final String HANDLE_MENU_OES_NORMALIZE_FRAGMENT = """
-            #extension GL_OES_EGL_image_external : require
-            precision highp float;
-
-            uniform samplerExternalOES uTexture;
-            uniform mat4 uTexMatrix;
-            uniform vec4 uBackdropRect;
-            uniform int uConfigRot;
-            varying vec2 vUv;
-
-            vec2 orientRootUv(vec2 rootUv) {
-                if (uConfigRot == 1) {
-                    return vec2(rootUv.y, 1.0 - rootUv.x);
-                } else if (uConfigRot == 2) {
-                    return vec2(1.0 - rootUv.x, 1.0 - rootUv.y);
-                } else if (uConfigRot == 3) {
-                    return vec2(1.0 - rootUv.y, rootUv.x);
-                }
-                return rootUv;
-            }
-
-            void main() {
-                vec2 rootUv = uBackdropRect.xy + vUv * uBackdropRect.zw;
-                vec2 orientedUv = orientRootUv(rootUv);
-                vec4 transformed = uTexMatrix * vec4(orientedUv, 0.0, 1.0);
-                gl_FragColor = texture2D(uTexture, transformed.xy);
-            }
-            """;
-
-    /**
      * Current upstream Prismal 31-tap Gaussian kernel, parameterized by direction so the same
      * program can execute the original horizontal and vertical passes.
      */
