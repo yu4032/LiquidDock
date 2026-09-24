@@ -109,6 +109,22 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
+    public void prismalSourceRefreshesContinuouslyWhileMenuIsAttached() throws Exception {
+        String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue(session.contains("sourceRoot.postOnAnimation(this::runContinuousSourceRefresh)"));
+        assertTrue(session.contains("Miuix307PassBlurBridge.resumeUpdates(current)"));
+        assertTrue(session.contains("sourceRoot.postInvalidateOnAnimation()"));
+        assertTrue(session.contains("continuous ViewRoot producer refresh started"));
+        assertTrue(session.contains("if (shuttingDown || !sourceBound || !sourceRoot.isAttachedToWindow()) return;"));
+        assertFalse(session.contains("postDelayed"));
+
+        assertTrue(bridge.contains("PassBlurDomain.SYSTEMUI_HANDLE_MENU"));
+        assertTrue(bridge.contains("setUpdateTextureFlag.invoke("));
+    }
+
+    @Test
     public void prismalStartupCannotMakeCurrentBeforeEglInitialization() throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
