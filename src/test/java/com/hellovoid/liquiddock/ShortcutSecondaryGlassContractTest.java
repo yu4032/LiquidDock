@@ -88,8 +88,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(vendorMaterial.contains("clearMiBackgroundBlendColor"));
         assertTrue(vendorMaterial.contains("setMiBloomStroke"));
         assertTrue(vendorMaterial.contains("new float[21]"));
-        assertTrue(vendorMaterial.contains("isMaterialEnabled"));
-        assertTrue(vendorMaterial.contains("prepareHyperMaterial"));
+        assertFalse(vendorMaterial.contains("getMethod(\"isMaterialEnabled\""));
+        assertTrue(vendorMaterial.contains(
+                "HookUtil.findMethodExact(\n"
+                        + "                    popupView.getClass(), \"prepareHyperMaterial\""));
+        assertTrue(vendorMaterial.contains("prepareHyperMaterial.invoke(popupView)"));
         assertTrue(vendorMaterial.contains("!popupView.isAttachedToWindow()"));
         assertFalse(vendorMaterial.contains("setPassWindowBlurEnabled"));
         assertFalse(vendorMaterial.contains("clearPassWindowBlur"));
