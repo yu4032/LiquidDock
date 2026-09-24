@@ -63,9 +63,6 @@ final class SystemUiHandleMenuPrismalSession {
     private volatile boolean sourceBound;
     private volatile boolean firstFramePresented;
     private volatile boolean sourceFrameReady;
-    private volatile boolean firstSourceFrameLogged;
-    private int sourceFrameCount;
-    private int prismalFrameCount;
     private volatile int width;
     private volatile int height;
 
@@ -242,14 +239,6 @@ final class SystemUiHandleMenuPrismalSession {
             }
             sourceBinding = next;
             sourceBound = true;
-            log("ViewRoot producer bound source=" + sourceSurface
-                    + " logical=" + width + "x" + height
-                    + " buffer=" + sourceEndpoint.bufferWidth + "x" + sourceEndpoint.bufferHeight
-                    + " rotation=" + sourceEndpoint.rotation
-                    + " contentRect=" + sourceContentRect.left + ","
-                    + sourceContentRect.bottom + ","
-                    + sourceContentRect.width + "," + sourceContentRect.height
-                    + " localDomain=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         } catch (Throwable error) {
             fail(error);
         }
@@ -262,7 +251,6 @@ final class SystemUiHandleMenuPrismalSession {
         sourceBinding = null;
         try {
             Miuix307PassBlurBridge.unbind(current);
-            log("ViewRoot producer unbound source=" + sourceSurface);
         } catch (Throwable error) {
             log("ViewRoot producer unbind failed: " + error);
         }
@@ -286,31 +274,9 @@ final class SystemUiHandleMenuPrismalSession {
             makePbufferCurrent();
             texture.updateTexImage();
             texture.getTransformMatrix(textureMatrix);
-            if (!firstSourceFrameLogged) {
-                firstSourceFrameLogged = true;
-                log("first ViewRoot source frame timestamp=" + texture.getTimestamp()
-                        + " matrix=[" + textureMatrix[0] + "," + textureMatrix[1] + ","
-                        + textureMatrix[4] + "," + textureMatrix[5] + ","
-                        + textureMatrix[12] + "," + textureMatrix[13] + "]"
-                        + " sourceBuffer=" + sourceEndpoint.bufferWidth + "x"
-                        + sourceEndpoint.bufferHeight
-                        + " rotation=" + sourceEndpoint.rotation
-                        + " contentRect=" + sourceContentRect.left + ","
-                        + sourceContentRect.bottom + ","
-                        + sourceContentRect.width + ","
-                        + sourceContentRect.height
-                        + " localDomain=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
-            }
             ensureRenderResources();
             normalizeBackdrop();
             sourceFrameReady = true;
-            sourceFrameCount++;
-            if (sourceFrameCount == 2) {
-                log("continuous ViewRoot source confirmed timestamp=" + texture.getTimestamp());
-            } else if (sourceFrameCount % 60 == 0) {
-                log("live ViewRoot source frames=" + sourceFrameCount
-                        + " timestamp=" + texture.getTimestamp());
-            }
             renderGlass();
         } catch (Throwable error) {
             fail(error);
@@ -394,15 +360,9 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         checkEgl("eglSwapBuffers", EGL14.eglSwapBuffers(eglDisplay, outputEglSurface));
-        prismalFrameCount++;
-        if (prismalFrameCount % 60 == 0) {
-            log("live Prismal output frames=" + prismalFrameCount
-                    + " sourceFrames=" + sourceFrameCount);
-        }
 
         if (!firstFramePresented) {
             firstFramePresented = true;
-            log("first Prismal frame presented size=" + width + "x" + height);
             mainHandler.post(() -> {
                 if (!shuttingDown && listener != null) listener.onFirstFramePresented();
             });
