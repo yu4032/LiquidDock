@@ -60,9 +60,13 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("uniform float2 u_basisX"));
         assertTrue(effect.contains("uniform float2 u_basisY"));
         assertTrue(effect.contains("float2 localFrag = float2("));
-        assertTrue(effect.contains("target.transformFromViewToWindowSpace(origin)"));
-        assertTrue(effect.contains("target.transformFromViewToWindowSpace(xAxis)"));
-        assertTrue(effect.contains("target.transformFromViewToWindowSpace(yAxis)"));
+        assertTrue(effect.contains("target.getLocationInWindow(origin)"));
+        assertTrue(effect.contains("mapThroughViewParents(target, localOrigin)"));
+        assertTrue(effect.contains("mapThroughViewParents(target, localXAxis)"));
+        assertTrue(effect.contains("mapThroughViewParents(target, localYAxis)"));
+        assertTrue(effect.contains("current.getMatrix().mapPoints(point)"));
+        assertTrue(effect.contains("point[0] -= view.getScrollX()"));
+        assertFalse(effect.contains("transformFromViewToWindowSpace"));
         assertTrue(effect.contains("addOnPreDrawListener(binding.preDrawListener)"));
         assertTrue(effect.contains("removeOnPreDrawListener(preDrawListener)"));
         assertFalse(effect.contains("RootPassBlurBackend"));
