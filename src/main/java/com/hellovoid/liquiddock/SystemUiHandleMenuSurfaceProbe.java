@@ -3,6 +3,10 @@ package com.hellovoid.liquiddock;
 import android.graphics.Rect;
 import android.view.SurfaceControl;
 
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
+
 /**
  * Read-only transaction trace for the outer HyperOS caption-menu surface.
  *
@@ -15,6 +19,8 @@ import android.view.SurfaceControl;
 final class SystemUiHandleMenuSurfaceProbe {
     private static final String TAG = "[DC][SystemUiHandleMenuSurface]";
     private static final String CAPTION_MENU_SURFACE = "Caption Menu";
+    private static final Set<SurfaceControl> TRACKED =
+            Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
     private static boolean installed;
 
@@ -61,7 +67,12 @@ final class SystemUiHandleMenuSurfaceProbe {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (args.length > 0 && args[0] instanceof SurfaceControl) {
                             SurfaceControl target = (SurfaceControl) args[0];
-                            if (isCaptionMenu(target)) logCall(op, args);
+                            boolean relevant = isTracked(target);
+                            if (relevant && "reparent".equals(op)
+                                    && args.length >= 2 && args[1] instanceof SurfaceControl) {
+                                TRACKED.add((SurfaceControl) args[1]);
+                            }
+                            if (relevant) logCall(op, args);
                         }
                         return chain.proceed(args);
                     });
@@ -72,11 +83,14 @@ final class SystemUiHandleMenuSurfaceProbe {
         }
     }
 
-    private static boolean isCaptionMenu(SurfaceControl surface) {
+    private static boolean isTracked(SurfaceControl surface) {
         if (surface == null) return false;
+        if (TRACKED.contains(surface)) return true;
         try {
             String label = String.valueOf(surface);
-            return label.contains(CAPTION_MENU_SURFACE) || label.contains("captionMenu");
+            boolean caption = label.contains(CAPTION_MENU_SURFACE) || label.contains("captionMenu");
+            if (caption) TRACKED.add(surface);
+            return caption;
         } catch (Throwable ignored) {
             return false;
         }
