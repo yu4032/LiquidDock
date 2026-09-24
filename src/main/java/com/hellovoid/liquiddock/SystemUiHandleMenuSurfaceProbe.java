@@ -6,6 +6,7 @@ import android.view.SurfaceControl;
 import android.view.View;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -28,8 +29,8 @@ final class SystemUiHandleMenuSurfaceProbe {
 
     private static final Set<SurfaceControl> TRACKED =
             Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
-    private static final Map<SurfaceControl, ScaleListener> SCALE_LISTENERS =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Integer, ScaleListener> SCALE_LISTENERS =
+            Collections.synchronizedMap(new HashMap<>());
 
     private static boolean installed;
 
@@ -58,14 +59,22 @@ final class SystemUiHandleMenuSurfaceProbe {
     static void registerScaleListener(SurfaceControl surface, ScaleListener listener) {
         if (surface == null || listener == null) return;
         TRACKED.add(surface);
-        SCALE_LISTENERS.put(surface, listener);
+        int layerId = Miuix307PassBlurBridge.surfaceLayerId(surface);
+        if (layerId < 0) {
+            log("registerScaleListener unavailable layer surface=" + surface);
+            return;
+        }
+        SCALE_LISTENERS.put(layerId, listener);
+        log("registerScaleListener layer=" + layerId + " surface=" + surface);
     }
 
     static void unregisterScaleListener(SurfaceControl surface, ScaleListener listener) {
         if (surface == null || listener == null) return;
+        int layerId = Miuix307PassBlurBridge.surfaceLayerId(surface);
+        if (layerId < 0) return;
         synchronized (SCALE_LISTENERS) {
-            if (SCALE_LISTENERS.get(surface) == listener) {
-                SCALE_LISTENERS.remove(surface);
+            if (SCALE_LISTENERS.get(layerId) == listener) {
+                SCALE_LISTENERS.remove(layerId);
             }
         }
     }
@@ -154,8 +163,10 @@ final class SystemUiHandleMenuSurfaceProbe {
     }
 
     private static void dispatchScale(SurfaceControl surface, Matrix matrix) {
-        ScaleListener listener = SCALE_LISTENERS.get(surface);
-        if (listener == null || matrix == null) return;
+        if (surface == null || matrix == null) return;
+        int layerId = Miuix307PassBlurBridge.surfaceLayerId(surface);
+        ScaleListener listener = layerId >= 0 ? SCALE_LISTENERS.get(layerId) : null;
+        if (listener == null) return;
         float[] values = new float[9];
         matrix.getValues(values);
         float scaleX = (float) Math.hypot(
