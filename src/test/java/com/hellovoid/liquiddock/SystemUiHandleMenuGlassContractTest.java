@@ -94,7 +94,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("PrismalGeometry"));
         assertTrue(session.contains("PrismalHighlightProfile"));
         assertTrue(session.contains("Miuix307PrismalAdapter.toPortable"));
-        assertTrue(session.contains("Miuix307PassBlurShaders.HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
+        assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
         assertTrue(session.contains("Miuix307PrismalCompositeShaders.FRAGMENT"));
         assertTrue(session.contains("first Prismal frame presented"));
 
@@ -110,27 +110,32 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void prismalKeepsNativeSamplerAliveAndPreservesCaptionProducerCrop() throws Exception {
+    public void prismalKeepsNativeSamplerAliveAndUsesXiaomiNativeSurfacePlacement()
+            throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
-        String shaders = Files.readString(MAIN.resolve("Miuix307PassBlurShaders.java"));
 
         assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurEnabled(target, true)"));
         assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurRadius(target, 0)"));
         assertTrue(hook.contains("native sampler retained at blur=0"));
         assertFalse(hook.contains("native blur fallback released"));
 
-        assertTrue(session.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
+        assertTrue(hook.contains("int menuX = intArg(args, 1)"));
+        assertTrue(hook.contains("int menuY = intArg(args, 2)"));
+        assertTrue(hook.contains("int menuWidth = intArg(args, 3)"));
+        assertTrue(hook.contains("int menuHeight = intArg(args, 4)"));
+
+        assertTrue(session.contains("Miuix307BackdropMapping.compute("));
+        assertTrue(session.contains("nativePlacement="));
+        assertTrue(session.contains("backdropRect="));
+        assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
+        assertTrue(session.contains("backdropX, backdropY, backdropW, backdropH"));
+        assertFalse(session.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
         assertFalse(session.contains("runContinuousSourceRefresh"));
-        assertFalse(session.contains("continuous ViewRoot producer refresh started"));
         assertTrue(session.contains("continuous ViewRoot source confirmed timestamp="));
         assertTrue(session.contains("sourceFrameReady = true"));
         assertTrue(session.contains("if (!sourceFrameReady || normalizedTexture == 0"));
         assertFalse(session.contains("postDelayed"));
-
-        assertTrue(shaders.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
-        assertTrue(shaders.contains(
-                "vec4 transformed = uTexMatrix * vec4(orientedUv, 0.0, 1.0)"));
     }
 
     @Test
