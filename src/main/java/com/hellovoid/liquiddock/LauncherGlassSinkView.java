@@ -46,6 +46,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private boolean parentRecoveryPosted;
     private Surface outputSurface;
     private LauncherGlassSession outputSession;
+    private Runnable outputLostListener;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassSinkView(
@@ -190,6 +191,11 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         if (Math.abs(nativeCornerRadiusPx - next) < 0.01f) return;
         nativeCornerRadiusPx = next;
         requestLifecycleRefresh();
+    }
+
+    void runWhenOutputLost(Runnable listener) {
+        if (disposed) return;
+        outputLostListener = listener;
     }
 
     void setPressInteraction(boolean pressed, float normalizedX, float normalizedY) {
@@ -366,6 +372,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     void dispose() {
         if (disposed) return;
         resetPressInteraction(false);
+        outputLostListener = null;
         disposed = true;
         View material = materialRef.get();
         if (material != null) {
@@ -466,12 +473,14 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+        Runnable lost = !disposed ? outputLostListener : null;
         Surface current = outputSurface;
         LauncherGlassSession owner = outputSession;
         outputSurface = null;
         outputSession = null;
         if (owner != null) owner.detachOutput(this, current);
         else if (current != null) current.release();
+        if (lost != null) post(lost);
         return true;
     }
 

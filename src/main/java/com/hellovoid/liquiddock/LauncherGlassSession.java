@@ -120,6 +120,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final Object outputWorkLock = new Object();
 
     private volatile boolean shuttingDown;
+    private volatile Runnable terminalFailureListener;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile launcherHighlightProfile =
             PrismalHighlightProfile.ALL_ENABLED;
@@ -230,6 +231,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 + " size=" + width + "x" + height;
     }
 
+    void setTerminalFailureListener(Runnable listener) {
+        terminalFailureListener = listener;
+    }
+
+    void setPrismalParams(PrismalParams params) {
+        if (shuttingDown || params == null) return;
+        prismalParams = params;
+        // Material-only changes (for example MIUIX dialog dim alpha) do not invalidate the
+        // captured backdrop. Re-render the prepared scene instead of recapturing the producer.
+        if (backdropPrepared) requestSceneRedraw();
+    }
+
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
         if (shuttingDown) return;
         applyGlassConfig(glassConfig);
@@ -321,6 +334,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void invalidateGeneration(long generation) {
         if (shuttingDown || generation < sceneGeneration) return;
         sceneGeneration = generation;
+    }
+
+    void requestFreshBackdrop() {
+        requestFreshBackdrop(sceneGeneration);
     }
 
     void requestFreshBackdrop(long generation) {
@@ -829,6 +846,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || generation != sceneGeneration) return;
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
+        Runnable listener = terminalFailureListener;
+        if (listener != null) {
+            mainHandler.post(() -> {
+                if (!shuttingDown && terminalFailureListener == listener) listener.run();
+            });
+        }
     }
 
     private void ensureLauncherGl() {
@@ -1011,6 +1034,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         MainHook.log(TAG + " shutdown " + debugLabel());
+        terminalFailureListener = null;
         shuttingDown = true;
         rotationSettleSerial++;
         rotationSettlePending = false;

@@ -112,6 +112,9 @@ public final class PrismalParams {
 
     public static Builder builder() { return new Builder(); }
 
+    /** Copy an immutable parameter set so one surface can override only its local appearance. */
+    public static Builder builder(PrismalParams source) { return new Builder(source); }
+
     public static final class Builder {
         public float ior = 1.5f;
         public float glassThicknessPx = 15f;
@@ -165,6 +168,64 @@ public final class PrismalParams {
         public float glowCenterY = 0.5f;
         public float glowStrength = 1f;
         public boolean showNormals;
+
+        public Builder() {}
+
+        private Builder(PrismalParams source) {
+            if (source == null) return;
+            ior = source.ior;
+            glassThicknessPx = source.glassThicknessPx;
+            normalStrength = source.normalStrength;
+            displacementScale = source.displacementScale;
+            heightTransitionWidthPx = source.heightTransitionWidthPx;
+            sminSmoothingPx = source.sminSmoothingPx;
+            refractionInsetPx = source.refractionInsetPx;
+            edgeRefractionFalloff = source.edgeRefractionFalloff;
+            liquidDome = source.liquidDome;
+            fresnelReflect = source.fresnelReflect;
+            lensRefractionScale = source.lensRefractionScale;
+            lensDepthEffect = source.lensDepthEffect;
+            chromaticAberration = source.chromaticAberration;
+            dispersionR = source.dispersionR;
+            dispersionB = source.dispersionB;
+            vibrancy = source.vibrancy;
+            plainHighlight = source.plainHighlight;
+            brightness = source.brightness;
+            highlightWidth = source.highlightWidth;
+            os4EdgeWidthPx = source.os4EdgeWidthPx;
+            os4ReflectOffsetPx = source.os4ReflectOffsetPx;
+            os4ReflectionStrength = source.os4ReflectionStrength;
+            os4ReflectionLighten = source.os4ReflectionLighten;
+            os4DirectionalAngleRange = source.os4DirectionalAngleRange;
+            os4DirectionalIntensity = source.os4DirectionalIntensity;
+            os4DirectionalOppositeIntensity = source.os4DirectionalOppositeIntensity;
+            lightDirX = source.lightDirX;
+            lightDirY = source.lightDirY;
+            specular = source.specular;
+            shininess = source.shininess;
+            rimStrength = source.rimStrength;
+            causticIntensity = source.causticIntensity;
+            shadowSoftness = source.shadowSoftness;
+            transmittance = source.transmittance;
+            backdropScaleX = source.backdropScaleX;
+            backdropScaleY = source.backdropScaleY;
+            parallaxScale = source.parallaxScale;
+            blurRadiusPx = source.blurRadiusPx;
+            tintR = source.tintR;
+            tintG = source.tintG;
+            tintB = source.tintB;
+            tintA = source.tintA;
+            shadowR = source.shadowR;
+            shadowG = source.shadowG;
+            shadowB = source.shadowB;
+            shadowA = source.shadowA;
+            pressProgress = source.pressProgress;
+            backdropPinch = source.backdropPinch;
+            glowCenterX = source.glowCenterX;
+            glowCenterY = source.glowCenterY;
+            glowStrength = source.glowStrength;
+            showNormals = source.showNormals;
+        }
 
         public PrismalParams build() { return new PrismalParams(this); }
     }

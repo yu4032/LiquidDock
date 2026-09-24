@@ -73,7 +73,7 @@ class ComposeSettingsActivity : SettingsActivity() {
 private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
-    Liquid(R.string.page_liquid),
+    Liquid(R.string.page_liquid), DialogCustomization(R.string.page_dialog_customization),
     ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
@@ -84,7 +84,8 @@ private enum class Page(val titleRes: Int) {
 
 private fun parentPage(page: Page): Page = when (page) {
     Page.Gboard -> Page.ThirdPartyApps
-    Page.ThirdPartyApps, Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
+    Page.DialogCustomization, Page.ThirdPartyApps,
+    Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
     else -> Page.Home
 }
 
@@ -487,6 +488,10 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     openLauncherHighlights = { page = Page.LauncherHighlights },
                     openWidgetComponents = { page = Page.WidgetComponents },
                     openThirdPartyApps = { page = Page.ThirdPartyApps },
+                    openDialogCustomization = { page = Page.DialogCustomization },
+                )
+                Page.DialogCustomization -> DialogGlassSettingsPage(
+                    padding, prefs, masterEnabled,
                 )
                 Page.ThirdPartyApps -> ThirdPartyAppsPage(
                     padding = padding,
@@ -668,6 +673,7 @@ private fun LiquidPage(
     openLauncherHighlights: () -> Unit,
     openWidgetComponents: () -> Unit,
     openThirdPartyApps: () -> Unit,
+    openDialogCustomization: () -> Unit,
 ) {
     var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
     var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
@@ -716,6 +722,12 @@ private fun LiquidPage(
             "快捷菜单深色模式适配",
             "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
             masterEnabled && liquidGlass,
+        )
+        ArrowPreference(
+            title = stringResource(R.string.page_dialog_customization),
+            summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
+            enabled = masterEnabled && liquidGlass,
+            onClick = openDialogCustomization,
         )
         BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
         BooleanSetting(
@@ -921,7 +933,7 @@ private fun SettingsList(
 }
 
 @Composable
-private fun PageHeader(title: String, summary: String? = null) {
+internal fun PageHeader(title: String, summary: String? = null) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
         Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
         if (!summary.isNullOrBlank()) Text(summary, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
@@ -929,12 +941,12 @@ private fun PageHeader(title: String, summary: String? = null) {
 }
 
 @Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { Column(content = content) }
 }
 
 @Composable
-private fun BooleanSetting(
+internal fun BooleanSetting(
     prefs: SharedPreferences, config: ConfigKey<Boolean>, title: String, summary: String? = null,
     enabled: Boolean = true, default: Boolean = config.uiDefault(), onChanged: (Boolean) -> Unit = {},
 ) {

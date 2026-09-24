@@ -112,6 +112,225 @@ public class ShortcutSecondaryGlassContractTest {
                         + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
     }
 
+
+    @Test public void launcherUninstallDialogUsesDialogRootBehindContentAuthority() throws Exception {
+        String hook = Files.readString(MAIN.resolve("LauncherUninstallDialogGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("LauncherDialogGlassCoordinator.java"));
+        String sink = Files.readString(MAIN.resolve("LauncherGlassSinkView.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String bindRequest = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
+        String domains = Files.readString(MAIN.resolve("PassBlurDomain.java"));
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String settings = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        // Canonical HyperOS 4.50: Delete/Remove/SecondConfirm all extend BaseUninstallDialog.
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.BaseUninstallDialog"));
+        assertTrue(hook.contains("base.getDeclaredConstructors()"));
+        assertTrue(hook.contains("HookUtil.hook(constructor"));
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.DeleteDialog"));
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.RemoveDialog"));
+        assertTrue(hook.contains(
+                "com.miui.home.launcher.uninstall.SecondConfirmDialog"));
+        // showDialog is supplemental only: it may invalidate a stale preloaded DeleteDialog when
+        // the construction-time native-night setting changed. Glass ownership still comes solely
+        // from the BaseUninstallDialog constructor and never from showDialog.
+        assertTrue(hook.contains("\"showDialog\""));
+        assertTrue(hook.contains("releasePreloadedDialog"));
+        assertFalse(hook.contains("\"mDeleteDialog\""));
+        assertFalse(hook.contains("\"mRemoveDialog\""));
+        assertFalse(hook.contains("android.app.AlertDialog"));
+
+        // Scope remains uninstall-only and MIUIX parentPanel remains the visual material host.
+        assertTrue(coordinator.contains(
+                "com.miui.home.launcher.uninstall.UninstallDialogViewContainer"));
+        assertTrue(coordinator.contains(
+                "miuix.appcompat.internal.widget.DialogParentPanel2"));
+        assertTrue(coordinator.contains("DIALOG_PARENT_PANEL_ID = \"parentPanel\""));
+        assertTrue(coordinator.contains("findExactClass(decor, UNINSTALL_CONTENT)"));
+        assertTrue(coordinator.contains("findExactClass(decor, DIALOG_PARENT_PANEL)"));
+
+        // The dialog ViewRoot, not the Launcher Activity root, is the behind-content authority.
+        assertTrue(domains.contains("LAUNCHER_DIALOG"));
+        assertTrue(bindRequest.contains(
+                "static PassBlurBindRequest launcherDialog(View authoritativeRoot)"));
+        assertTrue(bindRequest.contains("PassBlurDomain.LAUNCHER_DIALOG"));
+        assertTrue(coordinator.contains("View dialogRoot = decor.getRootView()"));
+        assertTrue(coordinator.contains("PassBlurBindRequest.launcherDialog(dialogRoot)"));
+        assertTrue(coordinator.contains("new LauncherGlassSession("));
+        assertTrue(coordinator.contains("authority.requestFreshBackdrop()"));
+        assertFalse(coordinator.contains("LauncherGlassSessionRegistry.acquire("));
+        assertFalse(coordinator.contains("LauncherGlassSceneController.requestFreshForRoot"));
+
+        // Output is in the same dialog ViewRoot, so its own pre-draw drives animation geometry.
+        assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
+        assertTrue(coordinator.contains("sink.runWhenOutputLost"));
+        assertTrue(coordinator.contains("setTerminalFailureListener"));
+        assertTrue(coordinator.contains("installMaterialGuard(binding)"));
+        assertTrue(coordinator.contains("OnPreDrawListener"));
+        assertTrue(session.contains("void setTerminalFailureListener(Runnable listener)"));
+        assertTrue(session.contains("void requestFreshBackdrop()"));
+        assertTrue(sink.contains("void runWhenOutputLost(Runnable listener)"));
+
+        // Stock MIUIX material is suppressed in the same layout pass that creates the
+        // replacement output, so dialog open cannot flash stock.
+        assertTrue(coordinator.contains("claimVendorMaterial(dialog, binding);"));
+        assertFalse(coordinator.contains(
+                "if (owner != null) claimVendorMaterial(owner, binding)"));
+        assertTrue(coordinator.contains("MiBlurBridge.getPassWindowBlurEnabled(panel)"));
+        assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, false)"));
+        assertTrue(coordinator.contains("MiBlurBridge.setPassWindowBlurEnabled(panel, true)"));
+        assertTrue(coordinator.contains("cloneTransparent(background, panel)"));
+        assertTrue(coordinator.contains("panel.setBackground(transparentBackground)"));
+        assertTrue(coordinator.contains("panel.setBackground(binding.originalBackground)"));
+        assertFalse(coordinator.contains("background.setAlpha(0)"));
+        assertFalse(coordinator.contains("int originalBackgroundAlpha"));
+        assertTrue(coordinator.contains("binding.transparentBackground.setAlpha(0)"));
+        assertTrue(coordinator.contains("MAIN.post(() -> releaseObserved(binding))"));
+        assertTrue(coordinator.contains("OnGlobalLayoutListener"));
+        assertFalse(coordinator.contains("postDelayed("));
+
+        assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
+        assertTrue(schema.contains("\"liquid_uninstall_dialog_glass\", true, true, true"));
+        assertTrue(settings.contains("Page.DialogCustomization -> DialogGlassSettingsPage("));
+        assertTrue(settings.contains("openDialogCustomization = { page = Page.DialogCustomization }"));
+    }
+
+    @Test public void launcherDialogGlassFollowsMiuixDimViewAndHasIndependentAppearancePage()
+            throws Exception {
+        String coordinator = Files.readString(MAIN.resolve("LauncherDialogGlassCoordinator.java"));
+        String preferences = Files.readString(MAIN.resolve("LauncherDialogGlassPreferences.java"));
+        String hook = Files.readString(MAIN.resolve("LauncherUninstallDialogGlassHook.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String schema = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+        String settings = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String dialogPage = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
+        String params = Files.readString(Path.of(
+                "prismal/src/main/java/com/hellovoid/prismal/PrismalParams.java"));
+        String nativeNight = Files.readString(
+                MAIN.resolve("LauncherDialogNativeNightBridge.java"));
+
+        // Canonical MIUIX immersive AlertDialog uses @id/dialog_dim_bg as the real dim
+        // authority and animates its alpha. Window DIM_BEHIND remains fallback-only.
+        assertTrue(coordinator.contains("DIALOG_DIM_BG_ID = \"dialog_dim_bg\""));
+        assertTrue(coordinator.contains("findByResourceEntryName(decor, DIALOG_DIM_BG_ID)"));
+        assertTrue(coordinator.contains("dimBg.getAlpha()"));
+        assertTrue(coordinator.contains("syncDialogDim(binding, dialog, false)"));
+        assertTrue(coordinator.contains("syncDialogDim(binding, owner, true)"));
+        assertTrue(coordinator.contains("applyDialogMaterial(binding, dialogRoot, effectiveDim)"));
+        assertTrue(coordinator.contains("restoreDialogDim(binding)"));
+        assertTrue(coordinator.contains("WindowManager.LayoutParams.FLAG_DIM_BEHIND"));
+        assertTrue(coordinator.contains("attributes.dimAmount"));
+        assertTrue(preferences.contains(
+                "out.brightness = source.brightness * (1f - safeDim)"));
+        assertTrue(session.contains("void setPrismalParams(PrismalParams params)"));
+        assertTrue(session.contains("if (backdropPrepared) requestSceneRedraw();"));
+        assertTrue(params.contains("public static Builder builder(PrismalParams source)"));
+
+        // The opt-out suppresses the actual MIUIX dim View without destroying its animated alpha,
+        // while non-immersive variants retain the WindowManager fallback.
+        assertTrue(schema.contains("DIALOG_DISABLE_DIMMING = bool("));
+        assertTrue(schema.contains("\"liquid_dialog_disable_dimming\", false, false, false"));
+        assertTrue(coordinator.contains("dimBg.setAlpha(0f)"));
+        assertFalse(coordinator.contains("dimBg.setVisibility(View.INVISIBLE)"));
+        assertTrue(coordinator.contains("binding.dimViewSuppressed = true"));
+        assertTrue(coordinator.contains("lastVendorDimAlpha"));
+        assertTrue(coordinator.contains(
+                "window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)"));
+        assertTrue(coordinator.contains("binding.windowDimSuppressed = true"));
+        assertTrue(dialogPage.contains("关闭对话时背景压暗"));
+        assertTrue(dialogPage.contains("点击对话框外部关闭弹窗"));
+
+        // Blur/color are optional dialog-local overrides; absence means inheritance from global.
+        assertTrue(schema.contains("DIALOG_BLUR = integer("));
+        assertTrue(schema.contains("\"liquid_dialog_blur\", 0, null, 0, 0, 60"));
+        assertTrue(schema.contains("DIALOG_TINT_RED = integer("));
+        assertTrue(schema.contains("DIALOG_TINT_GREEN = integer("));
+        assertTrue(schema.contains("DIALOG_TINT_BLUE = integer("));
+        assertTrue(schema.contains("DIALOG_TINT_ALPHA = integer("));
+        assertTrue(preferences.contains("reader.has(BLUR_KEY) ? reader.f(BLUR_KEY, baseBlur) : baseBlur"));
+        assertTrue(preferences.contains("out.blurRadiusPx = resolved.blur"));
+        assertTrue(preferences.contains("out.tintR = resolved.tintR / 255f"));
+        assertTrue(preferences.contains("out.tintA = resolved.tintAlpha / 255f"));
+
+        // Settings are resolved for every new dialog rather than frozen at Launcher hook install.
+        assertTrue(hook.contains("ConfigReader liveReader = ConfigReader.load()"));
+        assertTrue(hook.contains("LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader)"));
+        assertTrue(hook.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name()"));
+
+        // UI lives under Liquid Glass as the requested child page.
+        assertTrue(settings.contains("DialogCustomization(R.string.page_dialog_customization)"));
+        assertTrue(settings.contains(
+                "Page.DialogCustomization, Page.ThirdPartyApps,"));
+        assertTrue(settings.contains("title = stringResource(R.string.page_dialog_customization)"));
+        assertTrue(dialogPage.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
+        assertTrue(dialogPage.contains("ConfigSchema.Glass.DIALOG_DISABLE_DIMMING"));
+        assertTrue(dialogPage.contains("DialogAppearanceValueSlider("));
+        assertTrue(dialogPage.contains("对话背景模糊"));
+        assertTrue(dialogPage.contains("恢复继承全局外观"));
+
+        // Native dark mode is decided before MIUIX inflates the dialog hierarchy. The exact
+        // AlertController Context is replaced with the same dialog theme on a -night
+        // Configuration, so MIUIX remains the sole owner of text/button/icon/selectors.
+        assertTrue(schema.contains("DIALOG_DARK_MODE = bool("));
+        assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
+        assertTrue(dialogPage.contains("对话框深色模式"));
+        assertTrue(dialogPage.contains("原生夜间资源"));
+        assertFalse(preferences.contains("out.tintR *= 0.22f"));
+        assertFalse(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
+
+        assertTrue(hook.contains("LauncherDialogNativeNightBridge.install(classLoader)"));
+        assertTrue(hook.contains("LauncherDialogNativeNightBridge.enter()"));
+        assertTrue(hook.contains("requestNativeNight"));
+        assertTrue(hook.contains("result = chain.proceed(args)"));
+        assertTrue(hook.contains("nightScope.close()"));
+        assertTrue(hook.contains("installDeleteDialogCacheInvalidationHook(classLoader)"));
+        assertTrue(hook.contains("\"showDialog\""));
+        assertTrue(hook.contains("releasePreloadedDialog"));
+        assertTrue(hook.contains("cachedDeleteDialogNativeNight"));
+        assertTrue(hook.contains("constructedNight.booleanValue() == desiredNight"));
+
+        assertTrue(nativeNight.contains(
+                "ALERT_CONTROLLER = \"miuix.appcompat.app.AlertController\""));
+        assertTrue(nativeNight.contains(
+                "APP_COMPAT_DIALOG = \"androidx.appcompat.app.AppCompatDialog\""));
+        assertTrue(nativeNight.contains(
+                "getDeclaredConstructor(\n                    Context.class, appCompatDialog, Window.class)"));
+        assertTrue(nativeNight.contains("original.createConfigurationContext(override)"));
+        assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_YES"));
+        assertTrue(nativeNight.contains("resolveThemeResId(original)"));
+        assertTrue(nativeNight.contains("new ForcedNightDialogContext(configured, themeResId)"));
+        assertTrue(nativeNight.contains("UNINSTALL_LAYOUT = \"shortcut_uninstall_dialog\""));
+        assertTrue(nativeNight.contains("LayoutInflater.class"));
+        assertTrue(nativeNight.contains("cloneInContext(forced)"));
+        assertTrue(nativeNight.contains("NIGHT_INFLATE_REENTRY"));
+        assertTrue(nativeNight.contains("getThemeResId"));
+        assertTrue(nativeNight.contains("mThemeResource"));
+        assertFalse(nativeNight.contains("import android.content.pm.ActivityInfo"));
+        assertFalse(nativeNight.contains("import android.content.pm.ApplicationInfo"));
+        assertFalse(nativeNight.contains("getActivityInfo("));
+        assertFalse(nativeNight.contains("getApplicationInfo().theme"));
+        assertFalse(nativeNight.contains("AlertDialog_Theme_Dark"));
+        assertFalse(nativeNight.contains("setTextColor("));
+        assertFalse(nativeNight.contains("setBackgroundTintList("));
+        assertFalse(nativeNight.contains("setImageTintList("));
+        assertFalse(nativeNight.contains("setCompoundDrawableTintList("));
+        assertFalse(nativeNight.contains("injected AlertController context"));
+        assertFalse(nativeNight.contains("inflated native night uninstall content"));
+
+        assertFalse(coordinator.contains("LauncherDialogDarkModeController"));
+        assertFalse(coordinator.contains("darkModeSession"));
+        assertFalse(coordinator.contains("logNativeNightSnapshot"));
+        assertFalse(coordinator.contains("logTree("));
+    }
+
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String controller = Files.readString(MAIN.resolve("ShortcutMenuDarkModeController.java"));
