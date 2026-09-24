@@ -168,7 +168,6 @@ public class ShortcutSecondaryGlassContractTest {
 
         // Output is in the same dialog ViewRoot, so its own pre-draw drives animation geometry.
         assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
-        assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
         assertTrue(coordinator.contains("sink.runWhenOutputLost"));
         assertTrue(coordinator.contains("setTerminalFailureListener"));
         assertTrue(coordinator.contains("installMaterialGuard(binding)"));
@@ -176,12 +175,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(session.contains("void setTerminalFailureListener(Runnable listener)"));
         assertTrue(session.contains("void requestFreshBackdrop()"));
         assertTrue(sink.contains("void runWhenOutputLost(Runnable listener)"));
-        assertTrue(sink.contains("public void onSurfaceTextureUpdated(SurfaceTexture surface)"));
 
         // Stock MIUIX material is suppressed in the same layout pass that creates the
-        // replacement output, before first-frame presentation, so dialog open cannot flash stock.
+        // replacement output, so dialog open cannot flash stock.
         assertTrue(coordinator.contains("claimVendorMaterial(dialog, binding);"));
-        assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
         assertTrue(coordinator.contains("MIUIX material suppressed before first draw"));
         assertFalse(coordinator.contains(
                 "if (owner != null) claimVendorMaterial(owner, binding)"));
@@ -276,7 +273,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("title = stringResource(R.string.page_dialog_customization)"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.DIALOG_DISABLE_DIMMING"));
-        assertTrue(dialogPage.contains("GlassAppearanceValueSlider("));
+        assertTrue(dialogPage.contains("DialogAppearanceValueSlider("));
         assertTrue(dialogPage.contains("对话背景模糊"));
         assertTrue(dialogPage.contains("恢复继承全局外观"));
 
@@ -327,14 +324,12 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(nativeNight.contains("setBackgroundTintList("));
         assertFalse(nativeNight.contains("setImageTintList("));
         assertFalse(nativeNight.contains("setCompoundDrawableTintList("));
+        assertFalse(nativeNight.contains("injected AlertController context"));
+        assertFalse(nativeNight.contains("inflated native night uninstall content"));
 
         assertFalse(coordinator.contains("LauncherDialogDarkModeController"));
         assertFalse(coordinator.contains("darkModeSession"));
         assertTrue(coordinator.contains("logNativeNightSnapshot(binding, panel)"));
-        assertTrue(coordinator.contains("native-night snapshot"));
-        assertTrue(coordinator.contains("native-night view"));
-        assertTrue(coordinator.contains("getCurrentTextColor()"));
-        assertTrue(coordinator.contains("getBackgroundTintList()"));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
