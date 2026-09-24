@@ -13,14 +13,14 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Replaces HyperOS app-caption popup backgrounds with compositor-backed native glass while
+ * Replaces HyperOS app-caption popup backgrounds with compositor-backed pass-window blur while
  * preserving native controls.
  *
  * <p>HyperOS has two menu implementations in the SystemUI/WMShell stack. Xiaomi's primary path
  * creates a {@code MiuiCaptionContainerView} and passes it through
  * {@code MiuiDecorationDot.addWindow(...)} into a dedicated captionMenu SurfaceControlViewHost.
  * AOSP/WMShell builds use {@code desktop_mode_window_decor_handle_menu}. Both creation boundaries
- * are observed; glass binding waits for real attach/layout authority and never binds a
+ * are observed; blur replacement waits for real attach/layout authority and never binds a
  * RootPassBlur producer to the menu-local Windowless ViewRoot.</p>
  */
 final class SystemUiHandleMenuGlassHook {
@@ -226,7 +226,7 @@ final class SystemUiHandleMenuGlassHook {
 
             View target = resolveGlassTarget(root);
             if (!(root instanceof ViewGroup) || target == null) {
-                log("caption menu glass host/target unavailable; stock retained"
+                log("caption menu blur host/target unavailable; stock retained"
                         + " rootClass=" + root.getClass().getName());
                 PENDING.remove(root);
                 release();
@@ -247,10 +247,10 @@ final class SystemUiHandleMenuGlassHook {
                         waitForNativeSurfaceScale);
                 ACTIVE.put(root, binding);
                 binding.start();
-                log("caption menu native glass bind started target=" + targetLabel(target)
+                log("caption menu blur replacement bind started target=" + targetLabel(target)
                         + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             } catch (Throwable error) {
-                log("glass bind failed; stock retained: " + error);
+                log("blur replacement bind failed; stock retained: " + error);
                 Binding active = ACTIVE.remove(root);
                 if (active != null) active.release();
             }
