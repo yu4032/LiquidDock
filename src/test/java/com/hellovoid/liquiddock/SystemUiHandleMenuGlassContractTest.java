@@ -89,7 +89,8 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("sourceEndpoint.bufferWidth"));
         assertTrue(session.contains("sourceEndpoint.bufferHeight"));
         assertTrue(session.contains("sourceEndpoint.rotation"));
-        assertTrue(session.contains("sourceContentRect.left"));
+        assertTrue(session.contains("Miuix307BackdropMapping.compute("));
+        assertTrue(session.contains("backdropX, backdropY, backdropW, backdropH"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("PrismalGeometry"));
         assertTrue(session.contains("PrismalHighlightProfile"));
