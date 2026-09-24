@@ -711,6 +711,13 @@ private fun LiquidPage(
         )
         BooleanSetting(
             prefs,
+            ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
+            "应用顶部菜单液态玻璃",
+            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；重启系统界面后生效",
+            masterEnabled && liquidGlass,
+        )
+        BooleanSetting(
+            prefs,
             ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
             "桌面快捷菜单玻璃背景",
             "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
