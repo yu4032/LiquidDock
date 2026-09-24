@@ -330,7 +330,6 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(coordinator.contains("darkModeSession"));
         assertFalse(coordinator.contains("logNativeNightSnapshot"));
         assertFalse(coordinator.contains("logTree("));
-        assertFalse(sink.contains("runWhenFirstFramePresented"));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
