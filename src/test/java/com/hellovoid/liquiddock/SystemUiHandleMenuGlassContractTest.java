@@ -89,8 +89,11 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("sourceEndpoint.bufferWidth"));
         assertTrue(session.contains("sourceEndpoint.bufferHeight"));
         assertTrue(session.contains("sourceEndpoint.rotation"));
-        assertTrue(session.contains("Miuix307BackdropMapping.compute("));
-        assertTrue(session.contains("backdropX, backdropY, backdropW, backdropH"));
+        assertTrue(session.contains("RootPassBlurContentRect.resolve("));
+        assertTrue(session.contains("sourceContentRect.left"));
+        assertTrue(session.contains("sourceContentRect.bottom"));
+        assertTrue(session.contains("sourceContentRect.width"));
+        assertTrue(session.contains("sourceContentRect.height"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("PrismalGeometry"));
         assertTrue(session.contains("PrismalHighlightProfile"));
@@ -111,7 +114,7 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void prismalKeepsNativeSamplerAliveAndUsesXiaomiNativeSurfacePlacement()
+    public void prismalKeepsNativeSamplerAliveAndNormalizesInLocalViewRootDomain()
             throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
@@ -121,16 +124,16 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("native sampler retained at blur=0"));
         assertFalse(hook.contains("native blur fallback released"));
 
-        assertTrue(hook.contains("int menuX = intArg(args, 1)"));
-        assertTrue(hook.contains("int menuY = intArg(args, 2)"));
-        assertTrue(hook.contains("int menuWidth = intArg(args, 3)"));
-        assertTrue(hook.contains("int menuHeight = intArg(args, 4)"));
-
-        assertTrue(session.contains("Miuix307BackdropMapping.compute("));
-        assertTrue(session.contains("nativePlacement="));
-        assertTrue(session.contains("backdropRect="));
+        assertTrue(session.contains("RootPassBlurContentRect.resolve("));
+        assertTrue(session.contains("localDomain="));
         assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(session.contains("backdropX, backdropY, backdropW, backdropH"));
+        assertTrue(session.contains("sourceContentRect.left"));
+        assertTrue(session.contains("sourceContentRect.bottom"));
+        assertTrue(session.contains("sourceContentRect.width"));
+        assertTrue(session.contains("sourceContentRect.height"));
+        assertFalse(session.contains("Miuix307BackdropMapping.compute("));
+        assertFalse(session.contains("nativePlacement="));
+        assertFalse(session.contains("backdropRect="));
         assertFalse(session.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
         assertFalse(session.contains("runContinuousSourceRefresh"));
         assertTrue(session.contains("continuous ViewRoot source confirmed timestamp="));
