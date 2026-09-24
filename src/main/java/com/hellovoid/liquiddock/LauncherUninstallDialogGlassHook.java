@@ -45,8 +45,7 @@ final class LauncherUninstallDialogGlassHook {
             // Install once at process startup. It remains inert unless the exact uninstall-dialog
             // constructor scope below explicitly requests native night resources.
             nativeNightBridgeAvailable = LauncherDialogNativeNightBridge.install(classLoader);
-            boolean nativeNightBridge = nativeNightBridgeAvailable;
-            boolean cacheInvalidationHook = installDeleteDialogCacheInvalidationHook(classLoader);
+            installDeleteDialogCacheInvalidationHook(classLoader);
             Class<?> base = Class.forName(BASE_UNINSTALL_DIALOG, false, classLoader);
             int hooked = 0;
             for (Constructor<?> constructor : base.getDeclaredConstructors()) {
@@ -67,7 +66,7 @@ final class LauncherUninstallDialogGlassHook {
                     boolean darkMode = liveReader.b(
                             ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
                             ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback());
-                    boolean requestNativeNight = nativeNightBridge
+                    boolean requestNativeNight = nativeNightBridgeAvailable
                             && liveConfig.enabled
                             && liveConfig.glass.enabled
                             && enabled
@@ -84,29 +83,18 @@ final class LauncherUninstallDialogGlassHook {
 
                     Object owner = chain.getThisObject();
                     String type = owner != null ? owner.getClass().getName() : "<null>";
-                    MainHook.log(TAG + " constructor hit type=" + type
-                            + " args=" + args.length
-                            + " nativeNightBridge=" + nativeNightBridge
-                            + " nativeNightRequested=" + requestNativeNight);
                     if (DELETE_DIALOG.equals(type)) {
                         cachedDeleteDialogNativeNight = Boolean.valueOf(requestNativeNight);
                     }
                     if (!(owner instanceof Dialog) || args.length == 0
                             || !(args[0] instanceof Activity) || !isSupportedDialog(type)) {
-                        MainHook.log(TAG + " constructor ignored type=" + type
-                                + " context=" + (args.length > 0 && args[0] != null
-                                ? args[0].getClass().getName() : "<null>"));
                         return result;
                     }
                     if (!liveConfig.enabled || !liveConfig.glass.enabled || !enabled) {
-                        MainHook.log(TAG + " dialog skipped by live setting type=" + type);
                         return result;
                     }
                     LauncherDialogGlassCoordinator.watchUninstallDialog(
-                            (Activity) args[0],
-                            (Dialog) owner,
-                            liveConfig.glass,
-                            sourceFor(type));
+                            (Dialog) owner, liveConfig.glass, sourceFor(type));
                     return result;
                 });
                 hooked++;
@@ -116,9 +104,6 @@ final class LauncherUninstallDialogGlassHook {
                 return false;
             }
             installed = true;
-            MainHook.log(TAG + " constructor hooks installed count=" + hooked
-                    + " nativeNightBridge=" + nativeNightBridge
-                    + " cacheInvalidationHook=" + cacheInvalidationHook);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -131,7 +116,7 @@ final class LauncherUninstallDialogGlassHook {
      * exactly once when the requested native-night state changes so construction-time resources
      * can be resolved again through the normal getOrCreateDeleteDialog() path.
      */
-    private static boolean installDeleteDialogCacheInvalidationHook(ClassLoader classLoader) {
+    private static void installDeleteDialogCacheInvalidationHook(ClassLoader classLoader) {
         try {
             Class<?> controller = Class.forName(UNINSTALL_CONTROLLER, false, classLoader);
             Class<?> launcher = Class.forName(LAUNCHER, false, classLoader);
@@ -144,11 +129,8 @@ final class LauncherUninstallDialogGlassHook {
                         maybeInvalidateCachedDeleteDialog(args);
                         return chain.proceed(args);
                     });
-            MainHook.log(TAG + " DeleteDialog cache invalidation hook installed");
-            return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " DeleteDialog cache invalidation hook unavailable: " + error);
-            return false;
         }
     }
 
@@ -182,8 +164,6 @@ final class LauncherUninstallDialogGlassHook {
             return;
         }
         cachedDeleteDialogNativeNight = null;
-        MainHook.log(TAG + " released preloaded DeleteDialog for native-night change "
-                + constructedNight + "->" + desiredNight);
     }
 
     private static boolean isSupportedDialog(String type) {
