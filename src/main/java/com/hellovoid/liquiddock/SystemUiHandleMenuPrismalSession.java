@@ -10,7 +10,6 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.util.DisplayMetrics;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -50,16 +49,7 @@ final class SystemUiHandleMenuPrismalSession {
     private final View sourceRoot;
     private final SurfaceControl sourceSurface;
     private final RootPassBlurEndpointBridge.Endpoint sourceEndpoint;
-    private final float backdropX;
-    private final float backdropY;
-    private final float backdropW;
-    private final float backdropH;
-    private final int nativeMenuX;
-    private final int nativeMenuY;
-    private final int nativeMenuWidth;
-    private final int nativeMenuHeight;
-    private final int displayWidth;
-    private final int displayHeight;
+    private final RootPassBlurContentRect sourceContentRect;
     private final Listener listener;
     private final Handler mainHandler;
     private final HandlerThread renderThread;
@@ -102,10 +92,6 @@ final class SystemUiHandleMenuPrismalSession {
     SystemUiHandleMenuPrismalSession(
             View host,
             View sourceRoot,
-            int menuX,
-            int menuY,
-            int menuWidth,
-            int menuHeight,
             LiquidDockConfig.Glass glassConfig,
             Listener listener) {
         if (host == null) throw new IllegalArgumentException("host == null");
@@ -117,38 +103,18 @@ final class SystemUiHandleMenuPrismalSession {
         if (endpoint == null || !endpoint.isValid()) {
             throw new IllegalArgumentException("source ViewRoot endpoint unavailable");
         }
-        DisplayMetrics metrics = sourceRoot.getResources().getDisplayMetrics();
-        int frameWidth = Math.max(1, metrics.widthPixels);
-        int frameHeight = Math.max(1, metrics.heightPixels);
-        int placementWidth = menuWidth > 0 ? menuWidth : Math.max(1, sourceRoot.getWidth());
-        int placementHeight = menuHeight > 0 ? menuHeight : Math.max(1, sourceRoot.getHeight());
-        Miuix307BackdropMapping.Result mapping = Miuix307BackdropMapping.compute(
-                menuX,
-                menuY,
-                placementWidth,
-                placementHeight,
-                0,
-                0,
-                frameWidth,
-                frameHeight);
-        if (mapping.coverage == Miuix307BackdropMapping.Coverage.OUTSIDE) {
-            throw new IllegalArgumentException("native menu placement outside display");
-        }
 
         this.host = host;
         this.sourceRoot = sourceRoot;
         sourceEndpoint = endpoint;
         sourceSurface = endpoint.rootSurface;
-        backdropX = mapping.backdropX;
-        backdropY = mapping.backdropY;
-        backdropW = mapping.backdropW;
-        backdropH = mapping.backdropH;
-        nativeMenuX = menuX;
-        nativeMenuY = menuY;
-        nativeMenuWidth = placementWidth;
-        nativeMenuHeight = placementHeight;
-        displayWidth = frameWidth;
-        displayHeight = frameHeight;
+        sourceContentRect = RootPassBlurContentRect.resolve(
+                endpoint.surfaceWidth,
+                endpoint.surfaceHeight,
+                endpoint.insetLeft,
+                endpoint.insetTop,
+                endpoint.insetRight,
+                endpoint.insetBottom);
         this.listener = listener;
         mainHandler = new Handler(host.getContext().getMainLooper());
 
@@ -280,11 +246,10 @@ final class SystemUiHandleMenuPrismalSession {
                     + " logical=" + width + "x" + height
                     + " buffer=" + sourceEndpoint.bufferWidth + "x" + sourceEndpoint.bufferHeight
                     + " rotation=" + sourceEndpoint.rotation
-                    + " nativePlacement=" + nativeMenuX + "," + nativeMenuY + ","
-                    + nativeMenuWidth + "x" + nativeMenuHeight
-                    + " display=" + displayWidth + "x" + displayHeight
-                    + " backdropRect=" + backdropX + "," + backdropY + ","
-                    + backdropW + "," + backdropH);
+                    + " contentRect=" + sourceContentRect.left + ","
+                    + sourceContentRect.bottom + ","
+                    + sourceContentRect.width + "," + sourceContentRect.height
+                    + " localDomain=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         } catch (Throwable error) {
             fail(error);
         }
@@ -330,11 +295,11 @@ final class SystemUiHandleMenuPrismalSession {
                         + " sourceBuffer=" + sourceEndpoint.bufferWidth + "x"
                         + sourceEndpoint.bufferHeight
                         + " rotation=" + sourceEndpoint.rotation
-                        + " nativePlacement=" + nativeMenuX + "," + nativeMenuY + ","
-                        + nativeMenuWidth + "x" + nativeMenuHeight
-                        + " display=" + displayWidth + "x" + displayHeight
-                        + " backdropRect=" + backdropX + "," + backdropY + ","
-                        + backdropW + "," + backdropH);
+                        + " contentRect=" + sourceContentRect.left + ","
+                        + sourceContentRect.bottom + ","
+                        + sourceContentRect.width + ","
+                        + sourceContentRect.height
+                        + " localDomain=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             }
             ensureRenderResources();
             normalizeBackdrop();
@@ -375,7 +340,10 @@ final class SystemUiHandleMenuPrismalSession {
                 requireUniform(normalizeProgram, "uTexMatrix"),
                 1, false, textureMatrix, 0);
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
-                backdropX, backdropY, backdropW, backdropH);
+                sourceContentRect.left,
+                sourceContentRect.bottom,
+                sourceContentRect.width,
+                sourceContentRect.height);
         GLES20.glUniform1i(
                 requireUniform(normalizeProgram, "uConfigRot"),
                 sourceEndpoint.rotation);
