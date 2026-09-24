@@ -32,6 +32,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.claim"));
         assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.restoreIfVisible"));
         assertTrue(coordinator.contains("popupView.addOnAttachStateChangeListener"));
+        assertTrue(coordinator.contains("contentView.addOnLayoutChangeListener"));
+        assertTrue(coordinator.contains("hasRealGeometry(contentView)"));
+        assertTrue(coordinator.contains("view.getWidth() > 0 && view.getHeight() > 0"));
+        assertTrue(coordinator.contains("waiting for popup layout"));
+        assertTrue(coordinator.contains("HWUI backdrop effect bound size="));
         assertFalse(coordinator.contains("ShortcutPopupSourceOverlay"));
         assertFalse(coordinator.contains("ShortcutPopupGlassSession"));
         assertFalse(coordinator.contains("ShortcutPopupGlassLayer"));
@@ -68,8 +73,8 @@ public class ShortcutSecondaryGlassContractTest {
                 "SET_BACKDROP_RENDER_EFFECT.invoke(view, effect);\n"
                         + "            view.invalidate();\n"
                         + "            return true;"));
-        // mode=2 is ShortcutMenuLayer authority. PopupView.mContentView must retain the
-        // Launcher-configured mode=1 + element blur + blend-color contract.
+        // mode=2 is ShortcutMenuLayer authority. The generic RenderEffect bridge must not
+        // rewrite MIUI blur state; the dedicated popup material bridge owns that handoff.
         assertFalse(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
         assertTrue(bridge.contains(
                 "// Do not rewrite any of those properties here. In particular, mode=2 belongs to"));
@@ -109,7 +114,9 @@ public class ShortcutSecondaryGlassContractTest {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         assertTrue(coordinator.contains(
                 "decor.post(() -> release(state, \"popup-detached\"))"));
+        assertTrue(coordinator.contains("if (state.effect != null)"));
         assertTrue(coordinator.contains("state.effect.dispose()"));
+        assertTrue(coordinator.contains("content.removeOnLayoutChangeListener"));
         assertFalse(coordinator.contains("removeViewImmediate"));
         assertFalse(coordinator.contains("postDelayed("));
     }
