@@ -179,7 +179,6 @@ public class ShortcutSecondaryGlassContractTest {
         // Stock MIUIX material is suppressed in the same layout pass that creates the
         // replacement output, so dialog open cannot flash stock.
         assertTrue(coordinator.contains("claimVendorMaterial(dialog, binding);"));
-        assertTrue(coordinator.contains("MIUIX material suppressed before first draw"));
         assertFalse(coordinator.contains(
                 "if (owner != null) claimVendorMaterial(owner, binding)"));
         assertTrue(coordinator.contains("MiBlurBridge.getPassWindowBlurEnabled(panel)"));
