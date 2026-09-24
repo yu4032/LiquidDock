@@ -46,8 +46,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private boolean parentRecoveryPosted;
     private Surface outputSurface;
     private LauncherGlassSession outputSession;
-    private Runnable firstFrameListener;
-    private boolean firstFramePresented;
     private Runnable outputLostListener;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
@@ -193,21 +191,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         if (Math.abs(nativeCornerRadiusPx - next) < 0.01f) return;
         nativeCornerRadiusPx = next;
         requestLifecycleRefresh();
-    }
-
-    /**
-     * Deliver one callback only after this TextureView has received a real compositor frame.
-     *
-     * <p>Cross-ViewRoot consumers use this as the ownership handoff barrier: vendor material stays
-     * visible until the replacement glass has actually reached the Dialog window.</p>
-     */
-    void runWhenFirstFramePresented(Runnable listener) {
-        if (disposed || listener == null) return;
-        if (firstFramePresented) {
-            post(listener);
-            return;
-        }
-        firstFrameListener = listener;
     }
 
     void runWhenOutputLost(Runnable listener) {
@@ -389,7 +372,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     void dispose() {
         if (disposed) return;
         resetPressInteraction(false);
-        firstFrameListener = null;
         outputLostListener = null;
         disposed = true;
         View material = materialRef.get();
@@ -461,7 +443,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
         if (disposed || surfaceTexture == null) return;
-        firstFramePresented = false;
         Surface surface = new Surface(surfaceTexture);
         Surface stale = outputSurface;
         LauncherGlassSession staleSession = outputSession;
@@ -504,14 +485,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         return true;
     }
 
-    @Override
-    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-        if (disposed || firstFramePresented) return;
-        firstFramePresented = true;
-        Runnable listener = firstFrameListener;
-        firstFrameListener = null;
-        if (listener != null) listener.run();
-    }
+    @Override public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
 
     private LauncherGlassSession ensureLiveSession() {
         if (disposed) return null;
