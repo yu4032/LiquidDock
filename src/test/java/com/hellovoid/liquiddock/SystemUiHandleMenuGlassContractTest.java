@@ -21,7 +21,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("\"caption_menu_container\""));
         assertTrue(hook.contains("\"desktop_mode_window_decor_handle_menu\""));
         assertTrue(hook.contains("\"windowing_pill\""));
-        assertTrue(hook.contains("MiBlurBridge.applyPassWindowBlur(target, nativeBlurRadiusPx)"));
+        assertTrue(hook.contains("MiBlurBridge.applyPassWindowBlur(target, initialRadius)"));
         assertTrue(hook.contains("target.setBackground(null)"));
         assertTrue(hook.contains("restoreStockBackground()"));
 
