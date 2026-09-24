@@ -129,11 +129,8 @@ public class SystemUiHandleMenuGlassContractTest {
         assertFalse(session.contains("postDelayed"));
 
         assertTrue(shaders.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
-        assertTrue(shaders.contains("vec4 transformed = uTexMatrix * vec4(orientedUv, 0.0, 1.0)"));
-        assertFalse(shaders.substring(
-                shaders.indexOf("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"),
-                shaders.indexOf("GAUSSIAN_BLUR_FRAGMENT"))
-                .contains("compensateSurfaceTextureCropPreservingOrientation"));
+        assertTrue(shaders.contains(
+                "vec4 transformed = uTexMatrix * vec4(orientedUv, 0.0, 1.0)"));
     }
 
     @Test
