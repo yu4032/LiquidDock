@@ -13,23 +13,19 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Replaces HyperOS app-caption popup backgrounds with compositor-backed pass-window blur while
- * preserving native controls.
+ * Replaces HyperOS app-caption popup backgrounds with zero-copy Prismal glass while preserving
+ * native controls and native WMShell animation authority.
  *
- * <p>HyperOS has two menu implementations in the SystemUI/WMShell stack. Xiaomi's primary path
- * creates a {@code MiuiCaptionContainerView} and passes it through
- * {@code MiuiDecorationDot.addWindow(...)} into a dedicated captionMenu SurfaceControlViewHost.
- * AOSP/WMShell builds use {@code desktop_mode_window_decor_handle_menu}. Both creation boundaries
- * are observed; blur replacement waits for real attach/layout authority and never binds a
- * RootPassBlur producer to the menu-local Windowless ViewRoot.</p>
+ * <p>Xiaomi's primary path creates a {@code MiuiCaptionContainerView} through
+ * {@code MiuiDecorationDot.addWindow(...)}. AOSP/WMShell builds use
+ * {@code desktop_mode_window_decor_handle_menu}. The native pass-window material remains a
+ * fail-open sampler until Prismal presents a real source frame.</p>
  */
 final class SystemUiHandleMenuGlassHook {
     private static final String TAG = "[DC][SystemUiHandleMenuGlass]";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String MIUI_DECORATION_DOT =
             "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.decoration.MiuiDecorationDot";
-    private static final String MIUI_WINDOW_CONTROLLER =
-            "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.handlemenu.MiuiWindowController";
     private static final String HANDLE_MENU_LAYOUT = "desktop_mode_window_decor_handle_menu";
     private static final String CAPTION_MENU_CONTAINER = "caption_menu_container";
     private static final String WINDOWING_PILL = "windowing_pill";
@@ -38,8 +34,6 @@ final class SystemUiHandleMenuGlassHook {
     private static final Map<View, PendingBinding> PENDING =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Binding> ACTIVE =
-            Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<Object, Binding> CONTROLLERS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private static boolean installed;
@@ -73,41 +67,13 @@ final class SystemUiHandleMenuGlassHook {
                         SurfaceControl menuSurface =
                                 SystemUiHandleMenuSurfaceAnimationAuthority.windowSurface(result);
                         if (menuRoot != null) {
-                            log("MIUI caption menu window created root="
-                                    + menuRoot.getClass().getName()
-                                    + " attached=" + menuRoot.isAttachedToWindow()
-                                    + " surface=" + menuSurface);
-                            observeMenu(
-                                    menuRoot,
-                                    "miui-caption-window",
-                                    result,
-                                    menuSurface,
-                                    true);
+                            observeMenu(menuRoot, menuSurface, true);
                         }
                         return result;
                     });
             installedCount++;
-            log("MIUI captionMenu addWindow hook installed");
         } catch (Throwable error) {
             log("MIUI captionMenu hook unavailable: " + error);
-        }
-
-        try {
-            Class<?> controller = Class.forName(MIUI_WINDOW_CONTROLLER, false, classLoader);
-            HookUtil.hookMethod(
-                    controller,
-                    "releaseViewWithAnim",
-                    new Class<?>[0],
-                    chain -> {
-                        Object owner = chain.getThisObject();
-                        Binding binding = CONTROLLERS.get(owner);
-                        if (binding != null) binding.prepareForNativeClose();
-                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    });
-            installedCount++;
-            log("MIUI captionMenu close boundary hook installed");
-        } catch (Throwable error) {
-            log("MIUI captionMenu close hook unavailable: " + error);
         }
 
         try {
@@ -127,13 +93,11 @@ final class SystemUiHandleMenuGlassHook {
                         Object result = chain.proceed(args);
                         if (target && result instanceof View) {
                             View root = (View) result;
-                            log("AOSP HandleMenu layout inflated root=" + root.getClass().getName());
-                            observeMenu(root, "aosp-handle-menu", null, null, false);
+                            observeMenu(root, null, false);
                         }
                         return result;
                     });
             installedCount++;
-            log("AOSP HandleMenu layout inflation hook installed");
         } catch (Throwable error) {
             log("AOSP HandleMenu hook unavailable: " + error);
         }
@@ -159,39 +123,31 @@ final class SystemUiHandleMenuGlassHook {
 
     private static void observeMenu(
             View root,
-            String source,
-            Object controller,
             SurfaceControl menuSurface,
-            boolean waitForNativeSurfaceScale) {
+            boolean trackNativeSurfaceAnimation) {
         LiquidDockConfig.Glass glass = glassConfig;
         if (root == null || glass == null || !glass.enabled
                 || !glass.systemUiHandleMenuEnabled) return;
 
-        releaseRoot(root, "menu-replaced");
+        releaseRoot(root);
         PendingBinding pending = new PendingBinding(
-                root, glass, controller, menuSurface, waitForNativeSurfaceScale);
+                root, glass, menuSurface, trackNativeSurfaceAnimation);
         PENDING.put(root, pending);
         pending.start();
-        log("menu root observed source=" + source
-                + " class=" + root.getClass().getName()
-                + " attached=" + root.isAttachedToWindow()
-                + " size=" + root.getWidth() + "x" + root.getHeight());
     }
 
-    private static void releaseRoot(View root, String reason) {
+    private static void releaseRoot(View root) {
         if (root == null) return;
         PendingBinding pending = PENDING.remove(root);
         if (pending != null) pending.release();
         Binding active = ACTIVE.remove(root);
         if (active != null) active.release();
-        if (pending != null || active != null) log("released reason=" + reason);
     }
 
     private static final class PendingBinding implements View.OnAttachStateChangeListener,
             View.OnLayoutChangeListener {
         final View root;
         final LiquidDockConfig.Glass glass;
-        final Object controller;
         final SurfaceControl menuSurface;
         final boolean waitForNativeSurfaceScale;
         boolean released;
@@ -199,12 +155,10 @@ final class SystemUiHandleMenuGlassHook {
         PendingBinding(
                 View root,
                 LiquidDockConfig.Glass glass,
-                Object controller,
                 SurfaceControl menuSurface,
                 boolean waitForNativeSurfaceScale) {
             this.root = root;
             this.glass = glass;
-            this.controller = controller;
             this.menuSurface = menuSurface;
             this.waitForNativeSurfaceScale = waitForNativeSurfaceScale;
         }
@@ -241,13 +195,10 @@ final class SystemUiHandleMenuGlassHook {
                         sourceRoot,
                         target,
                         glass,
-                        controller,
                         menuSurface,
                         waitForNativeSurfaceScale);
                 ACTIVE.put(root, binding);
                 binding.start();
-                log("caption menu blur replacement bind started target=" + targetLabel(target)
-                        + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             } catch (Throwable error) {
                 log("blur replacement bind failed; stock retained: " + error);
                 Binding active = ACTIVE.remove(root);
@@ -264,7 +215,6 @@ final class SystemUiHandleMenuGlassHook {
 
         @Override
         public void onViewAttachedToWindow(View view) {
-            log("HandleMenuView attached");
             tryBind();
         }
 
@@ -301,7 +251,6 @@ final class SystemUiHandleMenuGlassHook {
         final Drawable stockBackground;
         final int nativeBlurRadiusPx;
         final LiquidDockConfig.Glass glassConfig;
-        final Object controller;
         final SurfaceControl menuSurface;
         final boolean trackNativeSurfaceAnimation;
         final SystemUiHandleMenuSurfaceAnimationAuthority.AlphaListener alphaListener;
@@ -321,13 +270,11 @@ final class SystemUiHandleMenuGlassHook {
                 View sourceRoot,
                 View target,
                 LiquidDockConfig.Glass glass,
-                Object controller,
                 SurfaceControl menuSurface,
                 boolean waitForNativeSurfaceScale) {
             this.root = root;
             this.sourceRoot = sourceRoot;
             this.target = target;
-            this.controller = controller;
             this.menuSurface = menuSurface;
             this.trackNativeSurfaceAnimation = waitForNativeSurfaceScale && menuSurface != null;
             stockBackground = target.getBackground();
@@ -338,12 +285,11 @@ final class SystemUiHandleMenuGlassHook {
 
         void start() {
             root.addOnAttachStateChangeListener(this);
-            if (controller != null) CONTROLLERS.put(controller, this);
             pendingSurfaceAlpha = trackNativeSurfaceAnimation ? 0f : 1f;
             applyReplacementBlur();
             if (trackNativeSurfaceAnimation) {
-                SystemUiHandleMenuSurfaceAnimationAuthority.registerAlphaListener(menuSurface, alphaListener);
-                log("replacement blur tracking native menu surface alpha surface=" + menuSurface);
+                SystemUiHandleMenuSurfaceAnimationAuthority.registerAlphaListener(
+                        menuSurface, alphaListener);
             }
             startPrismal();
         }
@@ -425,12 +371,6 @@ final class SystemUiHandleMenuGlassHook {
                 prismalSession = session;
                 prismalOutput = output;
                 output.setMaterialAlpha(0f);
-                RootPassBlurEndpointBridge.Endpoint endpoint =
-                        RootPassBlurEndpointBridge.inspect(sourceRoot);
-                log("Prismal pipeline armed sourceViewRoot="
-                        + (endpoint != null ? endpoint.rootSurface : "<unavailable>")
-                        + " target=" + targetLabel(target)
-                        + " size=" + target.getWidth() + "x" + target.getHeight());
             } catch (Throwable error) {
                 onPrismalFailure(error);
             }
@@ -450,8 +390,6 @@ final class SystemUiHandleMenuGlassHook {
             target.setBackground(null);
             prismalOutput.setMaterialAlpha(materialFade(pendingSurfaceAlpha));
             target.invalidate();
-            log("full Prismal glass presented; native sampler retained at blur=0"
-                    + " target=" + targetLabel(target));
         }
 
         private void onPrismalFailure(Throwable error) {
@@ -470,11 +408,6 @@ final class SystemUiHandleMenuGlassHook {
             applyMaterialFade(pendingSurfaceAlpha);
         }
 
-        void prepareForNativeClose() {
-            if (released) return;
-            log("native close boundary; glass material retained through surface scale-out");
-        }
-
         private void applyReplacementBlur() {
             if (released || replacementBlurApplied || !root.isAttachedToWindow()
                     || !target.isAttachedToWindow()) return;
@@ -491,12 +424,6 @@ final class SystemUiHandleMenuGlassHook {
             lastAppliedBlurRadius = initialRadius;
             target.setBackground(null);
             target.invalidate();
-            log("replacement pass-window blur armed before surface animation target="
-                    + targetLabel(target)
-                    + " maxBlur=" + nativeBlurRadiusPx
-                    + " initialBlur=" + initialRadius
-                    + " fadeStartAlpha=0.80"
-                    + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         }
 
         private void restoreStockBackground() {
@@ -515,9 +442,6 @@ final class SystemUiHandleMenuGlassHook {
             if (released) return;
             released = true;
             root.removeOnAttachStateChangeListener(this);
-            if (controller != null && CONTROLLERS.get(controller) == this) {
-                CONTROLLERS.remove(controller);
-            }
             if (menuSurface != null) {
                 SystemUiHandleMenuSurfaceAnimationAuthority.unregisterAlphaListener(
                         menuSurface, alphaListener);
@@ -541,7 +465,6 @@ final class SystemUiHandleMenuGlassHook {
         @Override
         public void onViewDetachedFromWindow(View view) {
             if (ACTIVE.get(root) == this) ACTIVE.remove(root);
-            log("caption menu detached");
             release();
         }
     }
