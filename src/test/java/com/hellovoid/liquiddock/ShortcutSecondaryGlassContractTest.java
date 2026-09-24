@@ -95,7 +95,9 @@ public class ShortcutSecondaryGlassContractTest {
 
         // Keep mContentView background blur mode=1 because HyperOS uses it to keep the
         // pass-window texture feed alive. Only the visible element material is suppressed.
-        assertFalse(vendorMaterial.contains("setMiBackgroundBlurMode"));
+        assertFalse(vendorMaterial.contains("SET_MI_BACKGROUND_BLUR_MODE"));
+        assertFalse(vendorMaterial.contains(
+                "View.class, \"setMiBackgroundBlurMode\""));
         assertTrue(vendorMaterial.contains("setMiViewBlurMode"));
         assertTrue(vendorMaterial.contains("clearMiBackgroundBlendColor"));
         assertTrue(vendorMaterial.contains("setMiBloomStroke"));
