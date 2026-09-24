@@ -6,6 +6,7 @@ import android.view.SurfaceControl;
 import android.view.View;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
@@ -21,12 +22,53 @@ import java.util.WeakHashMap;
 final class SystemUiHandleMenuSurfaceProbe {
     private static final String TAG = "[DC][SystemUiHandleMenuSurface]";
     private static final String CAPTION_MENU_SURFACE = "Caption Menu";
+    interface ScaleListener {
+        void onScale(float scaleX, float scaleY);
+    }
+
     private static final Set<SurfaceControl> TRACKED =
             Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+    private static final Map<SurfaceControl, ScaleListener> SCALE_LISTENERS =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private static boolean installed;
 
     private SystemUiHandleMenuSurfaceProbe() {}
+
+    static SurfaceControl trackController(Object controller) {
+        if (controller == null) return null;
+        HookUtil.InvocationResult<Object> result =
+                HookUtil.tryInvoke(controller, "getWindowSurface");
+        Object value = result.succeeded() ? result.value() : null;
+        if (!(value instanceof SurfaceControl)) {
+            log("trackController unavailable controller=" + controller.getClass().getName()
+                    + " failure=" + result.failure());
+            return null;
+        }
+        SurfaceControl surface = (SurfaceControl) value;
+        if (!surface.isValid()) {
+            log("trackController invalid surface=" + surface);
+            return null;
+        }
+        TRACKED.add(surface);
+        log("trackController surface=" + surface);
+        return surface;
+    }
+
+    static void registerScaleListener(SurfaceControl surface, ScaleListener listener) {
+        if (surface == null || listener == null) return;
+        TRACKED.add(surface);
+        SCALE_LISTENERS.put(surface, listener);
+    }
+
+    static void unregisterScaleListener(SurfaceControl surface, ScaleListener listener) {
+        if (surface == null || listener == null) return;
+        synchronized (SCALE_LISTENERS) {
+            if (SCALE_LISTENERS.get(surface) == listener) {
+                SCALE_LISTENERS.remove(surface);
+            }
+        }
+    }
 
     static void trackRoot(View root) {
         if (root == null) return;
@@ -94,7 +136,13 @@ final class SystemUiHandleMenuSurfaceProbe {
                                     && args.length >= 2 && args[1] instanceof SurfaceControl) {
                                 TRACKED.add((SurfaceControl) args[1]);
                             }
-                            if (relevant) logCall(op, args);
+                            if (relevant) {
+                                logCall(op, args);
+                                if ("matrixObject".equals(op) && args.length >= 2
+                                        && args[1] instanceof Matrix) {
+                                    dispatchScale(target, (Matrix) args[1]);
+                                }
+                            }
                         }
                         return chain.proceed(args);
                     });
@@ -103,6 +151,18 @@ final class SystemUiHandleMenuSurfaceProbe {
             log("hook unavailable op=" + op + " error=" + error);
             return 0;
         }
+    }
+
+    private static void dispatchScale(SurfaceControl surface, Matrix matrix) {
+        ScaleListener listener = SCALE_LISTENERS.get(surface);
+        if (listener == null || matrix == null) return;
+        float[] values = new float[9];
+        matrix.getValues(values);
+        float scaleX = (float) Math.hypot(
+                values[Matrix.MSCALE_X], values[Matrix.MSKEW_Y]);
+        float scaleY = (float) Math.hypot(
+                values[Matrix.MSCALE_Y], values[Matrix.MSKEW_X]);
+        listener.onScale(scaleX, scaleY);
     }
 
     private static boolean isTracked(SurfaceControl surface) {
