@@ -46,11 +46,10 @@ final class ShortcutPopupGlassCoordinator {
         prewarm(captureRoot, glassConfig);
         State state = current;
         if (state == null || state.released || state.captureRootRef.get() != captureRoot) return;
-        state.captureRequested = true;
         ShortcutPopupGlassSession session = state.session;
         if (session != null) {
             session.requestInitialCapture();
-            MainHook.log(TAG + " prewarmed workspace capture requested");
+            MainHook.log(TAG + " prewarmed workspace refresh requested");
         }
     }
 
@@ -70,23 +69,19 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
-            if (state.captureRequested) {
-                state.session.requestInitialCapture();
-                MainHook.log(TAG + " deferred prewarmed workspace capture requested");
-            }
+            state.session.requestInitialCapture();
+            MainHook.log(TAG + " idle workspace baseline requested");
         }
     }
 
     static synchronized boolean acceptPreShowBackdrop() {
         State state = current;
-        if (state == null || state.released || state.session == null
-                || !state.session.hasFrozenBackdrop()) {
-            if (state != null && !state.released) {
-                releaseLocked("pre-show-backdrop-not-ready");
-            }
-            return false;
+        if (state == null || state.released || state.session == null) return false;
+        boolean ready = state.session.sealForShow();
+        if (!ready) {
+            releaseLocked("pre-show-backdrop-not-ready");
         }
-        return true;
+        return ready;
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
@@ -314,7 +309,6 @@ final class ShortcutPopupGlassCoordinator {
         View.OnAttachStateChangeListener popupDetachListener;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
-        boolean captureRequested;
         boolean released;
 
         State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
