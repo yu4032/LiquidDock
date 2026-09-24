@@ -58,20 +58,17 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(bridge.contains(
                 "View.class.getMethod(\n"
                         + "                    \"setBackdropRenderEffect\", RenderEffect.class)"));
-        int applyStart = bridge.indexOf("static boolean applyBackdropRenderEffect");
-        int restoreStart = bridge.indexOf("static void restoreBackdropRenderEffect", applyStart);
-        assertTrue(applyStart >= 0 && restoreStart > applyStart);
-        String shortcutApply = bridge.substring(applyStart, restoreStart);
-        assertTrue(shortcutApply.contains("SET_BACKDROP_RENDER_EFFECT.invoke(view, effect)"));
+        assertTrue(bridge.contains(
+                "static boolean applyBackdropRenderEffect(View view, RenderEffect effect) {"));
+        assertTrue(bridge.contains(
+                "SET_BACKDROP_RENDER_EFFECT.invoke(view, effect);\n"
+                        + "            view.invalidate();\n"
+                        + "            return true;"));
         // mode=2 is ShortcutMenuLayer authority. PopupView.mContentView must retain the
         // Launcher-configured mode=1 + element blur + blend-color contract.
-        assertFalse(shortcutApply.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke"));
-        assertFalse(shortcutApply.contains("SET_MI_BACKGROUND_BLUR_RADIUS.invoke"));
-        assertFalse(shortcutApply.contains("SET_MI_VIEW_BLUR_MODE.invoke"));
-        assertFalse(shortcutApply.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke"));
-        assertFalse(shortcutApply.contains("CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke"));
-        assertFalse(shortcutApply.contains("SET_MI_BACKGROUND_BLEND_COLORS.invoke"));
-        assertFalse(shortcutApply.contains("SET_PASS_TEXTURE_SCALE.invoke"));
+        assertFalse(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
+        assertTrue(bridge.contains(
+                "// Do not rewrite any of those properties here. In particular, mode=2 belongs to"));
         assertTrue(bridge.contains("\"getMiBackgroundBlurMode\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlurRadius\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlendColors\""));
