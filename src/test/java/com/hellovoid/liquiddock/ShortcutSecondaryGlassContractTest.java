@@ -99,9 +99,9 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(bridge.contains("class BackdropRenderEffectState"));
         assertTrue(bridge.contains("restoreBackdropRenderEffect("));
 
-        // HyperOS PopupView advanced material is split: mMenuLayer keeps the real
-        // background-only blur, while mContentView element material must be removed.
-        assertTrue(vendorMaterial.contains("setMiBackgroundBlurMode"));
+        // Keep mContentView background blur mode=1 because HyperOS uses it to keep the
+        // pass-window texture feed alive. Only the visible element material is suppressed.
+        assertFalse(vendorMaterial.contains("setMiBackgroundBlurMode"));
         assertTrue(vendorMaterial.contains("setMiViewBlurMode"));
         assertTrue(vendorMaterial.contains("clearMiBackgroundBlendColor"));
         assertTrue(vendorMaterial.contains("setMiBloomStroke"));
@@ -112,6 +112,7 @@ public class ShortcutSecondaryGlassContractTest {
                         + "                    popupView.getClass(), \"prepareHyperMaterial\""));
         assertTrue(vendorMaterial.contains("prepareHyperMaterial.invoke(popupView)"));
         assertTrue(vendorMaterial.contains("!popupView.isAttachedToWindow()"));
+        assertTrue(vendorMaterial.contains("updateTextureState(view, false)"));
         assertFalse(vendorMaterial.contains("setPassWindowBlurEnabled"));
         assertFalse(vendorMaterial.contains("clearPassWindowBlur"));
         assertFalse(vendorMaterial.contains("setBackground(null)"));
