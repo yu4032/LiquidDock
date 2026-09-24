@@ -473,7 +473,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-        firstFramePresented = false;
         Runnable lost = !disposed ? outputLostListener : null;
         Surface current = outputSurface;
         LauncherGlassSession owner = outputSession;
