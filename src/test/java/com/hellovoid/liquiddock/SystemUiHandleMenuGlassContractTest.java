@@ -34,30 +34,36 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void miuiGlassHandoffUsesNativeSurfaceScaleAndCloseBoundaries() throws Exception {
+    public void miuiBlurTracksNativeSurfaceScaleForEntireAnimation() throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String probe = Files.readString(MAIN.resolve("SystemUiHandleMenuSurfaceProbe.java"));
+        String blur = Files.readString(MAIN.resolve("MiBlurBridge.java"));
 
         assertTrue(hook.contains(
                 "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.handlemenu.MiuiWindowController"));
         assertTrue(hook.contains("\"releaseViewWithAnim\""));
         assertTrue(hook.contains("SystemUiHandleMenuSurfaceProbe.trackController(result)"));
         assertTrue(hook.contains("registerScaleListener(menuSurface, scaleListener)"));
-        assertTrue(hook.contains("if (scale < 0.9999f) return;"));
-        assertTrue(hook.contains("prepareForNativeClose()"));
+        assertTrue(hook.contains("applyReplacementBlur();"));
+        assertTrue(hook.contains("pendingTextureScale = 0.05f"));
+        assertTrue(hook.contains("MiBlurBridge.setPassTextureScale(target, appliedScale)"));
         assertTrue(hook.contains(
-                "stock background restored before surface scale-out"));
-        assertTrue(hook.contains("applyReplacementBlur()"));
+                "replacement blur retained through surface scale-out"));
+        assertTrue(hook.contains("MiBlurBridge.setPassTextureScale(target, 1.0f)"));
         assertTrue(hook.contains("customPassBlurOwned"));
+        assertFalse(hook.contains("if (scale < 0.9999f) return;"));
+        assertFalse(hook.contains("stock background restored before surface scale-out"));
         assertFalse(hook.contains("vendor pass-window material retained"));
-        assertFalse(hook.contains("Boolean.TRUE.equals(vendorPassBlurEnabled)"));
+
+        assertTrue(blur.contains("static boolean setPassTextureScale(View view, float textureScale)"));
+        assertTrue(blur.contains("SET_PASS_TEXTURE_SCALE.invoke(view, safeScale)"));
 
         assertTrue(probe.contains("trackController(Object controller)"));
         assertTrue(probe.contains("getWindowSurface"));
         assertTrue(probe.contains("registerScaleListener"));
         assertTrue(probe.contains("dispatchScale"));
         assertTrue(probe.contains("Map<Integer, ScaleListener>"));
-        assertTrue(probe.contains("Miuix307PassBlurBridge.surfaceLayerId(surface)"));
+        assertTrue(probe.contains("stableLayerId(surface)"));
     }
 
     @Test
