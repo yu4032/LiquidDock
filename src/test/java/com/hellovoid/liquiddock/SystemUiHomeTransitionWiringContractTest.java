@@ -21,6 +21,14 @@ public class SystemUiHomeTransitionWiringContractTest {
         assertTrue(source.contains("\"onTransitionMerged\""));
     }
 
+    @Test public void observerFailuresCannotPreemptWmShellCallbacks() throws Exception {
+        String source = Files.readString(MAIN.resolve("SystemUiHomeTransitionSource.java"));
+        assertTrue(source.contains("ready observation begin failed"));
+        assertTrue(source.contains("ready observation end failed"));
+        assertTrue(source.contains("HOME visibility observation failed"));
+        assertTrue(source.contains("return chain.proceed(args)"));
+    }
+
     @Test public void protocolCarriesPhaseVisibilitySerialAndMonotonicTimestamp() throws Exception {
         String protocol = Files.readString(MAIN.resolve("SystemUiHomeTransitionProtocol.java"));
         assertTrue(protocol.contains("PHASE_START"));
