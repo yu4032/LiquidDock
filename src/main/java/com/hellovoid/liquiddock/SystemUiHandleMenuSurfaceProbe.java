@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.view.SurfaceControl;
 
@@ -33,6 +34,9 @@ final class SystemUiHandleMenuSurfaceProbe {
                 new Class<?>[]{SurfaceControl.class, float.class, float.class,
                         float.class, float.class},
                 "matrix");
+        hooks += hook("setMatrix",
+                new Class<?>[]{SurfaceControl.class, Matrix.class, float[].class},
+                "matrixObject");
         hooks += hook("setScale",
                 new Class<?>[]{SurfaceControl.class, float.class, float.class},
                 "scale");
@@ -48,6 +52,9 @@ final class SystemUiHandleMenuSurfaceProbe {
         hooks += hook("setWindowCrop",
                 new Class<?>[]{SurfaceControl.class, int.class, int.class},
                 "windowCrop");
+        hooks += hook("setGeometry",
+                new Class<?>[]{SurfaceControl.class, Rect.class, Rect.class, int.class},
+                "geometry");
         hooks += hook("show", new Class<?>[]{SurfaceControl.class}, "show");
         hooks += hook("hide", new Class<?>[]{SurfaceControl.class}, "hide");
         hooks += hook("reparent",
@@ -104,6 +111,16 @@ final class SystemUiHandleMenuSurfaceProbe {
                     .append(" dtdx=").append(args[2])
                     .append(" dsdy=").append(args[3])
                     .append(" dtdy=").append(args[4]);
+        } else if ("matrixObject".equals(op) && args.length >= 2) {
+            out.append(" value=").append(args[1]);
+            if (args.length >= 3 && args[2] instanceof float[]) {
+                float[] values = (float[]) args[2];
+                out.append(" floats=");
+                for (int i = 0; i < values.length; i++) {
+                    if (i > 0) out.append(',');
+                    out.append(values[i]);
+                }
+            }
         } else if ("scale".equals(op) && args.length >= 3) {
             out.append(" sx=").append(args[1]).append(" sy=").append(args[2]);
         } else if ("position".equals(op) && args.length >= 3) {
@@ -113,6 +130,10 @@ final class SystemUiHandleMenuSurfaceProbe {
         } else if (("crop".equals(op) || "windowCrop".equals(op)) && args.length >= 2) {
             out.append(" value=").append(args[1]);
             if (args.length >= 3) out.append('x').append(args[2]);
+        } else if ("geometry".equals(op) && args.length >= 4) {
+            out.append(" source=").append(args[1])
+                    .append(" dest=").append(args[2])
+                    .append(" transform=").append(args[3]);
         } else if ("reparent".equals(op) && args.length >= 2) {
             out.append(" parent=").append(args[1]);
         }
