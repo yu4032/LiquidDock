@@ -444,15 +444,17 @@ final class SystemUiHandleMenuGlassHook {
             if (released || prismalSession == null || prismalOutput == null) return;
             prismalPresented = true;
             if (customPassBlurOwned) {
-                MiBlurBridge.clearPassWindowBlur(target);
-                customPassBlurOwned = false;
-                replacementBlurApplied = false;
-                lastAppliedBlurRadius = -1;
+                // Keep the compositor pass-window gate alive: Prismal's exported OES producer
+                // depends on the same native backdrop sampler. Only hide the visible fallback by
+                // reducing its radius to zero; full disable is deferred until real detach.
+                MiBlurBridge.setPassWindowBlurEnabled(target, true);
+                MiBlurBridge.setPassWindowBlurRadius(target, 0);
+                lastAppliedBlurRadius = 0;
             }
             target.setBackground(null);
             prismalOutput.setMaterialAlpha(materialFade(pendingSurfaceAlpha));
             target.invalidate();
-            log("full Prismal glass presented; native blur fallback released"
+            log("full Prismal glass presented; native sampler retained at blur=0"
                     + " target=" + targetLabel(target));
         }
 
