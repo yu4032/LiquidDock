@@ -310,6 +310,7 @@ final class SystemUiHandleMenuGlassHook {
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
+        boolean handoffPosted;
         boolean closing;
         boolean released;
 
@@ -346,13 +347,22 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         private void onNativeSurfaceScale(float scaleX, float scaleY) {
-            if (released || closing || replacementBlurApplied) return;
+            if (released || closing || replacementBlurApplied || handoffPosted) return;
             float scale = Math.min(scaleX, scaleY);
             if (scale < 0.9999f) return;
-            applyReplacementBlur();
-            if (replacementBlurApplied) {
-                log("menu surface settled scale=" + scaleX + "," + scaleY
-                        + "; replacement blur presented");
+            handoffPosted = true;
+            boolean posted = root.post(() -> {
+                handoffPosted = false;
+                if (released || closing || replacementBlurApplied) return;
+                applyReplacementBlur();
+                if (replacementBlurApplied) {
+                    log("menu surface settled scale=" + scaleX + "," + scaleY
+                            + "; replacement blur presented");
+                }
+            });
+            if (!posted) {
+                handoffPosted = false;
+                log("settled blur handoff post rejected target=" + targetLabel(target));
             }
         }
 
