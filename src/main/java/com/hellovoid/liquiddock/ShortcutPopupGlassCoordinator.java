@@ -126,7 +126,7 @@ final class ShortcutPopupGlassCoordinator {
         state.layer = layer;
         updateGeometry(state);
         MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
-                + " backdropReady=" + state.session.hasFrozenBackdrop());
+                + " backdropReady=" + state.session.hasPreparedBackdrop());
         return true;
     }
 
