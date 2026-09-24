@@ -38,12 +38,13 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("MiBlurBridge.applyBackdropRenderEffect"));
         assertTrue(effect.contains("MiBlurBridge.captureBackdropRenderEffectState"));
         assertTrue(effect.contains("MiBlurBridge.restoreBackdropRenderEffect"));
-        assertTrue(effect.contains("originalBackground"));
-        assertTrue(effect.contains("originalOutlineProvider"));
-        assertTrue(effect.contains("originalClipToOutline"));
-        assertTrue(effect.contains("target.setBackground(originalBackground)"));
-        assertTrue(effect.contains("target.setOutlineProvider(originalOutlineProvider)"));
-        assertTrue(effect.contains("target.setClipToOutline(originalClipToOutline)"));
+        // Launcher has already configured PopupView.mContentView before this hook runs.
+        // The overlay effect must not seize background/outline ownership from MIUIX.
+        assertFalse(effect.contains("target.setBackground"));
+        assertFalse(effect.contains("target.setOutlineProvider"));
+        assertFalse(effect.contains("target.setClipToOutline"));
+        assertFalse(effect.contains("PassBlurQualityPolicy.captureScale"));
+        assertTrue(effect.contains("vendorMode="));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
         assertFalse(effect.contains("RootPassBlurBackend"));
@@ -57,9 +58,20 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(bridge.contains(
                 "View.class.getMethod(\n"
                         + "                    \"setBackdropRenderEffect\", RenderEffect.class)"));
-        assertTrue(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
-        assertTrue(bridge.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
-        assertTrue(bridge.contains("SET_BACKDROP_RENDER_EFFECT.invoke(view, effect)"));
+        int applyStart = bridge.indexOf("static boolean applyBackdropRenderEffect");
+        int restoreStart = bridge.indexOf("static void restoreBackdropRenderEffect", applyStart);
+        assertTrue(applyStart >= 0 && restoreStart > applyStart);
+        String shortcutApply = bridge.substring(applyStart, restoreStart);
+        assertTrue(shortcutApply.contains("SET_BACKDROP_RENDER_EFFECT.invoke(view, effect)"));
+        // mode=2 is ShortcutMenuLayer authority. PopupView.mContentView must retain the
+        // Launcher-configured mode=1 + element blur + blend-color contract.
+        assertFalse(shortcutApply.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke"));
+        assertFalse(shortcutApply.contains("SET_MI_BACKGROUND_BLUR_RADIUS.invoke"));
+        assertFalse(shortcutApply.contains("SET_MI_VIEW_BLUR_MODE.invoke"));
+        assertFalse(shortcutApply.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke"));
+        assertFalse(shortcutApply.contains("CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke"));
+        assertFalse(shortcutApply.contains("SET_MI_BACKGROUND_BLEND_COLORS.invoke"));
+        assertFalse(shortcutApply.contains("SET_PASS_TEXTURE_SCALE.invoke"));
         assertTrue(bridge.contains("\"getMiBackgroundBlurMode\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlurRadius\""));
         assertTrue(bridge.contains("\"getMiBackgroundBlendColors\""));

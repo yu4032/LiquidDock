@@ -1,12 +1,8 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Color;
-import android.graphics.Outline;
 import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
-import android.graphics.drawable.Drawable;
 import android.view.View;
-import android.view.ViewOutlineProvider;
 
 /**
  * ShortcutMenu glass rendered inside the popup RenderNode.
@@ -157,15 +153,7 @@ final class ShortcutPopupHwuiGlassEffect {
     private final Miuix307PrismalMaterial.Params params;
     private final float cornerRadius;
     private final View.OnLayoutChangeListener layoutListener;
-    private final ViewOutlineProvider outlineProvider;
     private final MiBlurBridge.BackdropRenderEffectState originalBlurState;
-    private final Drawable originalBackground;
-    private final ViewOutlineProvider originalOutlineProvider;
-    private final boolean originalClipToOutline;
-    private final int originalPaddingLeft;
-    private final int originalPaddingTop;
-    private final int originalPaddingRight;
-    private final int originalPaddingBottom;
     private boolean disposed;
 
     private ShortcutPopupHwuiGlassEffect(
@@ -173,36 +161,12 @@ final class ShortcutPopupHwuiGlassEffect {
             RuntimeShader shader,
             Miuix307PrismalMaterial.Params params,
             float cornerRadius,
-            MiBlurBridge.BackdropRenderEffectState originalBlurState,
-            Drawable originalBackground,
-            ViewOutlineProvider originalOutlineProvider,
-            boolean originalClipToOutline,
-            int originalPaddingLeft,
-            int originalPaddingTop,
-            int originalPaddingRight,
-            int originalPaddingBottom) {
+            MiBlurBridge.BackdropRenderEffectState originalBlurState) {
         this.target = target;
         this.shader = shader;
         this.params = params;
         this.cornerRadius = cornerRadius;
         this.originalBlurState = originalBlurState;
-        this.originalBackground = originalBackground;
-        this.originalOutlineProvider = originalOutlineProvider;
-        this.originalClipToOutline = originalClipToOutline;
-        this.originalPaddingLeft = originalPaddingLeft;
-        this.originalPaddingTop = originalPaddingTop;
-        this.originalPaddingRight = originalPaddingRight;
-        this.originalPaddingBottom = originalPaddingBottom;
-        this.outlineProvider = new ViewOutlineProvider() {
-            @Override public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(
-                        0,
-                        0,
-                        Math.max(1, view.getWidth()),
-                        Math.max(1, view.getHeight()),
-                        ShortcutPopupHwuiGlassEffect.this.cornerRadius);
-            }
-        };
         this.layoutListener = (v, left, top, right, bottom,
                                oldLeft, oldTop, oldRight, oldBottom) -> updateGeometry();
     }
@@ -220,58 +184,31 @@ final class ShortcutPopupHwuiGlassEffect {
             MainHook.log(TAG + " reversible vendor blur state unavailable; stock material retained");
             return null;
         }
-        Drawable originalBackground = target.getBackground();
-        ViewOutlineProvider originalOutlineProvider = target.getOutlineProvider();
-        boolean originalClipToOutline = target.getClipToOutline();
-        int originalPaddingLeft = target.getPaddingLeft();
-        int originalPaddingTop = target.getPaddingTop();
-        int originalPaddingRight = target.getPaddingRight();
-        int originalPaddingBottom = target.getPaddingBottom();
         ShortcutPopupHwuiGlassEffect binding = null;
         try {
             RuntimeShader shader = new RuntimeShader(AGSL);
             RenderEffect effect =
                     RenderEffect.createRuntimeShaderEffect(shader, BACKDROP);
-            int blurRadius =
-                    Math.max(0, Math.min(400, Math.round(params.blurRadiusPx)));
-            float textureScale = glassConfig != null
-                    ? PassBlurQualityPolicy.captureScale(
-                            glassConfig.passBlurCaptureScalePercent)
-                    : PassBlurQualityPolicy.captureScale(
-                            PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT);
             binding = new ShortcutPopupHwuiGlassEffect(
                     target,
                     shader,
                     params,
                     Math.max(0f, cornerRadius),
-                    originalBlurState,
-                    originalBackground,
-                    originalOutlineProvider,
-                    originalClipToOutline,
-                    originalPaddingLeft,
-                    originalPaddingTop,
-                    originalPaddingRight,
-                    originalPaddingBottom);
-            if (!MiBlurBridge.applyBackdropRenderEffect(
-                    target, effect, blurRadius, textureScale)) {
+                    originalBlurState);
+            if (!MiBlurBridge.applyBackdropRenderEffect(target, effect)) {
                 binding.restoreTargetState();
                 return null;
             }
 
             binding.applyStaticUniforms();
             binding.updateGeometry();
-            target.setOutlineProvider(binding.outlineProvider);
-            target.setClipToOutline(true);
-            target.setBackgroundColor(Color.TRANSPARENT);
-            target.setPadding(
-                    originalPaddingLeft,
-                    originalPaddingTop,
-                    originalPaddingRight,
-                    originalPaddingBottom);
             target.addOnLayoutChangeListener(binding.layoutListener);
             MainHook.log(TAG + " attached target=" + target.getClass().getName()
                     + " size=" + target.getWidth() + "x" + target.getHeight()
-                    + " blur=" + blurRadius + " scale=" + textureScale);
+                    + " vendorMode=" + originalBlurState.backgroundBlurMode
+                    + " vendorRadius=" + originalBlurState.backgroundBlurRadius
+                    + " pass=" + originalBlurState.passWindowBlurEnabled
+                    + " blends=" + originalBlurState.backgroundBlendColors.size());
             return binding;
         } catch (Throwable error) {
             if (binding != null) {
@@ -296,19 +233,6 @@ final class ShortcutPopupHwuiGlassEffect {
             target.removeOnLayoutChangeListener(layoutListener);
         } catch (Throwable ignored) {}
         MiBlurBridge.restoreBackdropRenderEffect(target, originalBlurState);
-        try {
-            target.setBackground(originalBackground);
-            target.setPadding(
-                    originalPaddingLeft,
-                    originalPaddingTop,
-                    originalPaddingRight,
-                    originalPaddingBottom);
-        } catch (Throwable ignored) {}
-        try {
-            target.setOutlineProvider(originalOutlineProvider);
-            target.setClipToOutline(originalClipToOutline);
-            target.invalidateOutline();
-        } catch (Throwable ignored) {}
         target.invalidate();
     }
 
@@ -341,7 +265,6 @@ final class ShortcutPopupHwuiGlassEffect {
                 "u_size",
                 Math.max(1f, target.getWidth()),
                 Math.max(1f, target.getHeight()));
-        target.invalidateOutline();
         target.invalidate();
     }
 }

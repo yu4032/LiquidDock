@@ -291,27 +291,23 @@ final class MiBlurBridge {
      * the generic TextureView PassBlur export: the effect remains part of HWUI composition and
      * therefore cannot become a new SurfaceFlinger layer that feeds back into the next backdrop.
      */
-    static boolean applyBackdropRenderEffect(
-            View view, RenderEffect effect, int radiusPx, float textureScale) {
+    static boolean applyBackdropRenderEffect(View view, RenderEffect effect) {
         if (!PASS_BLUR_AVAILABLE || !BACKDROP_EFFECT_AVAILABLE
                 || view == null || effect == null) return false;
-        int safeRadius = Math.max(0, Math.min(400, radiusPx));
-        float safeScale = Math.max(0.05f, Math.min(1f, textureScale));
         try {
-            // Mirrors Launcher BlurUtilities.setContainerBlur(..., mode=2, passWindow=true).
-            SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
-            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2);
-            SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, safeRadius);
-            CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
-            if (SET_PASS_TEXTURE_SCALE != null) {
-                SET_PASS_TEXTURE_SCALE.invoke(view, safeScale);
-            }
+            // ShortcutMenu.show() has already configured this exact content View with the
+            // Launcher-owned popup contract: background mode=1, pass-window enabled, popup
+            // blur radius, element blur mode=1, rounded outline and day/night blend colors.
+            //
+            // Do not rewrite any of those properties here. In particular, mode=2 belongs to
+            // ShortcutMenuLayer (the full-screen layer), not PopupView.mContentView. Replacing
+            // the popup contract with layer semantics makes HWUI sample the layer backdrop
+            // authority and also destroys the native element material.
             SET_BACKDROP_RENDER_EFFECT.invoke(view, effect);
             view.invalidate();
             return true;
         } catch (Throwable error) {
-            // The caller owns the pre-claim snapshot and performs the symmetric rollback. Do not
-            // clear unknown vendor state here after a partially successful reflective sequence.
+            // The caller owns the pre-claim snapshot and performs the symmetric rollback.
             MainHook.log("[DC] HWUI backdrop effect unavailable: " + error);
             return false;
         }
