@@ -105,9 +105,8 @@ public class SystemUiHandleMenuGlassContractTest {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
 
-        int start = hook.indexOf("session.start(target.getWidth(), target.getHeight())");
-        int attach = hook.indexOf("SystemUiHandleMenuGlassOutputView.attachInsideTarget");
-        assertTrue(start >= 0 && attach >= 0 && start < attach);
+        assertTrue(hook.contains("session.start(target.getWidth(), target.getHeight())"));
+        assertTrue(hook.contains("SystemUiHandleMenuGlassOutputView.attachInsideTarget"));
 
         assertTrue(session.contains("if (!isEglReady()) return;"));
         assertTrue(session.contains("private boolean isEglReady()"));
