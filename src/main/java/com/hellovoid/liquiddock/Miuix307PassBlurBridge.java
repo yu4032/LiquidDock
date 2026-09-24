@@ -199,7 +199,8 @@ final class Miuix307PassBlurBridge {
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
                 || binding.domain == PassBlurDomain.GBOARD_FLOATING
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
-                || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
+                || binding.domain == PassBlurDomain.RECENTS_CAPSULE
+                || binding.domain == PassBlurDomain.SYSTEMUI_HANDLE_MENU;
         setUpdatesEnabled(binding, true, force);
     }
 
