@@ -15,10 +15,15 @@ final class ShortcutPopupGlassCoordinator {
 
     private ShortcutPopupGlassCoordinator() {}
 
-    static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        releaseLocked("prepare-replace");
+    static synchronized void prewarm(View captureRoot, LiquidDockConfig.Glass glassConfig) {
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
+        State existing = current;
+        if (existing != null && !existing.released
+                && existing.captureRootRef.get() == captureRoot) {
+            return;
+        }
+        releaseLocked("prewarm-replace");
         State state = new State(captureRoot, glassConfig);
         current = state;
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
@@ -37,6 +42,18 @@ final class ShortcutPopupGlassCoordinator {
         if (overlay == null) releaseLocked("source-overlay-unavailable");
     }
 
+    static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        prewarm(captureRoot, glassConfig);
+        State state = current;
+        if (state == null || state.released || state.captureRootRef.get() != captureRoot) return;
+        state.captureRequested = true;
+        ShortcutPopupGlassSession session = state.session;
+        if (session != null) {
+            session.requestInitialCapture();
+            MainHook.log(TAG + " prewarmed workspace capture requested");
+        }
+    }
+
     private static void startSession(State state, ShortcutPopupSourceOverlay sourceRoot) {
         synchronized (ShortcutPopupGlassCoordinator.class) {
             if (current != state || state.released) return;
@@ -53,9 +70,10 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
-            state.session.requestInitialCapture();
-            boolean outputReady = ensurePopupOutput(state);
-            MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
+            if (state.captureRequested) {
+                state.session.requestInitialCapture();
+                MainHook.log(TAG + " deferred prewarmed workspace capture requested");
+            }
         }
     }
 
@@ -240,6 +258,10 @@ final class ShortcutPopupGlassCoordinator {
         current = null;
         if (state == null || state.released) return;
         state.released = true;
+        View prewarmRoot = state.captureRootRef.get();
+        LiquidDockConfig.Glass prewarmConfig = state.glassConfig;
+        boolean rewarmAfterRelease = "popup-detached".equals(reason)
+                || "popup-dismissed".equals(reason);
         View popup = state.popupRef.get();
         if (popup != null && state.popupDetachListener != null) {
             try { popup.removeOnAttachStateChangeListener(state.popupDetachListener); }
@@ -264,6 +286,9 @@ final class ShortcutPopupGlassCoordinator {
         state.sourceOverlay = null;
         if (source != null) source.dispose();
         MainHook.log(TAG + " released reason=" + reason);
+        if (rewarmAfterRelease && prewarmRoot != null && prewarmRoot.isAttachedToWindow()) {
+            prewarmRoot.post(() -> prewarm(prewarmRoot, prewarmConfig));
+        }
     }
 
     private static float resolveShortcutMenuCornerRadius(View contentView) {
@@ -289,6 +314,7 @@ final class ShortcutPopupGlassCoordinator {
         View.OnAttachStateChangeListener popupDetachListener;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
+        boolean captureRequested;
         boolean released;
 
         State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
