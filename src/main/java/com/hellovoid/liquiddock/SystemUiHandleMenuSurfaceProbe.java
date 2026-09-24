@@ -27,9 +27,15 @@ final class SystemUiHandleMenuSurfaceProbe {
         void onScale(float scaleX, float scaleY);
     }
 
+    interface AlphaListener {
+        void onAlpha(float alpha);
+    }
+
     private static final Set<SurfaceControl> TRACKED =
             Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
     private static final Map<Integer, ScaleListener> SCALE_LISTENERS =
+            Collections.synchronizedMap(new HashMap<>());
+    private static final Map<Integer, AlphaListener> ALPHA_LISTENERS =
             Collections.synchronizedMap(new HashMap<>());
 
     private static boolean installed;
@@ -75,6 +81,29 @@ final class SystemUiHandleMenuSurfaceProbe {
         synchronized (SCALE_LISTENERS) {
             if (SCALE_LISTENERS.get(layerId) == listener) {
                 SCALE_LISTENERS.remove(layerId);
+            }
+        }
+    }
+
+    static void registerAlphaListener(SurfaceControl surface, AlphaListener listener) {
+        if (surface == null || listener == null) return;
+        TRACKED.add(surface);
+        int layerId = stableLayerId(surface);
+        if (layerId < 0) {
+            log("registerAlphaListener unavailable layer surface=" + surface);
+            return;
+        }
+        ALPHA_LISTENERS.put(layerId, listener);
+        log("registerAlphaListener layer=" + layerId + " surface=" + surface);
+    }
+
+    static void unregisterAlphaListener(SurfaceControl surface, AlphaListener listener) {
+        if (surface == null || listener == null) return;
+        int layerId = stableLayerId(surface);
+        if (layerId < 0) return;
+        synchronized (ALPHA_LISTENERS) {
+            if (ALPHA_LISTENERS.get(layerId) == listener) {
+                ALPHA_LISTENERS.remove(layerId);
             }
         }
     }
@@ -150,6 +179,9 @@ final class SystemUiHandleMenuSurfaceProbe {
                                 if ("matrixObject".equals(op) && args.length >= 2
                                         && args[1] instanceof Matrix) {
                                     dispatchScale(target, (Matrix) args[1]);
+                                } else if ("alpha".equals(op) && args.length >= 2
+                                        && args[1] instanceof Number) {
+                                    dispatchAlpha(target, ((Number) args[1]).floatValue());
                                 }
                             }
                         }
@@ -183,6 +215,13 @@ final class SystemUiHandleMenuSurfaceProbe {
                     + " scale=" + scaleX + "," + scaleY);
         }
         listener.onScale(scaleX, scaleY);
+    }
+
+    private static void dispatchAlpha(SurfaceControl surface, float alpha) {
+        if (surface == null) return;
+        int layerId = stableLayerId(surface);
+        AlphaListener listener = layerId >= 0 ? ALPHA_LISTENERS.get(layerId) : null;
+        if (listener != null) listener.onAlpha(Math.max(0f, Math.min(1f, alpha)));
     }
 
     private static int stableLayerId(SurfaceControl surface) {
