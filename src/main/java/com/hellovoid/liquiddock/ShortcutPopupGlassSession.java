@@ -26,7 +26,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private static final String TAG = "[DC][ShortcutPopupGlass]";
-    private static final long GENERATION = 1L;
+    private long nextGeneration = 1L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -59,6 +59,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
+    private volatile boolean captureSealed;
+    private volatile long captureGeneration = -1L;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -100,11 +102,26 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        if (shuttingDown) return;
+        long generation = nextGeneration++;
+        captureGeneration = generation;
+        captureSealed = false;
+        sourceFrozen = false;
+        sourceBackend.setUpdatesEnabled(true, "shortcut-popup-refresh");
+        sourceBackend.requestFresh(generation);
+    }
+
+    boolean sealForShow() {
+        if (shuttingDown) return false;
+        captureSealed = true;
+        captureGeneration = nextGeneration++;
+        sourceBackend.setUpdatesEnabled(false, "shortcut-popup-show-sealed");
+        sourceFrozen = backdropPrepared;
+        return backdropPrepared;
     }
 
     boolean hasFrozenBackdrop() {
-        return !shuttingDown && backdropPrepared && sourceFrozen;
+        return !shuttingDown && backdropPrepared && captureSealed;
     }
 
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
@@ -165,7 +182,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+                || captureSealed || frame.generation != captureGeneration) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
