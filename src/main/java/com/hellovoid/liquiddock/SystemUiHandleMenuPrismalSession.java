@@ -45,7 +45,7 @@ final class SystemUiHandleMenuPrismalSession {
             -1f,  1f, 0f, 1f,
              1f,  1f, 1f, 1f
     };
-    private static final String[] EXCLUSIONS = new String[]{
+    private static final String[] EXTRA_EXCLUSIONS = new String[]{
             "SystemUiHandleMenuGlassOutputView",
             "TextureView"
     };
@@ -220,7 +220,8 @@ final class SystemUiHandleMenuPrismalSession {
             setMiBlurWinExc = transactionClass.getMethod(
                     "setMiBlurWinExc", SurfaceControl.class, String[].class);
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-                setMiBlurWinExc.invoke(transaction, sourceSurface, (Object) EXCLUSIONS);
+                setMiBlurWinExc.invoke(
+                        transaction, sourceSurface, (Object) captureExclusions());
                 setPassBlurSurface.invoke(transaction, sourceSurface, inputProducerSurface);
                 setUpdateTextureFlag.invoke(
                         transaction, sourceSurface, Boolean.TRUE, Float.valueOf(1.0f));
@@ -608,6 +609,32 @@ final class SystemUiHandleMenuPrismalSession {
         int uv = GLES20.glGetAttribLocation(program, "aUv");
         if (position >= 0) GLES20.glDisableVertexAttribArray(position);
         if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
+    }
+
+    private String[] captureExclusions() {
+        String sourceName = sourceSurfaceName();
+        String[] exclusions = new String[EXTRA_EXCLUSIONS.length + 1];
+        exclusions[0] = sourceName;
+        System.arraycopy(EXTRA_EXCLUSIONS, 0, exclusions, 1, EXTRA_EXCLUSIONS.length);
+        return exclusions;
+    }
+
+    private String sourceSurfaceName() {
+        try {
+            Method getName = SurfaceControl.class.getDeclaredMethod("getName");
+            getName.setAccessible(true);
+            Object value = getName.invoke(sourceSurface);
+            if (value instanceof String && !((String) value).isEmpty()) {
+                return (String) value;
+            }
+        } catch (Throwable ignored) {}
+        String label = String.valueOf(sourceSurface);
+        int start = label.indexOf("name=");
+        int hash = label.lastIndexOf('#');
+        if (start >= 0 && hash > start + 5) {
+            return label.substring(start + 5, hash);
+        }
+        return "Caption Menu";
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {
