@@ -34,6 +34,30 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
+    public void miuiGlassHandoffUsesNativeSurfaceScaleAndCloseBoundaries() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
+        String probe = Files.readString(MAIN.resolve("SystemUiHandleMenuSurfaceProbe.java"));
+
+        assertTrue(hook.contains(
+                "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.handlemenu.MiuiWindowController"));
+        assertTrue(hook.contains("\"releaseViewWithAnim\""));
+        assertTrue(hook.contains("SystemUiHandleMenuSurfaceProbe.trackController(result)"));
+        assertTrue(hook.contains("registerScaleListener(menuSurface, scaleListener)"));
+        assertTrue(hook.contains("if (scale < 0.999f) return;"));
+        assertTrue(hook.contains("prepareForNativeClose()"));
+        assertTrue(hook.contains(
+                "stock background restored before surface scale-out"));
+        assertTrue(hook.contains("vendorPassBlurEnabled = MiBlurBridge.getPassWindowBlurEnabled(target)"));
+        assertTrue(hook.contains("Boolean.TRUE.equals(vendorPassBlurEnabled)"));
+        assertTrue(hook.contains("customPassBlurOwned"));
+
+        assertTrue(probe.contains("trackController(Object controller)"));
+        assertTrue(probe.contains("getWindowSurface"));
+        assertTrue(probe.contains("registerScaleListener"));
+        assertTrue(probe.contains("dispatchScale"));
+    }
+
+    @Test
     public void animationProbeIsStrictlyReadOnlyAndOwnedByBindingLifetime() throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String probe = Files.readString(MAIN.resolve("SystemUiHandleMenuAnimationProbe.java"));
