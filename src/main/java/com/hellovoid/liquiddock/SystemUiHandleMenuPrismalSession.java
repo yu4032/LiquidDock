@@ -63,6 +63,7 @@ final class SystemUiHandleMenuPrismalSession {
     private volatile boolean sourceBound;
     private volatile boolean firstFramePresented;
     private volatile boolean firstSourceFrameLogged;
+    private boolean continuousRefreshPosted;
     private volatile int width;
     private volatile int height;
 
@@ -242,10 +243,27 @@ final class SystemUiHandleMenuPrismalSession {
                     + " logical=" + width + "x" + height
                     + " buffer=" + sourceEndpoint.bufferWidth + "x" + sourceEndpoint.bufferHeight
                     + " rotation=" + sourceEndpoint.rotation);
-            host.postInvalidateOnAnimation();
+            startContinuousSourceRefresh();
         } catch (Throwable error) {
             fail(error);
         }
+    }
+
+    private void startContinuousSourceRefresh() {
+        if (shuttingDown || continuousRefreshPosted) return;
+        continuousRefreshPosted = true;
+        sourceRoot.postOnAnimation(this::runContinuousSourceRefresh);
+        log("continuous ViewRoot producer refresh started");
+    }
+
+    private void runContinuousSourceRefresh() {
+        continuousRefreshPosted = false;
+        if (shuttingDown || !sourceBound || !sourceRoot.isAttachedToWindow()) return;
+        Miuix307PassBlurBridge.Binding current = sourceBinding;
+        if (current == null || !current.bound) return;
+        Miuix307PassBlurBridge.resumeUpdates(current);
+        sourceRoot.postInvalidateOnAnimation();
+        startContinuousSourceRefresh();
     }
 
     private void unbindSource() {
