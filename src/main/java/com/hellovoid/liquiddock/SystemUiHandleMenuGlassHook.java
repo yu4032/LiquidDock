@@ -11,6 +11,7 @@ import android.view.ViewGroup;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Replaces HyperOS app-caption popup backgrounds with compositor-backed pass-window blur while
@@ -310,8 +311,8 @@ final class SystemUiHandleMenuGlassHook {
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
-        boolean handoffPosted;
-        boolean closing;
+        volatile float pendingTextureScale = 1.0f;
+        final AtomicBoolean textureScalePostPending = new AtomicBoolean();
         boolean released;
 
         Binding(
@@ -339,38 +340,44 @@ final class SystemUiHandleMenuGlassHook {
             animationProbe.start();
             if (controller != null) CONTROLLERS.put(controller, this);
             if (waitForNativeSurfaceScale) {
+                pendingTextureScale = 0.05f;
                 SystemUiHandleMenuSurfaceProbe.registerScaleListener(menuSurface, scaleListener);
-                log("replacement blur waiting for menu surface settle surface=" + menuSurface);
-            } else {
-                applyReplacementBlur();
+                log("replacement blur tracking native menu surface scale surface=" + menuSurface);
             }
+            applyReplacementBlur();
         }
 
         private void onNativeSurfaceScale(float scaleX, float scaleY) {
-            if (released || closing || replacementBlurApplied || handoffPosted) return;
-            float scale = Math.min(scaleX, scaleY);
-            if (scale < 0.9999f) return;
-            handoffPosted = true;
+            if (released) return;
+            pendingTextureScale = Math.max(0.05f, Math.min(1.0f, Math.min(scaleX, scaleY)));
+            postTextureScaleUpdate();
+        }
+
+        private void postTextureScaleUpdate() {
+            if (released || !replacementBlurApplied || !customPassBlurOwned) return;
+            if (!textureScalePostPending.compareAndSet(false, true)) return;
             boolean posted = root.post(() -> {
-                handoffPosted = false;
-                if (released || closing || replacementBlurApplied) return;
-                applyReplacementBlur();
-                if (replacementBlurApplied) {
-                    log("menu surface settled scale=" + scaleX + "," + scaleY
-                            + "; replacement blur presented");
+                float appliedScale = pendingTextureScale;
+                try {
+                    if (!released && replacementBlurApplied && customPassBlurOwned) {
+                        MiBlurBridge.setPassTextureScale(target, appliedScale);
+                    }
+                } finally {
+                    textureScalePostPending.set(false);
+                }
+                if (!released && Math.abs(pendingTextureScale - appliedScale) > 0.0005f) {
+                    postTextureScaleUpdate();
                 }
             });
             if (!posted) {
-                handoffPosted = false;
-                log("settled blur handoff post rejected target=" + targetLabel(target));
+                textureScalePostPending.set(false);
+                log("dynamic blur texture-scale post rejected target=" + targetLabel(target));
             }
         }
 
         void prepareForNativeClose() {
-            if (released || closing) return;
-            closing = true;
-            restoreStockBackground();
-            log("native close boundary; stock background restored before surface scale-out");
+            if (released) return;
+            log("native close boundary; replacement blur retained through surface scale-out");
         }
 
         private void applyReplacementBlur() {
@@ -385,15 +392,19 @@ final class SystemUiHandleMenuGlassHook {
             }
             replacementBlurApplied = true;
             customPassBlurOwned = true;
+            MiBlurBridge.setPassTextureScale(target, pendingTextureScale);
             target.setBackground(null);
             target.invalidate();
-            log("replacement pass-window blur presented target=" + targetLabel(target)
+            log("replacement pass-window blur presented before surface animation target="
+                    + targetLabel(target)
                     + " blur=" + nativeBlurRadiusPx
+                    + " textureScale=" + pendingTextureScale
                     + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         }
 
         private void restoreStockBackground() {
             if (customPassBlurOwned) {
+                MiBlurBridge.setPassTextureScale(target, 1.0f);
                 MiBlurBridge.clearPassWindowBlur(target);
                 customPassBlurOwned = false;
             }
@@ -420,7 +431,7 @@ final class SystemUiHandleMenuGlassHook {
 
         @Override
         public void onViewAttachedToWindow(View view) {
-            if (!waitForNativeSurfaceScale) applyReplacementBlur();
+            applyReplacementBlur();
         }
 
         @Override
