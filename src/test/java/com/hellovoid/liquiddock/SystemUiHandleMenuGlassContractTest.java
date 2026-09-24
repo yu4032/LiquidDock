@@ -77,9 +77,10 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("target,"));
         assertTrue(hook.contains("sourceRoot,"));
         assertTrue(hook.contains("SystemUiHandleMenuGlassOutputView.attachInsideTarget"));
-        assertTrue(hook.contains("full Prismal glass presented; native blur fallback released"));
+        assertTrue(hook.contains("full Prismal glass presented; native sampler retained at blur=0"));
         assertTrue(hook.contains("Prismal fallback to native blur"));
-        assertTrue(hook.contains("MiBlurBridge.clearPassWindowBlur(target)"));
+        assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurEnabled(target, true)"));
+        assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurRadius(target, 0)"));
 
         assertTrue(session.contains("RootPassBlurEndpointBridge.inspect(sourceRoot)"));
         assertTrue(session.contains("PassBlurBindRequest.systemUiHandleMenu(sourceRoot)"));
@@ -93,7 +94,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("PrismalGeometry"));
         assertTrue(session.contains("PrismalHighlightProfile"));
         assertTrue(session.contains("Miuix307PrismalAdapter.toPortable"));
-        assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
+        assertTrue(session.contains("Miuix307PassBlurShaders.HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
         assertTrue(session.contains("Miuix307PrismalCompositeShaders.FRAGMENT"));
         assertTrue(session.contains("first Prismal frame presented"));
 
@@ -109,22 +110,30 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void prismalSourceRefreshesContinuouslyWhileMenuIsAttached() throws Exception {
+    public void prismalKeepsNativeSamplerAliveAndPreservesCaptionProducerCrop() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
-        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String shaders = Files.readString(MAIN.resolve("Miuix307PassBlurShaders.java"));
 
-        assertTrue(session.contains("sourceRoot.postOnAnimation(this::runContinuousSourceRefresh)"));
-        assertTrue(session.contains("Miuix307PassBlurBridge.resumeUpdates(current)"));
-        assertTrue(session.contains("sourceRoot.postInvalidateOnAnimation()"));
-        assertTrue(session.contains("continuous ViewRoot producer refresh started"));
+        assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurEnabled(target, true)"));
+        assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurRadius(target, 0)"));
+        assertTrue(hook.contains("native sampler retained at blur=0"));
+        assertFalse(hook.contains("native blur fallback released"));
+
+        assertTrue(session.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
+        assertFalse(session.contains("runContinuousSourceRefresh"));
+        assertFalse(session.contains("continuous ViewRoot producer refresh started"));
         assertTrue(session.contains("continuous ViewRoot source confirmed timestamp="));
         assertTrue(session.contains("sourceFrameReady = true"));
         assertTrue(session.contains("if (!sourceFrameReady || normalizedTexture == 0"));
-        assertTrue(session.contains("if (shuttingDown || !sourceBound || !sourceRoot.isAttachedToWindow()) return;"));
         assertFalse(session.contains("postDelayed"));
 
-        assertTrue(bridge.contains("PassBlurDomain.SYSTEMUI_HANDLE_MENU"));
-        assertTrue(bridge.contains("setUpdateTextureFlag.invoke("));
+        assertTrue(shaders.contains("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"));
+        assertTrue(shaders.contains("vec4 transformed = uTexMatrix * vec4(orientedUv, 0.0, 1.0)"));
+        assertFalse(shaders.substring(
+                shaders.indexOf("HANDLE_MENU_OES_NORMALIZE_FRAGMENT"),
+                shaders.indexOf("GAUSSIAN_BLUR_FRAGMENT"))
+                .contains("compensateSurfaceTextureCropPreservingOrientation"));
     }
 
     @Test
