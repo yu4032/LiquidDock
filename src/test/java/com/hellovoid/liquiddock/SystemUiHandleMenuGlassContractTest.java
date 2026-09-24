@@ -62,6 +62,31 @@ public class SystemUiHandleMenuGlassContractTest {
         assertFalse(probe.contains("postDelayed"));
     }
 
+
+    @Test
+    public void surfaceProbeObservesOnlyCaptionMenuTransactionsWithoutMutatingThem()
+            throws Exception {
+        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String probe = Files.readString(MAIN.resolve("SystemUiHandleMenuSurfaceProbe.java"));
+
+        assertTrue(module.contains("SystemUiHandleMenuSurfaceProbe.install()"));
+        assertTrue(probe.contains("SurfaceControl.Transaction.class"));
+        assertTrue(probe.contains("\"setMatrix\""));
+        assertTrue(probe.contains("\"setScale\""));
+        assertTrue(probe.contains("\"setPosition\""));
+        assertTrue(probe.contains("\"setAlpha\""));
+        assertTrue(probe.contains("\"reparent\""));
+        assertTrue(probe.contains("\"Caption Menu\""));
+        assertTrue(probe.contains("[DC][SystemUiHandleMenuSurface]"));
+
+        assertFalse(probe.contains("new SurfaceControl.Transaction"));
+        assertFalse(probe.contains(".apply()"));
+        assertFalse(probe.contains(".setMatrix("));
+        assertFalse(probe.contains(".setScale("));
+        assertFalse(probe.contains(".setPosition("));
+        assertFalse(probe.contains(".setAlpha("));
+    }
+
     @Test
     public void moduleAndSchemaKeepFeatureOptIn() throws Exception {
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
