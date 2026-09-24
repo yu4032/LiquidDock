@@ -43,18 +43,21 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("\"releaseViewWithAnim\""));
         assertTrue(hook.contains("SystemUiHandleMenuSurfaceProbe.trackController(result)"));
         assertTrue(hook.contains("registerScaleListener(menuSurface, scaleListener)"));
-        assertTrue(hook.contains("if (scale < 0.999f) return;"));
+        assertTrue(hook.contains("if (scale < 0.9999f) return;"));
         assertTrue(hook.contains("prepareForNativeClose()"));
         assertTrue(hook.contains(
                 "stock background restored before surface scale-out"));
-        assertTrue(hook.contains("vendorPassBlurEnabled = MiBlurBridge.getPassWindowBlurEnabled(target)"));
-        assertTrue(hook.contains("Boolean.TRUE.equals(vendorPassBlurEnabled)"));
+        assertTrue(hook.contains("applyReplacementBlur()"));
         assertTrue(hook.contains("customPassBlurOwned"));
+        assertFalse(hook.contains("vendor pass-window material retained"));
+        assertFalse(hook.contains("Boolean.TRUE.equals(vendorPassBlurEnabled)"));
 
         assertTrue(probe.contains("trackController(Object controller)"));
         assertTrue(probe.contains("getWindowSurface"));
         assertTrue(probe.contains("registerScaleListener"));
         assertTrue(probe.contains("dispatchScale"));
+        assertTrue(probe.contains("Map<Integer, ScaleListener>"));
+        assertTrue(probe.contains("Miuix307PassBlurBridge.surfaceLayerId(surface)"));
     }
 
     @Test
