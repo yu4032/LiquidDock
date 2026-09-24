@@ -46,6 +46,9 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("RenderEffect.createRuntimeShaderEffect"));
         assertTrue(effect.contains("MiBlurBridge.captureBackdropRenderEffectState"));
         assertTrue(effect.contains("contentView.addView("));
+        assertTrue(effect.contains(
+                "glassLayer.layout(0, 0, contentView.getWidth(), contentView.getHeight())"));
+        assertTrue(effect.contains("layerSize="));
         assertTrue(effect.contains("glassLayer"));
         assertTrue(effect.contains("MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)"));
         assertTrue(effect.contains("glassLayer.setRenderEffect(effect)"));
