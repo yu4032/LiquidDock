@@ -187,6 +187,7 @@ final class SystemUiHandleMenuGlassHook {
 
             PENDING.remove(root);
             release();
+            SystemUiHandleMenuSurfaceProbe.trackRoot(sourceRoot);
             try {
                 Binding binding = new Binding(root, sourceRoot, target, glass);
                 ACTIVE.put(root, binding);
