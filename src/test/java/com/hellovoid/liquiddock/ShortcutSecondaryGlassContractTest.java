@@ -190,7 +190,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(coordinator.contains("background.setAlpha(0)"));
         assertFalse(coordinator.contains("int originalBackgroundAlpha"));
         assertTrue(coordinator.contains("binding.transparentBackground.setAlpha(0)"));
-        assertTrue(coordinator.contains("background-reassert-failed"));
+        assertTrue(coordinator.contains("MAIN.post(() -> releaseObserved(binding))"));
         assertTrue(coordinator.contains("OnGlobalLayoutListener"));
         assertFalse(coordinator.contains("postDelayed("));
 
