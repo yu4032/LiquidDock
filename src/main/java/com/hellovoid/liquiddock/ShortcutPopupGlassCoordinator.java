@@ -59,6 +59,18 @@ final class ShortcutPopupGlassCoordinator {
         }
     }
 
+    static synchronized boolean acceptPreShowBackdrop() {
+        State state = current;
+        if (state == null || state.released || state.session == null
+                || !state.session.hasFrozenBackdrop()) {
+            if (state != null && !state.released) {
+                releaseLocked("pre-show-backdrop-not-ready");
+            }
+            return false;
+        }
+        return true;
+    }
+
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
