@@ -18,7 +18,7 @@ public class ShortcutSecondaryGlassContractTest {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String effect = Files.readString(MAIN.resolve("ShortcutPopupHwuiGlassEffect.java"));
         String bridge = Files.readString(MAIN.resolve("MiBlurBridge.java"));
-        String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
+        String domains = Files.readString(MAIN.resolve("PassBlurDomain.java"));
 
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
         assertTrue(hook.contains("backend=hwui-backdrop-effect"));
@@ -53,11 +53,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(bridge.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
         assertTrue(bridge.contains("SET_BACKDROP_RENDER_EFFECT.invoke(view, effect)"));
 
-        assertFalse(request.contains("SHORTCUT_POPUP_EXTRA_EXCLUSIONS"));
-        assertTrue(request.contains(
-                "PassBlurDomain.SHORTCUT_POPUP,\n"
-                        + "                1.0f,\n"
-                        + "                NO_EXTRA_EXCLUSIONS"));
+        assertFalse(domains.contains("SHORTCUT_POPUP"));
+        String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
+        assertFalse(request.contains("shortcutPopup("));
+        assertFalse(request.contains("PassBlurDomain.SHORTCUT_POPUP"));
     }
 
     @Test public void popupDetachDefersHwuiCleanupOutsideVendorRemoveTraversal()

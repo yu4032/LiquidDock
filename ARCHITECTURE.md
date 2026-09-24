@@ -119,7 +119,6 @@ Native source binding is explicit through `PassBlurBindRequest`; the domain is n
 Current domains:
 
 - `LAUNCHER_WORKSPACE`;
-- `SHORTCUT_POPUP`;
 - `DRAG_OVERLAY`;
 - `DOCK`;
 - `SECURITY_CENTER`.
@@ -274,17 +273,21 @@ Important ownership split:
 
 ## 9. Shortcut popup architecture
 
-Shortcut popup glass is intentionally independent from the ordinary static Workspace compositor.
+Shortcut popup glass is intentionally independent from the ordinary static Workspace compositor
+and from the root-export `RootPassBlurBackend` path.
 
 `MiuixShortcutMenuGlassHook`:
 
 - reads popup-glass and dark-mode options at process installation;
-- prewarms the source at `ShortcutMenuLayer.setRequestingItemInfo()`;
-- binds the actual popup after `ShortcutMenu.show()` through `mPopupView.getContentView()`;
-- starts a fast visual fade during dismiss;
-- leaves cleanup to real popup detach/release boundaries.
+- calls the vendor `ShortcutMenu.show()` first and resolves the real `mPopupView.getContentView()`;
+- attaches `ShortcutPopupHwuiGlassEffect` directly to that content RenderNode;
+- leaves popup scale/translation/alpha animation entirely under HyperOS ownership;
+- releases the effect only at the real popup detach boundary.
 
-The popup uses `PassBlurDomain.SHORTCUT_POPUP` and its own `ShortcutPopupGlassCoordinator` / session/layer lifecycle.
+`ShortcutPopupHwuiGlassEffect` uses `RuntimeShader -> RenderEffect` and Xiaomi's
+`View.setBackdropRenderEffect(RenderEffect)` bridge. Pass-window backdrop acquisition stays inside
+the Launcher ViewRoot/HWUI composition, so there is no extra TextureView/SurfaceFlinger output layer
+that can be sampled back into the next PassBlur frame.
 
 ### Dark-mode content adapter
 

@@ -181,11 +181,12 @@ Runtime small/large gates are independent; callbacks must re-check the matching 
 
 | Target | Method | Purpose |
 | --- | --- | --- |
-| `ShortcutMenuLayer` | `setRequestingItemInfo(ItemInfo)` | prewarm/cancel popup source around request ownership |
-| `ShortcutMenu` | `show()` | original first, then bind real popup content |
-| `ShortcutMenu` | `dismiss(EditStateChangeReason)` | begin fast custom fade, then normal detach cleanup |
+| `ShortcutMenu` | `show()` | original first, then bind the real popup content RenderNode to the HWUI backdrop effect |
+| `ShortcutMenu` | `dismiss(EditStateChangeReason)` | keep the vendor dismiss animation authoritative and release only after real detach |
 
-`mDecorView` / `mPopupView` are vendor fields. `getContentView()` is called on the actual popup object. The glass session itself uses typed LiquidDock APIs.
+`mDecorView` / `mPopupView` are vendor fields. `getContentView()` is called on the actual popup object.
+`ShortcutPopupHwuiGlassEffect` contains no capture window, TextureView, SurfaceTexture or custom
+dismiss animation; Xiaomi HWUI remains the backdrop and transform authority.
 
 ### Dark-mode content
 

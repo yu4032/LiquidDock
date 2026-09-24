@@ -192,7 +192,7 @@ PassBlur 是 source-driven：静态壁纸/静态 backdrop 可在 updates-enabled
 
 ### Glass background
 
-“桌面快捷菜单玻璃背景”在 `ShortcutMenuLayer.setRequestingItemInfo` 阶段预热独立 source，在 `ShortcutMenu.show()` 后绑定 popup content。它有专用 `SHORTCUT_POPUP` PassBlur domain，并在 dismiss 时快速淡出，再按真实 detach 生命周期回收。
+“桌面快捷菜单玻璃背景”在 `ShortcutMenu.show()` 完成后直接绑定真实 popup content 的 HWUI RenderNode，通过 `RuntimeShader -> RenderEffect -> View.setBackdropRenderEffect()` 处理原生 backdrop。它不再创建独立 PassBlur source/TextureView 输出，菜单的缩放、位移、透明度动画继续由系统原生 View 层级驱动，并在真实 detach 生命周期回收。
 
 ### 深色模式适配
 
