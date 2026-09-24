@@ -48,7 +48,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("applyReplacementBlur();"));
         assertTrue(hook.contains("pendingSurfaceAlpha = trackNativeSurfaceAnimation ? 0f : 1f"));
         assertTrue(hook.contains("float t = (surfaceAlpha - 0.80f) / 0.20f"));
-        assertTrue(hook.contains("float eased = t * t * (3f - (2f * t))"));
+        assertTrue(hook.contains("return t * t * (3f - (2f * t))"));
         assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurRadius(target, radius)"));
         assertTrue(hook.contains("glass material retained through surface scale-out"));
         assertTrue(hook.contains("initialRadius = trackNativeSurfaceAnimation ? 0 : nativeBlurRadiusPx"));
