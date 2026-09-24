@@ -305,7 +305,7 @@ final class ShortcutPopupHwuiGlassEffect {
         int width = Math.max(1, target.getWidth());
         int height = Math.max(1, target.getHeight());
 
-        target.getLocationInWindow(origin);
+        target.getLocationInSurface(origin);
 
         localOrigin[0] = 0f;
         localOrigin[1] = 0f;
