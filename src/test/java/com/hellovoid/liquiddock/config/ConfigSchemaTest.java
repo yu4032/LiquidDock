@@ -28,6 +28,18 @@ public class ConfigSchemaTest {
         assertTrue(ConfigSchema.all().contains(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING));
     }
 
+    @Test
+    public void systemUiHandleMenuGlassIsOptIn() {
+        assertEquals("liquid_systemui_handle_menu_glass",
+                ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name());
+        assertEquals(Boolean.FALSE, ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.uiDefault());
+        assertEquals(Boolean.FALSE,
+                ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.runtimeFallback());
+        assertEquals(ConfigKey.ExportMode.ALWAYS,
+                ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.exportMode());
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS));
+    }
+
     private static void assertComposeIntSpec(ConfigKey<Integer> key, int uiDefault,
                                              int min, int max) {
         assertEquals(key.name(), Integer.valueOf(uiDefault), key.uiDefault());
