@@ -3,8 +3,6 @@ package com.hellovoid.liquiddock;
 import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
 import android.view.View;
-import android.view.ViewParent;
-import android.view.ViewTreeObserver;
 
 /**
  * ShortcutMenu glass rendered inside the popup RenderNode.
@@ -20,9 +18,6 @@ final class ShortcutPopupHwuiGlassEffect {
     private static final String AGSL = """
             uniform shader u_backdrop;
             uniform float2 u_size;
-            uniform float2 u_origin;
-            uniform float2 u_basisX;
-            uniform float2 u_basisY;
             uniform float u_radius;
             uniform float u_ior;
             uniform float u_thickness;
@@ -73,21 +68,10 @@ final class ShortcutPopupHwuiGlassEffect {
 
             half4 main(float2 frag) {
                 float2 size = max(u_size, float2(1.0));
-
-                // Backdrop RenderEffect runs as an image filter over the framebuffer subset,
-                // so frag is in window/image coordinates, not mContentView-local coordinates.
-                // Recover local popup coordinates from the current transformed View basis.
-                float2 delta = frag - u_origin;
-                float det = u_basisX.x * u_basisY.y - u_basisX.y * u_basisY.x;
-                if (abs(det) < 0.00001) return half4(0.0);
-                float2 localFrag = float2(
-                        (delta.x * u_basisY.y - delta.y * u_basisY.x) / det,
-                        (u_basisX.x * delta.y - u_basisX.y * delta.x) / det);
-
                 float2 halfSize = size * 0.5;
                 float minDim = max(1.0, min(halfSize.x, halfSize.y));
                 float radius = clamp(u_radius, 0.0, minDim);
-                float2 p = localFrag - halfSize;
+                float2 p = frag - halfSize;
                 float dist = sdRoundRect(p, halfSize, radius);
                 float edgeDist = -dist;
                 float alpha = 1.0 - smoothstep(-1.25, 0.0, dist);
@@ -115,26 +99,22 @@ final class ShortcutPopupHwuiGlassEffect {
                 float2 snellOffset = n.xy * u_thickness * h * 0.11
                                    * u_displacementScale
                                    * (0.55 + 0.45 * (1.0 - fresnel));
-                float2 localSample = clamp(
-                        localFrag + lensOffset + snellOffset,
-                        float2(0.0), size - float2(1.0));
-                float2 sampleP = u_origin
-                        + u_basisX * localSample.x
-                        + u_basisY * localSample.y;
+                float2 sampleP = clamp(
+                        frag + lensOffset + snellOffset, float2(0.0), size - float2(1.0));
 
                 float ca = max(u_chromatic, 0.0) * 0.018 * edge;
                 float2 chromaDir = outward * ca;
-                float2 chromaWindow =
-                        u_basisX * chromaDir.x + u_basisY * chromaDir.y;
                 half3 color;
                 if (ca < 0.02) {
                     color = u_backdrop.eval(sampleP).rgb;
                 } else {
-                    half r = u_backdrop.eval(sampleP
-                            + chromaWindow * u_dispersionR).r;
+                    half r = u_backdrop.eval(clamp(
+                            sampleP + chromaDir * u_dispersionR,
+                            float2(0.0), size - float2(1.0))).r;
                     half g = u_backdrop.eval(sampleP).g;
-                    half b = u_backdrop.eval(sampleP
-                            - chromaWindow * u_dispersionB).b;
+                    half b = u_backdrop.eval(clamp(
+                            sampleP - chromaDir * u_dispersionB,
+                            float2(0.0), size - float2(1.0))).b;
                     color = half3(r, g, b);
                 }
 
@@ -173,7 +153,6 @@ final class ShortcutPopupHwuiGlassEffect {
     private final Miuix307PrismalMaterial.Params params;
     private final float cornerRadius;
     private final View.OnLayoutChangeListener layoutListener;
-    private final ViewTreeObserver.OnPreDrawListener preDrawListener;
     private final MiBlurBridge.BackdropRenderEffectState originalBlurState;
     private boolean disposed;
 
@@ -189,12 +168,7 @@ final class ShortcutPopupHwuiGlassEffect {
         this.cornerRadius = cornerRadius;
         this.originalBlurState = originalBlurState;
         this.layoutListener = (v, left, top, right, bottom,
-                               oldLeft, oldTop, oldRight, oldBottom) ->
-                updateGeometryAndTransform();
-        this.preDrawListener = () -> {
-            updateGeometryAndTransform();
-            return true;
-        };
+                               oldLeft, oldTop, oldRight, oldBottom) -> updateGeometry();
     }
 
     static ShortcutPopupHwuiGlassEffect attach(
@@ -227,12 +201,10 @@ final class ShortcutPopupHwuiGlassEffect {
             }
 
             binding.applyStaticUniforms();
-            binding.updateGeometryAndTransform();
+            binding.updateGeometry();
             target.addOnLayoutChangeListener(binding.layoutListener);
-            target.getViewTreeObserver().addOnPreDrawListener(binding.preDrawListener);
             MainHook.log(TAG + " attached target=" + target.getClass().getName()
                     + " size=" + target.getWidth() + "x" + target.getHeight()
-                    + " transform=" + binding.describeTransform()
                     + " vendorMode=" + originalBlurState.backgroundBlurMode
                     + " vendorRadius=" + originalBlurState.backgroundBlurRadius
                     + " pass=" + originalBlurState.passWindowBlurEnabled
@@ -259,10 +231,6 @@ final class ShortcutPopupHwuiGlassEffect {
     private void restoreTargetState() {
         try {
             target.removeOnLayoutChangeListener(layoutListener);
-        } catch (Throwable ignored) {}
-        try {
-            ViewTreeObserver observer = target.getViewTreeObserver();
-            if (observer.isAlive()) observer.removeOnPreDrawListener(preDrawListener);
         } catch (Throwable ignored) {}
         MiBlurBridge.restoreBackdropRenderEffect(target, originalBlurState);
         target.invalidate();
@@ -291,66 +259,12 @@ final class ShortcutPopupHwuiGlassEffect {
         shader.setFloatUniform("u_transmittance", params.transmittance);
     }
 
-    private final int[] origin = new int[2];
-    private final float[] localOrigin = new float[2];
-    private final float[] localXAxis = new float[2];
-    private final float[] localYAxis = new float[2];
-    private float basisXx = 1f;
-    private float basisXy;
-    private float basisYx;
-    private float basisYy = 1f;
-
-    private void updateGeometryAndTransform() {
+    private void updateGeometry() {
         if (disposed) return;
-        int width = Math.max(1, target.getWidth());
-        int height = Math.max(1, target.getHeight());
-
-        target.getLocationInSurface(origin);
-
-        localOrigin[0] = 0f;
-        localOrigin[1] = 0f;
-        localXAxis[0] = width;
-        localXAxis[1] = 0f;
-        localYAxis[0] = 0f;
-        localYAxis[1] = height;
-        mapThroughViewParents(target, localOrigin);
-        mapThroughViewParents(target, localXAxis);
-        mapThroughViewParents(target, localYAxis);
-
-        basisXx = (localXAxis[0] - localOrigin[0]) / (float) width;
-        basisXy = (localXAxis[1] - localOrigin[1]) / (float) width;
-        basisYx = (localYAxis[0] - localOrigin[0]) / (float) height;
-        basisYy = (localYAxis[1] - localOrigin[1]) / (float) height;
-
-        shader.setFloatUniform("u_size", (float) width, (float) height);
-        shader.setFloatUniform("u_origin", (float) origin[0], (float) origin[1]);
-        shader.setFloatUniform("u_basisX", basisXx, basisXy);
-        shader.setFloatUniform("u_basisY", basisYx, basisYy);
-    }
-
-    private static void mapThroughViewParents(View target, float[] point) {
-        if (target == null || point == null || point.length < 2) return;
-
-        View current = target;
-        if (!current.getMatrix().isIdentity()) current.getMatrix().mapPoints(point);
-        point[0] += current.getLeft();
-        point[1] += current.getTop();
-
-        ViewParent parent = current.getParent();
-        while (parent instanceof View) {
-            View view = (View) parent;
-            point[0] -= view.getScrollX();
-            point[1] -= view.getScrollY();
-            if (!view.getMatrix().isIdentity()) view.getMatrix().mapPoints(point);
-            point[0] += view.getLeft();
-            point[1] += view.getTop();
-            parent = view.getParent();
-        }
-    }
-
-    private String describeTransform() {
-        return "origin=" + origin[0] + "," + origin[1]
-                + " bx=" + basisXx + "," + basisXy
-                + " by=" + basisYx + "," + basisYy;
+        shader.setFloatUniform(
+                "u_size",
+                Math.max(1f, target.getWidth()),
+                Math.max(1f, target.getHeight()));
+        target.invalidate();
     }
 }
