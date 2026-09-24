@@ -218,6 +218,11 @@ final class ShortcutPopupHwuiGlassEffect {
                             ViewGroup.LayoutParams.MATCH_PARENT));
             added = true;
 
+            // The parent already has authoritative non-zero geometry at this point. Establish the
+            // MATCH_PARENT child bounds synchronously before registering it as a pass-blur
+            // consumer, then let normal parent layout remain authoritative on subsequent frames.
+            glassLayer.layout(0, 0, contentView.getWidth(), contentView.getHeight());
+
             // Xiaomi's pass-window + background/view blur is the real backdrop producer/consumer.
             // The standard RenderEffect is deliberately a *foreground* post-process of this owned
             // background plane; it no longer tries to read Xiaomi's private pass texture as an
@@ -233,6 +238,7 @@ final class ShortcutPopupHwuiGlassEffect {
             contentView.addOnLayoutChangeListener(binding.layoutListener);
             MainHook.log(TAG + " layer attached size="
                     + target.getWidth() + "x" + target.getHeight()
+                    + " layerSize=" + glassLayer.getWidth() + "x" + glassLayer.getHeight()
                     + " sourceMode=" + vendorState.backgroundBlurMode
                     + " sourceRadius=" + vendorState.backgroundBlurRadius
                     + " layerRadius=" + blurRadius
