@@ -20,7 +20,6 @@ import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
 
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -28,9 +27,10 @@ import java.nio.FloatBuffer;
 /**
  * Dedicated zero-copy PassBlur -> Prismal pipeline for HyperOS' app-caption Handle Menu.
  *
- * <p>The source authority is the outer WMShell ContainerLayer returned by
- * MiuiWindowController#getWindowSurface(), never the Windowless caption ViewRoot. That keeps
- * capture outside the popup-local ViewRoot path which is not a safe PassBlur producer.</p>
+ * <p>The source authority is the caption window's real ViewRoot surface — the same window-level
+ * compositor boundary on which native pass-window blur already samples the app behind the menu.
+ * This class deliberately avoids the generic RootPassBlurBackend lifecycle and binds only this
+ * short-lived 758x147 menu session.</p>
  */
 final class SystemUiHandleMenuPrismalSession {
     interface Listener {
@@ -45,13 +45,11 @@ final class SystemUiHandleMenuPrismalSession {
             -1f,  1f, 0f, 1f,
              1f,  1f, 1f, 1f
     };
-    private static final String[] EXTRA_EXCLUSIONS = new String[]{
-            "SystemUiHandleMenuGlassOutputView",
-            "TextureView"
-    };
-
     private final View host;
+    private final View sourceRoot;
     private final SurfaceControl sourceSurface;
+    private final RootPassBlurEndpointBridge.Endpoint sourceEndpoint;
+    private final RootPassBlurContentRect sourceContentRect;
     private final Listener listener;
     private final Handler mainHandler;
     private final HandlerThread renderThread;
@@ -85,21 +83,33 @@ final class SystemUiHandleMenuPrismalSession {
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
 
-    private Method setPassBlurSurface;
-    private Method setUpdateTextureFlag;
-    private Method setMiBlurWinExc;
+    private Miuix307PassBlurBridge.Binding sourceBinding;
 
     SystemUiHandleMenuPrismalSession(
             View host,
-            SurfaceControl sourceSurface,
+            View sourceRoot,
             LiquidDockConfig.Glass glassConfig,
             Listener listener) {
         if (host == null) throw new IllegalArgumentException("host == null");
-        if (sourceSurface == null || !sourceSurface.isValid()) {
-            throw new IllegalArgumentException("sourceSurface invalid");
+        if (sourceRoot == null || !sourceRoot.isAttachedToWindow()) {
+            throw new IllegalArgumentException("sourceRoot unavailable");
+        }
+        RootPassBlurEndpointBridge.Endpoint endpoint =
+                RootPassBlurEndpointBridge.inspect(sourceRoot);
+        if (endpoint == null || !endpoint.isValid()) {
+            throw new IllegalArgumentException("source ViewRoot endpoint unavailable");
         }
         this.host = host;
-        this.sourceSurface = sourceSurface;
+        this.sourceRoot = sourceRoot;
+        sourceEndpoint = endpoint;
+        sourceSurface = endpoint.rootSurface;
+        sourceContentRect = RootPassBlurContentRect.resolve(
+                endpoint.surfaceWidth,
+                endpoint.surfaceHeight,
+                endpoint.insetLeft,
+                endpoint.insetTop,
+                endpoint.insetRight,
+                endpoint.insetBottom);
         this.listener = listener;
         mainHandler = new Handler(host.getContext().getMainLooper());
 
@@ -178,9 +188,6 @@ final class SystemUiHandleMenuPrismalSession {
             try {
                 makePbufferCurrent();
                 ensureNormalizedTarget(this.width, this.height);
-                if (inputTexture != null) {
-                    inputTexture.setDefaultBufferSize(this.width, this.height);
-                }
                 renderLatestIfPossible();
             } catch (Throwable error) {
                 fail(error);
@@ -214,26 +221,26 @@ final class SystemUiHandleMenuPrismalSession {
 
     private void bindSource() {
         if (shuttingDown || sourceBound || inputProducerSurface == null
-                || !sourceSurface.isValid()) return;
+                || !sourceSurface.isValid() || !sourceRoot.isAttachedToWindow()) return;
         try {
-            Class<?> transactionClass = SurfaceControl.Transaction.class;
-            setPassBlurSurface = transactionClass.getMethod(
-                    "SetPassBlurSurface", SurfaceControl.class, Surface.class);
-            setUpdateTextureFlag = transactionClass.getMethod(
-                    "setUpdateTextureFlag", SurfaceControl.class, Boolean.TYPE, Float.TYPE);
-            setMiBlurWinExc = transactionClass.getMethod(
-                    "setMiBlurWinExc", SurfaceControl.class, String[].class);
-            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-                setMiBlurWinExc.invoke(
-                        transaction, sourceSurface, (Object) captureExclusions());
-                setPassBlurSurface.invoke(transaction, sourceSurface, inputProducerSurface);
-                setUpdateTextureFlag.invoke(
-                        transaction, sourceSurface, Boolean.TRUE, Float.valueOf(1.0f));
-                transaction.apply();
+            Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(
+                    PassBlurBindRequest.systemUiHandleMenu(sourceRoot),
+                    inputProducerSurface);
+            if (next == null) {
+                fail(new IllegalStateException("ViewRoot PassBlur producer bind unavailable"));
+                return;
             }
+            if (!RootPassBlurEndpointBridge.sameGeneration(next, sourceEndpoint)) {
+                Miuix307PassBlurBridge.unbind(next);
+                fail(new IllegalStateException("ViewRoot generation changed during bind"));
+                return;
+            }
+            sourceBinding = next;
             sourceBound = true;
-            log("raw producer bound source=" + sourceSurface
-                    + " logical=" + width + "x" + height);
+            log("ViewRoot producer bound source=" + sourceSurface
+                    + " logical=" + width + "x" + height
+                    + " buffer=" + sourceEndpoint.bufferWidth + "x" + sourceEndpoint.bufferHeight
+                    + " rotation=" + sourceEndpoint.rotation);
             host.postInvalidateOnAnimation();
         } catch (Throwable error) {
             fail(error);
@@ -241,27 +248,15 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private void unbindSource() {
-        if (!sourceBound) return;
+        if (!sourceBound && sourceBinding == null) return;
         sourceBound = false;
+        Miuix307PassBlurBridge.Binding current = sourceBinding;
+        sourceBinding = null;
         try {
-            if (!sourceSurface.isValid()) return;
-            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-                if (setPassBlurSurface != null) {
-                    setPassBlurSurface.invoke(transaction, sourceSurface, null);
-                }
-                if (setUpdateTextureFlag != null) {
-                    setUpdateTextureFlag.invoke(
-                            transaction, sourceSurface, Boolean.FALSE, Float.valueOf(1.0f));
-                }
-                if (setMiBlurWinExc != null) {
-                    setMiBlurWinExc.invoke(
-                            transaction, sourceSurface, (Object) new String[0]);
-                }
-                transaction.apply();
-            }
-            log("raw producer unbound source=" + sourceSurface);
+            Miuix307PassBlurBridge.unbind(current);
+            log("ViewRoot producer unbound source=" + sourceSurface);
         } catch (Throwable error) {
-            log("raw producer unbind failed: " + error);
+            log("ViewRoot producer unbind failed: " + error);
         }
     }
 
@@ -270,7 +265,9 @@ final class SystemUiHandleMenuPrismalSession {
         if (inputTexture != null && inputProducerSurface != null && oesTexture != 0) return;
         oesTexture = createOesTexture();
         inputTexture = new SurfaceTexture(oesTexture);
-        inputTexture.setDefaultBufferSize(Math.max(1, width), Math.max(1, height));
+        inputTexture.setDefaultBufferSize(
+                Math.max(1, sourceEndpoint.bufferWidth),
+                Math.max(1, sourceEndpoint.bufferHeight));
         inputProducerSurface = new Surface(inputTexture);
         inputTexture.setOnFrameAvailableListener(this::onFrameAvailable, renderHandler);
     }
@@ -311,8 +308,13 @@ final class SystemUiHandleMenuPrismalSession {
                 requireUniform(normalizeProgram, "uTexMatrix"),
                 1, false, textureMatrix, 0);
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
-                0f, 0f, 1f, 1f);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uConfigRot"), 0);
+                sourceContentRect.left,
+                sourceContentRect.bottom,
+                sourceContentRect.width,
+                sourceContentRect.height);
+        GLES20.glUniform1i(
+                requireUniform(normalizeProgram, "uConfigRot"),
+                sourceEndpoint.rotation);
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
@@ -620,32 +622,6 @@ final class SystemUiHandleMenuPrismalSession {
         int uv = GLES20.glGetAttribLocation(program, "aUv");
         if (position >= 0) GLES20.glDisableVertexAttribArray(position);
         if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
-    }
-
-    private String[] captureExclusions() {
-        String sourceName = sourceSurfaceName();
-        String[] exclusions = new String[EXTRA_EXCLUSIONS.length + 1];
-        exclusions[0] = sourceName;
-        System.arraycopy(EXTRA_EXCLUSIONS, 0, exclusions, 1, EXTRA_EXCLUSIONS.length);
-        return exclusions;
-    }
-
-    private String sourceSurfaceName() {
-        try {
-            Method getName = SurfaceControl.class.getDeclaredMethod("getName");
-            getName.setAccessible(true);
-            Object value = getName.invoke(sourceSurface);
-            if (value instanceof String && !((String) value).isEmpty()) {
-                return (String) value;
-            }
-        } catch (Throwable ignored) {}
-        String label = String.valueOf(sourceSurface);
-        int start = label.indexOf("name=");
-        int hash = label.lastIndexOf('#');
-        if (start >= 0 && hash > start + 5) {
-            return label.substring(start + 5, hash);
-        }
-        return "Caption Menu";
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {
