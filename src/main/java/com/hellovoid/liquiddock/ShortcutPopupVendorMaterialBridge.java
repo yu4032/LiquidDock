@@ -11,30 +11,26 @@ import java.lang.reflect.Method;
  * animation and parent background-only blur under vendor authority.
  *
  * <p>HyperOS PopupView.applyMaterialEffects() deliberately splits the material:
- * mMenuLayer owns background-only blur, while mContentView owns ViewBlur/ColorBlend/BloomStroke.
- * LiquidDock keeps the former as the real behind-menu substrate and removes only the latter so
- * the HWUI backdrop RenderEffect is the sole visible glass material.</p>
+ * mMenuLayer owns background-only blur, while Launcher also keeps mContentView background blur
+ * mode=1 as a pass-window backdrop consumer. LiquidDock preserves that substrate contract and
+ * removes only the visible ViewBlur/ColorBlend/BloomStroke element material.</p>
  */
 final class ShortcutPopupVendorMaterialBridge {
     private static final String TAG = "[DC][ShortcutPopupMaterial]";
 
     private static final Method SET_MI_VIEW_BLUR_MODE;
-    private static final Method SET_MI_BACKGROUND_BLUR_MODE;
     private static final Method CLEAR_MI_BACKGROUND_BLEND_COLOR;
     private static final Method SET_MI_BLOOM_STROKE;
     private static final boolean AVAILABLE;
 
     static {
         Method viewBlur = null;
-        Method backgroundBlur = null;
         Method clearBlend = null;
         Method bloom = null;
         boolean available = false;
         try {
             viewBlur = HookUtil.findMethodExact(
                     View.class, "setMiViewBlurMode", new Class<?>[]{int.class});
-            backgroundBlur = HookUtil.findMethodExact(
-                    View.class, "setMiBackgroundBlurMode", new Class<?>[]{int.class});
             clearBlend = HookUtil.findMethodExact(
                     View.class, "clearMiBackgroundBlendColor", new Class<?>[0]);
             bloom = HookUtil.findMethodExact(
@@ -44,7 +40,6 @@ final class ShortcutPopupVendorMaterialBridge {
             // Fail closed. A visible vendor material is better than a half-owned popup.
         }
         SET_MI_VIEW_BLUR_MODE = viewBlur;
-        SET_MI_BACKGROUND_BLUR_MODE = backgroundBlur;
         CLEAR_MI_BACKGROUND_BLEND_COLOR = clearBlend;
         SET_MI_BLOOM_STROKE = bloom;
         AVAILABLE = available;
@@ -63,9 +58,10 @@ final class ShortcutPopupVendorMaterialBridge {
             prepareHyperMaterial = HookUtil.findMethodExact(
                     popupView.getClass(), "prepareHyperMaterial", new Class<?>[0]);
 
-            // Do not touch pass-window enable. PopupView uses it as the gate for the parent
-            // mMenuLayer background-only blur that remains our real backdrop substrate.
-            invoke(SET_MI_BACKGROUND_BLUR_MODE, contentView, 0);
+            // Keep mContentView backgroundBlurMode=1. HyperOS View.setMiBackgroundBlurMode(0)
+            // calls ViewRootImpl.updateTextureState(view, false) while pass-window blur is
+            // enabled, which cuts off the real backdrop texture feed and makes the custom
+            // BackdropRenderEffect fully transparent. Remove only the visible element material.
             invoke(SET_MI_VIEW_BLUR_MODE, contentView, 0);
             invoke(CLEAR_MI_BACKGROUND_BLEND_COLOR, contentView);
             invoke(SET_MI_BLOOM_STROKE, contentView, (Object) new float[21]);
