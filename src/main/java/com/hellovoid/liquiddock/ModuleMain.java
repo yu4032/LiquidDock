@@ -37,6 +37,7 @@ public final class ModuleMain extends XposedModule {
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled
                         && runtimeConfig.glass.systemUiHandleMenuEnabled) {
+                    SystemUiHandleMenuSurfaceProbe.install();
                     SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
                 }
             } catch (Throwable error) {
