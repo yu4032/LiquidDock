@@ -417,6 +417,10 @@ final class SystemUiHandleMenuGlassHook {
                                         root.post(() -> onPrismalFailure(error));
                                     }
                                 });
+                // Queue EGL/source initialization before the output child publishes its
+                // initial visual size. The session also tolerates an early resize callback, but
+                // keeping initialization first makes the lifecycle deterministic.
+                session.start(target.getWidth(), target.getHeight());
                 SystemUiHandleMenuGlassOutputView output =
                         SystemUiHandleMenuGlassOutputView.attachInsideTarget(target, session);
                 if (output == null) {
@@ -426,7 +430,6 @@ final class SystemUiHandleMenuGlassHook {
                 prismalSession = session;
                 prismalOutput = output;
                 output.setMaterialAlpha(0f);
-                session.start(target.getWidth(), target.getHeight());
                 log("Prismal pipeline armed source=" + menuSurface
                         + " target=" + targetLabel(target)
                         + " size=" + target.getWidth() + "x" + target.getHeight());
