@@ -54,12 +54,14 @@ final class ShortcutPopupVendorMaterialBridge {
 
     static Claim claim(View popupView, View contentView) {
         if (!AVAILABLE || popupView == null || contentView == null) return null;
+        boolean advancedMaterial = false;
+        Method prepareHyperMaterial = null;
         try {
             Method isMaterialEnabled = popupView.getClass().getMethod("isMaterialEnabled");
             Object enabled = isMaterialEnabled.invoke(popupView);
             if (!(enabled instanceof Boolean)) return null;
-            boolean advancedMaterial = (Boolean) enabled;
-            Method prepareHyperMaterial = advancedMaterial
+            advancedMaterial = (Boolean) enabled;
+            prepareHyperMaterial = advancedMaterial
                     ? popupView.getClass().getMethod("prepareHyperMaterial")
                     : null;
 
@@ -77,6 +79,14 @@ final class ShortcutPopupVendorMaterialBridge {
                             ? contentView.getParent().getClass().getName() : "null"));
             return new Claim(popupView, prepareHyperMaterial, advancedMaterial);
         } catch (Throwable error) {
+            if (advancedMaterial && prepareHyperMaterial != null
+                    && popupView.isAttachedToWindow()) {
+                try {
+                    prepareHyperMaterial.invoke(popupView);
+                } catch (Throwable restoreError) {
+                    MainHook.log(TAG + " failed-claim restore failed: " + root(restoreError));
+                }
+            }
             MainHook.log(TAG + " claim failed; vendor material retained: " + root(error));
             return null;
         }
