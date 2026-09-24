@@ -50,7 +50,7 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(hook.contains("float t = (surfaceAlpha - 0.80f) / 0.20f"));
         assertTrue(hook.contains("float eased = t * t * (3f - (2f * t))"));
         assertTrue(hook.contains("MiBlurBridge.setPassWindowBlurRadius(target, radius)"));
-        assertTrue(hook.contains("replacement blur retained through surface scale-out"));
+        assertTrue(hook.contains("glass material retained through surface scale-out"));
         assertTrue(hook.contains("initialRadius = trackNativeSurfaceAnimation ? 0 : nativeBlurRadiusPx"));
         assertTrue(hook.contains("fadeStartAlpha=0.80"));
         assertTrue(hook.contains("customPassBlurOwned"));
@@ -64,6 +64,40 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(probe.contains("dispatchAlpha"));
         assertTrue(probe.contains("Map<Integer, AlphaListener>"));
         assertTrue(probe.contains("stableLayerId(surface)"));
+    }
+
+    @Test
+    public void fullPrismalUsesOuterCaptionContainerSurfaceAndKeepsNativeBlurAsFallback()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
+        String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
+        String output = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassOutputView.java"));
+
+        assertTrue(hook.contains("new SystemUiHandleMenuPrismalSession("));
+        assertTrue(hook.contains("SystemUiHandleMenuGlassOutputView.attachInsideTarget"));
+        assertTrue(hook.contains("full Prismal glass presented; native blur fallback released"));
+        assertTrue(hook.contains("Prismal fallback to native blur"));
+        assertTrue(hook.contains("MiBlurBridge.clearPassWindowBlur(target)"));
+
+        assertTrue(session.contains("MiuiWindowController#getWindowSurface()"));
+        assertTrue(session.contains("SetPassBlurSurface"));
+        assertTrue(session.contains("setUpdateTextureFlag"));
+        assertTrue(session.contains("PrismalRenderer"));
+        assertTrue(session.contains("PrismalGeometry"));
+        assertTrue(session.contains("PrismalHighlightProfile"));
+        assertTrue(session.contains("Miuix307PrismalAdapter.toPortable"));
+        assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
+        assertTrue(session.contains("Miuix307PrismalCompositeShaders.FRAGMENT"));
+        assertTrue(session.contains("first Prismal frame presented"));
+        assertFalse(session.contains("RootPassBlurEndpointBridge.inspect"));
+        assertFalse(session.contains("getViewRootImpl"));
+        assertFalse(session.contains("PixelCopy"));
+        assertFalse(session.contains("Bitmap"));
+
+        assertTrue(output.contains("extends TextureView"));
+        assertTrue(output.contains("group.addView(output, 0"));
+        assertTrue(output.contains("new ViewGroup.LayoutParams(0, 0)"));
+        assertTrue(output.contains("setMaterialAlpha"));
     }
 
     @Test
