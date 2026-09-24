@@ -56,6 +56,15 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("vendorMode="));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
+        assertTrue(effect.contains("uniform float2 u_origin"));
+        assertTrue(effect.contains("uniform float2 u_basisX"));
+        assertTrue(effect.contains("uniform float2 u_basisY"));
+        assertTrue(effect.contains("float2 localFrag = float2("));
+        assertTrue(effect.contains("target.transformFromViewToWindowSpace(origin)"));
+        assertTrue(effect.contains("target.transformFromViewToWindowSpace(xAxis)"));
+        assertTrue(effect.contains("target.transformFromViewToWindowSpace(yAxis)"));
+        assertTrue(effect.contains("addOnPreDrawListener(binding.preDrawListener)"));
+        assertTrue(effect.contains("removeOnPreDrawListener(preDrawListener)"));
         assertFalse(effect.contains("RootPassBlurBackend"));
         assertFalse(effect.contains("SurfaceTexture"));
         assertFalse(effect.contains("import android.view.TextureView"));
