@@ -59,7 +59,7 @@ final class SystemUiHandleMenuSurfaceProbe {
     static void registerScaleListener(SurfaceControl surface, ScaleListener listener) {
         if (surface == null || listener == null) return;
         TRACKED.add(surface);
-        int layerId = Miuix307PassBlurBridge.surfaceLayerId(surface);
+        int layerId = stableLayerId(surface);
         if (layerId < 0) {
             log("registerScaleListener unavailable layer surface=" + surface);
             return;
@@ -70,7 +70,7 @@ final class SystemUiHandleMenuSurfaceProbe {
 
     static void unregisterScaleListener(SurfaceControl surface, ScaleListener listener) {
         if (surface == null || listener == null) return;
-        int layerId = Miuix307PassBlurBridge.surfaceLayerId(surface);
+        int layerId = stableLayerId(surface);
         if (layerId < 0) return;
         synchronized (SCALE_LISTENERS) {
             if (SCALE_LISTENERS.get(layerId) == listener) {
@@ -164,16 +164,38 @@ final class SystemUiHandleMenuSurfaceProbe {
 
     private static void dispatchScale(SurfaceControl surface, Matrix matrix) {
         if (surface == null || matrix == null) return;
-        int layerId = Miuix307PassBlurBridge.surfaceLayerId(surface);
-        ScaleListener listener = layerId >= 0 ? SCALE_LISTENERS.get(layerId) : null;
-        if (listener == null) return;
+        int layerId = stableLayerId(surface);
         float[] values = new float[9];
         matrix.getValues(values);
         float scaleX = (float) Math.hypot(
                 values[Matrix.MSCALE_X], values[Matrix.MSKEW_Y]);
         float scaleY = (float) Math.hypot(
                 values[Matrix.MSCALE_Y], values[Matrix.MSKEW_X]);
+        ScaleListener listener = layerId >= 0 ? SCALE_LISTENERS.get(layerId) : null;
+        if (listener == null) {
+            if (scaleX >= 0.9999f && scaleY >= 0.9999f) {
+                log("settled matrix has no listener layer=" + layerId + " surface=" + surface);
+            }
+            return;
+        }
+        if (scaleX >= 0.9999f && scaleY >= 0.9999f) {
+            log("dispatch settled scale layer=" + layerId
+                    + " scale=" + scaleX + "," + scaleY);
+        }
         listener.onScale(scaleX, scaleY);
+    }
+
+    private static int stableLayerId(SurfaceControl surface) {
+        if (surface == null) return -1;
+        try {
+            String label = String.valueOf(surface);
+            int hash = label.lastIndexOf('#');
+            int end = hash >= 0 ? label.indexOf(')', hash) : -1;
+            if (hash >= 0 && end > hash + 1) {
+                return Integer.parseInt(label.substring(hash + 1, end));
+            }
+        } catch (Throwable ignored) {}
+        return Miuix307PassBlurBridge.surfaceLayerId(surface);
     }
 
     private static boolean isTracked(SurfaceControl surface) {
