@@ -171,6 +171,10 @@ final class SystemUiHandleMenuPrismalSession {
         this.height = Math.max(1, height);
         renderHandler.post(() -> {
             if (shuttingDown) return;
+            // attachInsideTarget() can publish the first visual size before start() has initialized
+            // EGL. Treat that callback as geometry only; start()/attachOutput() will consume the
+            // stored dimensions once the EGL domain exists.
+            if (!isEglReady()) return;
             try {
                 makePbufferCurrent();
                 ensureNormalizedTarget(this.width, this.height);
@@ -388,6 +392,13 @@ final class SystemUiHandleMenuPrismalSession {
         normalizedFramebuffer = createFramebuffer(normalizedTexture);
         normalizedWidth = width;
         normalizedHeight = height;
+    }
+
+    private boolean isEglReady() {
+        return eglDisplay != EGL14.EGL_NO_DISPLAY
+                && eglContext != EGL14.EGL_NO_CONTEXT
+                && eglConfig != null
+                && pbufferSurface != EGL14.EGL_NO_SURFACE;
     }
 
     private void ensureEgl() {
