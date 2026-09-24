@@ -62,7 +62,9 @@ final class SystemUiHandleMenuPrismalSession {
     private volatile boolean shuttingDown;
     private volatile boolean sourceBound;
     private volatile boolean firstFramePresented;
+    private volatile boolean sourceFrameReady;
     private volatile boolean firstSourceFrameLogged;
+    private int sourceFrameCount;
     private boolean continuousRefreshPosted;
     private volatile int width;
     private volatile int height;
@@ -309,6 +311,11 @@ final class SystemUiHandleMenuPrismalSession {
             }
             ensureRenderResources();
             normalizeBackdrop();
+            sourceFrameReady = true;
+            sourceFrameCount++;
+            if (sourceFrameCount == 2) {
+                log("continuous ViewRoot source confirmed timestamp=" + texture.getTimestamp());
+            }
             renderGlass();
         } catch (Throwable error) {
             fail(error);
@@ -316,7 +323,8 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private void renderLatestIfPossible() {
-        if (normalizedTexture == 0 || outputEglSurface == EGL14.EGL_NO_SURFACE) return;
+        if (!sourceFrameReady || normalizedTexture == 0
+                || outputEglSurface == EGL14.EGL_NO_SURFACE) return;
         renderGlass();
     }
 
@@ -352,7 +360,8 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private void renderGlass() {
-        if (normalizedTexture == 0 || outputEglSurface == EGL14.EGL_NO_SURFACE
+        if (!sourceFrameReady || normalizedTexture == 0
+                || outputEglSurface == EGL14.EGL_NO_SURFACE
                 || width <= 0 || height <= 0) return;
         makePbufferCurrent();
         prismalRenderer.prepareBackdrop(
