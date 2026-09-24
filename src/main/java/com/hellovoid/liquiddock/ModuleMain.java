@@ -9,7 +9,7 @@ import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
 import io.github.libxposed.api.XposedModule;
 
-/** libxposed API 101 entry point. SystemUI is injected only as a read-only timing source. */
+/** libxposed API 101 entry point with process-specific timing and opt-in glass integrations. */
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
@@ -29,10 +29,23 @@ public final class ModuleMain extends XposedModule {
         String packageName = param.getPackageName();
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             try {
-                SystemUiKeyguardGoneSource.install(param.getClassLoader());
-                SystemUiHomeTransitionSource.install(param.getClassLoader());
+                ClassLoader classLoader = param.getClassLoader();
+                if (classLoader == null) return;
+                SystemUiKeyguardGoneSource.install(classLoader);
+                SystemUiHomeTransitionSource.install(classLoader);
+                ConfigReader configReader = ConfigReader.load();
+                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                if (runtimeConfig.enabled && runtimeConfig.glass.enabled
+                        && runtimeConfig.glass.systemUiHandleMenuEnabled) {
+                    if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                        SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
+                    } else {
+                        Api101Bridge.log(
+                                "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
+                    }
+                }
             } catch (Throwable error) {
-                Api101Bridge.log("[DC] SystemUI timing source init failed", error);
+                Api101Bridge.log("[DC] SystemUI integration init failed", error);
             }
             return;
         }
