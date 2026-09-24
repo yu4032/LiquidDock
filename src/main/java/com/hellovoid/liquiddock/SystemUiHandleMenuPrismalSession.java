@@ -65,6 +65,7 @@ final class SystemUiHandleMenuPrismalSession {
     private volatile boolean sourceFrameReady;
     private volatile boolean firstSourceFrameLogged;
     private int sourceFrameCount;
+    private int prismalFrameCount;
     private volatile int width;
     private volatile int height;
 
@@ -302,6 +303,9 @@ final class SystemUiHandleMenuPrismalSession {
             sourceFrameCount++;
             if (sourceFrameCount == 2) {
                 log("continuous ViewRoot source confirmed timestamp=" + texture.getTimestamp());
+            } else if (sourceFrameCount % 60 == 0) {
+                log("live ViewRoot source frames=" + sourceFrameCount
+                        + " timestamp=" + texture.getTimestamp());
             }
             renderGlass();
         } catch (Throwable error) {
@@ -384,6 +388,11 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         checkEgl("eglSwapBuffers", EGL14.eglSwapBuffers(eglDisplay, outputEglSurface));
+        prismalFrameCount++;
+        if (prismalFrameCount % 60 == 0) {
+            log("live Prismal output frames=" + prismalFrameCount
+                    + " sourceFrames=" + sourceFrameCount);
+        }
 
         if (!firstFramePresented) {
             firstFramePresented = true;
