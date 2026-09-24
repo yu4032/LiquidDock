@@ -13,8 +13,6 @@ final class LauncherDialogGlassPreferences {
 
     static final class Appearance {
         final boolean disableDimming;
-        final boolean darkMode;
-        final boolean hasAppearanceOverride;
         final float blur;
         final int tintR;
         final int tintG;
@@ -23,16 +21,12 @@ final class LauncherDialogGlassPreferences {
 
         Appearance(
                 boolean disableDimming,
-                boolean darkMode,
-                boolean hasAppearanceOverride,
                 float blur,
                 int tintR,
                 int tintG,
                 int tintB,
                 int tintAlpha) {
             this.disableDimming = disableDimming;
-            this.darkMode = darkMode;
-            this.hasAppearanceOverride = hasAppearanceOverride;
             this.blur = Math.max(0f, blur);
             this.tintR = channel(tintR);
             this.tintG = channel(tintG);
@@ -50,19 +44,10 @@ final class LauncherDialogGlassPreferences {
         int baseG = base != null ? base.tintG : 255;
         int baseB = base != null ? base.tintB : 255;
         int baseA = base != null ? base.tintAlpha : 0;
-        boolean hasAppearanceOverride = reader.has(BLUR_KEY)
-                || reader.has(TINT_RED_KEY)
-                || reader.has(TINT_GREEN_KEY)
-                || reader.has(TINT_BLUE_KEY)
-                || reader.has(TINT_ALPHA_KEY);
         return new Appearance(
                 reader.b(
                         ConfigSchema.Glass.DIALOG_DISABLE_DIMMING.name(),
                         ConfigSchema.Glass.DIALOG_DISABLE_DIMMING.runtimeFallback()),
-                reader.b(
-                        ConfigSchema.Glass.DIALOG_DARK_MODE.name(),
-                        ConfigSchema.Glass.DIALOG_DARK_MODE.runtimeFallback()),
-                hasAppearanceOverride,
                 reader.has(BLUR_KEY) ? reader.f(BLUR_KEY, baseBlur) : baseBlur,
                 reader.has(TINT_RED_KEY) ? reader.i(TINT_RED_KEY, baseR) : baseR,
                 reader.has(TINT_GREEN_KEY) ? reader.i(TINT_GREEN_KEY, baseG) : baseG,
