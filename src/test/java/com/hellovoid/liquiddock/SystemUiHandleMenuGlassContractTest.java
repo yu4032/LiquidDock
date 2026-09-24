@@ -117,6 +117,9 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("Miuix307PassBlurBridge.resumeUpdates(current)"));
         assertTrue(session.contains("sourceRoot.postInvalidateOnAnimation()"));
         assertTrue(session.contains("continuous ViewRoot producer refresh started"));
+        assertTrue(session.contains("continuous ViewRoot source confirmed timestamp="));
+        assertTrue(session.contains("sourceFrameReady = true"));
+        assertTrue(session.contains("if (!sourceFrameReady || normalizedTexture == 0"));
         assertTrue(session.contains("if (shuttingDown || !sourceBound || !sourceRoot.isAttachedToWindow()) return;"));
         assertFalse(session.contains("postDelayed"));
 
