@@ -56,8 +56,13 @@ final class MiuixShortcutMenuGlassHook {
             }
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
+                boolean glassReady = !popupGlassEnabled
+                        || ShortcutPopupGlassCoordinator.acceptPreShowBackdrop();
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                bindShownPopup(chain.getThisObject(), popupGlassEnabled, darkModeEnabled);
+                bindShownPopup(
+                        chain.getThisObject(),
+                        popupGlassEnabled && glassReady,
+                        darkModeEnabled);
                 return result;
             });
 
