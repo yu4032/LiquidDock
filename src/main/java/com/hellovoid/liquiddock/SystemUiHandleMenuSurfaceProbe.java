@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.view.SurfaceControl;
+import android.view.View;
 
 import java.util.Collections;
 import java.util.Set;
@@ -26,6 +27,20 @@ final class SystemUiHandleMenuSurfaceProbe {
     private static boolean installed;
 
     private SystemUiHandleMenuSurfaceProbe() {}
+
+    static void trackRoot(View root) {
+        if (root == null) return;
+        RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
+        if (endpoint == null || endpoint.rootSurface == null || !endpoint.rootSurface.isValid()) {
+            log("trackRoot unavailable view=" + root.getClass().getName());
+            return;
+        }
+        TRACKED.add(endpoint.rootSurface);
+        log("trackRoot layer=" + endpoint.rootLayerId
+                + " seq=" + endpoint.surfaceSequenceId
+                + " vri=" + endpoint.viewRootIdentity
+                + " surface=" + endpoint.rootSurface);
+    }
 
     static synchronized void install() {
         if (installed) return;
