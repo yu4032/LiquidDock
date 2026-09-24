@@ -10,8 +10,6 @@ final class PassBlurBindRequest {
     private static final String[] RECENTS_CAPSULE_EXTRA_EXCLUSIONS = {"RecentsCapsuleGlassSinkView"};
     private static final String[] SYSTEMUI_HANDLE_MENU_EXTRA_EXCLUSIONS =
             {"SystemUiHandleMenuGlassOutputView", "TextureView"};
-    private static final String[] SHORTCUT_POPUP_EXTRA_EXCLUSIONS =
-            {"ShortcutMenuLayer", "PopupView", "ShortcutPopupGlassLayer", "TextureView"};
 
     private final View host;
     private final PassBlurDomain domain;
@@ -52,7 +50,7 @@ final class PassBlurBindRequest {
                 authoritativeRoot,
                 PassBlurDomain.SHORTCUT_POPUP,
                 1.0f,
-                SHORTCUT_POPUP_EXTRA_EXCLUSIONS);
+                NO_EXTRA_EXCLUSIONS);
     }
 
     static PassBlurBindRequest dragOverlay(View authoritativeRoot) {

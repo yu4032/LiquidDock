@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Point;
+import android.graphics.RenderEffect;
 import android.view.View;
 
 import java.lang.reflect.Method;
@@ -24,7 +25,9 @@ final class MiBlurBridge {
     private static final Method SET_MI_BACKGROUND_BLUR_RADIUS;
     private static final Method SET_MI_BACKGROUND_BLEND_COLORS;
     private static final Method CLEAR_MI_BACKGROUND_BLEND_COLOR;
+    private static final Method SET_BACKDROP_RENDER_EFFECT;
     private static final boolean PASS_BLUR_AVAILABLE;
+    private static final boolean BACKDROP_EFFECT_AVAILABLE;
 
     static volatile boolean liquidGlassActive;
 
@@ -80,6 +83,18 @@ final class MiBlurBridge {
         SET_MI_BACKGROUND_BLEND_COLORS = backgroundBlendColors;
         CLEAR_MI_BACKGROUND_BLEND_COLOR = clearBackgroundBlendColor;
         PASS_BLUR_AVAILABLE = passAvailable;
+
+        Method backdropRenderEffect = null;
+        boolean backdropEffectAvailable = false;
+        try {
+            backdropRenderEffect = View.class.getMethod(
+                    "setBackdropRenderEffect", RenderEffect.class);
+            backdropEffectAvailable = true;
+        } catch (Throwable ignored) {
+            // Xiaomi HWUI backdrop effects are optional; callers retain the stock material.
+        }
+        SET_BACKDROP_RENDER_EFFECT = backdropRenderEffect;
+        BACKDROP_EFFECT_AVAILABLE = backdropEffectAvailable;
     }
 
     private MiBlurBridge() {}
@@ -189,6 +204,51 @@ final class MiBlurBridge {
             MainHook.log("[DC] pass window blur failed: " + e);
             return false;
         }
+    }
+
+
+    /**
+     * Apply ShortcutMenu optics inside the target RenderNode. This is intentionally different from
+     * the generic TextureView PassBlur export: the effect remains part of HWUI composition and
+     * therefore cannot become a new SurfaceFlinger layer that feeds back into the next backdrop.
+     */
+    static boolean applyBackdropRenderEffect(
+            View view, RenderEffect effect, int radiusPx, float textureScale) {
+        if (!PASS_BLUR_AVAILABLE || !BACKDROP_EFFECT_AVAILABLE
+                || view == null || effect == null) return false;
+        int safeRadius = Math.max(0, Math.min(400, radiusPx));
+        float safeScale = Math.max(0.05f, Math.min(1f, textureScale));
+        try {
+            // Mirrors Launcher BlurUtilities.setContainerBlur(..., mode=2, passWindow=true).
+            SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
+            SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2);
+            SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, safeRadius);
+            CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
+            if (SET_PASS_TEXTURE_SCALE != null) {
+                SET_PASS_TEXTURE_SCALE.invoke(view, safeScale);
+            }
+            SET_BACKDROP_RENDER_EFFECT.invoke(view, effect);
+            view.invalidate();
+            return true;
+        } catch (Throwable error) {
+            clearBackdropRenderEffect(view);
+            MainHook.log("[DC] HWUI backdrop effect unavailable: " + error);
+            return false;
+        }
+    }
+
+    static void clearBackdropRenderEffect(View view) {
+        if (view == null) return;
+        if (SET_BACKDROP_RENDER_EFFECT != null) {
+            try {
+                SET_BACKDROP_RENDER_EFFECT.invoke(view, new Object[]{null});
+            } catch (Throwable ignored) {}
+        }
+        if (SET_PASS_TEXTURE_SCALE != null) {
+            try { SET_PASS_TEXTURE_SCALE.invoke(view, 1f); }
+            catch (Throwable ignored) {}
+        }
+        clearPassWindowBlur(view);
     }
 
     static void clearPassWindowBlur(View view) {

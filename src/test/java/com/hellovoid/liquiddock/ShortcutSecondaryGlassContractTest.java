@@ -12,74 +12,75 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuUsesContinuousWorkspaceSourceWithSelfExclusions()
+    @Test public void shortcutMenuUsesHwuiBackdropEffectWithoutFeedbackSurface()
             throws Exception {
         String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
-        String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
+        String effect = Files.readString(MAIN.resolve("ShortcutPopupHwuiGlassEffect.java"));
+        String bridge = Files.readString(MAIN.resolve("MiBlurBridge.java"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
-        assertTrue(hook.contains("com.miui.home.launcher.ShortcutMenuLayer"));
-        assertTrue(hook.contains("\"setRequestingItemInfo\""));
-        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
-        assertTrue(hook.contains("ownerView.getRootView()"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
-
-        assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
-        assertTrue(coordinator.contains("ensurePopupOutput(state)"));
-        assertTrue(coordinator.contains("hasPreparedBackdrop()"));
-        assertFalse(coordinator.contains("acceptPreShowBackdrop"));
-        assertFalse(coordinator.contains("pre-show-backdrop-not-ready"));
-
-        assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
-        assertTrue(session.contains("setUpdatesEnabled(true, \"shortcut-popup-live\")"));
-        assertTrue(session.contains("live workspace frames="));
-        assertFalse(session.contains("shortcut-popup-frozen"));
-        assertFalse(session.contains("setUpdatesEnabled(false"));
-
-        assertTrue(request.contains("SHORTCUT_POPUP_EXTRA_EXCLUSIONS"));
-        assertTrue(request.contains("\"ShortcutMenuLayer\""));
-        assertTrue(request.contains("\"PopupView\""));
-        assertTrue(request.contains("\"ShortcutPopupGlassLayer\""));
-        assertTrue(request.contains("\"TextureView\""));
-
+        assertTrue(hook.contains("backend=hwui-backdrop-effect"));
+        assertFalse(hook.contains("\"setRequestingItemInfo\""));
+        assertFalse(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
         assertFalse(hook.contains("postDelayed("));
-        assertFalse(hook.contains("PixelCopy"));
-        assertFalse(hook.contains("Bitmap"));
+
+        assertTrue(coordinator.contains("ShortcutPopupHwuiGlassEffect.attach"));
+        assertTrue(coordinator.contains("popupView.addOnAttachStateChangeListener"));
+        assertFalse(coordinator.contains("ShortcutPopupSourceOverlay"));
+        assertFalse(coordinator.contains("ShortcutPopupGlassSession"));
+        assertFalse(coordinator.contains("ShortcutPopupGlassLayer"));
+        assertFalse(coordinator.contains("TextureView"));
+
+        assertTrue(effect.contains("RuntimeShader"));
+        assertTrue(effect.contains("RenderEffect.createRuntimeShaderEffect"));
+        assertTrue(effect.contains("MiBlurBridge.applyBackdropRenderEffect"));
+        assertTrue(effect.contains("uniform shader u_backdrop"));
+        assertTrue(effect.contains("u_backdrop.eval"));
+        assertFalse(effect.contains("RootPassBlurBackend"));
+        assertFalse(effect.contains("SurfaceTexture"));
+        assertFalse(effect.contains("TextureView"));
+        assertFalse(effect.contains("PixelCopy"));
+        assertFalse(effect.contains("Bitmap"));
+        assertFalse(effect.contains("ScreenCapture"));
+
+        assertTrue(bridge.contains(
+                "View.class.getMethod(\n"
+                        + "                    \"setBackdropRenderEffect\", RenderEffect.class)"));
+        assertTrue(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
+        assertTrue(bridge.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
+        assertTrue(bridge.contains("SET_BACKDROP_RENDER_EFFECT.invoke(view, effect)"));
+
+        assertFalse(request.contains("SHORTCUT_POPUP_EXTRA_EXCLUSIONS"));
+        assertTrue(request.contains(
+                "PassBlurDomain.SHORTCUT_POPUP,\n"
+                        + "                1.0f,\n"
+                        + "                NO_EXTRA_EXCLUSIONS"));
     }
 
-    @Test public void popupDetachDefersCleanupOutsideVendorRemoveViewTraversal() throws Exception {
+    @Test public void popupDetachDefersHwuiCleanupOutsideVendorRemoveTraversal()
+            throws Exception {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
-        assertTrue(coordinator.contains("postDismissCleanup(state)"));
-        assertTrue(coordinator.contains("private static void postDismissCleanup(State state)"));
-        assertTrue(coordinator.contains("decor.post(() -> release(state, \"popup-detached\"))"));
+        assertTrue(coordinator.contains(
+                "decor.post(() -> release(state, \"popup-detached\"))"));
+        assertTrue(coordinator.contains("state.effect.dispose()"));
+        assertFalse(coordinator.contains("removeViewImmediate"));
+        assertFalse(coordinator.contains("postDelayed("));
     }
 
-    @Test public void dismissStartsFastFadeWithoutDestroyingGlassResources() throws Exception {
-        String hook = SourceContractText.read(
-                MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+    @Test public void dismissKeepsVendorAnimationAsSolePresentationAuthority()
+            throws Exception {
+        String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
-        String layer = SourceContractText.read(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+        String effect = Files.readString(MAIN.resolve("ShortcutPopupHwuiGlassEffect.java"));
 
         assertTrue(hook.contains(
-                "Object menu = chain.getThisObject();\n"
-                        + "                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
-                        + "                    Object result = chain.proceed"));
-        assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
-        assertTrue(coordinator.contains("layer.fadeOutFast()"));
-        assertTrue(layer.contains("private static final long FAST_DISMISS_FADE_MS = 90L"));
-        assertTrue(layer.contains(
-                "void fadeOutFast() {\n"
-                        + "        if (disposed) return;\n"
-                        + "        animate().cancel();\n"
-                        + "        animate()\n"
-                        + "                .alpha(0f)\n"
-                        + "                .setDuration(FAST_DISMISS_FADE_MS)\n"
-                        + "                .setInterpolator(new DecelerateInterpolator())\n"
-                        + "                .start();\n"
-                        + "    }"));
-        assertFalse(layer.contains("fadeOutFast();\n        dispose()"));
-        assertFalse(layer.contains("fadeOutFast();\n        session.shutdown()"));
+                "Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));\n"
+                        + "                    releaseIfAlreadyDetached(menu);"));
+        assertFalse(hook.contains("beginDismissFade"));
+        assertFalse(coordinator.contains("fadeOutFast"));
+        assertFalse(effect.contains("animate()"));
     }
 
     @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting() throws Exception {

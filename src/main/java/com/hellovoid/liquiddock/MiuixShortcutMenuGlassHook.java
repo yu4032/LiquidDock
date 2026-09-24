@@ -8,8 +8,6 @@ import java.lang.reflect.Method;
 final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
-    private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
-    private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
     private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
     private static boolean installed;
 
@@ -33,38 +31,15 @@ final class MiuixShortcutMenuGlassHook {
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
-            if (popupGlassEnabled) {
-                HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
-                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object itemInfo = args.length > 0 ? args[0] : null;
-                    Object owner = chain.getThisObject();
-                    if (owner instanceof View) {
-                        View ownerView = (View) owner;
-                        View launcherRoot = ownerView.getRootView();
-                        if (itemInfo != null) {
-                            ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
-                        }
-                        Object result = chain.proceed(args);
-                        if (itemInfo == null) {
-                            launcherRoot.postOnAnimation(
-                                    () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
-                        }
-                        return result;
-                    }
-                    return chain.proceed(args);
-                }, ITEM_INFO);
-            }
-
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                bindShownPopup(chain.getThisObject(), popupGlassEnabled, darkModeEnabled);
+                bindShownPopup(chain.getThisObject(), popupGlassEnabled, darkModeEnabled, glassConfig);
                 return result;
             });
 
             if (popupGlassEnabled) {
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
                     Object menu = chain.getThisObject();
-                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     releaseIfAlreadyDetached(menu);
                     return result;
@@ -73,7 +48,7 @@ final class MiuixShortcutMenuGlassHook {
 
             installed = true;
             MainHook.log(TAG + " hook installed popupGlass=" + popupGlassEnabled
-                    + " darkMode=" + darkModeEnabled);
+                    + " darkMode=" + darkModeEnabled + " backend=hwui-backdrop-effect");
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -81,8 +56,11 @@ final class MiuixShortcutMenuGlassHook {
         }
     }
 
-    private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
-                                       boolean darkModeEnabled) {
+    private static void bindShownPopup(
+            Object menu,
+            boolean popupGlassEnabled,
+            boolean darkModeEnabled,
+            LiquidDockConfig.Glass glassConfig) {
         if (menu == null) return;
         try {
             Object decorObject = HookUtil.getField(menu, "mDecorView");
@@ -97,9 +75,9 @@ final class MiuixShortcutMenuGlassHook {
             }
             if (!popupGlassEnabled || !GlassRuntimeState.isEnabled()) return;
             boolean bound = ShortcutPopupGlassCoordinator.bindPopup(
-                    (View) decorObject, (View) popupObject, contentView);
+                    (View) decorObject, (View) popupObject, contentView, glassConfig);
             if (!bound) {
-                MainHook.log(TAG + " pre-show source unavailable; stock material retained");
+                MainHook.log(TAG + " HWUI backdrop effect unavailable; stock material retained");
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " popup bind failed; stock material retained: " + error);
