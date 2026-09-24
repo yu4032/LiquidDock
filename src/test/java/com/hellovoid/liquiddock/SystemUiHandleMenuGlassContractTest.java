@@ -67,21 +67,28 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
-    public void fullPrismalUsesOuterCaptionContainerSurfaceAndKeepsNativeBlurAsFallback()
+    public void fullPrismalExportsTheSameCaptionViewRootBackdropAsNativeBlur()
             throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         String session = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
         String output = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassOutputView.java"));
 
         assertTrue(hook.contains("new SystemUiHandleMenuPrismalSession("));
+        assertTrue(hook.contains("target,"));
+        assertTrue(hook.contains("sourceRoot,"));
         assertTrue(hook.contains("SystemUiHandleMenuGlassOutputView.attachInsideTarget"));
         assertTrue(hook.contains("full Prismal glass presented; native blur fallback released"));
         assertTrue(hook.contains("Prismal fallback to native blur"));
         assertTrue(hook.contains("MiBlurBridge.clearPassWindowBlur(target)"));
 
-        assertTrue(session.contains("MiuiWindowController#getWindowSurface()"));
-        assertTrue(session.contains("SetPassBlurSurface"));
-        assertTrue(session.contains("setUpdateTextureFlag"));
+        assertTrue(session.contains("RootPassBlurEndpointBridge.inspect(sourceRoot)"));
+        assertTrue(session.contains("PassBlurBindRequest.systemUiHandleMenu(sourceRoot)"));
+        assertTrue(session.contains("Miuix307PassBlurBridge.bind("));
+        assertTrue(session.contains("RootPassBlurEndpointBridge.sameGeneration"));
+        assertTrue(session.contains("sourceEndpoint.bufferWidth"));
+        assertTrue(session.contains("sourceEndpoint.bufferHeight"));
+        assertTrue(session.contains("sourceEndpoint.rotation"));
+        assertTrue(session.contains("sourceContentRect.left"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("PrismalGeometry"));
         assertTrue(session.contains("PrismalHighlightProfile"));
@@ -89,8 +96,9 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
         assertTrue(session.contains("Miuix307PrismalCompositeShaders.FRAGMENT"));
         assertTrue(session.contains("first Prismal frame presented"));
-        assertFalse(session.contains("RootPassBlurEndpointBridge.inspect"));
-        assertFalse(session.contains("getViewRootImpl"));
+
+        assertFalse(session.contains("MiuiWindowController#getWindowSurface()"));
+        assertFalse(session.contains("new RootPassBlurBackend"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap"));
 
