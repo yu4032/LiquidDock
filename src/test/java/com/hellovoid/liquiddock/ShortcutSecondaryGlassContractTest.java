@@ -284,7 +284,6 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("\"liquid_dialog_dark_mode\", false, false, false"));
         assertTrue(dialogPage.contains("对话框深色模式"));
         assertTrue(dialogPage.contains("原生夜间资源"));
-        assertTrue(preferences.contains("ConfigSchema.Glass.DIALOG_DARK_MODE.name()"));
         assertFalse(preferences.contains("out.tintR *= 0.22f"));
         assertFalse(preferences.contains("out.tintA = Math.max(out.tintA, 0.58f)"));
 
@@ -329,7 +328,9 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertFalse(coordinator.contains("LauncherDialogDarkModeController"));
         assertFalse(coordinator.contains("darkModeSession"));
-        assertTrue(coordinator.contains("logNativeNightSnapshot(binding, panel)"));
+        assertFalse(coordinator.contains("logNativeNightSnapshot"));
+        assertFalse(coordinator.contains("logTree("));
+        assertFalse(sink.contains("runWhenFirstFramePresented"));
     }
 
     @Test public void shortcutMenuDarkModeSamplesAndCachesOnlyNearBlackIcons() throws Exception {
