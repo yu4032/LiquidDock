@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 /**
@@ -291,8 +292,9 @@ final class ShortcutPopupHwuiGlassEffect {
     }
 
     private final int[] origin = new int[2];
-    private final int[] xAxis = new int[2];
-    private final int[] yAxis = new int[2];
+    private final float[] localOrigin = new float[2];
+    private final float[] localXAxis = new float[2];
+    private final float[] localYAxis = new float[2];
     private float basisXx = 1f;
     private float basisXy;
     private float basisYx;
@@ -303,25 +305,47 @@ final class ShortcutPopupHwuiGlassEffect {
         int width = Math.max(1, target.getWidth());
         int height = Math.max(1, target.getHeight());
 
-        origin[0] = 0;
-        origin[1] = 0;
-        xAxis[0] = width;
-        xAxis[1] = 0;
-        yAxis[0] = 0;
-        yAxis[1] = height;
-        target.transformFromViewToWindowSpace(origin);
-        target.transformFromViewToWindowSpace(xAxis);
-        target.transformFromViewToWindowSpace(yAxis);
+        target.getLocationInWindow(origin);
 
-        basisXx = (xAxis[0] - origin[0]) / (float) width;
-        basisXy = (xAxis[1] - origin[1]) / (float) width;
-        basisYx = (yAxis[0] - origin[0]) / (float) height;
-        basisYy = (yAxis[1] - origin[1]) / (float) height;
+        localOrigin[0] = 0f;
+        localOrigin[1] = 0f;
+        localXAxis[0] = width;
+        localXAxis[1] = 0f;
+        localYAxis[0] = 0f;
+        localYAxis[1] = height;
+        mapThroughViewParents(target, localOrigin);
+        mapThroughViewParents(target, localXAxis);
+        mapThroughViewParents(target, localYAxis);
+
+        basisXx = (localXAxis[0] - localOrigin[0]) / (float) width;
+        basisXy = (localXAxis[1] - localOrigin[1]) / (float) width;
+        basisYx = (localYAxis[0] - localOrigin[0]) / (float) height;
+        basisYy = (localYAxis[1] - localOrigin[1]) / (float) height;
 
         shader.setFloatUniform("u_size", (float) width, (float) height);
         shader.setFloatUniform("u_origin", (float) origin[0], (float) origin[1]);
         shader.setFloatUniform("u_basisX", basisXx, basisXy);
         shader.setFloatUniform("u_basisY", basisYx, basisYy);
+    }
+
+    private static void mapThroughViewParents(View target, float[] point) {
+        if (target == null || point == null || point.length < 2) return;
+
+        View current = target;
+        if (!current.getMatrix().isIdentity()) current.getMatrix().mapPoints(point);
+        point[0] += current.getLeft();
+        point[1] += current.getTop();
+
+        ViewParent parent = current.getParent();
+        while (parent instanceof View) {
+            View view = (View) parent;
+            point[0] -= view.getScrollX();
+            point[1] -= view.getScrollY();
+            if (!view.getMatrix().isIdentity()) view.getMatrix().mapPoints(point);
+            point[0] += view.getLeft();
+            point[1] += view.getTop();
+            parent = view.getParent();
+        }
     }
 
     private String describeTransform() {
