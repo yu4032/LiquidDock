@@ -60,7 +60,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("uniform float2 u_basisX"));
         assertTrue(effect.contains("uniform float2 u_basisY"));
         assertTrue(effect.contains("float2 localFrag = float2("));
-        assertTrue(effect.contains("target.getLocationInWindow(origin)"));
+        assertTrue(effect.contains("target.getLocationInSurface(origin)"));
         assertTrue(effect.contains("mapThroughViewParents(target, localOrigin)"));
         assertTrue(effect.contains("mapThroughViewParents(target, localXAxis)"));
         assertTrue(effect.contains("mapThroughViewParents(target, localYAxis)"));
