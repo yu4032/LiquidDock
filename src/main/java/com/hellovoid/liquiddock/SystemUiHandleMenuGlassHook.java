@@ -311,6 +311,7 @@ final class SystemUiHandleMenuGlassHook {
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
+        boolean dynamicTextureScaleAvailable;
         volatile float pendingTextureScale = 1.0f;
         final AtomicBoolean textureScalePostPending = new AtomicBoolean();
         boolean released;
@@ -341,10 +342,12 @@ final class SystemUiHandleMenuGlassHook {
             if (controller != null) CONTROLLERS.put(controller, this);
             if (waitForNativeSurfaceScale) {
                 pendingTextureScale = 0.05f;
+            }
+            applyReplacementBlur();
+            if (waitForNativeSurfaceScale) {
                 SystemUiHandleMenuSurfaceProbe.registerScaleListener(menuSurface, scaleListener);
                 log("replacement blur tracking native menu surface scale surface=" + menuSurface);
             }
-            applyReplacementBlur();
         }
 
         private void onNativeSurfaceScale(float scaleX, float scaleY) {
@@ -354,7 +357,8 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         private void postTextureScaleUpdate() {
-            if (released || !replacementBlurApplied || !customPassBlurOwned) return;
+            if (released || !replacementBlurApplied || !customPassBlurOwned
+                    || !dynamicTextureScaleAvailable) return;
             if (!textureScalePostPending.compareAndSet(false, true)) return;
             boolean posted = root.post(() -> {
                 float appliedScale = pendingTextureScale;
@@ -392,20 +396,25 @@ final class SystemUiHandleMenuGlassHook {
             }
             replacementBlurApplied = true;
             customPassBlurOwned = true;
-            MiBlurBridge.setPassTextureScale(target, pendingTextureScale);
+            dynamicTextureScaleAvailable =
+                    MiBlurBridge.setPassTextureScale(target, pendingTextureScale);
             target.setBackground(null);
             target.invalidate();
             log("replacement pass-window blur presented before surface animation target="
                     + targetLabel(target)
                     + " blur=" + nativeBlurRadiusPx
                     + " textureScale=" + pendingTextureScale
+                    + " dynamicTextureScale=" + dynamicTextureScaleAvailable
                     + " popupRoot=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
         }
 
         private void restoreStockBackground() {
             if (customPassBlurOwned) {
-                MiBlurBridge.setPassTextureScale(target, 1.0f);
+                if (dynamicTextureScaleAvailable) {
+                    MiBlurBridge.setPassTextureScale(target, 1.0f);
+                }
                 MiBlurBridge.clearPassWindowBlur(target);
+                dynamicTextureScaleAvailable = false;
                 customPassBlurOwned = false;
             }
             replacementBlurApplied = false;
