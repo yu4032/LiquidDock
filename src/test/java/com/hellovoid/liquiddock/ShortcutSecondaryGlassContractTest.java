@@ -66,6 +66,16 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("sourceViewMode="));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
+        assertTrue(effect.contains("uniform float u_refractionInset"));
+        assertTrue(effect.contains("uniform float u_sminSmoothing"));
+        assertTrue(effect.contains("uniform float u_edgeRefractionFalloff"));
+        assertTrue(effect.contains("uniform float u_fresnelReflect"));
+        assertTrue(effect.contains("uniform float u_lensRefractionPx"));
+        assertTrue(effect.contains("uniform float u_lensDepthEffect"));
+        assertTrue(effect.contains("uniform float4 u_shadowColor"));
+        assertTrue(effect.contains("uniform float u_os4ReflectionStrength"));
+        assertTrue(effect.contains("edgeBand(edgeDist, os4Width)"));
+        assertTrue(effect.contains("shader.setFloatUniform(\"u_lensRefractionPx\", lensPx)"));
         // Skia RuntimeShader image filters run in local filter coordinates and the bound
         // child shader shares that coordinate domain. Do not remap through window/surface space.
         assertFalse(effect.contains("u_origin"));
