@@ -64,10 +64,15 @@ final class SystemUiHandleMenuGlassHook {
                                 ? (View) args[0]
                                 : null;
                         Object result = chain.proceed(args);
-                        SurfaceControl menuSurface =
-                                SystemUiHandleMenuSurfaceAnimationAuthority.windowSurface(result);
-                        if (menuRoot != null) {
-                            observeMenu(menuRoot, menuSurface, true);
+                        try {
+                            SurfaceControl menuSurface =
+                                    SystemUiHandleMenuSurfaceAnimationAuthority.windowSurface(result);
+                            if (menuRoot != null) {
+                                observeMenu(menuRoot, menuSurface, true);
+                            }
+                        } catch (Throwable error) {
+                            log("MIUI captionMenu observation failed; original result preserved: "
+                                    + error);
                         }
                         return result;
                     });
@@ -91,9 +96,14 @@ final class SystemUiHandleMenuGlassHook {
                                 : 0;
                         boolean target = isTargetHandleMenuLayout(inflater, resourceId);
                         Object result = chain.proceed(args);
-                        if (target && result instanceof View) {
-                            View root = (View) result;
-                            observeMenu(root, null, false);
+                        try {
+                            if (target && result instanceof View) {
+                                View root = (View) result;
+                                observeMenu(root, null, false);
+                            }
+                        } catch (Throwable error) {
+                            log("AOSP HandleMenu observation failed; original result preserved: "
+                                    + error);
                         }
                         return result;
                     });
@@ -164,12 +174,28 @@ final class SystemUiHandleMenuGlassHook {
         }
 
         void start() {
-            root.addOnAttachStateChangeListener(this);
-            root.addOnLayoutChangeListener(this);
-            tryBind();
+            try {
+                root.addOnAttachStateChangeListener(this);
+                root.addOnLayoutChangeListener(this);
+                tryBind();
+            } catch (Throwable error) {
+                log("pending HandleMenu listener setup failed; stock retained: " + error);
+                if (PENDING.get(root) == this) PENDING.remove(root);
+                release();
+            }
         }
 
         void tryBind() {
+            try {
+                tryBindInternal();
+            } catch (Throwable error) {
+                log("pending HandleMenu bind observation failed; stock retained: " + error);
+                if (PENDING.get(root) == this) PENDING.remove(root);
+                release();
+            }
+        }
+
+        private void tryBindInternal() {
             if (released || PENDING.get(root) != this) return;
             View sourceRoot = root.getRootView();
             if (!root.isAttachedToWindow() || root.getWidth() <= 0 || root.getHeight() <= 0
@@ -209,8 +235,8 @@ final class SystemUiHandleMenuGlassHook {
         void release() {
             if (released) return;
             released = true;
-            root.removeOnAttachStateChangeListener(this);
-            root.removeOnLayoutChangeListener(this);
+            try { root.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
+            try { root.removeOnLayoutChangeListener(this); } catch (Throwable ignored) {}
         }
 
         @Override
@@ -220,8 +246,12 @@ final class SystemUiHandleMenuGlassHook {
 
         @Override
         public void onViewDetachedFromWindow(View view) {
-            if (PENDING.get(root) == this) PENDING.remove(root);
-            release();
+            try {
+                if (PENDING.get(root) == this) PENDING.remove(root);
+                release();
+            } catch (Throwable error) {
+                log("pending HandleMenu detach cleanup failed: " + error);
+            }
         }
 
         @Override
@@ -306,6 +336,12 @@ final class SystemUiHandleMenuGlassHook {
             boolean posted = root.post(() -> {
                 try {
                     if (!released) applyMaterialFade(pendingSurfaceAlpha);
+                } catch (Throwable error) {
+                    log("material fade failed; preserving SystemUI animation: " + error);
+                    if (menuSurface != null) {
+                        SystemUiHandleMenuSurfaceAnimationAuthority.unregisterAlphaListener(
+                                menuSurface, alphaListener);
+                    }
                 } finally {
                     fadeUpdatePosted = false;
                 }
@@ -351,11 +387,15 @@ final class SystemUiHandleMenuGlassHook {
                                 glassConfig,
                                 new SystemUiHandleMenuPrismalSession.Listener() {
                                     @Override public void onFirstFramePresented() {
-                                        root.post(Binding.this::onPrismalPresented);
+                                        postBindingCallback(
+                                                "Prismal presentation",
+                                                Binding.this::onPrismalPresented);
                                     }
 
                                     @Override public void onFailure(Throwable error) {
-                                        root.post(() -> onPrismalFailure(error));
+                                        postBindingCallback(
+                                                "Prismal failure fallback",
+                                                () -> onPrismalFailure(error));
                                     }
                                 });
                 // Queue EGL/source initialization before the output child publishes its
@@ -373,6 +413,24 @@ final class SystemUiHandleMenuGlassHook {
                 output.setMaterialAlpha(0f);
             } catch (Throwable error) {
                 onPrismalFailure(error);
+            }
+        }
+
+        private void postBindingCallback(String operation, Runnable action) {
+            if (released || action == null) return;
+            try {
+                boolean posted = root.post(() -> {
+                    try {
+                        if (!released) action.run();
+                    } catch (Throwable error) {
+                        log(operation + " callback failed; SystemUI preserved: " + error);
+                    }
+                });
+                if (!posted) {
+                    log(operation + " callback rejected because menu root is no longer active");
+                }
+            } catch (Throwable error) {
+                log(operation + " callback enqueue failed; SystemUI preserved: " + error);
             }
         }
 
@@ -441,31 +499,53 @@ final class SystemUiHandleMenuGlassHook {
         void release() {
             if (released) return;
             released = true;
-            root.removeOnAttachStateChangeListener(this);
-            if (menuSurface != null) {
-                SystemUiHandleMenuSurfaceAnimationAuthority.unregisterAlphaListener(
-                        menuSurface, alphaListener);
+            try { root.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
+            try {
+                if (menuSurface != null) {
+                    SystemUiHandleMenuSurfaceAnimationAuthority.unregisterAlphaListener(
+                            menuSurface, alphaListener);
+                }
+            } catch (Throwable error) {
+                log("Surface alpha listener cleanup failed: " + error);
             }
             SystemUiHandleMenuGlassOutputView output = prismalOutput;
             prismalOutput = null;
-            if (output != null) output.dispose();
+            if (output != null) {
+                try { output.dispose(); } catch (Throwable error) {
+                    log("Prismal output cleanup failed: " + error);
+                }
+            }
             SystemUiHandleMenuPrismalSession session = prismalSession;
             prismalSession = null;
-            if (session != null) session.shutdown();
+            if (session != null) {
+                try { session.shutdown(); } catch (Throwable error) {
+                    log("Prismal session cleanup failed: " + error);
+                }
+            }
             prismalPresented = false;
-            restoreStockBackground();
+            try { restoreStockBackground(); } catch (Throwable error) {
+                log("stock background restore failed: " + error);
+            }
         }
 
         @Override
         public void onViewAttachedToWindow(View view) {
-            applyReplacementBlur();
-            startPrismal();
+            try {
+                applyReplacementBlur();
+                startPrismal();
+            } catch (Throwable error) {
+                log("active HandleMenu attach failed; stock path retained: " + error);
+            }
         }
 
         @Override
         public void onViewDetachedFromWindow(View view) {
-            if (ACTIVE.get(root) == this) ACTIVE.remove(root);
-            release();
+            try {
+                if (ACTIVE.get(root) == this) ACTIVE.remove(root);
+                release();
+            } catch (Throwable error) {
+                log("active HandleMenu detach cleanup failed: " + error);
+            }
         }
     }
 

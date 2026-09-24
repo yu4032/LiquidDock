@@ -34,14 +34,21 @@ final class SystemUiHandleMenuSurfaceAnimationAuthority {
                     new Class<?>[]{SurfaceControl.class, float.class},
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        if (args.length >= 2
-                                && args[0] instanceof SurfaceControl
-                                && args[1] instanceof Number) {
-                            dispatchAlpha(
-                                    (SurfaceControl) args[0],
-                                    ((Number) args[1]).floatValue());
+                        Object result = chain.proceed(args);
+                        if (ALPHA_LISTENERS.isEmpty()) return result;
+                        try {
+                            if (args.length >= 2
+                                    && args[0] instanceof SurfaceControl
+                                    && args[1] instanceof Number) {
+                                dispatchAlpha(
+                                        (SurfaceControl) args[0],
+                                        ((Number) args[1]).floatValue());
+                            }
+                        } catch (Throwable error) {
+                            safeLog("Surface alpha dispatch failed; original transaction preserved",
+                                    error);
                         }
-                        return chain.proceed(args);
+                        return result;
                     });
             installed = true;
             return true;
@@ -83,7 +90,16 @@ final class SystemUiHandleMenuSurfaceAnimationAuthority {
         int layerId = stableLayerId(surface);
         AlphaListener listener = layerId >= 0 ? ALPHA_LISTENERS.get(layerId) : null;
         if (listener != null) {
-            listener.onAlpha(Math.max(0f, Math.min(1f, alpha)));
+            try {
+                listener.onAlpha(Math.max(0f, Math.min(1f, alpha)));
+            } catch (Throwable error) {
+                synchronized (ALPHA_LISTENERS) {
+                    if (ALPHA_LISTENERS.get(layerId) == listener) {
+                        ALPHA_LISTENERS.remove(layerId);
+                    }
+                }
+                safeLog("Surface alpha listener failed; listener removed", error);
+            }
         }
     }
 
@@ -97,6 +113,18 @@ final class SystemUiHandleMenuSurfaceAnimationAuthority {
                 return Integer.parseInt(label.substring(hash + 1, end));
             }
         } catch (Throwable ignored) {}
-        return Miuix307PassBlurBridge.surfaceLayerId(surface);
+        try {
+            return Miuix307PassBlurBridge.surfaceLayerId(surface);
+        } catch (Throwable ignored) {
+            return -1;
+        }
+    }
+
+    private static void safeLog(String message, Throwable error) {
+        try {
+            Api101Bridge.log("[DC][SystemUiHandleMenuGlass] " + message, error);
+        } catch (Throwable ignored) {
+            // Global SurfaceControl hooks must never fail because diagnostics failed.
+        }
     }
 }

@@ -64,6 +64,41 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
+    public void systemUiHookBoundariesAreCrashContained() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
+        String authority = Files.readString(
+                MAIN.resolve("SystemUiHandleMenuSurfaceAnimationAuthority.java"));
+        String output = Files.readString(
+                MAIN.resolve("SystemUiHandleMenuGlassOutputView.java"));
+        String session = Files.readString(
+                MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
+
+        assertTrue(authority.contains("Object result = chain.proceed(args)"));
+        assertTrue(authority.contains(
+                "Surface alpha dispatch failed; original transaction preserved"));
+        assertTrue(authority.contains("Surface alpha listener failed; listener removed"));
+        assertTrue(authority.contains("ALPHA_LISTENERS.isEmpty()"));
+
+        assertTrue(hook.contains(
+                "MIUI captionMenu observation failed; original result preserved"));
+        assertTrue(hook.contains(
+                "AOSP HandleMenu observation failed; original result preserved"));
+        assertTrue(hook.contains("material fade failed; preserving SystemUI animation"));
+        assertTrue(hook.contains("callback failed; SystemUI preserved"));
+        assertTrue(hook.contains("detach cleanup failed"));
+
+        assertTrue(output.contains("SurfaceTexture attach failed"));
+        assertTrue(output.contains("SurfaceTexture resize failed"));
+        assertTrue(output.contains("SurfaceTexture destroy detach failed"));
+        assertTrue(output.contains("output view removal failed"));
+
+        assertTrue(session.contains("failureReported"));
+        assertTrue(session.contains("failure listener failed"));
+        assertTrue(session.contains("first-frame listener failed"));
+        assertTrue(session.contains("render cleanup enqueue failed"));
+    }
+
+    @Test
     public void prismalExportsTheNativeCaptionViewRootBackdropInLocalDomain()
             throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));

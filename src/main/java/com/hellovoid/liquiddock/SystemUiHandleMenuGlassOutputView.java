@@ -32,7 +32,13 @@ final class SystemUiHandleMenuGlassOutputView extends TextureView
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         setSurfaceTextureListener(this);
         targetLayoutListener = (v, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> syncFromTarget();
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            try {
+                syncFromTarget();
+            } catch (Throwable error) {
+                safeLog("layout sync failed", error);
+            }
+        };
         target.addOnLayoutChangeListener(targetLayoutListener);
     }
 
@@ -78,38 +84,73 @@ final class SystemUiHandleMenuGlassOutputView extends TextureView
         if (disposed) return;
         disposed = true;
         View target = targetRef.get();
-        if (target != null) target.removeOnLayoutChangeListener(targetLayoutListener);
+        if (target != null) {
+            try { target.removeOnLayoutChangeListener(targetLayoutListener); }
+            catch (Throwable ignored) {}
+        }
         Surface current = outputSurface;
         outputSurface = null;
-        if (current != null) session.detachOutput(current);
-        if (getParent() instanceof ViewGroup) {
-            ((ViewGroup) getParent()).removeView(this);
+        if (current != null) {
+            try { session.detachOutput(current); }
+            catch (Throwable error) { safeLog("output detach failed", error); }
+        }
+        try {
+            if (getParent() instanceof ViewGroup) {
+                ((ViewGroup) getParent()).removeView(this);
+            }
+        } catch (Throwable error) {
+            safeLog("output view removal failed", error);
         }
     }
 
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
         if (disposed || texture == null) return;
-        Surface next = new Surface(texture);
-        Surface old = outputSurface;
-        outputSurface = next;
-        if (old != null) session.detachOutput(old);
-        session.attachOutput(next, Math.max(1, width), Math.max(1, height));
+        Surface next = null;
+        try {
+            next = new Surface(texture);
+            Surface old = outputSurface;
+            outputSurface = next;
+            if (old != null) session.detachOutput(old);
+            session.attachOutput(next, Math.max(1, width), Math.max(1, height));
+        } catch (Throwable error) {
+            if (outputSurface == next) outputSurface = null;
+            if (next != null) {
+                try { next.release(); } catch (Throwable ignored) {}
+            }
+            safeLog("SurfaceTexture attach failed", error);
+        }
     }
 
     @Override
     public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
-        if (!disposed) session.resizeOutput(Math.max(1, width), Math.max(1, height));
+        if (disposed) return;
+        try {
+            session.resizeOutput(Math.max(1, width), Math.max(1, height));
+        } catch (Throwable error) {
+            safeLog("SurfaceTexture resize failed", error);
+        }
     }
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
         Surface current = outputSurface;
         outputSurface = null;
-        if (current != null) session.detachOutput(current);
+        if (current != null) {
+            try { session.detachOutput(current); }
+            catch (Throwable error) { safeLog("SurfaceTexture destroy detach failed", error); }
+        }
         return true;
     }
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
+
+    private static void safeLog(String message, Throwable error) {
+        try {
+            Api101Bridge.log("[DC][SystemUiHandleMenuGlass] " + message, error);
+        } catch (Throwable ignored) {
+            // TextureView callbacks execute on SystemUI's UI thread and must never escape.
+        }
+    }
 }

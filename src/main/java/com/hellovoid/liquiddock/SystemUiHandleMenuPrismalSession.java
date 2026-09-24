@@ -60,6 +60,7 @@ final class SystemUiHandleMenuPrismalSession {
     private final float[] textureMatrix = new float[16];
 
     private volatile boolean shuttingDown;
+    private volatile boolean failureReported;
     private volatile boolean sourceBound;
     private volatile boolean firstFramePresented;
     private volatile boolean sourceFrameReady;
@@ -211,14 +212,26 @@ final class SystemUiHandleMenuPrismalSession {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
-        mainHandler.post(this::unbindSource);
-        renderHandler.post(() -> {
-            releaseOutput();
-            releaseRenderResources();
-            releaseSource();
-            releaseEgl();
-        });
-        renderThread.quitSafely();
+        try {
+            mainHandler.post(this::unbindSource);
+        } catch (Throwable error) {
+            log("unbind enqueue failed: " + error);
+        }
+        try {
+            renderHandler.post(() -> {
+                try { releaseOutput(); } catch (Throwable ignored) {}
+                try { releaseRenderResources(); } catch (Throwable ignored) {}
+                try { releaseSource(); } catch (Throwable ignored) {}
+                try { releaseEgl(); } catch (Throwable ignored) {}
+            });
+        } catch (Throwable error) {
+            log("render cleanup enqueue failed: " + error);
+        }
+        try {
+            renderThread.quitSafely();
+        } catch (Throwable error) {
+            log("render thread shutdown failed: " + error);
+        }
     }
 
     private void bindSource() {
@@ -363,9 +376,18 @@ final class SystemUiHandleMenuPrismalSession {
 
         if (!firstFramePresented) {
             firstFramePresented = true;
-            mainHandler.post(() -> {
-                if (!shuttingDown && listener != null) listener.onFirstFramePresented();
-            });
+            try {
+                mainHandler.post(() -> {
+                    if (shuttingDown || listener == null) return;
+                    try {
+                        listener.onFirstFramePresented();
+                    } catch (Throwable error) {
+                        log("first-frame listener failed: " + error);
+                    }
+                });
+            } catch (Throwable error) {
+                log("first-frame callback enqueue failed: " + error);
+            }
         }
     }
 
@@ -669,11 +691,24 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private void fail(Throwable error) {
-        if (shuttingDown) return;
+        if (shuttingDown || failureReported) return;
+        failureReported = true;
         log("failure: " + error);
-        mainHandler.post(() -> {
-            if (!shuttingDown && listener != null) listener.onFailure(error);
-        });
+        try {
+            boolean posted = mainHandler.post(() -> {
+                if (shuttingDown || listener == null) return;
+                try {
+                    listener.onFailure(error);
+                } catch (Throwable callbackError) {
+                    log("failure listener failed: " + callbackError);
+                }
+            });
+            if (!posted) {
+                log("failure callback rejected by main looper");
+            }
+        } catch (Throwable enqueueError) {
+            log("failure callback enqueue failed: " + enqueueError);
+        }
     }
 
     private static void log(String message) {

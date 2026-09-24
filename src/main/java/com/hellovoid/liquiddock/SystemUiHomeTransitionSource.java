@@ -39,18 +39,34 @@ final class SystemUiHomeTransitionSource {
             HookUtil.hook(ready, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object token = args.length > 0 ? args[0] : null;
-                tracker.beginReady(token);
+                boolean trackingReady = false;
+                try {
+                    tracker.beginReady(token);
+                    trackingReady = true;
+                } catch (Throwable error) {
+                    log("ready observation begin failed", error);
+                }
                 try {
                     return chain.proceed(args);
                 } finally {
-                    tracker.endReady();
+                    if (trackingReady) {
+                        try {
+                            tracker.endReady();
+                        } catch (Throwable error) {
+                            log("ready observation end failed", error);
+                        }
+                    }
                 }
             });
 
             HookUtil.hook(notify, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (args.length > 0 && args[0] instanceof Boolean) {
-                    tracker.recordCurrentReadyVisibility((Boolean) args[0]);
+                try {
+                    if (args.length > 0 && args[0] instanceof Boolean) {
+                        tracker.recordCurrentReadyVisibility((Boolean) args[0]);
+                    }
+                } catch (Throwable error) {
+                    log("HOME visibility observation failed", error);
                 }
                 return chain.proceed(args);
             });
