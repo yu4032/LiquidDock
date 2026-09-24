@@ -291,10 +291,9 @@ final class SystemUiHandleMenuGlassHook {
     }
 
     /**
-     * Windowless caption menus are not safe RootPassBlur producer roots on this HyperOS build.
-     * Use HyperOS' own pass-window backdrop material directly on the menu target. This still
-     * samples compositor content behind the popup, but never calls SetPassBlurSurface on the
-     * menu-local 758x147 ViewRoot that was observed to kill SystemUI.
+     * Native pass-window blur remains the fail-open presentation. Prismal exports the same
+     * caption-window ViewRoot compositor backdrop through a dedicated short-lived producer,
+     * avoiding the generic RootPassBlurBackend lifecycle that previously proved unsafe here.
      */
     private static final class Binding implements View.OnAttachStateChangeListener {
         final View root;
@@ -406,7 +405,7 @@ final class SystemUiHandleMenuGlassHook {
                 SystemUiHandleMenuPrismalSession session =
                         new SystemUiHandleMenuPrismalSession(
                                 target,
-                                menuSurface,
+                                sourceRoot,
                                 glassConfig,
                                 new SystemUiHandleMenuPrismalSession.Listener() {
                                     @Override public void onFirstFramePresented() {
@@ -430,7 +429,10 @@ final class SystemUiHandleMenuGlassHook {
                 prismalSession = session;
                 prismalOutput = output;
                 output.setMaterialAlpha(0f);
-                log("Prismal pipeline armed source=" + menuSurface
+                RootPassBlurEndpointBridge.Endpoint endpoint =
+                        RootPassBlurEndpointBridge.inspect(sourceRoot);
+                log("Prismal pipeline armed sourceViewRoot="
+                        + (endpoint != null ? endpoint.rootSurface : "<unavailable>")
                         + " target=" + targetLabel(target)
                         + " size=" + target.getWidth() + "x" + target.getHeight());
             } catch (Throwable error) {
