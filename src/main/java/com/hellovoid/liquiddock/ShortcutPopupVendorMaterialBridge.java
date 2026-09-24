@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import java.lang.ref.WeakReference;
@@ -11,9 +12,10 @@ import java.lang.reflect.Method;
  * animation and parent background-only blur under vendor authority.
  *
  * <p>HyperOS PopupView.applyMaterialEffects() deliberately splits the material:
- * mMenuLayer owns background-only blur, while Launcher also keeps mContentView background blur
- * mode=1 as a pass-window backdrop consumer. LiquidDock preserves that substrate contract and
- * removes only the visible ViewBlur/ColorBlend/BloomStroke element material.</p>
+ * LiquidDock moves the visible blur plane to an owned child inside mContentView. The original
+ * mContentView therefore becomes content-only: its normal background is made transparent and its
+ * vendor ViewBlur/ColorBlend/BloomStroke surface material is suppressed while text/icons remain
+ * untouched.</p>
  */
 final class ShortcutPopupVendorMaterialBridge {
     private static final String TAG = "[DC][ShortcutPopupMaterial]";
@@ -50,6 +52,8 @@ final class ShortcutPopupVendorMaterialBridge {
     static Claim claim(View popupView, View contentView) {
         if (!AVAILABLE || popupView == null || contentView == null) return null;
         Method prepareHyperMaterial = null;
+        Drawable claimedBackground = null;
+        int claimedBackgroundAlpha = -1;
         try {
             // Do not query isMaterialEnabled() here. On the actual Launcher 4.50 build that
             // member is not publicly exposed even though JADX reconstructs it as public.
@@ -58,10 +62,16 @@ final class ShortcutPopupVendorMaterialBridge {
             prepareHyperMaterial = HookUtil.findMethodExact(
                     popupView.getClass(), "prepareHyperMaterial", new Class<?>[0]);
 
-            // Keep mContentView backgroundBlurMode=1. HyperOS View.setMiBackgroundBlurMode(0)
-            // calls ViewRootImpl.updateTextureState(view, false) while pass-window blur is
-            // enabled, which cuts off the real backdrop texture feed and makes the custom
-            // BackdropRenderEffect fully transparent. Remove only the visible element material.
+            Drawable background = contentView.getBackground();
+            int originalBackgroundAlpha = background != null ? background.getAlpha() : -1;
+            claimedBackground = background;
+            claimedBackgroundAlpha = originalBackgroundAlpha;
+            if (background != null) background.setAlpha(0);
+
+            // The owned child layer is now the only visible blur/material plane. Keep the
+            // launcher content hierarchy itself transparent so the same path works whether
+            // MIUIX advanced material is enabled (normally alpha=0) or disabled (normally
+            // restores the opaque immersionWindowBackground).
             invoke(SET_MI_VIEW_BLUR_MODE, contentView, 0);
             invoke(CLEAR_MI_BACKGROUND_BLEND_COLOR, contentView);
             invoke(SET_MI_BLOOM_STROKE, contentView, (Object) new float[21]);
@@ -69,9 +79,14 @@ final class ShortcutPopupVendorMaterialBridge {
 
             MainHook.log(TAG + " custom material claimed"
                     + " target=" + contentView.getClass().getName()
+                    + " backgroundAlpha=" + originalBackgroundAlpha
                     + " parent=" + (contentView.getParent() != null
                             ? contentView.getParent().getClass().getName() : "null"));
-            return new Claim(popupView, prepareHyperMaterial);
+            return new Claim(
+                    popupView,
+                    prepareHyperMaterial,
+                    background,
+                    originalBackgroundAlpha);
         } catch (Throwable error) {
             if (prepareHyperMaterial != null && popupView.isAttachedToWindow()) {
                 try {
@@ -79,6 +94,10 @@ final class ShortcutPopupVendorMaterialBridge {
                 } catch (Throwable restoreError) {
                     MainHook.log(TAG + " failed-claim restore failed: " + root(restoreError));
                 }
+            }
+            if (claimedBackground != null && claimedBackgroundAlpha >= 0) {
+                try { claimedBackground.setAlpha(claimedBackgroundAlpha); }
+                catch (Throwable ignored) {}
             }
             MainHook.log(TAG + " claim failed; vendor material retained: " + root(error));
             return null;
@@ -94,6 +113,11 @@ final class ShortcutPopupVendorMaterialBridge {
             claim.prepareHyperMaterial.invoke(popupView);
             MainHook.log(TAG + " vendor advanced material restored");
         } catch (Throwable error) {
+            Drawable background = claim.backgroundRef.get();
+            if (background != null && claim.originalBackgroundAlpha >= 0) {
+                try { background.setAlpha(claim.originalBackgroundAlpha); }
+                catch (Throwable ignored) {}
+            }
             MainHook.log(TAG + " vendor material restore failed: " + root(error));
         }
     }
@@ -101,11 +125,19 @@ final class ShortcutPopupVendorMaterialBridge {
     static final class Claim {
         final WeakReference<View> popupRef;
         final Method prepareHyperMaterial;
+        final WeakReference<Drawable> backgroundRef;
+        final int originalBackgroundAlpha;
         boolean restored;
 
-        Claim(View popupView, Method prepareHyperMaterial) {
+        Claim(
+                View popupView,
+                Method prepareHyperMaterial,
+                Drawable background,
+                int originalBackgroundAlpha) {
             this.popupRef = new WeakReference<>(popupView);
             this.prepareHyperMaterial = prepareHyperMaterial;
+            this.backgroundRef = new WeakReference<>(background);
+            this.originalBackgroundAlpha = originalBackgroundAlpha;
         }
     }
 
