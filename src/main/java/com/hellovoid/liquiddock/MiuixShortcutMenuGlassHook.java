@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
 /** HyperOS 4.50 ShortcutMenu glass and optional dark-mode content adaptation. */
@@ -34,6 +35,7 @@ final class MiuixShortcutMenuGlassHook {
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             if (popupGlassEnabled) {
+                installShortcutMenuLayerPrewarm(classLoader, glassConfig);
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object itemInfo = args.length > 0 ? args[0] : null;
@@ -84,6 +86,38 @@ final class MiuixShortcutMenuGlassHook {
             MainHook.log(TAG + " hook unavailable: " + error);
             return false;
         }
+    }
+
+    private static void installShortcutMenuLayerPrewarm(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Throwable {
+        Class<?> layer = Class.forName(SHORTCUT_MENU_LAYER, false, classLoader);
+        for (Constructor<?> constructor : layer.getDeclaredConstructors()) {
+            HookUtil.hook(constructor, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object owner = chain.getThisObject();
+                if (owner instanceof View) {
+                    schedulePrewarm((View) owner, glassConfig);
+                }
+                return result;
+            });
+        }
+    }
+
+    private static void schedulePrewarm(View ownerView, LiquidDockConfig.Glass glassConfig) {
+        if (ownerView == null || glassConfig == null) return;
+        if (ownerView.isAttachedToWindow()) {
+            ShortcutPopupGlassCoordinator.prewarm(ownerView.getRootView(), glassConfig);
+            return;
+        }
+        View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) {
+                v.removeOnAttachStateChangeListener(this);
+                ShortcutPopupGlassCoordinator.prewarm(v.getRootView(), glassConfig);
+            }
+
+            @Override public void onViewDetachedFromWindow(View v) {}
+        };
+        ownerView.addOnAttachStateChangeListener(listener);
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
