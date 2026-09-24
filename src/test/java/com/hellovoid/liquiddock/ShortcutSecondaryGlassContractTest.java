@@ -56,19 +56,13 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("vendorMode="));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
-        assertTrue(effect.contains("uniform float2 u_origin"));
-        assertTrue(effect.contains("uniform float2 u_basisX"));
-        assertTrue(effect.contains("uniform float2 u_basisY"));
-        assertTrue(effect.contains("float2 localFrag = float2("));
-        assertTrue(effect.contains("target.getLocationInSurface(origin)"));
-        assertTrue(effect.contains("mapThroughViewParents(target, localOrigin)"));
-        assertTrue(effect.contains("mapThroughViewParents(target, localXAxis)"));
-        assertTrue(effect.contains("mapThroughViewParents(target, localYAxis)"));
-        assertTrue(effect.contains("current.getMatrix().mapPoints(point)"));
-        assertTrue(effect.contains("point[0] -= view.getScrollX()"));
-        assertFalse(effect.contains("transformFromViewToWindowSpace"));
-        assertTrue(effect.contains("addOnPreDrawListener(binding.preDrawListener)"));
-        assertTrue(effect.contains("removeOnPreDrawListener(preDrawListener)"));
+        // Skia RuntimeShader image filters run in local filter coordinates and the bound
+        // child shader shares that coordinate domain. Do not remap through window/surface space.
+        assertFalse(effect.contains("u_origin"));
+        assertFalse(effect.contains("u_basisX"));
+        assertFalse(effect.contains("u_basisY"));
+        assertFalse(effect.contains("getLocationInSurface"));
+        assertFalse(effect.contains("mapThroughViewParents"));
         assertFalse(effect.contains("RootPassBlurBackend"));
         assertFalse(effect.contains("SurfaceTexture"));
         assertFalse(effect.contains("import android.view.TextureView"));
