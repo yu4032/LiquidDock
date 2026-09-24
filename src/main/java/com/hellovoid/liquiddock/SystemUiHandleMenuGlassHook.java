@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
+import android.view.SurfaceControl;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -27,6 +28,8 @@ final class SystemUiHandleMenuGlassHook {
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final String MIUI_DECORATION_DOT =
             "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.decoration.MiuiDecorationDot";
+    private static final String MIUI_WINDOW_CONTROLLER =
+            "com.android.wm.shell.multitasking.miuimultiwinswitch.miuiwindowdecor.handlemenu.MiuiWindowController";
     private static final String HANDLE_MENU_LAYOUT = "desktop_mode_window_decor_handle_menu";
     private static final String CAPTION_MENU_CONTAINER = "caption_menu_container";
     private static final String WINDOWING_PILL = "windowing_pill";
@@ -35,6 +38,8 @@ final class SystemUiHandleMenuGlassHook {
     private static final Map<View, PendingBinding> PENDING =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Binding> ACTIVE =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Object, Binding> CONTROLLERS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private static boolean installed;
@@ -65,11 +70,19 @@ final class SystemUiHandleMenuGlassHook {
                                 ? (View) args[0]
                                 : null;
                         Object result = chain.proceed(args);
+                        SurfaceControl menuSurface =
+                                SystemUiHandleMenuSurfaceProbe.trackController(result);
                         if (menuRoot != null) {
                             log("MIUI caption menu window created root="
                                     + menuRoot.getClass().getName()
-                                    + " attached=" + menuRoot.isAttachedToWindow());
-                            observeMenu(menuRoot, "miui-caption-window");
+                                    + " attached=" + menuRoot.isAttachedToWindow()
+                                    + " surface=" + menuSurface);
+                            observeMenu(
+                                    menuRoot,
+                                    "miui-caption-window",
+                                    result,
+                                    menuSurface,
+                                    true);
                         }
                         return result;
                     });
@@ -77,6 +90,24 @@ final class SystemUiHandleMenuGlassHook {
             log("MIUI captionMenu addWindow hook installed");
         } catch (Throwable error) {
             log("MIUI captionMenu hook unavailable: " + error);
+        }
+
+        try {
+            Class<?> controller = Class.forName(MIUI_WINDOW_CONTROLLER, false, classLoader);
+            HookUtil.hookMethod(
+                    controller,
+                    "releaseViewWithAnim",
+                    new Class<?>[0],
+                    chain -> {
+                        Object owner = chain.getThisObject();
+                        Binding binding = CONTROLLERS.get(owner);
+                        if (binding != null) binding.prepareForNativeClose();
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    });
+            installedCount++;
+            log("MIUI captionMenu close boundary hook installed");
+        } catch (Throwable error) {
+            log("MIUI captionMenu close hook unavailable: " + error);
         }
 
         try {
@@ -97,7 +128,7 @@ final class SystemUiHandleMenuGlassHook {
                         if (target && result instanceof View) {
                             View root = (View) result;
                             log("AOSP HandleMenu layout inflated root=" + root.getClass().getName());
-                            observeMenu(root, "aosp-handle-menu");
+                            observeMenu(root, "aosp-handle-menu", null, null, false);
                         }
                         return result;
                     });
@@ -126,13 +157,19 @@ final class SystemUiHandleMenuGlassHook {
         }
     }
 
-    private static void observeMenu(View root, String source) {
+    private static void observeMenu(
+            View root,
+            String source,
+            Object controller,
+            SurfaceControl menuSurface,
+            boolean waitForNativeSurfaceScale) {
         LiquidDockConfig.Glass glass = glassConfig;
         if (root == null || glass == null || !glass.enabled
                 || !glass.systemUiHandleMenuEnabled) return;
 
         releaseRoot(root, "menu-replaced");
-        PendingBinding pending = new PendingBinding(root, glass);
+        PendingBinding pending = new PendingBinding(
+                root, glass, controller, menuSurface, waitForNativeSurfaceScale);
         PENDING.put(root, pending);
         pending.start();
         log("menu root observed source=" + source
@@ -154,11 +191,22 @@ final class SystemUiHandleMenuGlassHook {
             View.OnLayoutChangeListener {
         final View root;
         final LiquidDockConfig.Glass glass;
+        final Object controller;
+        final SurfaceControl menuSurface;
+        final boolean waitForNativeSurfaceScale;
         boolean released;
 
-        PendingBinding(View root, LiquidDockConfig.Glass glass) {
+        PendingBinding(
+                View root,
+                LiquidDockConfig.Glass glass,
+                Object controller,
+                SurfaceControl menuSurface,
+                boolean waitForNativeSurfaceScale) {
             this.root = root;
             this.glass = glass;
+            this.controller = controller;
+            this.menuSurface = menuSurface;
+            this.waitForNativeSurfaceScale = waitForNativeSurfaceScale;
         }
 
         void start() {
@@ -189,7 +237,14 @@ final class SystemUiHandleMenuGlassHook {
             release();
             SystemUiHandleMenuSurfaceProbe.trackRoot(sourceRoot);
             try {
-                Binding binding = new Binding(root, sourceRoot, target, glass);
+                Binding binding = new Binding(
+                        root,
+                        sourceRoot,
+                        target,
+                        glass,
+                        controller,
+                        menuSurface,
+                        waitForNativeSurfaceScale);
                 ACTIVE.put(root, binding);
                 binding.start();
                 log("caption menu native glass bind started target=" + targetLabel(target)
@@ -248,27 +303,63 @@ final class SystemUiHandleMenuGlassHook {
         final Drawable stockBackground;
         final int nativeBlurRadiusPx;
         final SystemUiHandleMenuAnimationProbe animationProbe;
+        final Object controller;
+        final SurfaceControl menuSurface;
+        final boolean waitForNativeSurfaceScale;
+        final SystemUiHandleMenuSurfaceProbe.ScaleListener scaleListener;
 
         boolean nativeGlassApplied;
+        boolean closing;
         boolean released;
 
         Binding(
                 View root,
                 View sourceRoot,
                 View target,
-                LiquidDockConfig.Glass glass) {
+                LiquidDockConfig.Glass glass,
+                Object controller,
+                SurfaceControl menuSurface,
+                boolean waitForNativeSurfaceScale) {
             this.root = root;
             this.sourceRoot = sourceRoot;
             this.target = target;
+            this.controller = controller;
+            this.menuSurface = menuSurface;
+            this.waitForNativeSurfaceScale = waitForNativeSurfaceScale && menuSurface != null;
             stockBackground = target.getBackground();
             nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
             animationProbe = new SystemUiHandleMenuAnimationProbe(root, sourceRoot, target);
+            scaleListener = this::onNativeSurfaceScale;
         }
 
         void start() {
             root.addOnAttachStateChangeListener(this);
             animationProbe.start();
+            if (controller != null) CONTROLLERS.put(controller, this);
+            if (waitForNativeSurfaceScale) {
+                SystemUiHandleMenuSurfaceProbe.registerScaleListener(menuSurface, scaleListener);
+                log("native glass waiting for menu surface scale settle surface=" + menuSurface);
+            } else {
+                applyNativeGlass();
+            }
+        }
+
+        private void onNativeSurfaceScale(float scaleX, float scaleY) {
+            if (released || closing || nativeGlassApplied) return;
+            float scale = Math.min(scaleX, scaleY);
+            if (scale < 0.999f) return;
             applyNativeGlass();
+            if (nativeGlassApplied) {
+                log("native menu surface settled scale=" + scaleX + "," + scaleY
+                        + "; glass presented");
+            }
+        }
+
+        void prepareForNativeClose() {
+            if (released || closing) return;
+            closing = true;
+            restoreStockBackground();
+            log("native close boundary; stock background restored before surface scale-out");
         }
 
         private void applyNativeGlass() {
@@ -301,12 +392,19 @@ final class SystemUiHandleMenuGlassHook {
             released = true;
             root.removeOnAttachStateChangeListener(this);
             animationProbe.stop();
+            if (controller != null && CONTROLLERS.get(controller) == this) {
+                CONTROLLERS.remove(controller);
+            }
+            if (menuSurface != null) {
+                SystemUiHandleMenuSurfaceProbe.unregisterScaleListener(
+                        menuSurface, scaleListener);
+            }
             restoreStockBackground();
         }
 
         @Override
         public void onViewAttachedToWindow(View view) {
-            applyNativeGlass();
+            if (!waitForNativeSurfaceScale) applyNativeGlass();
         }
 
         @Override
