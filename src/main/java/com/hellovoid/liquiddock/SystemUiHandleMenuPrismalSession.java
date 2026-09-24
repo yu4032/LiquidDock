@@ -65,7 +65,6 @@ final class SystemUiHandleMenuPrismalSession {
     private volatile boolean sourceFrameReady;
     private volatile boolean firstSourceFrameLogged;
     private int sourceFrameCount;
-    private boolean continuousRefreshPosted;
     private volatile int width;
     private volatile int height;
 
@@ -244,28 +243,12 @@ final class SystemUiHandleMenuPrismalSession {
             log("ViewRoot producer bound source=" + sourceSurface
                     + " logical=" + width + "x" + height
                     + " buffer=" + sourceEndpoint.bufferWidth + "x" + sourceEndpoint.bufferHeight
-                    + " rotation=" + sourceEndpoint.rotation);
-            startContinuousSourceRefresh();
+                    + " rotation=" + sourceEndpoint.rotation
+                    + " contentRect=" + sourceContentRect.left + "," + sourceContentRect.bottom
+                    + "," + sourceContentRect.width + "," + sourceContentRect.height);
         } catch (Throwable error) {
             fail(error);
         }
-    }
-
-    private void startContinuousSourceRefresh() {
-        if (shuttingDown || continuousRefreshPosted) return;
-        continuousRefreshPosted = true;
-        sourceRoot.postOnAnimation(this::runContinuousSourceRefresh);
-        log("continuous ViewRoot producer refresh started");
-    }
-
-    private void runContinuousSourceRefresh() {
-        continuousRefreshPosted = false;
-        if (shuttingDown || !sourceBound || !sourceRoot.isAttachedToWindow()) return;
-        Miuix307PassBlurBridge.Binding current = sourceBinding;
-        if (current == null || !current.bound) return;
-        Miuix307PassBlurBridge.resumeUpdates(current);
-        sourceRoot.postInvalidateOnAnimation();
-        startContinuousSourceRefresh();
     }
 
     private void unbindSource() {
@@ -307,7 +290,11 @@ final class SystemUiHandleMenuPrismalSession {
                         + textureMatrix[12] + "," + textureMatrix[13] + "]"
                         + " sourceBuffer=" + sourceEndpoint.bufferWidth + "x"
                         + sourceEndpoint.bufferHeight
-                        + " rotation=" + sourceEndpoint.rotation);
+                        + " rotation=" + sourceEndpoint.rotation
+                        + " contentRect=" + sourceContentRect.left + ","
+                        + sourceContentRect.bottom + ","
+                        + sourceContentRect.width + ","
+                        + sourceContentRect.height);
             }
             ensureRenderResources();
             normalizeBackdrop();
@@ -352,8 +339,6 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glUniform1i(
                 requireUniform(normalizeProgram, "uConfigRot"),
                 sourceEndpoint.rotation);
-        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),
-                0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(normalizeProgram);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
@@ -414,7 +399,7 @@ final class SystemUiHandleMenuPrismalSession {
         if (normalizeProgram == 0) {
             normalizeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
-                    Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
+                    Miuix307PassBlurShaders.HANDLE_MENU_OES_NORMALIZE_FRAGMENT);
         }
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
