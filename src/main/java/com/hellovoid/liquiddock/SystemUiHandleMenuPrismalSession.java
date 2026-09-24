@@ -62,6 +62,7 @@ final class SystemUiHandleMenuPrismalSession {
     private volatile boolean shuttingDown;
     private volatile boolean sourceBound;
     private volatile boolean firstFramePresented;
+    private volatile boolean firstSourceFrameLogged;
     private volatile int width;
     private volatile int height;
 
@@ -278,6 +279,16 @@ final class SystemUiHandleMenuPrismalSession {
             makePbufferCurrent();
             texture.updateTexImage();
             texture.getTransformMatrix(textureMatrix);
+            if (!firstSourceFrameLogged) {
+                firstSourceFrameLogged = true;
+                log("first ViewRoot source frame timestamp=" + texture.getTimestamp()
+                        + " matrix=[" + textureMatrix[0] + "," + textureMatrix[1] + ","
+                        + textureMatrix[4] + "," + textureMatrix[5] + ","
+                        + textureMatrix[12] + "," + textureMatrix[13] + "]"
+                        + " sourceBuffer=" + sourceEndpoint.bufferWidth + "x"
+                        + sourceEndpoint.bufferHeight
+                        + " rotation=" + sourceEndpoint.rotation);
+            }
             ensureRenderResources();
             normalizeBackdrop();
             renderGlass();
