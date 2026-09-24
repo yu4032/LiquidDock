@@ -44,16 +44,23 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertTrue(effect.contains("RuntimeShader"));
         assertTrue(effect.contains("RenderEffect.createRuntimeShaderEffect"));
-        assertTrue(effect.contains("MiBlurBridge.applyBackdropRenderEffect"));
         assertTrue(effect.contains("MiBlurBridge.captureBackdropRenderEffectState"));
-        assertTrue(effect.contains("MiBlurBridge.restoreBackdropRenderEffect"));
-        // Launcher has already configured PopupView.mContentView before this hook runs.
-        // The overlay effect must not seize background/outline ownership from MIUIX.
+        assertTrue(effect.contains("contentView.addView("));
+        assertTrue(effect.contains("glassLayer"));
+        assertTrue(effect.contains("MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)"));
+        assertTrue(effect.contains("glassLayer.setRenderEffect(effect)"));
+        assertTrue(effect.contains("glassLayer.setRenderEffect(null)"));
+        assertTrue(effect.contains("MiBlurBridge.clearPassWindowBlur(glassLayer)"));
+        assertTrue(effect.contains("contentView.removeView(glassLayer)"));
+        assertFalse(effect.contains("MiBlurBridge.applyBackdropRenderEffect"));
+        assertFalse(effect.contains("MiBlurBridge.restoreBackdropRenderEffect"));
+        // The owned background child inherits PopupAnimHelper transforms from mContentView while
+        // launcher text/icons stay above it and never pass through the optical RenderEffect.
         assertFalse(effect.contains("target.setBackground"));
         assertFalse(effect.contains("target.setOutlineProvider"));
         assertFalse(effect.contains("target.setClipToOutline"));
         assertFalse(effect.contains("PassBlurQualityPolicy.captureScale"));
-        assertTrue(effect.contains("vendorMode="));
+        assertTrue(effect.contains("sourceViewMode="));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
         // Skia RuntimeShader image filters run in local filter coordinates and the bound
@@ -93,11 +100,14 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(bridge.contains("class BackdropRenderEffectState"));
         assertTrue(bridge.contains("restoreBackdropRenderEffect("));
 
-        // Keep mContentView background blur mode=1 because HyperOS uses it to keep the
-        // pass-window texture feed alive. Only the visible element material is suppressed.
+        // mContentView becomes content-only. Its normal fallback background must also be
+        // transparent so advanced-material on/off reaches the same owned glass child.
         assertFalse(vendorMaterial.contains("SET_MI_BACKGROUND_BLUR_MODE"));
         assertFalse(vendorMaterial.contains(
                 "View.class, \"setMiBackgroundBlurMode\""));
+        assertTrue(vendorMaterial.contains("contentView.getBackground()"));
+        assertTrue(vendorMaterial.contains("background.setAlpha(0)"));
+        assertTrue(vendorMaterial.contains("originalBackgroundAlpha"));
         assertTrue(vendorMaterial.contains("setMiViewBlurMode"));
         assertTrue(vendorMaterial.contains("clearMiBackgroundBlendColor"));
         assertTrue(vendorMaterial.contains("setMiBloomStroke"));
@@ -108,7 +118,6 @@ public class ShortcutSecondaryGlassContractTest {
                         + "                    popupView.getClass(), \"prepareHyperMaterial\""));
         assertTrue(vendorMaterial.contains("prepareHyperMaterial.invoke(popupView)"));
         assertTrue(vendorMaterial.contains("!popupView.isAttachedToWindow()"));
-        assertTrue(vendorMaterial.contains("updateTextureState(view, false)"));
         assertFalse(vendorMaterial.contains("setPassWindowBlurEnabled"));
         assertFalse(vendorMaterial.contains("clearPassWindowBlur"));
         assertFalse(vendorMaterial.contains("setBackground(null)"));
