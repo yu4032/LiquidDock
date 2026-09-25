@@ -23,7 +23,7 @@ LiquidDock 是一个面向 **HyperOS 3 平板桌面** 的 LSPosed 模块，主�
 
 可以给 Dock、桌面图标、小组件和文件夹加入统一的液态玻璃效果，并调整模糊、折射、高光、色散、圆角等外观。
 
-拖动图标或小组件时，玻璃效果也会跟随移动。桌面图标的长按快捷菜单也可以换成玻璃背景，并提供适合深色背景的白色文字和线条图标模式。
+拖动图标或小组件时，玻璃效果也会跟随移动。桌面图标的长按快捷菜单也可以换成玻璃背景，并提供适合深色背景的白色文字和图标模式。
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
