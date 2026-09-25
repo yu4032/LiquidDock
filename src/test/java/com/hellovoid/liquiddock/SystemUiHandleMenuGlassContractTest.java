@@ -118,10 +118,13 @@ public class SystemUiHandleMenuGlassContractTest {
         assertTrue(session.contains("sourceEndpoint.bufferHeight"));
         assertTrue(session.contains("sourceEndpoint.rotation"));
         assertTrue(session.contains("Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT"));
-        assertTrue(session.contains("sourceContentRect.left"));
-        assertTrue(session.contains("sourceContentRect.bottom"));
-        assertTrue(session.contains("sourceContentRect.width"));
-        assertTrue(session.contains("sourceContentRect.height"));
+        assertTrue(session.contains("targetContentRect = sourceContentRect"));
+        assertTrue(session.contains("sourceContentRect.subRect("));
+        assertTrue(session.contains("RootPassBlurContentRect backdropRect = targetContentRect"));
+        assertTrue(session.contains("backdropRect.left"));
+        assertTrue(session.contains("backdropRect.bottom"));
+        assertTrue(session.contains("backdropRect.width"));
+        assertTrue(session.contains("backdropRect.height"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("PrismalGeometry"));
         assertTrue(session.contains("PrismalHighlightProfile"));
