@@ -402,6 +402,7 @@ final class ShortcutPopupHwuiGlassEffect {
     private final RuntimeShader shader;
     private final Miuix307PrismalMaterial.Params params;
     private final float cornerRadius;
+    private final MiBlurBridge.BackdropRenderEffectState layerOriginalState;
     private final View.OnLayoutChangeListener layoutListener;
     private boolean disposed;
 
@@ -410,12 +411,14 @@ final class ShortcutPopupHwuiGlassEffect {
             View glassLayer,
             RuntimeShader shader,
             Miuix307PrismalMaterial.Params params,
-            float cornerRadius) {
+            float cornerRadius,
+            MiBlurBridge.BackdropRenderEffectState layerOriginalState) {
         this.contentView = contentView;
         this.glassLayer = glassLayer;
         this.shader = shader;
         this.params = params;
         this.cornerRadius = cornerRadius;
+        this.layerOriginalState = layerOriginalState;
         this.layoutListener = (v, left, top, right, bottom,
                                oldLeft, oldTop, oldRight, oldBottom) -> updateGeometry();
     }
@@ -435,7 +438,7 @@ final class ShortcutPopupHwuiGlassEffect {
             return null;
         }
 
-        int blurRadius = resolveBackdropRadius(target, vendorState, density);
+        int blurRadius = resolveBackdropRadius(params, density);
         View glassLayer = new View(target.getContext());
         glassLayer.setClickable(false);
         glassLayer.setFocusable(false);
@@ -448,13 +451,6 @@ final class ShortcutPopupHwuiGlassEffect {
             RuntimeShader shader = new RuntimeShader(AGSL);
             RenderEffect effect =
                     RenderEffect.createRuntimeShaderEffect(shader, BACKDROP);
-            binding = new ShortcutPopupHwuiGlassEffect(
-                    contentView,
-                    glassLayer,
-                    shader,
-                    params,
-                    Math.max(0f, cornerRadius));
-
             // Put the blur/material plane inside mContentView at index 0. It therefore inherits
             // PopupAnimHelper transforms automatically while all launcher text/icons remain
             // above it and are never processed by the optical RenderEffect.
@@ -471,15 +467,35 @@ final class ShortcutPopupHwuiGlassEffect {
             // consumer, then let normal parent layout remain authoritative on subsequent frames.
             glassLayer.layout(0, 0, contentView.getWidth(), contentView.getHeight());
 
-            // Xiaomi's pass-window + background/view blur is the real backdrop producer/consumer.
-            // The standard RenderEffect is deliberately a *foreground* post-process of this owned
-            // background plane; it no longer tries to read Xiaomi's private pass texture as an
-            // Android BackdropRenderEffect child shader.
+            MiBlurBridge.BackdropRenderEffectState layerOriginalState =
+                    MiBlurBridge.captureBackdropRenderEffectState(glassLayer);
+            if (layerOriginalState == null) {
+                try { contentView.removeView(glassLayer); } catch (Throwable ignored) {}
+                return null;
+            }
+            binding = new ShortcutPopupHwuiGlassEffect(
+                    contentView,
+                    glassLayer,
+                    shader,
+                    params,
+                    Math.max(0f, cornerRadius),
+                    layerOriginalState);
+
+            // Keep the Xiaomi producer/view gates alive, but use only the user's LiquidDock blur
+            // as a light substrate. Launcher ShortcutMenu's stock 143px radius destroys the local
+            // scene structure Prismal needs for refraction and must not become the final material.
             if (!MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)) {
                 binding.disposeOwnedLayer();
                 return null;
             }
-            glassLayer.setRenderEffect(effect);
+
+            // The optical material is a BackdropRenderEffect, not a normal View RenderEffect.
+            // A normal RenderEffect only sees this otherwise-empty View's own display-list content;
+            // Xiaomi background blur is a separate RenderNode property and therefore bypasses it.
+            if (!MiBlurBridge.applyBackdropRenderEffect(glassLayer, effect)) {
+                binding.disposeOwnedLayer();
+                return null;
+            }
 
             binding.applyStaticUniforms();
             binding.updateGeometry();
@@ -488,8 +504,8 @@ final class ShortcutPopupHwuiGlassEffect {
                     + target.getWidth() + "x" + target.getHeight()
                     + " layerSize=" + glassLayer.getWidth() + "x" + glassLayer.getHeight()
                     + " sourceMode=" + vendorState.backgroundBlurMode
-                    + " sourceRadius=" + vendorState.backgroundBlurRadius
-                    + " layerRadius=" + blurRadius
+                    + " vendorRadius=" + vendorState.backgroundBlurRadius
+                    + " opticalSubstrateRadius=" + blurRadius
                     + " sourcePass=" + vendorState.passWindowBlurEnabled
                     + " sourceViewMode=" + vendorState.viewBlurMode);
             return binding;
@@ -505,17 +521,11 @@ final class ShortcutPopupHwuiGlassEffect {
     }
 
     private static int resolveBackdropRadius(
-            View target, MiBlurBridge.BackdropRenderEffectState state, float density) {
-        if (state.backgroundBlurRadius > 0) return state.backgroundBlurRadius;
-        try {
-            int id = target.getResources().getIdentifier(
-                    "shortcut_menu_blur_radius", "dimen", "com.miui.home");
-            if (id != 0) {
-                int px = target.getResources().getDimensionPixelSize(id);
-                if (px > 0) return Math.min(400, px);
-            }
-        } catch (Throwable ignored) {}
-        return Math.min(400, Math.max(1, Math.round(40f * density)));
+            Miuix307PrismalMaterial.Params params, float density) {
+        // ConfigSchema.Glass.BLUR is a dp control. Preserve its literal user intent and convert
+        // only at the native View boundary, where HyperOS expects physical pixels.
+        float blurDp = params != null ? Math.max(0f, params.blurRadiusPx) : 0f;
+        return Math.max(0, Math.min(400, Math.round(blurDp * Math.max(0.1f, density))));
     }
 
     void dispose() {
@@ -529,10 +539,7 @@ final class ShortcutPopupHwuiGlassEffect {
         try {
             contentView.removeOnLayoutChangeListener(layoutListener);
         } catch (Throwable ignored) {}
-        try {
-            glassLayer.setRenderEffect(null);
-        } catch (Throwable ignored) {}
-        MiBlurBridge.clearPassWindowBlur(glassLayer);
+        MiBlurBridge.restoreBackdropRenderEffect(glassLayer, layerOriginalState);
         try {
             if (glassLayer.getParent() == contentView) {
                 contentView.removeView(glassLayer);
