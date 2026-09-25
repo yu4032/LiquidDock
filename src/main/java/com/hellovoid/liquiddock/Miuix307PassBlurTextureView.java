@@ -1233,7 +1233,8 @@ final class Miuix307PassBlurTextureView extends TextureView
             // reflow can move icon glass while the backdrop mapping stays byte-for-byte stable.
             // Publish that scene change with the already-fresh producer frame instead of waiting
             // for a vendor drop callback or unrelated source update.
-            if (dockSceneChanged && producerRecovery.hasFreshFrame()) {
+            if (DockGlassSceneRenderPolicy.shouldRenderSceneOnlyChange(
+                    dockSceneChanged, producerRecovery.hasFreshFrame())) {
                 renderHandler.post(() -> drawLatestFrame(false));
             }
             return;
