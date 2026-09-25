@@ -877,7 +877,7 @@ private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader("预设与数据", "保存、恢复或迁移 LiquidDock 配置") }
         item { SmallTitle("预设") }
-        item { SettingsCard { ArrowPreference("应用默认预设", summary = "恢复当前保存的布局与液态玻璃参数", onClick = { applyDefaultPreset(activity) }) } }
+        item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
         item { SmallTitle("备份与应用") }
         item {
             SettingsCard {
@@ -1053,6 +1053,6 @@ private fun StringDropdown(
 private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
     val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
     PresetManager.applyDefault(prefs.edit())
-    Toast.makeText(activity, "默认预设已应用", Toast.LENGTH_LONG).show()
+    Toast.makeText(activity, "默认配置已应用", Toast.LENGTH_LONG).show()
     activity.restartLauncher()
 }
