@@ -36,6 +36,30 @@ final class RootPassBlurContentRect {
                 contentHeight / (float) surfaceHeight);
     }
 
+    RootPassBlurContentRect subRect(
+            int rootWidth, int rootHeight,
+            int leftPx, int topPx, int widthPx, int heightPx) {
+        if (rootWidth <= 0 || rootHeight <= 0 || widthPx <= 0 || heightPx <= 0) {
+            return this;
+        }
+
+        int left = clamp(leftPx, 0, rootWidth);
+        int top = clamp(topPx, 0, rootHeight);
+        int right = clamp(leftPx + widthPx, 0, rootWidth);
+        int bottom = clamp(topPx + heightPx, 0, rootHeight);
+        if (right <= left || bottom <= top) return this;
+
+        float x = left / (float) rootWidth;
+        float y = (rootHeight - bottom) / (float) rootHeight;
+        float w = (right - left) / (float) rootWidth;
+        float h = (bottom - top) / (float) rootHeight;
+        return new RootPassBlurContentRect(
+                this.left + x * this.width,
+                this.bottom + y * this.height,
+                w * this.width,
+                h * this.height);
+    }
+
     boolean sameAs(RootPassBlurContentRect other) {
         return other != null
                 && Math.abs(left - other.left) < 0.00001f
