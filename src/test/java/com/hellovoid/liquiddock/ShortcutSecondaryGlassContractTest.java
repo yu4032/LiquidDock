@@ -12,32 +12,47 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuRendezvousDoesNotRequireSourceSessionBeforeShow() throws Exception {
+    @Test public void shortcutMenuPrewarmsOnDownAndLatchesBeforeDragMutation() throws Exception {
         String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
-        assertTrue(hook.contains("com.miui.home.launcher.ShortcutMenuLayer"));
+        assertTrue(hook.contains("com.miui.home.launcher.Workspace"));
+        assertTrue(hook.contains("getDeclaredMethod(\"dispatchTouchEvent\", MotionEvent.class)"));
+        assertTrue(hook.contains("MotionEvent.ACTION_DOWN"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig)"));
+        assertTrue(hook.contains("com.miui.home.launcher.Launcher"));
+        assertTrue(hook.contains("com.miui.home.launcher.CellLayout$CellInfo"));
+        assertTrue(hook.contains("getDeclaredMethod(\"dragSingleItem\", cellInfoClass, View.class)"));
+        assertTrue(hook.contains(
+                "ShortcutPopupGlassCoordinator.latchBeforeDrag(draggedView.getRootView())"));
         assertTrue(hook.contains("\"setRequestingItemInfo\""));
-        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
-        assertTrue(hook.contains("ownerView.getRootView()"));
-        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
+        assertFalse(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
+        assertFalse(hook.contains("itemInfo != null) {\n                            ShortcutPopupGlassCoordinator"));
+
+        assertTrue(coordinator.contains("static synchronized void armTouch("));
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
+        assertTrue(coordinator.contains("state.session.beginPrewarm()"));
+        assertTrue(coordinator.contains("static synchronized boolean latchBeforeDrag("));
+        assertTrue(coordinator.contains("state.session.latchPreDragBackdrop()"));
+        assertTrue(coordinator.contains("releaseLocked(\"pre-drag-latch-miss\")"));
+        assertTrue(coordinator.contains("!state.latched"));
+        assertTrue(coordinator.contains("!state.session.hasFrozenBackdrop()"));
         assertTrue(coordinator.contains("ensurePopupOutput(state)"));
-        assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
         assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
-        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
         assertTrue(coordinator.contains("captureRoot.getLocationOnScreen(root)"));
-        assertTrue(coordinator.contains("captureRoot.getWidth(), captureRoot.getHeight()"));
-        assertFalse(coordinator.contains("decorGroup.addView(layer, popupIndex"));
-        assertTrue(coordinator.contains("private static void onPresented(State state)"));
-        assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
-        assertFalse(coordinator.contains("if (!state.session.hasFrozenBackdrop())"));
-        assertFalse(coordinator.contains("pre-show-backdrop-not-ready"));
-        assertFalse(coordinator.contains("|| state.session == null || popupView == null"));
-        assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
-        assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
+
+        assertTrue(session.contains("void beginPrewarm()"));
+        assertTrue(session.contains("sourceBackend.requestFresh(GENERATION)"));
+        assertTrue(session.contains("boolean latchPreDragBackdrop()"));
+        assertTrue(session.contains("pre-drag latch rejected reason=no-clean-prewarm-frame"));
+        assertTrue(session.contains(
+                "setUpdatesEnabled(false, \"shortcut-popup-pre-drag-latch\")"));
+        assertTrue(session.contains("sourceFrozen || lateFramesRejected"));
+        assertTrue(session.contains("prewarmFrameCount++"));
+        assertFalse(session.contains("shortcut-popup-frozen"));
+
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
         assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
         assertFalse(hook.contains("attachToExternalMaterial"));
