@@ -59,7 +59,8 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ownerView.getRootView()"));
         assertTrue(coordinator.contains("static synchronized void prepare("));
         assertTrue(coordinator.contains("static synchronized void prepareIfNeeded("));
-        assertTrue(coordinator.contains("reusing existing pre-show capture early="));
+        assertTrue(coordinator.contains("state.early"));
+        assertTrue(coordinator.contains("reusing early Workspace pre-show capture"));
 
         // Do not reintroduce the rejected Dock-specific timing/root experiments.
         assertFalse(hook.contains("DockContainerView"));
