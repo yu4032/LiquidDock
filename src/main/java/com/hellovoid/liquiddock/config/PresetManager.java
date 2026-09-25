@@ -21,7 +21,20 @@ public final class PresetManager {
     }
 
     public static void applyDefault(SharedPreferences.Editor editor) {
-        editor.putBoolean(ConfigSchema.Debug.LOGGING.name(), false);
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            editor.remove(key.name());
+            if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
+                editor.remove(key.name() + "_tenths");
+            }
+        }
+        String profile = "third_party_glass.systemui.lockscreen_clock.";
+        editor.remove(profile + "enabled");
+        editor.remove(profile + "blur");
+        editor.remove(profile + "tint_r");
+        editor.remove(profile + "tint_g");
+        editor.remove(profile + "tint_b");
+        editor.remove(profile + "tint_alpha");
+
         for (Map.Entry<String, Object> entry : DEFAULT_VALUES.entrySet()) {
             Object value = entry.getValue();
             if (value instanceof Boolean) {
@@ -340,31 +353,9 @@ public final class PresetManager {
         source.put("third_party_glass.systemui.lockscreen_clock.enabled", Boolean.FALSE);
         source.put("third_party_glass.systemui.lockscreen_clock.blur", 3.3722174d);
         source.put("third_party_glass.systemui.lockscreen_clock.tint_b", 239);
-        return Collections.unmodifiableMap(ConfigCodec.importValues(source));
-    }
-
-    private static void putSchemaDefault(Map<String, Object> values, ConfigKey<?> key) {
-        Object value = key.uiDefault();
-        if (value == null) return;
-        if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
-            int dp = (Integer) value;
-            values.put(key.name(), dp);
-            values.put(key.name() + "_tenths", dp * 10);
-        } else {
-            values.put(key.name(), value);
-        }
-    }
-
-    private static <T> void put(Map<String, Object> values, ConfigKey<T> key, T value) {
-        values.put(key.name(), value);
-    }
-
-    private static void putDp(Map<String, Object> values, ConfigKey<Integer> key, float value) {
-        float clamped = value;
-        if (key.minInt() != null) clamped = Math.max(key.minInt(), clamped);
-        if (key.maxInt() != null) clamped = Math.min(key.maxInt(), clamped);
-        values.put(key.name(), Math.round(clamped));
-        values.put(key.name() + "_tenths", Math.round(clamped * 10f));
+        Map<String, Object> values = ConfigCodec.importValues(source);
+        values.put(ConfigSchema.Debug.LOGGING.name(), Boolean.FALSE);
+        return Collections.unmodifiableMap(values);
     }
 
     private static void putDp(SharedPreferences.Editor editor, ConfigKey<Integer> key,
