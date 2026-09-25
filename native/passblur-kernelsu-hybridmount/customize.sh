@@ -16,7 +16,8 @@ fi
 ORIGINAL=/system_ext/lib64/libsurfaceflinger.so
 STOCK_SHA=407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32
 PREVIOUS_SHA=ef523f9d57ebe5c3af2ec39747b07ab6d70bd69165461e09ddc0fc8f13f5d563
-PATCHED_SHA=7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f
+PACING12_SHA=7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f
+PATCHED_SHA=0ce7ceea23efd5a9f7bdd5f7858e3e8d21bb77c5d9261088a18726eeccf5bc48
 
 [ -f "$ORIGINAL" ] || abort "SurfaceFlinger library is missing"
 ACTUAL=$(sha256sum "$ORIGINAL" | awk '{print $1}')
@@ -36,34 +37,44 @@ apply_blob() {
   fi
 }
 
+apply_async_release() {
+  apply_blob 10810976 "$PATCHDIR/00a4f660.bin"
+  apply_blob 5563892  "$PATCHDIR/0054e5f4.bin"
+}
+
+restore_predecessor_overrides() {
+  # Restore stock constructor pacing and stock post-render queue behavior.
+  apply_blob 4331524 "$PATCHDIR/00421804.bin"
+  apply_blob 5611584 "$PATCHDIR/0055a040.bin"
+  apply_blob 5611736 "$PATCHDIR/0055a0d8.bin"
+}
+
 case "$ACTUAL" in
   "$STOCK_SHA")
     ui_print "- Stock SurfaceFlinger verified"
     cp -f "$ORIGINAL" "$PAYLOAD" || abort "Failed to stage stock SurfaceFlinger"
 
-    # Reproduce the previously validated per-PassBlur freshness/latest-only patch.
+    # Keep only the predecessor's per-instance registration, worker-entry stale rejection
+    # and lifetime cleanup. Do not install its late pre-queue cancellation.
     apply_blob 208      "$PATCHDIR/000000d0.bin"
     apply_blob 328      "$PATCHDIR/00000148.bin"
     apply_blob 4331664  "$PATCHDIR/00421890.bin"
     apply_blob 5566876  "$PATCHDIR/0054f19c.bin"
     apply_blob 5608176  "$PATCHDIR/005592f0.bin"
-    apply_blob 5611584  "$PATCHDIR/0055a040.bin"
-    apply_blob 5611736  "$PATCHDIR/0055a0d8.bin"
     apply_blob 5612152  "$PATCHDIR/0055a278.bin"
     apply_blob 10809728 "$PATCHDIR/00a4f180.bin"
-
-    # Additional pacing patch: PassBlur::PassBlur property read -> mov w0,#12.
-    apply_blob 4331524 "$PATCHDIR/00421804.bin"
+    apply_async_release
     ;;
 
-  "$PREVIOUS_SHA")
-    ui_print "- Previous LiquidDock native PassBlur payload verified"
+  "$PREVIOUS_SHA"|"$PACING12_SHA")
+    ui_print "- Previous LiquidDock PassBlur payload verified"
     cp -f "$ORIGINAL" "$PAYLOAD" || abort "Failed to stage previous SurfaceFlinger"
-    apply_blob 4331524 "$PATCHDIR/00421804.bin"
+    restore_predecessor_overrides
+    apply_async_release
     ;;
 
   "$PATCHED_SHA")
-    ui_print "- Current LiquidDock pacing12 payload already active"
+    ui_print "- Current LiquidDock async PassBlur payload already active"
     cp -f "$ORIGINAL" "$PAYLOAD" || abort "Failed to stage current SurfaceFlinger"
     ;;
 
@@ -76,11 +87,11 @@ chmod 0644 "$PAYLOAD"
 FINAL=$(sha256sum "$PAYLOAD" | awk '{print $1}')
 [ "$FINAL" = "$PATCHED_SHA" ] || abort "Generated SurfaceFlinger SHA256 differs: $FINAL"
 
-# Patch material is install-only. Keep installed module layout equivalent to the
-# validated HybridMount template.
 rm -rf "$PATCHDIR"
 
 ui_print "- Exact binary generated and verified"
-ui_print "- Per-PassBlur freshness/latest-only patch active"
-ui_print "- Native PassBlur pacing hard-set to 12 ms"
+ui_print "- Stock PassBlur pacing restored"
+ui_print "- Worker-entry stale rejection retained"
+ui_print "- Late pre-queue cancellation removed"
+ui_print "- SurfaceFlinger release no longer waits for unfinished PassBlur future"
 ui_print "- Hybrid Mount will mount the patched library on next reboot"
