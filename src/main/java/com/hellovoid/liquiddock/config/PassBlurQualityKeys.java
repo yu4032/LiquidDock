@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock.config;
 /** Persisted Workspace render-quality controls; native PassBlur geometry remains authoritative at 1.0. */
 public final class PassBlurQualityKeys {
     public static final String CAPTURE_SCALE = "liquid_passblur_capture_scale";
-    public static final int CAPTURE_SCALE_DEFAULT = 100;
+    public static final int CAPTURE_SCALE_DEFAULT = 50;
     public static final int CAPTURE_SCALE_MIN = 50;
     public static final int CAPTURE_SCALE_MAX = 100;
 
