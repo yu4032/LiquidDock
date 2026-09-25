@@ -12,63 +12,55 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuPrewarmsOnDownAndLatchesBeforeDragMutation() throws Exception {
+    @Test public void shortcutMenuUsesEarlyWorkspaceLatchAndPublishedDockAuthority()
+            throws Exception {
         String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
+        // Workspace keeps the proven early timing path.
         assertTrue(hook.contains("com.miui.home.launcher.CellLayout"));
         assertTrue(hook.contains("getDeclaredMethod(\"dispatchTouchEvent\", MotionEvent.class)"));
         assertTrue(hook.contains("getDeclaredMethod(\"lastDownOnOccupiedCell\")"));
-        assertTrue(hook.contains("MotionEvent.ACTION_DOWN"));
-        assertTrue(hook.contains("lastDownOnOccupiedCell.invoke(owner)"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig)"));
-
-        // Dock has its own window/touch pipeline and never reaches CellLayout. Prewarm on the
-        // routed Dock ACTION_DOWN, then latch at HotSeatsListContent.onLongClick() before either
-        // direct showShortcutMenu(view) or Dock DragController.startDrag().
-        assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
-        assertTrue(hook.contains(
-                "getDeclaredMethod(\"dispatchTouchEventFromHome\", MotionEvent.class)"));
-        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.armTouch(dockRoot, glassConfig)"));
-        assertTrue(hook.contains("com.miui.home.launcher.hotseats.HotSeatsListContent"));
-        assertTrue(hook.contains("getDeclaredMethod(\"onLongClick\", View.class)"));
-        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.latchBeforeDrag(dockRoot)"));
-        assertTrue(hook.contains("dock pre-show backdrop latch="));
-        assertTrue(hook.contains("cancelAttemptIfPopupNotBound"));
-
         assertTrue(hook.contains("com.miui.home.launcher.Launcher"));
         assertTrue(hook.contains("com.miui.home.launcher.CellLayout$CellInfo"));
         assertTrue(hook.contains("getDeclaredMethod(\"dragSingleItem\", cellInfoClass, View.class)"));
         assertTrue(hook.contains(
                 "ShortcutPopupGlassCoordinator.latchBeforeDrag(draggedView.getRootView())"));
+
+        // Dock must preserve the published v2.4.5 authority contract: the actual
+        // ShortcutMenuLayer root from setRequestingItemInfo(), not a guessed Dock touch root.
+        assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
         assertTrue(hook.contains("\"setRequestingItemInfo\""));
-        assertFalse(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
-        assertFalse(hook.contains("itemInfo != null) {\n                            ShortcutPopupGlassCoordinator"));
+        assertTrue(hook.contains("dockContainerClass.isInstance(owner)"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareAuthoritativeRoot("));
+        assertTrue(hook.contains("Dock authoritative menu root prepared"));
+        assertFalse(hook.contains("dispatchTouchEventFromHome"));
+        assertFalse(hook.contains("HotSeatsListContent"));
+        assertFalse(hook.contains("dock touch prewarm armed"));
+        assertFalse(hook.contains("dock pre-show backdrop latch="));
 
         assertTrue(coordinator.contains("static synchronized void armTouch("));
-        assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
+        assertTrue(coordinator.contains("static synchronized void prepareAuthoritativeRoot("));
+        assertTrue(coordinator.contains("prepareInternal(captureRoot, glassConfig, true"));
         assertTrue(coordinator.contains("state.session.beginPrewarm()"));
-        assertTrue(coordinator.contains("static synchronized boolean latchBeforeDrag("));
-        assertTrue(coordinator.contains("state.session.latchPreDragBackdrop()"));
-        assertTrue(coordinator.contains("releaseLocked(\"pre-drag-latch-miss\")"));
-        assertTrue(coordinator.contains("!state.latched"));
+        assertTrue(coordinator.contains("state.session.captureFirstFrameAndFreeze()"));
+        assertTrue(coordinator.contains("state.latched = true"));
         assertTrue(coordinator.contains("!state.session.hasFrozenBackdrop()"));
-        assertTrue(coordinator.contains("ensurePopupOutput(state)"));
         assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
         assertTrue(coordinator.contains("captureRoot.getLocationOnScreen(root)"));
 
         assertTrue(session.contains("void beginPrewarm()"));
-        assertTrue(session.contains("sourceBackend.requestFresh(GENERATION)"));
         assertTrue(session.contains("boolean latchPreDragBackdrop()"));
-        assertTrue(session.contains("pre-drag latch rejected reason=no-clean-prewarm-frame"));
+        assertTrue(session.contains("void captureFirstFrameAndFreeze()"));
+        assertTrue(session.contains("freezeOnNextFrame = true"));
         assertTrue(session.contains(
-                "setUpdatesEnabled(false, \"shortcut-popup-pre-drag-latch\")"));
+                "setUpdatesEnabled(false, \"shortcut-popup-authoritative-first-frame\")"));
+        assertTrue(session.contains("authoritative-root backdrop frozen"));
         assertTrue(session.contains("private final Object prewarmLock = new Object()"));
         assertTrue(session.contains("synchronized (prewarmLock)"));
-        assertTrue(session.contains("if (sourceFrozen || lateFramesRejected) return"));
-        assertTrue(session.contains("prewarmFrameCount++"));
         assertFalse(session.contains("shortcut-popup-frozen"));
 
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
