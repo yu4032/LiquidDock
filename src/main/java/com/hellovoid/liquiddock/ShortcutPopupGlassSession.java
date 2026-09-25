@@ -60,6 +60,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
+    private volatile boolean freezeOnNextFrame;
     private volatile boolean lateFramesRejected;
     private volatile long lastPrewarmFrameUptimeMs = -1L;
     private volatile int prewarmFrameCount;
@@ -113,6 +114,22 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         sourceFrozen = false;
         sourceBackend.requestFresh(GENERATION);
         MainHook.log(TAG + " prewarm requested generation=" + GENERATION);
+    }
+
+    /**
+     * Release-compatible capture mode used only when the real ShortcutMenuLayer root becomes
+     * known from setRequestingItemInfo(). Freeze the first frame from that authoritative root,
+     * matching the published v2.4.5 behavior instead of guessing a Dock touch-window root.
+     */
+    void captureFirstFrameAndFreeze() {
+        if (shuttingDown) return;
+        synchronized (prewarmLock) {
+            lateFramesRejected = false;
+            sourceFrozen = false;
+            freezeOnNextFrame = true;
+        }
+        sourceBackend.requestFresh(GENERATION);
+        MainHook.log(TAG + " authoritative-root first-frame capture requested");
     }
 
     /**
@@ -215,6 +232,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
         try {
+            boolean freezeAfterFrame;
             synchronized (prewarmLock) {
                 if (sourceFrozen || lateFramesRejected) return;
                 ensureGl();
@@ -231,6 +249,17 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 backdropPrepared = true;
                 prewarmFrameCount++;
                 lastPrewarmFrameUptimeMs = android.os.SystemClock.uptimeMillis();
+                freezeAfterFrame = freezeOnNextFrame;
+                if (freezeAfterFrame) {
+                    freezeOnNextFrame = false;
+                    sourceFrozen = true;
+                }
+            }
+            if (freezeAfterFrame) {
+                sourceBackend.setUpdatesEnabled(false,
+                        "shortcut-popup-authoritative-first-frame");
+                MainHook.log(TAG + " authoritative-root backdrop frozen frames="
+                        + prewarmFrameCount);
             }
             // While the finger is still in the normal press phase, keep replacing the prepared
             // backdrop with the newest clean frame. Geometry/output normally do not exist yet.
