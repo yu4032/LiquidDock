@@ -34,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Feedback-safe HyperOS 3.0.307 PassBlur -> OES -> 2D -> Prismal -> TextureView renderer.
@@ -173,8 +174,15 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final FloatBuffer quadBuffer;
     private final HandlerThread renderThread;
     private final Handler renderHandler;
+    private final HandlerThread frameSignalThread;
+    private final Handler frameSignalHandler;
     private final Handler mainHandler;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    private final AtomicBoolean renderScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean renderDirty = new AtomicBoolean(false);
+    private final AtomicBoolean producerRenderDirty = new AtomicBoolean(false);
+    private final AtomicLong producerFrameCount = new AtomicLong();
+    private final AtomicLong coalescedRenderRequests = new AtomicLong();
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
@@ -252,7 +260,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private boolean firstMatrixLogged;
     private boolean stageBDiagnosticsLogged;
     private boolean prismalMappingLogged;
-    private long producerFrameCount;
     private long renderedFrameCount;
     private long powerWindowStartedMs = SystemClock.uptimeMillis();
     private ViewTreeObserver preDrawObserver;
@@ -281,6 +288,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         renderThread = new HandlerThread("LiquidDock-PassBlur-EGL");
         renderThread.start();
         renderHandler = new Handler(renderThread.getLooper());
+        frameSignalThread = new HandlerThread("LiquidDock-PassBlur-FrameSignal");
+        frameSignalThread.start();
+        frameSignalHandler = new Handler(frameSignalThread.getLooper());
         mainHandler = new Handler(context.getMainLooper());
     }
 
@@ -418,6 +428,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         resetBoundGeometry();
 
         renderHandler.post(this::releaseRenderResources);
+        frameSignalThread.quitSafely();
         renderThread.quitSafely();
     }
 
@@ -637,10 +648,10 @@ final class Miuix307PassBlurTextureView extends TextureView
         inputProducerSurface = producer;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
-            producerFrameCount++;
+            producerFrameCount.incrementAndGet();
             frameAvailable.set(true);
-            drawLatestFrame(true);
-        }, renderHandler);
+            requestLatestRender(true);
+        }, frameSignalHandler);
     }
 
     private void ensureFboSize(int width, int height) {
@@ -675,6 +686,31 @@ final class Miuix307PassBlurTextureView extends TextureView
         rawFramebuffer = createFramebuffer(rawTexture);
         fboWidth = nextWidth;
         fboHeight = nextHeight;
+    }
+
+    private void requestLatestRender(boolean fromProducer) {
+        if (shuttingDown) return;
+        renderDirty.set(true);
+        if (fromProducer) producerRenderDirty.set(true);
+        if (!renderScheduled.compareAndSet(false, true)) {
+            coalescedRenderRequests.incrementAndGet();
+            return;
+        }
+        renderHandler.post(this::runLatestRender);
+    }
+
+    private void runLatestRender() {
+        boolean producerTriggered = producerRenderDirty.getAndSet(false);
+        renderDirty.set(false);
+        try {
+            drawLatestFrame(producerTriggered);
+        } finally {
+            renderScheduled.set(false);
+            if (!shuttingDown && renderDirty.get()
+                    && renderScheduled.compareAndSet(false, true)) {
+                renderHandler.post(this::runLatestRender);
+            }
+        }
     }
 
     private void drawLatestFrame(boolean fromFrameCallback) {
@@ -790,15 +826,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         long elapsed = now - powerWindowStartedMs;
         if (elapsed < 5000L) return;
         float seconds = Math.max(0.001f, elapsed / 1000f);
-        float producerFps = producerFrameCount / seconds;
+        long producerFrames = producerFrameCount.getAndSet(0L);
+        long coalesced = coalescedRenderRequests.getAndSet(0L);
+        float producerFps = producerFrames / seconds;
         float drawFps = renderedFrameCount / seconds;
         DockGlassSceneSnapshot scene = dockCompositor.latestScene();
         MainHook.log("[DC][PBTX][Power] producerFps=" + producerFps
                 + " drawFps=" + drawFps
+                + " coalesced=" + coalesced
                 + " dockItems=" + (scene != null ? scene.size() : 0)
                 + " attached=" + isAttachedToWindow()
                 + " shown=" + isShown());
-        producerFrameCount = 0L;
         renderedFrameCount = 0L;
         powerWindowStartedMs = now;
     }
