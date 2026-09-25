@@ -1196,8 +1196,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         float nextDockUvBottom = insets.bottom / (float) sampleHeight;
         float nextDockUvWidth = visibleWidth / (float) sampleWidth;
         float nextDockUvHeight = visibleHeight / (float) sampleHeight;
-        dockCompositor.refreshUiSceneIfNeeded(sampleWidth, sampleHeight,
-                insets.left, insets.top, 1f, 1f);
+        boolean dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
+                sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
 
         BackdropSnapshot currentSnapshot = backdropSnapshot;
         boolean unchanged = currentSnapshot != null
@@ -1228,7 +1228,16 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && Float.compare(dockUvWidth, nextDockUvWidth) == 0
                 && Float.compare(dockUvHeight, nextDockUvHeight) == 0
                 && producerCoverage == dock.coverage;
-        if (unchanged) return;
+        if (unchanged) {
+            // Dock icon membership/geometry is independent from the PassBlur crop. A hotseat
+            // reflow can move icon glass while the backdrop mapping stays byte-for-byte stable.
+            // Publish that scene change with the already-fresh producer frame instead of waiting
+            // for a vendor drop callback or unrelated source update.
+            if (dockSceneChanged && producerRecovery.hasFreshFrame()) {
+                renderHandler.post(() -> drawLatestFrame(false));
+            }
+            return;
+        }
 
         backdropX = sample.backdropX;
         backdropY = sample.backdropY;
