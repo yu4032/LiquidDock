@@ -51,10 +51,6 @@ final class ShortcutPopupGlassCoordinator {
             boolean dockMatch = matchesDockAuthority(state, authorityOwner);
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
-                if (dockMatch) {
-                    MainHook.log(TAG + " reusing early Dock capture backdropReady="
-                            + (state.session != null && state.session.hasFrozenBackdrop()));
-                }
                 return;
             }
         }
