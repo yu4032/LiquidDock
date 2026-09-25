@@ -6,22 +6,21 @@ from pathlib import Path
 STOCK_SHA256 = "407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32"
 PREVIOUS_SHA256 = "ef523f9d57ebe5c3af2ec39747b07ab6d70bd69165461e09ddc0fc8f13f5d563"
 PACING12_SHA256 = "7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f"
-PATCHED_SHA256 = "0ce7ceea23efd5a9f7bdd5f7858e3e8d21bb77c5d9261088a18726eeccf5bc48"
+ASYNC_RELEASE_SHA256 = "0ce7ceea23efd5a9f7bdd5f7858e3e8d21bb77c5d9261088a18726eeccf5bc48"\nPATCHED_SHA256 = "bf3a0565d7e7b1309b4a2a9027b73aab55dd66607a1bba381362c822d9456868"
 EXPECTED_SIZE = 11577024
 
 # Reproduces the user-validated per-PassBlur early freshness patch, but removes the
 # predecessor's late pre-queue cancellation and keeps stock pacing.
 #
-# The structural fix is at releaseCurRes:
-#   0x54e5f4: future<bool>::get()/move -> ready-only helper at 0xa4f660
+# Structural fix:
+#   - drawPassBlurIfNeed @ 0x54d310 branches to a submission gate.
+#     If the future vector is non-empty, no new heavy PassBlur job is submitted.
+#   - releaseCurRes @ 0x54e5b0 branches to an all-ready gate.
+#     The future vector is consumed only when every shared state has READY bit 0 set.
+#     Otherwise the entire vector/bookkeeping remains untouched and release returns.
 #
-# Helper semantics:
-#   - acquire-load shared-state ready flag at +0x70;
-#   - if not ready, return false immediately without locking/waiting;
-#   - if ready, tail-call the original __assoc_state<bool>::move().
-#
-# This prevents SurfaceFlinger composition from synchronously joining PassBlur work.
-# The worker-entry stale gate remains, so queued obsolete jobs are still cheap to discard.
+# This gives PassBlur one in-flight batch without blocking SurfaceFlinger present and without
+# turning unfinished work into a false result that would allow cross-frame backlog growth.
 UPGRADE_PATCHES = (
     # Restore stock behavior removed by the predecessor/Pacing12 experiments.
     (0x421804, bytes.fromhex("67811894")),  # bl property_get_int32
@@ -43,16 +42,17 @@ PATCHES = (
         "fd7bbea9fd030091f30b00f9f30300aa001840b900040051601a00b9e0000035608200912b010094e00313aaf30b40f9fd7bc2a823010014f30b40f9fd7bc2a8c0035fd6200b00b4fd7bbca9fd030091f35301a9f55b02a9161440f9f71b00f9560000b4d60a40f900dc40f9400900b4170040f9df0200f1e41a40fac0080054000480d20e010094f50300aa400800b4140300b094021491e00314aa0a010094802240f9600300b5932640f9130500b4600640f91f0016eb61040054608200910101009461420091200080d22000e0f800040091b30201a9802240f9a05e00a9601a40b9952200f900040011601a00b960820091f5000094f71b40f9e00314aaf55b42a9f35341a9fd7bc4a8ef000014010440f93f0017eb21010054e00314aaea000094f71b40f9e00315aaf35341a9f55b42a9fd7bc4a8e2000014000040f9d9ffff17730240f9d9ffff17000c80d2db000094f30300aa20feffb416fc00a9200080d2010080d2600e00f960820091d700009480000034e00313aad1000094e7ffff17802640f9600200f9932600f9cbffff17f71b40f9f35341a9f55b42a9fd7bc4a8c0035fd6c0035fd6fd7bbda9fd030091f35301a9f30300aaf51300f9800000b413dc40f9530000b4730240f9140300b094021491e00314aaba000094952a40f9d50000b4a00a40f99f2a00f984ffff97e00315aab2000094e00314aa150c44f8150100b4010040f9220440f95f0013eb81020054a10240f9010000f9952a00f9e00314aaa8000094350200b4a00a40f90170009121fcdf88e1010035a10e40f90040009100fcdfc83f0000ebe0179f1af51340f9f35341a9fd7bc3a8c0035fd6350040f9e00301aae6ffff1720008052f8ffff1700008052f6ffff17fd7bbaa9fd030091f35301a9140300b094021491f55b02a9f50300aaf76303a9962a40f9ef2300fd0f40201eb60000b4d30a40f9780640f91f0300eb80010054e041201ee00315aa83000094ef2340fd20008052805a00b9f35341a9f55b42a9f76343a9fd7bc6a8c0035fd677820091e12b00f9e00317aae20f0b29720000946072009100fcdf88e12b40f960020035c40e40f97342009160fedfc8e20f4b299f0000eba1010054e041201ee00318aa6900009420008052ef2340fd805a00b9e00317aaf35341a9f55b42a9f76343a9fd7bc6a85d000014e00315aa5f00009400008052f5ffff17000300b0005845b9c0035fd6fd7bbea9fd030091f35301a9130300b073021491e00313aa4e000094742a40f97f2a00f9740000b4800a40f918ffff97e00313aa48000094b40000b4e00314aaf35341a9fd7bc2a841000014f35341a9fd7bc2a8c0035fd6fd7bbda9fd030091f55b02a9150300b0b5021491f35301a9f40315aaf60300aae00315aa35000094938e44f8130200b4800240f9010440f93f0016eb21020054608200912d000094210080526072009101fc9f886082009129000094600240f9800200f9e00313aaf3feff97f35341a9e00315aaf55b42a9fd7bc3a820000014130040f9f40300aae9ffff170000000000000000880201f9e07bbfa9e00314aaf6feff97e07bc1a8ebfeeb17e00313aa4cffff97400000353329ec17682240b93a27ec17b6ffff97f603002ab12aec17b6ffff9740008052162bec17fd7bbca9e007bfa9c7ffff97e007c1a89748e71731c2ff173cc2ff17e3c2ff17e6c2ff1729c6ff172cc6ff170bd7ff1706d7ff17"
     )),
 
-    # releaseCurRes(): replace blocking future<bool>::move() with ready-only helper.
+    # One-batch-in-flight helpers.
     (0xA4F660, bytes.fromhex(
-        "08c00191"  # add x8, x0, #0x70
-        "08fddf88"  # ldar w8, [x8]
-        "48000036"  # tbz w8, #0, not_ready
-        "75fde817"  # b 0x48ec40 (__assoc_state<bool>::move)
-        "00008052"  # mov w0, #0
-        "c0035fd6"  # ret
+        "782244a91f0308eb41000054fbfbeb17e90318aa2a0140f90a0100b44cc10191"
+        "8bfddf88ab000036292100913f0108eb21ffff54cafbeb1740008052d5c1ff97"
+        "3efceb171f2003d51f2003d51f2003d5082444a91f0109eb4000005456fbeb17"
+        "09a042a914f7eb17"
     )),
-    (0x54E5F4, bytes.fromhex("1b041494")),
+    # releaseCurRes -> all-ready gate
+    (0x54E5B0, bytes.fromhex("2c041414")),
+    # drawPassBlurIfNeed -> in-flight submission gate
+    (0x54D310, bytes.fromhex("e8081414")),
 )
 
 def sha256(data: bytes) -> str:
@@ -112,7 +112,8 @@ def main() -> int:
     print(f"previous={PREVIOUS_SHA256}")
     print(f"pacing12={PACING12_SHA256}")
     print(f"patched={PATCHED_SHA256}")
-    print("release_patch=0x54e5f4: ready-only future helper")
+    print("release_gate=0x54e5b0: consume only when all futures are ready")
+    print("submit_gate=0x54d310: skip heavy submission while a batch is in flight")
     print("pacing=stock property/default")
     return 0
 
