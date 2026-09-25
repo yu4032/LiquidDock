@@ -63,7 +63,8 @@ final class ShortcutPopupGlassCoordinator {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
         if (state == null || state.released || state.captureRootRef.get() != liveRoot
-                || popupView == null || contentView == null || !(decorView instanceof ViewGroup)) {
+                || popupView == null || !(contentView instanceof ViewGroup)
+                || !(decorView instanceof ViewGroup)) {
             return false;
         }
 
@@ -110,41 +111,45 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.released || state.layer != null || state.session == null) {
             return state != null && state.layer != null;
         }
-        View decor = state.popupDecorRef.get();
         View popup = state.popupRef.get();
-        if (!(decor instanceof ViewGroup) || popup == null || !popup.isAttachedToWindow()) {
+        View content = state.contentRef.get();
+        if (popup == null || !popup.isAttachedToWindow() || !(content instanceof ViewGroup)
+                || !content.isAttachedToWindow()) {
             return false;
         }
-        ViewGroup decorGroup = (ViewGroup) decor;
-        int popupIndex = decorGroup.indexOfChild(popup);
-        if (popupIndex < 0) return false;
 
+        ViewGroup contentGroup = (ViewGroup) content;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
-                decor.getContext(), state.session);
-        decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
+                content.getContext(), state.session);
+        // This is a replacement for the native material background, not a sibling presentation
+        // layer. Index 0 keeps all Launcher menu content above it while letting MIUIX's existing
+        // mContentView bounds, alpha and corner-radius animation remain authoritative.
+        contentGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
         updateGeometry(state);
-        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
+        MainHook.log(TAG + " local popup output inserted in content index=0"
+                + " size=" + content.getWidth() + "x" + content.getHeight()
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
 
     private static void updateGeometry(State state) {
         if (state == null || state.released) return;
-        View decor = state.popupDecorRef.get();
+        View captureRoot = state.captureRootRef.get();
         View content = state.contentRef.get();
         ShortcutPopupGlassSession session = state.session;
-        if (decor == null || content == null || session == null || decor.getWidth() <= 0
-                || decor.getHeight() <= 0 || !content.isAttachedToWindow()) return;
+        if (captureRoot == null || content == null || session == null
+                || captureRoot.getWidth() <= 0 || captureRoot.getHeight() <= 0
+                || !content.isAttachedToWindow()) return;
         Rect rect = new Rect();
         if (!content.getGlobalVisibleRect(rect) || rect.width() <= 0 || rect.height() <= 0) return;
         int[] root = new int[2];
-        decor.getLocationOnScreen(root);
+        captureRoot.getLocationOnScreen(root);
         LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
                 root[0], root[1], rect.left, rect.top, rect.right, rect.bottom);
         LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
-                decor.getWidth(), decor.getHeight(),
+                captureRoot.getWidth(), captureRoot.getHeight(),
                 bounds.left, bounds.top, bounds.right, bounds.bottom,
                 resolveShortcutMenuCornerRadius(content));
         if (geometry != null) session.updateGeometry(geometry);
@@ -162,24 +167,6 @@ final class ShortcutPopupGlassCoordinator {
             state.materialClaimed = true;
             layer.reveal();
             MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released");
-        }
-    }
-
-    static synchronized void beginDismissFade(Object menu) {
-        State state = current;
-        if (state == null || state.released || menu == null) return;
-        try {
-            Object popupObject = HookUtil.getField(menu, "mPopupView");
-            View popup = state.popupRef.get();
-            if (popup == null || popupObject != popup) return;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " dismiss fade owner check failed: " + error);
-            return;
-        }
-        ShortcutPopupGlassLayer layer = state.layer;
-        if (layer != null) {
-            layer.fadeOutFast();
-            MainHook.log(TAG + " fast dismiss fade started");
         }
     }
 
