@@ -1,6 +1,0 @@
-id=liquiddock_passblur_pacing
-name=LiquidDock PassBlur Pacing
-version=0.1.0-experimental
-versionCode=1
-author=LiquidDock
-description=Experimental systemless override for HyperOS SurfaceFlinger PassBlur pacing.
