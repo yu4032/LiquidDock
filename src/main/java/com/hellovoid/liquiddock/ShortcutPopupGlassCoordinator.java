@@ -78,7 +78,9 @@ final class ShortcutPopupGlassCoordinator {
                     });
             if (state.authoritativeFirstFrame) {
                 state.session.captureFirstFrameAndFreeze();
-                MainHook.log(TAG + " authoritative menu-root capture active");
+                boolean outputReady = ensurePopupOutput(state);
+                MainHook.log(TAG + " authoritative menu-root capture active popupReady="
+                        + outputReady);
             } else {
                 state.session.beginPrewarm();
                 MainHook.log(TAG + " touch prewarm active");
@@ -128,10 +130,13 @@ final class ShortcutPopupGlassCoordinator {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
         if (state == null || state.released || !state.latched
-                || state.session == null || !state.session.hasFrozenBackdrop()
                 || state.captureRootRef.get() != liveRoot
                 || popupView == null || !(contentView instanceof ViewGroup)
                 || !(decorView instanceof ViewGroup)) {
+            return false;
+        }
+        if (!state.authoritativeFirstFrame
+                && (state.session == null || !state.session.hasFrozenBackdrop())) {
             return false;
         }
 
@@ -169,8 +174,12 @@ final class ShortcutPopupGlassCoordinator {
 
         boolean outputReady = ensurePopupOutput(state);
         updateGeometry(state);
-        MainHook.log(TAG + " popup accepted outputReady=" + outputReady
-                + " sessionReady=" + (state.session != null));
+        MainHook.log(TAG + " popup accepted mode="
+                + (state.authoritativeFirstFrame ? "authoritative-root" : "pre-drag-latch")
+                + " outputReady=" + outputReady
+                + " sessionReady=" + (state.session != null)
+                + " backdropReady="
+                + (state.session != null && state.session.hasFrozenBackdrop()));
         return true;
     }
 
