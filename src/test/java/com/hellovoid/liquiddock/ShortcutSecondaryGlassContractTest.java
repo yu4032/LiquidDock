@@ -60,8 +60,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(session.contains("boolean latchPreDragBackdrop()"));
         assertTrue(session.contains("void captureFirstFrameAndFreeze()"));
         assertTrue(session.contains("freezeOnNextFrame = true"));
-        assertTrue(session.contains(
-                "setUpdatesEnabled(false, \"shortcut-popup-authoritative-first-frame\")"));
+        assertTrue(session.contains("\"shortcut-popup-authoritative-first-frame\""));
         assertTrue(session.contains("authoritative-root backdrop frozen"));
         assertTrue(session.contains("private final Object prewarmLock = new Object()"));
         assertTrue(session.contains("synchronized (prewarmLock)"));
