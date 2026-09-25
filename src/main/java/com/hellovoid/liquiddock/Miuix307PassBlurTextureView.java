@@ -316,7 +316,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         passBlurCaptureScalePercent = glassConfig.passBlurCaptureScalePercent;
         updateBackdropMapping();
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) requestLatestRender(false);
     }
 
     private float workstationDockIconCornerRadiusDp;
@@ -324,7 +324,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
         dockCompositor.setWorkstationIconCornerRadiusDp(workstationDockIconCornerRadiusDp);
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) requestLatestRender(false);
     }
 
     void requestDockSceneRefresh() {
@@ -333,7 +333,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown) return;
             dockCompositor.invalidateUiScene();
             updateBackdropMapping();
-            if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+            if (producerRecovery.hasFreshFrame()) requestLatestRender(false);
             postInvalidateOnAnimation();
         });
     }
@@ -1273,7 +1273,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             // for a vendor drop callback or unrelated source update.
             if (DockGlassSceneRenderPolicy.shouldRenderSceneOnlyChange(
                     dockSceneChanged, producerRecovery.hasFreshFrame())) {
-                renderHandler.post(() -> drawLatestFrame(false));
+                requestLatestRender(false);
             }
             return;
         }
@@ -1311,7 +1311,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 dock.coverage);
         stageBDiagnosticsLogged = false;
         prismalMappingLogged = false;
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) requestLatestRender(false);
     }
 
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
