@@ -40,7 +40,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("attachToExternalMaterial"));
     }
 
-    @Test public void earlyWorkspaceSamplingOnlyExtendsPublishedShortcutLifecycle()
+    @Test public void earlyWorkspaceAndDockSamplingOnlyExtendPublishedShortcutLifecycle()
             throws Exception {
         String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
@@ -62,10 +62,21 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("state.early"));
         assertTrue(coordinator.contains("reusing early Workspace pre-show capture"));
 
-        // Do not reintroduce the rejected Dock-specific timing/root experiments.
-        assertFalse(hook.contains("DockContainerView"));
+        // Dock early sampling is keyed by the real DockContainerView owner instance. The
+        // published setRequestingItemInfo() path remains the fallback if owner/frame validation
+        // fails; do not key reuse solely by a transient root identity.
+        assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
+        assertTrue(hook.contains("getDeclaredMethod("));
+        assertTrue(hook.contains("\"dispatchTouchEventFromHome\""));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareDockEarly("));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused("));
+        assertTrue(coordinator.contains("final WeakReference<View> earlyOwnerRef"));
+        assertTrue(coordinator.contains("earlyOwner == authorityOwner"));
+        assertTrue(coordinator.contains("state.session.hasFrozenBackdrop()"));
+        assertTrue(coordinator.contains(
+                "Dock early frame not ready; falling back to published prepare"));
+        assertTrue(coordinator.contains("state.earlyOwnerRef.get() == decorView"));
         assertFalse(hook.contains("HotSeatsListContent"));
-        assertFalse(hook.contains("dispatchTouchEventFromHome"));
         assertFalse(hook.contains("dragSingleItem"));
 
         // Rendering, first-frame freeze and published presentation remain untouched in semantics.
