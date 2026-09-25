@@ -16,10 +16,56 @@ final class ShortcutPopupGlassCoordinator {
     private ShortcutPopupGlassCoordinator() {}
 
     static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        releaseLocked("prepare-replace");
+        prepareInternal(captureRoot, glassConfig, false, "prepare-replace");
+    }
+
+    /**
+     * Workspace-only early sampling entry. The rendering/capture behavior is intentionally
+     * identical to the published prepare() path; only the semantic start point is earlier.
+     */
+    static synchronized void prepareEarly(
+            View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        prepareInternal(captureRoot, glassConfig, true, "early-prepare-replace");
+    }
+
+    /**
+     * Preserve a matching early Workspace capture. Dock and every path without an early state
+     * fall straight back to the published prepare() behavior.
+     */
+    static synchronized void prepareIfNeeded(
+            View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        State state = current;
+        if (state != null && !state.released && state.captureRootRef.get() == captureRoot) {
+            state.requestStarted = true;
+            MainHook.log(TAG + " reusing existing pre-show capture early=" + state.early);
+            return;
+        }
+        prepareInternal(captureRoot, glassConfig, false, "prepare-replace");
+        state = current;
+        if (state != null && state.captureRootRef.get() == captureRoot) {
+            state.requestStarted = true;
+        }
+    }
+
+    static synchronized void cancelEarlyIfUnused(View captureRoot) {
+        State state = current;
+        if (state == null || state.released || !state.early
+                || state.captureRootRef.get() != captureRoot
+                || state.requestStarted || state.contentRef.get() != null) {
+            return;
+        }
+        releaseLocked("early-touch-ended-unused");
+    }
+
+    private static void prepareInternal(
+            View captureRoot,
+            LiquidDockConfig.Glass glassConfig,
+            boolean early,
+            String replaceReason) {
+        releaseLocked(replaceReason);
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
-        State state = new State(captureRoot, glassConfig);
+        State state = new State(captureRoot, glassConfig, early);
         current = state;
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
@@ -35,6 +81,7 @@ final class ShortcutPopupGlassCoordinator {
                 });
         state.sourceOverlay = overlay;
         if (overlay == null) releaseLocked("source-overlay-unavailable");
+        else if (early) MainHook.log(TAG + " early workspace capture armed");
     }
 
     private static void startSession(State state, ShortcutPopupSourceOverlay sourceRoot) {
@@ -264,6 +311,7 @@ final class ShortcutPopupGlassCoordinator {
     private static final class State {
         final WeakReference<View> captureRootRef;
         final LiquidDockConfig.Glass glassConfig;
+        final boolean early;
         WeakReference<View> popupDecorRef = new WeakReference<>(null);
         WeakReference<View> popupRef = new WeakReference<>(null);
         WeakReference<View> contentRef = new WeakReference<>(null);
@@ -273,13 +321,15 @@ final class ShortcutPopupGlassCoordinator {
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;
+        boolean requestStarted;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
         boolean released;
 
-        State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        State(View captureRoot, LiquidDockConfig.Glass glassConfig, boolean early) {
             captureRootRef = new WeakReference<>(captureRoot);
             this.glassConfig = glassConfig;
+            this.early = early;
         }
     }
 }
