@@ -124,11 +124,12 @@ final class MiuixShortcutMenuGlassHook {
                 launcherClass.getDeclaredMethod("dragSingleItem", cellInfoClass, View.class);
         dragSingleItem.setAccessible(true);
         HookUtil.hook(dragSingleItem, chain -> {
-            Object owner = chain.getThisObject();
-            if (owner instanceof View) {
-                ShortcutPopupGlassCoordinator.latchBeforeDrag(((View) owner).getRootView());
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            View draggedView = args.length > 1 && args[1] instanceof View ? (View) args[1] : null;
+            if (draggedView != null) {
+                ShortcutPopupGlassCoordinator.latchBeforeDrag(draggedView.getRootView());
             }
-            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            return chain.proceed(args);
         });
 
         MainHook.log(TAG + " pre-drag capture hooks installed");
