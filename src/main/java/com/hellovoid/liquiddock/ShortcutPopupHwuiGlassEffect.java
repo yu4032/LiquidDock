@@ -438,7 +438,6 @@ final class ShortcutPopupHwuiGlassEffect {
             return null;
         }
 
-        int blurRadius = resolveBackdropRadius(params, density);
         View glassLayer = new View(target.getContext());
         glassLayer.setClickable(false);
         glassLayer.setFocusable(false);
@@ -449,8 +448,21 @@ final class ShortcutPopupHwuiGlassEffect {
         boolean added = false;
         try {
             RuntimeShader shader = new RuntimeShader(AGSL);
-            RenderEffect effect =
+            RenderEffect opticalEffect =
                     RenderEffect.createRuntimeShaderEffect(shader, BACKDROP);
+            int blurRadius = resolveBackdropRadius(params, density);
+            RenderEffect effect = opticalEffect;
+            if (blurRadius > 0) {
+                // Keep blur and Prismal in one backdrop-filter graph. A separate Xiaomi
+                // background-blur plane is composited independently and can cover the RuntimeShader
+                // output, which leaves only blur visible even though setBackdropRenderEffect()
+                // succeeds.
+                RenderEffect blurEffect = RenderEffect.createBlurEffect(
+                        blurRadius,
+                        blurRadius,
+                        android.graphics.Shader.TileMode.CLAMP);
+                effect = RenderEffect.createChainEffect(opticalEffect, blurEffect);
+            }
             // Put the blur/material plane inside mContentView at index 0. It therefore inherits
             // PopupAnimHelper transforms automatically while all launcher text/icons remain
             // above it and are never processed by the optical RenderEffect.
@@ -481,17 +493,13 @@ final class ShortcutPopupHwuiGlassEffect {
                     Math.max(0f, cornerRadius),
                     layerOriginalState);
 
-            // Keep the Xiaomi producer/view gates alive, but use only the user's LiquidDock blur
-            // as a light substrate. Launcher ShortcutMenu's stock 143px radius destroys the local
-            // scene structure Prismal needs for refraction and must not become the final material.
-            if (!MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)) {
-                binding.disposeOwnedLayer();
-                return null;
-            }
-
+            // Do not enable Xiaomi background blur on the owned child. HyperOS renders that
+            // material as a separate backgroundBlur plane, so it can sit above the backdrop
+            // RuntimeShader and hide every refractive/highlight contribution. Blur is the inner
+            // RenderEffect in the same backdrop graph instead.
+            //
             // The optical material is a BackdropRenderEffect, not a normal View RenderEffect.
-            // A normal RenderEffect only sees this otherwise-empty View's own display-list content;
-            // Xiaomi background blur is a separate RenderNode property and therefore bypasses it.
+            // A normal RenderEffect only sees this otherwise-empty View's own display-list content.
             if (!MiBlurBridge.applyBackdropRenderEffect(glassLayer, effect)) {
                 binding.disposeOwnedLayer();
                 return null;
@@ -505,7 +513,7 @@ final class ShortcutPopupHwuiGlassEffect {
                     + " layerSize=" + glassLayer.getWidth() + "x" + glassLayer.getHeight()
                     + " sourceMode=" + vendorState.backgroundBlurMode
                     + " vendorRadius=" + vendorState.backgroundBlurRadius
-                    + " opticalSubstrateRadius=" + blurRadius
+                    + " backdropChainBlurRadius=" + blurRadius
                     + " sourcePass=" + vendorState.passWindowBlurEnabled
                     + " sourceViewMode=" + vendorState.viewBlurMode);
             return binding;
