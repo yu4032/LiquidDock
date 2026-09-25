@@ -26,8 +26,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
         assertTrue(coordinator.contains("ensurePopupOutput(state)"));
         assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
-        assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
+        assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
         assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("captureRoot.getLocationOnScreen(root)"));
+        assertTrue(coordinator.contains("captureRoot.getWidth(), captureRoot.getHeight()"));
+        assertFalse(coordinator.contains("decorGroup.addView(layer, popupIndex"));
         assertTrue(coordinator.contains("private static void onPresented(State state)"));
         assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
         assertFalse(coordinator.contains("if (!state.session.hasFrozenBackdrop())"));
@@ -47,31 +50,37 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("decor.post(() -> release(state, \"popup-detached\"))"));
     }
 
-    @Test public void dismissStartsFastFadeWithoutDestroyingGlassResources() throws Exception {
+    @Test public void shortcutGlassUsesLocalCropAndLeavesDismissAnimationToMiuix()
+            throws Exception {
         String hook = SourceContractText.read(
                 MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String layer = SourceContractText.read(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+        String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
 
         assertTrue(hook.contains(
-                "Object menu = chain.getThisObject();\n"
-                        + "                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
-                        + "                    Object result = chain.proceed"));
-        assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
-        assertTrue(coordinator.contains("layer.fadeOutFast()"));
-        assertTrue(layer.contains("private static final long FAST_DISMISS_FADE_MS = 90L"));
-        assertTrue(layer.contains(
-                "void fadeOutFast() {\n"
-                        + "        if (disposed) return;\n"
-                        + "        animate().cancel();\n"
-                        + "        animate()\n"
-                        + "                .alpha(0f)\n"
-                        + "                .setDuration(FAST_DISMISS_FADE_MS)\n"
-                        + "                .setInterpolator(new DecelerateInterpolator())\n"
-                        + "                .start();\n"
-                        + "    }"));
-        assertFalse(layer.contains("fadeOutFast();\n        dispose()"));
-        assertFalse(layer.contains("fadeOutFast();\n        session.shutdown()"));
+                "Preserve MIUIX PopupAnimHelper as the sole dismiss presentation authority"));
+        assertFalse(hook.contains("ShortcutPopupGlassCoordinator.beginDismissFade"));
+        assertFalse(coordinator.contains("beginDismissFade"));
+        assertFalse(layer.contains("FAST_DISMISS_FADE_MS"));
+        assertFalse(layer.contains("fadeOutFast()"));
+        assertFalse(layer.contains("DecelerateInterpolator"));
+
+        // The replacement is a material child, so mContentView's vendor bounds/alpha/radius
+        // animation carries it automatically instead of running a parallel animation.
+        assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
+        assertTrue(layer.contains("Local ShortcutMenu material output"));
+        assertTrue(layer.contains("mContentView bounds, alpha and corner-radius animation"));
+
+        // The local Surface samples only the popup's root-space crop. Never scale the entire
+        // full-screen scene into local menu bounds.
+        assertTrue(session.contains("presentCrop(prismalRenderer.outputTexture(), currentGeometry"));
+        assertTrue(session.contains("geometry.cropLeft"));
+        assertTrue(session.contains("geometry.cropBottom"));
+        assertTrue(session.contains("geometry.cropWidth"));
+        assertTrue(session.contains("geometry.cropHeight"));
+        assertFalse(session.contains(
+                "glUniform4f(requireUniform(compositeProgram, \"uCropRect\"), 0f, 0f, 1f, 1f)"));
     }
 
     @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting() throws Exception {
