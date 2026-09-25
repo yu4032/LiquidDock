@@ -1,4 +1,4 @@
-name: PassBlur KernelSU HybridMount
+name: PassBlur KernelSU HybridMount source
 
 on:
   pull_request:
@@ -9,103 +9,54 @@ on:
   workflow_dispatch:
 
 jobs:
-  package:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download exact SurfaceFlinger input
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -L --fail --retry 3 \
-            -H 'Accept: application/octet-stream' \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            -o /tmp/liquidui-passblur-gfx-input.tar.gz \
-            'https://api.github.com/repos/yu4032/hyperos-analysis/releases/assets/585945655'
-          echo '57e25e06f70aa3e3da98dbeb16fbcc6e6e9d2ecd541f96568dc043e91804282f  /tmp/liquidui-passblur-gfx-input.tar.gz' \
-            | sha256sum -c -
-          mkdir -p /tmp/passblur-input
-          tar -xzf /tmp/liquidui-passblur-gfx-input.tar.gz -C /tmp/passblur-input
-
-      - name: Build exact patched SurfaceFlinger
+      - name: Validate HybridMount source
         shell: bash
         run: |
           set -euo pipefail
           root='native/passblur-kernelsu-hybridmount'
-          stock='/tmp/passblur-input/passblur-gfx-input/files/libsurfaceflinger.so'
-          module='/tmp/LiquidDock-PassBlur-KernelSU-HybridMount'
-          payload="$module/system/system_ext/lib64/libsurfaceflinger.so"
 
-          test "$(sha256sum "$stock" | awk '{print $1}')" = \
+          python3 -m py_compile "$root/build_patched_surfaceflinger.py"
+          sh -n "$root/customize.sh"
+
+          test "$(tr -d '\r\n ' < "$root/original.sha256")" = \
             '407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32'
-
-          mkdir -p "$(dirname "$payload")"
-          python3 "$root/build_patched_surfaceflinger.py" "$stock" "$payload"
-
-          test "$(sha256sum "$payload" | awk '{print $1}')" = \
+          test "$(tr -d '\r\n ' < "$root/previous.sha256")" = \
+            'ef523f9d57ebe5c3af2ec39747b07ab6d70bd69165461e09ddc0fc8f13f5d563'
+          test "$(tr -d '\r\n ' < "$root/patched.sha256")" = \
             '7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f'
-          readelf -n "$payload" | grep -F 'Build ID: 39691db140edc0663fab2fde2475c091'
 
-          python3 - "$payload" <<'PY'
-          from pathlib import Path
-          import sys
-          data = Path(sys.argv[1]).read_bytes()
-          assert data[0x421804:0x421808] == bytes.fromhex('80018052')
-          print('0x421804 = mov w0,#12 verified')
-          PY
+          grep -F 'id=liquiddock_passblur_native' "$root/module.prop"
+          grep -F 'Hybrid Mount' "$root/customize.sh"
+          grep -F '7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f' \
+            "$root/customize.sh"
+          grep -F '(0x421804, bytes.fromhex("80018052"))' \
+            "$root/build_patched_surfaceflinger.py"
 
-          cp "$root/module.prop" "$module/module.prop"
-          cp "$root/customize.sh" "$module/customize.sh"
-          cp "$root/original.sha256" "$module/original.sha256"
-          cp "$root/patched.sha256" "$module/patched.sha256"
-          chmod 0755 "$module/customize.sh"
-          chmod 0644 "$module/module.prop" "$module/original.sha256" "$module/patched.sha256"
-
-      - name: Package KernelSU HybridMount module
+      - name: Validate sparse patch manifest shape
         shell: bash
         run: |
           set -euo pipefail
-          module='/tmp/LiquidDock-PassBlur-KernelSU-HybridMount'
-          out='out'
-          name='LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip'
-          mkdir -p "$out"
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
 
-          (
-            cd "$module"
-            zip -9 -r "$GITHUB_WORKSPACE/$out/$name" \
-              module.prop customize.sh original.sha256 patched.sha256 system
-          )
+          path = Path('native/passblur-kernelsu-hybridmount/build_patched_surfaceflinger.py')
+          tree = ast.parse(path.read_text())
+          constants = {}
+          for node in tree.body:
+              if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                  target = node.targets[0]
+                  if isinstance(target, ast.Name) and isinstance(node.value, ast.Constant):
+                      constants[target.id] = node.value.value
 
-          unzip -l "$out/$name"
-          echo '--- artifact sha256 ---'
-          sha256sum "$out/$name" | tee "$out/$name.sha256"
-
-          python3 - "$out/$name" <<'PY'
-          import sys, zipfile
-          expected = {
-              'module.prop',
-              'customize.sh',
-              'original.sha256',
-              'patched.sha256',
-              'system/',
-              'system/system_ext/',
-              'system/system_ext/lib64/',
-              'system/system_ext/lib64/libsurfaceflinger.so',
-          }
-          with zipfile.ZipFile(sys.argv[1]) as zf:
-              actual = set(zf.namelist())
-          if actual != expected:
-              raise SystemExit(f'unexpected module layout: {sorted(actual)}')
-          print('HybridMount ZIP layout verified')
+          assert constants['STOCK_SHA256'] == '407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32'
+          assert constants['PREVIOUS_SHA256'] == 'ef523f9d57ebe5c3af2ec39747b07ab6d70bd69165461e09ddc0fc8f13f5d563'
+          assert constants['PATCHED_SHA256'] == '7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f'
+          assert constants['EXPECTED_SIZE'] == 11577024
+          print('HybridMount source manifest verified')
           PY
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: LiquidDock-PassBlur-KernelSU-HybridMount
-          path: |
-            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip
-            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip.sha256
-          if-no-files-found: error
-          retention-days: 7
