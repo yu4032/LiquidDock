@@ -20,7 +20,9 @@ the executable `PT_LOAD`; neither tool assumes that a Ghidra address is a file
 offset. The executable segment is `R E` (`0x2e8000` through `0xa4f150`);
 `GNU_RELRO` covers `0xa50000` through `0xaa3000`. `readelf -n` reports no
 GNU BTI/PAC property note. That does not prove all individual call sites are
-free of branch-target or pointer-authentication constraints.
+free of branch-target or pointer-authentication constraints. The apparent
+`0xa4f150..0xa50000` file gap is outside the executable `PT_LOAD` file size,
+so it is not a proven mapped code cave for a trampoline.
 
 ## Verified call path
 
@@ -140,7 +142,17 @@ PassBlur instance** and the particular closure before `bgDrawPassBlur` is
 called. The original `bl bgDrawPassBlur@plt` is at ELF `0x54f24c`;
 immediately before it, `x1` points to the stack `SmallVector` at `sp+0x230`.
 This is a submission-hook candidate, but parsing the variant and preserving
-the move/copy semantics still need an adapter proof. The first worker
+the move/copy semantics still need an adapter proof. A narrower candidate is
+the closure-construction span at ELF `0x54f160..0x54f198`: disassembly shows
+`x20` as the allocated `0x208` closure, stores its copied promise wrapper
+at `x20+0x1b8` and shared control pointer at `x20+0x1c0`, then stores `x20`
+into the stack function slot at `sp+0x270`. The copied LayerFE pointer is at
+closure `+0x28`. This gives a direct route to the stable job key without
+decoding `SmallVector` at `0x54f24c`, but an insertion point must preserve the
+original instructions and register/exception state. The closure destructor
+(`0x658ff0` in Ghidra) releases the copied shared pointer and LayerSettings;
+it does not by itself retire a generation-registry entry. That cleanup is
+still unproved. The first worker
 comparison belongs after it has acquired the
 `PassBlur*` but before the expensive LayerSettings filtering. The relevant
 ARM64 span starts at ELF `0x559220` (loads LayerFE/PassBlur), with the
@@ -217,6 +229,28 @@ each callback; it does not contain `LatestFrameRenderGate` or an explicit
 `eglSwapInterval(1)` call. The old branch contains the gate but likewise no
 explicit swap-interval call. The consumer patch therefore still needs a
 separate review/integration rather than being represented as already on main.
+
+## KernelSU / Hybrid Mount delivery research
+
+KernelSU module layout supports a payload at
+`system/system_ext/lib64/libsurfaceflinger.so`; the installed Hybrid Mount
+6.2.1 `metainstall.sh` recognizes `system_ext` and creates the promoted
+partition symlink. Its bundled config selects OverlayFS. This solves
+systemless delivery after reboot, not the native generation ABI. The host-side
+`package_ksu_module.py` therefore requires an exact, approved instruction
+plan and emits no ZIP from the current empty `patch_sites` list. Its installer
+checks the original library SHA on the device before accepting the payload.
+
+On this device the persisted Hybrid Mount config is incompatible with the
+installed binary: it contains legacy `[kasumi]` keys, while the 6.2.1 parser
+lists `vfs_*` and `[rules]` but no `kasumi`. Direct invocation fails at line 7;
+`/data/adb/hybrid-mount/run/state.json` reports `failed_stage: config`,
+zero active mounts, and clean rollback. The config packaged with 6.2.1 is
+valid and uses `[rules]`. A copy of the persisted config must be kept before
+migrating it; the research work has not changed it or rebooted the device.
+After migration, validate both Hybrid Mount state and the SHA visible to
+SurfaceFlinger after reboot. KernelSU Safe Mode or `ksud module disable
+liquiddock_passblur_native` is the module-level recovery path.
 
 ## Reproduction and recovery boundary
 

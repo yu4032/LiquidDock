@@ -1,8 +1,9 @@
 # PassBlur native fork work area
 
 This directory is isolated from the LiquidDock APK. The APK's libxposed Java
-code cannot execute inside the `surfaceflinger` native process. No module,
-modified `libsurfaceflinger.so`, or installer is produced here yet.
+code cannot execute inside the `surfaceflinger` native process. The module
+packager is present, but no modified `libsurfaceflinger.so` or installable ZIP
+can be produced from the current unapproved manifest.
 
 The exact analyzed library can be checked offline:
 
@@ -53,6 +54,40 @@ python native/passblur/offline_patch.py restore \
   --original /path/to/verified/original/libsurfaceflinger.so \
   --output /path/to/restored/libsurfaceflinger.so
 ```
+
+`package_ksu_module.py` is a fail-closed packaging step for KernelSU with the
+Hybrid Mount metamodule. It independently reconstructs the approved patched
+bytes, checks both SHA256 values, and only then writes a ZIP containing
+`system/system_ext/lib64/libsurfaceflinger.so`. Hybrid Mount's installer
+promotes that path to `/system_ext/lib64/libsurfaceflinger.so`. The ZIP's
+`customize.sh` checks KernelSU, AArch64, an enabled Hybrid Mount metamodule,
+the current boot's Hybrid Mount state, and the device's original library SHA.
+The checked-in empty `patch_sites` list makes this command fail intentionally:
+
+```sh
+python native/passblur/package_ksu_module.py \
+  --original /path/to/verified/original/libsurfaceflinger.so \
+  --patched /path/to/approved/patched/libsurfaceflinger.so \
+  --output /path/to/liquiddock-passblur-native.zip
+```
+
+On the research device (HyperOS `OS3.0.310.0.WAOCNXM`), KernelSU and Hybrid
+Mount 6.2.1 are installed, and the on-device original library matches the
+manifest SHA. However, the installed Hybrid Mount binary rejected the persisted
+`/data/adb/hybrid-mount/config.toml` on 2026-09-25: its legacy `[kasumi]`
+section is unsupported by this binary. `run/state.json` records
+`failed_stage: config`, so no Hybrid Mount module files were mounted in that
+boot. The bundled `/data/adb/modules/hybrid_mount/config.toml` uses the
+accepted `[rules]` schema. Back up the persisted config, migrate its supported
+settings to that schema, and reboot before attempting any module installation.
+Do not use a module ZIP as evidence that a mount happened: after reboot inspect
+Hybrid Mount state and the library SHA in the SurfaceFlinger mount namespace.
+
+If the eventual module causes a boot failure, enter KernelSU Safe Mode or run
+`ksud module disable liquiddock_passblur_native` from a root ADB/recovery shell,
+then reboot. This only removes the systemless overlay; the original partition
+is not written. Keep the offline `.original` backup as an independent
+byte-for-byte restore source.
 
 Before any integration with a systemless module, resolve the ABI and
 lifetime gaps in
