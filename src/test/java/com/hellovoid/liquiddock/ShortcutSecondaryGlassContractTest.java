@@ -70,7 +70,7 @@ public class ShortcutSecondaryGlassContractTest {
         // animation carries it automatically instead of running a parallel animation.
         assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
         assertTrue(layer.contains("Local ShortcutMenu material output"));
-        assertTrue(layer.contains("mContentView bounds, alpha and corner-radius animation"));
+        assertTrue(layer.contains("lives inside MIUIX mContentView at index 0"));
 
         // The local Surface samples only the popup's root-space crop. Never scale the entire
         // full-screen scene into local menu bounds.
