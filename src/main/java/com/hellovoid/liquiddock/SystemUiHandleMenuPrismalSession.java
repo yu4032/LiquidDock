@@ -57,6 +57,7 @@ final class SystemUiHandleMenuPrismalSession {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final float requestedCornerRadiusPx;
     private final float[] textureMatrix = new float[16];
 
     private volatile boolean shuttingDown;
@@ -92,6 +93,15 @@ final class SystemUiHandleMenuPrismalSession {
             View sourceRoot,
             LiquidDockConfig.Glass glassConfig,
             Listener listener) {
+        this(host, sourceRoot, glassConfig, Float.NaN, listener);
+    }
+
+    SystemUiHandleMenuPrismalSession(
+            View host,
+            View sourceRoot,
+            LiquidDockConfig.Glass glassConfig,
+            float cornerRadiusPx,
+            Listener listener) {
         if (host == null) throw new IllegalArgumentException("host == null");
         if (sourceRoot == null || !sourceRoot.isAttachedToWindow()) {
             throw new IllegalArgumentException("sourceRoot unavailable");
@@ -114,6 +124,7 @@ final class SystemUiHandleMenuPrismalSession {
                 endpoint.insetRight,
                 endpoint.insetBottom);
         this.listener = listener;
+        requestedCornerRadiusPx = cornerRadiusPx;
         mainHandler = new Handler(host.getContext().getMainLooper());
 
         float density = host.getResources().getDisplayMetrics().density;
@@ -346,7 +357,10 @@ final class SystemUiHandleMenuPrismalSession {
                 height,
                 prismalParams);
         prismalRenderer.beginGlassFrame();
-        float radius = Math.max(1f, Math.min(width, height) * 0.5f);
+        float maximumRadius = Math.max(1f, Math.min(width, height) * 0.5f);
+        float radius = Float.isFinite(requestedCornerRadiusPx) && requestedCornerRadiusPx > 0f
+                ? Math.min(requestedCornerRadiusPx, maximumRadius)
+                : maximumRadius;
         prismalRenderer.drawGlass(
                 new PrismalGeometry(
                         width, height,
