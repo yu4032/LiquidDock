@@ -18,9 +18,11 @@ public class ShortcutSecondaryGlassContractTest {
         String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
         String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
-        assertTrue(hook.contains("com.miui.home.launcher.Workspace"));
+        assertTrue(hook.contains("com.miui.home.launcher.CellLayout"));
         assertTrue(hook.contains("getDeclaredMethod(\"dispatchTouchEvent\", MotionEvent.class)"));
+        assertTrue(hook.contains("getDeclaredMethod(\"lastDownOnOccupiedCell\")"));
         assertTrue(hook.contains("MotionEvent.ACTION_DOWN"));
+        assertTrue(hook.contains("lastDownOnOccupiedCell.invoke(owner)"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig)"));
         assertTrue(hook.contains("com.miui.home.launcher.Launcher"));
         assertTrue(hook.contains("com.miui.home.launcher.CellLayout$CellInfo"));
