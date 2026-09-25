@@ -61,7 +61,6 @@ public final class ConfigMigration {
 
     private static void seedDefaultProfileIfEmpty(SharedPreferences sp) {
         for (ConfigKey<?> key : ConfigSchema.all()) {
-            if (key.exportMode() == ConfigKey.ExportMode.NEVER) continue;
             if (sp.contains(key.name())) return;
             if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS
                     && sp.contains(key.name() + "_tenths")) {
