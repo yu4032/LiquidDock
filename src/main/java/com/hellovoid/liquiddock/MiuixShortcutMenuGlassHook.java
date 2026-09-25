@@ -146,8 +146,7 @@ final class MiuixShortcutMenuGlassHook {
                 if (action == MotionEvent.ACTION_DOWN) {
                     ShortcutPopupGlassCoordinator.prepareDockEarly(
                             dockMenuOwner, glassConfig);
-                } else if (action == MotionEvent.ACTION_UP
-                        || action == MotionEvent.ACTION_CANCEL) {
+                } else if (action == MotionEvent.ACTION_UP) {
                     ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused(dockMenuOwner);
                 }
             }
