@@ -19,8 +19,11 @@ jobs:
         run: |
           set -euo pipefail
           curl -L --fail --retry 3 \
+            -H 'Accept: application/octet-stream' \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
             -o /tmp/liquidui-passblur-gfx-input.tar.gz \
-            'https://github.com/yu4032/hyperos-analysis/releases/download/Libs/liquidui-passblur-gfx-input.tar.gz'
+            'https://api.github.com/repos/yu4032/hyperos-analysis/releases/assets/585945655'
           echo '57e25e06f70aa3e3da98dbeb16fbcc6e6e9d2ecd541f96568dc043e91804282f  /tmp/liquidui-passblur-gfx-input.tar.gz' \
             | sha256sum -c -
           mkdir -p /tmp/passblur-input
