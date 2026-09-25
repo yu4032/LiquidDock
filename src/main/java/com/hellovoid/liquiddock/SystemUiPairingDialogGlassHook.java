@@ -190,6 +190,7 @@ final class SystemUiPairingDialogGlassHook {
                 target = panel;
                 bound = true;
                 output.setMaterialAlpha(0f);
+                installMaterialGuard();
                 log("PairingDialog glass bound target=" + panel.getClass().getName()
                         + " size=" + panel.getWidth() + "x" + panel.getHeight()
                         + " radius=" + radiusPx);
@@ -273,7 +274,10 @@ final class SystemUiPairingDialogGlassHook {
             if (!observer.isAlive()) return;
 
             ViewTreeObserver.OnPreDrawListener listener = () -> {
-                if (released || !prismalPresented || target == null) return true;
+                if (released || target == null) return true;
+                SystemUiHandleMenuPrismalSession session = prismalSession;
+                if (session != null) session.refreshHostMapping();
+                if (!prismalPresented) return true;
                 if (target.getBackground() != null) target.setBackground(null);
 
                 Boolean enabled = MiBlurBridge.getPassWindowBlurEnabled(target);
