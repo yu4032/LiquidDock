@@ -16,10 +16,33 @@ final class ShortcutPopupGlassCoordinator {
     private ShortcutPopupGlassCoordinator() {}
 
     static synchronized void armTouch(View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        releaseLocked("touch-arm-replace");
+        prepareInternal(captureRoot, glassConfig, false, "touch-arm-replace");
+    }
+
+    /**
+     * Preserve the published ShortcutMenu root contract for Dock: setRequestingItemInfo() runs on
+     * the actual ShortcutMenuLayer that will later become ShortcutMenu.mDecorView. Do not infer
+     * this authority from Dock touch routing or from the pressed icon's root.
+     */
+    static synchronized void prepareAuthoritativeRoot(
+            View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        prepareInternal(captureRoot, glassConfig, true, "authoritative-root-replace");
+    }
+
+    private static void prepareInternal(
+            View captureRoot,
+            LiquidDockConfig.Glass glassConfig,
+            boolean authoritativeFirstFrame,
+            String replaceReason) {
+        releaseLocked(replaceReason);
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
-        State state = new State(captureRoot, glassConfig);
+        State state = new State(captureRoot, glassConfig, authoritativeFirstFrame);
+        if (authoritativeFirstFrame) {
+            // This mode intentionally restores the published Dock behavior: the actual menu root
+            // is authoritative, and the first frame from that root is the frozen backdrop.
+            state.latched = true;
+        }
         current = state;
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
@@ -53,8 +76,13 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
-            state.session.beginPrewarm();
-            MainHook.log(TAG + " touch prewarm active");
+            if (state.authoritativeFirstFrame) {
+                state.session.captureFirstFrameAndFreeze();
+                MainHook.log(TAG + " authoritative menu-root capture active");
+            } else {
+                state.session.beginPrewarm();
+                MainHook.log(TAG + " touch prewarm active");
+            }
         }
     }
 
@@ -290,6 +318,7 @@ final class ShortcutPopupGlassCoordinator {
     private static final class State {
         final WeakReference<View> captureRootRef;
         final LiquidDockConfig.Glass glassConfig;
+        final boolean authoritativeFirstFrame;
         WeakReference<View> popupDecorRef = new WeakReference<>(null);
         WeakReference<View> popupRef = new WeakReference<>(null);
         WeakReference<View> contentRef = new WeakReference<>(null);
@@ -304,9 +333,13 @@ final class ShortcutPopupGlassCoordinator {
         boolean dismissCleanupPosted;
         boolean released;
 
-        State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        State(
+                View captureRoot,
+                LiquidDockConfig.Glass glassConfig,
+                boolean authoritativeFirstFrame) {
             captureRootRef = new WeakReference<>(captureRoot);
             this.glassConfig = glassConfig;
+            this.authoritativeFirstFrame = authoritativeFirstFrame;
         }
     }
 }
