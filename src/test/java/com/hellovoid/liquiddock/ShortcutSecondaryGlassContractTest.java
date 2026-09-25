@@ -49,7 +49,9 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(session.contains("pre-drag latch rejected reason=no-clean-prewarm-frame"));
         assertTrue(session.contains(
                 "setUpdatesEnabled(false, \"shortcut-popup-pre-drag-latch\")"));
-        assertTrue(session.contains("sourceFrozen || lateFramesRejected"));
+        assertTrue(session.contains("private final Object prewarmLock = new Object()"));
+        assertTrue(session.contains("synchronized (prewarmLock)"));
+        assertTrue(session.contains("if (sourceFrozen || lateFramesRejected) return"));
         assertTrue(session.contains("prewarmFrameCount++"));
         assertFalse(session.contains("shortcut-popup-frozen"));
 
