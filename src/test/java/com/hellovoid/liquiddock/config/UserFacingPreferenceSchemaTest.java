@@ -36,37 +36,41 @@ public class UserFacingPreferenceSchemaTest {
     }
 
     @Test
-    public void defaultPresetIsDerivedFromAlwaysSchemaKeysOnly() {
+    public void defaultPresetZerosEveryExportableSchemaKey() {
         Map<String, Object> defaults = PresetManager.defaultValues();
         Set<String> allowedPersistedNames = new HashSet<>();
 
         for (ConfigKey<?> key : ConfigSchema.all()) {
-            if (key.exportMode() != ConfigKey.ExportMode.ALWAYS) continue;
+            if (key.exportMode() == ConfigKey.ExportMode.NEVER) continue;
             allowedPersistedNames.add(key.name());
-            assertTrue("default preset missing ALWAYS schema key: " + key.name(),
+            assertTrue("default preset missing schema key: " + key.name(),
                     defaults.containsKey(key.name()));
+
+            if (key.type() == ConfigKey.Type.BOOLEAN) {
+                assertEquals(key.name(), Boolean.FALSE, defaults.get(key.name()));
+            } else if (key.type() == ConfigKey.Type.INT) {
+                assertEquals(key.name(), Integer.valueOf(0), defaults.get(key.name()));
+            } else if (key.type() == ConfigKey.Type.STRING) {
+                assertEquals(key.name(), key.uiDefault(), defaults.get(key.name()));
+            }
+
             if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
                 allowedPersistedNames.add(key.name() + "_tenths");
-                assertTrue("default preset missing DP sidecar: " + key.name(),
-                        defaults.containsKey(key.name() + "_tenths"));
+                assertEquals(key.name() + "_tenths", Integer.valueOf(0),
+                        defaults.get(key.name() + "_tenths"));
             }
         }
 
-        // Historical explicit inclusion: the default preset reset the divider master switch,
-        // but optional divider geometry/color keys must remain absent until the user sets them.
-        allowedPersistedNames.add(ConfigSchema.Divider.ENABLED.name());
-        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Divider.ENABLED.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.WIDTH_DP.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.HEIGHT_SCALE.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.Y_OFFSET_DP.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.COLOR_RED.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.COLOR_GREEN.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.COLOR_BLUE.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.ALPHA.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name()));
+        String profile = "third_party_glass.systemui.lockscreen_clock.";
+        allowedPersistedNames.add(profile + "enabled");
+        allowedPersistedNames.add(profile + "blur");
+        allowedPersistedNames.add(profile + "tint_r");
+        allowedPersistedNames.add(profile + "tint_g");
+        allowedPersistedNames.add(profile + "tint_b");
+        allowedPersistedNames.add(profile + "tint_alpha");
 
         for (String name : defaults.keySet()) {
-            assertTrue("default preset contains schema-external or optional key: " + name,
+            assertTrue("default preset contains unmanaged key: " + name,
                     allowedPersistedNames.contains(name));
         }
     }
