@@ -41,14 +41,18 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("HotSeatsListContent"));
         assertFalse(hook.contains("dock touch prewarm armed"));
         assertFalse(hook.contains("dock pre-show backdrop latch="));
+        assertFalse(coordinator.contains("cancelAttemptIfPopupNotBound"));
 
         assertTrue(coordinator.contains("static synchronized void armTouch("));
         assertTrue(coordinator.contains("static synchronized void prepareAuthoritativeRoot("));
         assertTrue(coordinator.contains("prepareInternal(captureRoot, glassConfig, true"));
         assertTrue(coordinator.contains("state.session.beginPrewarm()"));
         assertTrue(coordinator.contains("state.session.captureFirstFrameAndFreeze()"));
+        assertTrue(coordinator.contains("boolean outputReady = ensurePopupOutput(state)"));
         assertTrue(coordinator.contains("state.latched = true"));
-        assertTrue(coordinator.contains("!state.session.hasFrozenBackdrop()"));
+        assertTrue(coordinator.contains("if (!state.authoritativeFirstFrame"));
+        assertTrue(coordinator.contains(
+                "(state.session == null || !state.session.hasFrozenBackdrop())"));
         assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
         assertTrue(coordinator.contains("captureRoot.getLocationOnScreen(root)"));
 
