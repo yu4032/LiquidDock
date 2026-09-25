@@ -37,8 +37,8 @@ public class PrismalOfficialParityV3Test {
     }
 
     @Test
-    public void defaultPresetWritesTheSameOfficialOpticalRecipe() {
-        Map<String, Object> p = PresetManager.defaultValues();
+    public void migrationPresetWritesTheSameOfficialOpticalRecipe() {
+        Map<String, Object> p = PresetManager.migrationValues();
 
         assertEquals(155, p.get("liquid_ior"));
         assertEquals(115, p.get("liquid_normal_strength"));
