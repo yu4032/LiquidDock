@@ -59,6 +59,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
+    private volatile boolean lateFramesRejected;
+    private volatile long lastPrewarmFrameUptimeMs = -1L;
+    private volatile int prewarmFrameCount;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -99,12 +102,43 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 "LiquidDock-ShortcutPopup-EGL");
     }
 
-    void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+    /**
+     * Start receiving clean behind-content frames while the pointer is still in the ordinary
+     * Workspace press phase. Do not freeze here: the long-press gesture has not committed yet.
+     */
+    void beginPrewarm() {
+        if (shuttingDown) return;
+        lateFramesRejected = false;
+        sourceFrozen = false;
+        sourceBackend.requestFresh(GENERATION);
+        MainHook.log(TAG + " prewarm requested generation=" + GENERATION);
+    }
+
+    /**
+     * Commit the most recent frame that arrived strictly before Launcher starts creating the drag
+     * presentation. Never wait for another frame here: a frame delivered after this boundary may
+     * already contain DragView/edit-state mutations and is therefore unsafe for ShortcutMenu.
+     */
+    boolean latchPreDragBackdrop() {
+        if (shuttingDown || lateFramesRejected) return false;
+        if (!backdropPrepared || prewarmFrameCount <= 0) {
+            lateFramesRejected = true;
+            sourceBackend.setUpdatesEnabled(false, "shortcut-popup-pre-drag-miss");
+            MainHook.log(TAG + " pre-drag latch rejected reason=no-clean-prewarm-frame");
+            return false;
+        }
+        sourceFrozen = true;
+        sourceBackend.setUpdatesEnabled(false, "shortcut-popup-pre-drag-latch");
+        long ageMs = lastPrewarmFrameUptimeMs >= 0L
+                ? Math.max(0L, android.os.SystemClock.uptimeMillis() - lastPrewarmFrameUptimeMs)
+                : -1L;
+        MainHook.log(TAG + " pre-drag backdrop latched frames=" + prewarmFrameCount
+                + " ageMs=" + ageMs);
+        return true;
     }
 
     boolean hasFrozenBackdrop() {
-        return !shuttingDown && backdropPrepared && sourceFrozen;
+        return !shuttingDown && backdropPrepared && sourceFrozen && !lateFramesRejected;
     }
 
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
@@ -165,7 +199,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+                || frame.generation != GENERATION || sourceFrozen || lateFramesRejected) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -179,11 +213,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            if (!sourceFrozen) {
-                sourceFrozen = true;
-                sourceBackend.setUpdatesEnabled(false, "shortcut-popup-frozen");
-                MainHook.log(TAG + " workspace backdrop frozen generation=" + frame.generation);
-            }
+            prewarmFrameCount++;
+            lastPrewarmFrameUptimeMs = android.os.SystemClock.uptimeMillis();
+            // While the finger is still in the normal press phase, keep replacing the prepared
+            // backdrop with the newest clean frame. Geometry/output normally do not exist yet.
             renderCurrent();
         } catch (Throwable error) {
             notifyFailure(error);
