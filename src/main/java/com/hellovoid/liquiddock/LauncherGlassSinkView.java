@@ -47,6 +47,8 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private Surface outputSurface;
     private LauncherGlassSession outputSession;
     private Runnable outputLostListener;
+    private Runnable firstFramePresentedListener;
+    private boolean firstFramePresented;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassSinkView(
@@ -196,6 +198,20 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     void runWhenOutputLost(Runnable listener) {
         if (disposed) return;
         outputLostListener = listener;
+    }
+
+    /**
+     * Run once after TextureView has consumed the first renderer-produced frame. This lets
+     * external material owners keep their native fallback visible until custom glass is actually
+     * present, instead of claiming the material merely because an EGL surface was created.
+     */
+    void runWhenFirstFramePresented(Runnable listener) {
+        if (disposed || listener == null) return;
+        if (firstFramePresented) {
+            post(listener);
+            return;
+        }
+        firstFramePresentedListener = listener;
     }
 
     void setPressInteraction(boolean pressed, float normalizedX, float normalizedY) {
@@ -373,6 +389,7 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         if (disposed) return;
         resetPressInteraction(false);
         outputLostListener = null;
+        firstFramePresentedListener = null;
         disposed = true;
         View material = materialRef.get();
         if (material != null) {
@@ -484,7 +501,14 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         return true;
     }
 
-    @Override public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
+    @Override
+    public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+        if (disposed || firstFramePresented) return;
+        firstFramePresented = true;
+        Runnable listener = firstFramePresentedListener;
+        firstFramePresentedListener = null;
+        if (listener != null) post(listener);
+    }
 
     private LauncherGlassSession ensureLiveSession() {
         if (disposed) return null;
