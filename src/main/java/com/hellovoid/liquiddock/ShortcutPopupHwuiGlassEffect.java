@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Canvas;
 import android.graphics.RenderEffect;
 import android.graphics.RuntimeShader;
 import android.view.View;
@@ -438,7 +439,7 @@ final class ShortcutPopupHwuiGlassEffect {
             return null;
         }
 
-        View glassLayer = new View(target.getContext());
+        View glassLayer = new BackdropEffectHostView(target.getContext());
         glassLayer.setClickable(false);
         glassLayer.setFocusable(false);
         glassLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -514,6 +515,7 @@ final class ShortcutPopupHwuiGlassEffect {
                     + " sourceMode=" + vendorState.backgroundBlurMode
                     + " vendorRadius=" + vendorState.backgroundBlurRadius
                     + " backdropChainBlurRadius=" + blurRadius
+                    + " hostDrawAnchor=true"
                     + " sourcePass=" + vendorState.passWindowBlurEnabled
                     + " sourceViewMode=" + vendorState.viewBlurMode);
             return binding;
@@ -525,6 +527,27 @@ final class ShortcutPopupHwuiGlassEffect {
             }
             MainHook.log(TAG + " layer unavailable; stock material retained: " + error);
             return null;
+        }
+    }
+
+    /**
+     * Backdrop RenderEffects still need a participating RenderNode. A completely empty View can
+     * be culled before backdrop filtering, which makes setBackdropRenderEffect() appear to succeed
+     * while producing no pixels. Record a practically invisible draw command so HWUI keeps this
+     * node in the frame. The backdrop RuntimeShader remains the visible material.
+     */
+    private static final class BackdropEffectHostView extends View {
+        BackdropEffectHostView(android.content.Context context) {
+            super(context);
+            setWillNotDraw(false);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            // Alpha 1/255 is visually negligible but prevents an empty display list from being
+            // optimized away. Do not use fully transparent paint: HWUI may elide that draw too.
+            canvas.drawColor(0x01000000);
         }
     }
 
