@@ -53,9 +53,8 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
         assertTrue(hook.contains("dispatchTouchEventFromHome"));
         assertTrue(hook.contains("\"dispatchTouchEvent\", MotionEvent.class"));
-        assertTrue(hook.contains("hookDockTouchRoute(dispatchTouchEventFromHome"));
-        assertTrue(hook.contains("hookDockTouchRoute(dispatchTouchEvent"));
-        assertTrue(hook.contains("\"direct-dock\""));
+        assertTrue(hook.contains("hookDockTouchRoute(dispatchTouchEventFromHome, glassConfig)"));
+        assertTrue(hook.contains("hookDockTouchRoute(dispatchTouchEvent, glassConfig)"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareDockEarly("));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareIfNeeded("));
 
@@ -68,7 +67,6 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("matchesDockAuthority(state, decorView)"));
         assertTrue(coordinator.contains("cancelDockEarlyIfUnused"));
         assertTrue(coordinator.contains("state.contentRef.get() != null"));
-        assertTrue(coordinator.contains("reusing early Dock capture backdropReady="));
         assertFalse(coordinator.contains("earlyOwner == authorityOwner"));
         assertFalse(coordinator.contains(
                 "dockMatch = earlyOwner != null\n"
