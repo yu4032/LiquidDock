@@ -11,7 +11,7 @@ import static org.junit.Assert.assertTrue;
 public class ConfigSchemaTest {
     @Test
     public void recentsBackgroundBlurIsAnExportedPercentage() {
-        assertEquals(Integer.valueOf(100), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.uiDefault());
+        assertEquals(Integer.valueOf(36), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.uiDefault());
         assertEquals(Integer.valueOf(0), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.minInt());
         assertEquals(Integer.valueOf(100), ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.maxInt());
         assertTrue(ConfigSchema.all().contains(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT));
@@ -76,18 +76,18 @@ public class ConfigSchemaTest {
 
     @Test
     public void legacyAndCurrentDefaultsRemainDistinctWhereRequired() {
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.runtimeFallback());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.uiDefault());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.exportDefault());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.runtimeFallback());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.uiDefault());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.exportDefault());
+        assertEquals(Integer.valueOf(-256), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.runtimeFallback());
+        assertEquals(Integer.valueOf(-256), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.uiDefault());
+        assertEquals(Integer.valueOf(-256), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.exportDefault());
+        assertEquals(Integer.valueOf(-256), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.runtimeFallback());
+        assertEquals(Integer.valueOf(-256), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.uiDefault());
+        assertEquals(Integer.valueOf(-256), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.exportDefault());
         assertEquals(ConfigKey.StorageMode.DIRECT, ConfigSchema.Glass.SAMPLING_EXTRA_TOP.storageMode());
         assertEquals(ConfigKey.StorageMode.DIRECT, ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.storageMode());
 
-        assertEquals(Integer.valueOf(4), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.runtimeFallback());
+        assertEquals(Integer.valueOf(1), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.runtimeFallback());
         assertEquals(Integer.valueOf(1), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.uiDefault());
-        assertEquals(Integer.valueOf(4), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.exportDefault());
+        assertEquals(Integer.valueOf(1), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.exportDefault());
     }
 
     @Test
@@ -103,15 +103,15 @@ public class ConfigSchemaTest {
     @Test
     public void composeGridSpecsKeepTheirCurrentDefaultsAndBounds() {
         assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, 0, -600, 600);
-        assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE, 0, -600, 600);
-        assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE, 0, -600, 600);
+        assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE, -8, -600, 600);
+        assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE, 8, -600, 600);
         assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE, 0, -600, 600);
-        assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE, 0, -600, 600);
+        assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE, 30, -600, 600);
         assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE, 0, -600, 600);
         assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_ROW_GAP, 0, -200, 400);
-        assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_ROW_GAP, 0, -200, 400);
-        assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, 0, -160, 160);
-        assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, 0, -160, 160);
+        assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_ROW_GAP, -15, -200, 400);
+        assertComposeIntSpec(ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, -9, -160, 160);
+        assertComposeIntSpec(ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, 12, -160, 160);
     }
 
     @Test
@@ -119,7 +119,7 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Dock.BLUR_RADIUS, 100, 0, 400);
         assertComposeIntSpec(ConfigSchema.Dock.HEIGHT_OFFSET, 0, -80, 80);
         assertComposeIntSpec(ConfigSchema.Dock.WIDTH_OFFSET, 0, -80, 80);
-        assertComposeIntSpec(ConfigSchema.Dock.CORNER_OFFSET, -1, -50, 100);
+        assertComposeIntSpec(ConfigSchema.Dock.CORNER_OFFSET, 3, -50, 100);
         assertComposeIntSpec(ConfigSchema.Dock.BLUR_CORNER_OFFSET, 0, -50, 100);
         assertComposeIntSpec(ConfigSchema.Dock.SPACING, 0, -8, 12);
         assertComposeIntSpec(ConfigSchema.Dock.BOTTOM_OFFSET, 0, -30, 40);
@@ -128,7 +128,7 @@ public class ConfigSchemaTest {
     @Test
     public void composeDividerSpecsKeepTheirCurrentDefaultsAndBounds() {
         assertComposeIntSpec(ConfigSchema.Divider.WIDTH_DP, 10, 0, 160);
-        assertComposeIntSpec(ConfigSchema.Divider.HEIGHT_SCALE, 60, 0, 100);
+        assertComposeIntSpec(ConfigSchema.Divider.HEIGHT_SCALE, 71, 0, 100);
         assertComposeIntSpec(ConfigSchema.Divider.Y_OFFSET_DP, 0, -80, 80);
         assertComposeIntSpec(ConfigSchema.Divider.COLOR_RED, 255, 0, 255);
         assertComposeIntSpec(ConfigSchema.Divider.COLOR_GREEN, 255, 0, 255);
@@ -138,11 +138,11 @@ public class ConfigSchemaTest {
 
     @Test
     public void composeWorkstationSpecsKeepTheirCurrentDefaultsAndBounds() {
-        assertComposeIntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, 0, -240, 240);
+        assertComposeIntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, 27, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, 0, -240, 240);
-        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 0, 0, 240);
+        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 41, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET, 0, 0, 240);
-        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 0, 0, 240);
+        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 41, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_VERTICAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, 0, -48, 48);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, 0, -48, 48);
@@ -150,35 +150,35 @@ public class ConfigSchemaTest {
 
     @Test
     public void composeLiquidSpecsExposeOnlyActiveOpticalControls() {
-        assertComposeIntSpec(ConfigSchema.Glass.BLUR, 2, 0, 60);
+        assertComposeIntSpec(ConfigSchema.Glass.BLUR, 7, 0, 60);
         assertComposeIntSpec(ConfigSchema.Glass.THICKNESS, 18, 1, 60);
         assertComposeIntSpec(ConfigSchema.Glass.IOR, 155, 100, 200);
         assertComposeIntSpec(ConfigSchema.Glass.NORMAL_STRENGTH, 115, 0, 300);
         assertComposeIntSpec(ConfigSchema.Glass.DOME, 130, 0, 200);
         assertComposeIntSpec(ConfigSchema.Glass.LENS_REFRACTION, 1, 0, 60);
         assertComposeIntSpec(ConfigSchema.Glass.DEPTH_EFFECT, 0, 0, 100);
-        assertComposeIntSpec(ConfigSchema.Glass.CHROMATIC, 26, 0, 40);
-        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_TOP, 0, -256, 256);
-        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM, 0, -256, 256);
-        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_LEFT, 0, -256, 256);
-        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_RIGHT, 0, -256, 256);
-        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 160);
+        assertComposeIntSpec(ConfigSchema.Glass.CHROMATIC, 9, 0, 40);
+        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_TOP, -256, -256, 256);
+        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM, -256, -256, 256);
+        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_LEFT, -256, -256, 256);
+        assertComposeIntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_RIGHT, -256, -256, 256);
+        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 0, 0, 160);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_RED, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_GREEN, 0, 0, 255);
-        assertComposeIntSpec(ConfigSchema.Glass.TINT_BLUE, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.TINT_BLUE, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, 100, 50, 300);
         assertComposeIntSpec(ConfigSchema.Glass.BRIGHTNESS, 108, 50, 200);
         assertComposeIntSpec(ConfigSchema.Glass.SPECULAR_SHARPNESS, 88, 1, 200);
         assertComposeIntSpec(ConfigSchema.Glass.SPECULAR_STRENGTH, 152, 0, 300);
         assertComposeIntSpec(ConfigSchema.Glass.RIM_LIGHT, 122, 0, 300);
-        assertComposeIntSpec(ConfigSchema.Glass.CAUSTICS, 28, 0, 100);
+        assertComposeIntSpec(ConfigSchema.Glass.CAUSTICS, 0, 0, 100);
     }
 
     @Test
     public void composePrismalSpecsUseUpstreamDefaultsAndDeclaredGuiBounds() {
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_REFRACTION_INSET, 20, 0, 80);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_DISPLACEMENT_SCALE, 115, 0, 400);
-        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH, 19, 1, 120);
+        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH, 8, 1, 120);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING, 2, 0, 24);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, 400, 0, 2000);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT, 198, 0, 500);
@@ -186,11 +186,11 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, 100, 0, 400);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, 128, 0, 300);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, 8, 0, 100);
-        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X, -50, -200, 200);
+        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X, 0, -200, 200);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y, -80, -200, 200);
-        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_RED, 255, 0, 255);
-        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_GREEN, 255, 0, 255);
-        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_BLUE, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_RED, 0, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_GREEN, 0, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_BLUE, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_ALPHA, 35, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS, 1000, 0, 2000);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_TRANSMITTANCE, 100, 0, 100);
@@ -201,23 +201,23 @@ public class ConfigSchemaTest {
 
     @Test
     public void composeStrokeSpecsKeepTheirCurrentDefaultsAndBounds() {
-        assertComposeIntSpec(ConfigSchema.Dock.STROKE_RED, 255, 0, 255);
-        assertComposeIntSpec(ConfigSchema.Dock.STROKE_GREEN, 255, 0, 255);
-        assertComposeIntSpec(ConfigSchema.Dock.STROKE_BLUE, 255, 0, 255);
-        assertComposeIntSpec(ConfigSchema.Dock.STROKE_ALPHA, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Dock.STROKE_RED, 175, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Dock.STROKE_GREEN, 163, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Dock.STROKE_BLUE, 171, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Dock.STROKE_ALPHA, 74, 0, 255);
         assertComposeIntSpec(ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH, 1, 0, 10);
-        assertComposeIntSpec(ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET, 3, 0, 16);
-        assertComposeIntSpec(ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT, 58, 40, 80);
+        assertComposeIntSpec(ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET, 0, 0, 16);
+        assertComposeIntSpec(ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT, 65, 40, 80);
         assertComposeIntSpec(ConfigSchema.Dock.FILL_DIFF_STROKE_WIDTH, 1, 0, 6);
         assertComposeIntSpec(ConfigSchema.Dock.STANDARD_STROKE_WIDTH, 1, 0, 10);
     }
 
     @Test
     public void composeShadowSpecsKeepTheirCurrentDefaultsAndBounds() {
-        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_RADIUS, 15, 1, 40);
-        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_SIZE, 18, 1, 60);
-        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_ALPHA, 140, 0, 200);
-        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_Y, 4, -24, 24);
+        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_RADIUS, 10, 1, 40);
+        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_SIZE, 5, 1, 60);
+        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_ALPHA, 64, 0, 200);
+        assertComposeIntSpec(ConfigSchema.Dock.SHADOW_Y, 0, -24, 24);
         assertComposeIntSpec(ConfigSchema.Dock.STROKE_SHADOW_RADIUS, 3, 1, 24);
         assertComposeIntSpec(ConfigSchema.Dock.STROKE_SHADOW_ALPHA, 70, 0, 200);
     }
@@ -225,8 +225,8 @@ public class ConfigSchemaTest {
     @Test
     public void workspacePassBlurQualityControlsKeepCurrentBehaviorByDefault() {
         ConfigKey<?> captureScale = findKey("liquid_passblur_capture_scale");
-        assertEquals(Integer.valueOf(100), captureScale.uiDefault());
-        assertEquals(Integer.valueOf(100), captureScale.runtimeFallback());
+        assertEquals(Integer.valueOf(50), captureScale.uiDefault());
+        assertEquals(Integer.valueOf(50), captureScale.runtimeFallback());
         assertEquals(Integer.valueOf(50), captureScale.minInt());
         assertEquals(Integer.valueOf(100), captureScale.maxInt());
         assertEquals(ConfigKey.ExportMode.ALWAYS, captureScale.exportMode());
