@@ -64,7 +64,8 @@ final class MiuixShortcutMenuGlassHook {
             if (popupGlassEnabled) {
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
                     Object menu = chain.getThisObject();
-                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);
+                    // Preserve MIUIX PopupAnimHelper as the sole dismiss presentation authority.
+                    // The local glass child inherits mContentView animation automatically.
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     releaseIfAlreadyDetached(menu);
                     return result;
