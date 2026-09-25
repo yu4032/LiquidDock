@@ -64,9 +64,25 @@ PATCHES = (
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
+def emit_patch_blobs(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for offset, payload in PATCHES:
+        (output_dir / f"{offset:08x}.bin").write_bytes(payload)
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--emit-patches":
+        emit_patch_blobs(Path(sys.argv[2]))
+        for offset, payload in PATCHES:
+            print(f"patch=0x{offset:x} size={len(payload)}")
+        return 0
+
     if len(sys.argv) != 3:
-        print(f"usage: {sys.argv[0]} STOCK_LIB OUTPUT_LIB", file=sys.stderr)
+        print(
+            f"usage: {sys.argv[0]} STOCK_LIB OUTPUT_LIB\n"
+            f"       {sys.argv[0]} --emit-patches OUTPUT_DIR",
+            file=sys.stderr,
+        )
         return 2
 
     stock_path = Path(sys.argv[1])
