@@ -14,6 +14,8 @@ public class DockGlassShapeOwnershipContractTest {
             Path.of("src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java");
     private static final Path DOCK_COMPOSITOR =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java");
+    private static final Path DOCK_HOST =
+            Path.of("src/main/java/com/hellovoid/liquiddock/DockLiquidGlassHostView.java");
     private static final Path PRISMAL_RENDERER =
             Path.of("prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java");
     private static final Path PRISMAL_HIGHLIGHT_PROFILE =
@@ -70,5 +72,15 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(guard.contains("vec2 rasterScale = (safeGlassSize + vec2(4.0)) / safeGlassSize;"));
         assertTrue(guard.contains("vec2 rasterPosition = a_position * rasterScale;"));
         assertTrue(guard.contains("v_shapeCoord = rasterPosition;"));
+    }
+
+    @Test
+    public void dockHostDoesNotClipThePrismalSdfEdgeASecondTime() throws Exception {
+        String host = Files.readString(DOCK_HOST);
+
+        assertTrue(host.contains("setClipChildren(false);"));
+        assertTrue(host.contains("outline.setPath(outlinePath);"));
+        assertFalse(host.contains("canvas.clipPath("));
+        assertFalse(host.contains("dispatchDraw(Canvas"));
     }
 }

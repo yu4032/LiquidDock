@@ -1,16 +1,21 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
-import android.graphics.Canvas;
 import android.graphics.Outline;
 import android.graphics.Path;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
-/** Lightweight clip/geometry host for the zero-copy Prismal TextureView. */
+/**
+ * Lightweight geometry host for the zero-copy Prismal TextureView.
+ *
+ * <p>Prismal owns the visible glass silhouette and its derivative-antialiased edge. The host keeps
+ * the matching outline only for RenderNode/MiShadow geometry; clipping the child a second time
+ * would cut through the outer SDF coverage, especially on the last pixel row at some Dock sizes.</p>
+ */
 final class DockLiquidGlassHostView extends FrameLayout {
-    private final Path clipPath = new Path();
+    private final Path outlinePath = new Path();
     private float radius;
     private boolean squircle;
     private float squircleCp = .58f;
@@ -21,20 +26,22 @@ final class DockLiquidGlassHostView extends FrameLayout {
         // Keep the normal View.draw() path so a foreground StrokeDrawable is actually rendered.
         // This host still has no onDraw() body; the only local drawing is the foreground edge.
         setWillNotDraw(false);
+        // The Prismal child is already alpha-masked by its SDF. Do not clip it again here: the
+        // Android path clip is inset by half a pixel for outline/stroke alignment and would become
+        // a competing coverage owner for the shader's outer AA/highlight pixels.
         setClipChildren(false);
         setClipToPadding(false);
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Mi Shadow / RenderNode shadow geometry comes from the View outline. Keep this outline on
-        // the exact same shape as the manual child clip so the outer stroke shadow cannot drift
-        // away from the visible zero-copy glass edge.
+        // Mi Shadow / RenderNode shadow geometry still follows the established Dock shape. This
+        // outline is metadata for the shadow; it is deliberately not applied as a child clip.
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
-                ensureClipPath();
-                if (clipPath.isEmpty()) return;
+                ensureOutlinePath();
+                if (outlinePath.isEmpty()) return;
                 try {
-                    outline.setPath(clipPath);
+                    outline.setPath(outlinePath);
                 } catch (Throwable ignored) {
                 }
             }
@@ -69,11 +76,12 @@ final class DockLiquidGlassHostView extends FrameLayout {
         }
     }
 
-    private void ensureClipPath() {
+    private void ensureOutlinePath() {
         if (!shapeDirty) return;
-        clipPath.rewind();
+        outlinePath.rewind();
         if (getWidth() > 1 && getHeight() > 1) {
-            DockShapePath.build(clipPath, getWidth(), getHeight(), radius, squircle, squircleCp);
+            DockShapePath.build(
+                    outlinePath, getWidth(), getHeight(), radius, squircle, squircleCp);
         }
         shapeDirty = false;
     }
@@ -89,14 +97,5 @@ final class DockLiquidGlassHostView extends FrameLayout {
         } finally {
             super.onDetachedFromWindow();
         }
-    }
-
-    @Override protected void dispatchDraw(Canvas canvas) {
-        ensureClipPath();
-        if (clipPath.isEmpty()) return;
-        int save = canvas.save();
-        canvas.clipPath(clipPath);
-        super.dispatchDraw(canvas);
-        canvas.restoreToCount(save);
     }
 }
