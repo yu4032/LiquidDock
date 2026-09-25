@@ -27,10 +27,10 @@ public final class ConfigSchema {
 
     public static final class Animation {
         public static final ConfigKey<Integer> WORKSPACE_VISIBILITY = integer(
-                "animation_workspace_visibility_ms", 450, 450, 450, 0, 2000,
+                "animation_workspace_visibility_ms", 0, 0, 0, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_REVEAL = integer(
-                "animation_dock_icon_reveal_ms", 450, 450, 450, 0, 2000,
+                "animation_dock_icon_reveal_ms", 278, 278, 278, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRESS_IN = integer(
                 "animation_press_in_ms", 90, 90, 90, 0, 2000,
@@ -71,16 +71,16 @@ public final class ConfigSchema {
                 "grid_landscape_horizontal_distance", 0, 0, 0, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LANDSCAPE_TOP_DISTANCE = dp(
-                "grid_landscape_top_distance", 0, 0, 0, -600, 600,
+                "grid_landscape_top_distance", -8, -8, -8, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LANDSCAPE_BOTTOM_DISTANCE = dp(
-                "grid_landscape_bottom_distance", 0, 0, 0, -600, 600,
+                "grid_landscape_bottom_distance", 8, 8, 8, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_HORIZONTAL_DISTANCE = dp(
                 "grid_portrait_horizontal_distance", 0, 0, 0, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_TOP_DISTANCE = dp(
-                "grid_portrait_top_distance", 0, 0, 0, -600, 600,
+                "grid_portrait_top_distance", 30, 30, 30, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_BOTTOM_DISTANCE = dp(
                 "grid_portrait_bottom_distance", 0, 0, 0, -600, 600,
@@ -88,16 +88,16 @@ public final class ConfigSchema {
 
         // Migrated legacy per-edge grid settings remain exported and runtime-readable.
         public static final ConfigKey<Integer> LANDSCAPE_MARGIN_LEFT = dp(
-                "grid_landscape_margin_left", 0, 0, 0, -2000, 2000,
+                "grid_landscape_margin_left", 30, 30, 30, -2000, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LANDSCAPE_MARGIN_RIGHT = dp(
-                "grid_landscape_margin_right", 0, 0, 0, -2000, 2000,
+                "grid_landscape_margin_right", 30, 30, 30, -2000, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LANDSCAPE_MARGIN_TOP = dp(
-                "grid_landscape_margin_top", 0, 0, 0, -2000, 2000,
+                "grid_landscape_margin_top", -35, -35, -35, -2000, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LANDSCAPE_MARGIN_BOTTOM = dp(
-                "grid_landscape_margin_bottom", 0, 0, 0, -2000, 2000,
+                "grid_landscape_margin_bottom", 20, 20, 20, -2000, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_MARGIN_LEFT = dp(
                 "grid_portrait_margin_left", 0, 0, 0, -2000, 2000,
@@ -109,7 +109,7 @@ public final class ConfigSchema {
                 "grid_portrait_margin_top", 0, 0, 0, -2000, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_MARGIN_BOTTOM = dp(
-                "grid_portrait_margin_bottom", 0, 0, 0, -2000, 2000,
+                "grid_portrait_margin_bottom", 100, 100, 100, -2000, 2000,
                 ConfigKey.ExportMode.ALWAYS);
 
         // Runtime defaults for row gaps are compatibility-dependent and stay in LiquidDockConfig.
@@ -117,13 +117,13 @@ public final class ConfigSchema {
                 "grid_landscape_row_gap", 0, null, 0, -200, 400,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_ROW_GAP = dp(
-                "grid_portrait_row_gap", 0, null, 0, -200, 400,
+                "grid_portrait_row_gap", -15, null, -15, -200, 400,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LANDSCAPE_INDICATOR_Y = dp(
-                "indicator_landscape_y", 0, 0, 0, -160, 160,
+                "indicator_landscape_y", -9, -9, -9, -160, 160,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PORTRAIT_INDICATOR_Y = dp(
-                "indicator_portrait_y", 0, 0, 0, -160, 160,
+                "indicator_portrait_y", 12, 12, 12, -160, 160,
                 ConfigKey.ExportMode.ALWAYS);
 
         // Import-only JSON aliases from pre-axis-distance exports. They never become
@@ -171,7 +171,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> CORNERS_DP = bool(
                 "corners_dp", true, false, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CORNER_OFFSET = dp(
-                "corner_offset", -1, -1, -1, -50, 100, ConfigKey.ExportMode.ALWAYS);
+                "corner_offset", 3, 3, 3, -50, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> BLUR_CORNER_OFFSET = dp(
                 "blur_corner_offset", 0, 0, 0, -50, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SQUIRCLE = bool(
@@ -181,39 +181,39 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> STROKE_ENABLED = bool(
                 "dock_stroke", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SQUIRCLE_CONTROL_POINT = integer(
-                "sq_outer_cp", 58, 58, 58, 40, 80, ConfigKey.ExportMode.ALWAYS);
+                "sq_outer_cp", 65, 65, 65, 40, 80, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SQUIRCLE_STROKE_WIDTH = dp(
-                "sq_stroke_w", 1, 4, 4, 0, 10, ConfigKey.ExportMode.ALWAYS);
+                "sq_stroke_w", 1, 1, 1, 0, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SQUIRCLE_STROKE_OFFSET = dp(
-                "sq_stroke_off", 3, 8, 8, 0, 16, ConfigKey.ExportMode.ALWAYS);
+                "sq_stroke_off", 0, 0, 0, 0, 16, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> FILL_DIFF_STROKE_WIDTH = dp(
-                "stroke_w", 1, 2, 2, 0, 6, ConfigKey.ExportMode.ALWAYS);
+                "stroke_w", 1, 1, 1, 0, 6, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STANDARD_STROKE_WIDTH = dp(
-                "std_stroke_w", 1, 4, 4, 0, 10, ConfigKey.ExportMode.ALWAYS);
+                "std_stroke_w", 1, 1, 1, 0, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STROKE_RED = integer(
-                "stroke_base_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "stroke_base_r", 175, 175, 175, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STROKE_GREEN = integer(
-                "stroke_base_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "stroke_base_g", 163, 163, 163, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STROKE_BLUE = integer(
-                "stroke_base_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "stroke_base_b", 171, 171, 171, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STROKE_ALPHA = integer(
-                "stroke_base_alpha", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "stroke_base_alpha", 74, 74, 74, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> STROKE_SHADOW = bool(
                 "stroke_shadow", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STROKE_SHADOW_RADIUS = dp(
-                "shadow_radius", 3, 8, 8, 1, 24, ConfigKey.ExportMode.ALWAYS);
+                "shadow_radius", 3, 3, 3, 1, 24, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> STROKE_SHADOW_ALPHA = integer(
                 "shadow_alpha", 70, 70, 70, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SHADOW_ENABLED = bool(
                 "dock_shadow", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_RADIUS = dp(
-                "dock_shadow_radius", 15, 42, 42, 1, 40, ConfigKey.ExportMode.ALWAYS);
+                "dock_shadow_radius", 10, 10, 10, 1, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_SIZE = dp(
-                "dock_shadow_size", 18, 52, 52, 1, 60, ConfigKey.ExportMode.ALWAYS);
+                "dock_shadow_size", 5, 5, 5, 1, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_ALPHA = integer(
-                "dock_shadow_alpha", 140, 140, 140, 0, 200, ConfigKey.ExportMode.ALWAYS);
+                "dock_shadow_alpha", 64, 64, 64, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_Y = dp(
-                "dock_shadow_y", 4, 12, 12, -24, 24, ConfigKey.ExportMode.ALWAYS);
+                "dock_shadow_y", 0, 0, 0, -24, 24, ConfigKey.ExportMode.ALWAYS);
 
         private Dock() {}
     }
@@ -225,19 +225,19 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "dock_divider_enabled", false, null, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> WIDTH_DP = integer(
-                "dock_divider_width_dp", 10, null, 0, 0, 160, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_width_dp", 10, null, 10, 0, 160, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> HEIGHT_SCALE = integer(
-                "dock_divider_height_scale", 60, null, 0, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_height_scale", 71, null, 71, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> Y_OFFSET_DP = integer(
                 "dock_divider_y_offset", 0, null, 0, -80, 80, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> COLOR_RED = integer(
-                "dock_divider_color_r", 255, null, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_color_r", 255, null, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> COLOR_GREEN = integer(
-                "dock_divider_color_g", 255, null, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_color_g", 255, null, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> COLOR_BLUE = integer(
-                "dock_divider_color_b", 255, null, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_color_b", 255, null, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> ALPHA = integer(
-                "dock_divider_alpha", 128, null, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_alpha", 128, null, 128, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
 
         private Divider() {}
     }
@@ -269,7 +269,7 @@ public final class ConfigSchema {
         // Appearance overrides are IF_PRESENT so an untouched dialog profile follows the
         // current global Prismal material instead of freezing a copied default.
         public static final ConfigKey<Integer> DIALOG_BLUR = integer(
-                "liquid_dialog_blur", 0, null, 0, 0, 60,
+                "liquid_dialog_blur", 6, null, 6, 0, 60,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> DIALOG_TINT_RED = integer(
                 "liquid_dialog_tint_r", 0, null, 0, 0, 255,
@@ -278,10 +278,10 @@ public final class ConfigSchema {
                 "liquid_dialog_tint_g", 0, null, 0, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> DIALOG_TINT_BLUE = integer(
-                "liquid_dialog_tint_b", 255, null, 255, 0, 255,
+                "liquid_dialog_tint_b", 0, null, 0, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> DIALOG_TINT_ALPHA = integer(
-                "liquid_dialog_tint_alpha", 35, null, 35, 0, 255,
+                "liquid_dialog_tint_alpha", 0, null, 0, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> FOLDER_GLASS = bool(
                 "liquid_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
@@ -302,11 +302,11 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> ICON_SIZE_OFFSET = dp(
                 "liquid_icon_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ICON_CORNER_RADIUS = dp(
-                "liquid_icon_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+                "liquid_icon_corner_radius", 17, 17, 17, 0, 128, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> WIDGET_SIZE_OFFSET = dp(
                 "liquid_widget_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> WIDGET_CORNER_RADIUS = dp(
-                "liquid_widget_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+                "liquid_widget_corner_radius", 20, 20, 20, 0, 128, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SMALL_FOLDER_GLASS = bool(
                 "liquid_small_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SMALL_FOLDER_SIZE_OFFSET = dp(
@@ -318,7 +318,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> LARGE_FOLDER_SIZE_OFFSET = dp(
                 "liquid_large_folder_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LARGE_FOLDER_CORNER_RADIUS = dp(
-                "liquid_large_folder_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+                "liquid_large_folder_corner_radius", 16, 16, 16, 0, 128, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DIMENSIONS_DP = bool(
                 "liquid_dimensions_dp", true, false, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<String> BLUR_MODE = string(
@@ -327,23 +327,23 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> MIUIX_307_PIPELINE = bool(
                 "liquid_miuix_307_pipeline", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> BLUR = dp(
-                "liquid_blur", 2, 2, 6, 0, 60, ConfigKey.ExportMode.ALWAYS);
+                "liquid_blur", 7, 7, 7, 0, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CHROMATIC = integer(
-                "liquid_chromatic", 26, 26, 2, 0, 40, ConfigKey.ExportMode.ALWAYS);
+                "liquid_chromatic", 9, 9, 9, 0, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_ALPHA = integer(
-                "liquid_tint_alpha", 35, 35, 38, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_alpha", 0, 0, 0, 0, 160, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_FPS = integer(
-                "liquid_capture_power_limit_fps", 20, 20, 20, 5, 60, ConfigKey.ExportMode.ALWAYS);
+                "liquid_capture_power_limit_fps", 30, 30, 30, 5, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_STOP_DELAY = integer(
                 "liquid_capture_stop_delay", 150, 150, 150, 0, 10000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SAMPLING_EXTRA_TOP = integer(
-                "liquid_sampling_extra_top", 0, 0, 0, -256, 256, ConfigKey.ExportMode.ALWAYS);
+                "liquid_sampling_extra_top", -256, -256, -256, -256, 256, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SAMPLING_EXTRA_BOTTOM = integer(
-                "liquid_sampling_extra_bottom", 0, 0, 0, -256, 256, ConfigKey.ExportMode.ALWAYS);
+                "liquid_sampling_extra_bottom", -256, -256, -256, -256, 256, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SAMPLING_EXTRA_LEFT = integer(
-                "liquid_sampling_extra_left", 0, 0, 0, -256, 256, ConfigKey.ExportMode.ALWAYS);
+                "liquid_sampling_extra_left", -256, -256, -256, -256, 256, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SAMPLING_EXTRA_RIGHT = integer(
-                "liquid_sampling_extra_right", 0, 0, 0, -256, 256, ConfigKey.ExportMode.ALWAYS);
+                "liquid_sampling_extra_right", -256, -256, -256, -256, 256, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> THICKNESS = dp(
                 "liquid_thickness", 18, 18, 18, 1, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> IOR = integer(
@@ -351,11 +351,11 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> NORMAL_STRENGTH = integer(
                 "liquid_normal_strength", 115, 115, 115, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOME = integer(
-                "liquid_dome", 130, 130, 100, 0, 200, ConfigKey.ExportMode.ALWAYS);
+                "liquid_dome", 130, 130, 130, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LENS_REFRACTION = dp(
-                "liquid_lens_refraction", 1, 1, 12, 0, 60, ConfigKey.ExportMode.ALWAYS);
+                "liquid_lens_refraction", 1, 1, 1, 0, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_SCALE = integer(
-                "liquid_capture_scale", 50, 50, 50, 10, 100, ConfigKey.ExportMode.ALWAYS);
+                "liquid_capture_scale", 100, 100, 100, 10, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PASSBLUR_CAPTURE_SCALE = integer(
                 PassBlurQualityKeys.CAPTURE_SCALE,
                 PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT,
@@ -391,44 +391,44 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> HIGHLIGHT_WIDTH = integer(
                 "liquid_highlight_width", 100, 100, 100, 50, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_RED = integer(
-                "liquid_tint_r", 0, 0, 238, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_GREEN = integer(
-                "liquid_tint_g", 0, 0, 244, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_BLUE = integer(
-                "liquid_tint_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DEPTH_EFFECT = integer(
-                "liquid_depth_effect", 0, 0, 8, 0, 100, ConfigKey.ExportMode.ALWAYS);
+                "liquid_depth_effect", 0, 0, 0, 0, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> BRIGHTNESS = integer(
                 "liquid_brightness", 108, 108, 108, 50, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SPECULAR_SHARPNESS = integer(
                 "liquid_specular_sharp", 88, 88, 88, 1, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SPECULAR_STRENGTH = integer(
-                "liquid_specular_strength", 152, 152, 105, 0, 300, ConfigKey.ExportMode.ALWAYS);
+                "liquid_specular_strength", 152, 152, 152, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> RIM_LIGHT = integer(
-                "liquid_rim_light", 122, 122, 100, 0, 300, ConfigKey.ExportMode.ALWAYS);
+                "liquid_rim_light", 122, 122, 122, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAUSTICS = integer(
-                "liquid_caustics", 28, 28, 28, 0, 100, ConfigKey.ExportMode.ALWAYS);
+                "liquid_caustics", 0, 0, 0, 0, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> EDGE_BAND = integer(
                 "liquid_edge_band", 32, 32, 32, 5, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> HIGHLIGHT_ALPHA = integer(
                 "liquid_highlight_alpha", 100, 100, 100, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> RECENTS_PREARM_DISTANCE = dp(
-                "liquid_recents_prearm_distance", 8, 8, 0, 1, 48, ConfigKey.ExportMode.ALWAYS);
+                "liquid_recents_prearm_distance", 8, 8, 8, 1, 48, ConfigKey.ExportMode.ALWAYS);
 
         // Current Prismal upstream controls. Percent-like values use x100 storage;
         // distance-valued controls use the existing DP_TENTHS representation.
         public static final ConfigKey<Integer> PRISMAL_REFRACTION_INSET = dp(
-                "liquid_prismal_refraction_inset", 20, 20, 5, 0, 80, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_refraction_inset", 20, 20, 20, 0, 80, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_DISPLACEMENT_SCALE = integer(
-                "liquid_prismal_displacement_scale", 115, 115, 100, 0, 400, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_displacement_scale", 115, 115, 115, 0, 400, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_HEIGHT_TRANSITION_WIDTH = dp(
-                "liquid_prismal_height_transition_width", 19, 19, 15, 1, 120, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_height_transition_width", 8, 8, 8, 1, 120, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_SMIN_SMOOTHING = dp(
                 "liquid_prismal_smin_smoothing", 2, 2, 2, 0, 24, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_EDGE_REFRACTION_FALLOFF = integer(
-                "liquid_prismal_edge_refraction_falloff", 400, 400, 200, 0, 2000, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_edge_refraction_falloff", 400, 400, 400, 0, 2000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_FRESNEL_REFLECT = integer(
-                "liquid_prismal_fresnel_reflect", 198, 198, 79, 0, 500, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_fresnel_reflect", 198, 198, 198, 0, 500, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_DISPERSION_R = integer(
                 "liquid_prismal_dispersion_r", 100, 100, 100, 0, 400, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_DISPERSION_B = integer(
@@ -450,24 +450,24 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> OS4_DIRECTIONAL_ANGLE_RANGE = integer(
                 "liquid_os4_directional_angle_range", 52, 52, 52, 5, 150, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OS4_DIRECTIONAL_INTENSITY = integer(
-                "liquid_os4_directional_intensity", 42, 42, 42, 0, 200, ConfigKey.ExportMode.ALWAYS);
+                "liquid_os4_directional_intensity", 36, 36, 36, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OS4_DIRECTIONAL_OPPOSITE_INTENSITY = integer(
-                "liquid_os4_directional_opposite_intensity", 14, 14, 14, 0, 200,
+                "liquid_os4_directional_opposite_intensity", 23, 23, 23, 0, 200,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_X = integer(
-                "liquid_prismal_light_dir_x", -50, -50, 100, -200, 200, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_light_dir_x", 0, 0, 0, -200, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_Y = integer(
-                "liquid_prismal_light_dir_y", -80, -80, 62, -200, 200, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_light_dir_y", -80, -80, -80, -200, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_SHADOW_RED = integer(
-                "liquid_prismal_shadow_r", 255, 255, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_shadow_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_SHADOW_GREEN = integer(
-                "liquid_prismal_shadow_g", 255, 255, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_shadow_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_SHADOW_BLUE = integer(
-                "liquid_prismal_shadow_b", 255, 255, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_shadow_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_SHADOW_ALPHA = integer(
-                "liquid_prismal_shadow_alpha", 35, 35, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_shadow_alpha", 35, 35, 35, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_SHADOW_SOFTNESS = integer(
-                "liquid_prismal_shadow_softness", 1000, 1000, 100, 0, 2000, ConfigKey.ExportMode.ALWAYS);
+                "liquid_prismal_shadow_softness", 1000, 1000, 1000, 0, 2000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_TRANSMITTANCE = integer(
                 "liquid_prismal_transmittance", 100, 100, 100, 0, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_BACKDROP_SCALE_X = integer(
@@ -492,16 +492,16 @@ public final class ConfigSchema {
                 "liquid_gboard_blur", 0, null, 0, 0, 60,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> TINT_RED = integer(
-                "liquid_gboard_tint_r", 0, null, 0, 0, 255,
+                "liquid_gboard_tint_r", 10, null, 10, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> TINT_GREEN = integer(
-                "liquid_gboard_tint_g", 0, null, 0, 0, 255,
+                "liquid_gboard_tint_g", 15, null, 15, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> TINT_BLUE = integer(
-                "liquid_gboard_tint_b", 255, null, 255, 0, 255,
+                "liquid_gboard_tint_b", 15, null, 15, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> TINT_ALPHA = integer(
-                "liquid_gboard_tint_alpha", 35, null, 35, 0, 255,
+                "liquid_gboard_tint_alpha", 126, null, 126, 0, 255,
                 ConfigKey.ExportMode.IF_PRESENT);
 
         private Gboard() {}
@@ -535,16 +535,16 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> DOCK_CUSTOMIZATION = bool(
                 "workstation_dock_customization", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_WIDTH_OFFSET = dp(
-                "workstation_dock_width_offset", 0, 0, 0, -240, 240,
+                "workstation_dock_width_offset", 27, 27, 27, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_GLASS_CORNER_RADIUS = dp(
-                "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
+                "workstation_dock_icon_glass_corner_radius", 12, 12, 12, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> GRID_HORIZONTAL_OFFSET = dp(
                 "workstation_grid_horizontal_offset", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240,
+                "workstation_all_apps_landscape_horizontal_offset", 41, 41, 41, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         // Merged vertical keys are retained for old configs/JSON only; current UI writes
         // independent top/bottom spacing keys below.
@@ -552,22 +552,22 @@ public final class ConfigSchema {
                 "workstation_all_apps_landscape_vertical_offset", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_TOP_SPACING = dp(
-                "workstation_all_apps_landscape_top_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_landscape_top_spacing", 90, 90, 90, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_BOTTOM_SPACING = dp(
-                "workstation_all_apps_landscape_bottom_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_landscape_bottom_spacing", 118, 118, 118, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_portrait_horizontal_offset", 0, 0, 0, 0, 240,
+                "workstation_all_apps_portrait_horizontal_offset", 41, 41, 41, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_VERTICAL_OFFSET = dp(
                 "workstation_all_apps_portrait_vertical_offset", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_TOP_SPACING = dp(
-                "workstation_all_apps_portrait_top_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_portrait_top_spacing", 132, 132, 132, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_BOTTOM_SPACING = dp(
-                "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_portrait_bottom_spacing", 61, 61, 61, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_TOP_OFFSET = dp(
                 "workstation_dock_icon_top_offset", 0, 0, 0, -48, 48,
@@ -587,7 +587,7 @@ public final class ConfigSchema {
 
     public static final class Recents {
         public static final ConfigKey<Integer> BACKGROUND_BLUR_PERCENT = integer(
-                "recents_background_blur_percent", 100, 100, 100, 0, 100,
+                "recents_background_blur_percent", 36, 36, 36, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DISABLE_WALLPAPER_DIMMING = bool(
                 "recents_disable_wallpaper_dimming", false, false, false,
