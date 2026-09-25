@@ -35,9 +35,10 @@ final class ShortcutPopupGlassCoordinator {
     static synchronized void prepareIfNeeded(
             View captureRoot, LiquidDockConfig.Glass glassConfig) {
         State state = current;
-        if (state != null && !state.released && state.captureRootRef.get() == captureRoot) {
+        if (state != null && !state.released && state.early
+                && state.captureRootRef.get() == captureRoot) {
             state.requestStarted = true;
-            MainHook.log(TAG + " reusing existing pre-show capture early=" + state.early);
+            MainHook.log(TAG + " reusing early Workspace pre-show capture");
             return;
         }
         prepareInternal(captureRoot, glassConfig, false, "prepare-replace");
