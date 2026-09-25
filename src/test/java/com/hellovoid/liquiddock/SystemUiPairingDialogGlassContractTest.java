@@ -55,5 +55,10 @@ public class SystemUiPairingDialogGlassContractTest {
         assertTrue(session.contains("float requestedCornerRadiusPx;"));
         assertTrue(session.contains("Float.isFinite(requestedCornerRadiusPx)"));
         assertTrue(session.contains("this(host, sourceRoot, glassConfig, Float.NaN, listener)"));
+        assertTrue(session.contains("host.getLocationInWindow(hostLocation)"));
+        assertTrue(session.contains("sourceRoot.getLocationInWindow(rootLocation)"));
+        assertTrue(session.contains("sourceContentRect.subRect("));
+        assertTrue(session.contains("RootPassBlurContentRect backdropRect = targetContentRect"));
+        assertTrue(hook.contains("session.refreshHostMapping()"));
     }
 }
