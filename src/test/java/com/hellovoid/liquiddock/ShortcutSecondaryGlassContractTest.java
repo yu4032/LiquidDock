@@ -352,10 +352,14 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertTrue(nativeNight.contains(
                 "ALERT_CONTROLLER = \"miuix.appcompat.app.AlertController\""));
-        assertTrue(nativeNight.contains(
-                "APP_COMPAT_DIALOG = \"androidx.appcompat.app.AppCompatDialog\""));
-        assertTrue(nativeNight.contains(
-                "getDeclaredConstructor(\n                    Context.class, appCompatDialog, Window.class)"));
+        assertTrue(nativeNight.contains("controller.getDeclaredConstructors()"));
+        assertTrue(nativeNight.contains("Context.class.isAssignableFrom(parameters[0])"));
+        assertTrue(nativeNight.contains("Dialog.class.isAssignableFrom(parameters[1])"));
+        assertTrue(nativeNight.contains("Window.class.isAssignableFrom(parameters[2])"));
+        assertTrue(nativeNight.contains("no semantic AlertController constructor found"));
+        assertFalse(nativeNight.contains("APP_COMPAT_DIALOG"));
+        assertFalse(nativeNight.contains("androidx.appcompat.app.AppCompatDialog"));
+        assertFalse(nativeNight.contains("getDeclaredConstructor("));
         assertTrue(nativeNight.contains("original.createConfigurationContext(override)"));
         assertTrue(nativeNight.contains("Configuration.UI_MODE_NIGHT_YES"));
         assertTrue(nativeNight.contains("resolveThemeResId(original)"));

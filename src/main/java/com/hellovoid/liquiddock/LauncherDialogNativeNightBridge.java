@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Configuration;
@@ -22,7 +23,6 @@ import java.lang.reflect.Method;
 final class LauncherDialogNativeNightBridge {
     private static final String TAG = "[DC][LauncherDialogNativeNight]";
     private static final String ALERT_CONTROLLER = "miuix.appcompat.app.AlertController";
-    private static final String APP_COMPAT_DIALOG = "androidx.appcompat.app.AppCompatDialog";
     private static final String UNINSTALL_LAYOUT = "shortcut_uninstall_dialog";
 
     private static final ThreadLocal<Integer> FORCE_NIGHT_DEPTH = new ThreadLocal<>();
@@ -36,33 +36,47 @@ final class LauncherDialogNativeNightBridge {
         if (classLoader == null) return false;
         try {
             Class<?> controller = Class.forName(ALERT_CONTROLLER, false, classLoader);
-            Class<?> appCompatDialog = Class.forName(APP_COMPAT_DIALOG, false, classLoader);
-            Constructor<?> constructor = controller.getDeclaredConstructor(
-                    Context.class, appCompatDialog, Window.class);
-            constructor.setAccessible(true);
-
-            HookUtil.hook(constructor, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (!isForceNightActive() || args.length < 1 || !(args[0] instanceof Context)) {
-                    return chain.proceed(args);
+            int hooked = 0;
+            for (Constructor<?> constructor : controller.getDeclaredConstructors()) {
+                Class<?>[] parameters = constructor.getParameterTypes();
+                if (parameters.length != 3
+                        || !Context.class.isAssignableFrom(parameters[0])
+                        || !Dialog.class.isAssignableFrom(parameters[1])
+                        || !Window.class.isAssignableFrom(parameters[2])) {
+                    continue;
                 }
+                constructor.setAccessible(true);
+                HookUtil.hook(constructor, chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    if (!isForceNightActive() || args.length < 1
+                            || !(args[0] instanceof Context)) {
+                        return chain.proceed(args);
+                    }
 
-                Context original = (Context) args[0];
-                int themeResId = resolveThemeResId(original);
-                if (themeResId == 0) {
-                    MainHook.log(TAG + " dialog theme id unavailable; original context retained");
+                    Context original = (Context) args[0];
+                    int themeResId = resolveThemeResId(original);
+                    if (themeResId == 0) {
+                        MainHook.log(TAG
+                                + " dialog theme id unavailable; original context retained");
+                        return chain.proceed(args);
+                    }
+
+                    Context forced = createForcedNightContext(original, themeResId);
+                    if (forced == null) {
+                        MainHook.log(TAG
+                                + " forced night context unavailable; original context retained");
+                        return chain.proceed(args);
+                    }
+
+                    args[0] = forced;
                     return chain.proceed(args);
-                }
-
-                Context forced = createForcedNightContext(original, themeResId);
-                if (forced == null) {
-                    MainHook.log(TAG + " forced night context unavailable; original context retained");
-                    return chain.proceed(args);
-                }
-
-                args[0] = forced;
-                return chain.proceed(args);
-            });
+                });
+                hooked++;
+            }
+            if (hooked == 0) {
+                MainHook.log(TAG + " no semantic AlertController constructor found");
+                return false;
+            }
 
             installUninstallLayoutHooks();
             installed = true;
