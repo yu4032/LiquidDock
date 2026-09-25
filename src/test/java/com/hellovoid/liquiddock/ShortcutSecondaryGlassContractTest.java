@@ -40,6 +40,43 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("attachToExternalMaterial"));
     }
 
+    @Test public void earlyWorkspaceSamplingOnlyExtendsPublishedShortcutLifecycle()
+            throws Exception {
+        String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
+        String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
+        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+
+        assertTrue(hook.contains("com.miui.home.launcher.CellLayout"));
+        assertTrue(hook.contains("getDeclaredMethod(\"dispatchTouchEvent\", MotionEvent.class)"));
+        assertTrue(hook.contains("getDeclaredMethod(\"lastDownOnOccupiedCell\")"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareEarly(launcherRoot, glassConfig)"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareIfNeeded("));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.cancelEarlyIfUnused(launcherRoot)"));
+
+        // The published setRequestingItemInfo authority remains the rendezvous for every path.
+        assertTrue(hook.contains("\"setRequestingItemInfo\""));
+        assertTrue(hook.contains("ownerView.getRootView()"));
+        assertTrue(coordinator.contains("static synchronized void prepare("));
+        assertTrue(coordinator.contains("static synchronized void prepareIfNeeded("));
+        assertTrue(coordinator.contains("reusing existing pre-show capture early="));
+
+        // Do not reintroduce the rejected Dock-specific timing/root experiments.
+        assertFalse(hook.contains("DockContainerView"));
+        assertFalse(hook.contains("HotSeatsListContent"));
+        assertFalse(hook.contains("dispatchTouchEventFromHome"));
+        assertFalse(hook.contains("dragSingleItem"));
+
+        // Rendering, first-frame freeze and published presentation remain untouched in semantics.
+        assertTrue(session.contains("void requestInitialCapture()"));
+        assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
+        assertFalse(session.contains("beginPrewarm()"));
+        assertFalse(session.contains("latchPreDragBackdrop()"));
+        assertFalse(session.contains("captureFirstFrameAndFreeze()"));
+        assertTrue(layer.contains("FAST_DISMISS_FADE_MS = 90L"));
+        assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
+    }
+
     @Test public void popupDetachDefersCleanupOutsideVendorRemoveViewTraversal() throws Exception {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         assertTrue(coordinator.contains("postDismissCleanup(state)"));
