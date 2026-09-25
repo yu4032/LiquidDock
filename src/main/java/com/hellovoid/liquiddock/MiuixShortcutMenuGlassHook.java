@@ -136,14 +136,13 @@ final class MiuixShortcutMenuGlassHook {
         dispatchTouchEventFromHome.setAccessible(true);
         dispatchTouchEvent.setAccessible(true);
 
-        hookDockTouchRoute(dispatchTouchEventFromHome, glassConfig, "home-forwarded");
-        hookDockTouchRoute(dispatchTouchEvent, glassConfig, "direct-dock");
+        hookDockTouchRoute(dispatchTouchEventFromHome, glassConfig);
+        hookDockTouchRoute(dispatchTouchEvent, glassConfig);
     }
 
     private static void hookDockTouchRoute(
             Method method,
-            LiquidDockConfig.Glass glassConfig,
-            String route) {
+            LiquidDockConfig.Glass glassConfig) {
         HookUtil.hook(method, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
@@ -158,7 +157,6 @@ final class MiuixShortcutMenuGlassHook {
                 if (action == MotionEvent.ACTION_DOWN) {
                     ShortcutPopupGlassCoordinator.prepareDockEarly(
                             dockMenuOwner, glassConfig);
-                    MainHook.log(TAG + " dock early capture armed route=" + route);
                 } else if (action == MotionEvent.ACTION_UP) {
                     ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused(dockMenuOwner);
                 }
