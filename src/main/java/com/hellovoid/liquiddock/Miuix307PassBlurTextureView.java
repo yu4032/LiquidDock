@@ -34,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Feedback-safe HyperOS 3.0.307 PassBlur -> OES -> 2D -> Prismal -> TextureView renderer.
@@ -173,8 +174,16 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final FloatBuffer quadBuffer;
     private final HandlerThread renderThread;
     private final Handler renderHandler;
+    private final HandlerThread frameSignalThread;
+    private final Handler frameSignalHandler;
     private final Handler mainHandler;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    // SurfaceTexture frame callbacks must never share the GL looper. The framework posts one
+    // callback message per producer frame; if GL work is performed on that same looper, those
+    // callback messages can become a FIFO backlog ahead of the newest image. The signal looper
+    // only marks latest-state dirty and allows at most one GL render runnable to be pending.
+    private final AtomicBoolean producerRenderScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean producerRenderDirty = new AtomicBoolean(false);
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
@@ -252,7 +261,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private boolean firstMatrixLogged;
     private boolean stageBDiagnosticsLogged;
     private boolean prismalMappingLogged;
-    private long producerFrameCount;
+    private final AtomicLong producerFrameCount = new AtomicLong();
     private long renderedFrameCount;
     private long powerWindowStartedMs = SystemClock.uptimeMillis();
     private ViewTreeObserver preDrawObserver;
@@ -281,6 +290,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         renderThread = new HandlerThread("LiquidDock-PassBlur-EGL");
         renderThread.start();
         renderHandler = new Handler(renderThread.getLooper());
+        frameSignalThread = new HandlerThread("LiquidDock-PassBlur-FrameSignal");
+        frameSignalThread.start();
+        frameSignalHandler = new Handler(frameSignalThread.getLooper());
         mainHandler = new Handler(context.getMainLooper());
     }
 
@@ -417,6 +429,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         Miuix307PassBlurBridge.unbind(currentBinding);
         resetBoundGeometry();
 
+        SurfaceTexture currentInput = inputSurfaceTexture;
+        if (currentInput != null) {
+            try { currentInput.setOnFrameAvailableListener(null); } catch (Throwable ignored) {}
+        }
+        frameSignalThread.quitSafely();
         renderHandler.post(this::releaseRenderResources);
         renderThread.quitSafely();
     }
@@ -637,10 +654,35 @@ final class Miuix307PassBlurTextureView extends TextureView
         inputProducerSurface = producer;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
-            producerFrameCount++;
+            producerFrameCount.incrementAndGet();
             frameAvailable.set(true);
+            producerRenderDirty.set(true);
+            scheduleLatestProducerRender();
+        }, frameSignalHandler);
+    }
+
+    /**
+     * Latest-only consumer gate. SurfaceTexture callbacks run on frameSignalHandler, while all EGL
+     * access remains owned by renderHandler. Multiple producer notifications received while one GL
+     * frame is queued or rendering collapse into one follow-up draw; no historical callback is
+     * replayed through the GL pipeline.
+     */
+    private void scheduleLatestProducerRender() {
+        if (shuttingDown || !producerRenderScheduled.compareAndSet(false, true)) return;
+        renderHandler.post(this::runLatestProducerRender);
+    }
+
+    private void runLatestProducerRender() {
+        producerRenderDirty.set(false);
+        try {
             drawLatestFrame(true);
-        }, renderHandler);
+        } finally {
+            producerRenderScheduled.set(false);
+            if (!shuttingDown && producerRenderDirty.get()
+                    && producerRenderScheduled.compareAndSet(false, true)) {
+                renderHandler.post(this::runLatestProducerRender);
+            }
+        }
     }
 
     private void ensureFboSize(int width, int height) {
@@ -790,7 +832,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         long elapsed = now - powerWindowStartedMs;
         if (elapsed < 5000L) return;
         float seconds = Math.max(0.001f, elapsed / 1000f);
-        float producerFps = producerFrameCount / seconds;
+        float producerFps = producerFrameCount.getAndSet(0L) / seconds;
         float drawFps = renderedFrameCount / seconds;
         DockGlassSceneSnapshot scene = dockCompositor.latestScene();
         MainHook.log("[DC][PBTX][Power] producerFps=" + producerFps
@@ -798,7 +840,6 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + " dockItems=" + (scene != null ? scene.size() : 0)
                 + " attached=" + isAttachedToWindow()
                 + " shown=" + isShown());
-        producerFrameCount = 0L;
         renderedFrameCount = 0L;
         powerWindowStartedMs = now;
     }
