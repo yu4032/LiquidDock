@@ -27,6 +27,10 @@ final class ShortcutPopupGlassCoordinator {
     static synchronized void prepareDockEarly(
             View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
         if (dockMenuOwner == null) return;
+        State state = current;
+        if (state != null && !state.released && state.contentRef.get() != null) {
+            return;
+        }
         prepareInternal(
                 dockMenuOwner.getRootView(),
                 glassConfig,
@@ -44,10 +48,7 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner = state.earlyOwnerRef.get();
             boolean workspaceMatch = earlyOwner == null
                     && state.captureRootRef.get() == captureRoot;
-            boolean dockMatch = earlyOwner != null
-                    && earlyOwner == authorityOwner
-                    && state.session != null
-                    && state.session.hasFrozenBackdrop();
+            boolean dockMatch = matchesDockAuthority(state, authorityOwner);
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
                 return;
@@ -135,10 +136,8 @@ final class ShortcutPopupGlassCoordinator {
         View liveRoot = decorView != null ? decorView.getRootView() : null;
         boolean rootMatches = state != null && state.captureRootRef.get() == liveRoot;
         boolean dockOwnerMatches = state != null
-                && state.earlyOwnerRef.get() == decorView
                 && state.requestStarted
-                && state.session != null
-                && state.session.hasFrozenBackdrop();
+                && matchesDockAuthority(state, decorView);
         if (state == null || state.released || (!rootMatches && !dockOwnerMatches)
                 || popupView == null || contentView == null || !(decorView instanceof ViewGroup)) {
             return false;
@@ -264,7 +263,7 @@ final class ShortcutPopupGlassCoordinator {
         State state = current;
         if (state == null || state.contentRef.get() != null) return;
         boolean rootMatches = state.captureRootRef.get() == captureRoot;
-        boolean ownerMatches = state.earlyOwnerRef.get() == authorityOwner;
+        boolean ownerMatches = matchesDockAuthority(state, authorityOwner);
         if (rootMatches || ownerMatches) releaseLocked("query-cancelled");
     }
 
@@ -273,7 +272,7 @@ final class ShortcutPopupGlassCoordinator {
         View liveRoot = decorView != null ? decorView.getRootView() : null;
         if (state == null) return;
         boolean rootMatches = state.captureRootRef.get() == liveRoot;
-        boolean ownerMatches = state.earlyOwnerRef.get() == decorView;
+        boolean ownerMatches = matchesDockAuthority(state, decorView);
         if (!rootMatches && !ownerMatches) return;
         if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
@@ -292,6 +291,12 @@ final class ShortcutPopupGlassCoordinator {
             return;
         }
         release(state, "popup-detached-no-root");
+    }
+
+    private static boolean matchesDockAuthority(State state, View candidate) {
+        if (state == null || candidate == null || !state.dockEarly) return false;
+        Class<?> authorityClass = state.earlyAuthorityClass;
+        return authorityClass != null && authorityClass.isInstance(candidate);
     }
 
     private static void release(State expected, String reason) {
@@ -345,6 +350,8 @@ final class ShortcutPopupGlassCoordinator {
         final WeakReference<View> captureRootRef;
         final LiquidDockConfig.Glass glassConfig;
         final boolean early;
+        final boolean dockEarly;
+        final Class<?> earlyAuthorityClass;
         final WeakReference<View> earlyOwnerRef;
         WeakReference<View> popupDecorRef = new WeakReference<>(null);
         WeakReference<View> popupRef = new WeakReference<>(null);
@@ -368,6 +375,8 @@ final class ShortcutPopupGlassCoordinator {
             captureRootRef = new WeakReference<>(captureRoot);
             this.glassConfig = glassConfig;
             this.early = early;
+            this.dockEarly = earlyOwner != null;
+            this.earlyAuthorityClass = earlyOwner != null ? earlyOwner.getClass() : null;
             earlyOwnerRef = new WeakReference<>(earlyOwner);
         }
     }

@@ -52,15 +52,37 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareEarly("));
         assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
         assertTrue(hook.contains("dispatchTouchEventFromHome"));
+        assertTrue(hook.contains("\"dispatchTouchEvent\", MotionEvent.class"));
+        assertTrue(hook.contains("hookDockTouchRoute(dispatchTouchEventFromHome, glassConfig)"));
+        assertTrue(hook.contains("hookDockTouchRoute(dispatchTouchEvent, glassConfig)"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareDockEarly("));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareIfNeeded("));
 
         assertTrue(coordinator.contains("final WeakReference<View> earlyOwnerRef"));
-        assertTrue(coordinator.contains("earlyOwner == authorityOwner"));
-        assertTrue(coordinator.contains("state.session.hasFrozenBackdrop()"));
+        assertTrue(coordinator.contains("final Class<?> earlyAuthorityClass"));
+        assertTrue(coordinator.contains("matchesDockAuthority(state, authorityOwner)"));
+        assertTrue(coordinator.contains("authorityClass.isInstance(candidate)"));
         assertTrue(coordinator.contains("prepareInternal(captureRoot, glassConfig, false, null"));
-        assertTrue(coordinator.contains("state.earlyOwnerRef.get() == decorView"));
+        assertTrue(coordinator.contains("state.requestStarted"));
+        assertTrue(coordinator.contains("matchesDockAuthority(state, decorView)"));
         assertTrue(coordinator.contains("cancelDockEarlyIfUnused"));
+        assertTrue(coordinator.contains("state.contentRef.get() != null"));
+        assertFalse(coordinator.contains("earlyOwner == authorityOwner"));
+        assertFalse(coordinator.contains(
+                "dockMatch = earlyOwner != null\n"
+                        + "                    && earlyOwner == authorityOwner\n"
+                        + "                    && state.session != null\n"
+                        + "                    && state.session.hasFrozenBackdrop()"));
+
+        // HyperOS system-drag can send ACTION_CANCEL long before HotSeats onLongClick. Keep the
+        // early Dock frame alive across CANCEL; ordinary taps still release it on ACTION_UP.
+        assertTrue(hook.contains(
+                "} else if (action == MotionEvent.ACTION_UP) {\n"
+                        + "                    ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused"));
+        assertFalse(hook.contains(
+                "} else if (action == MotionEvent.ACTION_UP\n"
+                        + "                        || action == MotionEvent.ACTION_CANCEL) {\n"
+                        + "                    ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused"));
 
         assertTrue(session.contains("void requestInitialCapture()"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
