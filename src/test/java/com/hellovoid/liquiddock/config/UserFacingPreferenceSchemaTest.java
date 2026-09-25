@@ -96,5 +96,11 @@ public class UserFacingPreferenceSchemaTest {
                 source.contains("prefs.edit().putInt(\""));
         assertFalse("settings must not write literal string keys directly",
                 source.contains("prefs.edit().putString(\""));
+        assertTrue("data page must expose neutral default preset",
+                source.contains("\"应用默认预设\""));
+        assertTrue("data page must expose tuned preset",
+                source.contains("\"应用调校预设\""));
+        assertTrue("tuned preset must delegate to PresetManager",
+                source.contains("PresetManager.applyTuned(prefs.edit())"));
     }
 }
