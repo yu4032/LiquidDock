@@ -115,9 +115,11 @@ lines 854–899. There is no proven spare capture slot for a generation.
 `bgDrawPassBlur` moves/copies its `SmallVector<std::function<void()>>`, and
 the closure clone helper (`0x65a300.c` lines 139–148) copies the promise
 shared-state control block. Therefore a side table keyed by the initial
-closure allocation address would lose the worker's cloned job. The shared
-promise state is a candidate stable per-job key, but its exact registration
-and erase ordering still require an ABI-safe implementation.
+closure allocation address would lose the worker's cloned job. The actual
+promise shared-state pointer (`**(closure + 0x1b8)`) is a candidate stable
+per-job key. `native/passblur/latest_only_scheduler.hpp` models a side table
+with this key and per-PassBlur state; attaching and erasing it in the
+original binary still requires ABI-safe hook points.
 
 `releaseCurRes` (`0x64e4b0.c`) iterates the vector at manager `+0x40..0x48`
 and calls `std::__assoc_state<bool>::move` for each future. A false result
@@ -138,17 +140,24 @@ PassBlur instance** and the particular closure before `bgDrawPassBlur` is
 called. The first worker comparison belongs after it has acquired the
 `PassBlur*` but before the expensive LayerSettings filtering. The relevant
 ARM64 span starts at ELF `0x559220` (loads LayerFE/PassBlur), with the
-`incStrong` call at `0x55923c`. Returning there cannot simply branch to the
-existing completion tail: the tail destroys vectors initialized *after*
-that point. A wrapper must complete the promise and run a proven cleanup
-path without touching uninitialized stack objects.
+`incStrong` call at `0x55923c`. Returning *there* cannot simply branch to the
+existing completion tail: the tail destroys vectors initialized after that
+point. Disassembly narrows a candidate to ELF `0x5592f0`: both local String8
+vectors and the filtered-layer vector have been initialized, while the
+layer-filtering loop has not begun. The original no-dequeued-buffer path at
+`0x559ad0` sets `w22=0` and branches to the common promise/cleanup tail at
+`0x55a13c`. A stale-entry hook could use that same false-result tail only
+after validating the full stack/register state and erasing its per-job side
+table entry. This is a candidate, not an approved instruction patch.
 
 The second comparison belongs after RenderEngine returns a fence and before
 the queue call at ELF `0x55a040` (Ghidra `0x65a040`). The original cancel call
-at ELF `0x559ee8` is on a separate geometry/error path. Stale-after-render
-must take the cancel path, release fence and `unique_fd`, and complete false.
-It cannot merely replace the `bl queuePassBlurBuffer` instruction: the
-original path later sets true unconditionally and contains fence cleanup.
+at ELF `0x559ee8` is on a separate geometry/error path and duplicates
+`NO_FENCE`; stale-after-render must instead cancel using the RenderEngine
+fence, release that fence and `unique_fd`, and complete false. It cannot merely
+replace the `bl queuePassBlurBuffer` instruction: ELF `0x55a0d8` later sets
+`w22=1` unconditionally before the common completion tail. Both the buffer
+action and result assignment require coordinated changes.
 Submission and queue publication also need a common per-instance
 linearization lock, otherwise a newer request can arrive between an atomic
 freshness read and `queuePassBlurBuffer`. GPU work stays outside that lock.

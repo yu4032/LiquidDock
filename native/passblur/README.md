@@ -14,7 +14,8 @@ The `Libs` release archive from `yu4032/hyperos-analysis` must have SHA256
 `57e25e06f70aa3e3da98dbeb16fbcc6e6e9d2ecd541f96568dc043e91804282f`.
 Its `files/libsurfaceflinger.so` must have SHA256
 `407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32`.
-The manifest also pins 18 function byte ranges. A mismatch is a different
+The manifest also pins 18 function byte ranges and six disassembled candidate
+instructions. Candidate sites are evidence only, not approved patch sites. A mismatch is a different
 build and must not be patched with these offsets.
 The `PassBlur native guard tests` workflow runs the guard and scheduler tests
 on code changes. Its manual `verify-private-release` job additionally fetches
@@ -22,11 +23,12 @@ and verifies the real private asset when the repository has a read-scoped
 `HYPEROS_ANALYSIS_READ_TOKEN` secret; it fails explicitly if that secret is
 missing.
 
-The Phase 1 generation algorithm is implemented in
-`latest_only_scheduler.hpp`. It requires native adapters at submission,
-worker entry, pre-queue, and PassBlur lifecycle. Its C++ test exercises
-separate targets, both stale gates, concurrent publication, and pointer
-reuse:
+The Phase 1 generation algorithm and a per-job registry keyed by the promise
+shared state are implemented in `latest_only_scheduler.hpp`. This avoids
+using the cloned closure allocation as identity. It still requires native
+adapters at submission, worker entry, pre-queue, completion, and PassBlur
+lifecycle. Its C++ test exercises separate targets, both stale gates,
+concurrent publication, pointer reuse, and cloned-job lookup:
 
 ```sh
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread \

@@ -42,6 +42,14 @@ def fixture():
                 "after": "01000014",
             }
         ],
+        "candidate_sites": [
+            {
+                "name": "fixture-branch-candidate",
+                "elf_vaddr": "0x100c",
+                "ghidra_address": "0x10100c",
+                "bytes": "00000014",
+            }
+        ],
     }
     return bytes(image), manifest
 
@@ -55,6 +63,7 @@ class BinaryGuardsTest(unittest.TestCase):
         failures = verify(bytes(corrupted), manifest)
         self.assertTrue(any("binary SHA256" in failure for failure in failures))
         self.assertTrue(any("function bytes" in failure for failure in failures))
+        self.assertTrue(any("candidate instruction" in failure for failure in failures))
 
     def test_target_bytes_and_only_approved_changes(self):
         original, manifest = fixture()

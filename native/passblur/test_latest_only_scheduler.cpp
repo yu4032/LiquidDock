@@ -94,4 +94,21 @@ int main() {
     assert(!LatestOnlyScheduler::publishOrCancel(
         retiring, [&] { assert(false); }, [&] { ++canceled; }));
     assert(canceled == 3);
+
+    // std::function cloning changes the closure allocation, while the
+    // promise's shared state address stays the same for lookup and erase.
+    liquiddock::passblur::JobRegistry jobs;
+    int promiseState = 0;
+    int anotherPromise = 0;
+    assert(jobs.registerInstance(&targetA));
+    assert(jobs.capture(&promiseState, &targetA));
+    assert(!jobs.capture(&promiseState, &targetA));
+    auto captured = jobs.find(&promiseState);
+    assert(captured && LatestOnlyScheduler::shouldRender(captured));
+    assert(jobs.capture(&anotherPromise, &targetA));
+    assert(!LatestOnlyScheduler::shouldRender(jobs.find(&promiseState)));
+    assert(jobs.erase(&promiseState));
+    assert(!jobs.find(&promiseState));
+    assert(jobs.erase(&anotherPromise));
+    assert(jobs.unregisterInstance(&targetA));
 }

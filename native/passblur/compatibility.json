@@ -162,5 +162,43 @@
       "entry_bytes": "ef3bb66ded33016deb2b026de923036d"
     }
   ],
-  "patch_sites": []
+  "patch_sites": [],
+  "candidate_sites": [
+    {
+      "name": "worker-entry-after-local-inits",
+      "elf_vaddr": "0x5592f0",
+      "ghidra_address": "0x6592f0",
+      "bytes": "682240b9"
+    },
+    {
+      "name": "existing-false-tail",
+      "elf_vaddr": "0x559ad0",
+      "ghidra_address": "0x659ad0",
+      "bytes": "f6031f2a"
+    },
+    {
+      "name": "existing-cancel-call",
+      "elf_vaddr": "0x559ee8",
+      "ghidra_address": "0x659ee8",
+      "bytes": "e2ac1394"
+    },
+    {
+      "name": "prequeue-call",
+      "elf_vaddr": "0x55a040",
+      "ghidra_address": "0x65a040",
+      "bytes": "90ac1394"
+    },
+    {
+      "name": "unconditional-true-result",
+      "elf_vaddr": "0x55a0d8",
+      "ghidra_address": "0x65a0d8",
+      "bytes": "36008052"
+    },
+    {
+      "name": "common-promise-tail",
+      "elf_vaddr": "0x55a13c",
+      "ghidra_address": "0x65a13c",
+      "bytes": "68de40f9"
+    }
+  ]
 }

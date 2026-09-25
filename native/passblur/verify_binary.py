@@ -70,6 +70,17 @@ def verify(data, manifest):
                 failures.append(f"entry bytes differ: {function['name']}")
             if int(function["ghidra_address"], 16) - vaddr != manifest["ghidra_image_base"]:
                 failures.append(f"address-base mismatch: {function['name']}")
+        for site in manifest.get("candidate_sites", []):
+            vaddr = int(site["elf_vaddr"], 16)
+            expected = bytes.fromhex(site["bytes"])
+            if len(expected) != 4 or vaddr % 4:
+                failures.append(f"invalid candidate instruction: {site['name']}")
+                continue
+            offset = file_offset(segments, vaddr, 4)
+            if data[offset : offset + 4] != expected:
+                failures.append(f"candidate instruction differs: {site['name']}")
+            if int(site["ghidra_address"], 16) - vaddr != manifest["ghidra_image_base"]:
+                failures.append(f"candidate address-base mismatch: {site['name']}")
     except (ValueError, KeyError, struct.error) as exc:
         failures.append(str(exc))
     return failures

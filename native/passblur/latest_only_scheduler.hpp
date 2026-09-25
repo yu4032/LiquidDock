@@ -95,4 +95,48 @@ private:
     std::unordered_map<const void*, std::shared_ptr<State>> registry_;
 };
 
+// The original std::function closure is cloned while bgDrawPassBlur moves
+// through SmallVector. Its allocation address is not a stable job key. Both
+// copies retain the same promise shared state, so a verified native adapter
+// can pass that state address here without changing the 0x208 closure layout.
+// The adapter must remove the record on every normal completion path.
+class JobRegistry {
+public:
+    bool registerInstance(const void* identity) { return scheduler_.registerInstance(identity); }
+    bool unregisterInstance(const void* identity) { return scheduler_.unregisterInstance(identity); }
+
+    bool capture(const void* promiseState, const void* passBlurIdentity) {
+        if (!promiseState) return false;
+        std::lock_guard<std::mutex> guard(jobsMutex_);
+        // Allocate the job record *before* advancing generation. Otherwise
+        // an allocation failure could stale the previous job with no newer
+        // job actually in the queue.
+        auto [it, inserted] = jobs_.emplace(promiseState, LatestOnlyScheduler::Job{});
+        if (!inserted) return false;
+        auto job = scheduler_.submit(passBlurIdentity);
+        if (!job) {
+            jobs_.erase(it);
+            return false;
+        }
+        it->second = std::move(job);
+        return true;
+    }
+
+    LatestOnlyScheduler::Job find(const void* promiseState) const {
+        std::lock_guard<std::mutex> guard(jobsMutex_);
+        auto it = jobs_.find(promiseState);
+        return it == jobs_.end() ? LatestOnlyScheduler::Job{} : it->second;
+    }
+
+    bool erase(const void* promiseState) {
+        std::lock_guard<std::mutex> guard(jobsMutex_);
+        return jobs_.erase(promiseState) == 1;
+    }
+
+private:
+    LatestOnlyScheduler scheduler_;
+    mutable std::mutex jobsMutex_;
+    std::unordered_map<const void*, LatestOnlyScheduler::Job> jobs_;
+};
+
 } // namespace liquiddock::passblur
