@@ -22,7 +22,7 @@ LiquidDock is an LSPosed module for the **HyperOS tablet launcher**, focused on 
 
 Add a consistent Liquid Glass look to the Dock, workspace icons, widgets, and folders. Blur, refraction, highlights, dispersion, corner radius, and other visual details can be adjusted from the settings app.
 
-Glass also follows dragged icons and widgets. The long-press shortcut menu can use a glass background as well, with an optional white text and line-icon mode for dark backgrounds.
+Glass also follows dragged icons and widgets. The long-press shortcut menu can use a glass background as well, with an optional white text and icon mode for dark backgrounds.
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
