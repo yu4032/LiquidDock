@@ -31,7 +31,7 @@ ld_submit_hook:
     ldp x4, x5, [sp, #0x20]
     ldp x6, x7, [sp, #0x30]
     add sp, sp, #0x40
-    b ORIG_SUBMIT_CONT
+    .inst 0x17ebfe5a // b 0x54eba4 when blob is placed at 0xa4f200
 .size ld_submit_hook, .-ld_submit_hook
 
 .global ld_closure_hook
@@ -51,8 +51,8 @@ ld_closure_hook:
     ldr x9, [sp, #0x08]
     str wzr, [x9, #0x20]
 
-    adrp x10, STATE_BASE
-    add x10, x10, :lo12:STATE_BASE
+    .inst 0xd503201f // nop
+    .inst 0x1030ec8a // adr x10, 0xab1000
     mrs x11, TPIDR_EL0
     str x11, [x10, #STATE_STALE_TPIDR]
     str x1,  [x10, #STATE_STALE_PASSBLUR]
@@ -61,7 +61,7 @@ ld_closure_hook:
     ldr x0, [sp, #0x08]
     stp d15, d14, [sp, #-0xa0]!
     adr x30, ld_closure_after
-    b ORIG_CLOSURE_CONT
+    .inst 0x17ec27ca // b 0x5591b4
 
 ld_closure_after:
     ldr w9, [sp, #0x14]
@@ -71,8 +71,8 @@ ld_closure_after:
     ldr w11, [sp, #0x10]
     str w11, [x10, #0x20]
 
-    adrp x10, STATE_BASE
-    add x10, x10, :lo12:STATE_BASE
+    .inst 0xd503201f // nop
+    .inst 0x1030eaca // adr x10, 0xab1000
     stp xzr, xzr, [x10, #STATE_STALE_TPIDR]
 3:
     ldp x30, x10, [sp, #0x00]
@@ -83,8 +83,8 @@ ld_closure_after:
 .global ld_dequeue_hook
 .type ld_dequeue_hook,%function
 ld_dequeue_hook:
-    adrp x9, STATE_BASE
-    add x9, x9, :lo12:STATE_BASE
+    .inst 0xd503201f // nop
+    .inst 0x1030ea09 // adr x9, 0xab1000
     ldr x10, [x9, #STATE_STALE_TPIDR]
     cbz x10, 4f
     mrs x11, TPIDR_EL0
@@ -96,7 +96,7 @@ ld_dequeue_hook:
     ret
 4:
     sub sp, sp, #0xa0
-    b ORIG_DEQUEUE_CONT
+    .inst 0x17e74e36 // b 0x422bc4
 .size ld_dequeue_hook, .-ld_dequeue_hook
 
 .global ld_settexture_hook
@@ -110,13 +110,13 @@ ld_settexture_hook:
     ldp x0, x1, [sp, #0x00]
     ldr x30, [sp, #0x10]
     add sp, sp, #0x20
-    b ORIG_SETTEX_CONT
+    .inst 0x17e74b89 // b 0x422134
 .size ld_settexture_hook, .-ld_settexture_hook
 
 .type ld_lock,%function
 ld_lock:
-    adrp x9, STATE_BASE
-    add x9, x9, :lo12:STATE_BASE
+    .inst 0xd503201f // nop
+    .inst 0x1030e749 // adr x9, 0xab1000
 5:
     ldaxr w10, [x9]
     cbnz w10, 6f
