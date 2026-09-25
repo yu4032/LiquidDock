@@ -182,8 +182,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     // callback message per producer frame; if GL work is performed on that same looper, those
     // callback messages can become a FIFO backlog ahead of the newest image. The signal looper
     // only marks latest-state dirty and allows at most one GL render runnable to be pending.
-    private final AtomicBoolean producerRenderScheduled = new AtomicBoolean(false);
-    private final AtomicBoolean producerRenderDirty = new AtomicBoolean(false);
+    private final LatestFrameRenderGate producerRenderGate = new LatestFrameRenderGate();
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
@@ -656,8 +655,9 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount.incrementAndGet();
             frameAvailable.set(true);
-            producerRenderDirty.set(true);
-            scheduleLatestProducerRender();
+            if (producerRenderGate.request()) {
+                renderHandler.post(this::runLatestProducerRender);
+            }
         }, frameSignalHandler);
     }
 
@@ -667,19 +667,12 @@ final class Miuix307PassBlurTextureView extends TextureView
      * frame is queued or rendering collapse into one follow-up draw; no historical callback is
      * replayed through the GL pipeline.
      */
-    private void scheduleLatestProducerRender() {
-        if (shuttingDown || !producerRenderScheduled.compareAndSet(false, true)) return;
-        renderHandler.post(this::runLatestProducerRender);
-    }
-
     private void runLatestProducerRender() {
-        producerRenderDirty.set(false);
+        producerRenderGate.beginRender();
         try {
             drawLatestFrame(true);
         } finally {
-            producerRenderScheduled.set(false);
-            if (!shuttingDown && producerRenderDirty.get()
-                    && producerRenderScheduled.compareAndSet(false, true)) {
+            if (!shuttingDown && producerRenderGate.finishRenderAndNeedsFollowUp()) {
                 renderHandler.post(this::runLatestProducerRender);
             }
         }
