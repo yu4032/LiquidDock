@@ -127,44 +127,46 @@ public final class PresetManager {
             putSchemaDefault(values, key);
         }
 
-        // Explicit preset inclusions/deltas only. IF_PRESENT keys stay absent unless they were
-        // historically part of the preset; values that differ from UI defaults are typed here.
+        // Preserve the existing boolean preset behavior. Only numeric defaults are aligned
+        // with the supplied profile; feature enable/disable defaults are intentionally unchanged.
         put(values, ConfigSchema.Divider.ENABLED, false);
-
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_LEFT, 30f);
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_RIGHT, 30f);
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_TOP, -35f);
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_MARGIN_BOTTOM, 20f);
-        putDp(values, ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM, 100f);
-        putDp(values, ConfigSchema.Grid.PORTRAIT_ROW_GAP, -16f);
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, 30f);
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE, 20f);
-        putDp(values, ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE, 10.3f);
-        putDp(values, ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, -8.8f);
-        putDp(values, ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, 11.8f);
-
         put(values, ConfigSchema.Glass.ENABLED, true);
-        put(values, ConfigSchema.Glass.CAPTURE_FPS, 30);
-        put(values, ConfigSchema.Glass.CAPTURE_SCALE, 100);
+        put(values, ConfigSchema.Dock.SQUIRCLE, true);
+        put(values, ConfigSchema.Dock.FILL_DIFF, true);
+
+        // DP_TENTHS sidecars preserve fractional defaults that ConfigSchema's integer metadata
+        // cannot represent exactly.
+        putDp(values, ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, -9.4f);
+        putDp(values, ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, 11.8f);
+        putDp(values, ConfigSchema.Dock.CORNER_OFFSET, 3.4f);
+        putDp(values, ConfigSchema.Dock.STANDARD_STROKE_WIDTH, 0.9f);
+        putDp(values, ConfigSchema.Dock.SHADOW_SIZE, 4.7f);
+        putDp(values, ConfigSchema.Glass.ICON_CORNER_RADIUS, 16.5f);
+        putDp(values, ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET, -0.5f);
+        putDp(values, ConfigSchema.Glass.BLUR, 7.2f);
         putDp(values, ConfigSchema.Glass.LENS_REFRACTION, 1.3f);
         putDp(values, ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING, 1.8f);
+        putDp(values, ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, 26.5f);
+        putDp(values, ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 41.1f);
+        putDp(values, ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 41.2f);
+        putDp(values, ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, 60.8f);
 
-        put(values, ConfigSchema.Dock.STROKE_RED, 180);
-        put(values, ConfigSchema.Dock.STROKE_GREEN, 180);
-        put(values, ConfigSchema.Dock.STROKE_BLUE, 180);
-        put(values, ConfigSchema.Dock.STROKE_ALPHA, 119);
-        put(values, ConfigSchema.Dock.SQUIRCLE, true);
-        put(values, ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT, 65);
-        put(values, ConfigSchema.Dock.FILL_DIFF, true);
-        put(values, ConfigSchema.Dock.SHADOW_ALPHA, 64);
-        putDp(values, ConfigSchema.Dock.HEIGHT_OFFSET, 2.2f);
-        putDp(values, ConfigSchema.Dock.CORNER_OFFSET, 1f);
-        putDp(values, ConfigSchema.Dock.BLUR_CORNER_OFFSET, -1f);
-        putDp(values, ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET, 0f);
-        putDp(values, ConfigSchema.Dock.SHADOW_RADIUS, 10f);
-        putDp(values, ConfigSchema.Dock.SHADOW_SIZE, 4.7f);
-        putDp(values, ConfigSchema.Dock.SHADOW_Y, 0f);
-        putDp(values, ConfigSchema.Dock.BOTTOM_OFFSET, -2f);
+        // Numeric IF_PRESENT settings explicitly present in the supplied profile.
+        put(values, ConfigSchema.Divider.WIDTH_DP, 10);
+        put(values, ConfigSchema.Divider.HEIGHT_SCALE, 71);
+        put(values, ConfigSchema.Divider.Y_OFFSET_DP, 0);
+        put(values, ConfigSchema.Divider.COLOR_RED, 255);
+        put(values, ConfigSchema.Divider.COLOR_GREEN, 255);
+        put(values, ConfigSchema.Divider.COLOR_BLUE, 255);
+        put(values, ConfigSchema.Divider.ALPHA, 128);
+        put(values, ConfigSchema.Glass.DIALOG_BLUR, 6);
+        put(values, ConfigSchema.Glass.DIALOG_TINT_BLUE, 0);
+        put(values, ConfigSchema.Glass.DIALOG_TINT_ALPHA, 0);
+        put(values, ConfigSchema.Glass.FOLDER_CORNER_RADIUS, 0);
+        put(values, ConfigSchema.Gboard.TINT_RED, 10);
+        put(values, ConfigSchema.Gboard.TINT_GREEN, 15);
+        put(values, ConfigSchema.Gboard.TINT_BLUE, 15);
+        put(values, ConfigSchema.Gboard.TINT_ALPHA, 126);
         return Collections.unmodifiableMap(values);
     }
 
