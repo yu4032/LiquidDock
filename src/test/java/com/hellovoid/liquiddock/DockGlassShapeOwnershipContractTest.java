@@ -14,6 +14,8 @@ public class DockGlassShapeOwnershipContractTest {
             Path.of("src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java");
     private static final Path DOCK_COMPOSITOR =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java");
+    private static final Path DOCK_ITEM_NODE =
+            Path.of("src/main/java/com/hellovoid/liquiddock/DockGlassItemNode.java");
     private static final Path DOCK_HOST =
             Path.of("src/main/java/com/hellovoid/liquiddock/DockLiquidGlassHostView.java");
     private static final Path PRISMAL_RENDERER =
@@ -72,6 +74,18 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(guard.contains("vec2 rasterScale = (safeGlassSize + vec2(4.0)) / safeGlassSize;"));
         assertTrue(guard.contains("vec2 rasterPosition = a_position * rasterScale;"));
         assertTrue(guard.contains("v_shapeCoord = rasterPosition;"));
+    }
+
+    @Test
+    public void dockIconFingerprintIncludesHotSeatsOwnershipRootGeometry() throws Exception {
+        String node = Files.readString(DOCK_ITEM_NODE);
+
+        assertTrue(node.contains("return mixViewGeometry(hash, dockRoot);"));
+        assertTrue(node.contains("view.getLeft()"));
+        assertTrue(node.contains("view.getRight()"));
+        assertTrue(node.contains("view.getTranslationX()"));
+        assertTrue(node.contains("view.getScaleX()"));
+        assertTrue(node.contains("view.getPivotX()"));
     }
 
     @Test
