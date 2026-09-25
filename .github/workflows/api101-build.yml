@@ -6,6 +6,7 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
+      - ci/dock-shortcut-popup-early-sampling-v245
   pull_request:
     branches: [ main ]
   workflow_dispatch:
