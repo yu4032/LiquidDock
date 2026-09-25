@@ -178,11 +178,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final Handler frameSignalHandler;
     private final Handler mainHandler;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-    private final AtomicBoolean renderScheduled = new AtomicBoolean(false);
-    private final AtomicBoolean renderDirty = new AtomicBoolean(false);
-    private final AtomicBoolean producerRenderDirty = new AtomicBoolean(false);
     private final AtomicLong producerFrameCount = new AtomicLong();
-    private final AtomicLong coalescedRenderRequests = new AtomicLong();
+    private final LatestFrameRenderGate latestRenderGate = new LatestFrameRenderGate();
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
@@ -690,24 +687,17 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     private void requestLatestRender(boolean fromProducer) {
         if (shuttingDown) return;
-        renderDirty.set(true);
-        if (fromProducer) producerRenderDirty.set(true);
-        if (!renderScheduled.compareAndSet(false, true)) {
-            coalescedRenderRequests.incrementAndGet();
-            return;
+        if (latestRenderGate.request(fromProducer)) {
+            renderHandler.post(this::runLatestRender);
         }
-        renderHandler.post(this::runLatestRender);
     }
 
     private void runLatestRender() {
-        boolean producerTriggered = producerRenderDirty.getAndSet(false);
-        renderDirty.set(false);
+        boolean producerTriggered = latestRenderGate.beginRun();
         try {
             drawLatestFrame(producerTriggered);
         } finally {
-            renderScheduled.set(false);
-            if (!shuttingDown && renderDirty.get()
-                    && renderScheduled.compareAndSet(false, true)) {
+            if (!shuttingDown && latestRenderGate.finishRunAndClaimFollowUp()) {
                 renderHandler.post(this::runLatestRender);
             }
         }
@@ -827,7 +817,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (elapsed < 5000L) return;
         float seconds = Math.max(0.001f, elapsed / 1000f);
         long producerFrames = producerFrameCount.getAndSet(0L);
-        long coalesced = coalescedRenderRequests.getAndSet(0L);
+        long coalesced = latestRenderGate.takeCoalescedRequestCount();
         float producerFps = producerFrames / seconds;
         float drawFps = renderedFrameCount / seconds;
         DockGlassSceneSnapshot scene = dockCompositor.latestScene();
