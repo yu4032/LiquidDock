@@ -56,6 +56,21 @@ public final class ConfigMigration {
         migrateCornersToDp(safeDensity, preferences);
         migrateDockDimensionsToDp(safeDensity, preferences);
         migrateAxisDistances(preferences);
+        seedDefaultProfileIfEmpty(preferences);
+    }
+
+    private static void seedDefaultProfileIfEmpty(SharedPreferences sp) {
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (sp.contains(key.name())) return;
+            if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS
+                    && sp.contains(key.name() + "_tenths")) {
+                return;
+            }
+        }
+        for (String key : sp.getAll().keySet()) {
+            if (key.startsWith("third_party_glass.")) return;
+        }
+        PresetManager.applyDefault(sp.edit());
     }
 
     private static void removeRetiredGlassPreferences(SharedPreferences sp) {

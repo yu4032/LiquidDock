@@ -36,39 +36,32 @@ public class UserFacingPreferenceSchemaTest {
     }
 
     @Test
-    public void defaultPresetIsDerivedFromAlwaysSchemaKeysOnly() {
+    public void defaultConfigurationUsesOnlyRegisteredOrBoundedProfileKeys() {
         Map<String, Object> defaults = PresetManager.defaultValues();
         Set<String> allowedPersistedNames = new HashSet<>();
 
         for (ConfigKey<?> key : ConfigSchema.all()) {
-            if (key.exportMode() != ConfigKey.ExportMode.ALWAYS) continue;
             allowedPersistedNames.add(key.name());
-            assertTrue("default preset missing ALWAYS schema key: " + key.name(),
-                    defaults.containsKey(key.name()));
             if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
                 allowedPersistedNames.add(key.name() + "_tenths");
-                assertTrue("default preset missing DP sidecar: " + key.name(),
-                        defaults.containsKey(key.name() + "_tenths"));
+            }
+            if (key.exportMode() == ConfigKey.ExportMode.ALWAYS) {
+                assertTrue("default configuration missing ALWAYS schema key: " + key.name(),
+                        defaults.containsKey(key.name()));
             }
         }
 
-        // Historical explicit inclusion: the default preset reset the divider master switch,
-        // but optional divider geometry/color keys must remain absent until the user sets them.
-        allowedPersistedNames.add(ConfigSchema.Divider.ENABLED.name());
-        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Divider.ENABLED.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.WIDTH_DP.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.HEIGHT_SCALE.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.Y_OFFSET_DP.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.COLOR_RED.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.COLOR_GREEN.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.COLOR_BLUE.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Divider.ALPHA.name()));
-        assertFalse(defaults.containsKey(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name()));
-
         for (String name : defaults.keySet()) {
-            assertTrue("default preset contains schema-external or optional key: " + name,
-                    allowedPersistedNames.contains(name));
+            assertTrue("default configuration contains unmanaged key: " + name,
+                    allowedPersistedNames.contains(name)
+                            || name.startsWith("third_party_glass."));
         }
+
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name()));
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name()));
+        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Debug.LOGGING.name()));
     }
 
     @Test
@@ -92,5 +85,9 @@ public class UserFacingPreferenceSchemaTest {
                 source.contains("prefs.edit().putInt(\""));
         assertFalse("settings must not write literal string keys directly",
                 source.contains("prefs.edit().putString(\""));
+        assertTrue("settings must expose the single default configuration",
+                source.contains("\"应用默认配置\""));
+        assertFalse("settings must not expose a second tuned/default preset",
+                source.contains("\"应用调校预设\"") || source.contains("applyTunedPreset"));
     }
 }
