@@ -24,6 +24,20 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("MotionEvent.ACTION_DOWN"));
         assertTrue(hook.contains("lastDownOnOccupiedCell.invoke(owner)"));
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig)"));
+
+        // Dock has its own window/touch pipeline and never reaches CellLayout. Prewarm on the
+        // routed Dock ACTION_DOWN, then latch at HotSeatsListContent.onLongClick() before either
+        // direct showShortcutMenu(view) or Dock DragController.startDrag().
+        assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
+        assertTrue(hook.contains(
+                "getDeclaredMethod(\"dispatchTouchEventFromHome\", MotionEvent.class)"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.armTouch(dockRoot, glassConfig)"));
+        assertTrue(hook.contains("com.miui.home.launcher.hotseats.HotSeatsListContent"));
+        assertTrue(hook.contains("getDeclaredMethod(\"onLongClick\", View.class)"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.latchBeforeDrag(dockRoot)"));
+        assertTrue(hook.contains("dock pre-show backdrop latch="));
+        assertTrue(hook.contains("cancelAttemptIfPopupNotBound"));
+
         assertTrue(hook.contains("com.miui.home.launcher.Launcher"));
         assertTrue(hook.contains("com.miui.home.launcher.CellLayout$CellInfo"));
         assertTrue(hook.contains("getDeclaredMethod(\"dragSingleItem\", cellInfoClass, View.class)"));
