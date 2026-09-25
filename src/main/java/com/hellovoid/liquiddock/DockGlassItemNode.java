@@ -40,23 +40,14 @@ final class DockGlassItemNode {
         if (cursor == null || !belongsTo(dockRoot)) return Long.MIN_VALUE;
         long hash = 0xcbf29ce484222325L;
         while (cursor != null && cursor != dockRoot) {
-            hash = mix(hash, System.identityHashCode(cursor));
-            hash = mix(hash, cursor.getVisibility());
-            hash = mix(hash, cursor.getLeft()); hash = mix(hash, cursor.getTop());
-            hash = mix(hash, cursor.getRight()); hash = mix(hash, cursor.getBottom());
-            hash = mix(hash, cursor.getScrollX()); hash = mix(hash, cursor.getScrollY());
-            hash = mix(hash, Float.floatToIntBits(cursor.getTranslationX()));
-            hash = mix(hash, Float.floatToIntBits(cursor.getTranslationY()));
-            hash = mix(hash, Float.floatToIntBits(cursor.getScaleX()));
-            hash = mix(hash, Float.floatToIntBits(cursor.getScaleY()));
-            hash = mix(hash, Float.floatToIntBits(cursor.getRotation()));
-            hash = mix(hash, Float.floatToIntBits(cursor.getAlpha()));
+            hash = mixViewGeometry(hash, cursor);
             ViewParent parent = cursor.getParent();
             cursor = parent instanceof View ? (View) parent : null;
         }
-        hash = mix(hash, dockRoot.getVisibility());
-        hash = mix(hash, Float.floatToIntBits(dockRoot.getAlpha()));
-        return hash;
+        // HotSeats itself can resize/recenter when items are added or removed while every child
+        // keeps the same local coordinates. captureStatic() uses transformMatrixToGlobal(), so
+        // the cache fingerprint must include the ownership root that participates in that matrix.
+        return mixViewGeometry(hash, dockRoot);
     }
 
     LauncherGlassGeometry.Snapshot capture(View ownershipRoot, Matrix outputInverse,
@@ -149,6 +140,23 @@ final class DockGlassItemNode {
         return LauncherGlassGeometry.resolve(framebufferWidth, framebufferHeight,
                 x, y, x + width, y + height,
                 LauncherGlassBoundsPolicy.capRadius(radius, width, height));
+    }
+
+    private static long mixViewGeometry(long hash, View view) {
+        hash = mix(hash, System.identityHashCode(view));
+        hash = mix(hash, view.getVisibility());
+        hash = mix(hash, view.getLeft()); hash = mix(hash, view.getTop());
+        hash = mix(hash, view.getRight()); hash = mix(hash, view.getBottom());
+        hash = mix(hash, view.getScrollX()); hash = mix(hash, view.getScrollY());
+        hash = mix(hash, Float.floatToIntBits(view.getTranslationX()));
+        hash = mix(hash, Float.floatToIntBits(view.getTranslationY()));
+        hash = mix(hash, Float.floatToIntBits(view.getScaleX()));
+        hash = mix(hash, Float.floatToIntBits(view.getScaleY()));
+        hash = mix(hash, Float.floatToIntBits(view.getPivotX()));
+        hash = mix(hash, Float.floatToIntBits(view.getPivotY()));
+        hash = mix(hash, Float.floatToIntBits(view.getRotation()));
+        hash = mix(hash, Float.floatToIntBits(view.getAlpha()));
+        return hash;
     }
 
     private static Drawable iconDrawable(View view) {
