@@ -40,6 +40,37 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(hook.contains("attachToExternalMaterial"));
     }
 
+    @Test public void shortcutMenuCapturesWorkspaceAndDockBeforeLongPressWithoutChangingRenderer()
+            throws Exception {
+        String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
+        String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
+        String session = Files.readString(MAIN.resolve("ShortcutPopupGlassSession.java"));
+        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+
+        assertTrue(hook.contains("com.miui.home.launcher.CellLayout"));
+        assertTrue(hook.contains("lastDownOnOccupiedCell"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareEarly("));
+        assertTrue(hook.contains("com.miui.home.launcher.dock.DockContainerView"));
+        assertTrue(hook.contains("dispatchTouchEventFromHome"));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareDockEarly("));
+        assertTrue(hook.contains("ShortcutPopupGlassCoordinator.prepareIfNeeded("));
+
+        assertTrue(coordinator.contains("final WeakReference<View> earlyOwnerRef"));
+        assertTrue(coordinator.contains("earlyOwner == authorityOwner"));
+        assertTrue(coordinator.contains("state.session.hasFrozenBackdrop()"));
+        assertTrue(coordinator.contains("prepareInternal(captureRoot, glassConfig, false, null"));
+        assertTrue(coordinator.contains("state.earlyOwnerRef.get() == decorView"));
+        assertTrue(coordinator.contains("cancelDockEarlyIfUnused"));
+
+        assertTrue(session.contains("void requestInitialCapture()"));
+        assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
+        assertTrue(layer.contains("FAST_DISMISS_FADE_MS = 90L"));
+        assertFalse(session.contains("beginPrewarm()"));
+        assertFalse(session.contains("latchPreDragBackdrop()"));
+        assertFalse(hook.contains("HotSeatsListContent"));
+        assertFalse(hook.contains("dragSingleItem"));
+    }
+
     @Test public void popupDetachDefersCleanupOutsideVendorRemoveViewTraversal() throws Exception {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         assertTrue(coordinator.contains("postDismissCleanup(state)"));
