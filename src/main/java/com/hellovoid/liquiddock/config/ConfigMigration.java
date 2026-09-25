@@ -97,7 +97,7 @@ public final class ConfigMigration {
             return;
         }
 
-        Map<String, Object> defaults = PresetManager.defaultValues();
+        Map<String, Object> defaults = PresetManager.migrationValues();
         boolean glassEnabled = sp.contains("liquid_glass")
                 ? sp.getBoolean("liquid_glass", true)
                 : Boolean.TRUE.equals(defaults.get("liquid_glass"));
