@@ -8,6 +8,7 @@ if [ -f "$ORIGINAL" ]; then
     if [ -n "$VALUE" ]; then
         resetprop -n "$PROP" "$VALUE"
     else
-        resetprop -n --delete "$PROP"
+        # The decompiled PassBlur constructor uses 30 ms when the property is absent.
+        resetprop -n "$PROP" "30"
     fi
 fi
