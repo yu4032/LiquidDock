@@ -11,6 +11,8 @@ final class MiuixShortcutMenuGlassHook {
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
     private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
     private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
+    private static final String DOCK_CONTAINER_VIEW =
+            "com.miui.home.launcher.dock.DockContainerView";
     private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
     private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
     private static boolean installed;
@@ -37,6 +39,7 @@ final class MiuixShortcutMenuGlassHook {
         try {
             if (popupGlassEnabled) {
                 installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
+                installEarlyDockCaptureHook(classLoader, glassConfig);
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object itemInfo = args.length > 0 ? args[0] : null;
@@ -49,12 +52,13 @@ final class MiuixShortcutMenuGlassHook {
                             // Dock has no early state here and therefore falls back to the exact
                             // published prepare() lifecycle through prepareIfNeeded().
                             ShortcutPopupGlassCoordinator.prepareIfNeeded(
-                                    launcherRoot, glassConfig);
+                                    ownerView, launcherRoot, glassConfig);
                         }
                         Object result = chain.proceed(args);
                         if (itemInfo == null) {
                             launcherRoot.postOnAnimation(
-                                    () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
+                                    () -> ShortcutPopupGlassCoordinator.cancelPending(
+                                            ownerView, launcherRoot));
                         }
                         return result;
                     }
@@ -124,6 +128,41 @@ final class MiuixShortcutMenuGlassHook {
             return result;
         });
         MainHook.log(TAG + " early Workspace sampling hook installed");
+    }
+
+    private static void installEarlyDockCaptureHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
+        Class<?> dockContainerClass = Class.forName(DOCK_CONTAINER_VIEW, false, classLoader);
+        Method dispatchTouchEventFromHome =
+                dockContainerClass.getDeclaredMethod(
+                        "dispatchTouchEventFromHome", MotionEvent.class);
+        dispatchTouchEventFromHome.setAccessible(true);
+
+        HookUtil.hook(dispatchTouchEventFromHome, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
+                    ? (MotionEvent) args[0] : null;
+            Object owner = chain.getThisObject();
+
+            Object result = chain.proceed(args);
+
+            if (owner instanceof View && event != null) {
+                View dockMenuOwner = (View) owner;
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    // DockControllerImpl routes home touches through the same getMDockRootView()
+                    // instance that later executes showShortcutMenu(). Bind early capture to that
+                    // owner identity rather than assuming getRootView() will remain stable.
+                    ShortcutPopupGlassCoordinator.prepareDockEarly(
+                            dockMenuOwner, glassConfig);
+                } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused(dockMenuOwner);
+                }
+            }
+            return result;
+        });
+        MainHook.log(TAG + " early Dock sampling hook installed");
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
