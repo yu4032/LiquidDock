@@ -16,10 +16,81 @@ final class ShortcutPopupGlassCoordinator {
     private ShortcutPopupGlassCoordinator() {}
 
     static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        releaseLocked("prepare-replace");
+        prepareInternal(captureRoot, glassConfig, false, null, "prepare-replace");
+    }
+
+    static synchronized void prepareEarly(
+            View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
+    }
+
+    static synchronized void prepareDockEarly(
+            View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
+        if (dockMenuOwner == null) return;
+        prepareInternal(
+                dockMenuOwner.getRootView(),
+                glassConfig,
+                true,
+                dockMenuOwner,
+                "dock-early-prepare-replace");
+    }
+
+    static synchronized void prepareIfNeeded(
+            View authorityOwner,
+            View captureRoot,
+            LiquidDockConfig.Glass glassConfig) {
+        State state = current;
+        if (state != null && !state.released && state.early) {
+            View earlyOwner = state.earlyOwnerRef.get();
+            boolean workspaceMatch = earlyOwner == null
+                    && state.captureRootRef.get() == captureRoot;
+            boolean dockMatch = earlyOwner != null
+                    && earlyOwner == authorityOwner
+                    && state.session != null
+                    && state.session.hasFrozenBackdrop();
+            if (workspaceMatch || dockMatch) {
+                state.requestStarted = true;
+                return;
+            }
+        }
+        prepareInternal(captureRoot, glassConfig, false, null, "prepare-replace");
+        state = current;
+        if (state != null && state.captureRootRef.get() == captureRoot) {
+            state.requestStarted = true;
+        }
+    }
+
+    static synchronized void cancelEarlyIfUnused(View captureRoot) {
+        State state = current;
+        if (state == null || state.released || !state.early
+                || state.earlyOwnerRef.get() != null
+                || state.captureRootRef.get() != captureRoot
+                || state.requestStarted || state.contentRef.get() != null) {
+            return;
+        }
+        releaseLocked("early-touch-ended-unused");
+    }
+
+    static synchronized void cancelDockEarlyIfUnused(View dockMenuOwner) {
+        State state = current;
+        if (state == null || state.released || !state.early
+                || state.earlyOwnerRef.get() != dockMenuOwner
+                || state.requestStarted || state.contentRef.get() != null) {
+            return;
+        }
+        releaseLocked("dock-early-touch-ended-unused");
+    }
+
+    private static void prepareInternal(
+            View captureRoot,
+            LiquidDockConfig.Glass glassConfig,
+            boolean early,
+            View earlyOwner,
+            String replaceReason) {
+        releaseLocked(replaceReason);
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
-        State state = new State(captureRoot, glassConfig);
+        State state = new State(captureRoot, glassConfig, early, earlyOwner);
         current = state;
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
@@ -62,7 +133,13 @@ final class ShortcutPopupGlassCoordinator {
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
-        if (state == null || state.released || state.captureRootRef.get() != liveRoot
+        boolean rootMatches = state != null && state.captureRootRef.get() == liveRoot;
+        boolean dockOwnerMatches = state != null
+                && state.earlyOwnerRef.get() == decorView
+                && state.requestStarted
+                && state.session != null
+                && state.session.hasFrozenBackdrop();
+        if (state == null || state.released || (!rootMatches && !dockOwnerMatches)
                 || popupView == null || contentView == null || !(decorView instanceof ViewGroup)) {
             return false;
         }
@@ -183,18 +260,21 @@ final class ShortcutPopupGlassCoordinator {
         }
     }
 
-    static synchronized void cancelPending(View captureRoot) {
+    static synchronized void cancelPending(View authorityOwner, View captureRoot) {
         State state = current;
-        if (state != null && state.captureRootRef.get() == captureRoot
-                && state.contentRef.get() == null) {
-            releaseLocked("query-cancelled");
-        }
+        if (state == null || state.contentRef.get() != null) return;
+        boolean rootMatches = state.captureRootRef.get() == captureRoot;
+        boolean ownerMatches = state.earlyOwnerRef.get() == authorityOwner;
+        if (rootMatches || ownerMatches) releaseLocked("query-cancelled");
     }
 
     static synchronized void releasePopupIfDetached(View decorView, View popupView) {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
-        if (state == null || state.captureRootRef.get() != liveRoot) return;
+        if (state == null) return;
+        boolean rootMatches = state.captureRootRef.get() == liveRoot;
+        boolean ownerMatches = state.earlyOwnerRef.get() == decorView;
+        if (!rootMatches && !ownerMatches) return;
         if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
 
@@ -264,6 +344,8 @@ final class ShortcutPopupGlassCoordinator {
     private static final class State {
         final WeakReference<View> captureRootRef;
         final LiquidDockConfig.Glass glassConfig;
+        final boolean early;
+        final WeakReference<View> earlyOwnerRef;
         WeakReference<View> popupDecorRef = new WeakReference<>(null);
         WeakReference<View> popupRef = new WeakReference<>(null);
         WeakReference<View> contentRef = new WeakReference<>(null);
@@ -273,13 +355,20 @@ final class ShortcutPopupGlassCoordinator {
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;
+        boolean requestStarted;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
         boolean released;
 
-        State(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        State(
+                View captureRoot,
+                LiquidDockConfig.Glass glassConfig,
+                boolean early,
+                View earlyOwner) {
             captureRootRef = new WeakReference<>(captureRoot);
             this.glassConfig = glassConfig;
+            this.early = early;
+            earlyOwnerRef = new WeakReference<>(earlyOwner);
         }
     }
 }
