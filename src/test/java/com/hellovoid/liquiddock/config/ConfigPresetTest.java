@@ -56,9 +56,13 @@ public class ConfigPresetTest {
         assertEquals(Boolean.FALSE, tuned.get("dock_customization"));
         assertEquals(Boolean.TRUE, tuned.get("dock_divider_enabled"));
         assertEquals(Boolean.TRUE, tuned.get("liquid_glass"));
-        assertEquals(Boolean.TRUE, tuned.get("liquid_security_center_glass"));
-        assertEquals(Boolean.TRUE, tuned.get("liquid_systemui_handle_menu_glass"));
+        assertEquals(Boolean.FALSE, tuned.get("liquid_security_center_glass"));
+        assertEquals(Boolean.FALSE, tuned.get("liquid_systemui_handle_menu_glass"));
         assertEquals(Boolean.TRUE, tuned.get("liquid_shortcut_popup_glass"));
+        assertEquals("Security Center glass must remain explicit opt-in",
+                Boolean.FALSE, tuned.get("liquid_security_center_glass"));
+        assertEquals("SystemUI handle-menu glass must remain explicit opt-in",
+                Boolean.FALSE, tuned.get("liquid_systemui_handle_menu_glass"));
         assertEquals(Boolean.TRUE, tuned.get("liquid_dialog_dark_mode"));
         assertEquals(Boolean.FALSE, tuned.get("liquid_icon_glass"));
         assertEquals(Boolean.TRUE, tuned.get("liquid_functional_dock_icon_glass"));
