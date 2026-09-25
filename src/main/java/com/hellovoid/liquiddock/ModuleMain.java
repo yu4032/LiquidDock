@@ -122,6 +122,11 @@ public final class ModuleMain extends XposedModule {
             Launcher450IconSizeHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
                     runtimeConfig.grid.iconSizePercent);
+            Folder2x1Hook.install(
+                    classLoader,
+                    runtimeConfig.enabled && runtimeConfig.grid.os4Folder2x1,
+                    runtimeConfig.grid.iconSizeEnabled,
+                    runtimeConfig.grid.iconSizePercent);
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
 
