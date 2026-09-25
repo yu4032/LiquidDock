@@ -1,4 +1,4 @@
-name: PassBlur KernelSU HybridMount source
+name: PassBlur KernelSU HybridMount
 
 on:
   pull_request:
@@ -9,12 +9,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate HybridMount source
+      - name: Validate source manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -32,31 +32,102 @@ jobs:
 
           grep -F 'id=liquiddock_passblur_native' "$root/module.prop"
           grep -F 'Hybrid Mount' "$root/customize.sh"
-          grep -F '7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f' \
-            "$root/customize.sh"
+          grep -F 'apply_blob 4331524' "$root/customize.sh"
           grep -F '(0x421804, bytes.fromhex("80018052"))' \
             "$root/build_patched_surfaceflinger.py"
 
-      - name: Validate sparse patch manifest shape
+      - name: Emit installation patch blobs
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import ast
-          from pathlib import Path
+          root='native/passblur-kernelsu-hybridmount'
+          module='/tmp/LiquidDock-PassBlur-KernelSU-HybridMount'
 
-          path = Path('native/passblur-kernelsu-hybridmount/build_patched_surfaceflinger.py')
-          tree = ast.parse(path.read_text())
-          constants = {}
-          for node in tree.body:
-              if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                  target = node.targets[0]
-                  if isinstance(target, ast.Name) and isinstance(node.value, ast.Constant):
-                      constants[target.id] = node.value.value
+          mkdir -p "$module/patches"
+          python3 "$root/build_patched_surfaceflinger.py" \
+            --emit-patches "$module/patches"
 
-          assert constants['STOCK_SHA256'] == '407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32'
-          assert constants['PREVIOUS_SHA256'] == 'ef523f9d57ebe5c3af2ec39747b07ab6d70bd69165461e09ddc0fc8f13f5d563'
-          assert constants['PATCHED_SHA256'] == '7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f'
-          assert constants['EXPECTED_SIZE'] == 11577024
-          print('HybridMount source manifest verified')
+          test "$(stat -c %s "$module/patches/00421804.bin")" = 4
+          test "$(xxd -p "$module/patches/00421804.bin" | tr -d '\n')" = '80018052'
+
+          cp "$root/module.prop" "$module/module.prop"
+          cp "$root/customize.sh" "$module/customize.sh"
+          cp "$root/original.sha256" "$module/original.sha256"
+          cp "$root/previous.sha256" "$module/previous.sha256"
+          cp "$root/patched.sha256" "$module/patched.sha256"
+          chmod 0755 "$module/customize.sh"
+          chmod 0644 "$module/module.prop" \
+            "$module/original.sha256" "$module/previous.sha256" "$module/patched.sha256"
+
+      - name: Validate patch blob set
+        shell: bash
+        run: |
+          set -euo pipefail
+          module='/tmp/LiquidDock-PassBlur-KernelSU-HybridMount'
+          expected='
+          000000d0.bin
+          00000148.bin
+          00421804.bin
+          00421890.bin
+          0054f19c.bin
+          005592f0.bin
+          0055a040.bin
+          0055a0d8.bin
+          0055a278.bin
+          00a4f180.bin'
+          actual="$(find "$module/patches" -maxdepth 1 -type f -printf '%f\n' | sort)"
+          test "$actual" = "$(printf '%s\n' "$expected" | sed '/^[[:space:]]*$/d' | sed 's/^[[:space:]]*//' | sort)"
+
+      - name: Package flashable KernelSU module
+        shell: bash
+        run: |
+          set -euo pipefail
+          module='/tmp/LiquidDock-PassBlur-KernelSU-HybridMount'
+          out='out'
+          name='LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip'
+          mkdir -p "$out"
+
+          (
+            cd "$module"
+            zip -9 -r "$GITHUB_WORKSPACE/$out/$name" \
+              module.prop customize.sh original.sha256 previous.sha256 patched.sha256 patches
+          )
+
+          unzip -l "$out/$name"
+          sha256sum "$out/$name" | tee "$out/$name.sha256"
+
+          python3 - "$out/$name" <<'PY'
+          import sys, zipfile
+          required = {
+              'module.prop',
+              'customize.sh',
+              'original.sha256',
+              'previous.sha256',
+              'patched.sha256',
+              'patches/',
+              'patches/000000d0.bin',
+              'patches/00000148.bin',
+              'patches/00421804.bin',
+              'patches/00421890.bin',
+              'patches/0054f19c.bin',
+              'patches/005592f0.bin',
+              'patches/0055a040.bin',
+              'patches/0055a0d8.bin',
+              'patches/0055a278.bin',
+              'patches/00a4f180.bin',
+          }
+          with zipfile.ZipFile(sys.argv[1]) as zf:
+              actual = set(zf.namelist())
+          if actual != required:
+              raise SystemExit(f'unexpected module layout: {sorted(actual)}')
+          print('KernelSU installer-time patch ZIP verified')
           PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiquidDock-PassBlur-KernelSU-HybridMount
+          path: |
+            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip
+            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
