@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.view.MotionEvent;
 import android.view.View;
 
 import java.lang.reflect.Method;
@@ -9,6 +10,9 @@ final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
     private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
+    private static final String WORKSPACE = "com.miui.home.launcher.Workspace";
+    private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
+    private static final String CELL_INFO = "com.miui.home.launcher.CellLayout$CellInfo";
     private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
     private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
     private static boolean installed;
@@ -34,24 +38,22 @@ final class MiuixShortcutMenuGlassHook {
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             if (popupGlassEnabled) {
+                installPreDragCaptureHooks(classLoader, glassConfig);
+
+                // Query state is no longer allowed to start capture. It is already downstream of
+                // Launcher drag/edit-state mutation. Keep this hook only as the semantic cancel
+                // boundary for an abandoned async ShortcutMenu query.
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object itemInfo = args.length > 0 ? args[0] : null;
                     Object owner = chain.getThisObject();
-                    if (owner instanceof View) {
-                        View ownerView = (View) owner;
-                        View launcherRoot = ownerView.getRootView();
-                        if (itemInfo != null) {
-                            ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
-                        }
-                        Object result = chain.proceed(args);
-                        if (itemInfo == null) {
-                            launcherRoot.postOnAnimation(
-                                    () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
-                        }
-                        return result;
+                    Object result = chain.proceed(args);
+                    if (itemInfo == null && owner instanceof View) {
+                        View launcherRoot = ((View) owner).getRootView();
+                        launcherRoot.postOnAnimation(
+                                () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
                     }
-                    return chain.proceed(args);
+                    return result;
                 }, ITEM_INFO);
             }
 
@@ -80,6 +82,56 @@ final class MiuixShortcutMenuGlassHook {
             MainHook.log(TAG + " hook unavailable: " + error);
             return false;
         }
+    }
+
+    private static void installPreDragCaptureHooks(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
+        Class<?> workspaceClass = Class.forName(WORKSPACE, false, classLoader);
+        Method dispatchTouchEvent =
+                workspaceClass.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
+        dispatchTouchEvent.setAccessible(true);
+        HookUtil.hook(dispatchTouchEvent, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
+                    ? (MotionEvent) args[0] : null;
+            Object owner = chain.getThisObject();
+
+            Object result = chain.proceed(args);
+
+            if (owner instanceof View && event != null) {
+                View launcherRoot = ((View) owner).getRootView();
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    // Run after Workspace has dispatched DOWN to its CellLayout/long-click agent,
+                    // but still hundreds of milliseconds before the semantic long-press commit.
+                    ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig);
+                } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.cancelTouchIfUnlatched(
+                            launcherRoot, action == MotionEvent.ACTION_UP
+                                    ? "touch-up-before-drag" : "touch-cancel-before-drag");
+                }
+            }
+            return result;
+        });
+
+        // HyperOS Launcher.onLongClick resolves the real occupied cell and then enters
+        // dragSingleItem(); the first statement inside dragSingleItem() is Workspace.startDrag().
+        // Latch immediately before that call, while the prepared source still represents the
+        // untouched Workspace. This is earlier and semantically stronger than setRequestingItemInfo.
+        Class<?> launcherClass = Class.forName(LAUNCHER, false, classLoader);
+        Class<?> cellInfoClass = Class.forName(CELL_INFO, false, classLoader);
+        Method dragSingleItem =
+                launcherClass.getDeclaredMethod("dragSingleItem", cellInfoClass, View.class);
+        dragSingleItem.setAccessible(true);
+        HookUtil.hook(dragSingleItem, chain -> {
+            Object owner = chain.getThisObject();
+            if (owner instanceof View) {
+                ShortcutPopupGlassCoordinator.latchBeforeDrag(((View) owner).getRootView());
+            }
+            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+        });
+
+        MainHook.log(TAG + " pre-drag capture hooks installed");
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
