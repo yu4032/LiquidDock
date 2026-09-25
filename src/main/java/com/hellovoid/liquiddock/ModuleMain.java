@@ -35,6 +35,9 @@ public final class ModuleMain extends XposedModule {
                 SystemUiHomeTransitionSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                if (runtimeConfig.enabled && runtimeConfig.glass.enabled) {
+                    SystemUiPairingDialogGlassHook.install(runtimeConfig.glass);
+                }
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled
                         && runtimeConfig.glass.systemUiHandleMenuEnabled) {
                     if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
