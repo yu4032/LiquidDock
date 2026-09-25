@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.view.MotionEvent;
 import android.view.View;
 
 import java.lang.reflect.Method;
@@ -9,6 +10,7 @@ final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
     private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
+    private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
     private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
     private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
     private static boolean installed;
@@ -34,6 +36,7 @@ final class MiuixShortcutMenuGlassHook {
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             if (popupGlassEnabled) {
+                installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object itemInfo = args.length > 0 ? args[0] : null;
@@ -42,7 +45,11 @@ final class MiuixShortcutMenuGlassHook {
                         View ownerView = (View) owner;
                         View launcherRoot = ownerView.getRootView();
                         if (itemInfo != null) {
-                            ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
+                            // Reuse an ACTION_DOWN capture when this is the Workspace path.
+                            // Dock has no early state here and therefore falls back to the exact
+                            // published prepare() lifecycle through prepareIfNeeded().
+                            ShortcutPopupGlassCoordinator.prepareIfNeeded(
+                                    launcherRoot, glassConfig);
                         }
                         Object result = chain.proceed(args);
                         if (itemInfo == null) {
@@ -79,6 +86,44 @@ final class MiuixShortcutMenuGlassHook {
             MainHook.log(TAG + " hook unavailable: " + error);
             return false;
         }
+    }
+
+    private static void installEarlyWorkspaceCaptureHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
+        Class<?> cellLayoutClass = Class.forName(CELL_LAYOUT, false, classLoader);
+        Method dispatchTouchEvent =
+                cellLayoutClass.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
+        Method lastDownOnOccupiedCell =
+                cellLayoutClass.getDeclaredMethod("lastDownOnOccupiedCell");
+        dispatchTouchEvent.setAccessible(true);
+        lastDownOnOccupiedCell.setAccessible(true);
+
+        HookUtil.hook(dispatchTouchEvent, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
+                    ? (MotionEvent) args[0] : null;
+            Object owner = chain.getThisObject();
+
+            // Preserve CellLayout's own hit-test as authority. It sets
+            // mLastDownOnOccupiedCell before dispatching to the long-click machinery.
+            Object result = chain.proceed(args);
+
+            if (owner instanceof View && event != null) {
+                View launcherRoot = ((View) owner).getRootView();
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    Object occupied = lastDownOnOccupiedCell.invoke(owner);
+                    if (occupied instanceof Boolean && ((Boolean) occupied).booleanValue()) {
+                        ShortcutPopupGlassCoordinator.prepareEarly(launcherRoot, glassConfig);
+                    }
+                } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.cancelEarlyIfUnused(launcherRoot);
+                }
+            }
+            return result;
+        });
+        MainHook.log(TAG + " early Workspace sampling hook installed");
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
