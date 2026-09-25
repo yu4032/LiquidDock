@@ -877,7 +877,20 @@ private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader("预设与数据", "保存、恢复或迁移 LiquidDock 配置") }
         item { SmallTitle("预设") }
-        item { SettingsCard { ArrowPreference("应用默认预设", summary = "恢复当前保存的布局与液态玻璃参数", onClick = { applyDefaultPreset(activity) }) } }
+        item {
+            SettingsCard {
+                ArrowPreference(
+                    "应用默认预设",
+                    summary = "将可配置数值归零、开关关闭",
+                    onClick = { applyDefaultPreset(activity) },
+                )
+                ArrowPreference(
+                    "应用调校预设",
+                    summary = "应用随项目提供的完整参数与开关",
+                    onClick = { applyTunedPreset(activity) },
+                )
+            }
+        }
         item { SmallTitle("备份与应用") }
         item {
             SettingsCard {
@@ -1054,5 +1067,12 @@ private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
     val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
     PresetManager.applyDefault(prefs.edit())
     Toast.makeText(activity, "默认预设已应用", Toast.LENGTH_LONG).show()
+    activity.restartLauncher()
+}
+
+private fun applyTunedPreset(activity: ComposeSettingsActivity) {
+    val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
+    PresetManager.applyTuned(prefs.edit())
+    Toast.makeText(activity, "调校预设已应用", Toast.LENGTH_LONG).show()
     activity.restartLauncher()
 }
