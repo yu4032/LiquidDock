@@ -15,8 +15,8 @@ final class ShortcutPopupGlassCoordinator {
 
     private ShortcutPopupGlassCoordinator() {}
 
-    static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        releaseLocked("prepare-replace");
+    static synchronized void armTouch(View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        releaseLocked("touch-arm-replace");
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig);
@@ -53,16 +53,46 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
-            state.session.requestInitialCapture();
-            boolean outputReady = ensurePopupOutput(state);
-            MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
+            state.session.beginPrewarm();
+            MainHook.log(TAG + " touch prewarm active");
         }
+    }
+
+    /**
+     * Semantic commit boundary from Launcher.dragSingleItem(): this runs before
+     * Workspace.startDrag() can create DragView/edit-state mutations.
+     */
+    static synchronized boolean latchBeforeDrag(View captureRoot) {
+        State state = current;
+        if (state == null || state.released || state.captureRootRef.get() != captureRoot
+                || state.session == null || state.latched) {
+            return state != null && state.latched;
+        }
+        boolean latched = state.session.latchPreDragBackdrop();
+        if (!latched) {
+            releaseLocked("pre-drag-latch-miss");
+            return false;
+        }
+        state.latched = true;
+        MainHook.log(TAG + " clean backdrop committed before drag");
+        return true;
+    }
+
+    static synchronized void cancelTouchIfUnlatched(View captureRoot, String reason) {
+        State state = current;
+        if (state == null || state.released || state.captureRootRef.get() != captureRoot
+                || state.latched || state.contentRef.get() != null) {
+            return;
+        }
+        releaseLocked(reason != null ? reason : "touch-ended");
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
-        if (state == null || state.released || state.captureRootRef.get() != liveRoot
+        if (state == null || state.released || !state.latched
+                || state.session == null || !state.session.hasFrozenBackdrop()
+                || state.captureRootRef.get() != liveRoot
                 || popupView == null || !(contentView instanceof ViewGroup)
                 || !(decorView instanceof ViewGroup)) {
             return false;
@@ -260,6 +290,7 @@ final class ShortcutPopupGlassCoordinator {
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;
+        boolean latched;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
         boolean released;
