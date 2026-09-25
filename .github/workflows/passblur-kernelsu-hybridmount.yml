@@ -27,13 +27,21 @@ jobs:
             '407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32'
           test "$(tr -d '\r\n ' < "$root/previous.sha256")" = \
             'ef523f9d57ebe5c3af2ec39747b07ab6d70bd69165461e09ddc0fc8f13f5d563'
-          test "$(tr -d '\r\n ' < "$root/patched.sha256")" = \
+          test "$(tr -d '\r\n ' < "$root/pacing12.sha256")" = \
             '7cb2123d0b5d5cfd9ae63699c9624ebe306392b88f642ec609fdb5fc2247e30f'
+          test "$(tr -d '\r\n ' < "$root/patched.sha256")" = \
+            '0ce7ceea23efd5a9f7bdd5f7858e3e8d21bb77c5d9261088a18726eeccf5bc48'
 
           grep -F 'id=liquiddock_passblur_native' "$root/module.prop"
           grep -F 'Hybrid Mount' "$root/customize.sh"
-          grep -F 'apply_blob 4331524' "$root/customize.sh"
-          grep -F '(0x421804, bytes.fromhex("80018052"))' \
+          grep -F 'apply_async_release' "$root/customize.sh"
+          grep -F '(0x54E5F4, bytes.fromhex("1b041494"))' \
+            "$root/build_patched_surfaceflinger.py"
+          grep -F '(0x421804, bytes.fromhex("67811894"))' \
+            "$root/build_patched_surfaceflinger.py"
+          grep -F '(0x55A040, bytes.fromhex("90ac1394"))' \
+            "$root/build_patched_surfaceflinger.py"
+          grep -F '(0x55A0D8, bytes.fromhex("36008052"))' \
             "$root/build_patched_surfaceflinger.py"
 
       - name: Emit installation patch blobs
@@ -47,17 +55,22 @@ jobs:
           python3 "$root/build_patched_surfaceflinger.py" \
             --emit-patches "$module/patches"
 
-          test "$(stat -c %s "$module/patches/00421804.bin")" = 4
-          test "$(xxd -p "$module/patches/00421804.bin" | tr -d '\n')" = '80018052'
+          test "$(stat -c %s "$module/patches/00a4f660.bin")" = 24
+          test "$(stat -c %s "$module/patches/0054e5f4.bin")" = 4
+          test "$(xxd -p "$module/patches/00421804.bin" | tr -d '\n')" = '67811894'
+          test "$(xxd -p "$module/patches/0055a040.bin" | tr -d '\n')" = '90ac1394'
+          test "$(xxd -p "$module/patches/0055a0d8.bin" | tr -d '\n')" = '36008052'
 
           cp "$root/module.prop" "$module/module.prop"
           cp "$root/customize.sh" "$module/customize.sh"
           cp "$root/original.sha256" "$module/original.sha256"
           cp "$root/previous.sha256" "$module/previous.sha256"
+          cp "$root/pacing12.sha256" "$module/pacing12.sha256"
           cp "$root/patched.sha256" "$module/patched.sha256"
           chmod 0755 "$module/customize.sh"
           chmod 0644 "$module/module.prop" \
-            "$module/original.sha256" "$module/previous.sha256" "$module/patched.sha256"
+            "$module/original.sha256" "$module/previous.sha256" \
+            "$module/pacing12.sha256" "$module/patched.sha256"
 
       - name: Validate patch blob set
         shell: bash
@@ -69,12 +82,14 @@ jobs:
           00000148.bin
           00421804.bin
           00421890.bin
+          0054e5f4.bin
           0054f19c.bin
           005592f0.bin
           0055a040.bin
           0055a0d8.bin
           0055a278.bin
-          00a4f180.bin'
+          00a4f180.bin
+          00a4f660.bin'
           actual="$(find "$module/patches" -maxdepth 1 -type f -printf '%f\n' | sort)"
           test "$actual" = "$(printf '%s\n' "$expected" | sed '/^[[:space:]]*$/d' | sed 's/^[[:space:]]*//' | sort)"
 
@@ -84,13 +99,14 @@ jobs:
           set -euo pipefail
           module='/tmp/LiquidDock-PassBlur-KernelSU-HybridMount'
           out='out'
-          name='LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip'
+          name='LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-AsyncRelease.zip'
           mkdir -p "$out"
 
           (
             cd "$module"
             zip -9 -r "$GITHUB_WORKSPACE/$out/$name" \
-              module.prop customize.sh original.sha256 previous.sha256 patched.sha256 patches
+              module.prop customize.sh original.sha256 previous.sha256 \
+              pacing12.sha256 patched.sha256 patches
           )
 
           unzip -l "$out/$name"
@@ -103,31 +119,34 @@ jobs:
               'customize.sh',
               'original.sha256',
               'previous.sha256',
+              'pacing12.sha256',
               'patched.sha256',
               'patches/',
               'patches/000000d0.bin',
               'patches/00000148.bin',
               'patches/00421804.bin',
               'patches/00421890.bin',
+              'patches/0054e5f4.bin',
               'patches/0054f19c.bin',
               'patches/005592f0.bin',
               'patches/0055a040.bin',
               'patches/0055a0d8.bin',
               'patches/0055a278.bin',
               'patches/00a4f180.bin',
+              'patches/00a4f660.bin',
           }
           with zipfile.ZipFile(sys.argv[1]) as zf:
               actual = set(zf.namelist())
           if actual != required:
               raise SystemExit(f'unexpected module layout: {sorted(actual)}')
-          print('KernelSU installer-time patch ZIP verified')
+          print('KernelSU async PassBlur patch ZIP verified')
           PY
 
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-PassBlur-KernelSU-HybridMount
           path: |
-            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip
-            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-Pacing12.zip.sha256
+            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-AsyncRelease.zip
+            out/LiquidDock-PassBlur-KernelSU-HybridMount-OS3.0.310.0.WAOCNXM-AsyncRelease.zip.sha256
           if-no-files-found: error
           retention-days: 7
