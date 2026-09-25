@@ -50,6 +50,7 @@ final class SystemUiHandleMenuPrismalSession {
     private final SurfaceControl sourceSurface;
     private final RootPassBlurEndpointBridge.Endpoint sourceEndpoint;
     private final RootPassBlurContentRect sourceContentRect;
+    private volatile RootPassBlurContentRect targetContentRect;
     private final Listener listener;
     private final Handler mainHandler;
     private final HandlerThread renderThread;
@@ -123,6 +124,7 @@ final class SystemUiHandleMenuPrismalSession {
                 endpoint.insetTop,
                 endpoint.insetRight,
                 endpoint.insetBottom);
+        targetContentRect = sourceContentRect;
         this.listener = listener;
         requestedCornerRadiusPx = cornerRadiusPx;
         mainHandler = new Handler(host.getContext().getMainLooper());
@@ -147,6 +149,7 @@ final class SystemUiHandleMenuPrismalSession {
 
     void start(int width, int height) {
         if (shuttingDown) return;
+        refreshHostMapping();
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
         renderHandler.post(() -> {
@@ -191,6 +194,7 @@ final class SystemUiHandleMenuPrismalSession {
 
     void resizeOutput(int width, int height) {
         if (shuttingDown) return;
+        refreshHostMapping();
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
         renderHandler.post(() -> {
@@ -218,6 +222,39 @@ final class SystemUiHandleMenuPrismalSession {
                 try { surface.release(); } catch (Throwable ignored) {}
             }
         });
+    }
+
+    /**
+     * Publish the material host's current ViewRoot-relative sampling rectangle.
+     *
+     * <p>This is a UI-thread geometry operation. The GL thread consumes only the immutable
+     * RootPassBlurContentRect snapshot, so dialog translations never require View access from the
+     * render thread.</p>
+     */
+    void refreshHostMapping() {
+        if (shuttingDown || !host.isAttachedToWindow() || !sourceRoot.isAttachedToWindow()) return;
+        int rootWidth = sourceRoot.getWidth();
+        int rootHeight = sourceRoot.getHeight();
+        int hostWidth = host.getWidth();
+        int hostHeight = host.getHeight();
+        if (rootWidth <= 0 || rootHeight <= 0 || hostWidth <= 0 || hostHeight <= 0) return;
+
+        try {
+            int[] hostLocation = new int[2];
+            int[] rootLocation = new int[2];
+            host.getLocationInWindow(hostLocation);
+            sourceRoot.getLocationInWindow(rootLocation);
+            targetContentRect = sourceContentRect.subRect(
+                    rootWidth,
+                    rootHeight,
+                    hostLocation[0] - rootLocation[0],
+                    hostLocation[1] - rootLocation[1],
+                    hostWidth,
+                    hostHeight);
+        } catch (Throwable error) {
+            // Preserve the last valid mapping. The source itself remains a safe fail-open input.
+            log("host mapping refresh failed: " + error);
+        }
     }
 
     void shutdown() {
@@ -329,11 +366,13 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glUniformMatrix4fv(
                 requireUniform(normalizeProgram, "uTexMatrix"),
                 1, false, textureMatrix, 0);
+        RootPassBlurContentRect backdropRect = targetContentRect;
+        if (backdropRect == null) backdropRect = sourceContentRect;
         GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
-                sourceContentRect.left,
-                sourceContentRect.bottom,
-                sourceContentRect.width,
-                sourceContentRect.height);
+                backdropRect.left,
+                backdropRect.bottom,
+                backdropRect.width,
+                backdropRect.height);
         GLES20.glUniform1i(
                 requireUniform(normalizeProgram, "uConfigRot"),
                 sourceEndpoint.rotation);
