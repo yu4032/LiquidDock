@@ -61,6 +61,7 @@ final class SystemUiHandleMenuGlassOutputView extends TextureView
         if (disposed || target == null || getParent() != target) return false;
         int width = Math.max(1, target.getWidth());
         int height = Math.max(1, target.getHeight());
+        session.refreshHostMapping();
         boolean changed = getLeft() != 0 || getTop() != 0
                 || getRight() != width || getBottom() != height;
         if (changed) {
