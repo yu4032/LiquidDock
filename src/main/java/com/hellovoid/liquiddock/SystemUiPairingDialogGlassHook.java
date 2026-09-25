@@ -108,6 +108,7 @@ final class SystemUiPairingDialogGlassHook {
         Drawable stockBackground;
         boolean replacementBlurApplied;
         boolean prismalPresented;
+        boolean terminalFailure;
         boolean bound;
         boolean released;
 
@@ -130,7 +131,7 @@ final class SystemUiPairingDialogGlassHook {
         }
 
         void tryBind() {
-            if (released || bound || !decor.isAttachedToWindow()) return;
+            if (released || terminalFailure || bound || !decor.isAttachedToWindow()) return;
             if (findExactClass(decor, PAIRING_PARENT_PANEL) == null) return;
 
             View panel = findExactClass(decor, DIALOG_PARENT_PANEL);
@@ -146,6 +147,7 @@ final class SystemUiPairingDialogGlassHook {
 
             stockBackground = panel.getBackground();
             if (!MiBlurBridge.applyPassWindowBlur(panel, nativeBlurRadiusPx)) {
+                terminalFailure = true;
                 log("pairing panel pass-window fallback unavailable; stock retained");
                 return;
             }
@@ -179,6 +181,7 @@ final class SystemUiPairingDialogGlassHook {
                 output = SystemUiHandleMenuGlassOutputView.attachInsideTarget(panel, session);
                 if (output == null) {
                     session.shutdown();
+                    terminalFailure = true;
                     restoreNativeFallback();
                     return;
                 }
@@ -225,6 +228,7 @@ final class SystemUiPairingDialogGlassHook {
 
         private void onPrismalFailure(Throwable error) {
             if (released) return;
+            terminalFailure = true;
             log("Prismal fallback to native pairing blur: " + error);
             removeMaterialGuard();
 
