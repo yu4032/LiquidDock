@@ -20,6 +20,13 @@ EXPECTED_FIRST = {
     0x0F0: 0xD10183FF,
 }
 
+EXPECTED_ADR = {
+    0x070: (0xAB1000, 10),
+    0x0A8: (0xAB1000, 10),
+    0x0C0: (0xAB1000, 9),
+    0x118: (0xAB1000, 9),
+}
+
 
 def decode_b(pc: int, word: int) -> int:
     if (word & 0x7C000000) != 0x14000000:
@@ -30,6 +37,17 @@ def decode_b(pc: int, word: int) -> int:
     if imm26 & (1 << 25):
         imm26 -= 1 << 26
     return pc + (imm26 << 2)
+
+
+def decode_adr(pc: int, word: int):
+    if (word & 0x9F000000) != 0x10000000:
+        raise AssertionError(f"not ADR at {pc:#x}: {word:#010x}")
+    immlo = (word >> 29) & 0x3
+    immhi = (word >> 5) & 0x7FFFF
+    imm = (immhi << 2) | immlo
+    if imm & (1 << 20):
+        imm -= 1 << 21
+    return pc + imm, word & 0x1F
 
 
 def main() -> None:
@@ -52,6 +70,12 @@ def main() -> None:
     for off, expected in EXPECTED_FIRST.items():
         word = struct.unpack_from("<I", data, off)[0]
         assert word == expected, (hex(off), hex(word), hex(expected))
+
+    for off, (target, register) in EXPECTED_ADR.items():
+        word = struct.unpack_from("<I", data, off)[0]
+        actual, actual_register = decode_adr(CODE_BASE + off, word)
+        assert actual == target, (hex(CODE_BASE + off), hex(actual), hex(target))
+        assert actual_register == register, (off, actual_register, register)
 
     print(f"patch blob verified: {len(data)} bytes")
 
