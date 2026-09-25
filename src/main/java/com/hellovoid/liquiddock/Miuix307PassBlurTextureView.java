@@ -811,24 +811,24 @@ final class Miuix307PassBlurTextureView extends TextureView
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
-        bindQuad(normalizeProgram);
+        GlQuadBindings.bind(quadBuffer, normalizeProgram);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);
+        GLES20.glUniform1i(GlProgramUtils.requireUniform(normalizeProgram, "uTexture"), 0);
         GLES20.glUniformMatrix4fv(
-                requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);
+                GlProgramUtils.requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);
         GLES20.glUniform4f(
-                requireUniform(normalizeProgram, "uBackdropRect"),
+                GlProgramUtils.requireUniform(normalizeProgram, "uBackdropRect"),
                 mapping.backdropX, mapping.backdropY, mapping.backdropW, mapping.backdropH);
         GLES20.glUniform1i(
-                requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);
+                GlProgramUtils.requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);
         GLES20.glUniform4f(
-                requireUniform(normalizeProgram, "uValidDockRect"),
+                GlProgramUtils.requireUniform(normalizeProgram, "uValidDockRect"),
                 mapping.validSampleLeft, mapping.validSampleBottom,
                 mapping.validSampleRight, mapping.validSampleTop);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(normalizeProgram);
+        GlQuadBindings.unbind(normalizeProgram);
     }
 
     private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {
@@ -886,14 +886,14 @@ final class Miuix307PassBlurTextureView extends TextureView
                 GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA,
                 GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        GlQuadBindings.bind(quadBuffer, compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+        GLES20.glUniform1i(GlProgramUtils.requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(GlProgramUtils.requireUniform(compositeProgram, "uCropRect"),
                 mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        GlQuadBindings.unbind(compositeProgram);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         return true;
@@ -934,28 +934,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + "BR raw=[" + right + "," + bottom + "] official=[" + right + "," + officialBottom + "]");
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
-        quadBuffer.position(0);
-        GLES20.glEnableVertexAttribArray(position);
-        GLES20.glVertexAttribPointer(
-                position, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
-        quadBuffer.position(2);
-        GLES20.glEnableVertexAttribArray(uv);
-        GLES20.glVertexAttribPointer(
-                uv, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
-    }
-
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
-        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
-    }
-
-    private void bindProducerWhenReady(int attempt) {
+            private void bindProducerWhenReady(int attempt) {
         if (shuttingDown || binding != null) return;
         View materialHost = materialHostRef.get();
         Surface producer = inputProducerSurface;
@@ -1644,13 +1623,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
     }
 
-    private static int requireUniform(int program, String name) {
-        int location = GLES20.glGetUniformLocation(program, name);
-        if (location < 0) throw new IllegalStateException("missing uniform " + name);
-        return location;
-    }
-
-    private static void checkEglHandle(String stage, boolean ok) {
+        private static void checkEglHandle(String stage, boolean ok) {
         if (!ok) {
             throw new IllegalStateException(stage + " error=0x"
                     + Integer.toHexString(EGL14.eglGetError()));

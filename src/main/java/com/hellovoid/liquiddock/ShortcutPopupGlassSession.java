@@ -250,7 +250,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.makePbufferCurrent();
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
         if (compositeProgram == 0) {
-            compositeProgram = createProgram(
+            compositeProgram = GlProgramUtils.createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
         }
@@ -265,13 +265,13 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        GlQuadBindings.bind(quadBuffer, compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glUniform1i(GlProgramUtils.requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(GlProgramUtils.requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        GlQuadBindings.unbind(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
     }
 
@@ -292,63 +292,4 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         });
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
-        quadBuffer.position(0);
-        GLES20.glEnableVertexAttribArray(position);
-        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false,
-                4 * Float.BYTES, quadBuffer);
-        quadBuffer.position(2);
-        GLES20.glEnableVertexAttribArray(uv);
-        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false,
-                4 * Float.BYTES, quadBuffer);
-    }
-
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
-        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
-    }
-
-    private static int createProgram(String vertexSource, String fragmentSource) {
-        int vertex = compileShader(GLES20.GL_VERTEX_SHADER, vertexSource);
-        int fragment = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource);
-        int program = GLES20.glCreateProgram();
-        GLES20.glAttachShader(program, vertex);
-        GLES20.glAttachShader(program, fragment);
-        GLES20.glLinkProgram(program);
-        int[] linked = new int[1];
-        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linked, 0);
-        GLES20.glDeleteShader(vertex);
-        GLES20.glDeleteShader(fragment);
-        if (linked[0] == 0) {
-            String log = GLES20.glGetProgramInfoLog(program);
-            GLES20.glDeleteProgram(program);
-            throw new IllegalStateException("program link failed: " + log);
-        }
-        return program;
-    }
-
-    private static int compileShader(int type, String source) {
-        int shader = GLES20.glCreateShader(type);
-        GLES20.glShaderSource(shader, source);
-        GLES20.glCompileShader(shader);
-        int[] compiled = new int[1];
-        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
-        if (compiled[0] == 0) {
-            String log = GLES20.glGetShaderInfoLog(shader);
-            GLES20.glDeleteShader(shader);
-            throw new IllegalStateException("shader compile failed: " + log);
-        }
-        return shader;
-    }
-
-    private static int requireUniform(int program, String name) {
-        int location = GLES20.glGetUniformLocation(program, name);
-        if (location < 0) throw new IllegalStateException("missing uniform " + name);
-        return location;
-    }
-}
+                    }

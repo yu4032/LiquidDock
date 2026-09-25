@@ -447,7 +447,7 @@ final class RootPassBlurBackend {
         ensureEgl();
         makePbufferCurrentUnchecked();
         if (normalizeProgram == 0) {
-            normalizeProgram = createProgram(
+            normalizeProgram = GlProgramUtils.createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
         }
@@ -574,20 +574,20 @@ final class RootPassBlurBackend {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
-        bindQuad(normalizeProgram);
+        GlQuadBindings.bind(quadBuffer, normalizeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);
-        GLES20.glUniformMatrix4fv(requireUniform(normalizeProgram, "uTexMatrix"),
+        GLES20.glUniform1i(GlProgramUtils.requireUniform(normalizeProgram, "uTexture"), 0);
+        GLES20.glUniformMatrix4fv(GlProgramUtils.requireUniform(normalizeProgram, "uTexMatrix"),
                 1, false, textureMatrix, 0);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uConfigRot"), rotation);
-        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),
+        GLES20.glUniform1i(GlProgramUtils.requireUniform(normalizeProgram, "uConfigRot"), rotation);
+        GLES20.glUniform4f(GlProgramUtils.requireUniform(normalizeProgram, "uValidDockRect"),
                 0f, 0f, 1f, 1f);
         RootPassBlurContentRect rect = contentRect;
-        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
+        GLES20.glUniform4f(GlProgramUtils.requireUniform(normalizeProgram, "uBackdropRect"),
                 rect.left, rect.bottom, rect.width, rect.height);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(normalizeProgram);
+        GlQuadBindings.unbind(normalizeProgram);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 
         return new RootPassBlurFrame(
@@ -776,28 +776,7 @@ final class RootPassBlurBackend {
         }
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
-        quadBuffer.position(0);
-        GLES20.glEnableVertexAttribArray(position);
-        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false,
-                4 * Float.BYTES, quadBuffer);
-        quadBuffer.position(2);
-        GLES20.glEnableVertexAttribArray(uv);
-        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false,
-                4 * Float.BYTES, quadBuffer);
-    }
-
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
-        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
-    }
-
-    private static int createTexture2D(int width, int height) {
+            private static int createTexture2D(int width, int height) {
         int[] ids = new int[1];
         GLES20.glGenTextures(1, ids, 0);
         int texture = ids[0];
@@ -831,46 +810,7 @@ final class RootPassBlurBackend {
         return ids[0];
     }
 
-    private static int createProgram(String vertexSource, String fragmentSource) {
-        int vertex = compileShader(GLES20.GL_VERTEX_SHADER, vertexSource);
-        int fragment = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource);
-        int program = GLES20.glCreateProgram();
-        GLES20.glAttachShader(program, vertex);
-        GLES20.glAttachShader(program, fragment);
-        GLES20.glLinkProgram(program);
-        int[] linked = new int[1];
-        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linked, 0);
-        GLES20.glDeleteShader(vertex);
-        GLES20.glDeleteShader(fragment);
-        if (linked[0] == 0) {
-            String log = GLES20.glGetProgramInfoLog(program);
-            GLES20.glDeleteProgram(program);
-            throw new IllegalStateException("program link failed: " + log);
-        }
-        return program;
-    }
-
-    private static int compileShader(int type, String source) {
-        int shader = GLES20.glCreateShader(type);
-        GLES20.glShaderSource(shader, source);
-        GLES20.glCompileShader(shader);
-        int[] compiled = new int[1];
-        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
-        if (compiled[0] == 0) {
-            String log = GLES20.glGetShaderInfoLog(shader);
-            GLES20.glDeleteShader(shader);
-            throw new IllegalStateException("shader compile failed: " + log);
-        }
-        return shader;
-    }
-
-    private static int requireUniform(int program, String name) {
-        int location = GLES20.glGetUniformLocation(program, name);
-        if (location < 0) throw new IllegalStateException("missing uniform " + name);
-        return location;
-    }
-
-    private void requireRenderThread() {
+                private void requireRenderThread() {
         if (Thread.currentThread() != renderThread) {
             throw new IllegalStateException("root PassBlur GL access outside render thread");
         }
