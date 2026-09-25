@@ -1,6 +1,6 @@
 id=liquiddock_passblur_native
-name=LiquidDock PassBlur Native Pacing
-version=2
-versionCode=2
+name=LiquidDock PassBlur Async Producer
+version=3
+versionCode=3
 author=LiquidDock
-description=Exact-build latest-only PassBlur + 12ms pacing patch mounted via Hybrid Mount
+description=Exact-build PassBlur early-freshness + non-blocking SurfaceFlinger release patch via Hybrid Mount
