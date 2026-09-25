@@ -48,7 +48,7 @@ final class MiuixShortcutMenuGlassHook {
 
             installed = true;
             MainHook.log(TAG + " hook installed popupGlass=" + popupGlassEnabled
-                    + " darkMode=" + darkModeEnabled + " backend=hwui-backdrop-effect");
+                    + " darkMode=" + darkModeEnabled + " backend=launcher-external-prismal");
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable: " + error);
@@ -77,7 +77,7 @@ final class MiuixShortcutMenuGlassHook {
             boolean bound = ShortcutPopupGlassCoordinator.bindPopup(
                     (View) decorObject, (View) popupObject, contentView, glassConfig);
             if (!bound) {
-                MainHook.log(TAG + " HWUI backdrop effect unavailable; stock material retained");
+                MainHook.log(TAG + " external Prismal sink unavailable; stock material retained");
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " popup bind failed; stock material retained: " + error);
