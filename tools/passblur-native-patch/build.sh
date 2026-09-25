@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PATCH_DIR="$ROOT/tools/passblur-native-patch"
-OUT_DIR="\${PASSBLUR_PATCH_OUT:-$ROOT/build/passblur-native-patch}"
+OUT_DIR="${PASSBLUR_PATCH_OUT:-$ROOT/build/passblur-native-patch}"
 
-CLANG_BIN="\${CLANG:-clang}"
-LLD_BIN="\${LD_LLD:-ld.lld}"
-OBJCOPY_BIN="\${LLVM_OBJCOPY:-}"
+CLANG_BIN="${CLANG:-clang}"
+LLD_BIN="${LD_LLD:-ld.lld}"
+OBJCOPY_BIN="${LLVM_OBJCOPY:-}"
 
 if [[ -z "$OBJCOPY_BIN" ]]; then
     if command -v llvm-objcopy >/dev/null 2>&1; then
@@ -36,7 +36,7 @@ python3 "$PATCH_DIR/verify_blob.py" "$OUT_DIR/latest_only.bin"
 
 if [[ $# -gt 0 ]]; then
     INPUT="$1"
-    OUTPUT="\${2:-$OUT_DIR/libsurfaceflinger.latest-only.so}"
+    OUTPUT="${2:-$OUT_DIR/libsurfaceflinger.latest-only.so}"
     python3 "$PATCH_DIR/patch_libsurfaceflinger.py" \
         "$INPUT" "$OUT_DIR/latest_only.bin" "$OUTPUT"
 fi
