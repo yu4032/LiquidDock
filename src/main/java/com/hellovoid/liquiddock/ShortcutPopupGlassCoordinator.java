@@ -87,6 +87,15 @@ final class ShortcutPopupGlassCoordinator {
         releaseLocked(reason != null ? reason : "touch-ended");
     }
 
+    static synchronized void cancelAttemptIfPopupNotBound(View captureRoot, String reason) {
+        State state = current;
+        if (state == null || state.released || state.captureRootRef.get() != captureRoot
+                || state.contentRef.get() != null) {
+            return;
+        }
+        releaseLocked(reason != null ? reason : "attempt-ended-without-popup");
+    }
+
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
         State state = current;
         View liveRoot = decorView != null ? decorView.getRootView() : null;
