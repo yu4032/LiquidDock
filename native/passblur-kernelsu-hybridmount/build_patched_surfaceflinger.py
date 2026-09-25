@@ -22,10 +22,12 @@ EXPECTED_SIZE = 11577024
 # This gives PassBlur one in-flight batch without blocking SurfaceFlinger present and without
 # turning unfinished work into a false result that would allow cross-frame backlog growth.
 UPGRADE_PATCHES = (
-    # Restore stock behavior removed by the predecessor/Pacing12 experiments.
+    # Restore stock behavior removed by predecessor experiments.
     (0x421804, bytes.fromhex("67811894")),  # bl property_get_int32
     (0x55A040, bytes.fromhex("90ac1394")),  # bl PassBlur::queuePassBlurBuffer
     (0x55A0D8, bytes.fromhex("36008052")),  # mov w22,#1
+    # Restore stock future<bool>::move call when upgrading from AsyncRelease.
+    (0x54E5F4, bytes.fromhex("9301fd97")),
 )
 
 PATCHES = (
@@ -111,6 +113,7 @@ def main() -> int:
     print(f"stock={STOCK_SHA256}")
     print(f"previous={PREVIOUS_SHA256}")
     print(f"pacing12={PACING12_SHA256}")
+    print(f"async_release={ASYNC_RELEASE_SHA256}")
     print(f"patched={PATCHED_SHA256}")
     print("release_gate=0x54e5b0: consume only when all futures are ready")
     print("submit_gate=0x54d310: skip heavy submission while a batch is in flight")
