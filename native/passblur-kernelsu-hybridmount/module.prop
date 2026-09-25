@@ -1,6 +1,6 @@
 id=liquiddock_passblur_native
-name=LiquidDock PassBlur Async Producer
-version=3
-versionCode=3
+name=LiquidDock PassBlur One-In-Flight
+version=4
+versionCode=4
 author=LiquidDock
-description=Exact-build PassBlur early-freshness + non-blocking SurfaceFlinger release patch via Hybrid Mount
+description=Exact-build PassBlur early-freshness + non-blocking all-ready release + one-in-flight submission gate via Hybrid Mount
