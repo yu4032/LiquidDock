@@ -50,6 +50,10 @@ public class ShortcutSecondaryGlassContractTest {
                 "glassLayer.layout(0, 0, contentView.getWidth(), contentView.getHeight())"));
         assertTrue(effect.contains("layerSize="));
         assertTrue(effect.contains("glassLayer"));
+        assertTrue(effect.contains("new BackdropEffectHostView(target.getContext())"));
+        assertTrue(effect.contains("setWillNotDraw(false)"));
+        assertTrue(effect.contains("canvas.drawColor(0x01000000)"));
+        assertTrue(effect.contains("hostDrawAnchor=true"));
         assertFalse(effect.contains("MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)"));
         assertTrue(effect.contains("RenderEffect.createBlurEffect("));
         assertTrue(effect.contains("RenderEffect.createChainEffect(opticalEffect, blurEffect)"));
