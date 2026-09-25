@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_TMP="/data/local/tmp/$MODULE_ID"
 REMOTE_MOD="/data/adb/modules/$MODULE_ID"
 
-"$ADB" shell su -c "rm -rf '$REMOTE_TMP' '$REMOTE_MOD'; mkdir -p '$REMOTE_TMP' '$REMOTE_MOD'"
+"$ADB" shell su -c "rm -rf '$REMOTE_TMP'; mkdir -p '$REMOTE_TMP'; if [ -f '$REMOTE_MOD/original_value' ]; then cp '$REMOTE_MOD/original_value' '$REMOTE_TMP/original_value'; fi; rm -rf '$REMOTE_MOD'; mkdir -p '$REMOTE_MOD'"
 for file in module.prop interval_ms post-fs-data.sh uninstall.sh; do
     "$ADB" push "$SCRIPT_DIR/$file" "$REMOTE_TMP/$file" >/dev/null
 done
