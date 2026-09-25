@@ -13,23 +13,68 @@ import org.junit.Test;
 
 public class ConfigPresetTest {
     @Test
-    public void defaultPresetPreservesIntentionalOverridesAndIncludesNewSchemaKeys() {
+    public void defaultConfigurationMatchesBundledProfileAndSafetyOverrides() {
         Map<String, Object> defaults = PresetManager.defaultValues();
 
-        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Glass.ENABLED.name()));
-        assertEquals(Integer.valueOf(30), defaults.get(ConfigSchema.Glass.CAPTURE_FPS.name()));
-        assertEquals(Integer.valueOf(100), defaults.get(ConfigSchema.Glass.CAPTURE_SCALE.name()));
-        assertEquals(Integer.valueOf(13), defaults.get(ConfigSchema.Glass.LENS_REFRACTION.name() + "_tenths"));
-        assertEquals(Integer.valueOf(-88), defaults.get(ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name() + "_tenths"));
-        assertEquals(Integer.valueOf(118), defaults.get(ConfigSchema.Grid.PORTRAIT_INDICATOR_Y.name() + "_tenths"));
-        assertEquals(Integer.valueOf(180), defaults.get(ConfigSchema.Dock.STROKE_RED.name()));
-        assertEquals(Integer.valueOf(119), defaults.get(ConfigSchema.Dock.STROKE_ALPHA.name()));
-        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Dock.SQUIRCLE.name()));
-        assertEquals(Integer.valueOf(47), defaults.get(ConfigSchema.Dock.SHADOW_SIZE.name() + "_tenths"));
+        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Core.ENABLED.name()));
+        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Grid.ICON_SIZE_ENABLED.name()));
+        assertEquals(Integer.valueOf(100), defaults.get(ConfigSchema.Grid.ICON_SIZE_PERCENT.name()));
         assertEquals("8x4", defaults.get(ConfigSchema.Grid.PROFILE.name()));
-        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name()));
-        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.LauncherHighlight.SKY_HAZE.name()));
-        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name()));
+
+        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Dock.ENABLED.name()));
+        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Divider.ENABLED.name()));
+        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Dock.SQUIRCLE.name()));
+        assertEquals(Integer.valueOf(175), defaults.get(ConfigSchema.Dock.STROKE_RED.name()));
+        assertEquals(Integer.valueOf(74), defaults.get(ConfigSchema.Dock.STROKE_ALPHA.name()));
+        assertEquals(Integer.valueOf(47),
+                defaults.get(ConfigSchema.Dock.SHADOW_SIZE.name() + "_tenths"));
+
+        assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Glass.ENABLED.name()));
+        assertEquals(Integer.valueOf(9), defaults.get(ConfigSchema.Glass.CHROMATIC.name()));
+        assertEquals(Integer.valueOf(72),
+                defaults.get(ConfigSchema.Glass.BLUR.name() + "_tenths"));
+        assertEquals(Integer.valueOf(13),
+                defaults.get(ConfigSchema.Glass.LENS_REFRACTION.name() + "_tenths"));
+        assertEquals(Integer.valueOf(50),
+                defaults.get(ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name()));
+        assertEquals(Integer.valueOf(0),
+                defaults.get(ConfigSchema.Glass.PASSBLUR_RENDER_FPS.name()));
+        assertEquals(Boolean.TRUE,
+                defaults.get(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name()));
+        assertEquals(Boolean.TRUE,
+                defaults.get(ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name()));
+        assertEquals(Boolean.TRUE,
+                defaults.get(ConfigSchema.Glass.DIALOG_DARK_MODE.name()));
+
+        // Explicit safety overrides: these integrations and debug logging are never enabled by
+        // the default configuration even though the supplied profile enabled the first two.
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name()));
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name()));
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.Debug.LOGGING.name()));
+
+        assertEquals(Boolean.TRUE,
+                defaults.get(ConfigSchema.LauncherHighlight.SKY_HAZE.name()));
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name()));
+        assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Gboard.ENABLED.name()));
+        assertEquals(Integer.valueOf(10), defaults.get(ConfigSchema.Gboard.TINT_RED.name()));
+        assertEquals(Integer.valueOf(126), defaults.get(ConfigSchema.Gboard.TINT_ALPHA.name()));
+
+        assertEquals(Boolean.FALSE,
+                defaults.get("third_party_glass.systemui.lockscreen_clock.enabled"));
+        assertEquals(Float.valueOf(3.3722174f),
+                defaults.get("third_party_glass.systemui.lockscreen_clock.blur"));
+        assertEquals(Integer.valueOf(244),
+                defaults.get("third_party_glass.systemui.lockscreen_clock.tint_r"));
+        assertEquals(Integer.valueOf(241),
+                defaults.get("third_party_glass.systemui.lockscreen_clock.tint_g"));
+        assertEquals(Integer.valueOf(239),
+                defaults.get("third_party_glass.systemui.lockscreen_clock.tint_b"));
+        assertEquals(Integer.valueOf(0),
+                defaults.get("third_party_glass.systemui.lockscreen_clock.tint_alpha"));
     }
 
     @Test
