@@ -69,12 +69,16 @@ This produces:
 
 ```text
 build/passblur-native-patch/latest_only.o
-build/passblur-native-patch/latest_only.elf
 build/passblur-native-patch/latest_only.bin
 ```
 
-The build always runs `verify_blob.py`, which decodes the critical AArch64 branches and verifies
-all four original prologue instructions embedded in the trampolines.
+No native linker is required. The AArch64 source is assembled as a relocation-free ET_REL object;
+`extract_text.py` rejects unresolved `.text` relocations and extracts the raw blob directly.
+The absolute vendor return branches and sidecar ADR instructions are deliberately version-locked
+machine words.
+
+The build always runs `verify_blob.py`, which decodes the critical AArch64 branches, verifies the
+sidecar ADR targets, and checks all four original prologue instructions embedded in the trampolines.
 
 To patch the verified original library:
 
