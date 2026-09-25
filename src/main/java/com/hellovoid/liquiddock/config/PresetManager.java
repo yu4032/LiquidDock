@@ -43,6 +43,7 @@ public final class PresetManager {
 
     private static void writeValues(
             SharedPreferences.Editor editor, Map<String, Object> values) {
+        clearPresetKeys(editor);
         for (Map.Entry<String, Object> entry : values.entrySet()) {
             Object value = entry.getValue();
             if (value instanceof Boolean) {
@@ -56,6 +57,23 @@ public final class PresetManager {
             }
         }
         editor.commit();
+    }
+
+    private static void clearPresetKeys(SharedPreferences.Editor editor) {
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (key.exportMode() == ConfigKey.ExportMode.NEVER) continue;
+            editor.remove(key.name());
+            if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
+                editor.remove(key.name() + "_tenths");
+            }
+        }
+        String profile = "third_party_glass.systemui.lockscreen_clock.";
+        editor.remove(profile + "enabled");
+        editor.remove(profile + "blur");
+        editor.remove(profile + "tint_r");
+        editor.remove(profile + "tint_g");
+        editor.remove(profile + "tint_b");
+        editor.remove(profile + "tint_alpha");
     }
 
     public static IpadPresetResult applyIpad(Context context, SharedPreferences preferences) {
