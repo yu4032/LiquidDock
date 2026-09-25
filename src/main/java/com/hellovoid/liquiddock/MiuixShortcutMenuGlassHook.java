@@ -11,6 +11,10 @@ final class MiuixShortcutMenuGlassHook {
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
     private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
     private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
+    private static final String DOCK_CONTAINER_VIEW =
+            "com.miui.home.launcher.dock.DockContainerView";
+    private static final String HOTSEATS_LIST_CONTENT =
+            "com.miui.home.launcher.hotseats.HotSeatsListContent";
     private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
     private static final String CELL_INFO = "com.miui.home.launcher.CellLayout$CellInfo";
     private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
@@ -138,7 +142,67 @@ final class MiuixShortcutMenuGlassHook {
             return chain.proceed(args);
         });
 
-        MainHook.log(TAG + " occupied-cell pre-drag capture hooks installed");
+        installDockCaptureHooks(classLoader, glassConfig);
+        MainHook.log(TAG + " occupied-cell + dock pre-drag capture hooks installed");
+    }
+
+    private static void installDockCaptureHooks(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
+        Class<?> dockContainerClass = Class.forName(DOCK_CONTAINER_VIEW, false, classLoader);
+        Method dispatchFromHome =
+                dockContainerClass.getDeclaredMethod("dispatchTouchEventFromHome", MotionEvent.class);
+        dispatchFromHome.setAccessible(true);
+        HookUtil.hook(dispatchFromHome, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
+                    ? (MotionEvent) args[0] : null;
+            Object owner = chain.getThisObject();
+
+            Object result = chain.proceed(args);
+
+            if (owner instanceof View && event != null) {
+                View dockRoot = ((View) owner).getRootView();
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    // DockControllerImpl only routes this method after isTouchInHotSeatArea()
+                    // succeeds, so this is the Dock equivalent of CellLayout's occupied-cell DOWN.
+                    ShortcutPopupGlassCoordinator.armTouch(dockRoot, glassConfig);
+                    MainHook.log(TAG + " dock touch prewarm armed");
+                } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.cancelTouchIfUnlatched(
+                            dockRoot, action == MotionEvent.ACTION_UP
+                                    ? "dock-touch-up-before-long-press"
+                                    : "dock-touch-cancel-before-long-press");
+                }
+            }
+            return result;
+        });
+
+        Class<?> hotSeatsListContentClass =
+                Class.forName(HOTSEATS_LIST_CONTENT, false, classLoader);
+        Method onLongClick = hotSeatsListContentClass.getDeclaredMethod("onLongClick", View.class);
+        onLongClick.setAccessible(true);
+        HookUtil.hook(onLongClick, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            View pressedView = args.length > 0 && args[0] instanceof View ? (View) args[0] : null;
+            View dockRoot = pressedView != null ? pressedView.getRootView() : null;
+
+            boolean latched = dockRoot != null
+                    && ShortcutPopupGlassCoordinator.latchBeforeDrag(dockRoot);
+            if (dockRoot != null) {
+                MainHook.log(TAG + " dock pre-show backdrop latch=" + latched);
+            }
+
+            Object result = chain.proceed(args);
+
+            if (!(result instanceof Boolean) || !((Boolean) result).booleanValue()) {
+                if (dockRoot != null) {
+                    ShortcutPopupGlassCoordinator.cancelAttemptIfPopupNotBound(
+                            dockRoot, "dock-long-click-rejected");
+                }
+            }
+            return result;
+        });
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
