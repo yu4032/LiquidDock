@@ -22,6 +22,13 @@ EXPECTED_SIZE = 11577024
 #
 # This prevents SurfaceFlinger composition from synchronously joining PassBlur work.
 # The worker-entry stale gate remains, so queued obsolete jobs are still cheap to discard.
+UPGRADE_PATCHES = (
+    # Restore stock behavior removed by the predecessor/Pacing12 experiments.
+    (0x421804, bytes.fromhex("67811894")),  # bl property_get_int32
+    (0x55A040, bytes.fromhex("90ac1394")),  # bl PassBlur::queuePassBlurBuffer
+    (0x55A0D8, bytes.fromhex("36008052")),  # mov w22,#1
+)
+
 PATCHES = (
     # ELF RX-segment extension from the validated predecessor module.
     (0xD0, bytes.fromhex("00807600000000000080")),
@@ -53,14 +60,20 @@ def sha256(data: bytes) -> str:
 
 def emit_patch_blobs(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for offset, payload in PATCHES:
+    emitted = {}
+    for offset, payload in (*PATCHES, *UPGRADE_PATCHES):
+        previous = emitted.get(offset)
+        if previous is not None and previous != payload:
+            raise RuntimeError(f"conflicting patch blob at 0x{offset:x}")
+        emitted[offset] = payload
+    for offset, payload in emitted.items():
         (output_dir / f"{offset:08x}.bin").write_bytes(payload)
 
 
 def main() -> int:
     if len(sys.argv) == 3 and sys.argv[1] == "--emit-patches":
         emit_patch_blobs(Path(sys.argv[2]))
-        for offset, payload in PATCHES:
+        for offset, payload in (*PATCHES, *UPGRADE_PATCHES):
             print(f"patch=0x{offset:x} size={len(payload)}")
         return 0
 
