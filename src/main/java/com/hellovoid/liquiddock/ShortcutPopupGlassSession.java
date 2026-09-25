@@ -54,6 +54,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final Object prewarmLock = new Object();
 
     private volatile LauncherGlassGeometry.Snapshot geometry;
     private volatile boolean shuttingDown;
@@ -120,19 +121,32 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
      * already contain DragView/edit-state mutations and is therefore unsafe for ShortcutMenu.
      */
     boolean latchPreDragBackdrop() {
-        if (shuttingDown || lateFramesRejected) return false;
-        if (!backdropPrepared || prewarmFrameCount <= 0) {
-            lateFramesRejected = true;
+        if (shuttingDown) return false;
+        int frames;
+        long ageMs;
+        synchronized (prewarmLock) {
+            if (lateFramesRejected) return false;
+            if (!backdropPrepared || prewarmFrameCount <= 0) {
+                lateFramesRejected = true;
+                frames = prewarmFrameCount;
+                ageMs = -1L;
+            } else {
+                sourceFrozen = true;
+                frames = prewarmFrameCount;
+                ageMs = lastPrewarmFrameUptimeMs >= 0L
+                        ? Math.max(0L,
+                                android.os.SystemClock.uptimeMillis() - lastPrewarmFrameUptimeMs)
+                        : -1L;
+            }
+        }
+        if (!sourceFrozen) {
             sourceBackend.setUpdatesEnabled(false, "shortcut-popup-pre-drag-miss");
-            MainHook.log(TAG + " pre-drag latch rejected reason=no-clean-prewarm-frame");
+            MainHook.log(TAG + " pre-drag latch rejected reason=no-clean-prewarm-frame"
+                    + " frames=" + frames);
             return false;
         }
-        sourceFrozen = true;
         sourceBackend.setUpdatesEnabled(false, "shortcut-popup-pre-drag-latch");
-        long ageMs = lastPrewarmFrameUptimeMs >= 0L
-                ? Math.max(0L, android.os.SystemClock.uptimeMillis() - lastPrewarmFrameUptimeMs)
-                : -1L;
-        MainHook.log(TAG + " pre-drag backdrop latched frames=" + prewarmFrameCount
+        MainHook.log(TAG + " pre-drag backdrop latched frames=" + frames
                 + " ageMs=" + ageMs);
         return true;
     }
@@ -199,22 +213,25 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION || sourceFrozen || lateFramesRejected) return;
+                || frame.generation != GENERATION) return;
         try {
-            ensureGl();
-            logicalWidth = frame.logicalWidth;
-            logicalHeight = frame.logicalHeight;
-            sourceBackend.makePbufferCurrent();
-            prismalRenderer.prepareBackdrop(
-                    frame.normalizedTextureId,
-                    frame.physicalWidth,
-                    frame.physicalHeight,
-                    frame.logicalWidth,
-                    frame.logicalHeight,
-                    prismalParams);
-            backdropPrepared = true;
-            prewarmFrameCount++;
-            lastPrewarmFrameUptimeMs = android.os.SystemClock.uptimeMillis();
+            synchronized (prewarmLock) {
+                if (sourceFrozen || lateFramesRejected) return;
+                ensureGl();
+                logicalWidth = frame.logicalWidth;
+                logicalHeight = frame.logicalHeight;
+                sourceBackend.makePbufferCurrent();
+                prismalRenderer.prepareBackdrop(
+                        frame.normalizedTextureId,
+                        frame.physicalWidth,
+                        frame.physicalHeight,
+                        frame.logicalWidth,
+                        frame.logicalHeight,
+                        prismalParams);
+                backdropPrepared = true;
+                prewarmFrameCount++;
+                lastPrewarmFrameUptimeMs = android.os.SystemClock.uptimeMillis();
+            }
             // While the finger is still in the normal press phase, keep replacing the prepared
             // backdrop with the newest clean frame. Geometry/output normally do not exist yet.
             renderCurrent();
