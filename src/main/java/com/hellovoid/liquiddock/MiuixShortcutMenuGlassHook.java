@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.view.MotionEvent;
 import android.view.View;
 
 import java.lang.reflect.Method;
@@ -9,6 +10,9 @@ final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
     private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
+    private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
+    private static final String DOCK_CONTAINER_VIEW =
+            "com.miui.home.launcher.dock.DockContainerView";
     private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
     private static final String EDIT_STATE_CHANGE_REASON = "com.miui.home.launcher.EditStateChangeReason";
     private static boolean installed;
@@ -34,6 +38,8 @@ final class MiuixShortcutMenuGlassHook {
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
             if (popupGlassEnabled) {
+                installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
+                installEarlyDockCaptureHook(classLoader, glassConfig);
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object itemInfo = args.length > 0 ? args[0] : null;
@@ -42,12 +48,14 @@ final class MiuixShortcutMenuGlassHook {
                         View ownerView = (View) owner;
                         View launcherRoot = ownerView.getRootView();
                         if (itemInfo != null) {
-                            ShortcutPopupGlassCoordinator.prepare(launcherRoot, glassConfig);
+                            ShortcutPopupGlassCoordinator.prepareIfNeeded(
+                                    ownerView, launcherRoot, glassConfig);
                         }
                         Object result = chain.proceed(args);
                         if (itemInfo == null) {
                             launcherRoot.postOnAnimation(
-                                    () -> ShortcutPopupGlassCoordinator.cancelPending(launcherRoot));
+                                    () -> ShortcutPopupGlassCoordinator.cancelPending(
+                                            ownerView, launcherRoot));
                         }
                         return result;
                     }
@@ -79,6 +87,72 @@ final class MiuixShortcutMenuGlassHook {
             MainHook.log(TAG + " hook unavailable: " + error);
             return false;
         }
+    }
+
+    private static void installEarlyWorkspaceCaptureHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
+        Class<?> cellLayoutClass = Class.forName(CELL_LAYOUT, false, classLoader);
+        Method dispatchTouchEvent =
+                cellLayoutClass.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
+        Method lastDownOnOccupiedCell =
+                cellLayoutClass.getDeclaredMethod("lastDownOnOccupiedCell");
+        dispatchTouchEvent.setAccessible(true);
+        lastDownOnOccupiedCell.setAccessible(true);
+
+        HookUtil.hook(dispatchTouchEvent, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
+                    ? (MotionEvent) args[0] : null;
+            Object owner = chain.getThisObject();
+
+            Object result = chain.proceed(args);
+
+            if (owner instanceof View && event != null) {
+                View launcherRoot = ((View) owner).getRootView();
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    Object occupied = lastDownOnOccupiedCell.invoke(owner);
+                    if (occupied instanceof Boolean && ((Boolean) occupied).booleanValue()) {
+                        ShortcutPopupGlassCoordinator.prepareEarly(launcherRoot, glassConfig);
+                    }
+                } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.cancelEarlyIfUnused(launcherRoot);
+                }
+            }
+            return result;
+        });
+    }
+
+    private static void installEarlyDockCaptureHook(
+            ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
+        Class<?> dockContainerClass = Class.forName(DOCK_CONTAINER_VIEW, false, classLoader);
+        Method dispatchTouchEventFromHome =
+                dockContainerClass.getDeclaredMethod(
+                        "dispatchTouchEventFromHome", MotionEvent.class);
+        dispatchTouchEventFromHome.setAccessible(true);
+
+        HookUtil.hook(dispatchTouchEventFromHome, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
+                    ? (MotionEvent) args[0] : null;
+            Object owner = chain.getThisObject();
+
+            Object result = chain.proceed(args);
+
+            if (owner instanceof View && event != null) {
+                View dockMenuOwner = (View) owner;
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    ShortcutPopupGlassCoordinator.prepareDockEarly(
+                            dockMenuOwner, glassConfig);
+                } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused(dockMenuOwner);
+                }
+            }
+            return result;
+        });
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
