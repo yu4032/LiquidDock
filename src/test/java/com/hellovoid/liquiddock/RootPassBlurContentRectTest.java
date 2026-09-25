@@ -29,6 +29,27 @@ public class RootPassBlurContentRectTest {
     }
 
     @Test
+    public void rootSubRectMapsIntoInsetAdjustedBufferUv() {
+        RootPassBlurContentRect content =
+                RootPassBlurContentRect.resolve(1000, 800, 10, 20, 30, 40);
+        RootPassBlurContentRect panel =
+                content.subRect(960, 740, 240, 185, 480, 370);
+
+        assertEquals(content.left + 0.25f * content.width, panel.left, 0.00001f);
+        assertEquals(content.bottom + 0.25f * content.height, panel.bottom, 0.00001f);
+        assertEquals(0.5f * content.width, panel.width, 0.00001f);
+        assertEquals(0.5f * content.height, panel.height, 0.00001f);
+    }
+
+    @Test
+    public void fullRootSubRectPreservesContentRect() {
+        RootPassBlurContentRect content =
+                RootPassBlurContentRect.resolve(1000, 800, 10, 20, 30, 40);
+
+        assertTrue(content.subRect(960, 740, 0, 0, 960, 740).sameAs(content));
+    }
+
+    @Test
     public void invalidGeometryFallsBackToWholeBuffer() {
         assertTrue(RootPassBlurContentRect.resolve(0, 100, 0, 0, 0, 0)
                 .sameAs(RootPassBlurContentRect.full()));
