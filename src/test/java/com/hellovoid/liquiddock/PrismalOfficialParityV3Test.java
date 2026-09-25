@@ -37,15 +37,15 @@ public class PrismalOfficialParityV3Test {
     }
 
     @Test
-    public void defaultPresetWritesTheSameOfficialOpticalRecipe() {
+    public void defaultConfigurationUsesBundledOpticalProfile() {
         Map<String, Object> p = PresetManager.defaultValues();
 
         assertEquals(155, p.get("liquid_ior"));
         assertEquals(115, p.get("liquid_normal_strength"));
         assertEquals(130, p.get("liquid_dome"));
-        assertEquals(26, p.get("liquid_chromatic"));
-        assertEquals(2, p.get("liquid_blur"));
-        assertEquals(20, p.get("liquid_blur_tenths"));
+        assertEquals(9, p.get("liquid_chromatic"));
+        assertEquals(7, p.get("liquid_blur"));
+        assertEquals(72, p.get("liquid_blur_tenths"));
         assertEquals(18, p.get("liquid_thickness"));
         assertEquals(180, p.get("liquid_thickness_tenths"));
         assertEquals(1, p.get("liquid_lens_refraction"));
@@ -54,14 +54,14 @@ public class PrismalOfficialParityV3Test {
         assertEquals(122, p.get("liquid_rim_light"));
         assertEquals(0, p.get("liquid_tint_r"));
         assertEquals(0, p.get("liquid_tint_g"));
-        assertEquals(255, p.get("liquid_tint_b"));
-        assertEquals(35, p.get("liquid_tint_alpha"));
+        assertEquals(0, p.get("liquid_tint_b"));
+        assertEquals(0, p.get("liquid_tint_alpha"));
 
         assertEquals(20, p.get("liquid_prismal_refraction_inset"));
         assertEquals(200, p.get("liquid_prismal_refraction_inset_tenths"));
         assertEquals(115, p.get("liquid_prismal_displacement_scale"));
-        assertEquals(19, p.get("liquid_prismal_height_transition_width"));
-        assertEquals(190, p.get("liquid_prismal_height_transition_width_tenths"));
+        assertEquals(8, p.get("liquid_prismal_height_transition_width"));
+        assertEquals(80, p.get("liquid_prismal_height_transition_width_tenths"));
         assertEquals(2, p.get("liquid_prismal_smin_smoothing"));
         assertEquals(18, p.get("liquid_prismal_smin_smoothing_tenths"));
         assertEquals(400, p.get("liquid_prismal_edge_refraction_falloff"));
@@ -70,11 +70,11 @@ public class PrismalOfficialParityV3Test {
         assertEquals(100, p.get("liquid_prismal_dispersion_b"));
         assertEquals(128, p.get("liquid_prismal_vibrancy"));
         assertEquals(8, p.get("liquid_prismal_plain_highlight"));
-        assertEquals(-50, p.get("liquid_prismal_light_dir_x"));
+        assertEquals(0, p.get("liquid_prismal_light_dir_x"));
         assertEquals(-80, p.get("liquid_prismal_light_dir_y"));
-        assertEquals(255, p.get("liquid_prismal_shadow_r"));
-        assertEquals(255, p.get("liquid_prismal_shadow_g"));
-        assertEquals(255, p.get("liquid_prismal_shadow_b"));
+        assertEquals(0, p.get("liquid_prismal_shadow_r"));
+        assertEquals(0, p.get("liquid_prismal_shadow_g"));
+        assertEquals(0, p.get("liquid_prismal_shadow_b"));
         assertEquals(35, p.get("liquid_prismal_shadow_alpha"));
         assertEquals(1000, p.get("liquid_prismal_shadow_softness"));
         assertEquals(100, p.get("liquid_prismal_transmittance"));
