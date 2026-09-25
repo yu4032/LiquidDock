@@ -51,12 +51,13 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(effect.contains("layerSize="));
         assertTrue(effect.contains("glassLayer"));
         assertTrue(effect.contains("MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)"));
-        assertTrue(effect.contains("glassLayer.setRenderEffect(effect)"));
-        assertTrue(effect.contains("glassLayer.setRenderEffect(null)"));
-        assertTrue(effect.contains("MiBlurBridge.clearPassWindowBlur(glassLayer)"));
+        assertTrue(effect.contains("MiBlurBridge.applyBackdropRenderEffect(glassLayer, effect)"));
+        assertTrue(effect.contains("MiBlurBridge.restoreBackdropRenderEffect("));
+        assertTrue(effect.contains("layerOriginalState"));
         assertTrue(effect.contains("contentView.removeView(glassLayer)"));
-        assertFalse(effect.contains("MiBlurBridge.applyBackdropRenderEffect"));
-        assertFalse(effect.contains("MiBlurBridge.restoreBackdropRenderEffect"));
+        assertFalse(effect.contains("glassLayer.setRenderEffect(effect)"));
+        assertFalse(effect.contains("glassLayer.setRenderEffect(null)"));
+        assertFalse(effect.contains("MiBlurBridge.clearPassWindowBlur(glassLayer)"));
         // The owned background child inherits PopupAnimHelper transforms from mContentView while
         // launcher text/icons stay above it and never pass through the optical RenderEffect.
         assertFalse(effect.contains("target.setBackground"));
@@ -64,6 +65,12 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(effect.contains("target.setClipToOutline"));
         assertFalse(effect.contains("PassBlurQualityPolicy.captureScale"));
         assertTrue(effect.contains("sourceViewMode="));
+        assertTrue(effect.contains("vendorRadius="));
+        assertTrue(effect.contains("opticalSubstrateRadius="));
+        assertTrue(effect.contains("params.blurRadiusPx"));
+        assertTrue(effect.contains("blurDp * Math.max(0.1f, density)"));
+        assertFalse(effect.contains("return state.backgroundBlurRadius"));
+        assertFalse(effect.contains("\"shortcut_menu_blur_radius\""));
         assertTrue(effect.contains("uniform shader u_backdrop"));
         assertTrue(effect.contains("u_backdrop.eval"));
         assertTrue(effect.contains("uniform float u_refractionInset"));
