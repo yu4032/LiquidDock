@@ -12,158 +12,79 @@ import org.junit.Test;
 public class ShortcutSecondaryGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
-    @Test public void shortcutMenuUsesHwuiBackdropEffectWithoutFeedbackSurface()
+    @Test public void shortcutMenuUsesLauncherExternalPrismalWithoutFeedbackSurface()
             throws Exception {
         String hook = SourceContractText.read(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
-        String effect = Files.readString(MAIN.resolve("ShortcutPopupHwuiGlassEffect.java"));
-        String bridge = Files.readString(MAIN.resolve("MiBlurBridge.java"));
+        String sink = Files.readString(MAIN.resolve("LauncherGlassSinkView.java"));
         String vendorMaterial = Files.readString(
                 MAIN.resolve("ShortcutPopupVendorMaterialBridge.java"));
         String domains = Files.readString(MAIN.resolve("PassBlurDomain.java"));
+        String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
 
         assertTrue(hook.contains("ShortcutPopupGlassCoordinator.bindPopup"));
-        assertTrue(hook.contains("backend=hwui-backdrop-effect"));
+        assertTrue(hook.contains("backend=launcher-external-prismal"));
+        assertFalse(hook.contains("backend=hwui-backdrop-effect"));
         assertFalse(hook.contains("\"setRequestingItemInfo\""));
         assertFalse(hook.contains("ShortcutPopupGlassCoordinator.prepare"));
         assertFalse(hook.contains("postDelayed("));
 
-        assertTrue(coordinator.contains("ShortcutPopupHwuiGlassEffect.attach"));
+        assertTrue(coordinator.contains("LauncherGlassSessionRegistry.acquire"));
+        assertTrue(coordinator.contains("LauncherGlassSessionRegistry.resolveStableRoot"));
+        assertTrue(coordinator.contains("LauncherGlassSinkView.attachToExternalMaterial"));
+        assertTrue(coordinator.contains("authority.requestFreshBackdrop()"));
+        assertTrue(coordinator.contains("authority.publishDragGeometry(sink, geometry)"));
+        assertTrue(coordinator.contains("sink.captureGeometry(launcherRoot)"));
+        assertTrue(coordinator.contains("sink.runWhenFirstFramePresented"));
+        assertTrue(coordinator.contains("sink.runWhenOutputLost"));
         assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.claim"));
         assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.restoreIfVisible"));
         assertTrue(coordinator.contains("popupView.addOnAttachStateChangeListener"));
         assertTrue(coordinator.contains("contentView.addOnLayoutChangeListener"));
-        assertTrue(coordinator.contains("hasRealGeometry(contentView)"));
-        assertTrue(coordinator.contains("view.getWidth() > 0 && view.getHeight() > 0"));
-        assertTrue(coordinator.contains("waiting for popup layout"));
-        assertTrue(coordinator.contains("HWUI backdrop effect bound size="));
+        assertTrue(coordinator.contains("observer.addOnPreDrawListener(listener)"));
+        assertTrue(coordinator.contains("external Prismal first frame presented"));
+        assertTrue(coordinator.contains("Never shut it down from a transient popup"));
+        assertFalse(coordinator.contains("ShortcutPopupHwuiGlassEffect.attach"));
+        assertFalse(coordinator.contains("setBackdropRenderEffect"));
+        assertFalse(coordinator.contains("RenderEffect"));
+        assertFalse(coordinator.contains("RuntimeShader"));
         assertFalse(coordinator.contains("ShortcutPopupSourceOverlay"));
         assertFalse(coordinator.contains("ShortcutPopupGlassSession"));
         assertFalse(coordinator.contains("ShortcutPopupGlassLayer"));
-        assertFalse(coordinator.contains("TextureView"));
 
-        assertTrue(effect.contains("RuntimeShader"));
-        assertTrue(effect.contains("RenderEffect.createRuntimeShaderEffect"));
-        assertTrue(effect.contains("MiBlurBridge.captureBackdropRenderEffectState"));
-        assertTrue(effect.contains("contentView.addView("));
-        assertTrue(effect.contains(
-                "glassLayer.layout(0, 0, contentView.getWidth(), contentView.getHeight())"));
-        assertTrue(effect.contains("layerSize="));
-        assertTrue(effect.contains("glassLayer"));
-        assertTrue(effect.contains("new BackdropEffectHostView(target.getContext())"));
-        assertTrue(effect.contains("setWillNotDraw(false)"));
-        assertTrue(effect.contains("canvas.drawColor(0x01000000)"));
-        assertTrue(effect.contains("hostDrawAnchor=true"));
-        assertFalse(effect.contains("MiBlurBridge.applyPassWindowBlur(glassLayer, blurRadius)"));
-        assertTrue(effect.contains("RenderEffect.createBlurEffect("));
-        assertTrue(effect.contains("RenderEffect.createChainEffect(opticalEffect, blurEffect)"));
-        assertTrue(effect.contains("MiBlurBridge.applyBackdropRenderEffect(glassLayer, effect)"));
-        assertTrue(effect.contains("MiBlurBridge.restoreBackdropRenderEffect("));
-        assertTrue(effect.contains("layerOriginalState"));
-        assertTrue(effect.contains("contentView.removeView(glassLayer)"));
-        assertFalse(effect.contains("glassLayer.setRenderEffect(effect)"));
-        assertFalse(effect.contains("glassLayer.setRenderEffect(null)"));
-        assertFalse(effect.contains("MiBlurBridge.clearPassWindowBlur(glassLayer)"));
-        assertFalse(effect.contains("MiBlurBridge.setPassWindowBlurEnabled(glassLayer"));
-        // The owned background child inherits PopupAnimHelper transforms from mContentView while
-        // launcher text/icons stay above it and never pass through the optical RenderEffect.
-        assertFalse(effect.contains("target.setBackground"));
-        assertFalse(effect.contains("target.setOutlineProvider"));
-        assertFalse(effect.contains("target.setClipToOutline"));
-        assertFalse(effect.contains("PassBlurQualityPolicy.captureScale"));
-        assertTrue(effect.contains("sourceViewMode="));
-        assertTrue(effect.contains("vendorRadius="));
-        assertTrue(effect.contains("backdropChainBlurRadius="));
-        assertFalse(effect.contains("opticalSubstrateRadius="));
-        assertTrue(effect.contains("params.blurRadiusPx"));
-        assertTrue(effect.contains("blurDp * Math.max(0.1f, density)"));
-        assertFalse(effect.contains("return state.backgroundBlurRadius"));
-        assertFalse(effect.contains("\"shortcut_menu_blur_radius\""));
-        assertTrue(effect.contains("uniform shader u_backdrop"));
-        assertTrue(effect.contains("u_backdrop.eval"));
-        assertTrue(effect.contains("uniform float u_refractionInset"));
-        assertTrue(effect.contains("uniform float u_sminSmoothing"));
-        assertTrue(effect.contains("uniform float u_edgeRefractionFalloff"));
-        assertTrue(effect.contains("uniform float u_fresnelReflect"));
-        assertTrue(effect.contains("uniform float u_lensRefractionPx"));
-        assertTrue(effect.contains("uniform float u_lensDepthEffect"));
-        assertTrue(effect.contains("uniform float4 u_shadowColor"));
-        assertTrue(effect.contains("uniform float u_os4ReflectionStrength"));
-        assertTrue(effect.contains("edgeBand(edgeDist, os4Width)"));
-        assertTrue(effect.contains("shader.setFloatUniform(\"u_lensRefractionPx\", lensPx)"));
-        // Skia RuntimeShader image filters run in local filter coordinates and the bound
-        // child shader shares that coordinate domain. Do not remap through window/surface space.
-        assertFalse(effect.contains("u_origin"));
-        assertFalse(effect.contains("u_basisX"));
-        assertFalse(effect.contains("u_basisY"));
-        assertFalse(effect.contains("getLocationInSurface"));
-        assertFalse(effect.contains("mapThroughViewParents"));
-        assertFalse(effect.contains("RootPassBlurBackend"));
-        assertFalse(effect.contains("SurfaceTexture"));
-        assertFalse(effect.contains("import android.view.TextureView"));
-        assertFalse(effect.contains("extends TextureView"));
-        assertFalse(effect.contains("PixelCopy"));
-        assertFalse(effect.contains("Bitmap"));
-        assertFalse(effect.contains("ScreenCapture"));
+        // External sink output is allowed to be TextureView because its producer authority is the
+        // separate Launcher ViewRoot. The popup output therefore cannot be sampled back into the
+        // workspace source.
+        assertTrue(sink.contains("attachToExternalMaterial"));
+        assertTrue(sink.contains("externalSessionAuthority"));
+        assertTrue(sink.contains("runWhenFirstFramePresented"));
+        assertTrue(sink.contains("onSurfaceTextureUpdated"));
+        assertTrue(sink.contains("firstFramePresentedListener"));
 
-        assertTrue(bridge.contains(
-                "View.class.getMethod(\n"
-                        + "                    \"setBackdropRenderEffect\", RenderEffect.class)"));
-        assertTrue(bridge.contains(
-                "static boolean applyBackdropRenderEffect(View view, RenderEffect effect) {"));
-        assertTrue(bridge.contains(
-                "SET_BACKDROP_RENDER_EFFECT.invoke(view, effect);\n"
-                        + "            view.invalidate();\n"
-                        + "            return true;"));
-        // mode=2 is ShortcutMenuLayer authority. The generic RenderEffect bridge must not
-        // rewrite MIUI blur state; the dedicated popup material bridge owns that handoff.
-        assertFalse(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 2)"));
-        assertTrue(bridge.contains(
-                "// Do not rewrite any of those properties here. In particular, mode=2 belongs to"));
-        assertTrue(bridge.contains("\"getMiViewBlurMode\""));
-        assertTrue(bridge.contains("\"getMiBackgroundBlurMode\""));
-        assertTrue(bridge.contains("\"getMiBackgroundBlurRadius\""));
-        assertTrue(bridge.contains("\"getMiBackgroundBlendColors\""));
-        assertTrue(bridge.contains("\"getPassTextureScale\""));
-        assertTrue(bridge.contains("class BackdropRenderEffectState"));
-        assertTrue(bridge.contains("restoreBackdropRenderEffect("));
-
-        // mContentView becomes content-only. Its normal fallback background must also be
-        // transparent so advanced-material on/off reaches the same owned glass child.
-        assertFalse(vendorMaterial.contains("SET_MI_BACKGROUND_BLUR_MODE"));
-        assertFalse(vendorMaterial.contains(
-                "View.class, \"setMiBackgroundBlurMode\""));
+        // Keep stock material until the first custom frame exists; only then make mContentView
+        // content-only. Failure or detach restores the vendor material.
         assertTrue(vendorMaterial.contains("contentView.getBackground()"));
         assertTrue(vendorMaterial.contains("background.setAlpha(0)"));
         assertTrue(vendorMaterial.contains("originalBackgroundAlpha"));
-        assertTrue(vendorMaterial.contains("setMiViewBlurMode"));
-        assertTrue(vendorMaterial.contains("clearMiBackgroundBlendColor"));
-        assertTrue(vendorMaterial.contains("setMiBloomStroke"));
-        assertTrue(vendorMaterial.contains("new float[21]"));
-        assertFalse(vendorMaterial.contains("getMethod(\"isMaterialEnabled\""));
-        assertTrue(vendorMaterial.contains(
-                "HookUtil.findMethodExact(\n"
-                        + "                    popupView.getClass(), \"prepareHyperMaterial\""));
         assertTrue(vendorMaterial.contains("prepareHyperMaterial.invoke(popupView)"));
-        assertTrue(vendorMaterial.contains("!popupView.isAttachedToWindow()"));
-        assertFalse(vendorMaterial.contains("setPassWindowBlurEnabled"));
-        assertFalse(vendorMaterial.contains("clearPassWindowBlur"));
-        assertFalse(vendorMaterial.contains("setBackground(null)"));
 
+        // ShortcutPopup must not create a second PassBlur domain/producer. It reuses the stable
+        // Launcher workspace session instead.
         assertFalse(domains.contains("SHORTCUT_POPUP"));
-        String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
         assertFalse(request.contains("shortcutPopup("));
         assertFalse(request.contains("PassBlurDomain.SHORTCUT_POPUP"));
     }
 
-    @Test public void popupDetachDefersHwuiCleanupOutsideVendorRemoveTraversal()
+    @Test public void popupDetachDefersExternalSinkCleanupOutsideVendorRemoveTraversal()
             throws Exception {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         assertTrue(coordinator.contains(
                 "decor.post(() -> release(state, \"popup-detached\"))"));
-        assertTrue(coordinator.contains("if (state.effect != null)"));
-        assertTrue(coordinator.contains("state.effect.dispose()"));
+        assertTrue(coordinator.contains("state.geometryObserver.removeOnPreDrawListener"));
+        assertTrue(coordinator.contains("if (sink != null) sink.dispose()"));
         assertTrue(coordinator.contains("content.removeOnLayoutChangeListener"));
+        assertTrue(coordinator.contains("ShortcutPopupVendorMaterialBridge.restoreIfVisible"));
+        assertFalse(coordinator.contains("state.authority.shutdown()"));
         assertFalse(coordinator.contains("removeViewImmediate"));
         assertFalse(coordinator.contains("postDelayed("));
     }
