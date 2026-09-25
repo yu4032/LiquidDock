@@ -10,19 +10,32 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
 </p>
 
-LiquidDock is an LSPosed module for the **HyperOS tablet launcher**, focused on desktop layout, Dock customization, and Liquid Glass effects.
+LiquidDock is an LSPosed module for HyperOS tablets. It customizes the home screen, Dock, Recents, and extends Liquid Glass styling to additional system surfaces and selected third-party apps.
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
 </p>
 
-## What it can do
+## Main features
 
 ### Liquid Glass
 
-Add a consistent Liquid Glass look to the Dock, workspace icons, widgets, and folders. Blur, refraction, highlights, dispersion, corner radius, and other visual details can be adjusted from the settings app.
+LiquidDock can add a consistent Liquid Glass appearance to:
 
-Glass also follows dragged icons and widgets. The long-press shortcut menu can use a glass background as well, with an optional white text and icon mode for dark backgrounds.
+- the Dock;
+- workspace icons and Dock utility icons;
+- widgets;
+- small and large folders;
+- dragged icons, widgets, and folders;
+- the long-press shortcut menu;
+- the Recents action buttons;
+- launcher uninstall, remove, and second-confirmation dialogs;
+- the app-caption menu with split-screen and floating-window controls;
+- supported Security Center sidebars;
+- the MIUI system search main background;
+- the Gboard floating keyboard and related toolbar surfaces.
+
+Blur, refraction, dispersion, tint, brightness, shadow, highlights, corner radius, and individual highlight layers can be adjusted.
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
@@ -30,87 +43,145 @@ Glass also follows dragged icons and widgets. The long-press shortcut menu can u
 
 ### Home screen layout
 
-Choose between **8×4** and **10×6** workspace grids, with separate spacing and positioning controls for portrait and landscape.
+Choose between **8×4 / 4×8** and **10×6 / 6×10** workspace profiles. Portrait and landscape can be adjusted independently for:
 
-On Launcher 4.50, icon size can also be adjusted for the workspace, Dock, folders, and related launcher views without changing normal All Apps or Search sizing.
+- horizontal spacing;
+- top and bottom spacing;
+- row gaps;
+- page-indicator position;
+- widget sizing adaptation.
+
+Launcher 4.50 also supports independent icon-size control for the workspace, Dock, folders, and related launcher surfaces.
 
 ### Dock
 
-Adjust Dock width, height, bottom position, icon spacing, corner radius, and blur. Stroke, shadow, and Workstation divider options are available too.
+Available Dock controls include:
 
-The phone-interconnect shortcut can be hidden from the Dock without turning off the underlying system feature.
+- width and height;
+- bottom position;
+- icon spacing;
+- blur and corner radius;
+- stroke;
+- continuous/squircle shape;
+- whole-Dock shadow and stroke shadow;
+- Workstation divider.
+
+The phone-interconnect shortcut can be hidden without disabling the underlying system feature.
 
 ### Widgets and folders
 
-Widgets can use glass backgrounds with an optional dark-content mode. Selected background parts of supported widgets can also be hidden from the settings app.
+Widgets can use glass backgrounds with optional dark-content adaptation. Supported widgets can also be scanned from the current workspace so individual internal background components can be hidden. These hiding rules can be backed up and restored separately.
 
-Small and large folders can be configured separately, including their glass effect, size, and corner radius.
+Small and large folders have separate glass, size, and corner-radius controls.
+
+### Shortcut menu and dialogs
+
+The long-press shortcut menu can use a glass background with an optional white-text-and-icon mode for dark backgrounds.
+
+Launcher uninstall, remove, and second-confirmation dialogs can use their own glass appearance, with controls for:
+
+- background dimming;
+- native dark mode;
+- local tint;
+- local blur;
+- restoring inheritance from the global glass appearance.
 
 ### Recents and Workstation
 
-Recents background blur can be adjusted. LiquidDock also includes several layout options for HyperOS Workstation / Laptop mode, including Dock, workspace, and app-page positioning.
+Recents supports:
 
-Workstation support is still being refined, so changing its options one at a time is recommended.
+- adjustable wallpaper blur;
+- optional wallpaper-dimming suppression;
+- Liquid Glass for the Clear All and device-interconnect action buttons.
 
-### Security Center sidebar
+Workstation mode has separate controls for Dock length, icon position, icon corner radius, workspace horizontal position, All Apps spacing, and the divider.
 
-LiquidDock can also add Liquid Glass to supported HyperOS 4 Security Center sidebar pages, including Game Toolbox, Video Toolbox, Global Dock, and All Apps.
+### System UI and Security Center
 
-Security Center varies significantly between system versions. If a build is not compatible, LiquidDock leaves the original system interface in place.
+Optional system integrations include:
+
+- the app-caption menu containing split-screen, floating-window, and related controls;
+- supported Security Center Game Toolbox, Video Toolbox, Global Dock, and All Apps surfaces.
+
+These two higher-risk system integrations are not automatically enabled by the built-in default configuration.
+
+### MIUI system search and Gboard
+
+MIUI system search can replace its main background with Liquid Glass and can use independent tint and blur values.
+
+Gboard supports glass for the floating keyboard and related toolbar surfaces, independent tint and blur, and a setting that controls whether dragging the bottom handle automatically enters resize mode.
+
+### Configuration, animation, and backup
+
+Animation timing can be adjusted for workspace visibility, Dock icon return, press feedback, Dock size changes, and settings-page transitions.
+
+The settings app supports:
+
+- restoring the built-in default configuration;
+- exporting the current configuration to JSON;
+- importing a JSON configuration;
+- separate backup and restore for widget-component hiding rules.
+
+A fresh install is seeded with the current built-in default configuration. Existing user settings are not replaced by the default profile during upgrades.
 
 ## Compatibility
 
-The main development and test baseline is:
+Main development and verification baseline:
 
-| Item | Recommended version |
+| Item | Current range |
 | --- | --- |
-| HyperOS | 3.0.307 or newer |
+| HyperOS | Primarily tablet builds based on 3.0.307 and newer |
 | System Launcher | `com.miui.home` release-4.50.x.x |
 | LSPosed | A version with libxposed API 101 support |
 
-Launcher and Security Center updates may temporarily affect compatibility. If something stops working after an update, check the installed launcher version first.
+Updates to Launcher, System UI, Security Center, Gboard, or MIUI Search may temporarily affect the corresponding integration.
 
 ## Installation
 
 1. Download the latest APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
 2. Install it and enable LiquidDock in LSPosed.
-3. Enable these scopes:
-   - System Launcher — `com.miui.home`
-   - System UI — `com.android.systemui`
-   - Security Center — `com.miui.securitycenter`
-4. Restart the affected processes or reboot the device.
-5. Open LiquidDock and enable the features you want.
+3. Enable the scopes you need:
 
-Some layout options require a launcher restart. The settings app indicates this where possible.
+| Scope | Used for |
+| --- | --- |
+| `com.miui.home` | Required for the core Launcher, Dock, Recents, folder, and widget features |
+| `com.android.systemui` | Recommended for launcher transitions and required for the optional app-caption menu glass |
+| `com.miui.securitycenter` | Only required for Security Center glass |
+| `com.google.android.inputmethod.latin` | Only required for Gboard integration |
+| `com.android.quicksearchbox` | Only required for MIUI Search glass |
+
+4. Restart the affected processes or reboot the device.
+5. Open LiquidDock and configure the features you want.
+
+Some structural settings require a Launcher, System UI, or app restart. The settings app indicates this where possible.
 
 ## Reporting issues
 
-When opening an issue, please include:
+When opening an issue, include:
 
 - HyperOS version;
 - System Launcher version;
-- the LiquidDock options that were enabled;
-- short, reliable reproduction steps;
-- relevant logs when available.
+- the app version related to the affected integration;
+- enabled LiquidDock options;
+- reliable reproduction steps;
+- relevant logs when needed.
 
-For Workstation or Security Center problems, also mention the page or mode where the issue occurs.
+## Documentation
 
-## More documentation
+- [FEATURES.md](FEATURES.md) — current features and settings
+- [ARCHITECTURE.md](ARCHITECTURE.md) — current runtime architecture
+- [HOOKS.md](HOOKS.md) — current integration boundaries
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development rules
+- [TODO.md](TODO.md) — active unfinished work
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [DIVIDER.md](DIVIDER.md) — Workstation divider behavior
 
-For a complete feature list, see [FEATURES.md](FEATURES.md).
-
-Development and implementation notes are kept in:
-
-- [ARCHITECTURE.md](ARCHITECTURE.md)
-- [HOOKS.md](HOOKS.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [TODO.md](TODO.md)
-- [CHANGELOG.md](CHANGELOG.md)
+Files under `docs/superpowers/` are historical plans, specifications, and verification records. They do not describe the current implementation unless explicitly stated otherwise.
 
 ## Risk notice
 
 > [!WARNING]
-> LiquidDock changes parts of the system Launcher, System UI, and Security Center. System component updates may introduce compatibility issues, so keep a working recovery method available before updating.
+> LiquidDock changes the presentation of System Launcher, System UI, Security Center, and selected third-party apps. System or app updates may introduce compatibility issues, so keep a working recovery method available before updating.
 
 LiquidDock is a community project and is not affiliated with Xiaomi, LSPosed, or related projects.
 

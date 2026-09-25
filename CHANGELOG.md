@@ -1,4 +1,13 @@
-# Changelog for AI agent
+# Changelog
+
+> 本文件按版本记录当时的变化，历史条目不会为追随当前实现而改写。当前行为请以 `main` 生产源码和 [README.md](README.md)、[FEATURES.md](FEATURES.md)、[ARCHITECTURE.md](ARCHITECTURE.md)、[HOOKS.md](HOOKS.md) 为准。
+
+## Unreleased
+
+### Documentation
+
+- 按当前 v2.5.0 生产代码重建 README、功能、架构、Hook、贡献指南、TODO、Divider、第三方声明和旧架构说明
+- 将 `docs/superpowers` 下的阶段性计划、设计和验证记录统一标记为历史归档，避免旧方案被误读为当前实现
 
 ## v2.5.0 (2026-09-25)
 
@@ -15,6 +24,8 @@
 ### 配置
 
 - 将用户配置档设为唯一默认配置；仅在首次初始化时写入，不覆盖已有设置
+- 默认配置明确保持安全中心玻璃、SystemUI 应用顶部菜单玻璃和调试日志关闭
+
 
 ## v2.4.5 (2026-09-22)
 

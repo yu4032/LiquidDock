@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Historical record / 历史记录。** 本文件记录其日期对应的计划、设计或验证快照，不维护为当前实现契约。当前行为请以 [README](../../../README.md)、[FEATURES](../../../FEATURES.md)、[ARCHITECTURE](../../../ARCHITECTURE.md)、[HOOKS](../../../HOOKS.md) 和 [TODO](../../../TODO.md) 为准。
+
 # Launcher Static Page Glass Compositor Design
 
 Date: 2026-08-23
