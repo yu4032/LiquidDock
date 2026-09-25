@@ -71,15 +71,16 @@ final class DockGlassCompositor {
         }
     }
 
-    void refreshUiSceneIfNeeded(int framebufferWidth, int framebufferHeight,
+    boolean refreshUiSceneIfNeeded(int framebufferWidth, int framebufferHeight,
             float sampleInsetLeft, float sampleInsetTop, float scaleX, float scaleY) {
         View ownershipRoot = ownershipRootRef.get();
         View outputRoot = outputRootRef.get();
         if (ownershipRoot == null || outputRoot == null
                 || !GlassRuntimeState.isEnabled() || !iconStyle.enabled) {
+            boolean changed = latestScene.size() > 0;
             cached.clear();
             latestScene = DockGlassSceneSnapshot.EMPTY;
-            return;
+            return changed;
         }
 
         boolean workstationMode = MainHook.isWorkstationMode();
@@ -139,7 +140,7 @@ final class DockGlassCompositor {
                 || Float.compare(scaleX, lastScaleX) != 0
                 || Float.compare(scaleY, lastScaleY) != 0
                 || outputFingerprint != lastOutputFingerprint;
-        if (!geometryMappingChanged && fingerprint == lastFingerprint) return;
+        if (!geometryMappingChanged && fingerprint == lastFingerprint) return false;
 
         boolean anyGeometryChanged = geometryMappingChanged;
         if (!anyGeometryChanged) {
@@ -159,8 +160,9 @@ final class DockGlassCompositor {
             outputRoot.transformMatrixToGlobal(outputGlobal);
             outputInverse = new Matrix();
             if (!outputGlobal.invert(outputInverse)) {
+                boolean changed = latestScene.size() > 0;
                 latestScene = DockGlassSceneSnapshot.EMPTY;
-                return;
+                return changed;
             }
         }
 
@@ -201,6 +203,7 @@ final class DockGlassCompositor {
         lastInsetT = sampleInsetTop;
         lastScaleX = scaleX;
         lastScaleY = scaleY;
+        return true;
     }
 
     DockGlassSceneSnapshot latestScene() { return latestScene; }
