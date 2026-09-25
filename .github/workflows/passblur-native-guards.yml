@@ -1,0 +1,46 @@
+name: PassBlur native guard tests
+
+on:
+  push:
+    paths:
+      - 'native/passblur/**'
+      - 'docs/reverse-engineering/passblur-native-scheduler.md'
+      - '.github/workflows/passblur-native-guards.yml'
+  pull_request:
+    paths:
+      - 'native/passblur/**'
+      - 'docs/reverse-engineering/passblur-native-scheduler.md'
+      - '.github/workflows/passblur-native-guards.yml'
+  workflow_dispatch:
+
+jobs:
+  guard-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Binary identity, target-byte and unrelated-byte guards
+        run: python3 -m unittest discover native/passblur -p 'test_*.py' -v
+      - name: Per-PassBlur scheduler state and race tests
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread \
+            native/passblur/test_latest_only_scheduler.cpp \
+            -o /tmp/passblur-scheduler-test
+          /tmp/passblur-scheduler-test
+      - name: Ensure no unreviewed production patch sites exist
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('native/passblur/compatibility.json').read_text())
+          assert manifest['patch_sites'] == [], 'Review native patch sites before enabling them'
+          print('No deployable native patch in this branch')
+          PY
+  verify-private-release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify private release archive, ELF identity and function bytes
+        env:
+          HYPEROS_ANALYSIS_READ_TOKEN: ${{ secrets.HYPEROS_ANALYSIS_READ_TOKEN }}
+        run: python3 native/passblur/verify_release_asset.py

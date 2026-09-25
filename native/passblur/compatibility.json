@@ -1,0 +1,166 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "yu4032/hyperos-analysis",
+    "branch": "analysis/passblur-gfx-libs",
+    "commit": "2e2856e172d5faba872ab776dd79ddb0576d6178",
+    "release_tag": "Libs",
+    "asset": "liquidui-passblur-gfx-input.tar.gz",
+    "asset_sha256": "57e25e06f70aa3e3da98dbeb16fbcc6e6e9d2ecd541f96568dc043e91804282f"
+  },
+  "binary": {
+    "name": "libsurfaceflinger.so",
+    "size": 11577024,
+    "sha256": "407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32",
+    "build_id": "39691db140edc0663fab2fde2475c091",
+    "machine": "AArch64"
+  },
+  "ghidra_image_base": 1048576,
+  "functions": [
+    {
+      "name": "PassBlur::PassBlur (base constructor)",
+      "ghidra_address": "0x5215e0",
+      "elf_vaddr": "0x4215e0",
+      "size": 336,
+      "sha256": "e221cb9133e8799c99855b3439a4af4709857226c0b80ac26dc18519eed06563",
+      "entry_bytes": "fd7bbda9f50b00f9f44f02a9fd030091"
+    },
+    {
+      "name": "PassBlur::PassBlur (complete constructor)",
+      "ghidra_address": "0x521730",
+      "elf_vaddr": "0x421730",
+      "size": 352,
+      "sha256": "e47c5c35836aa240126a1eb7cb16a265c065219f388ed68bcd9e2d303e742c66",
+      "entry_bytes": "fd7bbda9f50b00f9f44f02a9fd030091"
+    },
+    {
+      "name": "PassBlur::~PassBlur",
+      "ghidra_address": "0x521890",
+      "elf_vaddr": "0x421890",
+      "size": 508,
+      "sha256": "eaf11d8827865beac36e0d09387afed94a5654f60f6ebfb6dcd7a654a3ee0823",
+      "entry_bytes": "fd7bbca9f70b00f9f65702a9f44f03a9"
+    },
+    {
+      "name": "PassBlur::disconnectWin",
+      "ghidra_address": "0x521aa0",
+      "elf_vaddr": "0x421aa0",
+      "size": 316,
+      "sha256": "0360dc72ec282a9d4deac2defd7745f526bbf043af3e631be0b62557a9519c4e",
+      "entry_bytes": "041040f9e40900b4fd7bbca9f70b00f9"
+    },
+    {
+      "name": "PassBlur::setUpdateTextureFlag",
+      "ghidra_address": "0x5222e0",
+      "elf_vaddr": "0x4222e0",
+      "size": 148,
+      "sha256": "23836ece7415f4375b0d6edd3454ab0b83dd1255233bde8e1e711e384a421cb9",
+      "entry_bytes": "e80f1dfcfd7b01a9f44f02a9fd430091"
+    },
+    {
+      "name": "PassBlur::setForceRefresh",
+      "ghidra_address": "0x522380",
+      "elf_vaddr": "0x422380",
+      "size": 136,
+      "sha256": "c2a934b95103c853f7872a7fcf0277c9b2b24332d7bd11e5268c31c16a32320c",
+      "entry_bytes": "fd7bbda9f50b00f9f44f02a9fd030091"
+    },
+    {
+      "name": "PassBlur::cancelPassBlurBuffer",
+      "ghidra_address": "0x522730",
+      "elf_vaddr": "0x422730",
+      "size": 396,
+      "sha256": "85f9a6cd4c364a47cc22810111e906c6e6987e75acf68d00d02d82a31bdfd916",
+      "entry_bytes": "fd7bbca9f70b00f9f65702a9f44f03a9"
+    },
+    {
+      "name": "PassBlur::queuePassBlurBuffer",
+      "ghidra_address": "0x5228c0",
+      "elf_vaddr": "0x4228c0",
+      "size": 760,
+      "sha256": "9b770b6d57ceda93b6ad197ee42fa7ef302767c08ea47c35b33f8075277404b6",
+      "entry_bytes": "ff4302d1e82300fdfdfb04a9f92f00f9"
+    },
+    {
+      "name": "PassBlur::dequeuePassBlurBuffer",
+      "ghidra_address": "0x522bc0",
+      "elf_vaddr": "0x422bc0",
+      "size": 1476,
+      "sha256": "6f8342cbbee4afabc162ffdad5fcbf4e5d736b8afa28bb9e84c84dd4fb7fa904",
+      "entry_bytes": "ff8302d1fd7b04a9fc6f05a9fa6706a9"
+    },
+    {
+      "name": "BackgroundExecutor::BackgroundExecutor",
+      "ghidra_address": "0x448340",
+      "elf_vaddr": "0x348340",
+      "size": 588,
+      "sha256": "31dbe1425072903d2542d7de476a87f613c8a9eaa853a633473f29db9d5fa344",
+      "entry_bytes": "ff4301d1fd7b01a9f85f02a9f65703a9"
+    },
+    {
+      "name": "BackgroundExecutor::bgDrawPassBlur",
+      "ghidra_address": "0x448b70",
+      "elf_vaddr": "0x348b70",
+      "size": 488,
+      "sha256": "63ab33b5da0b92f32f9905b42f981358c5cb4980d68c1e9c424587a975664301",
+      "entry_bytes": "fd7bbaa9fc6f01a9fa6702a9f85f03a9"
+    },
+    {
+      "name": "LocklessQueue::pop",
+      "ghidra_address": "0x4491b0",
+      "elf_vaddr": "0x3491b0",
+      "size": 592,
+      "sha256": "3fed9a2c931b0d05aa98a7352184fb70e4d4bcbd995425ab5383840efca382df",
+      "entry_bytes": "fd7bbba9fc6701a9f85f02a9f65703a9"
+    },
+    {
+      "name": "passBlur worker",
+      "ghidra_address": "0x449630",
+      "elf_vaddr": "0x349630",
+      "size": 492,
+      "sha256": "18b520163fdd016f4a48e8b11d708193a1a03ffd964b351108c96f6b18b2d4b9",
+      "entry_bytes": "fd7bbaa9fc6f01a9fa6702a9f85f03a9"
+    },
+    {
+      "name": "Scheduler::getPacesetterVsyncPeriod",
+      "ghidra_address": "0x571750",
+      "elf_vaddr": "0x471750",
+      "size": 324,
+      "sha256": "8620da7e64c748c0bfb197920ad1548ac196289b20fac35dbbef4a5bd69a1165",
+      "entry_bytes": "ff8301d1fd7b03a9f65704a9f44f05a9"
+    },
+    {
+      "name": "MiOutputManager::drawPassBlurIfNeed",
+      "ghidra_address": "0x64d2d0",
+      "elf_vaddr": "0x54d2d0",
+      "size": 4536,
+      "sha256": "760e6d9b77083fc08e7a8a9521ba4f1693c903ea34a21478bff7ec3728e4050d",
+      "entry_bytes": "ef3bb66ded33016deb2b026de923036d"
+    },
+    {
+      "name": "MiOutputManager::releaseCurRes",
+      "ghidra_address": "0x64e4b0",
+      "elf_vaddr": "0x54e4b0",
+      "size": 772,
+      "sha256": "1dbc8f26bc34a84b61b7735636b359ed97ba50e78671fccfae6b37902840e176",
+      "entry_bytes": "fd7bbba9f90b00f9f85f02a9f65703a9"
+    },
+    {
+      "name": "MiOutputManager::drawPassBlurInternal",
+      "ghidra_address": "0x64eba0",
+      "elf_vaddr": "0x54eba0",
+      "size": 2120,
+      "sha256": "7a5fa5522c6c0d3a652cd01e561bd3d46ec93e20aac459b5342e72f885e3d9df",
+      "entry_bytes": "fd7bbaa9fc6f01a9fa6702a9f85f03a9"
+    },
+    {
+      "name": "drawPassBlurInternal closure::operator()",
+      "ghidra_address": "0x6591b0",
+      "elf_vaddr": "0x5591b0",
+      "size": 4420,
+      "sha256": "a3edab921bde2457c08ede15ee3641ff4472cbbef7d558fdc46cf6332f25de2b",
+      "entry_bytes": "ef3bb66ded33016deb2b026de923036d"
+    }
+  ],
+  "patch_sites": []
+}

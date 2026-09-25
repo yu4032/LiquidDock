@@ -19,3 +19,5 @@ keystore.properties
 # Hermes desktop attachments
 .hermes/
 .worktrees/
+__pycache__/
+*.pyc
