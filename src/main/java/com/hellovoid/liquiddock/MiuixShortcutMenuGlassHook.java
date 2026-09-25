@@ -10,7 +10,7 @@ final class MiuixShortcutMenuGlassHook {
     private static final String TAG = "[DC][ShortcutMenuGlass]";
     private static final String SHORTCUT_MENU = "com.miui.home.launcher.shortcuts.ShortcutMenu";
     private static final String SHORTCUT_MENU_LAYER = "com.miui.home.launcher.ShortcutMenuLayer";
-    private static final String WORKSPACE = "com.miui.home.launcher.Workspace";
+    private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
     private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
     private static final String CELL_INFO = "com.miui.home.launcher.CellLayout$CellInfo";
     private static final String ITEM_INFO = "com.miui.home.launcher.ItemInfo";
@@ -86,25 +86,31 @@ final class MiuixShortcutMenuGlassHook {
 
     private static void installPreDragCaptureHooks(
             ClassLoader classLoader, LiquidDockConfig.Glass glassConfig) throws Exception {
-        Class<?> workspaceClass = Class.forName(WORKSPACE, false, classLoader);
-        Method dispatchTouchEvent =
-                workspaceClass.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
-        dispatchTouchEvent.setAccessible(true);
-        HookUtil.hook(dispatchTouchEvent, chain -> {
+        Class<?> cellLayoutClass = Class.forName(CELL_LAYOUT, false, classLoader);
+        Method cellDispatch =
+                cellLayoutClass.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
+        Method lastDownOnOccupiedCell =
+                cellLayoutClass.getDeclaredMethod("lastDownOnOccupiedCell");
+        cellDispatch.setAccessible(true);
+        lastDownOnOccupiedCell.setAccessible(true);
+        HookUtil.hook(cellDispatch, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
                     ? (MotionEvent) args[0] : null;
             Object owner = chain.getThisObject();
 
+            // Let CellLayout perform its authoritative hit-test first. HyperOS writes
+            // mCellInfo.cell and mLastDownOnOccupiedCell before forwarding DOWN to OnLongClickAgent.
             Object result = chain.proceed(args);
 
             if (owner instanceof View && event != null) {
                 View launcherRoot = ((View) owner).getRootView();
                 int action = event.getActionMasked();
                 if (action == MotionEvent.ACTION_DOWN) {
-                    // Run after Workspace has dispatched DOWN to its CellLayout/long-click agent,
-                    // but still hundreds of milliseconds before the semantic long-press commit.
-                    ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig);
+                    Object occupied = lastDownOnOccupiedCell.invoke(owner);
+                    if (occupied instanceof Boolean && ((Boolean) occupied).booleanValue()) {
+                        ShortcutPopupGlassCoordinator.armTouch(launcherRoot, glassConfig);
+                    }
                 } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     ShortcutPopupGlassCoordinator.cancelTouchIfUnlatched(
                             launcherRoot, action == MotionEvent.ACTION_UP
@@ -132,7 +138,7 @@ final class MiuixShortcutMenuGlassHook {
             return chain.proceed(args);
         });
 
-        MainHook.log(TAG + " pre-drag capture hooks installed");
+        MainHook.log(TAG + " occupied-cell pre-drag capture hooks installed");
     }
 
     private static void bindShownPopup(Object menu, boolean popupGlassEnabled,
