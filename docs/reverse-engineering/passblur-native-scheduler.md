@@ -137,7 +137,11 @@ Thus true means the queue path was reached, not guaranteed display delivery.
 
 Submission must associate a monotonic generation with the **specific
 PassBlur instance** and the particular closure before `bgDrawPassBlur` is
-called. The first worker comparison belongs after it has acquired the
+called. The original `bl bgDrawPassBlur@plt` is at ELF `0x54f24c`;
+immediately before it, `x1` points to the stack `SmallVector` at `sp+0x230`.
+This is a submission-hook candidate, but parsing the variant and preserving
+the move/copy semantics still need an adapter proof. The first worker
+comparison belongs after it has acquired the
 `PassBlur*` but before the expensive LayerSettings filtering. The relevant
 ARM64 span starts at ELF `0x559220` (loads LayerFE/PassBlur), with the
 `incStrong` call at `0x55923c`. Returning *there* cannot simply branch to the

@@ -14,7 +14,7 @@ The `Libs` release archive from `yu4032/hyperos-analysis` must have SHA256
 `57e25e06f70aa3e3da98dbeb16fbcc6e6e9d2ecd541f96568dc043e91804282f`.
 Its `files/libsurfaceflinger.so` must have SHA256
 `407be876ceadc0ac5254abcc357ed2c196fbbf6179c940bc75d1ddf05f63ae32`.
-The manifest also pins 18 function byte ranges and six disassembled candidate
+The manifest also pins 18 function byte ranges and seven disassembled candidate
 instructions. Candidate sites are evidence only, not approved patch sites. A mismatch is a different
 build and must not be patched with these offsets.
 The `PassBlur native guard tests` workflow runs the guard and scheduler tests

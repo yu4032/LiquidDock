@@ -165,6 +165,12 @@
   "patch_sites": [],
   "candidate_sites": [
     {
+      "name": "submission-bgDrawPassBlur-call",
+      "elf_vaddr": "0x54f24c",
+      "ghidra_address": "0x64f24c",
+      "bytes": "b9c61394"
+    },
+    {
       "name": "worker-entry-after-local-inits",
       "elf_vaddr": "0x5592f0",
       "ghidra_address": "0x6592f0",
