@@ -56,6 +56,14 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
+                SideSlideHoldDiagnostics.log("securitycenter packageReady process=" + loadedProcessName
+                        + " master=" + runtimeConfig.enabled
+                        + " sideSlideEnabled=" + sideSlideEnabled);
+                if (runtimeConfig.enabled && sideSlideEnabled) {
+                    boolean installed = SecurityCenterSidebarCommandBridge.install();
+                    SideSlideHoldDiagnostics.log("securitycenter bridge install=" + installed);
+                }
                 SecurityCenterGlassRuntimeState.initialize(
                         Api101Bridge.remotePreferences("config"),
                         runtimeConfig.enabled,
@@ -77,6 +85,7 @@ public final class ModuleMain extends XposedModule {
                 }
                 SecurityCenterGlassHook.install(classLoader, runtimeConfig);
             } catch (Throwable error) {
+                SideSlideHoldDiagnostics.log("securitycenter init failed", error);
                 Api101Bridge.log("[DC] Security Center glass init failed", error);
             }
             return;
@@ -100,6 +109,11 @@ public final class ModuleMain extends XposedModule {
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+            boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
+            SideSlideHoldDiagnostics.log("launcher packageReady process=" + loadedProcessName
+                    + " master=" + runtimeConfig.enabled
+                    + " sideSlideEnabled=" + sideSlideEnabled
+                    + " classLoader=" + (classLoader != null));
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
@@ -122,6 +136,12 @@ public final class ModuleMain extends XposedModule {
             Launcher450IconSizeHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
                     runtimeConfig.grid.iconSizePercent);
+            if (runtimeConfig.enabled && sideSlideEnabled) {
+                boolean installed = Launcher450SideSlideHoldHook.install(classLoader);
+                SideSlideHoldDiagnostics.log("launcher gesture hook install=" + installed);
+            } else {
+                SideSlideHoldDiagnostics.log("launcher gesture hook skipped");
+            }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
 
@@ -161,6 +181,7 @@ public final class ModuleMain extends XposedModule {
             HomeGridDragBoundsHook.install(classLoader,
                     customGridEnabled, selectedProfile);
         } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log("launcher init failed", error);
             Api101Bridge.log("[DC] API101 package init failed", error);
         }
     }

@@ -520,7 +520,12 @@ private fun HomePage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.app_name)) }
         item { SmallTitle(stringResource(R.string.category_master)) }
-        item { SettingsCard { BooleanSetting(prefs, ConfigSchema.Core.ENABLED, stringResource(R.string.enable_liquiddock), stringResource(R.string.enable_liquiddock_summary)) { onMasterChanged(it) } } }
+        item {
+    SettingsCard {
+        BooleanSetting(prefs, ConfigSchema.Core.ENABLED, stringResource(R.string.enable_liquiddock), stringResource(R.string.enable_liquiddock_summary)) { onMasterChanged(it) }
+        SideSlideHoldSetting(prefs, masterEnabled)
+    }
+}
         item { SmallTitle(stringResource(R.string.category_customization)) }
         item {
             SettingsCard {
