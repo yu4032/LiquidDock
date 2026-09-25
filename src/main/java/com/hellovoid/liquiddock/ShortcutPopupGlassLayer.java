@@ -6,12 +6,15 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.DecelerateInterpolator;
 
-/** Stable full-screen popup glass output. Its Surface never follows MiuiX popup bounds animation. */
+/**
+ * Local ShortcutMenu material output.
+ *
+ * <p>The layer lives inside MIUIX mContentView at index 0, so vendor bounds/alpha/radius animation
+ * remains the sole presentation authority. The Surface contains only the root-space crop covered by
+ * the menu rather than a full-screen scene scaled into local bounds.</p>
+ */
 final class ShortcutPopupGlassLayer extends TextureView implements TextureView.SurfaceTextureListener {
-    private static final long FAST_DISMISS_FADE_MS = 90L;
-
     private final ShortcutPopupGlassSession session;
     private Surface outputSurface;
     private boolean disposed;
@@ -32,16 +35,6 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
             animate().cancel();
             setAlpha(1f);
         }
-    }
-
-    void fadeOutFast() {
-        if (disposed) return;
-        animate().cancel();
-        animate()
-                .alpha(0f)
-                .setDuration(FAST_DISMISS_FADE_MS)
-                .setInterpolator(new DecelerateInterpolator())
-                .start();
     }
 
     void dispose() {
