@@ -27,6 +27,10 @@ final class ShortcutPopupGlassCoordinator {
     static synchronized void prepareDockEarly(
             View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
         if (dockMenuOwner == null) return;
+        State state = current;
+        if (state != null && !state.released && state.contentRef.get() != null) {
+            return;
+        }
         prepareInternal(
                 dockMenuOwner.getRootView(),
                 glassConfig,
@@ -47,6 +51,10 @@ final class ShortcutPopupGlassCoordinator {
             boolean dockMatch = matchesDockAuthority(state, authorityOwner);
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
+                if (dockMatch) {
+                    MainHook.log(TAG + " reusing early Dock capture backdropReady="
+                            + (state.session != null && state.session.hasFrozenBackdrop()));
+                }
                 return;
             }
         }
