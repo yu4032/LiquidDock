@@ -162,9 +162,20 @@ point. Disassembly narrows a candidate to ELF `0x5592f0`: both local String8
 vectors and the filtered-layer vector have been initialized, while the
 layer-filtering loop has not begun. The original no-dequeued-buffer path at
 `0x559ad0` sets `w22=0` and branches to the common promise/cleanup tail at
-`0x55a13c`. A stale-entry hook could use that same false-result tail only
-after validating the full stack/register state and erasing its per-job side
-table entry. This is a candidate, not an approved instruction patch.
+`0x55a13c`. Disassembly of `0x55a13c..0x55a278` confirms the tail writes the
+false result into the promise, notifies waiters, destroys both initialized
+`String8` vectors, calls `decStrong` on the PassBlur object saved at `sp+0x70`,
+and frees the filtered-layer vector. This makes `0x559ad0` the correct cleanup
+destination from an initialized early gate; a hook still needs to preserve
+`x19`, `w22`, stack state and the per-job side table. This is a candidate, not
+an approved instruction patch.
+
+The reference `JobRegistry` now models a `take` at worker entry: it erases the
+promise-state side-table entry while transferring the captured generation to
+worker-owned state. This removes the normal-path leak without depending on
+which cloned `std::function` allocation survives. A native adapter still has
+to prove the promise-state pointer at both entry and submission, and define
+behavior if a queued function is destroyed without invocation.
 
 The second comparison belongs after RenderEngine returns a fence and before
 the queue call at ELF `0x55a040` (Ghidra `0x65a040`). The original cancel call
@@ -174,6 +185,15 @@ fence, release that fence and `unique_fd`, and complete false. It cannot merely
 replace the `bl queuePassBlurBuffer` instruction: ELF `0x55a0d8` later sets
 `w22=1` unconditionally before the common completion tail. Both the buffer
 action and result assignment require coordinated changes.
+The actual `cancelPassBlurBuffer` implementation accepts a pointer to the
+caller's `unique_fd`, duplicates its fd for the native-window cancel call,
+clears `+0xd0/+0xd8` and resets `+0xb4`. The existing cancel branch at
+`0x559ee0..0x559f3c` reads and closes the caller's fd, sets `w22=0`, then
+joins the common cleanup at `0x55a0dc`. Its input fence is `NO_FENCE`, and
+branching into it from the post-render call site would skip the post-render
+Fence reference release at `0x55a084..0x55a0ac`. A late adapter must consume
+the RenderEngine fence and preserve that cleanup rather than reuse the branch
+blindly.
 Submission and queue publication also need a common per-instance
 linearization lock, otherwise a newer request can arrive between an atomic
 freshness read and `queuePassBlurBuffer`. GPU work stays outside that lock.

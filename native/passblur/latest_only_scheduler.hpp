@@ -33,8 +33,8 @@ public:
     }
 
     // Retiring a state also rejects any closures still holding it. A reused
-    // address gets a distinct State. The closure's original strong PassBlur
-    // reference remains the native lifetime authority.
+    // address gets a distinct State. The original worker acquires its strong
+    // PassBlur reference at entry; this registry does not extend that lifetime.
     bool unregisterInstance(const void* identity) {
         std::lock_guard<std::mutex> registryGuard(registryMutex_);
         auto it = registry_.find(identity);
@@ -126,6 +126,18 @@ public:
         std::lock_guard<std::mutex> guard(jobsMutex_);
         auto it = jobs_.find(promiseState);
         return it == jobs_.end() ? LatestOnlyScheduler::Job{} : it->second;
+    }
+
+    // The worker takes ownership at entry, before either stale decision.
+    // This removes the side-table entry on every normal closure invocation;
+    // the native adapter must hold the returned Job through the late gate.
+    LatestOnlyScheduler::Job take(const void* promiseState) {
+        std::lock_guard<std::mutex> guard(jobsMutex_);
+        auto it = jobs_.find(promiseState);
+        if (it == jobs_.end()) return {};
+        auto job = std::move(it->second);
+        jobs_.erase(it);
+        return job;
     }
 
     bool erase(const void* promiseState) {

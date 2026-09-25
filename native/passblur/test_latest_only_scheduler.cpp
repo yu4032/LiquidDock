@@ -107,8 +107,10 @@ int main() {
     assert(captured && LatestOnlyScheduler::shouldRender(captured));
     assert(jobs.capture(&anotherPromise, &targetA));
     assert(!LatestOnlyScheduler::shouldRender(jobs.find(&promiseState)));
-    assert(jobs.erase(&promiseState));
+    auto taken = jobs.take(&promiseState);
+    assert(taken && !LatestOnlyScheduler::shouldRender(taken));
     assert(!jobs.find(&promiseState));
+    assert(!jobs.take(&promiseState));
     assert(jobs.erase(&anotherPromise));
     assert(jobs.unregisterInstance(&targetA));
 }
