@@ -1,6 +1,6 @@
 # LiquidDock Architecture
 
-本文档描述当前 `main` / **v2.5.0** 的生产架构。历史 `docs/superpowers/*` 记录的是阶段性设计与验证过程，不是当前 runtime contract。
+本文档描述当前 `main` / **v2.5.1** 的生产架构。历史 `docs/superpowers/*` 记录的是阶段性设计与验证过程，不是当前 runtime contract。
 
 当前工程基线：
 
@@ -130,7 +130,7 @@ runtime states / feature owners
 
 ### 2.2 Single default configuration
 
-v2.5.0 只有一套内置默认配置。
+v2.5.1 只有一套内置默认配置。
 
 `PresetManager.defaultValues()` 保存完整默认 snapshot。首次真正空配置启动时，`ConfigMigration` 会写入该 snapshot；已有配置不会被默认值覆盖。
 
@@ -398,7 +398,7 @@ Context + Dialog + Window
 
 发现目标构造器。
 
-这是 v2.5.0 的 R8 修复：签名/优化构建曾把类名字符串改写成 `v9`，导致目标进程 ClassLoader 无法解析。
+这是 v2.5.1 的 R8 修复：签名/优化构建曾把类名字符串改写成 `v9`，导致目标进程 ClassLoader 无法解析。
 
 ---
 

@@ -1,6 +1,6 @@
 # Deprecated Source / Historical Architecture
 
-本文档对应当前 `main` / **v2.5.0**，说明哪些旧架构已经退出主线。
+本文档对应当前 `main` / **v2.5.1**，说明哪些旧架构已经退出主线。
 
 ## 1. 已退役的 1.x backdrop 架构
 
@@ -49,7 +49,7 @@ archive/1.x
 
 ## 4. 当前独立 glass domains
 
-v2.5.0 已不仅有 Launcher Workspace。当前 source domain 还包括：
+v2.5.1 已不仅有 Launcher Workspace。当前 source domain 还包括：
 
 - Dock；
 - ShortcutMenu；

@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向当前 `main` / **v2.5.0**。生产源码、设置页、`ConfigSchema`、构建配置与当前根文档是开发事实来源；`docs/superpowers/*` 只保存历史方案与验证记录。
+本文档面向当前 `main` / **v2.5.1**。生产源码、设置页、`ConfigSchema`、构建配置与当前根文档是开发事实来源；`docs/superpowers/*` 只保存历史方案与验证记录。
 
 ## 1. Build baseline
 

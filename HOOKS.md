@@ -1,6 +1,6 @@
 # LiquidDock Hook / Listener Map
 
-本文档记录当前 `main` / **v2.5.0** 的主要 Hook、listener、reflection 和 runtime ownership 边界。
+本文档记录当前 `main` / **v2.5.1** 的主要 Hook、listener、reflection 和 runtime ownership 边界。
 
 当前 Xposed scope：
 
