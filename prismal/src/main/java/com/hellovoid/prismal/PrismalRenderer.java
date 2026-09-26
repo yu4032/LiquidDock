@@ -308,10 +308,6 @@ public final class PrismalRenderer implements AutoCloseable {
         blurTextureV = createTexture(blurWidth, blurHeight);
         blurFramebufferV = createFramebuffer(blurTextureV);
         outputTexture = createTexture(outputWidth, outputHeight);
-        // Diagnostic only: avoid linear interpolation across transparent-black SDF edge texels.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, outputTexture);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
         outputFramebuffer = createFramebuffer(outputTexture);
     }
 
