@@ -619,8 +619,8 @@ private fun DockPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
     SettingsList(padding, stringResource(R.string.page_dock)) {
         BooleanSetting(prefs, ConfigSchema.Dock.ENABLED, stringResource(R.string.dock_customization), stringResource(R.string.dock_customization_summary), masterEnabled) { dockEnabled = it }
         BooleanSetting(prefs, ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
-        BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
+        BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled) { resizeAnimation = it }
+        BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && !resizeAnimation) { smoothResize = it }
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
 }

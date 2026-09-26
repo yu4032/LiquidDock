@@ -73,6 +73,25 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
+    public void dockResizeControlsRemainAvailableWithoutDockCustomization() throws Exception {
+        String source = Files.readString(UI);
+
+        String nativeResize = lineContaining(source, "ConfigSchema.Dock.RESIZE_ANIMATION,");
+        String smoothResize = lineContaining(source, "ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION,");
+
+        assertTrue("native resize selection still follows the module master switch",
+                nativeResize.contains("masterEnabled"));
+        assertFalse("native resize selection must not depend on Dock customization",
+                nativeResize.contains("dockEnabled"));
+        assertTrue("smooth resize selection still follows the module master switch",
+                smoothResize.contains("masterEnabled"));
+        assertTrue("smooth resize must remain mutually exclusive with native resize",
+                smoothResize.contains("!resizeAnimation"));
+        assertFalse("smooth resize selection must not depend on Dock customization",
+                smoothResize.contains("dockEnabled"));
+    }
+
+    @Test
     public void debugLoggingKeepsItsExistingRestartWording() throws Exception {
         String source = Files.readString(UI);
         String line = lineContaining(source, "ConfigSchema.Debug.LOGGING");
