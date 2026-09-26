@@ -1,6 +1,6 @@
 # LiquidDock Workstation Divider
 
-本文档描述当前 `main` / **v2.5.0** 的工作台 Dock 分隔线行为。
+本文档描述当前 `main` / **v2.5.1** 的工作台 Dock 分隔线行为。
 
 Divider 是独立的视觉设置，不拥有 Workstation Dock 长度、图标位置、All Apps 布局或玻璃 source。
 
