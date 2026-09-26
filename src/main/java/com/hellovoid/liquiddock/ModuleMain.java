@@ -33,6 +33,7 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 SystemUiKeyguardGoneSource.install(classLoader);
                 SystemUiHomeTransitionSource.install(classLoader);
+                SystemUiTopPopupProbe.install();
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled
