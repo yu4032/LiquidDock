@@ -1,6 +1,6 @@
 # LiquidDock TODO FOR AGENT
 
-当前主线：**v2.5.0 / HyperOS 3.0.307+ / Launcher 4.50 / libxposed API 101**。
+当前主线：**v2.5.1 / HyperOS 3.0.307+ / Launcher 4.50 / libxposed API 101**。
 
 本文件只记录当前生产代码仍存在的工程债务、兼容性风险和未完成收口。已经落地并通过真机/CI 验证的修复不再保留为 active TODO。
 
@@ -67,7 +67,7 @@ private static volatile boolean widgetAdaptationEnabled;
 
 **状态：功能已上线，跨版本覆盖仍需要真实样本。**
 
-v2.5.0 已经同时覆盖：
+v2.5.1 已经同时覆盖：
 
 - SystemUI app-caption menu；
 - Security Center sidebar；
@@ -153,7 +153,7 @@ v2.5.0 已经同时覆盖：
 
 ## P1 · Signed-build / R8 compatibility regression coverage
 
-v2.5.0 已经出现并修复两个真实的跨 ClassLoader R8 问题：
+v2.5.1 已经出现并修复两个真实的跨 ClassLoader R8 问题：
 
 1. Launcher RecyclerView signature；
 2. Dialog native-night AppCompatDialog class-string 被改写成 `v9`。
