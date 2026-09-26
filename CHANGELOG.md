@@ -2,11 +2,17 @@
 
 > 本文件按版本记录当时的变化，历史条目不会为追随当前实现而改写。当前行为请以 `main` 生产源码和 [README.md](README.md)、[FEATURES.md](FEATURES.md)、[ARCHITECTURE.md](ARCHITECTURE.md)、[HOOKS.md](HOOKS.md) 为准。
 
-## Unreleased
+## v2.5.1 (2026-09-26)
+
+### Dock 液态玻璃
+
+- 修复 Dock 圆角最外缘出现稳定黑线的问题：Prismal 已输出最终 straight-RGBA 材质图，最终 TextureView composite 不再额外使用 `SRC_ALPHA` 重复压暗 SDF 抗锯齿边缘
+- 保留 Prismal 内部多节点 blending 与现有底边抗锯齿/高光连续性，不恢复会截断边缘像素的二次 host clip
+- 增加最终 composite alpha 契约测试，防止后续重新引入重复预乘
 
 ### Documentation
 
-- 按当前 v2.5.0 生产代码重建 README、功能、架构、Hook、贡献指南、TODO、Divider、第三方声明和旧架构说明
+- 按当前 v2.5.1 生产代码重建 README、功能、架构、Hook、贡献指南、TODO、Divider、第三方声明和旧架构说明
 - 将 `docs/superpowers` 下的阶段性计划、设计和验证记录统一标记为历史归档，避免旧方案被误读为当前实现
 
 ## v2.5.0 (2026-09-25)
