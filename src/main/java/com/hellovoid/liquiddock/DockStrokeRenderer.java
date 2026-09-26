@@ -173,8 +173,6 @@ final class DockStrokeRenderer {
     static void configureReplacingForeground(
             View host, LiquidDockConfig.Dock config, float radius) {
         configureInternal(host, config, radius, false);
-        // Diagnostic only: isolate the host foreground ring while leaving MiShadow ownership intact.
-        if (host != null) host.setForeground(null);
 
         // A bound GlassHost owns the custom edge. Release any foreground ring that the
         // vendor BlurBackground2 carried before this host was installed or refreshed.
