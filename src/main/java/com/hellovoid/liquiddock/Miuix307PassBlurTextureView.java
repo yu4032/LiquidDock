@@ -832,8 +832,9 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {
-        float glassWidth = Math.max(1f, mapping.dockUvWidth * mapping.sampleWidth);
-        float glassHeight = Math.max(1f, mapping.dockUvHeight * mapping.sampleHeight);
+        // Diagnostic only: align the Prismal body with DockShapePath's 0.5px inset on each edge.
+        float glassWidth = Math.max(1f, mapping.dockUvWidth * mapping.sampleWidth - 1f);
+        float glassHeight = Math.max(1f, mapping.dockUvHeight * mapping.sampleHeight - 1f);
         float centerX = (mapping.dockUvLeft + mapping.dockUvWidth * 0.5f)
                 * mapping.sampleWidth;
         float centerGlY = (mapping.dockUvBottom + mapping.dockUvHeight * 0.5f)
