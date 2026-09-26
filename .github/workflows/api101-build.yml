@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Build PassBlur native patch trampoline
+        run: bash tools/passblur-native-patch/build.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -60,5 +62,6 @@ jobs:
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
             prismal/src/main/java/com/hellovoid/prismal
+            tools/passblur-native-patch
           if-no-files-found: error
           retention-days: 3
