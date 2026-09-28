@@ -6,6 +6,8 @@ package com.hellovoid.liquiddock;
  * <p>The actual vendor endpoint remains DockWindowManagerService / ISidebarOverlay.</p>
  */
 final class SidebarCommandContract {
+    static final String ACTION_PREPARE =
+            "com.hellovoid.liquiddock.action.PREPARE_SECURITY_CENTER_SIDEBAR";
     static final String ACTION_SHOW =
             "com.hellovoid.liquiddock.action.SHOW_SECURITY_CENTER_SIDEBAR";
 
@@ -22,6 +24,7 @@ final class SidebarCommandContract {
     static final String EXTRA_HEIGHT = "height";
     static final String EXTRA_RADIUS = "radius";
 
+    static final int RESULT_READY = 0x5343;
     static final int RESULT_ACCEPTED = 0x5344;
     static final int RESULT_UNAVAILABLE = 0x5345;
 
