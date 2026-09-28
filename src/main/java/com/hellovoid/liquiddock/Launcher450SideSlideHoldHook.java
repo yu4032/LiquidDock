@@ -51,6 +51,7 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Object readyStateBack;
     private static volatile Method applicationGetLauncherMethod;
     private static volatile Method launcherIsInStateMethod;
+    private static volatile Class<?> launcherStateClass;
     private static volatile Object launcherStateNormal;
     private static volatile boolean installed;
 
@@ -65,7 +66,7 @@ final class Launcher450SideSlideHoldHook {
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
             Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
             Class<?> launcherClass = Class.forName(LAUNCHER_CLASS, false, classLoader);
-            Class<?> launcherStateClass = Class.forName(LAUNCHER_STATE_CLASS, false, classLoader);
+            Class<?> stateClass = Class.forName(LAUNCHER_STATE_CLASS, false, classLoader);
 
             Method onTouchEvent = HookUtil.findMethodExact(
                     stubClass, "onTouchEvent", new Class<?>[]{MotionEvent.class});
@@ -76,8 +77,7 @@ final class Launcher450SideSlideHoldHook {
             Method getLauncher = HookUtil.findMethodExact(
                     applicationClass, "getLauncher", new Class<?>[0]);
             Method isInState = HookUtil.findMethodExact(
-                    launcherClass, "isInState", new Class<?>[]{launcherStateClass});
-            Object normal = launcherStateClass.getField("NORMAL").get(null);
+                    launcherClass, "isInState", new Class<?>[]{stateClass});
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -88,7 +88,8 @@ final class Launcher450SideSlideHoldHook {
             readyStateBack = back;
             applicationGetLauncherMethod = getLauncher;
             launcherIsInStateMethod = isInState;
-            launcherStateNormal = normal;
+            launcherStateClass = stateClass;
+            launcherStateNormal = null;
 
             HookUtil.hook(onTouchEvent, chain -> {
                 Object owner = chain.getThisObject();
@@ -254,17 +255,30 @@ final class Launcher450SideSlideHoldHook {
     private static boolean isLauncherDesktop() {
         Method getLauncher = applicationGetLauncherMethod;
         Method isInState = launcherIsInStateMethod;
-        Object normal = launcherStateNormal;
-        if (getLauncher == null || isInState == null || normal == null) return false;
+        Class<?> stateClass = launcherStateClass;
+        if (getLauncher == null || isInState == null || stateClass == null) return false;
         try {
             Object launcher = getLauncher.invoke(null);
             if (launcher == null) return false;
+
+            Object normal = launcherStateNormal;
+            if (normal == null) {
+                // Do not touch LauncherState static fields during module/class-loader bootstrap.
+                // Resolve NORMAL lazily only after Launcher already exists and Application.onCreate
+                // has completed enough for vendor state construction to have a valid Context.
+                normal = stateClass.getField("NORMAL").get(null);
+                if (normal == null) return false;
+                launcherStateNormal = normal;
+                SideSlideHoldDiagnostics.log(TAG + " lazily resolved LauncherState.NORMAL");
+            }
+
             boolean desktop = Boolean.TRUE.equals(isInState.invoke(launcher, normal));
             SideSlideHoldDiagnostics.log(TAG
                     + " HOME authority LauncherState.NORMAL=" + desktop);
             return desktop;
         } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " HOME authority unavailable: " + error);
+            // Never let optional side-slide state resolution poison Launcher startup/runtime.
+            SideSlideHoldDiagnostics.log(TAG + " HOME authority unavailable; fail open: " + error);
             return false;
         }
     }
