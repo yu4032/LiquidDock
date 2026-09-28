@@ -7,7 +7,6 @@ import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
-import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
@@ -388,12 +387,12 @@ final class Launcher450SideSlideHoldHook {
                     return;
                 }
 
-                // OS4 long-click semantics: arm only. Sidebar commit is deferred until ACTION_UP.
-                owner.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                // OS4 long-click semantics: arm only. Security Center performs the native
+                // activate -> haptic -> widen sequence; commit remains deferred until ACTION_UP.
                 state.confirmationVisible = true;
                 sendConfirmation(owner, true);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar preflight ready -> haptic -> armed; wait ACTION_UP");
+                        + " Sidebar preflight ready -> native confirm armed; wait ACTION_UP");
             }
         };
         try {
