@@ -2,82 +2,121 @@ package com.hellovoid.liquiddock;
 
 /** Android-free state machine for fail-closed unlock producer recovery. */
 final class UnlockCaptureRecoveryState {
+    enum Phase {
+        IDLE,
+        BLOCKED_WAITING_GONE,
+        ROLLING_OVER,
+        RECOVERED,
+        FAILED_CLOSED
+    }
+
     static final class Decision {
         final boolean suspendProducers;
         final boolean requestRollover;
         final boolean releaseBarrier;
+        final boolean failedClosed;
         final long serial;
 
         Decision(
                 boolean suspendProducers,
                 boolean requestRollover,
                 boolean releaseBarrier,
+                boolean failedClosed,
                 long serial) {
             this.suspendProducers = suspendProducers;
             this.requestRollover = requestRollover;
             this.releaseBarrier = releaseBarrier;
+            this.failedClosed = failedClosed;
             this.serial = serial;
         }
     }
 
     private long nextSerial;
     private long activeSerial;
-    private boolean blocked;
-    private boolean rolloverRequested;
+    private Phase phase = Phase.IDLE;
 
     synchronized Decision onPrepare() {
-        // Preserve the active serial only while a real rollover completion is still in flight.
-        // A failed/stale blocked cycle has no completion authority left, so the next PREPARE must
-        // be able to arm a new recovery cycle instead of turning blocked into a permanent latch.
-        if (blocked && rolloverRequested) {
-            return new Decision(false, false, false, activeSerial);
-        }
+        // PREPARE is a new lifecycle authority even if an older rollover is still completing.
+        // Advancing the serial makes every completion from the previous unlock cycle stale.
         activeSerial = ++nextSerial;
-        blocked = true;
-        rolloverRequested = false;
-        return new Decision(true, false, false, activeSerial);
+        phase = Phase.BLOCKED_WAITING_GONE;
+        return decision(true, false, false, false);
     }
 
     synchronized Decision onSystemUiGoneFinished() {
         boolean suspend = false;
-        if (!blocked) {
+        if (phase == Phase.IDLE || phase == Phase.RECOVERED) {
+            // Failsafe for devices where Launcher PREPARE was missed: arm capture protection before
+            // requesting a replacement endpoint.
             activeSerial = ++nextSerial;
-            blocked = true;
-            rolloverRequested = false;
+            phase = Phase.BLOCKED_WAITING_GONE;
             suspend = true;
+        } else if (phase == Phase.FAILED_CLOSED) {
+            // A failed cycle cannot regain authority from a repeated FINISHED callback. Only a new
+            // PREPARE starts another recovery cycle.
+            return decision(false, false, false, true);
         }
-        if (rolloverRequested) {
-            return new Decision(false, false, false, activeSerial);
+
+        if (phase == Phase.ROLLING_OVER) {
+            return decision(false, false, false, false);
         }
-        rolloverRequested = true;
-        return new Decision(suspend, true, false, activeSerial);
+        if (phase != Phase.BLOCKED_WAITING_GONE) {
+            return decision(false, false, false, false);
+        }
+
+        phase = Phase.ROLLING_OVER;
+        return decision(suspend, true, false, false);
     }
 
     synchronized Decision onRolloverFinished(long serial, boolean success) {
-        if (!blocked || !rolloverRequested || serial != activeSerial) {
-            return new Decision(false, false, false, activeSerial);
+        if (serial != activeSerial || phase != Phase.ROLLING_OVER) {
+            return decision(false, false, false, phase == Phase.FAILED_CLOSED);
         }
         if (!success) {
-            // The current cycle remains fail-closed, but this completion is terminal: it is no
-            // longer an in-flight rollover that may protect the serial from the next PREPARE.
-            rolloverRequested = false;
-            return new Decision(false, false, false, activeSerial);
+            phase = Phase.FAILED_CLOSED;
+            return decision(false, false, false, true);
         }
-        blocked = false;
-        rolloverRequested = false;
-        return new Decision(false, false, true, activeSerial);
+
+        phase = Phase.RECOVERED;
+        return decision(false, false, true, false);
     }
 
-    synchronized Decision onBarrierTimeout(long serial) {
-        if (!blocked || serial != activeSerial) {
-            return new Decision(false, false, false, activeSerial);
+    /**
+     * Optional watchdog transition. Timeout is diagnostic/fallback authority only: it can mark the
+     * active cycle terminally failed, but it can never release LiquidDock capture authority.
+     */
+    synchronized Decision onWatchdogTimeout(long serial) {
+        if (serial != activeSerial || !isBlocked()) {
+            return decision(false, false, false, phase == Phase.FAILED_CLOSED);
         }
-        blocked = false;
-        rolloverRequested = false;
-        return new Decision(false, false, true, activeSerial);
+        phase = Phase.FAILED_CLOSED;
+        return decision(false, false, false, true);
     }
 
     synchronized boolean isBlocked() {
-        return blocked;
+        return phase == Phase.BLOCKED_WAITING_GONE
+                || phase == Phase.ROLLING_OVER
+                || phase == Phase.FAILED_CLOSED;
+    }
+
+    synchronized Phase phase() {
+        return phase;
+    }
+
+    synchronized long activeSerial() {
+        return activeSerial;
+    }
+
+    private Decision decision(
+            boolean suspendProducers,
+            boolean requestRollover,
+            boolean releaseBarrier,
+            boolean failedClosed) {
+        return new Decision(
+                suspendProducers,
+                requestRollover,
+                releaseBarrier,
+                failedClosed,
+                activeSerial);
     }
 }

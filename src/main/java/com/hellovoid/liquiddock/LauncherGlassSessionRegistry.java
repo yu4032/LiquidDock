@@ -148,6 +148,16 @@ final class LauncherGlassSessionRegistry {
         return rejected == 0 && failed == 0;
     }
 
+    /**
+     * Terminal failure fallback for an unlock cycle. Releasing every owned session removes both
+     * the custom source and presentation instead of pretending the failed producer is authorized.
+     * A later lifecycle can acquire fresh sessions and the next PREPARE uses a new recovery serial.
+     */
+    static void failClosedUnlockCapture() {
+        MainHook.log("[DC][LauncherGlass] unlock recovery FAILED_CLOSED; releasing custom ownership");
+        shutdownAll();
+    }
+
     static synchronized void shutdownAll() {
         ArrayList<View> roots = new ArrayList<>(SESSIONS.keySet());
         ArrayList<LauncherGlassSession> sessions = new ArrayList<>(SESSIONS.values());
