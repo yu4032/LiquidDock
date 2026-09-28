@@ -389,7 +389,6 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static boolean vendorShowEndpointReady() {
-        if (desktop) ensureDesktopDockContext();
         IBinder binder = sidebarBinder;
         Method show = showMethod;
         if (binder == null || show == null || !binder.isBinderAlive()) {
@@ -416,6 +415,7 @@ final class SecurityCenterSidebarCommandBridge {
 
     private static boolean showSidebar(
             int x, int y, int width, int height, int radius, boolean desktop) {
+        if (desktop) ensureDesktopDockContext();
         IBinder binder = sidebarBinder;
         Method show = showMethod;
         if (binder == null || show == null || !binder.isBinderAlive()) {
