@@ -252,7 +252,7 @@ final class Launcher450SideSlideHoldHook {
             state.scheduledGeneration = generation;
             Runnable runnable = () -> {
                 if (state.scheduledGeneration != generation) return;
-                if (!state.policy.requestSidebar(generation)) return;
+                if (!state.policy.requestArm(generation)) return;
                 SideSlideHoldDiagnostics.log(TAG + " HOME hover confirmed for "
                         + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms"
                         + " at x=" + state.hoverAnchorX + " y=" + state.hoverAnchorY);
@@ -311,7 +311,7 @@ final class Launcher450SideSlideHoldHook {
         state.scheduledGeneration = generation;
         Runnable runnable = () -> {
             if (state.scheduledGeneration != generation) return;
-            if (!state.policy.requestSidebar(generation)) return;
+            if (!state.policy.requestArm(generation)) return;
             SideSlideHoldDiagnostics.log(TAG + " " + authority + " stable for "
                     + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms -> preflight Sidebar");
             prepareThenShowSidebar(owner, state, generation);
@@ -323,7 +323,7 @@ final class Launcher450SideSlideHoldHook {
     private static void prepareThenShowSidebar(View owner, GestureState state, int generation) {
         Context context = owner.getContext();
         if (context == null) {
-            state.policy.onSidebarResult(false, generation);
+            state.policy.onArmResult(false, generation);
             return;
         }
         Intent prepare = new Intent(SidebarCommandContract.ACTION_PREPARE)
@@ -410,7 +410,7 @@ final class Launcher450SideSlideHoldHook {
     private static void showSidebar(View owner, GestureState state, int generation) {
         Context context = owner.getContext();
         if (context == null) {
-            state.policy.onSidebarResult(false, generation);
+            state.policy.onArmResult(false, generation);
             return;
         }
         int[] geometry = sourceGeometry(owner, state.lastRawX, state.lastRawY);
