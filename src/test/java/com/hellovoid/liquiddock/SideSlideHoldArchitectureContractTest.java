@@ -70,6 +70,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("\"e3\""));
         assertTrue(bridge.contains("\"Q1\""));
         assertTrue(bridge.contains("RegionSamplingImageView"));
+        assertTrue(bridge.contains("VENDOR_SHOW_ENTRY"));
+        assertTrue(bridge.contains("resolveManagerFiveIntShowMethod"));
         assertTrue(bridge.contains("desktop dock context"));
         assertTrue(bridge.contains("setType.invoke(dockState, 4)"));
         assertTrue(bridge.contains("getMethod(\"H1\")"));
