@@ -40,7 +40,14 @@ final class Launcher450SideSlideHoldHook {
     private static final float HOME_VISUAL_SATURATION_PX = 180f;
     // Hover means positional dwell, not merely elapsed time after crossing the boundary.
     private static final float HOME_HOVER_SLOP_DP = 12f;
-    private static final float SOURCE_SIZE_DP = 48f;
+    // Recovered from OS4 GestureBackArrowView construction:
+    // 14dp / 30dp / 24dp / 53dp / 8dp. The Sidebar source rect uses the BackArrow
+    // footprint rather than an arbitrary square.
+    private static final float OS4_SOURCE_WIDTH_DP = 30f;
+    private static final float OS4_SOURCE_HEIGHT_DP = 53f;
+    private static final float OS4_SOURCE_RADIUS_DP = 8f;
+    // OS4 on_swipe_start seeds the BackArrow top at startY - 20.0.
+    private static final float OS4_SOURCE_TOP_OFFSET_PX = 20f;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<Object, GestureState> STATES =
@@ -217,6 +224,7 @@ final class Launcher450SideSlideHoldHook {
             state.sideStub = isPadSideStub(view);
             state.desktopAtDown = state.sideStub && isLauncherDesktop();
             state.downX = event.getRawX();
+            state.downRawY = event.getRawY();
             state.leftEdge = state.downX < view.getResources().getDisplayMetrics().widthPixels / 2f;
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
@@ -509,35 +517,26 @@ final class Launcher450SideSlideHoldHook {
     }
 
     private static int[] sourceGeometry(View owner, GestureState state) {
-        Object arrowObject = state.arrow;
-        if (arrowObject instanceof View) {
-            View arrow = (View) arrowObject;
-            int width = Math.max(arrow.getWidth(), arrow.getMeasuredWidth());
-            int height = Math.max(arrow.getHeight(), arrow.getMeasuredHeight());
-            if (width > 0 && height > 0) {
-                int[] location = new int[2];
-                arrow.getLocationOnScreen(location);
-                int radius = Math.max(1, Math.min(width, height) / 2);
-                SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar source geometry from GestureBackArrowView "
-                        + location[0] + "," + location[1] + " "
-                        + width + "x" + height + " r=" + radius);
-                return new int[]{location[0], location[1], width, height, radius};
-            }
-        }
-
         DisplayMetrics dm = owner.getResources().getDisplayMetrics();
-        int size = Math.max(1, Math.round(SOURCE_SIZE_DP * dm.density));
-        int screenWidth = Math.max(size, dm.widthPixels);
-        int screenHeight = Math.max(size, dm.heightPixels);
-        boolean left = state.lastRawX < screenWidth / 2f;
-        int x = left ? 0 : screenWidth - size;
-        int y = Math.round(state.lastRawY - size / 2f);
-        y = Math.max(0, Math.min(y, screenHeight - size));
+        int width = Math.max(1, Math.round(OS4_SOURCE_WIDTH_DP * dm.density));
+        int height = Math.max(1, Math.round(OS4_SOURCE_HEIGHT_DP * dm.density));
+        int radius = Math.max(1, Math.round(OS4_SOURCE_RADIUS_DP * dm.density));
+        int screenWidth = Math.max(width, dm.widthPixels);
+        int screenHeight = Math.max(height, dm.heightPixels);
+
+        // OS4 anchors Sidebar evoke geometry to the original swipe-start Y. Do not derive the
+        // source from GestureBackArrowView.getLocationOnScreen() and do not follow the final MOVE.
+        // Native on_swipe_start initializes the BackArrow top as startY - 20.0.
+        int x = state.leftEdge ? 0 : screenWidth - width;
+        int y = Math.round(state.downRawY - OS4_SOURCE_TOP_OFFSET_PX);
+        y = Math.max(0, Math.min(y, screenHeight - height));
+
         SideSlideHoldDiagnostics.log(TAG
-                + " Sidebar source geometry fallback "
-                + x + "," + y + " " + size + "x" + size);
-        return new int[]{x, y, size, size, size / 2};
+                + " Sidebar OS4 source geometry edge=" + (state.leftEdge ? "left" : "right")
+                + " downY=" + state.downRawY
+                + " -> " + x + "," + y + " " + width + "x" + height
+                + " r=" + radius);
+        return new int[]{x, y, width, height, radius};
     }
 
     private static void finishGesture(Object owner, GestureState state) {
@@ -572,6 +571,7 @@ final class Launcher450SideSlideHoldHook {
         boolean workspaceCancelled;
         Object arrow;
         float downX;
+        float downRawY;
         float lastRawX;
         float lastRawY;
         float hoverAnchorX = Float.NaN;
