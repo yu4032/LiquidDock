@@ -58,7 +58,7 @@ public final class ModuleMain extends XposedModule {
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
                 if (runtimeConfig.enabled && sideSlideEnabled) {
-                    SecurityCenterSidebarCommandBridge.install();
+                    SecurityCenterSidebarCommandBridge.install(classLoader);
                 }
                 SecurityCenterGlassRuntimeState.initialize(
                         Api101Bridge.remotePreferences("config"),
