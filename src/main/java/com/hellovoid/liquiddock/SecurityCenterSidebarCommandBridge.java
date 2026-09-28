@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.app.Service;
 import android.os.IBinder;
 
 import java.lang.reflect.Method;
@@ -104,32 +105,52 @@ final class SecurityCenterSidebarCommandBridge {
 
     private SecurityCenterSidebarCommandBridge() {}
 
-    static boolean install() {
+    static boolean install(ClassLoader classLoader) {
         if (installed) return true;
-        HookUtil.InvocationResult<Object> appResult =
-                HookUtil.tryInvokeActivityThreadCurrentApplication();
-        Object application = appResult.succeeded() ? appResult.value() : null;
-        if (!(application instanceof Context)) {
-            SideSlideHoldDiagnostics.log(TAG + " no application context; fail closed");
+        if (classLoader == null) return false;
+        try {
+            Class<?> serviceClass = Class.forName(
+                    SecurityCenterHookSpec.BOOTSTRAP_SERVICE_CLASS, false, classLoader);
+            Method onCreate = HookUtil.findMethodExact(
+                    serviceClass, "onCreate", new Class<?>[0]);
+            HookUtil.hook(onCreate, chain -> {
+                Object service = chain.getThisObject();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (service instanceof Context) {
+                    ensureInstalled((Context) service);
+                } else {
+                    SideSlideHoldDiagnostics.log(TAG
+                            + " DockWindowManagerService.onCreate owner is not Context");
+                }
+                return result;
+            });
+            installed = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " lifecycle hook installed; waiting DockWindowManagerService.onCreate");
+            return true;
+        } catch (Throwable error) {
+            installed = false;
+            SideSlideHoldDiagnostics.log(TAG + " lifecycle hook install failed", error);
             return false;
         }
+    }
 
-        Context context = ((Context) application).getApplicationContext();
-        if (context == null) context = (Context) application;
-        appContext = context;
+    private static void ensureInstalled(Context source) {
+        if (source == null || appContext != null) return;
+        Context context = source.getApplicationContext();
+        if (context == null) context = source;
         try {
             IntentFilter filter = new IntentFilter();
             filter.addAction(SidebarCommandContract.ACTION_PREPARE);
             filter.addAction(SidebarCommandContract.ACTION_SHOW);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
-            installed = true;
+            appContext = context;
             bindVendorService(context);
-            SideSlideHoldDiagnostics.log(TAG + " installed in Security Center :ui");
-            return true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " receiver ready from DockWindowManagerService.onCreate");
         } catch (Throwable error) {
-            installed = false;
-            SideSlideHoldDiagnostics.log(TAG + " install failed", error);
-            return false;
+            appContext = null;
+            SideSlideHoldDiagnostics.log(TAG + " runtime registration failed", error);
         }
     }
 
