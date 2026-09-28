@@ -56,6 +56,7 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("finishCurrentGesture"));
         assertTrue(contract.contains("ACTION_CONFIRM_START"));
         assertTrue(contract.contains("ACTION_CONFIRM_END"));
+        assertTrue(contract.contains("EXTRA_DESKTOP"));
         assertTrue(bridge.contains("vendorShowEndpointReady"));
         assertTrue(bridge.contains("logVendorBooleanDiagnostics"));
         assertTrue(bridge.contains("show.invoke"));
@@ -69,6 +70,9 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("\"e3\""));
         assertTrue(bridge.contains("\"Q1\""));
         assertTrue(bridge.contains("RegionSamplingImageView"));
+        assertTrue(bridge.contains("desktop dock context"));
+        assertTrue(bridge.contains("setType.invoke(dockState, 4)"));
+        assertTrue(bridge.contains("getMethod(\"H1\")"));
         assertFalse(bridge.contains("if (!vendorAvailableOrShowing())"));
         assertTrue(bridge.contains("DockWindowManagerService.onCreate"));
         assertTrue(bridge.contains("ensureInstalled((Context) service)"));
