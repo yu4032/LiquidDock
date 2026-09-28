@@ -94,8 +94,7 @@ final class SecurityCenterSidebarCommandBridge {
                 boolean desktop = intent.getBooleanExtra(
                         SidebarCommandContract.EXTRA_DESKTOP, false);
                 if (desktop) {
-                    ensureDesktopDockContext(intent.getIntExtra(
-                            SidebarCommandContract.EXTRA_GESTURE_Y, -1));
+                    ensureDesktopDockContext();
                 }
                 boolean ready = vendorShowEndpointReady();
                 if (ready) logVendorBooleanDiagnostics();
@@ -107,9 +106,7 @@ final class SecurityCenterSidebarCommandBridge {
             if (SidebarCommandContract.ACTION_CONFIRM_START.equals(action)) {
                 boolean desktop = intent.getBooleanExtra(
                         SidebarCommandContract.EXTRA_DESKTOP, false);
-                int gestureY = intent.getIntExtra(
-                        SidebarCommandContract.EXTRA_GESTURE_Y, -1);
-                if (desktop) ensureDesktopDockContext(gestureY);
+                if (desktop) ensureDesktopDockContext();
                 performNativeConfirmationHaptic();
                 return;
             }
@@ -123,8 +120,7 @@ final class SecurityCenterSidebarCommandBridge {
                     intent.getIntExtra(SidebarCommandContract.EXTRA_WIDTH, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_HEIGHT, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_RADIUS, 0),
-                    intent.getBooleanExtra(SidebarCommandContract.EXTRA_DESKTOP, false),
-                    intent.getIntExtra(SidebarCommandContract.EXTRA_GESTURE_Y, -1));
+                    intent.getBooleanExtra(SidebarCommandContract.EXTRA_DESKTOP, false));
             setResultCode(accepted
                     ? SidebarCommandContract.RESULT_ACCEPTED
                     : SidebarCommandContract.RESULT_UNAVAILABLE);
@@ -451,7 +447,7 @@ final class SecurityCenterSidebarCommandBridge {
         return null;
     }
 
-    private static void ensureDesktopDockContext(int gestureY) {
+    private static void ensureDesktopDockContext() {
         Object service = serviceOwner;
         if (service == null) return;
         try {
@@ -475,22 +471,8 @@ final class SecurityCenterSidebarCommandBridge {
                 return;
             }
             setType.invoke(dockState, 4);
-
-            Object wrapper = resolveOrPrepareMainSidebarWrapper(manager);
-            if (wrapper == null) {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " desktop dock context type4 but SidebarWrapper unresolved");
-                return;
-            }
-
-            View line = resolveSidebarLineView(wrapper);
-            if (gestureY >= 0 && line != null) {
-                moveSidebarToGestureY(manager, wrapper, line, gestureY);
-            }
-
             SideSlideHoldDiagnostics.log(TAG
-                    + " desktop dock context type4 ready state=" + dockState
-                    + " wrapperReady=true gestureY=" + gestureY);
+                    + " desktop dock context type4 ready state=" + dockState);
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG
                     + " desktop dock context setup failed", error);
@@ -540,71 +522,6 @@ final class SecurityCenterSidebarCommandBridge {
         return match;
     }
 
-    private static Object resolveOrPrepareMainSidebarWrapper(Object manager)
-            throws ReflectiveOperationException {
-        Object attached = resolveAttachedSidebarWrapper(manager);
-        if (attached != null) return attached;
-
-        for (Method method : manager.getClass().getMethods()) {
-            if (method.getParameterTypes().length != 0) continue;
-            if (!method.getReturnType().getName().startsWith("com.miui.dock.sidebar.")) {
-                continue;
-            }
-            Object candidate = method.invoke(manager);
-            if (candidate == null) continue;
-            if (resolveSidebarLineView(candidate) != null) return candidate;
-        }
-        return null;
-    }
-
-    private static void moveSidebarToGestureY(
-            Object manager, Object wrapper, View line, int gestureY)
-            throws ReflectiveOperationException {
-        Method move = null;
-        for (Method method : manager.getClass().getMethods()) {
-            if (method.getReturnType() != void.class) continue;
-            Class<?>[] params = method.getParameterTypes();
-            if (params.length != 2
-                    || params[0] != int.class
-                    || !params[1].isAssignableFrom(wrapper.getClass())) {
-                continue;
-            }
-            if (move != null) {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " move Sidebar entry ambiguous; keep vendor position");
-                return;
-            }
-            move = method;
-        }
-        if (move == null) {
-            SideSlideHoldDiagnostics.log(TAG
-                    + " move Sidebar entry unavailable; keep vendor position");
-            return;
-        }
-
-        int lineHeight = Math.max(line.getHeight(), line.getMeasuredHeight());
-        if (lineHeight <= 0) {
-            int resId = line.getResources().getIdentifier(
-                    "sidebar_line_height_vertical", "dimen",
-                    SidebarCommandContract.SECURITY_CENTER_PACKAGE);
-            if (resId != 0) {
-                lineHeight = line.getResources().getDimensionPixelSize(resId);
-            }
-        }
-        if (lineHeight <= 0) {
-            lineHeight = Math.max(1, Math.round(
-                    66f * line.getResources().getDisplayMetrics().density));
-        }
-        int screenHeight = line.getResources().getDisplayMetrics().heightPixels;
-        int targetY = Math.max(0, Math.min(
-                gestureY - (lineHeight / 2),
-                Math.max(0, screenHeight - lineHeight)));
-        move.invoke(manager, targetY, wrapper);
-        SideSlideHoldDiagnostics.log(TAG
-                + " Sidebar line moved to gesture targetY=" + targetY
-                + " rawY=" + gestureY + " height=" + lineHeight);
-    }
-
     private static boolean vendorShowEndpointReady() {
         IBinder binder = sidebarBinder;
         Method show = showMethod;
@@ -631,9 +548,8 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static boolean showSidebar(
-            int x, int y, int width, int height, int radius,
-            boolean desktop, int gestureY) {
-        if (desktop) ensureDesktopDockContext(gestureY);
+            int x, int y, int width, int height, int radius, boolean desktop) {
+        if (desktop) ensureDesktopDockContext();
         IBinder binder = sidebarBinder;
         Method show = showMethod;
         if (binder == null || show == null || !binder.isBinderAlive()) {
