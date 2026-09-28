@@ -32,6 +32,8 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile IBinder sidebarBinder;
     private static volatile Method showMethod;
     private static volatile Method[] availabilityMethods;
+    private static volatile Method vendorShowEntryMethod;
+    private static volatile boolean vendorShowProbeInstalled;
 
     private static final ServiceConnection CONNECTION = new ServiceConnection() {
         @Override
@@ -167,6 +169,7 @@ final class SecurityCenterSidebarCommandBridge {
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             appContext = context;
             bindVendorService(context);
+            installVendorShowProbe(source);
             SideSlideHoldDiagnostics.log(TAG
                     + " receiver ready from DockWindowManagerService.onCreate");
         } catch (Throwable error) {
@@ -187,6 +190,122 @@ final class SecurityCenterSidebarCommandBridge {
         } catch (Throwable error) {
             clearBinder("bindService failed: " + error);
         }
+    }
+
+    private static void installVendorShowProbe(Object service) {
+        if (vendorShowProbeInstalled || service == null) return;
+        try {
+            Object manager = resolveDockWindowManager(service);
+            if (manager == null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " vendor show probe unavailable: manager unresolved");
+                return;
+            }
+            Method entry = resolveManagerFiveIntShowMethod(manager.getClass());
+            if (entry == null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " vendor show probe unavailable: five-int entry ambiguous");
+                return;
+            }
+            vendorShowEntryMethod = entry;
+            HookUtil.hook(entry, chain -> {
+                logVendorShowEntry(chain.getThisObject(), chain.getArgs().toArray(new Object[0]));
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            vendorShowProbeInstalled = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " vendor show probe installed method=" + entry.getName());
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " vendor show probe install failed", error);
+        }
+    }
+
+    private static Method resolveManagerFiveIntShowMethod(Class<?> type) {
+        Method match = null;
+        for (Method method : type.getDeclaredMethods()) {
+            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 5) continue;
+            boolean allInts = true;
+            for (Class<?> param : params) {
+                if (param != int.class) {
+                    allInts = false;
+                    break;
+                }
+            }
+            if (!allInts) continue;
+            if (match != null) return null;
+            method.setAccessible(true);
+            match = method;
+        }
+        return match;
+    }
+
+    private static void logVendorShowEntry(Object manager, Object[] args) {
+        int dockType = -1;
+        boolean wrapperPresent = false;
+        boolean wrapperAttached = false;
+        int lineVisibility = -1;
+        boolean lineActive = false;
+        try {
+            Object service = serviceOwner;
+            if (service != null) {
+                Method getDockState = service.getClass().getMethod("I0");
+                Object dockState = getDockState.invoke(service);
+                if (dockState != null) {
+                    Method getType = dockState.getClass().getMethod("c");
+                    dockType = ((Number) getType.invoke(dockState)).intValue();
+                }
+            }
+            Object wrapper = resolveMainSidebarWrapper(manager);
+            wrapperPresent = wrapper != null;
+            View line = wrapper != null ? resolveSidebarLineView(wrapper) : null;
+            if (line != null) {
+                wrapperAttached = line.isAttachedToWindow() || line.getWindowToken() != null;
+                lineVisibility = line.getVisibility();
+                try {
+                    Method isActive = line.getClass().getMethod("isActive");
+                    lineActive = Boolean.TRUE.equals(isActive.invoke(line));
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " vendor show entry diagnostics failed", error);
+        }
+
+        SideSlideHoldDiagnostics.log(TAG
+                + " VENDOR_SHOW_ENTRY dockType=" + dockType
+                + " wrapper=" + wrapperPresent
+                + " attached=" + wrapperAttached
+                + " lineVisibility=" + lineVisibility
+                + " lineActive=" + lineActive
+                + " geometry=" + formatGeometry(args));
+    }
+
+    private static String formatGeometry(Object[] args) {
+        if (args == null || args.length != 5) return "invalid";
+        return String.valueOf(args[0]) + "," + args[1] + " "
+                + args[2] + "x" + args[3] + " r=" + args[4];
+    }
+
+    private static Object resolveMainSidebarWrapper(Object manager)
+            throws ReflectiveOperationException {
+        Method getter = null;
+        for (Method method : manager.getClass().getMethods()) {
+            if (method.getParameterTypes().length != 0) continue;
+            if (!method.getReturnType().getName().startsWith("com.miui.dock.sidebar.")) continue;
+            if (getter != null) {
+                // Prefer the stable semantic zero-arg getter named G0 when available, but do not
+                // require it for compatibility.
+                if ("G0".equals(method.getName())) {
+                    getter = method;
+                    break;
+                }
+                continue;
+            }
+            getter = method;
+        }
+        return getter != null ? getter.invoke(manager) : null;
     }
 
     private static Method resolveShowMethod(Class<?> binderClass) {
