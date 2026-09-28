@@ -371,6 +371,7 @@ final class Launcher450SideSlideHoldHook {
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
                 .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
                 .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
+        final boolean requestWasDesktop = state.desktopAtDown;
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
@@ -389,8 +390,8 @@ final class Launcher450SideSlideHoldHook {
                     return;
                 }
 
-                // OS4 long-click semantics: arm only. Security Center performs the native
-                // activate -> haptic -> widen sequence; commit remains deferred until ACTION_UP.
+                // Dwell only arms the gesture. Security Center performs native haptic feedback;
+                // the OS4 panel transform remains deferred until ACTION_UP / vendor y2().
                 state.confirmationVisible = true;
                 sendConfirmation(owner, true, state);
                 SideSlideHoldDiagnostics.log(TAG
@@ -466,7 +467,8 @@ final class Launcher450SideSlideHoldHook {
                 .putExtra(SidebarCommandContract.EXTRA_WIDTH, geometry[2])
                 .putExtra(SidebarCommandContract.EXTRA_HEIGHT, geometry[3])
                 .putExtra(SidebarCommandContract.EXTRA_RADIUS, geometry[4])
-                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown);
+                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
+                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
 
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
@@ -475,7 +477,7 @@ final class Launcher450SideSlideHoldHook {
                         getResultCode() == SidebarCommandContract.RESULT_ACCEPTED;
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar release show result accepted=" + accepted
-                        + " desktop=" + state.desktopAtDown);
+                        + " desktop=" + requestWasDesktop);
             }
         };
 
