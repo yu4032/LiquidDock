@@ -525,7 +525,7 @@ final class Launcher450SideSlideHoldHook {
         int screenHeight = Math.max(height, dm.heightPixels);
 
         // OS4 anchors Sidebar evoke geometry to the original swipe-start Y. Do not derive the
-        // source from GestureBackArrowView.getLocationOnScreen() and do not follow the final MOVE.
+        // source from the BackArrow view's screen location and do not follow the final MOVE.
         // Native on_swipe_start initializes the BackArrow top as startY - 20.0.
         int x = state.leftEdge ? 0 : screenWidth - width;
         int y = Math.round(state.downRawY - OS4_SOURCE_TOP_OFFSET_PX);
