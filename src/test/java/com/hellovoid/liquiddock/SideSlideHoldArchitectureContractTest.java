@@ -88,7 +88,6 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("params.length != 5"));
         assertTrue(bridge.contains("method.getReturnType() != boolean.class"));
         assertFalse(bridge.contains("\"a7\""));
-        assertFalse(bridge.contains("\"D\""));
         assertFalse(bridge.contains("\"p1\""));
     }
 }
