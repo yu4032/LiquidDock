@@ -234,16 +234,37 @@ final class SecurityCenterSidebarCommandBridge {
             // OS4 decompilation: SidebarWrapper.U() -> widenSidebarLine(),
             // SidebarWrapper.R() -> narrowSidebarLine(). Resolve only after strong structural
             // validation of the live attached com.miui.dock.sidebar wrapper.
-            String methodName = widen ? "U" : "R";
-            Method method = wrapper.getClass().getMethod(methodName);
-            if (method.getReturnType() != void.class || method.getParameterTypes().length != 0) {
+            if (widen) {
+                // OS4 SidebarTouchListener.onLongClick():
+                // DockWindowManager.L0(true, true) -> haptic -> SidebarWrapper.U().
+                Method activate = manager.getClass().getMethod(
+                        "L0", boolean.class, boolean.class);
+                Method widenMethod = wrapper.getClass().getMethod("U");
+                if (activate.getReturnType() != void.class
+                        || widenMethod.getReturnType() != void.class) {
+                    SideSlideHoldDiagnostics.log(TAG
+                            + " native confirmation start signature mismatch");
+                    return;
+                }
+                activate.invoke(manager, true, true);
+                widenMethod.invoke(wrapper);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " native confirmation signature mismatch method=" + methodName);
-                return;
+                        + " native Sidebar confirmation activate+widen");
+            } else {
+                // OS4 long-click ACTION_UP visual cleanup:
+                // SidebarWrapper.D() -> R() -> DockWindowManager.e3() -> Q1(wrapper).
+                Method hideMoving = wrapper.getClass().getMethod("D");
+                Method narrow = wrapper.getClass().getMethod("R");
+                Method updateAssistant = manager.getClass().getMethod("e3");
+                Method removePassDown = manager.getClass().getMethod(
+                        "Q1", wrapper.getClass());
+                hideMoving.invoke(wrapper);
+                narrow.invoke(wrapper);
+                updateAssistant.invoke(manager);
+                removePassDown.invoke(manager, wrapper);
+                SideSlideHoldDiagnostics.log(TAG
+                        + " native Sidebar confirmation cleanup+narrow");
             }
-            method.invoke(wrapper);
-            SideSlideHoldDiagnostics.log(TAG
-                    + " native Sidebar confirmation " + (widen ? "widen" : "narrow"));
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " native confirmation failed", error);
         }
