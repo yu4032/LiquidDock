@@ -487,28 +487,22 @@ final class SecurityCenterSidebarCommandBridge {
 
     private static Object prepareMainSidebarWrapper(Object manager)
             throws ReflectiveOperationException {
-        Method candidate = null;
+        boolean foundEntry = false;
         for (Method method : manager.getClass().getMethods()) {
             if (method.isSynthetic() || method.getParameterTypes().length != 0) continue;
             if (!method.getReturnType().getName().startsWith("com.miui.dock.sidebar.")) {
                 continue;
             }
-            if (candidate != null) {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " prepare SidebarWrapper entry ambiguous; fail open");
-                return null;
+            foundEntry = true;
+            Object wrapper = method.invoke(manager);
+            if (wrapper != null && resolveSidebarLineView(wrapper) != null) {
+                SideSlideHoldDiagnostics.log(TAG + " main SidebarWrapper prepared");
+                return wrapper;
             }
-            candidate = method;
         }
-        if (candidate == null) {
+        if (!foundEntry) {
             SideSlideHoldDiagnostics.log(TAG
                     + " prepare SidebarWrapper entry unavailable");
-            return null;
-        }
-        Object wrapper = candidate.invoke(manager);
-        if (wrapper != null && resolveSidebarLineView(wrapper) != null) {
-            SideSlideHoldDiagnostics.log(TAG + " main SidebarWrapper prepared");
-            return wrapper;
         }
         return null;
     }
