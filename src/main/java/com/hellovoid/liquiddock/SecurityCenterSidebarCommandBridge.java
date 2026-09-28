@@ -1,0 +1,223 @@
+package com.hellovoid.liquiddock;
+
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.os.IBinder;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Security Center :ui bridge to the exported DockWindowManagerService Sidebar endpoint.
+ *
+ * <p>OS4 decompilation confirms ISidebarOverlay exposes one five-int show method plus two
+ * zero-argument boolean state methods (canShowNewDock and isNewDockShowing). The bridge keeps
+ * structural resolution so R8 method names are not part of LiquidDock's compatibility contract.</p>
+ */
+final class SecurityCenterSidebarCommandBridge {
+    private static final String TAG = "[DC][SidebarBridge]";
+
+    private static volatile boolean installed;
+    private static volatile Context appContext;
+    private static volatile IBinder sidebarBinder;
+    private static volatile Method showMethod;
+    private static volatile Method[] availabilityMethods;
+
+    private static final ServiceConnection CONNECTION = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            if (service == null) {
+                clearBinder("null service");
+                return;
+            }
+            try {
+                String descriptor = service.getInterfaceDescriptor();
+                if (!SidebarCommandContract.SIDEBAR_DESCRIPTOR.equals(descriptor)) {
+                    clearBinder("descriptor mismatch=" + descriptor);
+                    return;
+                }
+                Method show = resolveShowMethod(service.getClass());
+                Method[] states = resolveBooleanStateMethods(service.getClass());
+                if (show == null || states == null) {
+                    clearBinder("vendor Sidebar contract unavailable or ambiguous");
+                    return;
+                }
+                show.setAccessible(true);
+                for (Method state : states) state.setAccessible(true);
+                sidebarBinder = service;
+                showMethod = show;
+                availabilityMethods = states;
+                SideSlideHoldDiagnostics.log(TAG + " ready descriptor=" + descriptor);
+            } catch (Throwable error) {
+                clearBinder("bind validation failed: " + error);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            clearBinder("service disconnected");
+            Context context = appContext;
+            if (context != null) bindVendorService(context);
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            clearBinder("binding died");
+            Context context = appContext;
+            if (context != null) bindVendorService(context);
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            clearBinder("null binding");
+        }
+    };
+
+    private static final BroadcastReceiver RECEIVER = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null
+                    || !SidebarCommandContract.ACTION_SHOW.equals(intent.getAction())) {
+                return;
+            }
+            boolean accepted = showSidebar(
+                    intent.getIntExtra(SidebarCommandContract.EXTRA_X, 0),
+                    intent.getIntExtra(SidebarCommandContract.EXTRA_Y, 0),
+                    intent.getIntExtra(SidebarCommandContract.EXTRA_WIDTH, 0),
+                    intent.getIntExtra(SidebarCommandContract.EXTRA_HEIGHT, 0),
+                    intent.getIntExtra(SidebarCommandContract.EXTRA_RADIUS, 0));
+            setResultCode(accepted
+                    ? SidebarCommandContract.RESULT_ACCEPTED
+                    : SidebarCommandContract.RESULT_UNAVAILABLE);
+        }
+    };
+
+    private SecurityCenterSidebarCommandBridge() {}
+
+    static boolean install() {
+        if (installed) return true;
+        HookUtil.InvocationResult<Object> appResult =
+                HookUtil.tryInvokeActivityThreadCurrentApplication();
+        Object application = appResult.succeeded() ? appResult.value() : null;
+        if (!(application instanceof Context)) {
+            SideSlideHoldDiagnostics.log(TAG + " no application context; fail closed");
+            return false;
+        }
+
+        Context context = ((Context) application).getApplicationContext();
+        if (context == null) context = (Context) application;
+        appContext = context;
+        try {
+            IntentFilter filter = new IntentFilter(SidebarCommandContract.ACTION_SHOW);
+            context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
+            installed = true;
+            bindVendorService(context);
+            SideSlideHoldDiagnostics.log(TAG + " installed in Security Center :ui");
+            return true;
+        } catch (Throwable error) {
+            installed = false;
+            SideSlideHoldDiagnostics.log(TAG + " install failed", error);
+            return false;
+        }
+    }
+
+    private static void bindVendorService(Context context) {
+        try {
+            Intent intent = new Intent(SidebarCommandContract.SERVICE_ACTION)
+                    .setComponent(new ComponentName(
+                            SidebarCommandContract.SECURITY_CENTER_PACKAGE,
+                            SidebarCommandContract.SERVICE_CLASS));
+            boolean bound = context.bindService(intent, CONNECTION, Context.BIND_AUTO_CREATE);
+            SideSlideHoldDiagnostics.log(TAG + " bindService=" + bound);
+            if (!bound) clearBinder("bindService returned false");
+        } catch (Throwable error) {
+            clearBinder("bindService failed: " + error);
+        }
+    }
+
+    private static Method resolveShowMethod(Class<?> binderClass) {
+        Method match = null;
+        for (Method method : binderClass.getDeclaredMethods()) {
+            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 5) continue;
+            boolean allInts = true;
+            for (Class<?> param : params) {
+                if (param != int.class) {
+                    allInts = false;
+                    break;
+                }
+            }
+            if (!allInts) continue;
+            if (match != null) return null;
+            match = method;
+        }
+        return match;
+    }
+
+    private static Method[] resolveBooleanStateMethods(Class<?> binderClass) {
+        List<Method> matches = new ArrayList<>(2);
+        for (Method method : binderClass.getDeclaredMethods()) {
+            if (method.isSynthetic()) continue;
+            if (method.getReturnType() != boolean.class) continue;
+            if (method.getParameterTypes().length != 0) continue;
+            matches.add(method);
+        }
+        return matches.size() == 2 ? matches.toArray(new Method[0]) : null;
+    }
+
+    private static boolean vendorAvailableOrShowing() {
+        IBinder binder = sidebarBinder;
+        Method[] states = availabilityMethods;
+        if (binder == null || states == null || !binder.isBinderAlive()) {
+            Context context = appContext;
+            if (context != null) bindVendorService(context);
+            return false;
+        }
+        try {
+            for (Method state : states) {
+                if (Boolean.TRUE.equals(state.invoke(binder))) return true;
+            }
+            return false;
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " availability query failed", error);
+            return false;
+        }
+    }
+
+    private static boolean showSidebar(int x, int y, int width, int height, int radius) {
+        IBinder binder = sidebarBinder;
+        Method show = showMethod;
+        if (binder == null || show == null || !binder.isBinderAlive()) {
+            Context context = appContext;
+            if (context != null) bindVendorService(context);
+            return false;
+        }
+        if (width <= 0 || height <= 0 || radius < 0) return false;
+        if (!vendorAvailableOrShowing()) {
+            SideSlideHoldDiagnostics.log(TAG + " vendor reports Sidebar unavailable");
+            return false;
+        }
+        try {
+            show.invoke(binder, x, y, width, height, radius);
+            SideSlideHoldDiagnostics.log(TAG + " vendor show accepted geometry="
+                    + x + "," + y + " " + width + "x" + height + " r=" + radius);
+            return true;
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " vendor show failed", error);
+            return false;
+        }
+    }
+
+    private static void clearBinder(String reason) {
+        sidebarBinder = null;
+        showMethod = null;
+        availabilityMethods = null;
+        SideSlideHoldDiagnostics.log(TAG + " not ready: " + reason);
+    }
+}
