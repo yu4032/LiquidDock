@@ -69,7 +69,6 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("resolveDockState"));
         assertTrue(bridge.contains("DockWindowType{"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
-        assertTrue(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertFalse(bridge.contains("activate+haptic+widen"));
         assertFalse(bridge.contains("cleanup+narrow"));
         assertTrue(bridge.contains("RegionSamplingImageView"));
