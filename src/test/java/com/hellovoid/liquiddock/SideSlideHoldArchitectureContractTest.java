@@ -50,6 +50,10 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(contract.contains("RESULT_READY"));
         assertTrue(hook.contains("Sidebar preflight ready -> native confirm armed; wait ACTION_UP"));
         assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
+        assertTrue(hook.contains("Sidebar source geometry from GestureBackArrowView"));
+        assertTrue(hook.contains("getLocationOnScreen"));
+        assertFalse(bridge.contains("moveSidebarToGestureY"));
+        assertFalse(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
         assertFalse(hook.contains("if (consumeDesktop)"));
         assertTrue(hook.contains("HOME Workspace paging cancelled for edge side-slide"));
@@ -62,10 +66,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("show.invoke"));
         assertTrue(contract.contains("EXTRA_GESTURE_Y"));
         assertTrue(bridge.contains("native confirmation haptic"));
-        assertTrue(bridge.contains("Sidebar line moved to gesture targetY"));
         assertTrue(bridge.contains("resolveDockState"));
         assertTrue(bridge.contains("DockWindowType{"));
-        assertTrue(bridge.contains("sidebar_line_height_vertical"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
         assertTrue(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertFalse(bridge.contains("activate+haptic+widen"));
@@ -75,7 +77,6 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("resolveManagerFiveIntShowMethod"));
         assertTrue(bridge.contains("desktop dock context"));
         assertTrue(bridge.contains("setType.invoke(dockState, 4)"));
-        assertTrue(bridge.contains("moveSidebarToGestureY"));
         assertFalse(bridge.contains("if (!vendorAvailableOrShowing())"));
         assertTrue(bridge.contains("DockWindowManagerService.onCreate"));
         assertTrue(bridge.contains("ensureInstalled((Context) service)"));
