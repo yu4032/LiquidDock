@@ -470,14 +470,18 @@ final class SecurityCenterSidebarCommandBridge {
                         + " desktop dock context unavailable: dock type setter ambiguous");
                 return;
             }
-            setType.invoke(dockState, 4);
 
+            // Prepare the vendor wrapper while the desktop still has dockType=0. H1-like
+            // preparation keeps its line inactive in that state. Switching to type 4 first would
+            // make the vendor prepare path call M2() and expose the unrelated thin Sidebar line.
             Object wrapper = resolveMainSidebarWrapper(manager);
             if (wrapper == null) {
                 wrapper = prepareMainSidebarWrapper(manager);
             }
+            setType.invoke(dockState, 4);
+
             SideSlideHoldDiagnostics.log(TAG
-                    + " desktop dock context type4 ready state=" + dockState
+                    + " desktop dock context wrapper-before-type4 state=" + dockState
                     + " wrapperReady=" + (wrapper != null));
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG
