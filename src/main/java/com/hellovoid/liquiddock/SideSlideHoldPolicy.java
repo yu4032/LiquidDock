@@ -1,27 +1,27 @@
 package com.hellovoid.liquiddock;
 
 /**
- * Android-free eligibility state for the Launcher 4.50 side-slide Sidebar extension.
+ * Android-free state for the Launcher 4.50 / OS4-style side-slide Sidebar extension.
  *
- * <p>Apps use Launcher's native READY_STATE_RECENT authority. HOME has no Back/RECENT commit
- * state on OS3, so the hook may explicitly provide a HOME-only visual-progress eligibility bit.
- * Both sources converge here and stale acknowledgements remain generation-safe.</p>
+ * <p>Dwell only arms the gesture. Release commits it. This mirrors OS4's long-click flow:
+ * 300 ms -> haptic/confirmation animation -> ACTION_UP -> Sidebar commit.</p>
  */
 final class SideSlideHoldPolicy {
-    // OS4 Security Center SidebarTouchListener posts its long-click confirmation at 300 ms.
     static final long HOLD_DWELL_MS = 300L;
 
     private boolean active;
     private boolean eligible;
-    private boolean requestIssued;
-    private boolean sidebarAccepted;
+    private boolean armRequested;
+    private boolean armed;
+    private boolean releaseCommitted;
     private int generation;
 
     void onDown() {
         active = true;
         eligible = false;
-        requestIssued = false;
-        sidebarAccepted = false;
+        armRequested = false;
+        armed = false;
+        releaseCommitted = false;
         generation++;
     }
 
@@ -34,10 +34,11 @@ final class SideSlideHoldPolicy {
     }
 
     private boolean setEligible(boolean nextEligible) {
-        if (!active || sidebarAccepted) return false;
+        if (!active || releaseCommitted) return false;
         if (nextEligible == eligible) return false;
         eligible = nextEligible;
-        requestIssued = false;
+        armRequested = false;
+        armed = false;
         generation++;
         return nextEligible;
     }
@@ -46,32 +47,45 @@ final class SideSlideHoldPolicy {
         return generation;
     }
 
-    boolean requestSidebar(int expectedGeneration) {
-        if (!active || !eligible || requestIssued || sidebarAccepted
+    boolean requestArm(int expectedGeneration) {
+        if (!active || !eligible || armRequested || armed || releaseCommitted
                 || generation != expectedGeneration) {
             return false;
         }
-        requestIssued = true;
+        armRequested = true;
         return true;
     }
 
-    void onSidebarResult(boolean accepted, int expectedGeneration) {
-        if (!active || !eligible || !requestIssued || generation != expectedGeneration) {
-            return;
+    boolean onArmResult(boolean ready, int expectedGeneration) {
+        if (!active || !eligible || !armRequested || releaseCommitted
+                || generation != expectedGeneration) {
+            return false;
         }
-        sidebarAccepted = accepted;
-        if (!accepted) requestIssued = false;
+        armRequested = false;
+        armed = ready;
+        return armed;
+    }
+
+    boolean isArmed() {
+        return active && eligible && armed && !releaseCommitted;
+    }
+
+    boolean commitRelease(int expectedGeneration) {
+        if (!isArmed() || generation != expectedGeneration) return false;
+        releaseCommitted = true;
+        return true;
     }
 
     boolean shouldConsumeVendorCompletion() {
-        return active && sidebarAccepted;
+        return active && releaseCommitted;
     }
 
-    void onUpOrCancel() {
+    void onFinish() {
         active = false;
         eligible = false;
-        requestIssued = false;
-        sidebarAccepted = false;
+        armRequested = false;
+        armed = false;
+        releaseCommitted = false;
         generation++;
     }
 }
