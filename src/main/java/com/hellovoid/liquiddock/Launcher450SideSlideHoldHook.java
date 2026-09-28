@@ -51,6 +51,8 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Object readyStateBack;
     private static volatile Method applicationGetLauncherMethod;
     private static volatile Method launcherIsInStateMethod;
+    private static volatile Method launcherGetWorkspaceMethod;
+    private static volatile Method workspaceFinishCurrentGestureMethod;
     private static volatile Class<?> launcherStateClass;
     private static volatile Object launcherStateNormal;
     private static volatile boolean installed;
@@ -66,6 +68,7 @@ final class Launcher450SideSlideHoldHook {
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
             Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
             Class<?> launcherClass = Class.forName(LAUNCHER_CLASS, false, classLoader);
+            Class<?> workspaceClass = Class.forName("com.miui.home.launcher.Workspace", false, classLoader);
             Class<?> stateClass = Class.forName(LAUNCHER_STATE_CLASS, false, classLoader);
 
             Method onTouchEvent = HookUtil.findMethodExact(
@@ -78,6 +81,10 @@ final class Launcher450SideSlideHoldHook {
                     applicationClass, "getLauncher", new Class<?>[0]);
             Method isInState = HookUtil.findMethodExact(
                     launcherClass, "isInState", new Class<?>[]{stateClass});
+            Method getWorkspace = HookUtil.findMethodExact(
+                    launcherClass, "getWorkspace", new Class<?>[0]);
+            Method finishCurrentGesture = HookUtil.findMethodExact(
+                    workspaceClass, "finishCurrentGesture", new Class<?>[0]);
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -88,6 +95,8 @@ final class Launcher450SideSlideHoldHook {
             readyStateBack = back;
             applicationGetLauncherMethod = getLauncher;
             launcherIsInStateMethod = isInState;
+            launcherGetWorkspaceMethod = getWorkspace;
+            workspaceFinishCurrentGestureMethod = finishCurrentGesture;
             launcherStateClass = stateClass;
             launcherStateNormal = null;
 
@@ -108,13 +117,9 @@ final class Launcher450SideSlideHoldHook {
                     cancelConfirmation((View) owner, state);
                 }
 
-                boolean consumeDesktop = state.sideStub && state.desktopAtDown;
                 try {
-                    // On HOME the edge stub becomes the input owner for this edge gesture.
-                    // This prevents Workspace horizontal paging from stealing the gesture.
-                    if (consumeDesktop) {
-                        return Boolean.TRUE;
-                    }
+                    // Always preserve GestureStubView's own state machine. HOME paging is cancelled
+                    // explicitly when the edge gesture reaches the reserved side-slide region.
                     return chain.proceed(args);
                 } finally {
                     if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
@@ -216,6 +221,7 @@ final class Launcher450SideSlideHoldHook {
             state.leftEdge = state.downX < view.getResources().getDisplayMetrics().widthPixels / 2f;
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
+            state.workspaceCancelled = false;
             state.policy.onDown();
             SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
                     + " desktop=" + state.desktopAtDown
@@ -229,6 +235,9 @@ final class Launcher450SideSlideHoldHook {
         boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
         boolean saturated = inward && Math.abs(dx) >= HOME_VISUAL_SATURATION_PX;
         boolean entered = state.policy.onDesktopProgress(saturated);
+        if (saturated && !state.workspaceCancelled) {
+            cancelWorkspacePaging(view, state);
+        }
         if (!saturated) {
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
@@ -262,6 +271,39 @@ final class Launcher450SideSlideHoldHook {
             view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
             SideSlideHoldDiagnostics.log(TAG + " HOME hover armed dx=" + dx
                     + " reset=" + movedOutsideHover);
+        }
+    }
+
+    private static void cancelWorkspacePaging(View source, GestureState state) {
+        Method getLauncher = applicationGetLauncherMethod;
+        Method getWorkspace = launcherGetWorkspaceMethod;
+        Method finishCurrentGesture = workspaceFinishCurrentGestureMethod;
+        if (getLauncher == null || getWorkspace == null || finishCurrentGesture == null) return;
+        try {
+            Object launcher = getLauncher.invoke(null);
+            if (launcher == null) return;
+            Object workspace = getWorkspace.invoke(launcher);
+            if (!(workspace instanceof View)) return;
+
+            MotionEvent cancel = MotionEvent.obtain(
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    MotionEvent.ACTION_CANCEL,
+                    source.getX(),
+                    source.getY(),
+                    0);
+            try {
+                ((View) workspace).dispatchTouchEvent(cancel);
+            } finally {
+                cancel.recycle();
+            }
+            finishCurrentGesture.invoke(workspace);
+            state.workspaceCancelled = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " HOME Workspace paging cancelled for edge side-slide");
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " HOME Workspace cancel failed; preserve stock paging", error);
         }
     }
 
@@ -479,6 +521,7 @@ final class Launcher450SideSlideHoldHook {
         state.desktopAtDown = false;
         state.arrow = null;
         state.confirmationVisible = false;
+        state.workspaceCancelled = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
         state.scheduledGeneration = Integer.MIN_VALUE;
@@ -500,6 +543,7 @@ final class Launcher450SideSlideHoldHook {
         boolean desktopAtDown;
         boolean leftEdge;
         boolean confirmationVisible;
+        boolean workspaceCancelled;
         Object arrow;
         float downX;
         float lastRawX;
