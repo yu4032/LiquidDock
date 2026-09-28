@@ -64,6 +64,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("native confirmation haptic"));
         assertTrue(bridge.contains("Sidebar line moved to gesture targetY"));
         assertTrue(bridge.contains("resolveDockState"));
+        assertTrue(bridge.contains("DockWindowType{"));
+        assertTrue(bridge.contains("sidebar_line_height_vertical"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
         assertTrue(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertFalse(bridge.contains("activate+haptic+widen"));
