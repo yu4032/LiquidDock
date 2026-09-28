@@ -19,9 +19,9 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("GestureBackArrowView$ReadyState"));
         assertTrue(hook.contains("setReadyFinish"));
         assertTrue(policy.contains("READY_STATE_RECENT"));
-        assertTrue(hook.contains("isInDesktop"));
-        assertTrue(hook.contains("launcherGetDockControllerMethod"));
-        assertTrue(hook.contains("dockControllerIsInDesktopMethod"));
+        assertTrue(hook.contains("LauncherState.NORMAL"));
+        assertTrue(hook.contains("launcherIsInStateMethod"));
+        assertTrue(hook.contains("launcherStateNormal"));
         assertTrue(hook.contains("HOME_VISUAL_SATURATION_PX"));
         assertTrue(hook.contains("HOME_HOVER_SLOP_DP"));
         assertTrue(hook.contains("HOME hover confirmed"));
