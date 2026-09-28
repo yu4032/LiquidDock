@@ -458,7 +458,7 @@ final class Launcher450SideSlideHoldHook {
             state.policy.onArmResult(false, generation);
             return;
         }
-        int[] geometry = sourceGeometry(owner, state.lastRawX, state.lastRawY);
+        int[] geometry = sourceGeometry(owner, state);
         Intent intent = new Intent(SidebarCommandContract.ACTION_SHOW)
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
                 .putExtra(SidebarCommandContract.EXTRA_X, geometry[0])
@@ -508,15 +508,35 @@ final class Launcher450SideSlideHoldHook {
         }
     }
 
-    private static int[] sourceGeometry(View view, float rawX, float rawY) {
-        DisplayMetrics dm = view.getResources().getDisplayMetrics();
+    private static int[] sourceGeometry(View owner, GestureState state) {
+        Object arrowObject = state.arrow;
+        if (arrowObject instanceof View) {
+            View arrow = (View) arrowObject;
+            int width = Math.max(arrow.getWidth(), arrow.getMeasuredWidth());
+            int height = Math.max(arrow.getHeight(), arrow.getMeasuredHeight());
+            if (width > 0 && height > 0) {
+                int[] location = new int[2];
+                arrow.getLocationOnScreen(location);
+                int radius = Math.max(1, Math.min(width, height) / 2);
+                SideSlideHoldDiagnostics.log(TAG
+                        + " Sidebar source geometry from GestureBackArrowView "
+                        + location[0] + "," + location[1] + " "
+                        + width + "x" + height + " r=" + radius);
+                return new int[]{location[0], location[1], width, height, radius};
+            }
+        }
+
+        DisplayMetrics dm = owner.getResources().getDisplayMetrics();
         int size = Math.max(1, Math.round(SOURCE_SIZE_DP * dm.density));
         int screenWidth = Math.max(size, dm.widthPixels);
         int screenHeight = Math.max(size, dm.heightPixels);
-        boolean left = rawX < screenWidth / 2f;
+        boolean left = state.lastRawX < screenWidth / 2f;
         int x = left ? 0 : screenWidth - size;
-        int y = Math.round(rawY - size / 2f);
+        int y = Math.round(state.lastRawY - size / 2f);
         y = Math.max(0, Math.min(y, screenHeight - size));
+        SideSlideHoldDiagnostics.log(TAG
+                + " Sidebar source geometry fallback "
+                + x + "," + y + " " + size + "x" + size);
         return new int[]{x, y, size, size, size / 2};
     }
 
