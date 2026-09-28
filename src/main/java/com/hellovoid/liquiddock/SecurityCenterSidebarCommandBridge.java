@@ -471,12 +471,46 @@ final class SecurityCenterSidebarCommandBridge {
                 return;
             }
             setType.invoke(dockState, 4);
+
+            Object wrapper = resolveMainSidebarWrapper(manager);
+            if (wrapper == null) {
+                wrapper = prepareMainSidebarWrapper(manager);
+            }
             SideSlideHoldDiagnostics.log(TAG
-                    + " desktop dock context type4 ready state=" + dockState);
+                    + " desktop dock context type4 ready state=" + dockState
+                    + " wrapperReady=" + (wrapper != null));
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG
                     + " desktop dock context setup failed", error);
         }
+    }
+
+    private static Object prepareMainSidebarWrapper(Object manager)
+            throws ReflectiveOperationException {
+        Method candidate = null;
+        for (Method method : manager.getClass().getMethods()) {
+            if (method.isSynthetic() || method.getParameterTypes().length != 0) continue;
+            if (!method.getReturnType().getName().startsWith("com.miui.dock.sidebar.")) {
+                continue;
+            }
+            if (candidate != null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " prepare SidebarWrapper entry ambiguous; fail open");
+                return null;
+            }
+            candidate = method;
+        }
+        if (candidate == null) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " prepare SidebarWrapper entry unavailable");
+            return null;
+        }
+        Object wrapper = candidate.invoke(manager);
+        if (wrapper != null && resolveSidebarLineView(wrapper) != null) {
+            SideSlideHoldDiagnostics.log(TAG + " main SidebarWrapper prepared");
+            return wrapper;
+        }
+        return null;
     }
 
     private static Object resolveDockState(Object manager) throws IllegalAccessException {
