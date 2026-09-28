@@ -50,8 +50,12 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(contract.contains("RESULT_READY"));
         assertTrue(hook.contains("Sidebar preflight ready -> native confirm armed; wait ACTION_UP"));
         assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
-        assertTrue(hook.contains("Sidebar source geometry from GestureBackArrowView"));
-        assertTrue(hook.contains("getLocationOnScreen"));
+        assertTrue(hook.contains("Sidebar OS4 source geometry"));
+        assertTrue(hook.contains("state.downRawY - OS4_SOURCE_TOP_OFFSET_PX"));
+        assertTrue(hook.contains("OS4_SOURCE_WIDTH_DP = 30f"));
+        assertTrue(hook.contains("OS4_SOURCE_HEIGHT_DP = 53f"));
+        assertTrue(hook.contains("OS4_SOURCE_RADIUS_DP = 8f"));
+        assertFalse(hook.contains("getLocationOnScreen"));
         assertFalse(bridge.contains("moveSidebarToGestureY"));
         assertFalse(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
