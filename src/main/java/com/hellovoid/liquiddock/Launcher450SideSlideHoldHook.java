@@ -18,13 +18,12 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Launcher 4.50 Pad edge-gesture extension: native RECENT-ready + dwell -> Security Center Sidebar.
+ * Launcher 4.50 Pad side-slide extension.
  *
- * <p>Launcher remains authoritative for distance, direction, speed and BACK/RECENT/NONE state.
- * LiquidDock observes only the stable semantic ReadyState boundary. If Security Center positively
- * accepts the Sidebar show request while the gesture is still active, the vendor completion state
- * is reconciled to BACK so Launcher performs its normal release cleanup; only the final Back
- * injection is suppressed.</p>
+ * <p>Apps use Launcher's native GestureBackArrowView ReadyState. HOME does not expose a
+ * BACK/RECENT completion state on OS3, so HOME alone falls back to the already-existing OS3
+ * predictive-back visual saturation distance (180 px) observed at GestureStubView. This fallback
+ * is never used in app state and does not replace Launcher's app gesture authority.</p>
  */
 final class Launcher450SideSlideHoldHook {
     private static final String TAG = "[DC][SideSlideHold450]";
@@ -32,6 +31,12 @@ final class Launcher450SideSlideHoldHook {
     private static final String ARROW_VIEW = "com.miui.home.recents.GestureBackArrowView";
     private static final String READY_STATE =
             "com.miui.home.recents.GestureBackArrowView$ReadyState";
+    private static final String LAUNCHER_APPLICATION = "com.miui.home.launcher.Application";
+
+    // Recovered from GestureStubView's predictive-back progress: abs(dx) / 180f, clamped to 1.
+    // On HOME only, where OS3 never publishes READY_STATE_RECENT, this is used as a visual
+    // saturation boundary rather than as a claim about vendor Back completion semantics.
+    private static final float HOME_VISUAL_SATURATION_PX = 180f;
     private static final float SOURCE_SIZE_DP = 48f;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -40,6 +45,7 @@ final class Launcher450SideSlideHoldHook {
 
     private static volatile Method setReadyFinishMethod;
     private static volatile Object readyStateBack;
+    private static volatile Method applicationGetLauncherMethod;
     private static volatile boolean installed;
 
     private Launcher450SideSlideHoldHook() {}
@@ -51,6 +57,7 @@ final class Launcher450SideSlideHoldHook {
             Class<?> stubClass = Class.forName(GESTURE_STUB, false, classLoader);
             Class<?> arrowClass = Class.forName(ARROW_VIEW, false, classLoader);
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
+            Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
 
             Method onTouchEvent = HookUtil.findMethodExact(
                     stubClass, "onTouchEvent", new Class<?>[]{MotionEvent.class});
@@ -58,6 +65,8 @@ final class Launcher450SideSlideHoldHook {
                     stubClass, "injectBackKeyEvent", new Class<?>[]{boolean.class});
             Method setReadyFinish = HookUtil.findMethodExact(
                     arrowClass, "setReadyFinish", new Class<?>[]{readyClass});
+            Method getLauncher = HookUtil.findMethodExact(
+                    applicationClass, "getLauncher", new Class<?>[0]);
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -66,6 +75,7 @@ final class Launcher450SideSlideHoldHook {
             }
             setReadyFinishMethod = setReadyFinish;
             readyStateBack = back;
+            applicationGetLauncherMethod = getLauncher;
 
             HookUtil.hook(onTouchEvent, chain -> {
                 Object owner = chain.getThisObject();
@@ -100,10 +110,12 @@ final class Launcher450SideSlideHoldHook {
                             : String.valueOf(requested);
                     if (state.policy.shouldConsumeVendorCompletion()) {
                         args[0] = readyStateBack;
-                    } else {
+                    } else if (!state.desktopAtDown) {
                         boolean enteredRecent = state.policy.onReadyState(readyName);
+                        SideSlideHoldDiagnostics.log(TAG + " ReadyState=" + readyName
+                                + " enteredRecent=" + enteredRecent);
                         if (enteredRecent && state.owner instanceof View) {
-                            scheduleDwell((View) state.owner, state);
+                            scheduleDwell((View) state.owner, state, "native RECENT");
                         } else if (!"READY_STATE_RECENT".equals(readyName)
                                 && state.owner instanceof View) {
                             cancelDwell((View) state.owner, state);
@@ -125,7 +137,7 @@ final class Launcher450SideSlideHoldHook {
 
             installed = true;
             SideSlideHoldDiagnostics.log(TAG
-                    + " installed; authority=GestureBackArrowView.ReadyState");
+                    + " installed; appAuthority=ReadyState homeFallback=visualSaturation");
             return true;
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " unavailable on target Launcher", error);
@@ -172,8 +184,44 @@ final class Launcher450SideSlideHoldHook {
         if (action == MotionEvent.ACTION_DOWN) {
             cancelDwell(view, state);
             state.sideStub = isPadSideStub(view);
+            state.desktopAtDown = state.sideStub && isLauncherDesktop();
+            state.downX = event.getRawX();
+            state.leftEdge = state.downX < view.getResources().getDisplayMetrics().widthPixels / 2f;
             state.policy.onDown();
-            SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub);
+            SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
+                    + " desktop=" + state.desktopAtDown
+                    + " edge=" + (state.leftEdge ? "left" : "right"));
+            return;
+        }
+
+        if (!state.sideStub || !state.desktopAtDown || action != MotionEvent.ACTION_MOVE) return;
+
+        float dx = event.getRawX() - state.downX;
+        boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
+        boolean saturated = inward && Math.abs(dx) >= HOME_VISUAL_SATURATION_PX;
+        boolean entered = state.policy.onDesktopProgress(saturated);
+        if (entered) {
+            SideSlideHoldDiagnostics.log(TAG + " HOME visual saturation reached dx=" + dx);
+            scheduleDwell(view, state, "HOME visual saturation");
+        } else if (!saturated) {
+            cancelDwell(view, state);
+        }
+    }
+
+    private static boolean isLauncherDesktop() {
+        Method getLauncher = applicationGetLauncherMethod;
+        if (getLauncher == null) return false;
+        try {
+            Object launcher = getLauncher.invoke(null);
+            if (launcher == null) return false;
+            Method getDockController = launcher.getClass().getMethod("getDockController");
+            Object dockController = getDockController.invoke(launcher);
+            if (dockController == null) return false;
+            Method isInDesktop = dockController.getClass().getMethod("isInDesktop");
+            return Boolean.TRUE.equals(isInDesktop.invoke(dockController));
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " HOME authority unavailable: " + error);
+            return false;
         }
     }
 
@@ -185,7 +233,7 @@ final class Launcher450SideSlideHoldHook {
         return width > 0 && dm.widthPixels > 0 && width < dm.widthPixels / 3;
     }
 
-    private static void scheduleDwell(View owner, GestureState state) {
+    private static void scheduleDwell(View owner, GestureState state, String authority) {
         if (!state.sideStub) return;
         cancelDwell(owner, state);
         int generation = state.policy.generation();
@@ -193,15 +241,60 @@ final class Launcher450SideSlideHoldHook {
         Runnable runnable = () -> {
             if (state.scheduledGeneration != generation) return;
             if (!state.policy.requestSidebar(generation)) return;
-            SideSlideHoldDiagnostics.log(TAG + " native RECENT stable for "
-                    + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms -> request Sidebar");
-            requestSidebar(owner, state, generation);
+            SideSlideHoldDiagnostics.log(TAG + " " + authority + " stable for "
+                    + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms -> preflight Sidebar");
+            prepareThenShowSidebar(owner, state, generation);
         };
         state.dwellRunnable = runnable;
         owner.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
     }
 
-    private static void requestSidebar(View owner, GestureState state, int generation) {
+    private static void prepareThenShowSidebar(View owner, GestureState state, int generation) {
+        Context context = owner.getContext();
+        if (context == null) {
+            state.policy.onSidebarResult(false, generation);
+            return;
+        }
+        Intent prepare = new Intent(SidebarCommandContract.ACTION_PREPARE)
+                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE);
+        BroadcastReceiver result = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ignored, Intent ignoredIntent) {
+                if (getResultCode() != SidebarCommandContract.RESULT_READY) {
+                    state.policy.onSidebarResult(false, generation);
+                    SideSlideHoldDiagnostics.log(TAG
+                            + " Sidebar preflight unavailable/stale -> stock gesture");
+                    return;
+                }
+                if (state.scheduledGeneration != generation) {
+                    state.policy.onSidebarResult(false, generation);
+                    return;
+                }
+
+                // OS4 Security Center confirms its 300 ms long-click with haptic, then widens
+                // the Sidebar line. We preserve the same ordering: haptic first, vendor show next.
+                owner.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                SideSlideHoldDiagnostics.log(TAG
+                        + " Sidebar preflight ready -> haptic -> vendor show");
+                showSidebar(owner, state, generation);
+            }
+        };
+        try {
+            context.sendOrderedBroadcast(
+                    prepare,
+                    null,
+                    result,
+                    MAIN,
+                    SidebarCommandContract.RESULT_UNAVAILABLE,
+                    null,
+                    null);
+        } catch (Throwable error) {
+            state.policy.onSidebarResult(false, generation);
+            SideSlideHoldDiagnostics.log(TAG + " Sidebar preflight failed", error);
+        }
+    }
+
+    private static void showSidebar(View owner, GestureState state, int generation) {
         Context context = owner.getContext();
         if (context == null) {
             state.policy.onSidebarResult(false, generation);
@@ -224,13 +317,12 @@ final class Launcher450SideSlideHoldHook {
                 state.policy.onSidebarResult(accepted, generation);
                 if (!state.policy.shouldConsumeVendorCompletion()) {
                     SideSlideHoldDiagnostics.log(TAG
-                            + " Sidebar unavailable/stale -> vendor gesture remains authoritative");
+                            + " Sidebar show unavailable/stale -> stock gesture");
                     return;
                 }
-                owner.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                forceVendorCleanupToBack(state);
+                if (!state.desktopAtDown) forceVendorCleanupToBack(state);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar accepted -> arm vendor completion suppression");
+                        + " Sidebar accepted desktop=" + state.desktopAtDown);
             }
         };
 
@@ -245,7 +337,7 @@ final class Launcher450SideSlideHoldHook {
                     null);
         } catch (Throwable error) {
             state.policy.onSidebarResult(false, generation);
-            SideSlideHoldDiagnostics.log(TAG + " Sidebar request failed", error);
+            SideSlideHoldDiagnostics.log(TAG + " Sidebar show request failed", error);
         }
     }
 
@@ -278,6 +370,7 @@ final class Launcher450SideSlideHoldHook {
         if (owner instanceof View) cancelDwell((View) owner, state);
         state.policy.onUpOrCancel();
         state.sideStub = false;
+        state.desktopAtDown = false;
         state.arrow = null;
         state.scheduledGeneration = Integer.MIN_VALUE;
     }
@@ -295,7 +388,10 @@ final class Launcher450SideSlideHoldHook {
         Runnable dwellRunnable;
         int scheduledGeneration = Integer.MIN_VALUE;
         boolean sideStub;
+        boolean desktopAtDown;
+        boolean leftEdge;
         Object arrow;
+        float downX;
         float lastRawX;
         float lastRawY;
 
