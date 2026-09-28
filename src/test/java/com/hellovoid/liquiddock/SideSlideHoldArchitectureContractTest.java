@@ -48,7 +48,7 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> haptic -> armed; wait ACTION_UP"));
+        assertTrue(hook.contains("Sidebar preflight ready -> native confirm armed; wait ACTION_UP"));
         assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
         assertFalse(hook.contains("if (consumeDesktop)"));
@@ -60,7 +60,7 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("logVendorBooleanDiagnostics"));
         assertTrue(bridge.contains("show.invoke"));
         assertTrue(bridge.contains("native Sidebar confirmation"));
-        assertTrue(bridge.contains("activate+widen"));
+        assertTrue(bridge.contains("activate+haptic+widen"));
         assertTrue(bridge.contains("cleanup+narrow"));
         assertTrue(bridge.contains("\"L0\", boolean.class, boolean.class"));
         assertTrue(bridge.contains("\"U\""));
