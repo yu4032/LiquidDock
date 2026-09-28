@@ -10,6 +10,10 @@ final class SidebarCommandContract {
             "com.hellovoid.liquiddock.action.PREPARE_SECURITY_CENTER_SIDEBAR";
     static final String ACTION_SHOW =
             "com.hellovoid.liquiddock.action.SHOW_SECURITY_CENTER_SIDEBAR";
+    static final String ACTION_CONFIRM_START =
+            "com.hellovoid.liquiddock.action.START_SECURITY_CENTER_SIDEBAR_CONFIRM";
+    static final String ACTION_CONFIRM_END =
+            "com.hellovoid.liquiddock.action.END_SECURITY_CENTER_SIDEBAR_CONFIRM";
 
     static final String SECURITY_CENTER_PACKAGE = "com.miui.securitycenter";
     static final String SERVICE_CLASS =
