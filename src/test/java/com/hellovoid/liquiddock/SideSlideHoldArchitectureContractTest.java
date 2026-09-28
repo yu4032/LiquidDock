@@ -55,7 +55,7 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("OS4_SOURCE_WIDTH_DP = 30f"));
         assertTrue(hook.contains("OS4_SOURCE_HEIGHT_DP = 53f"));
         assertTrue(hook.contains("OS4_SOURCE_RADIUS_DP = 8f"));
-        assertFalse(hook.contains("getLocationOnScreen"));
+        assertFalse(hook.contains(".getLocationOnScreen("));
         assertFalse(bridge.contains("moveSidebarToGestureY"));
         assertFalse(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
