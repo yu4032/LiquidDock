@@ -100,14 +100,25 @@ final class Launcher450SideSlideHoldHook {
                 if (owner instanceof View && event != null) {
                     observeTouchBefore((View) owner, event, state);
                 }
+
+                int action = event != null ? event.getActionMasked() : -1;
+                if (owner instanceof View && action == MotionEvent.ACTION_UP) {
+                    commitRelease((View) owner, state);
+                } else if (owner instanceof View && action == MotionEvent.ACTION_CANCEL) {
+                    cancelConfirmation((View) owner, state);
+                }
+
+                boolean consumeDesktop = state.sideStub && state.desktopAtDown;
                 try {
+                    // On HOME the edge stub becomes the input owner for this edge gesture.
+                    // This prevents Workspace horizontal paging from stealing the gesture.
+                    if (consumeDesktop) {
+                        return Boolean.TRUE;
+                    }
                     return chain.proceed(args);
                 } finally {
-                    if (event != null) {
-                        int action = event.getActionMasked();
-                        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                            finishGesture(owner, state);
-                        }
+                    if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                        finishGesture(owner, state);
                     }
                 }
             });
@@ -134,6 +145,7 @@ final class Launcher450SideSlideHoldHook {
                         } else if (!"READY_STATE_RECENT".equals(readyName)
                                 && state.owner instanceof View) {
                             cancelDwell((View) state.owner, state);
+                            cancelConfirmation((View) state.owner, state);
                         }
                     }
                 }
@@ -221,6 +233,7 @@ final class Launcher450SideSlideHoldHook {
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
             cancelDwell(view, state);
+            cancelConfirmation(view, state);
             return;
         }
 
@@ -319,22 +332,26 @@ final class Launcher450SideSlideHoldHook {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
                 if (getResultCode() != SidebarCommandContract.RESULT_READY) {
-                    state.policy.onSidebarResult(false, generation);
+                    state.policy.onArmResult(false, generation);
                     SideSlideHoldDiagnostics.log(TAG
                             + " Sidebar preflight unavailable/stale -> stock gesture");
                     return;
                 }
                 if (state.scheduledGeneration != generation) {
-                    state.policy.onSidebarResult(false, generation);
+                    state.policy.onArmResult(false, generation);
                     return;
                 }
 
-                // OS4 Security Center confirms its 300 ms long-click with haptic, then widens
-                // the Sidebar line. We preserve the same ordering: haptic first, vendor show next.
+                if (!state.policy.onArmResult(true, generation)) {
+                    return;
+                }
+
+                // OS4 long-click semantics: arm only. Sidebar commit is deferred until ACTION_UP.
                 owner.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                state.confirmationVisible = true;
+                sendConfirmation(owner, true);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar preflight ready -> haptic -> vendor show");
-                showSidebar(owner, state, generation);
+                        + " Sidebar preflight ready -> haptic -> armed; wait ACTION_UP");
             }
         };
         try {
@@ -347,8 +364,46 @@ final class Launcher450SideSlideHoldHook {
                     null,
                     null);
         } catch (Throwable error) {
-            state.policy.onSidebarResult(false, generation);
+            state.policy.onArmResult(false, generation);
             SideSlideHoldDiagnostics.log(TAG + " Sidebar preflight failed", error);
+        }
+    }
+
+    private static void commitRelease(View owner, GestureState state) {
+        int generation = state.policy.generation();
+        if (!state.policy.commitRelease(generation)) {
+            return;
+        }
+        cancelDwell(owner, state);
+        if (state.confirmationVisible) {
+            sendConfirmation(owner, false);
+            state.confirmationVisible = false;
+        }
+        SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
+        showSidebar(owner, state, generation);
+        if (!state.desktopAtDown) {
+            forceVendorCleanupToBack(state);
+        }
+    }
+
+    private static void cancelConfirmation(View owner, GestureState state) {
+        if (!state.confirmationVisible) return;
+        sendConfirmation(owner, false);
+        state.confirmationVisible = false;
+        SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
+    }
+
+    private static void sendConfirmation(View owner, boolean start) {
+        Context context = owner.getContext();
+        if (context == null) return;
+        Intent intent = new Intent(start
+                ? SidebarCommandContract.ACTION_CONFIRM_START
+                : SidebarCommandContract.ACTION_CONFIRM_END)
+                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE);
+        try {
+            context.sendBroadcast(intent);
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " confirmation command failed", error);
         }
     }
 
@@ -372,15 +427,9 @@ final class Launcher450SideSlideHoldHook {
             public void onReceive(Context ignored, Intent ignoredIntent) {
                 boolean accepted =
                         getResultCode() == SidebarCommandContract.RESULT_ACCEPTED;
-                state.policy.onSidebarResult(accepted, generation);
-                if (!state.policy.shouldConsumeVendorCompletion()) {
-                    SideSlideHoldDiagnostics.log(TAG
-                            + " Sidebar show unavailable/stale -> stock gesture");
-                    return;
-                }
-                if (!state.desktopAtDown) forceVendorCleanupToBack(state);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar accepted desktop=" + state.desktopAtDown);
+                        + " Sidebar release show result accepted=" + accepted
+                        + " desktop=" + state.desktopAtDown);
             }
         };
 
@@ -394,7 +443,6 @@ final class Launcher450SideSlideHoldHook {
                     null,
                     null);
         } catch (Throwable error) {
-            state.policy.onSidebarResult(false, generation);
             SideSlideHoldDiagnostics.log(TAG + " Sidebar show request failed", error);
         }
     }
@@ -426,10 +474,11 @@ final class Launcher450SideSlideHoldHook {
 
     private static void finishGesture(Object owner, GestureState state) {
         if (owner instanceof View) cancelDwell((View) owner, state);
-        state.policy.onUpOrCancel();
+        state.policy.onFinish();
         state.sideStub = false;
         state.desktopAtDown = false;
         state.arrow = null;
+        state.confirmationVisible = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
         state.scheduledGeneration = Integer.MIN_VALUE;
@@ -450,6 +499,7 @@ final class Launcher450SideSlideHoldHook {
         boolean sideStub;
         boolean desktopAtDown;
         boolean leftEdge;
+        boolean confirmationVisible;
         Object arrow;
         float downX;
         float lastRawX;
