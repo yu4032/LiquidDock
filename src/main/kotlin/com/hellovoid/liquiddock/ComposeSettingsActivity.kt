@@ -590,6 +590,18 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                 )
             }
         }
+        item { SmallTitle("文件夹 · Launcher 4.50") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.OS4_FOLDER_2X1,
+                    "OS4 2×1 文件夹（实验）",
+                    "在原生 1×1、2×2、3×3 之外新增 2×1 尺寸档；可视宽度严格等于两个桌面图标宽度，高度等于一个桌面图标高度；第 4 个内容起第三位切换为四宫格；重启桌面后生效",
+                    masterEnabled,
+                )
+            }
+        }
         item { SmallTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
