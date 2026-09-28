@@ -48,12 +48,17 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> haptic -> vendor show"));
-        assertTrue(hook.contains("RESULT_ACCEPTED"));
+        assertTrue(hook.contains("Sidebar preflight ready -> haptic -> armed; wait ACTION_UP"));
+        assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
+        assertTrue(hook.contains("return Boolean.TRUE"));
+        assertTrue(contract.contains("ACTION_CONFIRM_START"));
+        assertTrue(contract.contains("ACTION_CONFIRM_END"));
         assertTrue(bridge.contains("vendorShowEndpointReady"));
         assertTrue(bridge.contains("logVendorBooleanDiagnostics"));
         assertTrue(bridge.contains("show.invoke"));
+        assertTrue(bridge.contains("native Sidebar confirmation"));
+        assertTrue(bridge.contains("RegionSamplingImageView"));
         assertFalse(bridge.contains("if (!vendorAvailableOrShowing())"));
         assertTrue(bridge.contains("DockWindowManagerService.onCreate"));
         assertTrue(bridge.contains("ensureInstalled((Context) service)"));
