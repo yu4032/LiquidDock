@@ -20,7 +20,11 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("setReadyFinish"));
         assertTrue(policy.contains("READY_STATE_RECENT"));
         assertTrue(hook.contains("isInDesktop"));
+        assertTrue(hook.contains("launcherGetDockControllerMethod"));
+        assertTrue(hook.contains("dockControllerIsInDesktopMethod"));
         assertTrue(hook.contains("HOME_VISUAL_SATURATION_PX"));
+        assertTrue(hook.contains("HOME_HOVER_SLOP_DP"));
+        assertTrue(hook.contains("HOME hover confirmed"));
         assertTrue(hook.contains("abs(dx) / 180f"));
 
         assertFalse(hook.contains("BACK_COMPLETE_DISTANCE_PX"));
@@ -45,6 +49,9 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
         assertTrue(bridge.contains("vendorAvailableOrShowing"));
         assertTrue(bridge.contains("show.invoke"));
+        assertTrue(bridge.contains("DockWindowManagerService.onCreate"));
+        assertTrue(bridge.contains("ensureInstalled((Context) service)"));
+        assertFalse(bridge.contains("tryInvokeActivityThreadCurrentApplication"));
     }
 
     @Test
