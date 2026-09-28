@@ -369,7 +369,8 @@ final class Launcher450SideSlideHoldHook {
         }
         Intent prepare = new Intent(SidebarCommandContract.ACTION_PREPARE)
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
-                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown);
+                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
+                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
@@ -391,7 +392,7 @@ final class Launcher450SideSlideHoldHook {
                 // OS4 long-click semantics: arm only. Security Center performs the native
                 // activate -> haptic -> widen sequence; commit remains deferred until ACTION_UP.
                 state.confirmationVisible = true;
-                sendConfirmation(owner, true);
+                sendConfirmation(owner, true, state);
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar preflight ready -> native confirm armed; wait ACTION_UP");
             }
@@ -418,7 +419,7 @@ final class Launcher450SideSlideHoldHook {
         }
         cancelDwell(owner, state);
         if (state.confirmationVisible) {
-            sendConfirmation(owner, false);
+            sendConfirmation(owner, false, state);
             state.confirmationVisible = false;
         }
         SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
@@ -430,18 +431,20 @@ final class Launcher450SideSlideHoldHook {
 
     private static void cancelConfirmation(View owner, GestureState state) {
         if (!state.confirmationVisible) return;
-        sendConfirmation(owner, false);
+        sendConfirmation(owner, false, state);
         state.confirmationVisible = false;
         SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
     }
 
-    private static void sendConfirmation(View owner, boolean start) {
+    private static void sendConfirmation(View owner, boolean start, GestureState state) {
         Context context = owner.getContext();
         if (context == null) return;
         Intent intent = new Intent(start
                 ? SidebarCommandContract.ACTION_CONFIRM_START
                 : SidebarCommandContract.ACTION_CONFIRM_END)
-                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE);
+                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
+                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
+                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown);
         try {
             context.sendBroadcast(intent);
         } catch (Throwable error) {
