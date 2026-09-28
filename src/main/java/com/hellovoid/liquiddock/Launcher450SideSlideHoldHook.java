@@ -33,7 +33,7 @@ final class Launcher450SideSlideHoldHook {
             "com.miui.home.recents.GestureBackArrowView$ReadyState";
     private static final String LAUNCHER_APPLICATION = "com.miui.home.launcher.Application";
     private static final String LAUNCHER_CLASS = "com.miui.home.launcher.Launcher";
-    private static final String DOCK_CONTROLLER_CLASS = "com.miui.home.launcher.dock.DockController";
+    private static final String LAUNCHER_STATE_CLASS = "com.miui.home.launcher.LauncherState";
 
     // Recovered from GestureStubView's predictive-back progress: abs(dx) / 180f, clamped to 1.
     // On HOME only, where OS3 never publishes READY_STATE_RECENT, this is used as a visual
@@ -50,8 +50,8 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method setReadyFinishMethod;
     private static volatile Object readyStateBack;
     private static volatile Method applicationGetLauncherMethod;
-    private static volatile Method launcherGetDockControllerMethod;
-    private static volatile Method dockControllerIsInDesktopMethod;
+    private static volatile Method launcherIsInStateMethod;
+    private static volatile Object launcherStateNormal;
     private static volatile boolean installed;
 
     private Launcher450SideSlideHoldHook() {}
@@ -65,7 +65,7 @@ final class Launcher450SideSlideHoldHook {
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
             Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
             Class<?> launcherClass = Class.forName(LAUNCHER_CLASS, false, classLoader);
-            Class<?> dockControllerClass = Class.forName(DOCK_CONTROLLER_CLASS, false, classLoader);
+            Class<?> launcherStateClass = Class.forName(LAUNCHER_STATE_CLASS, false, classLoader);
 
             Method onTouchEvent = HookUtil.findMethodExact(
                     stubClass, "onTouchEvent", new Class<?>[]{MotionEvent.class});
@@ -75,10 +75,9 @@ final class Launcher450SideSlideHoldHook {
                     arrowClass, "setReadyFinish", new Class<?>[]{readyClass});
             Method getLauncher = HookUtil.findMethodExact(
                     applicationClass, "getLauncher", new Class<?>[0]);
-            Method getDockController = HookUtil.findMethodExact(
-                    launcherClass, "getDockController", new Class<?>[0]);
-            Method isInDesktop = HookUtil.findMethodExact(
-                    dockControllerClass, "isInDesktop", new Class<?>[0]);
+            Method isInState = HookUtil.findMethodExact(
+                    launcherClass, "isInState", new Class<?>[]{launcherStateClass});
+            Object normal = launcherStateClass.getField("NORMAL").get(null);
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -88,8 +87,8 @@ final class Launcher450SideSlideHoldHook {
             setReadyFinishMethod = setReadyFinish;
             readyStateBack = back;
             applicationGetLauncherMethod = getLauncher;
-            launcherGetDockControllerMethod = getDockController;
-            dockControllerIsInDesktopMethod = isInDesktop;
+            launcherIsInStateMethod = isInState;
+            launcherStateNormal = normal;
 
             HookUtil.hook(onTouchEvent, chain -> {
                 Object owner = chain.getThisObject();
@@ -152,7 +151,7 @@ final class Launcher450SideSlideHoldHook {
 
             installed = true;
             SideSlideHoldDiagnostics.log(TAG
-                    + " installed; appAuthority=ReadyState homeFallback=visualSaturation");
+                    + " installed; appAuthority=ReadyState homeAuthority=LauncherState.NORMAL");
             return true;
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " unavailable on target Launcher", error);
@@ -254,16 +253,15 @@ final class Launcher450SideSlideHoldHook {
 
     private static boolean isLauncherDesktop() {
         Method getLauncher = applicationGetLauncherMethod;
-        Method getDockController = launcherGetDockControllerMethod;
-        Method isInDesktop = dockControllerIsInDesktopMethod;
-        if (getLauncher == null || getDockController == null || isInDesktop == null) return false;
+        Method isInState = launcherIsInStateMethod;
+        Object normal = launcherStateNormal;
+        if (getLauncher == null || isInState == null || normal == null) return false;
         try {
             Object launcher = getLauncher.invoke(null);
             if (launcher == null) return false;
-            Object dockController = getDockController.invoke(launcher);
-            if (dockController == null) return false;
-            boolean desktop = Boolean.TRUE.equals(isInDesktop.invoke(dockController));
-            SideSlideHoldDiagnostics.log(TAG + " HOME authority desktop=" + desktop);
+            boolean desktop = Boolean.TRUE.equals(isInState.invoke(launcher, normal));
+            SideSlideHoldDiagnostics.log(TAG
+                    + " HOME authority LauncherState.NORMAL=" + desktop);
             return desktop;
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " HOME authority unavailable: " + error);
