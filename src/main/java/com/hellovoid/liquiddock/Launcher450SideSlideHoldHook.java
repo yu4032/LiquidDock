@@ -40,9 +40,13 @@ final class Launcher450SideSlideHoldHook {
     private static final float HOME_VISUAL_SATURATION_PX = 180f;
     // Hover means positional dwell, not merely elapsed time after crossing the boundary.
     private static final float HOME_HOVER_SLOP_DP = 12f;
-    // Fallback source extent when the vendor GestureBackArrowView has not produced a measured
-    // screen-space rect. Prefer the real vendor view geometry whenever it is available.
-    private static final float SOURCE_SIZE_DP = 48f;
+    // OS4 GestureBackArrowView visual source geometry used by Security Center's launcher-origin
+    // transform. Side authority is kept separate: Security Center derives left/right solely from
+    // the first x argument, so x must come from the gesture edge rather than the Arrow view.
+    private static final float OS4_SOURCE_WIDTH_DP = 30f;
+    private static final float OS4_SOURCE_HEIGHT_DP = 53f;
+    private static final float OS4_SOURCE_RADIUS_DP = 8f;
+    private static final float OS4_SOURCE_TOP_OFFSET_PX = 20f;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<Object, GestureState> STATES =
@@ -512,39 +516,43 @@ final class Launcher450SideSlideHoldHook {
     }
 
     private static int[] sourceGeometry(View owner, GestureState state) {
-        // The Security Center endpoint consumes a screen-space source rect. Reuse the actual
-        // Launcher BackArrow rect rather than reconstructing OS4's internal layout constants in a
-        // different process/display coordinate context. The fixed ACTION_DOWN-based reconstruction
-        // regressed the panel anchor on OS3 even though the Sidebar show call itself succeeded.
+        DisplayMetrics dm = owner.getResources().getDisplayMetrics();
+        int width = Math.max(1, Math.round(OS4_SOURCE_WIDTH_DP * dm.density));
+        int height = Math.max(1, Math.round(OS4_SOURCE_HEIGHT_DP * dm.density));
+        int radius = Math.max(1, Math.round(OS4_SOURCE_RADIUS_DP * dm.density));
+        int screenWidth = Math.max(width, dm.widthPixels);
+        int screenHeight = Math.max(height, dm.heightPixels);
+
+        // Security Center's x2.o(x, context) is the actual side authority:
+        // x <= displayWidth / 2 means left, otherwise right. GestureBackArrowView's own screen x
+        // is not a safe side signal on Launcher 4.50, so pin x to the originating edge.
+        int x = state.leftEdge ? 0 : screenWidth - width;
+
+        // Preserve the vendor visual transform origin vertically when the Arrow has a real screen
+        // position. Only the Y coordinate is consumed here; its X/size are intentionally ignored.
+        int y = Integer.MIN_VALUE;
         Object arrowObject = state.arrow;
         if (arrowObject instanceof View) {
             View arrow = (View) arrowObject;
-            int width = Math.max(arrow.getWidth(), arrow.getMeasuredWidth());
-            int height = Math.max(arrow.getHeight(), arrow.getMeasuredHeight());
-            if (width > 0 && height > 0) {
+            if (arrow.isAttachedToWindow()) {
                 int[] location = new int[2];
                 arrow.getLocationOnScreen(location);
-                int radius = Math.max(1, Math.min(width, height) / 2);
-                SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar source geometry from GestureBackArrowView "
-                        + location[0] + "," + location[1] + " "
-                        + width + "x" + height + " r=" + radius);
-                return new int[]{location[0], location[1], width, height, radius};
+                y = location[1];
             }
         }
+        if (y == Integer.MIN_VALUE) {
+            y = Math.round(state.downRawY - OS4_SOURCE_TOP_OFFSET_PX);
+        }
+        y = Math.max(0, Math.min(y, screenHeight - height));
 
-        DisplayMetrics dm = owner.getResources().getDisplayMetrics();
-        int size = Math.max(1, Math.round(SOURCE_SIZE_DP * dm.density));
-        int screenWidth = Math.max(size, dm.widthPixels);
-        int screenHeight = Math.max(size, dm.heightPixels);
-        boolean left = state.lastRawX < screenWidth / 2f;
-        int x = left ? 0 : screenWidth - size;
-        int y = Math.round(state.lastRawY - size / 2f);
-        y = Math.max(0, Math.min(y, screenHeight - size));
         SideSlideHoldDiagnostics.log(TAG
-                + " Sidebar source geometry fallback "
-                + x + "," + y + " " + size + "x" + size);
-        return new int[]{x, y, size, size, size / 2};
+                + " Sidebar source geometry side=" + (state.leftEdge ? "left" : "right")
+                + " securitySideX=" + x
+                + " y=" + y
+                + " source=" + width + "x" + height
+                + " r=" + radius
+                + " downY=" + state.downRawY);
+        return new int[]{x, y, width, height, radius};
     }
 
     private static void finishGesture(Object owner, GestureState state) {
