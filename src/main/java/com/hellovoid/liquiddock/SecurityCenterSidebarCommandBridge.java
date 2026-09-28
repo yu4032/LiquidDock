@@ -247,9 +247,13 @@ final class SecurityCenterSidebarCommandBridge {
                     return;
                 }
                 activate.invoke(manager, true, true);
+                View line = resolveSidebarLineView(wrapper);
+                if (line != null) {
+                    line.performHapticFeedback(0);
+                }
                 widenMethod.invoke(wrapper);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " native Sidebar confirmation activate+widen");
+                        + " native Sidebar confirmation activate+haptic+widen");
             } else {
                 // OS4 long-click ACTION_UP visual cleanup:
                 // SidebarWrapper.D() -> R() -> DockWindowManager.e3() -> Q1(wrapper).
