@@ -81,10 +81,15 @@ final class SecurityCenterSidebarCommandBridge {
     private static final BroadcastReceiver RECEIVER = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent == null
-                    || !SidebarCommandContract.ACTION_SHOW.equals(intent.getAction())) {
+            if (intent == null) return;
+            String action = intent.getAction();
+            if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
+                setResultCode(vendorAvailableOrShowing()
+                        ? SidebarCommandContract.RESULT_READY
+                        : SidebarCommandContract.RESULT_UNAVAILABLE);
                 return;
             }
+            if (!SidebarCommandContract.ACTION_SHOW.equals(action)) return;
             boolean accepted = showSidebar(
                     intent.getIntExtra(SidebarCommandContract.EXTRA_X, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_Y, 0),
@@ -113,7 +118,9 @@ final class SecurityCenterSidebarCommandBridge {
         if (context == null) context = (Context) application;
         appContext = context;
         try {
-            IntentFilter filter = new IntentFilter(SidebarCommandContract.ACTION_SHOW);
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(SidebarCommandContract.ACTION_PREPARE);
+            filter.addAction(SidebarCommandContract.ACTION_SHOW);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             installed = true;
             bindVendorService(context);
