@@ -22,6 +22,11 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("LauncherState.NORMAL"));
         assertTrue(hook.contains("launcherIsInStateMethod"));
         assertTrue(hook.contains("launcherStateNormal"));
+        assertTrue(hook.contains("lazily resolved LauncherState.NORMAL"));
+        int installIndex = hook.indexOf("static boolean install");
+        int desktopIndex = hook.indexOf("private static boolean isLauncherDesktop");
+        String installBlock = hook.substring(installIndex, desktopIndex);
+        assertFalse(installBlock.contains("getField(\"NORMAL\")"));
         assertTrue(hook.contains("HOME_VISUAL_SATURATION_PX"));
         assertTrue(hook.contains("HOME_HOVER_SLOP_DP"));
         assertTrue(hook.contains("HOME hover confirmed"));
