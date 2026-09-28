@@ -10,7 +10,7 @@ import java.nio.file.Path;
 
 public class SideSlideHoldArchitectureContractTest {
     @Test
-    public void launcherUsesVendorReadyStateInsteadOfDuplicatingGestureThresholds() throws Exception {
+    public void appGestureUsesVendorReadyStateAndHomeFallbackIsExplicitlyScoped() throws Exception {
         String hook = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/Launcher450SideSlideHoldHook.java"));
         String policy = Files.readString(Path.of(
@@ -19,17 +19,18 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("GestureBackArrowView$ReadyState"));
         assertTrue(hook.contains("setReadyFinish"));
         assertTrue(policy.contains("READY_STATE_RECENT"));
+        assertTrue(hook.contains("isInDesktop"));
+        assertTrue(hook.contains("HOME_VISUAL_SATURATION_PX"));
+        assertTrue(hook.contains("abs(dx) / 180f"));
 
         assertFalse(hook.contains("BACK_COMPLETE_DISTANCE_PX"));
         assertFalse(hook.contains("STABILITY_SLOP_PX"));
-        assertFalse(policy.contains("180f"));
-        assertFalse(policy.contains("20f"));
         assertFalse(hook.contains("mAssistX1"));
         assertFalse(hook.contains("mAssistX2"));
     }
 
     @Test
-    public void sidebarAcknowledgementPrecedesVendorCompletionSuppression() throws Exception {
+    public void os4ConfirmationOrderDoesNotArmOnPreflight() throws Exception {
         String hook = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/Launcher450SideSlideHoldHook.java"));
         String bridge = Files.readString(Path.of(
@@ -37,14 +38,13 @@ public class SideSlideHoldArchitectureContractTest {
         String contract = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/SidebarCommandContract.java"));
 
-        assertTrue(hook.contains("sendOrderedBroadcast"));
+        assertTrue(contract.contains("ACTION_PREPARE"));
+        assertTrue(contract.contains("RESULT_READY"));
+        assertTrue(hook.contains("Sidebar preflight ready -> haptic -> vendor show"));
         assertTrue(hook.contains("RESULT_ACCEPTED"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
+        assertTrue(bridge.contains("vendorAvailableOrShowing"));
         assertTrue(bridge.contains("show.invoke"));
-        assertTrue(contract.contains("ISidebarOverlay"));
-
-        assertFalse(contract.contains("ACTION_PREPARE"));
-        assertFalse(hook.contains("PREPARE"));
     }
 
     @Test
