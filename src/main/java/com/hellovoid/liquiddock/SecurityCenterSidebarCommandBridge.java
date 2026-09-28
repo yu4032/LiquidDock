@@ -89,6 +89,9 @@ final class SecurityCenterSidebarCommandBridge {
             if (intent == null) return;
             String action = intent.getAction();
             if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
+                boolean desktop = intent.getBooleanExtra(
+                        SidebarCommandContract.EXTRA_DESKTOP, false);
+                if (desktop) ensureDesktopDockContext();
                 boolean ready = vendorShowEndpointReady();
                 if (ready) logVendorBooleanDiagnostics();
                 setResultCode(ready
@@ -110,7 +113,8 @@ final class SecurityCenterSidebarCommandBridge {
                     intent.getIntExtra(SidebarCommandContract.EXTRA_Y, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_WIDTH, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_HEIGHT, 0),
-                    intent.getIntExtra(SidebarCommandContract.EXTRA_RADIUS, 0));
+                    intent.getIntExtra(SidebarCommandContract.EXTRA_RADIUS, 0),
+                    intent.getBooleanExtra(SidebarCommandContract.EXTRA_DESKTOP, false));
             setResultCode(accepted
                     ? SidebarCommandContract.RESULT_ACCEPTED
                     : SidebarCommandContract.RESULT_UNAVAILABLE);
@@ -347,7 +351,45 @@ final class SecurityCenterSidebarCommandBridge {
         return null;
     }
 
+    private static void ensureDesktopDockContext() {
+        Object service = serviceOwner;
+        if (service == null) return;
+        try {
+            Method getDockState = service.getClass().getMethod("I0");
+            Object dockState = getDockState.invoke(service);
+            if (dockState == null) {
+                SideSlideHoldDiagnostics.log(TAG + " desktop dock context unavailable: no state");
+                return;
+            }
+
+            Method getType = dockState.getClass().getMethod("c");
+            Method setType = dockState.getClass().getMethod("a", int.class);
+            int currentType = ((Number) getType.invoke(dockState)).intValue();
+            if (currentType != 4) {
+                setType.invoke(dockState, 4);
+            }
+
+            Object manager = resolveDockWindowManager(service);
+            if (manager != null) {
+                // OS4 DockAssistantView context. H1() ensures the main SidebarWrapper exists
+                // and re-enables its line/window for a non-zero dock type.
+                Method prepareWrapper = manager.getClass().getMethod("H1");
+                Object wrapper = prepareWrapper.invoke(manager);
+                SideSlideHoldDiagnostics.log(TAG
+                        + " desktop dock context " + currentType + "->4"
+                        + " wrapperReady=" + (wrapper != null));
+            } else {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " desktop dock context set type4; manager unresolved");
+            }
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " desktop dock context setup failed", error);
+        }
+    }
+
     private static boolean vendorShowEndpointReady() {
+        if (desktop) ensureDesktopDockContext();
         IBinder binder = sidebarBinder;
         Method show = showMethod;
         if (binder == null || show == null || !binder.isBinderAlive()) {
@@ -372,7 +414,8 @@ final class SecurityCenterSidebarCommandBridge {
         }
     }
 
-    private static boolean showSidebar(int x, int y, int width, int height, int radius) {
+    private static boolean showSidebar(
+            int x, int y, int width, int height, int radius, boolean desktop) {
         IBinder binder = sidebarBinder;
         Method show = showMethod;
         if (binder == null || show == null || !binder.isBinderAlive()) {
