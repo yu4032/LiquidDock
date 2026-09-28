@@ -504,18 +504,25 @@ final class SecurityCenterSidebarCommandBridge {
             field.setAccessible(true);
             Object candidate = field.get(manager);
             if (candidate == null) continue;
+
+            String stateText;
+            try {
+                stateText = String.valueOf(candidate);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            if (!stateText.startsWith("DockWindowType{")
+                    || !stateText.contains("dockType=")
+                    || !stateText.contains("lastType=")) {
+                continue;
+            }
             if (resolveUniqueVoidIntMethod(candidate.getClass()) == null) continue;
 
-            boolean hasIntGetter = false;
-            for (Method method : candidate.getClass().getMethods()) {
-                if (method.getParameterTypes().length == 0
-                        && method.getReturnType() == int.class) {
-                    hasIntGetter = true;
-                    break;
-                }
+            if (match != null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " dock state semantic match ambiguous");
+                return null;
             }
-            if (!hasIntGetter) continue;
-            if (match != null) return null;
             match = candidate;
         }
         return match;
@@ -575,7 +582,19 @@ final class SecurityCenterSidebarCommandBridge {
             return;
         }
 
-        int lineHeight = Math.max(1, line.getHeight());
+        int lineHeight = Math.max(line.getHeight(), line.getMeasuredHeight());
+        if (lineHeight <= 0) {
+            int resId = line.getResources().getIdentifier(
+                    "sidebar_line_height_vertical", "dimen",
+                    SidebarCommandContract.SECURITY_CENTER_PACKAGE);
+            if (resId != 0) {
+                lineHeight = line.getResources().getDimensionPixelSize(resId);
+            }
+        }
+        if (lineHeight <= 0) {
+            lineHeight = Math.max(1, Math.round(
+                    66f * line.getResources().getDisplayMetrics().density));
+        }
         int screenHeight = line.getResources().getDisplayMetrics().heightPixels;
         int targetY = Math.max(0, Math.min(
                 gestureY - (lineHeight / 2),
