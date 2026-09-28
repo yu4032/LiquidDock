@@ -13,91 +13,99 @@ public class SideSlideHoldPolicyTest {
     }
 
     @Test
-    public void backReadyNeverRequestsSidebar() {
+    public void backReadyNeverArmsSidebar() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
         policy.onReadyState("READY_STATE_BACK");
         int generation = policy.generation();
 
-        assertFalse(policy.requestSidebar(generation));
+        assertFalse(policy.requestArm(generation));
         assertFalse(policy.shouldConsumeVendorCompletion());
     }
 
     @Test
-    public void enteringRecentCreatesOneEligibleGeneration() {
+    public void enteringRecentCreatesOneArmOpportunity() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
 
         assertTrue(policy.onReadyState("READY_STATE_RECENT"));
         int generation = policy.generation();
         assertFalse(policy.onReadyState("READY_STATE_RECENT"));
-        assertTrue(policy.requestSidebar(generation));
-        assertFalse(policy.requestSidebar(generation));
+        assertTrue(policy.requestArm(generation));
+        assertFalse(policy.requestArm(generation));
     }
 
     @Test
-    public void desktopVisualProgressCanProvideHomeOnlyEligibility() {
-        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
-        policy.onDown();
-
-        assertTrue(policy.onDesktopProgress(true));
-        int generation = policy.generation();
-        assertTrue(policy.requestSidebar(generation));
-
-        policy.onDesktopProgress(false);
-        policy.onSidebarResult(true, generation);
-        assertFalse(policy.shouldConsumeVendorCompletion());
-    }
-
-    @Test
-    public void leavingRecentInvalidatesPendingRequest() {
+    public void successfulDwellOnlyArmsUntilRelease() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
         policy.onReadyState("READY_STATE_RECENT");
         int generation = policy.generation();
-        assertTrue(policy.requestSidebar(generation));
 
-        policy.onReadyState("READY_STATE_BACK");
-        policy.onSidebarResult(true, generation);
-
+        assertTrue(policy.requestArm(generation));
+        assertTrue(policy.onArmResult(true, generation));
+        assertTrue(policy.isArmed());
         assertFalse(policy.shouldConsumeVendorCompletion());
-    }
 
-    @Test
-    public void onlyAcceptedCurrentRequestSuppressesVendorCompletion() {
-        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
-        policy.onDown();
-        policy.onReadyState("READY_STATE_RECENT");
-        int generation = policy.generation();
-        assertTrue(policy.requestSidebar(generation));
-
-        policy.onSidebarResult(true, generation);
+        assertTrue(policy.commitRelease(generation));
         assertTrue(policy.shouldConsumeVendorCompletion());
     }
 
     @Test
-    public void unavailableSidebarFailsOpenToVendorGesture() {
+    public void leavingEligibleStateCancelsArm() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
         policy.onReadyState("READY_STATE_RECENT");
         int generation = policy.generation();
-        assertTrue(policy.requestSidebar(generation));
+        assertTrue(policy.requestArm(generation));
+        assertTrue(policy.onArmResult(true, generation));
 
-        policy.onSidebarResult(false, generation);
+        policy.onReadyState("READY_STATE_BACK");
+
+        assertFalse(policy.isArmed());
+        assertFalse(policy.commitRelease(generation));
         assertFalse(policy.shouldConsumeVendorCompletion());
-        assertTrue(policy.requestSidebar(generation));
     }
 
     @Test
-    public void releaseInvalidatesLateAcknowledgement() {
+    public void desktopVisualProgressUsesSameArmReleaseContract() {
+        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
+        policy.onDown();
+        assertTrue(policy.onDesktopProgress(true));
+        int generation = policy.generation();
+
+        assertTrue(policy.requestArm(generation));
+        assertTrue(policy.onArmResult(true, generation));
+        assertTrue(policy.commitRelease(generation));
+        assertTrue(policy.shouldConsumeVendorCompletion());
+    }
+
+    @Test
+    public void unavailablePreflightFailsOpen() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
         policy.onReadyState("READY_STATE_RECENT");
         int generation = policy.generation();
-        assertTrue(policy.requestSidebar(generation));
 
-        policy.onUpOrCancel();
-        policy.onSidebarResult(true, generation);
+        assertTrue(policy.requestArm(generation));
+        assertFalse(policy.onArmResult(false, generation));
+        assertFalse(policy.isArmed());
+        assertFalse(policy.commitRelease(generation));
+        assertFalse(policy.shouldConsumeVendorCompletion());
+    }
+
+    @Test
+    public void finishInvalidatesArmedGesture() {
+        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
+        policy.onDown();
+        policy.onReadyState("READY_STATE_RECENT");
+        int generation = policy.generation();
+        assertTrue(policy.requestArm(generation));
+        assertTrue(policy.onArmResult(true, generation));
+
+        policy.onFinish();
+
+        assertFalse(policy.commitRelease(generation));
         assertFalse(policy.shouldConsumeVendorCompletion());
     }
 }
