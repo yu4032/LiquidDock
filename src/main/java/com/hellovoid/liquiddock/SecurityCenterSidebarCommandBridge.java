@@ -85,7 +85,9 @@ final class SecurityCenterSidebarCommandBridge {
             if (intent == null) return;
             String action = intent.getAction();
             if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
-                setResultCode(vendorAvailableOrShowing()
+                boolean ready = vendorShowEndpointReady();
+                if (ready) logVendorBooleanDiagnostics();
+                setResultCode(ready
                         ? SidebarCommandContract.RESULT_READY
                         : SidebarCommandContract.RESULT_UNAVAILABLE);
                 return;
@@ -199,22 +201,28 @@ final class SecurityCenterSidebarCommandBridge {
         return matches.size() == 2 ? matches.toArray(new Method[0]) : null;
     }
 
-    private static boolean vendorAvailableOrShowing() {
+    private static boolean vendorShowEndpointReady() {
         IBinder binder = sidebarBinder;
-        Method[] states = availabilityMethods;
-        if (binder == null || states == null || !binder.isBinderAlive()) {
+        Method show = showMethod;
+        if (binder == null || show == null || !binder.isBinderAlive()) {
             Context context = appContext;
             if (context != null) bindVendorService(context);
             return false;
         }
+        return true;
+    }
+
+    private static void logVendorBooleanDiagnostics() {
+        IBinder binder = sidebarBinder;
+        Method[] states = availabilityMethods;
+        if (binder == null || states == null || !binder.isBinderAlive()) return;
         try {
-            for (Method state : states) {
-                if (Boolean.TRUE.equals(state.invoke(binder))) return true;
-            }
-            return false;
+            boolean first = Boolean.TRUE.equals(states[0].invoke(binder));
+            boolean second = Boolean.TRUE.equals(states[1].invoke(binder));
+            SideSlideHoldDiagnostics.log(TAG
+                    + " vendor boolean diagnostics first=" + first + " second=" + second);
         } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " availability query failed", error);
-            return false;
+            SideSlideHoldDiagnostics.log(TAG + " vendor boolean diagnostics failed", error);
         }
     }
 
@@ -227,8 +235,8 @@ final class SecurityCenterSidebarCommandBridge {
             return false;
         }
         if (width <= 0 || height <= 0 || radius < 0) return false;
-        if (!vendorAvailableOrShowing()) {
-            SideSlideHoldDiagnostics.log(TAG + " vendor reports Sidebar unavailable");
+        if (!vendorShowEndpointReady()) {
+            SideSlideHoldDiagnostics.log(TAG + " vendor show endpoint not ready");
             return false;
         }
         try {
