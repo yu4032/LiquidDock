@@ -1,11 +1,17 @@
 package com.hellovoid.liquiddock;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 public class SideSlideHoldPolicyTest {
+    @Test
+    public void dwellMatchesRecoveredOs4LongClickConfirmation() {
+        assertEquals(300L, SideSlideHoldPolicy.HOLD_DWELL_MS);
+    }
+
     @Test
     public void backReadyNeverRequestsSidebar() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
@@ -27,6 +33,20 @@ public class SideSlideHoldPolicyTest {
         assertFalse(policy.onReadyState("READY_STATE_RECENT"));
         assertTrue(policy.requestSidebar(generation));
         assertFalse(policy.requestSidebar(generation));
+    }
+
+    @Test
+    public void desktopVisualProgressCanProvideHomeOnlyEligibility() {
+        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
+        policy.onDown();
+
+        assertTrue(policy.onDesktopProgress(true));
+        int generation = policy.generation();
+        assertTrue(policy.requestSidebar(generation));
+
+        policy.onDesktopProgress(false);
+        policy.onSidebarResult(true, generation);
+        assertFalse(policy.shouldConsumeVendorCompletion());
     }
 
     @Test
