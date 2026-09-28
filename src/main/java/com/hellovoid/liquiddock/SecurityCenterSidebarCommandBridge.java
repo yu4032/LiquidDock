@@ -290,22 +290,24 @@ final class SecurityCenterSidebarCommandBridge {
 
     private static Object resolveMainSidebarWrapper(Object manager)
             throws ReflectiveOperationException {
-        Method getter = null;
-        for (Method method : manager.getClass().getMethods()) {
-            if (method.getParameterTypes().length != 0) continue;
-            if (!method.getReturnType().getName().startsWith("com.miui.dock.sidebar.")) continue;
-            if (getter != null) {
-                // Prefer the stable semantic zero-arg getter named G0 when available, but do not
-                // require it for compatibility.
-                if ("G0".equals(method.getName())) {
-                    getter = method;
-                    break;
-                }
+        Object attached = resolveAttachedSidebarWrapper(manager);
+        if (attached != null) return attached;
+
+        Object unique = null;
+        for (Field field : manager.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            field.setAccessible(true);
+            Object candidate = field.get(manager);
+            if (candidate == null
+                    || !candidate.getClass().getName().startsWith("com.miui.dock.sidebar.")) {
                 continue;
             }
-            getter = method;
+            View line = resolveSidebarLineView(candidate);
+            if (line == null) continue;
+            if (unique != null) return null;
+            unique = candidate;
         }
-        return getter != null ? getter.invoke(manager) : null;
+        return unique;
     }
 
     private static Method resolveShowMethod(Class<?> binderClass) {
