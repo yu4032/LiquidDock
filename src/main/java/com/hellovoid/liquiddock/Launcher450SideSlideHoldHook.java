@@ -32,11 +32,15 @@ final class Launcher450SideSlideHoldHook {
     private static final String READY_STATE =
             "com.miui.home.recents.GestureBackArrowView$ReadyState";
     private static final String LAUNCHER_APPLICATION = "com.miui.home.launcher.Application";
+    private static final String LAUNCHER_CLASS = "com.miui.home.launcher.Launcher";
+    private static final String DOCK_CONTROLLER_CLASS = "com.miui.home.launcher.dock.DockController";
 
     // Recovered from GestureStubView's predictive-back progress: abs(dx) / 180f, clamped to 1.
     // On HOME only, where OS3 never publishes READY_STATE_RECENT, this is used as a visual
     // saturation boundary rather than as a claim about vendor Back completion semantics.
     private static final float HOME_VISUAL_SATURATION_PX = 180f;
+    // Hover means positional dwell, not merely elapsed time after crossing the boundary.
+    private static final float HOME_HOVER_SLOP_DP = 12f;
     private static final float SOURCE_SIZE_DP = 48f;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -46,6 +50,8 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method setReadyFinishMethod;
     private static volatile Object readyStateBack;
     private static volatile Method applicationGetLauncherMethod;
+    private static volatile Method launcherGetDockControllerMethod;
+    private static volatile Method dockControllerIsInDesktopMethod;
     private static volatile boolean installed;
 
     private Launcher450SideSlideHoldHook() {}
@@ -58,6 +64,8 @@ final class Launcher450SideSlideHoldHook {
             Class<?> arrowClass = Class.forName(ARROW_VIEW, false, classLoader);
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
             Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
+            Class<?> launcherClass = Class.forName(LAUNCHER_CLASS, false, classLoader);
+            Class<?> dockControllerClass = Class.forName(DOCK_CONTROLLER_CLASS, false, classLoader);
 
             Method onTouchEvent = HookUtil.findMethodExact(
                     stubClass, "onTouchEvent", new Class<?>[]{MotionEvent.class});
@@ -67,6 +75,10 @@ final class Launcher450SideSlideHoldHook {
                     arrowClass, "setReadyFinish", new Class<?>[]{readyClass});
             Method getLauncher = HookUtil.findMethodExact(
                     applicationClass, "getLauncher", new Class<?>[0]);
+            Method getDockController = HookUtil.findMethodExact(
+                    launcherClass, "getDockController", new Class<?>[0]);
+            Method isInDesktop = HookUtil.findMethodExact(
+                    dockControllerClass, "isInDesktop", new Class<?>[0]);
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -76,6 +88,8 @@ final class Launcher450SideSlideHoldHook {
             setReadyFinishMethod = setReadyFinish;
             readyStateBack = back;
             applicationGetLauncherMethod = getLauncher;
+            launcherGetDockControllerMethod = getDockController;
+            dockControllerIsInDesktopMethod = isInDesktop;
 
             HookUtil.hook(onTouchEvent, chain -> {
                 Object owner = chain.getThisObject();
@@ -112,8 +126,9 @@ final class Launcher450SideSlideHoldHook {
                         args[0] = readyStateBack;
                     } else if (!state.desktopAtDown) {
                         boolean enteredRecent = state.policy.onReadyState(readyName);
-                        SideSlideHoldDiagnostics.log(TAG + " ReadyState=" + readyName
-                                + " enteredRecent=" + enteredRecent);
+                        if (enteredRecent) {
+                            SideSlideHoldDiagnostics.log(TAG + " ReadyState entered RECENT");
+                        }
                         if (enteredRecent && state.owner instanceof View) {
                             scheduleDwell((View) state.owner, state, "native RECENT");
                         } else if (!"READY_STATE_RECENT".equals(readyName)
@@ -187,6 +202,8 @@ final class Launcher450SideSlideHoldHook {
             state.desktopAtDown = state.sideStub && isLauncherDesktop();
             state.downX = event.getRawX();
             state.leftEdge = state.downX < view.getResources().getDisplayMetrics().widthPixels / 2f;
+            state.hoverAnchorX = Float.NaN;
+            state.hoverAnchorY = Float.NaN;
             state.policy.onDown();
             SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
                     + " desktop=" + state.desktopAtDown
@@ -200,25 +217,54 @@ final class Launcher450SideSlideHoldHook {
         boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
         boolean saturated = inward && Math.abs(dx) >= HOME_VISUAL_SATURATION_PX;
         boolean entered = state.policy.onDesktopProgress(saturated);
-        if (entered) {
-            SideSlideHoldDiagnostics.log(TAG + " HOME visual saturation reached dx=" + dx);
-            scheduleDwell(view, state, "HOME visual saturation");
-        } else if (!saturated) {
+        if (!saturated) {
+            state.hoverAnchorX = Float.NaN;
+            state.hoverAnchorY = Float.NaN;
             cancelDwell(view, state);
+            return;
+        }
+
+        float x = event.getRawX();
+        float y = event.getRawY();
+        float hoverSlop = HOME_HOVER_SLOP_DP * view.getResources().getDisplayMetrics().density;
+        boolean anchorMissing = Float.isNaN(state.hoverAnchorX) || Float.isNaN(state.hoverAnchorY);
+        boolean movedOutsideHover = !anchorMissing
+                && (Math.abs(x - state.hoverAnchorX) > hoverSlop
+                || Math.abs(y - state.hoverAnchorY) > hoverSlop);
+        if (entered || anchorMissing || movedOutsideHover) {
+            state.hoverAnchorX = x;
+            state.hoverAnchorY = y;
+            cancelDwell(view, state);
+            int generation = state.policy.generation();
+            state.scheduledGeneration = generation;
+            Runnable runnable = () -> {
+                if (state.scheduledGeneration != generation) return;
+                if (!state.policy.requestSidebar(generation)) return;
+                SideSlideHoldDiagnostics.log(TAG + " HOME hover confirmed for "
+                        + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms"
+                        + " at x=" + state.hoverAnchorX + " y=" + state.hoverAnchorY);
+                prepareThenShowSidebar(view, state, generation);
+            };
+            state.dwellRunnable = runnable;
+            view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
+            SideSlideHoldDiagnostics.log(TAG + " HOME hover armed dx=" + dx
+                    + " reset=" + movedOutsideHover);
         }
     }
 
     private static boolean isLauncherDesktop() {
         Method getLauncher = applicationGetLauncherMethod;
-        if (getLauncher == null) return false;
+        Method getDockController = launcherGetDockControllerMethod;
+        Method isInDesktop = dockControllerIsInDesktopMethod;
+        if (getLauncher == null || getDockController == null || isInDesktop == null) return false;
         try {
             Object launcher = getLauncher.invoke(null);
             if (launcher == null) return false;
-            Method getDockController = launcher.getClass().getMethod("getDockController");
             Object dockController = getDockController.invoke(launcher);
             if (dockController == null) return false;
-            Method isInDesktop = dockController.getClass().getMethod("isInDesktop");
-            return Boolean.TRUE.equals(isInDesktop.invoke(dockController));
+            boolean desktop = Boolean.TRUE.equals(isInDesktop.invoke(dockController));
+            SideSlideHoldDiagnostics.log(TAG + " HOME authority desktop=" + desktop);
+            return desktop;
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " HOME authority unavailable: " + error);
             return false;
@@ -372,6 +418,8 @@ final class Launcher450SideSlideHoldHook {
         state.sideStub = false;
         state.desktopAtDown = false;
         state.arrow = null;
+        state.hoverAnchorX = Float.NaN;
+        state.hoverAnchorY = Float.NaN;
         state.scheduledGeneration = Integer.MIN_VALUE;
     }
 
@@ -394,6 +442,8 @@ final class Launcher450SideSlideHoldHook {
         float downX;
         float lastRawX;
         float lastRawY;
+        float hoverAnchorX = Float.NaN;
+        float hoverAnchorY = Float.NaN;
 
         GestureState(Object owner) {
             this.owner = owner;
