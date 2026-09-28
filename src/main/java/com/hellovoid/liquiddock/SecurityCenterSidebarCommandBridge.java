@@ -8,8 +8,11 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.app.Service;
 import android.os.IBinder;
+import android.view.View;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +28,7 @@ final class SecurityCenterSidebarCommandBridge {
 
     private static volatile boolean installed;
     private static volatile Context appContext;
+    private static volatile Object serviceOwner;
     private static volatile IBinder sidebarBinder;
     private static volatile Method showMethod;
     private static volatile Method[] availabilityMethods;
@@ -92,6 +96,14 @@ final class SecurityCenterSidebarCommandBridge {
                         : SidebarCommandContract.RESULT_UNAVAILABLE);
                 return;
             }
+            if (SidebarCommandContract.ACTION_CONFIRM_START.equals(action)) {
+                invokeNativeConfirmation(true);
+                return;
+            }
+            if (SidebarCommandContract.ACTION_CONFIRM_END.equals(action)) {
+                invokeNativeConfirmation(false);
+                return;
+            }
             if (!SidebarCommandContract.ACTION_SHOW.equals(action)) return;
             boolean accepted = showSidebar(
                     intent.getIntExtra(SidebarCommandContract.EXTRA_X, 0),
@@ -139,12 +151,15 @@ final class SecurityCenterSidebarCommandBridge {
 
     private static void ensureInstalled(Context source) {
         if (source == null || appContext != null) return;
+        serviceOwner = source;
         Context context = source.getApplicationContext();
         if (context == null) context = source;
         try {
             IntentFilter filter = new IntentFilter();
             filter.addAction(SidebarCommandContract.ACTION_PREPARE);
             filter.addAction(SidebarCommandContract.ACTION_SHOW);
+            filter.addAction(SidebarCommandContract.ACTION_CONFIRM_START);
+            filter.addAction(SidebarCommandContract.ACTION_CONFIRM_END);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             appContext = context;
             bindVendorService(context);
@@ -199,6 +214,112 @@ final class SecurityCenterSidebarCommandBridge {
             matches.add(method);
         }
         return matches.size() == 2 ? matches.toArray(new Method[0]) : null;
+    }
+
+    private static void invokeNativeConfirmation(boolean widen) {
+        Object service = serviceOwner;
+        if (service == null) {
+            SideSlideHoldDiagnostics.log(TAG + " native confirmation unavailable: no service");
+            return;
+        }
+        try {
+            Object manager = resolveDockWindowManager(service);
+            Object wrapper = manager != null ? resolveAttachedSidebarWrapper(manager) : null;
+            if (wrapper == null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " native confirmation unavailable: no attached SidebarWrapper");
+                return;
+            }
+
+            // OS4 decompilation: SidebarWrapper.U() -> widenSidebarLine(),
+            // SidebarWrapper.R() -> narrowSidebarLine(). Resolve only after strong structural
+            // validation of the live attached com.miui.dock.sidebar wrapper.
+            String methodName = widen ? "U" : "R";
+            Method method = wrapper.getClass().getMethod(methodName);
+            if (method.getReturnType() != void.class || method.getParameterTypes().length != 0) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " native confirmation signature mismatch method=" + methodName);
+                return;
+            }
+            method.invoke(wrapper);
+            SideSlideHoldDiagnostics.log(TAG
+                    + " native Sidebar confirmation " + (widen ? "widen" : "narrow"));
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " native confirmation failed", error);
+        }
+    }
+
+    private static Object resolveDockWindowManager(Object service) throws IllegalAccessException {
+        for (Field field : service.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            field.setAccessible(true);
+            Object candidate = field.get(service);
+            if (candidate == null || candidate instanceof IBinder) continue;
+            if (hasFiveIntVoidMethod(candidate.getClass())
+                    && hasSidebarWrapperReturn(candidate.getClass())) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasFiveIntVoidMethod(Class<?> type) {
+        for (Method method : type.getMethods()) {
+            if (method.getReturnType() != void.class) continue;
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 5) continue;
+            boolean allInts = true;
+            for (Class<?> param : params) {
+                if (param != int.class) {
+                    allInts = false;
+                    break;
+                }
+            }
+            if (allInts) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasSidebarWrapperReturn(Class<?> type) {
+        for (Method method : type.getMethods()) {
+            if (method.getParameterTypes().length != 0) continue;
+            String name = method.getReturnType().getName();
+            if (name.startsWith("com.miui.dock.sidebar.")) return true;
+        }
+        return false;
+    }
+
+    private static Object resolveAttachedSidebarWrapper(Object manager)
+            throws ReflectiveOperationException {
+        for (Field field : manager.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            field.setAccessible(true);
+            Object candidate = field.get(manager);
+            if (candidate == null
+                    || !candidate.getClass().getName().startsWith("com.miui.dock.sidebar.")) {
+                continue;
+            }
+            View line = resolveSidebarLineView(candidate);
+            if (line != null && (line.isAttachedToWindow() || line.getWindowToken() != null)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static View resolveSidebarLineView(Object wrapper)
+            throws ReflectiveOperationException {
+        for (Method method : wrapper.getClass().getMethods()) {
+            if (method.getParameterTypes().length != 0) continue;
+            if (!View.class.isAssignableFrom(method.getReturnType())) continue;
+            if (!"com.miui.dock.sidebar.RegionSamplingImageView"
+                    .equals(method.getReturnType().getName())) {
+                continue;
+            }
+            Object value = method.invoke(wrapper);
+            return value instanceof View ? (View) value : null;
+        }
+        return null;
     }
 
     private static boolean vendorShowEndpointReady() {
