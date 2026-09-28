@@ -371,7 +371,6 @@ final class Launcher450SideSlideHoldHook {
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
                 .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
                 .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
-        final boolean requestWasDesktop = state.desktopAtDown;
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
@@ -470,6 +469,7 @@ final class Launcher450SideSlideHoldHook {
                 .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
                 .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
 
+        final boolean requestWasDesktop = state.desktopAtDown;
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
