@@ -653,7 +653,6 @@ final class Launcher450SideSlideHoldHook {
                 .putExtra(SidebarCommandContract.EXTRA_WIDTH, geometry[2])
                 .putExtra(SidebarCommandContract.EXTRA_HEIGHT, geometry[3])
                 .putExtra(SidebarCommandContract.EXTRA_RADIUS, geometry[4])
-                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
                 .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
                 .putExtra(SidebarCommandContract.EXTRA_GENERATION, generation);
 
