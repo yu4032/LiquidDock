@@ -145,7 +145,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             float gestureRawY,
             long startedAtUptimeMs,
             long releaseStartedAtUptimeMs,
-            float releaseMiniCenterX) {
+            float releaseMiniCenterX,
+            float interactiveMiniCenterX) {
         if (canvas == null || arrowView == null) return;
 
         float density = os4Density(arrowView);
@@ -248,16 +249,18 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         // where mScale == GesturesBackController.convertOffset(offset) / 20.
         // The OS4 separated body then starts with its center 12dp outside the display and lerps
         // to one body half-width past that endpoint.
-        float miniCenterX = releasing && !Float.isNaN(releaseMiniCenterX)
-                ? releaseMiniCenterX
-                : resolveMiniSidebarCenterX(
-                        viewWidth,
-                        leftEdge,
-                        baselineX,
-                        arrowBackWidth,
-                        gestureProgress,
-                        splitProgress,
-                        density);
+        float miniCenterX = !Float.isNaN(interactiveMiniCenterX)
+                ? interactiveMiniCenterX
+                : (releasing && !Float.isNaN(releaseMiniCenterX)
+                        ? releaseMiniCenterX
+                        : resolveMiniSidebarCenterX(
+                                viewWidth,
+                                leftEdge,
+                                baselineX,
+                                arrowBackWidth,
+                                gestureProgress,
+                                splitProgress,
+                                density));
 
         // OS4 build_teardrop_path receives calculate_positions() endpoints, not the
         // 24x53 Sidebar body dimensions. On OS3 the equivalent span is mBackWidth * visual
@@ -401,6 +404,31 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 arrowBackWidth,
                 gestureProgress,
                 splitProgress,
+                density);
+    }
+
+    static float settledMiniSidebarCenterX(
+            View arrowView,
+            boolean leftEdge,
+            float arrowStartX,
+            float arrowBackWidth,
+            float gestureProgress) {
+        if (arrowView == null) return Float.NaN;
+        float viewWidth = arrowView.getWidth();
+        if (viewWidth <= 0f) return Float.NaN;
+        float density = os4Density(arrowView);
+        float baselineX = !Float.isNaN(arrowStartX)
+                ? (leftEdge ? arrowStartX : viewWidth - arrowStartX)
+                : (leftEdge
+                        ? FALLBACK_EDGE_INSET_DP * density
+                        : viewWidth - FALLBACK_EDGE_INSET_DP * density);
+        return resolveMiniSidebarCenterX(
+                viewWidth,
+                leftEdge,
+                baselineX,
+                arrowBackWidth,
+                gestureProgress,
+                1f,
                 density);
     }
 
