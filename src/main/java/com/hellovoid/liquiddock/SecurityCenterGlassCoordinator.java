@@ -749,9 +749,26 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassGeometry dock = dockSink.captureGeometry(root, dockRadius);
         if (dock == null) return null;
 
-        // Global Dock has one visible background authority: sidebar_background's native
-        // SidebarLineDrawable. DockLayout/abstractDockLayout animate content carriers, but must
-        // not create a second glass background.
+        if (assistantType == ASSISTANT_GLOBAL_DOCK) {
+            View motionBox = motionBoxRef.get();
+            if (motionBox != null && motionBox.isAttachedToWindow()
+                    && motionBox.getVisibility() == View.VISIBLE
+                    && motionBox.getAlpha() > 0f) {
+                SecurityCenterGlassGeometry boxMotion =
+                        SecurityCenterGlassSinkView.captureViewGeometry(motionBox, root, dockRadius);
+                if (boxMotion != null) {
+                    float left = Math.min(dock.left, boxMotion.left);
+                    float top = Math.min(dock.top, boxMotion.top);
+                    float right = Math.max(dock.left + dock.width, boxMotion.left + boxMotion.width);
+                    float bottom = Math.max(dock.top + dock.height, boxMotion.top + boxMotion.height);
+                    SecurityCenterGlassGeometry united = SecurityCenterGlassGeometry.resolve(
+                            root.getWidth(), root.getHeight(),
+                            0f, 0f, left, top, right, bottom, dockRadius);
+                    if (united != null) dock = united.withRootCrop();
+                }
+            }
+        }
+
         SecurityCenterGlassGeometry preview = null;
 
         View appsView = liveAppsView();
