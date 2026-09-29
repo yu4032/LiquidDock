@@ -7,11 +7,8 @@ import android.net.Uri;
 import android.view.Window;
 import android.view.WindowInsetsController;
 import android.widget.Toast;
-import androidx.preference.Preference;
-import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import org.json.JSONArray;
@@ -30,7 +27,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import com.hellovoid.liquiddock.config.ConfigCodec;
 import com.hellovoid.liquiddock.config.ConfigMigration;
-import com.hellovoid.liquiddock.config.PresetManager;
 
 public class SettingsActivity extends AppCompatActivity {
     private static final int WIDGET_HIDDEN_BACKUP_MAX_BYTES = 1024 * 1024;
@@ -51,10 +47,7 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_settings);
         migratePreferences();
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
         Window w = getWindow();
         // targetSdk 35+ is edge-to-edge: the system/theme owns the status-bar background.
         // Only request icon contrast through the modern insets controller.
@@ -66,13 +59,7 @@ public class SettingsActivity extends AppCompatActivity {
                     night ? 0 : WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
                     WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
         }
-        if (useLegacyPreferenceUi()) {
-            getSupportFragmentManager().beginTransaction()
-                .replace(R.id.fragment_container, new SettingsFragment()).commit();
-        }
     }
-
-    protected boolean useLegacyPreferenceUi() { return true; }
 
     private void migratePreferences() {
         ConfigMigration.migrate(this, PreferenceManager.getDefaultSharedPreferences(this));
@@ -410,44 +397,4 @@ public class SettingsActivity extends AppCompatActivity {
         }).start();
     }
 
-    public static class SettingsFragment extends PreferenceFragmentCompat {
-        @Override public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-            setPreferencesFromResource(R.xml.preferences, rootKey);
-            SettingsActivity activity = (SettingsActivity) requireActivity();
-            Preference export = findPreference("export_config");
-            if (export != null) export.setOnPreferenceClickListener(pref -> {
-                activity.launchExport(); return true;
-            });
-            Preference importPref = findPreference("import_config");
-            if (importPref != null) importPref.setOnPreferenceClickListener(pref -> {
-                activity.launchImport(); return true;
-            });
-            Preference ipadPreset = findPreference("preset_ipad");
-            if (ipadPreset != null) ipadPreset.setOnPreferenceClickListener(pref -> {
-                applyIpadPreset();
-                return true;
-            });
-            Preference restart = findPreference("restart_launcher");
-            if (restart != null) restart.setOnPreferenceClickListener(pref -> {
-                activity.restartLauncher();
-                return true;
-            });
-        }
-
-        private void applyIpadPreset() {
-            PresetManager.IpadPresetResult result = PresetManager.applyIpad(requireContext(),
-                    PreferenceManager.getDefaultSharedPreferences(requireContext()));
-            Toast.makeText(requireContext(),
-                "iPad preset: spacing " + result.spacing + " px, height "
-                    + signed(result.heightOffset) + " px, width " + signed(result.widthOffset)
-                    + " px, radius " + signed(result.cornerOffset) + " px, bottom +"
-                    + result.bottomOffset + " px",
-                Toast.LENGTH_LONG).show();
-            ((SettingsActivity) requireActivity()).restartLauncher();
-        }
-
-        private static String signed(int value) {
-            return value > 0 ? "+" + value : String.valueOf(value);
-        }
-    }
 }
