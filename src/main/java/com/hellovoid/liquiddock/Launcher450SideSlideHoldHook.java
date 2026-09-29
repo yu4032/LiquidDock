@@ -254,6 +254,7 @@ final class Launcher450SideSlideHoldHook {
                                 state.arrowLocalCenterY,
                                 state.arrowStartX,
                                 state.arrowExpectedHeight,
+                                stableArrowBackWidth(arrow),
                                 state.os4GestureProgress,
                                 state.splitActive,
                                 state.splitStartedAtUptimeMs,
@@ -966,6 +967,17 @@ final class Launcher450SideSlideHoldHook {
             state.clearFrozenSourceGeometry();
         }
         state.scheduledGeneration = Integer.MIN_VALUE;
+    }
+
+    private static float stableArrowBackWidth(Object arrow) {
+        if (arrow == null) return Float.NaN;
+        try {
+            int width = HookUtil.getIntField(arrow, "mBackWidth");
+            return width > 0 ? width : Float.NaN;
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " unable to read GestureBackArrowView#mBackWidth", error);
+            return Float.NaN;
+        }
     }
 
     private static float os4ProgressFromOffset(float offset) {
