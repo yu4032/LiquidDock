@@ -291,6 +291,26 @@ final class SecurityCenterGlassCoordinator
         if (isCurrentTurbo(turboLayout)) refreshCurrentFrame(true);
     }
 
+    void fadePanelOnVendorExit(View turboLayout) {
+        if (!isCurrentTurbo(turboLayout)) return;
+        if (dockSink != null) dockSink.startExitFade();
+        if (previewSink != null) previewSink.startExitFade();
+        if (boxSink != null) boxSink.startExitFade();
+        if (appsSink != null) appsSink.startExitFade();
+    }
+
+    void cancelPanelExitFade() {
+        if (dockSink != null) dockSink.cancelExitFade(true);
+        if (previewSink != null) previewSink.cancelExitFade(true);
+        if (boxSink != null) boxSink.cancelExitFade(true);
+        if (appsSink != null) appsSink.cancelExitFade(true);
+    }
+
+    void fadeAllAppsOnExit(View turboLayout) {
+        if (!isCurrentTurbo(turboLayout)) return;
+        if (appsSink != null) appsSink.startExitFade();
+    }
+
     void onVendorPanelClosing(View turboLayout) {
         if (!isCurrentTurbo(turboLayout)) return;
         ownership.onVendorClosing();
