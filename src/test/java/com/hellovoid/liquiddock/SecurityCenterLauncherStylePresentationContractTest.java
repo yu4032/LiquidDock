@@ -176,7 +176,7 @@ public class SecurityCenterLauncherStylePresentationContractTest {
 
     @Test public void videoToolboxMaterialIdentityIsWatchedAcrossRebuilds() throws Exception {
         String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
-        assertTrue("Video Toolbox must keep watching because za.p can rebuild its View tree",
+        assertTrue("Video Toolbox must keep watching because its adapter can rebuild the View tree",
                 early.contains("return type == ASSISTANT_VIDEO;"));
         assertTrue("carrier identity, not one successful readiness bind, controls rebinding",
                 early.contains("shouldRebind(dock, abstractDock, boxMaterial)")
