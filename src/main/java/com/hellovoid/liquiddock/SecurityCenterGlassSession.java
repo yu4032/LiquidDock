@@ -210,7 +210,6 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         if (cancelled != null) cancelPresentationArms(cancelled);
         if (offer.requestSource && !shuttingDown) {
             sourceBackend.requestFresh(offer.sourceGeneration);
-            log("source requested serial=" + next.serial + " generation=" + generation);
         }
         requestCachedPresentation(generation);
     }
@@ -314,7 +313,6 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (generation >= 0L && !shuttingDown) {
             sourceBackend.requestFresh(generation);
-            log("source retried after output mutation generation=" + generation);
         }
     }
 
@@ -461,11 +459,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 request.sinks[i].requestPresentationDraw();
             }
             sourceBackend.makePbufferCurrent();
-
-            if (submission.awaitPresentationAck) {
-                log("submitted serial=" + request.serial + " generation=" + request.generation
-                        + " awaiting TextureView presentation ack");
-            } else {
+            if (!submission.awaitPresentationAck) {
                 final long nextSourceGeneration;
                 synchronized (pipelineLock) {
                     nextSourceGeneration = framePipeline.onSteadySubmitted(
@@ -473,10 +467,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 }
                 if (nextSourceGeneration >= 0L && !shuttingDown) {
                     sourceBackend.requestFresh(nextSourceGeneration);
-                    log("source requested after steady submit generation=" + nextSourceGeneration);
                 }
-                log("steady submitted serial=" + request.serial
-                        + " generation=" + request.generation);
                 FrameRequest latest = frameRequest;
                 if (!shuttingDown && latest != null
                         && (latest.serial != request.serial
