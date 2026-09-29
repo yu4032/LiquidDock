@@ -68,6 +68,8 @@ final class SecurityCenterGlassSinkView extends TextureView
     private volatile long surfaceUpdateSequence;
     private volatile long armedSurfaceUpdateSequence;
     private boolean parentRecoveryPosted;
+    private int outputEnvelopeWidth;
+    private int outputEnvelopeHeight;
     private boolean hasBeenWindowVisible;
     private boolean windowVisibilityInterrupted;
     private ValueAnimator exitFadeAnimator;
@@ -188,8 +190,7 @@ final class SecurityCenterGlassSinkView extends TextureView
             return setContentAlphaIfChanged(0f) || changed;
         }
 
-        View geometrySource = rootSpaceOutput ? material.getRootView() : material;
-        if (geometrySource == null || !geometrySource.isAttachedToWindow()) {
+        if (!material.isAttachedToWindow()) {
             return setContentAlphaIfChanged(0f) || changed;
         }
         Bounds bounds;
@@ -202,12 +203,30 @@ final class SecurityCenterGlassSinkView extends TextureView
                     1f, 1f);
             outset = 0f;
         } else {
-            bounds = mapBounds(geometrySource, expectedParent);
+            bounds = mapBounds(material, expectedParent);
             if (bounds == null) return setContentAlphaIfChanged(0f) || changed;
-            outset = rootSpaceOutput ? 0f : OPTICAL_OUTSET_PX;
+            outset = OPTICAL_OUTSET_PX;
         }
-        int width = Math.max(1, (int) Math.ceil(bounds.right - bounds.left + outset * 2f));
-        int height = Math.max(1, (int) Math.ceil(bounds.bottom - bounds.top + outset * 2f));
+
+        int visualWidth = Math.max(1,
+                (int) Math.ceil(bounds.right - bounds.left + outset * 2f));
+        int visualHeight = Math.max(1,
+                (int) Math.ceil(bounds.bottom - bounds.top + outset * 2f));
+        int layoutWidth = Math.max(1,
+                (int) Math.ceil(material.getWidth() + outset * 2f));
+        int layoutHeight = Math.max(1,
+                (int) Math.ceil(material.getHeight() + outset * 2f));
+        if (rootSpaceOutput) {
+            // Root-space means geometry/crop coordinates, not a full-root EGL window.
+            // Keep one local envelope per material carrier and only grow it for real overshoot.
+            outputEnvelopeWidth = Math.max(outputEnvelopeWidth, Math.max(layoutWidth, visualWidth));
+            outputEnvelopeHeight = Math.max(outputEnvelopeHeight, Math.max(layoutHeight, visualHeight));
+        } else {
+            outputEnvelopeWidth = visualWidth;
+            outputEnvelopeHeight = visualHeight;
+        }
+        int width = Math.max(1, outputEnvelopeWidth);
+        int height = Math.max(1, outputEnvelopeHeight);
         ViewGroup.LayoutParams params = getLayoutParams();
         if (params != null && (params.width != width || params.height != height)) {
             params.width = width;
@@ -250,9 +269,18 @@ final class SecurityCenterGlassSinkView extends TextureView
                     bounds.left, bounds.top, bounds.right, bounds.bottom,
                     cornerRadiusPx * visualScale);
             if (shape == null) return null;
-            return rootSpaceOutput
-                    ? shape.withRootCrop()
-                    : shape.expandedBy(OPTICAL_OUTSET_PX * visualScale);
+            if (!rootSpaceOutput) {
+                return shape.expandedBy(OPTICAL_OUTSET_PX * visualScale);
+            }
+            Bounds outputBounds = mapBounds(this, root);
+            if (outputBounds == null) return null;
+            return SecurityCenterGlassGeometry.inheritedTransform(
+                    root.getWidth(), root.getHeight(),
+                    shape.left, shape.top,
+                    shape.left + shape.width, shape.top + shape.height,
+                    outputBounds.left, outputBounds.top,
+                    outputBounds.right, outputBounds.bottom,
+                    shape.cornerRadius);
         } catch (Throwable ignored) {
             return null;
         }
