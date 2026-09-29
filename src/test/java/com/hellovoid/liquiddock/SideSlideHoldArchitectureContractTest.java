@@ -48,9 +48,13 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> native haptic armed; wait ACTION_UP"));
-        assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
-        assertTrue(bridge.contains("native confirmation haptic"));
+        assertTrue(hook.contains("Sidebar preflight ready -> Launcher haptic + preview; wait ACTION_UP"));
+        assertTrue(hook.contains("ACTION_UP -> Launcher preview handoff -> commit Sidebar"));
+        assertTrue(hook.contains("performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)"));
+        assertTrue(hook.contains("LauncherSideSlidePreview.show"));
+        assertTrue(hook.contains("preview.beginRelease()"));
+        assertTrue(hook.contains("preview.finishHandoff(accepted)"));
+        assertFalse(hook.contains("sendConfirmation(owner, true, state)"));
         assertTrue(hook.contains("Sidebar source geometry side="));
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
         assertTrue(hook.contains("centerY = !Float.isNaN(state.hoverAnchorY)"));
@@ -67,14 +71,11 @@ public class SideSlideHoldArchitectureContractTest {
         assertFalse(hook.contains("if (consumeDesktop)"));
         assertTrue(hook.contains("HOME Workspace paging cancelled for edge side-slide"));
         assertTrue(hook.contains("finishCurrentGesture"));
-        assertTrue(contract.contains("ACTION_CONFIRM_START"));
-        assertTrue(contract.contains("ACTION_CONFIRM_END"));
         assertTrue(contract.contains("EXTRA_DESKTOP"));
         assertTrue(bridge.contains("vendorShowEndpointReady"));
         assertTrue(bridge.contains("logVendorBooleanDiagnostics"));
         assertTrue(bridge.contains("show.invoke"));
         assertTrue(contract.contains("EXTRA_GESTURE_Y"));
-        assertTrue(bridge.contains("native confirmation haptic"));
         assertTrue(bridge.contains("resolveDockState"));
         assertTrue(bridge.contains("DockWindowType{"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
