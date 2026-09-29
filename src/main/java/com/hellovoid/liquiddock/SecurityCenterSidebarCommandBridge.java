@@ -748,7 +748,6 @@ final class SecurityCenterSidebarCommandBridge {
         try {
             releasedSidebarWindowRoot = null;
             pendingLauncherGeneration = generation;
-            SecurityCenterNewDockSourceGeometry.publish(x, y, width, height, radius);
             show.invoke(binder, x, y, width, height, radius);
             SideSlideHoldDiagnostics.log(TAG + " vendor show accepted geometry="
                     + x + "," + y + " " + width + "x" + height + " r=" + radius);
@@ -765,7 +764,6 @@ final class SecurityCenterSidebarCommandBridge {
     private static void clearBinder(String reason) {
         sidebarBinder = null;
         showMethod = null;
-        SecurityCenterNewDockSourceGeometry.clear();
         availabilityMethods = null;
         vendorAnimationCallback = null;
         vendorAnimationCallbackRegisterMethod = null;

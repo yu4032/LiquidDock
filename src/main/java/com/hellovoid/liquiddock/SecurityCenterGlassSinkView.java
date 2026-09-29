@@ -232,20 +232,6 @@ final class SecurityCenterGlassSinkView extends TextureView
                 || material.getWidth() <= 0 || material.getHeight() <= 0
                 || root.getWidth() <= 0 || root.getHeight() <= 0) return null;
         try {
-            if (materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
-                    && SecurityCenterSidebarDrawableGeometry.ownsRoot(root)) {
-                SecurityCenterSidebarDrawableGeometry.Snapshot nativeBackground =
-                        SecurityCenterSidebarDrawableGeometry.currentRootGeometry(root);
-                if (nativeBackground == null) return null;
-                SecurityCenterGlassGeometry nativeShape = SecurityCenterGlassGeometry.resolve(
-                        root.getWidth(), root.getHeight(),
-                        0f, 0f,
-                        nativeBackground.left, nativeBackground.top,
-                        nativeBackground.right, nativeBackground.bottom,
-                        nativeBackground.radius);
-                return nativeShape != null ? nativeShape.withRootCrop() : null;
-            }
-
             Bounds bounds = mapBounds(material, root);
             if (bounds == null) return null;
             float visualScale = Math.min(bounds.horizontalScale, bounds.verticalScale);
@@ -268,27 +254,6 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (disposed || session.isShutdown()) return;
         syncFromMaterial();
         session.onMaterialTransformMutated(this);
-    }
-
-    static SecurityCenterGlassGeometry captureViewGeometry(
-            View material, View root, float cornerRadiusPx) {
-        if (material == null || root == null || !material.isAttachedToWindow()
-                || !root.isAttachedToWindow() || material.getWidth() <= 0 || material.getHeight() <= 0
-                || root.getWidth() <= 0 || root.getHeight() <= 0
-                || !finite(cornerRadiusPx) || cornerRadiusPx < 0f) return null;
-        try {
-            Bounds bounds = mapBounds(material, root);
-            if (bounds == null) return null;
-            float visualScale = Math.min(bounds.horizontalScale, bounds.verticalScale);
-            if (!finite(visualScale) || visualScale <= 0f) return null;
-            return SecurityCenterGlassGeometry.resolve(
-                    root.getWidth(), root.getHeight(),
-                    0f, 0f,
-                    bounds.left, bounds.top, bounds.right, bounds.bottom,
-                    cornerRadiusPx * visualScale);
-        } catch (Throwable ignored) {
-            return null;
-        }
     }
 
     void setAuthorizedVisible(boolean visible) {
