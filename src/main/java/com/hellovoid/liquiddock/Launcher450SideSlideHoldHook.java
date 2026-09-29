@@ -43,10 +43,14 @@ final class Launcher450SideSlideHoldHook {
     // OS4 split_effect_renderer starts at gesture progress 0.8 and reaches its full split at 1.0.
     // Map OS3's observed 180px visual boundary to that same 0.8 point.
     private static final float OS4_SPLIT_START_PROGRESS = 0.8f;
-    // OS4 GestureBackArrowView visual source geometry used by Security Center's launcher-origin
-    // transform. Side authority is kept separate: Security Center derives left/right solely from
-    // the first x argument, so x must come from the gesture edge rather than the Arrow view.
-    private static final float OS4_SOURCE_WIDTH_DP = 24f;
+    // Two different OS4 geometries must stay separate:
+    // - the Launcher separated mini Sidebar body is 24x53dp;
+    // - Security Center's launcher-origin transform source is 30x53dp.
+    // The 30dp source width was recovered from GestureBackArrowView construction and is what the
+    // native showNewDockFromLauncher contract expects. Reusing the 24dp visual body width here
+    // shifts the vendor expansion inward even when x itself is edge-anchored.
+    private static final float OS4_MINI_SIDEBAR_WIDTH_DP = 24f;
+    private static final float OS4_VENDOR_SOURCE_WIDTH_DP = 30f;
     private static final float OS4_SOURCE_HEIGHT_DP = 53f;
     private static final float OS4_SOURCE_RADIUS_DP = 8f;
     // OS4 calculate_positions clamps projected placement to gesture progress 0.8. Constructor
@@ -889,7 +893,7 @@ final class Launcher450SideSlideHoldHook {
         float density = owner.getResources().getConfiguration().densityDpi > 0
                 ? owner.getResources().getConfiguration().densityDpi / 160f
                 : dm.density;
-        int width = Math.max(1, Math.round(OS4_SOURCE_WIDTH_DP * density));
+        int width = Math.max(1, Math.round(OS4_VENDOR_SOURCE_WIDTH_DP * density));
         int height = Math.max(1, Math.round(OS4_SOURCE_HEIGHT_DP * density));
         int radius = Math.max(1, Math.round(OS4_SOURCE_RADIUS_DP * density));
         int screenWidth = Math.max(width, dm.widthPixels);
@@ -1049,7 +1053,7 @@ final class Launcher450SideSlideHoldHook {
         float density = owner.getResources().getConfiguration().densityDpi > 0
                 ? owner.getResources().getConfiguration().densityDpi / 160f
                 : dm.density;
-        float miniHalfWidth = OS4_SOURCE_WIDTH_DP * density * 0.5f;
+        float miniHalfWidth = OS4_MINI_SIDEBAR_WIDTH_DP * density * 0.5f;
         float outerBoundary = state.leftEdge
                 ? state.lockedMiniCenterScreenX - miniHalfWidth
                 : state.lockedMiniCenterScreenX + miniHalfWidth;
@@ -1087,8 +1091,8 @@ final class Launcher450SideSlideHoldHook {
                 : Math.max(1f, screenWidth - state.lockedMiniCenterScreenX);
         float retractProgress = clamp01(edgeDistance / lockedEdgeDistance);
         float outsideCenter = state.leftEdge
-                ? -OS4_SOURCE_WIDTH_DP * density * 0.5f
-                : arrow.getWidth() + OS4_SOURCE_WIDTH_DP * density * 0.5f;
+                ? -OS4_MINI_SIDEBAR_WIDTH_DP * density * 0.5f
+                : arrow.getWidth() + OS4_MINI_SIDEBAR_WIDTH_DP * density * 0.5f;
         state.interactiveMiniCenterX = outsideCenter
                 + (state.lockedMiniCenterX - outsideCenter) * retractProgress;
         arrow.postInvalidateOnAnimation();
