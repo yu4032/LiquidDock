@@ -30,12 +30,16 @@ public class SecurityCenterSinkOutputPolicyTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Object dock = Enum.valueOf((Class<? extends Enum>) role, "DOCK");
         @SuppressWarnings({"rawtypes", "unchecked"})
+        Object preview = Enum.valueOf((Class<? extends Enum>) role, "DOCK_PREVIEW");
+        @SuppressWarnings({"rawtypes", "unchecked"})
         Object toolbox = Enum.valueOf((Class<? extends Enum>) role, "TOOLBOX");
         @SuppressWarnings({"rawtypes", "unchecked"})
         Object allApps = Enum.valueOf((Class<? extends Enum>) role, "ALL_APPS");
 
         assertFalse("Dock glass must live inside DockLayout so Folme owns its transform",
                 (Boolean) method.invoke(null, dock));
+        assertFalse("abstract Dock preview must also inherit its native Folme transform",
+                (Boolean) method.invoke(null, preview));
         assertTrue((Boolean) method.invoke(null, toolbox));
         assertTrue((Boolean) method.invoke(null, allApps));
         assertFalse((Boolean) method.invoke(null, new Object[]{null}));
@@ -43,6 +47,7 @@ public class SecurityCenterSinkOutputPolicyTest {
         Method inherit = policy.getDeclaredMethod("inheritsMaterialTransform", role);
         inherit.setAccessible(true);
         assertTrue((Boolean) inherit.invoke(null, dock));
+        assertTrue((Boolean) inherit.invoke(null, preview));
         assertFalse((Boolean) inherit.invoke(null, toolbox));
         assertFalse((Boolean) inherit.invoke(null, allApps));
     }
