@@ -54,6 +54,7 @@ final class SecurityCenterGlassSinkView extends TextureView
     private final SecurityCenterGlassSession session;
     private final SecurityCenterSinkOutputPolicy.MaterialRole materialRole;
     private final boolean rootSpaceOutput;
+    private final boolean inheritMaterialTransform;
     private final Paint presentationPaint = new Paint();
     private final View.OnAttachStateChangeListener materialAttachListener;
     private Surface outputSurface;
@@ -78,6 +79,8 @@ final class SecurityCenterGlassSinkView extends TextureView
         this.session = session;
         this.materialRole = materialRole;
         rootSpaceOutput = SecurityCenterSinkOutputPolicy.usesRootSpaceOutput(materialRole);
+        inheritMaterialTransform =
+                SecurityCenterSinkOutputPolicy.inheritsMaterialTransform(materialRole);
         materialAttachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 scheduleParentRecovery("material-attached");
@@ -109,13 +112,24 @@ final class SecurityCenterGlassSinkView extends TextureView
             SecurityCenterSinkOutputPolicy.MaterialRole materialRole) {
         if (material == null || session == null || session.isShutdown() || materialRole == null
                 || !material.isAttachedToWindow()) return null;
-        OverlayHost host = resolveOverlayHost(material);
-        if (host == null) return null;
-        int index = host.parent.indexOfChild(host.anchor);
-        if (index < 0) return null;
         SecurityCenterGlassSinkView sink = new SecurityCenterGlassSinkView(
                 material.getContext(), material, session, materialRole);
-        host.parent.addView(sink, index, new ViewGroup.LayoutParams(1, 1));
+        if (sink.inheritMaterialTransform) {
+            if (!(material instanceof ViewGroup)) return null;
+            ViewGroup materialGroup = (ViewGroup) material;
+            materialGroup.addView(
+                    sink,
+                    0,
+                    new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
+        } else {
+            OverlayHost host = resolveOverlayHost(material);
+            if (host == null) return null;
+            int index = host.parent.indexOfChild(host.anchor);
+            if (index < 0) return null;
+            host.parent.addView(sink, index, new ViewGroup.LayoutParams(1, 1));
+        }
         sink.syncFromMaterial();
         return sink;
     }
@@ -135,17 +149,25 @@ final class SecurityCenterGlassSinkView extends TextureView
     boolean syncFromMaterial() {
         View material = materialRef.get();
         if (disposed || session.isShutdown() || material == null) return false;
-        OverlayHost host = resolveOverlayHost(material);
-        if (host == null) return false;
-        if (getParent() != host.parent) {
+        OverlayHost host = inheritMaterialTransform ? null : resolveOverlayHost(material);
+        ViewGroup expectedParent = inheritMaterialTransform && material instanceof ViewGroup
+                ? (ViewGroup) material
+                : host != null ? host.parent : null;
+        if (expectedParent == null) return false;
+        if (getParent() != expectedParent) {
             scheduleParentRecovery("overlay-host-mismatch");
             return true;
         }
 
         boolean changed = false;
-        boolean structurallyVisible = isStructurallyVisible(material, host.parent)
-                && material.getWindowVisibility() == View.VISIBLE;
-        float effectiveAlpha = effectiveMaterialAlpha(material, host.parent);
+        boolean structurallyVisible = inheritMaterialTransform
+                ? material.getVisibility() == View.VISIBLE
+                        && material.getWindowVisibility() == View.VISIBLE
+                : isStructurallyVisible(material, expectedParent)
+                        && material.getWindowVisibility() == View.VISIBLE;
+        float effectiveAlpha = inheritMaterialTransform
+                ? 1f
+                : effectiveMaterialAlpha(material, expectedParent);
         int desiredVisibility = structurallyVisible ? View.VISIBLE : View.INVISIBLE;
         if (getVisibility() != desiredVisibility) {
             setVisibility(desiredVisibility);
@@ -159,9 +181,20 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (geometrySource == null || !geometrySource.isAttachedToWindow()) {
             return setContentAlphaIfChanged(0f) || changed;
         }
-        Bounds bounds = mapBounds(geometrySource, host.parent);
-        if (bounds == null) return setContentAlphaIfChanged(0f) || changed;
-        float outset = rootSpaceOutput ? 0f : OPTICAL_OUTSET_PX;
+        Bounds bounds;
+        float outset;
+        if (inheritMaterialTransform) {
+            bounds = new Bounds(
+                    0f, 0f,
+                    Math.max(1, material.getWidth()),
+                    Math.max(1, material.getHeight()),
+                    1f, 1f);
+            outset = 0f;
+        } else {
+            bounds = mapBounds(geometrySource, expectedParent);
+            if (bounds == null) return setContentAlphaIfChanged(0f) || changed;
+            outset = rootSpaceOutput ? 0f : OPTICAL_OUTSET_PX;
+        }
         int width = Math.max(1, (int) Math.ceil(bounds.right - bounds.left + outset * 2f));
         int height = Math.max(1, (int) Math.ceil(bounds.bottom - bounds.top + outset * 2f));
         ViewGroup.LayoutParams params = getLayoutParams();
@@ -229,11 +262,16 @@ final class SecurityCenterGlassSinkView extends TextureView
     boolean isPresentationReady() {
         if (disposed || session.isShutdown()) return false;
         View material = materialRef.get();
-        OverlayHost host = resolveOverlayHost(material);
+        OverlayHost host = material != null && !inheritMaterialTransform
+                ? resolveOverlayHost(material) : null;
         boolean structurallyVisible = material != null
-                && host != null
-                && getParent() == host.parent
-                && isStructurallyVisible(material, host.parent);
+                && (inheritMaterialTransform
+                        ? material instanceof ViewGroup
+                                && getParent() == material
+                                && material.getVisibility() == View.VISIBLE
+                        : host != null
+                                && getParent() == host.parent
+                                && isStructurallyVisible(material, host.parent));
         boolean ancestorsVisible = true;
         View current = this;
         while (current != null) {
@@ -302,17 +340,35 @@ final class SecurityCenterGlassSinkView extends TextureView
     private void recoverParentNow(String reason) {
         if (disposed || session.isShutdown()) return;
         View material = materialRef.get();
-        OverlayHost host = resolveOverlayHost(material);
-        if (material == null || host == null) return;
+        if (material == null) return;
+        ViewGroup expectedParent;
+        OverlayHost host = null;
+        if (inheritMaterialTransform) {
+            if (!(material instanceof ViewGroup)) return;
+            expectedParent = (ViewGroup) material;
+        } else {
+            host = resolveOverlayHost(material);
+            if (host == null) return;
+            expectedParent = host.parent;
+        }
         Object current = getParent();
-        if (current != host.parent) {
+        if (current != expectedParent) {
             if (current instanceof ViewGroup) ((ViewGroup) current).removeView(this);
-            int index = Math.max(0, host.parent.indexOfChild(host.anchor));
-            host.parent.addView(this, index, new ViewGroup.LayoutParams(1, 1));
+            if (inheritMaterialTransform) {
+                expectedParent.addView(
+                        this,
+                        0,
+                        new ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT));
+            } else {
+                int index = Math.max(0, host.parent.indexOfChild(host.anchor));
+                host.parent.addView(this, index, new ViewGroup.LayoutParams(1, 1));
+            }
             try {
                 Api101Bridge.log("[DC][SecurityCenterGlass] sink overlay host recovered reason=" + reason
                         + " material=" + material.getClass().getSimpleName()
-                        + " host=" + host.parent.getClass().getSimpleName());
+                        + " host=" + expectedParent.getClass().getSimpleName());
             } catch (Throwable ignored) {}
         }
         syncFromMaterial();
