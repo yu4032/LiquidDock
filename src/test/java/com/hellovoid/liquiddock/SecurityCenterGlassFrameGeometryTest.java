@@ -67,10 +67,11 @@ public class SecurityCenterGlassFrameGeometryTest {
                 3008, 1880, 0f, 0f, 1000f, 261f, 2088f, 1724f, 24f);
         Method method = SecurityCenterGlassFrameGeometry.class.getDeclaredMethod(
                 "compose", SecurityCenterGlassGeometry.class,
-                SecurityCenterGlassGeometry.class, SecurityCenterGlassGeometry.class);
+                SecurityCenterGlassGeometry.class, SecurityCenterGlassGeometry.class,
+                SecurityCenterGlassGeometry.class);
         method.setAccessible(true);
         SecurityCenterGlassFrameGeometry frame =
-                (SecurityCenterGlassFrameGeometry) method.invoke(null, dock, box, apps);
+                (SecurityCenterGlassFrameGeometry) method.invoke(null, dock, null, box, apps);
 
         assertEquals("All Apps owns the toolbox material slot while present", 2, frame.nodeCount());
         assertSame(dock, frame.nodeAt(0));
@@ -82,6 +83,24 @@ public class SecurityCenterGlassFrameGeometryTest {
         assertEquals(261f, presentation.top, 0.001f);
         assertEquals(2054f, presentation.width, 0.001f);
         assertEquals(1463f, presentation.height, 0.001f);
+    }
+
+    @Test
+    public void nativeSidebarCrossfadeCarriesDockAndAbstractDockTogether() {
+        SecurityCenterGlassGeometry dock = SecurityCenterGlassGeometry.resolve(
+                3008, 1880, 0f, 0f, 34f, 261f, 240f, 1724f, 40f);
+        SecurityCenterGlassGeometry preview = SecurityCenterGlassGeometry.resolve(
+                3008, 1880, 0f, 0f, 34f, 261f, 240f, 1724f, 40f);
+        assertNotNull(dock);
+        assertNotNull(preview);
+
+        SecurityCenterGlassFrameGeometry frame =
+                SecurityCenterGlassFrameGeometry.compose(dock, preview, null, null);
+
+        assertEquals(2, frame.nodeCount());
+        assertSame(dock, frame.nodeAt(0));
+        assertSame(preview, frame.nodeAt(1));
+        assertSame(preview, frame.previewGeometry());
     }
 
     @Test
