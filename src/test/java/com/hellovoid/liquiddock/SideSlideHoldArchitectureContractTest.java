@@ -50,18 +50,13 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> Launcher haptic + preview"));
+        assertTrue(hook.contains("Sidebar preflight ready -> Launcher haptic"));
         assertTrue(hook.contains("wait ACTION_UP"));
-        assertTrue(hook.contains("ACTION_UP -> Launcher preview handoff -> commit Sidebar"));
+        assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
         assertTrue(hook.contains("performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)"));
-        assertTrue(hook.contains("LauncherSideSlidePreview.show"));
         assertTrue(hook.contains("owner.post(() ->"));
-        assertTrue(hook.contains("LauncherSideSlidePreview.show("));
-        assertTrue(hook.contains("owner.post(() -> preview.finishHandoff(accepted))"));
         assertTrue(hook.contains("Thread.currentThread().getName()"));
-        assertFalse(hook.contains("MAIN.post(() -> LauncherSideSlidePreview.show"));
-        assertTrue(hook.contains("preview.beginRelease()"));
-        assertTrue(hook.contains("preview.finishHandoff(accepted)"));
+        assertFalse(hook.contains("LauncherSideSlidePreview"));
         assertFalse(hook.contains("sendConfirmation(owner, true, state)"));
         assertTrue(hook.contains("Sidebar source geometry side="));
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
