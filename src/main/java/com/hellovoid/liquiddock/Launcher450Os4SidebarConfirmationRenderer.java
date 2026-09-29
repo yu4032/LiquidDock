@@ -114,6 +114,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             float arrowStartX,
             float arrowExpectedHeight,
             float gestureProgress,
+            boolean splitActive,
+            long splitStartedAtUptimeMs,
             float gestureRawY,
             long startedAtUptimeMs,
             long releaseStartedAtUptimeMs) {
@@ -135,53 +137,59 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float splitProgress;
 
         float sourceProgress = clamp01(gestureProgress);
-        float requestedSplit =
-                clamp01((sourceProgress - SPLIT_START_PROGRESS) / SPLIT_RANGE);
+        boolean splitGateReached =
+                splitActive && sourceProgress >= SPLIT_START_PROGRESS;
 
-        // run_abstract_sidebar_anim_target(show=true) is armed by on_vsync while the pointer is
-        // still down. Once the 0.8 progress threshold is crossed, OS4's Folme target moves
-        // 30x30/r30 -> 24x53/r8 while split_progress rises and teardrop/bridge target 0.
-        // Keep the native spring shape, but gate it with the real gesture threshold instead of
-        // starting it from elapsed wall-clock time.
-        float activeSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
-        float splitSpring =
-                clamp01(springProgress(activeSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
-        splitProgress = requestedSplit * splitSpring;
+        // OS4 uses the 0.8 gesture threshold as the gate that starts a show=true Folme target.
+        // After the gate is crossed, split_progress itself animates to 1 independently of any
+        // further pointer distance.
+        float splitSeconds = splitGateReached && splitStartedAtUptimeMs > 0L
+                ? Math.max(0L, now - splitStartedAtUptimeMs) / 1000f
+                : 0f;
 
-        float widthProgress =
-                splitProgress * clamp01(
-                        springProgress(activeSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
-        float heightProgress =
-                splitProgress * clamp01(
-                        springProgress(activeSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
-        float radiusProgress =
-                splitProgress * clamp01(
-                        springProgress(activeSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
+        splitProgress = splitGateReached
+                ? clamp01(springProgress(splitSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S))
+                : 0f;
+
+        float widthProgress = splitGateReached
+                ? clamp01(springProgress(splitSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S))
+                : 0f;
+        float heightProgress = splitGateReached
+                ? clamp01(springProgress(splitSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S))
+                : 0f;
+        float radiusProgress = splitGateReached
+                ? clamp01(springProgress(splitSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S))
+                : 0f;
 
         width = lerp(CIRCLE_WIDTH_DP * density, SIDEBAR_WIDTH_DP * density, widthProgress);
         height = lerp(CIRCLE_HEIGHT_DP * density, SIDEBAR_HEIGHT_DP * density, heightProgress);
         radius = lerp(CIRCLE_RADIUS_DP * density, SIDEBAR_RADIUS_DP * density, radiusProgress);
 
-        float teardropCollapse =
-                splitProgress * clamp01(
-                        springProgress(activeSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
-        float bridgeCollapse =
-                splitProgress * clamp01(
-                        springProgress(activeSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+        float teardropCollapse = splitGateReached
+                ? clamp01(springProgress(splitSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S))
+                : 0f;
+        float bridgeCollapse = splitGateReached
+                ? clamp01(springProgress(splitSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S))
+                : 0f;
         teardropFactor = 1f - teardropCollapse;
         bridgeFactor = 1f - bridgeCollapse;
 
         if (releasing) {
-            // ACTION_UP does not create the mini Sidebar. The held gesture has already created it.
-            // Release only removes the remaining water-drop/bridge contribution while preserving
-            // the split/body endpoint for Security Center's expansion.
+            // By ACTION_UP the mini Sidebar already exists. Release only removes any residual
+            // water-drop/bridge while keeping the body at its split endpoint for vendor handoff.
             float releaseSeconds =
                     Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
             float releaseDrop =
                     clamp01(springProgress(releaseSeconds, TEARDROP_DAMPING, 0.10f));
             teardropFactor *= 1f - releaseDrop;
             bridgeFactor *= 1f - releaseDrop;
-            splitProgress = Math.max(splitProgress, requestedSplit);
+
+            float releaseSplit =
+                    clamp01(springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+            splitProgress = Math.max(splitProgress, releaseSplit);
+            width = lerp(width, SIDEBAR_WIDTH_DP * density, releaseSplit);
+            height = lerp(height, SIDEBAR_HEIGHT_DP * density, releaseSplit);
+            radius = lerp(radius, SIDEBAR_RADIUS_DP * density, releaseSplit);
         }
 
         // OS3 already computes the authoritative local geometry in onActionDown(y,startX,height).
