@@ -388,9 +388,16 @@ final class SecurityCenterGlassCoordinator
                 SecurityCenterGlassRuntimeState.isEnabled())) return;
         if (callbackSession != session || callbackSession.isShutdown()
                 || root == null || !root.isAttachedToWindow()) return;
-        // This callback runs in the same View setter call stack that Folme uses. Re-sample the
-        // carrier geometry immediately instead of waiting for root pre-draw, which otherwise
-        // makes root-space glass visibly trail the native Sidebar.
+        // This callback runs in the same View setter call stack that Folme uses. The first
+        // Dock contraction after a stable expanded frame is the real exit-animation start edge.
+        // Fade every custom sink there; do not wait for terminal cleanup callbacks.
+        if (sink == dockSink && sink.consumeExitContractionStart()) {
+            View turbo = turboRef.get();
+            if (turbo != null) fadePanelOnVendorExit(turbo);
+        }
+
+        // Re-sample the carrier geometry immediately instead of waiting for root pre-draw, which
+        // otherwise makes root-space glass visibly trail the native Sidebar.
         refreshCurrentFrame(true);
     }
 
