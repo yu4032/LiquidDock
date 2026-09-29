@@ -188,24 +188,24 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 early.contains("postDelayed("));
     }
 
-    @Test public void allSecurityCenterGlassUsesFastNativeExitTrendFade() throws Exception {
+    @Test public void allSecurityCenterGlassUsesFastSemanticExitFade() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
         assertTrue("exit fade must live in every sink instead of one assistant type",
                 sink.contains("EXIT_FADE_MS = 80L")
-                        && sink.contains("updateExitFadeState(")
-                        && sink.contains("exitFadeMultiplier()"));
-        assertTrue("alpha and scale contraction must both be accepted as native exit signals",
-                sink.contains("alphaFalling")
-                        && sink.contains("scaleFalling")
-                        && sink.contains("structureLeaving"));
+                        && sink.contains("ValueAnimator.ofFloat(1f, 0f)")
+                        && sink.contains("desiredAlpha *= exitFadeMultiplier"));
+        assertTrue("panel exits must use the already-resolved semantic terminal authorities",
+                hook.contains("resolveTerminalTurbo(chain.getArgs(), contract)")
+                        && hook.contains("live.fadePanelOnVendorExit(turbo)"));
+        assertTrue("All Apps exits must use the stable dismiss authority",
+                hook.contains("live.fadeAllAppsOnExit(turbo)"));
         assertTrue("fade must modulate Prismal composition alpha rather than TextureView alpha",
-                sink.contains("desiredAlpha *= exitFadeMultiplier()")
-                        && sink.contains("presentationPaint.setAlpha"));
-        assertFalse("sidebar AIDL lifecycle must remain unrelated to fade authority",
-                hook.contains("fadeVideoToolboxOnExit")
-                        || hook.contains("cancelVideoToolboxExitFade"));
+                sink.contains("presentationPaint.setAlpha"));
+        assertTrue("fade diagnostics must expose start/cancel without per-frame spam",
+                sink.contains("[DC][SecurityCenterGlassFade]")
+                        && sink.contains("logFade(\"START\")"));
         assertTrue("coordinator sidebar lifecycle callbacks remain no-op",
                 coordinator.contains("void onSidebarShowRequested() {}")
                         && coordinator.contains("void onSidebarHideRequested(boolean animated) {}"));
