@@ -39,8 +39,6 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile IBinder sidebarBinder;
     private static volatile Method showMethod;
     private static volatile Method[] availabilityMethods;
-    private static volatile Method vendorShowEntryMethod;
-    private static volatile boolean vendorShowProbeInstalled;
     private static volatile boolean turboTouchReleaseHookInstalled;
     private static volatile boolean sidebarRootClickReleaseHookInstalled;
     private static volatile boolean windowLayoutPassDownGuardHookInstalled;
@@ -187,7 +185,6 @@ final class SecurityCenterSidebarCommandBridge {
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             appContext = context;
             bindVendorService(context);
-            installVendorShowProbe(source);
             installTurboTouchReleaseHook(source.getClassLoader());
             installSidebarRootClickReleaseHook(source.getClassLoader());
             installWindowLayoutPassDownGuardHook(source.getClassLoader());
@@ -378,35 +375,6 @@ final class SecurityCenterSidebarCommandBridge {
         }
     }
 
-    private static void installVendorShowProbe(Object service) {
-        if (vendorShowProbeInstalled || service == null) return;
-        try {
-            Object manager = resolveDockWindowManager(service);
-            if (manager == null) {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " vendor show probe unavailable: manager unresolved");
-                return;
-            }
-            Method entry = resolveManagerFiveIntShowMethod(manager.getClass());
-            if (entry == null) {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " vendor show probe unavailable: five-int entry ambiguous");
-                return;
-            }
-            vendorShowEntryMethod = entry;
-            HookUtil.hook(entry, chain -> {
-                logVendorShowEntry(chain.getThisObject(), chain.getArgs().toArray(new Object[0]));
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-            vendorShowProbeInstalled = true;
-            SideSlideHoldDiagnostics.log(TAG
-                    + " vendor show probe installed method=" + entry.getName());
-        } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " vendor show probe install failed", error);
-        }
-    }
-
-
     private static void registerVendorAnimationCallback(IBinder service)
             throws ReflectiveOperationException {
         ClassLoader loader = service.getClass().getClassLoader();
@@ -526,74 +494,6 @@ final class SecurityCenterSidebarCommandBridge {
             }
             return super.onTransact(code, data, reply, flags);
         }
-    }
-
-    private static Method resolveManagerFiveIntShowMethod(Class<?> type) {
-        Method match = null;
-        for (Method method : type.getDeclaredMethods()) {
-            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
-            Class<?>[] params = method.getParameterTypes();
-            if (params.length != 5) continue;
-            boolean allInts = true;
-            for (Class<?> param : params) {
-                if (param != int.class) {
-                    allInts = false;
-                    break;
-                }
-            }
-            if (!allInts) continue;
-            if (match != null) return null;
-            method.setAccessible(true);
-            match = method;
-        }
-        return match;
-    }
-
-    private static void logVendorShowEntry(Object manager, Object[] args) {
-        int dockType = -1;
-        boolean wrapperPresent = false;
-        boolean wrapperAttached = false;
-        int lineVisibility = -1;
-        try {
-            Object dockState = resolveDockState(manager);
-            if (dockState != null) {
-                for (Method method : dockState.getClass().getMethods()) {
-                    if (method.getParameterTypes().length != 0
-                            || method.getReturnType() != int.class) continue;
-                    int value = ((Number) method.invoke(dockState)).intValue();
-                    if (value == 0 || value == 1 || value == 3
-                            || value == 4 || value == 5) {
-                        if (value == 4) {
-                            dockType = 4;
-                            break;
-                        }
-                        if (dockType == -1) dockType = value;
-                    }
-                }
-            }
-            Object wrapper = resolveMainSidebarWrapper(manager);
-            wrapperPresent = wrapper != null;
-            View line = wrapper != null ? resolveSidebarLineView(wrapper) : null;
-            if (line != null) {
-                wrapperAttached = line.isAttachedToWindow() || line.getWindowToken() != null;
-                lineVisibility = line.getVisibility();
-            }
-        } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " vendor show entry diagnostics failed", error);
-        }
-
-        SideSlideHoldDiagnostics.log(TAG
-                + " VENDOR_SHOW_ENTRY dockType=" + dockType
-                + " wrapper=" + wrapperPresent
-                + " attached=" + wrapperAttached
-                + " lineVisibility=" + lineVisibility
-                + " geometry=" + formatGeometry(args));
-    }
-
-    private static String formatGeometry(Object[] args) {
-        if (args == null || args.length != 5) return "invalid";
-        return String.valueOf(args[0]) + "," + args[1] + " "
-                + args[2] + "x" + args[3] + " r=" + args[4];
     }
 
     private static Object resolveMainSidebarWrapper(Object manager)
