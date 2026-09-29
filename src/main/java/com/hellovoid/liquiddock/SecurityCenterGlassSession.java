@@ -28,6 +28,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 SecurityCenterGlassSession session, SecurityCenterGlassSinkView sink);
         void onWindowVisibilityRestored(
                 SecurityCenterGlassSession session, SecurityCenterGlassSinkView sink);
+        void onMaterialTransformMutated(
+                SecurityCenterGlassSession session, SecurityCenterGlassSinkView sink);
         void onTerminalFailure(
                 SecurityCenterGlassSession session, long generation, Throwable error);
     }
@@ -159,6 +161,12 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.requestRebind("security-center-window-visible");
         }
         return sourceBackend.isRebindPending();
+    }
+
+    void onMaterialTransformMutated(SecurityCenterGlassSinkView sink) {
+        if (shuttingDown || sink == null || sink.isDisposed()) return;
+        Listener currentListener = listener;
+        if (currentListener != null) currentListener.onMaterialTransformMutated(this, sink);
     }
 
     void onOutputWindowVisibilityRestored(SecurityCenterGlassSinkView sink) {
