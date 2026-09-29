@@ -12,6 +12,11 @@
     <string name="page_workstation">工作台 Dock</string>
     <string name="page_recents">多任务</string>
     <string name="page_liquid">液态玻璃</string>
+    <string name="page_security_center_sidebar">安全中心侧边栏</string>
+    <string name="home_security_center_sidebar_summary">侧滑呼出、第二段触发距离与侧边栏液态玻璃</string>
+    <string name="security_center_sidebar_header_summary">集中管理 Launcher 侧滑呼出与安全中心侧边栏材质；相关设置修改后建议重启桌面与安全中心。</string>
+    <string name="security_center_sidebar_category_gesture">侧滑呼出</string>
+    <string name="security_center_sidebar_category_appearance">外观</string>
     <string name="page_dialog_customization">对话弹窗自定义</string>
     <string name="page_widget_components">小组件组件</string>
     <string name="page_widget_component_detail">小组件组件详情</string>
