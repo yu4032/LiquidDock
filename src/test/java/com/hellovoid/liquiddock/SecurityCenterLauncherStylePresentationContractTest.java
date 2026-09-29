@@ -141,12 +141,16 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 sink.contains("OPTICAL_OUTSET_PX = 3f"));
         assertTrue("Shape and presentation crop must remain separable",
                 geometry.contains("inheritedTransform("));
-        assertTrue("root-space outputs use a stable local material envelope",
-                sink.contains("outputEnvelopeWidth")
-                        && sink.contains("outputEnvelopeHeight")
-                        && sink.contains("Math.max(layoutWidth, visualWidth)"));
+        assertTrue("root-space outputs lock one local material envelope per sink",
+                sink.contains("outputEnvelopeLocked")
+                        && sink.contains("outputEnvelopeWidth = layoutWidth")
+                        && sink.contains("outputEnvelopeHeight = layoutHeight")
+                        && sink.contains("if (!outputEnvelopeLocked)"));
         assertFalse("root-space output must not allocate one full-root TextureView per sink",
                 sink.contains("rootSpaceOutput ? material.getRootView() : material"));
+        assertFalse("Folme visual scale must not grow the EGL output envelope every frame",
+                sink.contains("Math.max(outputEnvelopeWidth, Math.max(layoutWidth, visualWidth))")
+                        || sink.contains("Math.max(outputEnvelopeHeight, Math.max(layoutHeight, visualHeight))"));
         assertTrue("presentation crop comes from the actual TextureView envelope in root space",
                 sink.contains("Bounds outputBounds = mapBounds(this, root)")
                         && sink.contains("outputBounds.left")
@@ -202,6 +206,11 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 sink.contains("consumeExitContractionStart()")
                         && coordinator.contains("sink == dockSink && sink.consumeExitContractionStart()")
                         && coordinator.contains("fadePanelOnVendorExit(turbo)"));
+        assertTrue("one native exit may trigger the fade only once until the next show/authorization",
+                sink.contains("exitContractionLatched")
+                        && sink.contains("!exitContractionLatched")
+                        && sink.contains("exitContractionLatched = true")
+                        && sink.contains("exitContractionLatched = false"));
         assertTrue("All Apps exits must use the stable dismiss authority",
                 hook.contains("live.fadeAllAppsOnExit(turbo)"));
         assertTrue("fade must modulate Prismal composition alpha rather than TextureView alpha",
