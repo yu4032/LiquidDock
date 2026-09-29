@@ -88,11 +88,7 @@ final class SecurityCenterEarlyPrepareHook {
                     && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
-            if (pending.type == ASSISTANT_GLOBAL_DOCK) {
-                if (!SecurityCenterSidebarDrawableGeometry.bindDock(dock)) return false;
-            } else {
-                SecurityCenterSidebarDrawableGeometry.clearRuntime();
-            }
+            SecurityCenterSidebarDrawableGeometry.clearRuntime();
             SecurityCenterGlassRuntimeState.bindAssistant(
                     turbo, dock, abstractDock, boxMaterial, pending.type);
             log("deferred prepare bound type=" + pending.type
