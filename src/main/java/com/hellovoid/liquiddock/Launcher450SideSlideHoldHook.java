@@ -395,13 +395,12 @@ final class Launcher450SideSlideHoldHook {
                     return;
                 }
 
-                // OS4 confirmation is a preview stage: Security Center activates its native
-                // confirmation visual and haptic here. The full launcher-origin transform remains
-                // deferred until ACTION_UP.
+                // Confirmation only arms the gesture and performs native haptic feedback.
+                // Keep the full vendor show deferred until ACTION_UP.
                 state.confirmationVisible = true;
                 sendConfirmation(owner, true, state);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar preflight ready -> native SC preview armed; wait ACTION_UP");
+                        + " Sidebar preflight ready -> native haptic armed; wait ACTION_UP");
             }
         };
         try {
@@ -425,12 +424,12 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
         cancelDwell(owner, state);
-        SideSlideHoldDiagnostics.log(TAG
-                + " ACTION_UP -> commit SC preview into full Sidebar transform");
+        if (state.confirmationVisible) {
+            sendConfirmation(owner, false, state);
+            state.confirmationVisible = false;
+        }
+        SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
         showSidebar(owner, state, generation);
-        // A successful release consumes the confirmation preview into the panel transform.
-        // Do not narrow it first; ACTION_CONFIRM_END is reserved for cancellation.
-        state.confirmationVisible = false;
         if (!state.desktopAtDown) {
             forceVendorCleanupToBack(state);
         }
