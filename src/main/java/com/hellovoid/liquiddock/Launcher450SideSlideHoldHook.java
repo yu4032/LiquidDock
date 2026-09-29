@@ -538,6 +538,7 @@ final class Launcher450SideSlideHoldHook {
                     View arrow = resolveArrowView(owner, state);
                     if (arrow != null) {
                         state.arrow = arrow;
+                        snapshotSidebarSourceGeometry(owner, state, arrow);
                         arrow.postInvalidateOnAnimation();
                     } else {
                         // GestureBackArrowView is a sibling window on this Launcher build.
@@ -618,7 +619,9 @@ final class Launcher450SideSlideHoldHook {
             state.policy.onArmResult(false, generation);
             return;
         }
-        int[] geometry = sourceGeometry(owner, state);
+        int[] geometry = state.hasFrozenSourceGeometry()
+                ? state.frozenSourceGeometry()
+                : sourceGeometry(owner, state);
         Intent intent = new Intent(SidebarCommandContract.ACTION_SHOW)
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
                 .putExtra(SidebarCommandContract.EXTRA_X, geometry[0])
@@ -791,6 +794,23 @@ final class Launcher450SideSlideHoldHook {
         }
     }
 
+    private static void snapshotSidebarSourceGeometry(
+            View owner, GestureState state, View arrow) {
+        if (state == null || owner == null || arrow == null) return;
+        if (Float.isNaN(state.arrowLocalCenterY) || Float.isNaN(state.arrowStartX)) return;
+        int[] geometry = sourceGeometry(owner, state);
+        state.frozenSourceX = geometry[0];
+        state.frozenSourceY = geometry[1];
+        state.frozenSourceWidth = geometry[2];
+        state.frozenSourceHeight = geometry[3];
+        state.frozenSourceRadius = geometry[4];
+        SideSlideHoldDiagnostics.log(TAG
+                + " froze Sidebar source geometry="
+                + geometry[0] + "," + geometry[1]
+                + " " + geometry[2] + "x" + geometry[3]
+                + " r=" + geometry[4]);
+    }
+
     private static int[] sourceGeometry(View owner, GestureState state) {
         DisplayMetrics dm = owner.getResources().getDisplayMetrics();
         int width = Math.max(1, Math.round(OS4_SOURCE_WIDTH_DP * dm.density));
@@ -856,6 +876,9 @@ final class Launcher450SideSlideHoldHook {
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
         state.hoverAnchorLocalY = Float.NaN;
+        if (!state.awaitingVendorHandoff) {
+            state.clearFrozenSourceGeometry();
+        }
         state.scheduledGeneration = Integer.MIN_VALUE;
     }
 
@@ -896,6 +919,37 @@ final class Launcher450SideSlideHoldHook {
         float arrowLocalCenterY = Float.NaN;
         float arrowStartX = Float.NaN;
         float arrowExpectedHeight = Float.NaN;
+        int frozenSourceX = Integer.MIN_VALUE;
+        int frozenSourceY = Integer.MIN_VALUE;
+        int frozenSourceWidth = Integer.MIN_VALUE;
+        int frozenSourceHeight = Integer.MIN_VALUE;
+        int frozenSourceRadius = Integer.MIN_VALUE;
+
+        boolean hasFrozenSourceGeometry() {
+            return frozenSourceX != Integer.MIN_VALUE
+                    && frozenSourceY != Integer.MIN_VALUE
+                    && frozenSourceWidth > 0
+                    && frozenSourceHeight > 0
+                    && frozenSourceRadius >= 0;
+        }
+
+        int[] frozenSourceGeometry() {
+            return new int[]{
+                    frozenSourceX,
+                    frozenSourceY,
+                    frozenSourceWidth,
+                    frozenSourceHeight,
+                    frozenSourceRadius
+            };
+        }
+
+        void clearFrozenSourceGeometry() {
+            frozenSourceX = Integer.MIN_VALUE;
+            frozenSourceY = Integer.MIN_VALUE;
+            frozenSourceWidth = Integer.MIN_VALUE;
+            frozenSourceHeight = Integer.MIN_VALUE;
+            frozenSourceRadius = Integer.MIN_VALUE;
+        }
 
         GestureState(Object owner) {
             this.owner = owner;
