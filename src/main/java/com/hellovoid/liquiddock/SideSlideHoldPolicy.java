@@ -66,6 +66,10 @@ final class SideSlideHoldPolicy {
         return armed;
     }
 
+    boolean isEligible() {
+        return active && eligible && !releaseCommitted;
+    }
+
     boolean isArmed() {
         return active && eligible && armed && !releaseCommitted;
     }
