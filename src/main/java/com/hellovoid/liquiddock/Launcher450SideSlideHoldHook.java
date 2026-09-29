@@ -22,12 +22,10 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Launcher 4.50 Pad side-slide extension.
+ * Launcher 4.50 Pad app-side side-slide extension.
  *
- * <p>Apps use Launcher's native GestureBackArrowView ReadyState. HOME does not expose a
- * BACK/RECENT completion state on OS3, so HOME alone falls back to the already-existing OS3
- * predictive-back visual saturation distance (180 px) observed at GestureStubView. This fallback
- * is never used in app state and does not replace Launcher's app gesture authority.</p>
+ * <p>The feature only follows Launcher's native GestureBackArrowView ReadyState while an app
+ * owns the back gesture. HOME/Workspace side-slide support is deliberately not implemented.</p>
  */
 final class Launcher450SideSlideHoldHook {
     private static final String TAG = "[DC][SideSlideHold450]";
@@ -37,14 +35,10 @@ final class Launcher450SideSlideHoldHook {
             "com.miui.home.recents.GesturesBackController";
     private static final String READY_STATE =
             "com.miui.home.recents.GestureBackArrowView$ReadyState";
-    private static final String LAUNCHER_APPLICATION = "com.miui.home.launcher.Application";
-    private static final String LAUNCHER_CLASS = "com.miui.home.launcher.Launcher";
-    private static final String LAUNCHER_STATE_CLASS = "com.miui.home.launcher.LauncherState";
 
     // Recovered from GestureStubView's predictive-back progress: abs(dx) / 180f, clamped to 1.
-    // On HOME only, where OS3 never publishes READY_STATE_RECENT, this is used as a visual
-    // saturation boundary rather than as a claim about vendor Back completion semantics.
-    private static final float HOME_VISUAL_SATURATION_PX = 180f;
+    // Used only as a temporary visual-progress fallback until ArrowView publishes its own offset.
+    private static final float BACK_VISUAL_SATURATION_PX = 180f;
     // OS4 split_effect_renderer starts at gesture progress 0.8 and reaches its full split at 1.0.
     // Map OS3's observed 180px visual boundary to that same 0.8 point.
     private static final float OS4_SPLIT_START_PROGRESS = 0.8f;
@@ -72,15 +66,9 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method setReadyFinishMethod;
     private static volatile Method convertOffsetMethod;
     private static volatile Object readyStateBack;
-    private static volatile Method applicationGetLauncherMethod;
-    private static volatile Method launcherIsInStateMethod;
-    private static volatile Method launcherGetWorkspaceMethod;
-    private static volatile Method workspaceFinishCurrentGestureMethod;
     private static volatile Method resetRenderPropertyMethod;
     private static volatile Method shouldRedirectEventMethod;
     private static volatile Method onBackCancelledMethod;
-    private static volatile Class<?> launcherStateClass;
-    private static volatile Object launcherStateNormal;
     private static volatile boolean handoffReceiverRegistered;
     private static volatile boolean installed;
 
@@ -95,11 +83,6 @@ final class Launcher450SideSlideHoldHook {
             Class<?> gesturesBackControllerClass =
                     Class.forName(GESTURES_BACK_CONTROLLER, false, classLoader);
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
-            Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
-            Class<?> launcherClass = Class.forName(LAUNCHER_CLASS, false, classLoader);
-            Class<?> workspaceClass = Class.forName("com.miui.home.launcher.Workspace", false, classLoader);
-            Class<?> stateClass = Class.forName(LAUNCHER_STATE_CLASS, false, classLoader);
-
             Method onTouchEvent = HookUtil.findMethodExact(
                     stubClass, "onTouchEvent", new Class<?>[]{MotionEvent.class});
             Method injectBack = HookUtil.findMethodExact(
@@ -115,14 +98,6 @@ final class Launcher450SideSlideHoldHook {
                     new Class<?>[]{float.class, float.class, float.class});
             Method onArrowActionMove = HookUtil.findMethodExact(
                     arrowClass, "onActionMove", new Class<?>[]{float.class});
-            Method getLauncher = HookUtil.findMethodExact(
-                    applicationClass, "getLauncher", new Class<?>[0]);
-            Method isInState = HookUtil.findMethodExact(
-                    launcherClass, "isInState", new Class<?>[]{stateClass});
-            Method getWorkspace = HookUtil.findMethodExact(
-                    launcherClass, "getWorkspace", new Class<?>[0]);
-            Method finishCurrentGesture = HookUtil.findMethodExact(
-                    workspaceClass, "finishCurrentGesture", new Class<?>[0]);
             Method resetRenderProperty = HookUtil.findMethodExact(
                     stubClass, "resetRenderProperty", new Class<?>[]{String.class});
             Method shouldRedirectEvent = HookUtil.findMethodExact(
@@ -139,15 +114,9 @@ final class Launcher450SideSlideHoldHook {
             setReadyFinishMethod = setReadyFinish;
             convertOffsetMethod = convertOffset;
             readyStateBack = back;
-            applicationGetLauncherMethod = getLauncher;
-            launcherIsInStateMethod = isInState;
-            launcherGetWorkspaceMethod = getWorkspace;
-            workspaceFinishCurrentGestureMethod = finishCurrentGesture;
             resetRenderPropertyMethod = resetRenderProperty;
             shouldRedirectEventMethod = shouldRedirectEvent;
             onBackCancelledMethod = onBackCancelled;
-            launcherStateClass = stateClass;
-            launcherStateNormal = null;
 
             HookUtil.hook(onTouchEvent, chain -> {
                 Object owner = chain.getThisObject();
@@ -184,8 +153,7 @@ final class Launcher450SideSlideHoldHook {
                 }
 
                 try {
-                    // Always preserve GestureStubView's own state machine. HOME paging is cancelled
-                    // explicitly when the edge gesture reaches the reserved side-slide region.
+                    // Always preserve GestureStubView's own state machine.
                     return chain.proceed(args);
                 } finally {
                     if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
@@ -214,7 +182,7 @@ final class Launcher450SideSlideHoldHook {
                         // active, keep BACK as the host state so that promotion cannot hide/reset
                         // the ArrowView underneath our mini Sidebar.
                         args[0] = readyStateBack;
-                    } else if (!state.desktopAtDown) {
+                    } else {
                         boolean enteredRecent = state.policy.onReadyState(readyName);
                         if (enteredRecent) {
                             SideSlideHoldDiagnostics.log(TAG + " ReadyState entered RECENT");
@@ -273,8 +241,7 @@ final class Launcher450SideSlideHoldHook {
                         // finger crosses back over the mini Sidebar itself.
                         maybeEnterOs4Split(
                                 state, arrow instanceof View ? (View) arrow : null);
-                        if (!state.desktopAtDown
-                                && !state.confirmationVisible
+                        if (!state.confirmationVisible
                                 && state.policy.isEligible()
                                 && state.owner instanceof View
                                 && state.dwellRunnable == null
@@ -349,7 +316,7 @@ final class Launcher450SideSlideHoldHook {
 
             installed = true;
             SideSlideHoldDiagnostics.log(TAG
-                    + " installed; appAuthority=ReadyState homeAuthority=LauncherState.NORMAL");
+                    + " installed; appAuthority=ReadyState; HOME unsupported");
             return true;
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " unavailable on target Launcher", error);
@@ -464,14 +431,12 @@ final class Launcher450SideSlideHoldHook {
             ensureVendorHandoffReceiver(view.getContext());
             state.gestureActive = true;
             state.sideStub = isPadSideStub(view);
-            state.desktopAtDown = state.sideStub && isLauncherDesktop();
             state.downX = event.getRawX();
             state.downRawY = event.getRawY();
             state.leftEdge = state.downX < view.getResources().getDisplayMetrics().widthPixels / 2f;
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
             state.hoverAnchorLocalY = Float.NaN;
-            state.workspaceCancelled = false;
             state.suppressStockAfterCommit = false;
             state.awaitingVendorHandoff = false;
             state.committedGeneration = Integer.MIN_VALUE;
@@ -501,7 +466,6 @@ final class Launcher450SideSlideHoldHook {
             state.activeGeneration = state.policy.generation();
             SideSlideHoldDiagnostics.log(TAG + " DOWN generation=" + state.activeGeneration
                     + " sideStub=" + state.sideStub
-                    + " desktop=" + state.desktopAtDown
                     + " edge=" + (state.leftEdge ? "left" : "right")
                     + " secondStage=" + state.secondStageDistancePx + "px");
             return;
@@ -514,7 +478,7 @@ final class Launcher450SideSlideHoldHook {
                 // converted progress. OS3's public predictive-back stream already defines
                 // abs(dx)/180 as its normalized 0..1 visual progress.
                 state.os4GestureProgress =
-                        clamp01(rawDx / HOME_VISUAL_SATURATION_PX);
+                        clamp01(rawDx / BACK_VISUAL_SATURATION_PX);
                 maybeEnterOs4Split(state, state.arrow instanceof View ? (View) state.arrow : null);
             }
 
@@ -527,115 +491,7 @@ final class Launcher450SideSlideHoldHook {
             }
         }
 
-        if (!state.sideStub || !state.desktopAtDown || action != MotionEvent.ACTION_MOVE) return;
-
-        float dx = event.getRawX() - state.downX;
-        boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
-        boolean visualSaturated = inward && Math.abs(dx) >= HOME_VISUAL_SATURATION_PX;
-        boolean secondStageReached =
-                inward && Math.abs(dx) >= state.secondStageDistancePx;
-        boolean entered = state.policy.onDesktopProgress(secondStageReached);
-        if (visualSaturated && !state.workspaceCancelled) {
-            cancelWorkspacePaging(view, state);
-        }
-        if (!secondStageReached) {
-            state.hoverAnchorX = Float.NaN;
-            state.hoverAnchorY = Float.NaN;
-            state.hoverAnchorLocalY = Float.NaN;
-            cancelDwell(view, state);
-            return;
-        }
-
-        // OS4 hold authority is continuous once the gesture enters the SideSlideHold region.
-        // Keep following the finger for handoff geometry, but do not restart the 300 ms timer for
-        // ordinary motion inside that region. The old 12dp positional-reset rule made activation
-        // depend on an unnaturally motionless finger and caused the observed probabilistic misses.
-        state.hoverAnchorX = event.getRawX();
-        state.hoverAnchorY = event.getRawY();
-        state.hoverAnchorLocalY = event.getY();
-        if (!state.confirmationConsumedThisGesture
-                && (entered || state.dwellRunnable == null)) {
-            cancelDwell(view, state);
-            int generation = state.policy.generation();
-            state.scheduledGeneration = generation;
-            Runnable runnable = () -> {
-                if (state.scheduledGeneration != generation) return;
-                if (!state.policy.requestArm(generation)) return;
-                SideSlideHoldDiagnostics.log(TAG + " HOME hold confirmed for "
-                        + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms"
-                        + " at x=" + state.hoverAnchorX + " y=" + state.hoverAnchorY);
-                prepareThenShowSidebar(view, state, generation);
-            };
-            state.dwellRunnable = runnable;
-            view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
-            SideSlideHoldDiagnostics.log(TAG
-                    + " HOME second-stage armed dx=" + dx
-                    + " threshold=" + state.secondStageDistancePx + "px");
-        }
-    }
-
-    private static void cancelWorkspacePaging(View source, GestureState state) {
-        Method getLauncher = applicationGetLauncherMethod;
-        Method getWorkspace = launcherGetWorkspaceMethod;
-        Method finishCurrentGesture = workspaceFinishCurrentGestureMethod;
-        if (getLauncher == null || getWorkspace == null || finishCurrentGesture == null) return;
-        try {
-            Object launcher = getLauncher.invoke(null);
-            if (launcher == null) return;
-            Object workspace = getWorkspace.invoke(launcher);
-            if (!(workspace instanceof View)) return;
-
-            MotionEvent cancel = MotionEvent.obtain(
-                    System.currentTimeMillis(),
-                    System.currentTimeMillis(),
-                    MotionEvent.ACTION_CANCEL,
-                    source.getX(),
-                    source.getY(),
-                    0);
-            try {
-                ((View) workspace).dispatchTouchEvent(cancel);
-            } finally {
-                cancel.recycle();
-            }
-            finishCurrentGesture.invoke(workspace);
-            state.workspaceCancelled = true;
-            SideSlideHoldDiagnostics.log(TAG
-                    + " HOME Workspace paging cancelled for edge side-slide");
-        } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG
-                    + " HOME Workspace cancel failed; preserve stock paging", error);
-        }
-    }
-
-    private static boolean isLauncherDesktop() {
-        Method getLauncher = applicationGetLauncherMethod;
-        Method isInState = launcherIsInStateMethod;
-        Class<?> stateClass = launcherStateClass;
-        if (getLauncher == null || isInState == null || stateClass == null) return false;
-        try {
-            Object launcher = getLauncher.invoke(null);
-            if (launcher == null) return false;
-
-            Object normal = launcherStateNormal;
-            if (normal == null) {
-                // Do not touch LauncherState static fields during module/class-loader bootstrap.
-                // Resolve NORMAL lazily only after Launcher already exists and Application.onCreate
-                // has completed enough for vendor state construction to have a valid Context.
-                normal = stateClass.getField("NORMAL").get(null);
-                if (normal == null) return false;
-                launcherStateNormal = normal;
-                SideSlideHoldDiagnostics.log(TAG + " lazily resolved LauncherState.NORMAL");
-            }
-
-            boolean desktop = Boolean.TRUE.equals(isInState.invoke(launcher, normal));
-            SideSlideHoldDiagnostics.log(TAG
-                    + " HOME authority LauncherState.NORMAL=" + desktop);
-            return desktop;
-        } catch (Throwable error) {
-            // Never let optional side-slide state resolution poison Launcher startup/runtime.
-            SideSlideHoldDiagnostics.log(TAG + " HOME authority unavailable; fail open: " + error);
-            return false;
-        }
+        // HOME never arms because it does not publish READY_STATE_RECENT. No desktop fallback.
     }
 
     private static boolean isPadSideStub(View view) {
@@ -670,7 +526,6 @@ final class Launcher450SideSlideHoldHook {
         }
         Intent prepare = new Intent(SidebarCommandContract.ACTION_PREPARE)
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
-                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
                 .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
                 .putExtra(SidebarCommandContract.EXTRA_GENERATION, generation);
         BroadcastReceiver result = new BroadcastReceiver() {
@@ -792,9 +647,7 @@ final class Launcher450SideSlideHoldHook {
                 owner, state, arrow, generation, "release-handoff");
         SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
         showSidebar(owner, state, generation);
-        if (!state.desktopAtDown) {
-            forceVendorCleanupToBack(state);
-        }
+        forceVendorCleanupToBack(state);
     }
 
     private static void cancelConfirmation(View owner, GestureState state) {
@@ -840,15 +693,13 @@ final class Launcher450SideSlideHoldHook {
                 .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
                 .putExtra(SidebarCommandContract.EXTRA_GENERATION, generation);
 
-        final boolean requestWasDesktop = state.desktopAtDown;
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
                 final boolean accepted =
                         getResultCode() == SidebarCommandContract.RESULT_ACCEPTED;
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar release show result accepted=" + accepted
-                        + " desktop=" + requestWasDesktop);
+                        + " Sidebar release show result accepted=" + accepted);
                 if (accepted) {
                     // Security Center has synchronously consumed the frozen mini-Sidebar geometry
                     // and scheduled its native transform. Stop drawing the Launcher copy on the
@@ -1143,7 +994,6 @@ final class Launcher450SideSlideHoldHook {
         state.policy.onFinish();
         state.gestureActive = false;
         state.sideStub = false;
-        state.desktopAtDown = false;
         if (!state.awaitingVendorHandoff) {
             state.arrow = null;
             state.confirmationVisible = false;
@@ -1151,7 +1001,6 @@ final class Launcher450SideSlideHoldHook {
             state.confirmationStartedAtUptimeMs = 0L;
             state.confirmationDrawLogged = false;
         }
-        state.workspaceCancelled = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
         state.hoverAnchorLocalY = Float.NaN;
@@ -1186,7 +1035,7 @@ final class Launcher450SideSlideHoldHook {
                         error);
             }
         }
-        return clamp01(offset / HOME_VISUAL_SATURATION_PX);
+        return clamp01(offset / BACK_VISUAL_SATURATION_PX);
     }
 
     private static boolean secondStageDistanceReached(GestureState state) {
@@ -1288,9 +1137,6 @@ final class Launcher450SideSlideHoldHook {
 
         float dismissDistance = 4f * density;
         if (edgeDistance <= dismissDistance) {
-            if (state.desktopAtDown) {
-                state.policy.onDesktopProgress(false);
-            }
             cancelDwell(owner, state);
             cancelConfirmation(owner, state);
             SideSlideHoldDiagnostics.log(TAG + " confirmation retracted through screen edge");
@@ -1333,12 +1179,10 @@ final class Launcher450SideSlideHoldHook {
                 SideSlideHoldFeatureConfig.DEFAULT_SECOND_STAGE_DISTANCE_PX;
         boolean gestureActive;
         boolean sideStub;
-        boolean desktopAtDown;
         boolean leftEdge;
         boolean confirmationVisible;
         boolean suppressStockAfterCommit;
         boolean awaitingVendorHandoff;
-        boolean workspaceCancelled;
         boolean confirmationDrawLogged;
         boolean arrowFallbackBindingLogged;
         boolean splitActive;
