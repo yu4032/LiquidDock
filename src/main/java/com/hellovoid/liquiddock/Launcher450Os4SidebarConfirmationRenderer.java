@@ -23,6 +23,16 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float SIDEBAR_HEIGHT_DP = 53f;
     private static final float SIDEBAR_RADIUS_DP = 8f;
     private static final float FALLBACK_EDGE_INSET_DP = 12f;
+    // on_vsync's standalone mini-Sidebar layer starts with its center 12dp outside the edge.
+    private static final float MINI_SIDEBAR_OUTSIDE_CENTER_DP = 12f;
+    // calculate_positions uses the native 76dp profile width and clamps gesture progress to 0.8
+    // for the projected Sidebar location.
+    private static final float PROJECTED_POSITION_PROGRESS = 0.8f;
+    // CachedIconDp is rendered by on_vsync as three white rounded squares. The native layout is
+    // three equal 3dp dots with 3dp gaps and a 1.5dp radius.
+    private static final float SIDEBAR_ICON_DOT_DP = 3f;
+    private static final float SIDEBAR_ICON_GAP_DP = 3f;
+    private static final float SIDEBAR_ICON_RADIUS_DP = 1.5f;
 
     // Exact Folme configs recovered from run_abstract_sidebar_anim_target.
     private static final float WIDTH_DAMPING = 0.80f;
@@ -99,6 +109,13 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(1f);
                 paint.setColor(BORDER_COLOR);
+                return paint;
+            });
+    private static final ThreadLocal<Paint> ICON_PAINT =
+            ThreadLocal.withInitial(() -> {
+                Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(0xFFFFFFFF);
                 return paint;
             });
     private static final ThreadLocal<Path> PATH =
@@ -217,14 +234,29 @@ final class Launcher450Os4SidebarConfirmationRenderer {
 
         float halfWidth = width * 0.5f;
         float halfHeight = height * 0.5f;
-        float centerX = leftEdge
+
+        // Keep teardrop coordinates and mini-Sidebar coordinates separate. OS4 on_vsync starts
+        // the mini body with its center 12dp outside the display, then interpolates that center to
+        // calculate_positions(width, ...)'s projected location using split_progress.
+        float projectedDistance =
+                PROFILE_WIDTH * density * PROJECTED_POSITION_PROGRESS;
+        float projectedCenterX = leftEdge
+                ? baselineX + projectedDistance
+                : baselineX - projectedDistance;
+        float miniStartCenterX = leftEdge
+                ? -MINI_SIDEBAR_OUTSIDE_CENTER_DP * density
+                : viewWidth + MINI_SIDEBAR_OUTSIDE_CENTER_DP * density;
+        float miniCenterX = lerp(miniStartCenterX, projectedCenterX, splitProgress);
+
+        // Teardrop remains rooted at the original gesture baseline.
+        float teardropCenterX = leftEdge
                 ? baselineX + halfWidth
                 : baselineX - halfWidth;
 
         // The water-drop path shares the same baseline as OS3's stock Back background.
         if (teardropFactor > 0.001f && bridgeFactor > 0.001f) {
-            float profileLeft = leftEdge ? baselineX : centerX - halfWidth;
-            float profileRight = leftEdge ? centerX + halfWidth : baselineX;
+            float profileLeft = leftEdge ? baselineX : teardropCenterX - halfWidth;
+            float profileRight = leftEdge ? teardropCenterX + halfWidth : baselineX;
             if (profileRight - profileLeft > 0.001f) {
                 Path path = PATH.get();
                 buildNativeTeardropPath(
@@ -249,7 +281,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     canvas,
                     leftEdge,
                     baselineX,
-                    centerX,
+                    miniCenterX,
                     centerY,
                     width,
                     height,
@@ -270,22 +302,32 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             int oldBorderAlpha = border.getAlpha();
             fill.setAlpha(Math.round(oldFillAlpha * reveal));
             border.setAlpha(Math.round(oldBorderAlpha * reveal));
+
+            // Exact standalone mini-Sidebar geometry from GestureBackArrowView::on_vsync:
+            // 24dp x 53dp, radius 8dp. It is independent from the split renderer's intermediate
+            // sidebar_width/sidebar_height values.
+            float miniHalfWidth = SIDEBAR_WIDTH_DP * density * 0.5f;
+            float miniHalfHeight = SIDEBAR_HEIGHT_DP * density * 0.5f;
+            float miniRadius = SIDEBAR_RADIUS_DP * density;
             canvas.drawRoundRect(
-                    centerX - halfWidth,
-                    centerY - halfHeight,
-                    centerX + halfWidth,
-                    centerY + halfHeight,
-                    radius,
-                    radius,
+                    miniCenterX - miniHalfWidth,
+                    centerY - miniHalfHeight,
+                    miniCenterX + miniHalfWidth,
+                    centerY + miniHalfHeight,
+                    miniRadius,
+                    miniRadius,
                     fill);
             canvas.drawRoundRect(
-                    centerX - halfWidth,
-                    centerY - halfHeight,
-                    centerX + halfWidth,
-                    centerY + halfHeight,
-                    radius,
-                    radius,
+                    miniCenterX - miniHalfWidth,
+                    centerY - miniHalfHeight,
+                    miniCenterX + miniHalfWidth,
+                    centerY + miniHalfHeight,
+                    miniRadius,
+                    miniRadius,
                     border);
+
+            drawNativeMiniSidebarIcon(canvas, miniCenterX, centerY, reveal, density);
+
             fill.setAlpha(oldFillAlpha);
             border.setAlpha(oldBorderAlpha);
         }
@@ -296,6 +338,36 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 || teardropFactor > 0.001f) {
             arrowView.postInvalidateOnAnimation();
         }
+    }
+
+    private static void drawNativeMiniSidebarIcon(
+            Canvas canvas,
+            float centerX,
+            float centerY,
+            float reveal,
+            float density) {
+        // on_vsync renders the cached Sidebar icon with three white rounded rects centered
+        // vertically inside the 24x53 body.
+        float dot = SIDEBAR_ICON_DOT_DP * density;
+        float radius = SIDEBAR_ICON_RADIUS_DP * density;
+        float step = (SIDEBAR_ICON_DOT_DP + SIDEBAR_ICON_GAP_DP) * density;
+        float halfDot = dot * 0.5f;
+
+        Paint icon = ICON_PAINT.get();
+        int oldAlpha = icon.getAlpha();
+        icon.setAlpha(Math.round(255f * clamp01(reveal)));
+        for (int i = -1; i <= 1; i++) {
+            float cy = centerY + i * step;
+            canvas.drawRoundRect(
+                    centerX - halfDot,
+                    cy - halfDot,
+                    centerX + halfDot,
+                    cy + halfDot,
+                    radius,
+                    radius,
+                    icon);
+        }
+        icon.setAlpha(oldAlpha);
     }
 
     private static void drawNativeSplitBridge(
