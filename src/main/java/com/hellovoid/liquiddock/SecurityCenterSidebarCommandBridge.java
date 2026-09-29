@@ -44,6 +44,8 @@ final class SecurityCenterSidebarCommandBridge {
     private static final int MIUI_FLAG_CLICK_PASS_DOWN = 0x20;
     private static final String TURBO_LAYOUT_CLASS =
             "com.miui.gamebooster.windowmanager.newbox.TurboLayout";
+    private static final String REGION_SAMPLING_IMAGE_VIEW_CLASS =
+            "com.miui.dock.sidebar.RegionSamplingImageView";
     private static volatile Object vendorAnimationCallback;
     private static volatile Method vendorAnimationCallbackRegisterMethod;
     private static volatile int pendingLauncherGeneration = Integer.MIN_VALUE;
@@ -228,7 +230,7 @@ final class SecurityCenterSidebarCommandBridge {
             Class<?> turboLayoutClass = Class.forName(
                     TURBO_LAYOUT_CLASS, false, classLoader);
             Method setVisibility = HookUtil.findMethodExact(
-                    View.class, "setVisibility", int.class);
+                    View.class, "setVisibility", new Class<?>[]{int.class});
             HookUtil.hook(setVisibility, chain -> {
                 Object owner = chain.getThisObject();
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -524,10 +526,7 @@ final class SecurityCenterSidebarCommandBridge {
             if (Modifier.isStatic(field.getModifiers())) continue;
             field.setAccessible(true);
             Object candidate = field.get(manager);
-            if (candidate == null
-                    || !candidate.getClass().getName().startsWith("com.miui.dock.sidebar.")) {
-                continue;
-            }
+            if (candidate == null || !isSidebarWrapperType(candidate.getClass())) continue;
             View line = resolveSidebarLineView(candidate);
             if (line == null) continue;
             if (unique != null) return null;
@@ -623,10 +622,31 @@ final class SecurityCenterSidebarCommandBridge {
     private static boolean hasSidebarWrapperReturn(Class<?> type) {
         for (Method method : type.getMethods()) {
             if (method.getParameterTypes().length != 0) continue;
-            String name = method.getReturnType().getName();
-            if (name.startsWith("com.miui.dock.sidebar.")) return true;
+            if (isSidebarWrapperType(method.getReturnType())) return true;
         }
         return false;
+    }
+
+    /**
+     * Resolves the Sidebar wrapper by stable capabilities only. The wrapper class itself is
+     * R8-obfuscated and is deliberately never named or package-matched.
+     */
+    private static boolean isSidebarWrapperType(Class<?> type) {
+        if (type == null || type == void.class || type.isPrimitive() || type == Object.class) {
+            return false;
+        }
+        boolean hasLine = false;
+        boolean hasTurboLayout = false;
+        for (Method method : type.getMethods()) {
+            if (method.isSynthetic() || method.getParameterTypes().length != 0) continue;
+            String returnType = method.getReturnType().getName();
+            if (REGION_SAMPLING_IMAGE_VIEW_CLASS.equals(returnType)) {
+                hasLine = true;
+            } else if (TURBO_LAYOUT_CLASS.equals(returnType)) {
+                hasTurboLayout = true;
+            }
+        }
+        return hasLine && hasTurboLayout;
     }
 
     private static Object resolveAttachedSidebarWrapper(Object manager)
@@ -635,10 +655,7 @@ final class SecurityCenterSidebarCommandBridge {
             if (Modifier.isStatic(field.getModifiers())) continue;
             field.setAccessible(true);
             Object candidate = field.get(manager);
-            if (candidate == null
-                    || !candidate.getClass().getName().startsWith("com.miui.dock.sidebar.")) {
-                continue;
-            }
+            if (candidate == null || !isSidebarWrapperType(candidate.getClass())) continue;
             View line = resolveSidebarLineView(candidate);
             if (line != null && (line.isAttachedToWindow() || line.getWindowToken() != null)) {
                 return candidate;
@@ -652,8 +669,7 @@ final class SecurityCenterSidebarCommandBridge {
         for (Method method : wrapper.getClass().getMethods()) {
             if (method.getParameterTypes().length != 0) continue;
             if (!View.class.isAssignableFrom(method.getReturnType())) continue;
-            if (!"com.miui.dock.sidebar.RegionSamplingImageView"
-                    .equals(method.getReturnType().getName())) {
+            if (!REGION_SAMPLING_IMAGE_VIEW_CLASS.equals(method.getReturnType().getName())) {
                 continue;
             }
             Object value = method.invoke(wrapper);
@@ -686,9 +702,9 @@ final class SecurityCenterSidebarCommandBridge {
                 return;
             }
 
-            // Prepare the vendor wrapper while the desktop still has dockType=0. H1-like
-            // preparation keeps its line inactive in that state. Switching to type 4 first would
-            // make the vendor prepare path call M2() and expose the unrelated thin Sidebar line.
+            // Prepare the vendor wrapper while the desktop still has dockType=0. The native
+            // prepare capability keeps its line inactive in that state. Switching to type 4
+            // first exposes the unrelated thin Sidebar line on the target build.
             Object wrapper = resolveMainSidebarWrapper(manager);
             if (wrapper == null) {
                 wrapper = prepareMainSidebarWrapper(manager);
@@ -709,9 +725,7 @@ final class SecurityCenterSidebarCommandBridge {
         boolean foundEntry = false;
         for (Method method : manager.getClass().getMethods()) {
             if (method.isSynthetic() || method.getParameterTypes().length != 0) continue;
-            if (!method.getReturnType().getName().startsWith("com.miui.dock.sidebar.")) {
-                continue;
-            }
+            if (!isSidebarWrapperType(method.getReturnType())) continue;
             foundEntry = true;
             Object wrapper = method.invoke(manager);
             if (wrapper != null && resolveSidebarLineView(wrapper) != null) {
