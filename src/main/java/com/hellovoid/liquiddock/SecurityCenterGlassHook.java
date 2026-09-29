@@ -166,12 +166,8 @@ final class SecurityCenterGlassHook {
                     chain.proceed(chain.getArgs().toArray(new Object[0])));
 
             for (Method terminalMethod : terminalCleanup.methods()) {
-                HookUtil.hook(terminalMethod, chain -> {
-                    SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                    View turbo = resolveTerminalTurbo(chain.getArgs(), contract);
-                    if (live != null && turbo != null) live.fadePanelOnVendorExit(turbo);
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                });
+                HookUtil.hook(terminalMethod, chain ->
+                        chain.proceed(chain.getArgs().toArray(new Object[0])));
             }
 
             ACTIVATION.onCallbacksRegistered();
@@ -218,18 +214,6 @@ final class SecurityCenterGlassHook {
         }
         if (!targetPresent) live.fadeAllAppsOnExit(turbo);
         live.refreshTransitionFrame(turbo);
-    }
-
-    private static View resolveTerminalTurbo(
-            java.util.List<Object> args,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        if (args == null || contract == null) return null;
-        for (Object arg : args) {
-            if (arg instanceof View && contract.turboClass().isInstance(arg)) {
-                return (View) arg;
-            }
-        }
-        return null;
     }
 
     private static SecurityCenterGlassCoordinator currentCoordinator(
