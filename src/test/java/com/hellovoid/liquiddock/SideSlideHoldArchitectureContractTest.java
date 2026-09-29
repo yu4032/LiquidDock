@@ -48,9 +48,10 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> haptic then start native SC transform"));
-        assertTrue(hook.contains("native confirmation haptic complete -> start SC transform"));
-        assertTrue(hook.contains("ACTION_UP -> finalize Sidebar gesture"));
+        assertTrue(hook.contains("Sidebar preflight ready -> native SC preview armed; wait ACTION_UP"));
+        assertTrue(hook.contains("ACTION_UP -> commit SC preview into full Sidebar transform"));
+        assertTrue(bridge.contains("native SC preview activate+haptic+widen"));
+        assertTrue(bridge.contains("native SC preview cancel+narrow"));
         assertTrue(hook.contains("Sidebar source geometry side="));
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
         assertTrue(hook.contains("centerY = !Float.isNaN(state.hoverAnchorY)"));
@@ -68,8 +69,6 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("HOME Workspace paging cancelled for edge side-slide"));
         assertTrue(hook.contains("finishCurrentGesture"));
         assertTrue(contract.contains("ACTION_CONFIRM_START"));
-        assertTrue(hook.contains("sendOrderedBroadcast"));
-        assertTrue(hook.contains("sidebarShowIssued"));
         assertTrue(contract.contains("ACTION_CONFIRM_END"));
         assertTrue(contract.contains("EXTRA_DESKTOP"));
         assertTrue(bridge.contains("vendorShowEndpointReady"));
@@ -80,8 +79,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("resolveDockState"));
         assertTrue(bridge.contains("DockWindowType{"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
-        assertFalse(bridge.contains("activate+haptic+widen"));
-        assertFalse(bridge.contains("cleanup+narrow"));
+        assertTrue(bridge.contains("activate+haptic+widen"));
+        assertTrue(bridge.contains("cancel+narrow"));
         assertTrue(bridge.contains("RegionSamplingImageView"));
         assertTrue(bridge.contains("VENDOR_SHOW_ENTRY"));
         assertTrue(bridge.contains("resolveManagerFiveIntShowMethod"));
