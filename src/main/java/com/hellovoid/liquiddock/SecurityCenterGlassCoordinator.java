@@ -360,6 +360,21 @@ final class SecurityCenterGlassCoordinator
     }
 
     @Override
+    public void onMaterialTransformMutated(
+            SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
+        View root = rootRef.get();
+        if (!policy.acceptsOutputReady(
+                root, callbackSession, sink, dockSink, previewSink, boxSink, appsSink,
+                SecurityCenterGlassRuntimeState.isEnabled())) return;
+        if (callbackSession != session || callbackSession.isShutdown()
+                || root == null || !root.isAttachedToWindow()) return;
+        // This callback runs in the same View setter call stack that Folme uses. Re-sample the
+        // carrier geometry immediately instead of waiting for root pre-draw, which otherwise
+        // makes root-space glass visibly trail the native Sidebar.
+        refreshCurrentFrame(true);
+    }
+
+    @Override
     public void onWindowVisibilityRestored(
             SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
         View root = rootRef.get();
