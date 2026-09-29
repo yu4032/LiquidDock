@@ -88,16 +88,16 @@ final class SecurityCenterEarlyPrepareHook {
                     && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
-            // DockLayout and its native Folme transform are the sole animation authority.
-            // Do not bind a second drawable-rect morph model here: that creates a separate
-            // glass trajectory which can diverge from the real toolbox/window animation.
-            SecurityCenterGlassRuntimeState.bindAssistant(
-                    turbo, dock, abstractDock, boxMaterial, pending.type);
-            log("deferred prepare bound type=" + pending.type
-                    + " turbo@" + identity(turbo)
-                    + " dock@" + identity(dock)
-                    + " abstract@" + identity(abstractDock)
-                    + " box@" + identity(boxMaterial), null);
+            if (pending.shouldRebind(dock, abstractDock, boxMaterial)) {
+                SecurityCenterGlassRuntimeState.bindAssistant(
+                        turbo, dock, abstractDock, boxMaterial, pending.type);
+                pending.markBound(dock, abstractDock, boxMaterial);
+                log("deferred prepare bound type=" + pending.type
+                        + " turbo@" + identity(turbo)
+                        + " dock@" + identity(dock)
+                        + " abstract@" + identity(abstractDock)
+                        + " box@" + identity(boxMaterial), null);
+            }
             return true;
         } catch (Throwable error) {
             log("deferred prepare not ready", error);
@@ -185,6 +185,9 @@ final class SecurityCenterEarlyPrepareHook {
         final SecurityCenterSemanticContractResolver.ResolvedContract contract;
         final int videoMainContentResId;
         private ViewTreeObserver observedTree;
+        private WeakReference<View> boundDockRef = new WeakReference<>(null);
+        private WeakReference<View> boundAbstractDockRef = new WeakReference<>(null);
+        private WeakReference<View> boundBoxRef = new WeakReference<>(null);
         private boolean disposed;
 
         PendingPrepare(
@@ -205,7 +208,7 @@ final class SecurityCenterEarlyPrepareHook {
                 return;
             }
             turbo.addOnAttachStateChangeListener(this);
-            if (tryBindWhenReady(this)) {
+            if (tryBindWhenReady(this) && !keepsWatchingCarrierIdentity()) {
                 dispose();
                 return;
             }
@@ -220,7 +223,7 @@ final class SecurityCenterEarlyPrepareHook {
                 dispose();
                 return true;
             }
-            if (tryBindWhenReady(this)) {
+            if (tryBindWhenReady(this) && !keepsWatchingCarrierIdentity()) {
                 dispose();
             } else {
                 armPreDrawIfAttached(turbo);
@@ -231,7 +234,7 @@ final class SecurityCenterEarlyPrepareHook {
         @Override
         public void onViewAttachedToWindow(View view) {
             if (disposed || view != turboRef.get()) return;
-            if (tryBindWhenReady(this)) {
+            if (tryBindWhenReady(this) && !keepsWatchingCarrierIdentity()) {
                 dispose();
                 return;
             }
@@ -241,6 +244,24 @@ final class SecurityCenterEarlyPrepareHook {
         @Override
         public void onViewDetachedFromWindow(View view) {
             if (view == turboRef.get()) dispose();
+        }
+
+        private boolean keepsWatchingCarrierIdentity() {
+            // Video Toolbox is rebuilt through its za.p adapter while TurboLayout/root may be
+            // reused. A one-shot bind leaves LiquidDock attached to a stale main_content View.
+            return type == ASSISTANT_VIDEO;
+        }
+
+        boolean shouldRebind(View dock, View abstractDock, View box) {
+            return boundDockRef.get() != dock
+                    || boundAbstractDockRef.get() != abstractDock
+                    || boundBoxRef.get() != box;
+        }
+
+        void markBound(View dock, View abstractDock, View box) {
+            boundDockRef = new WeakReference<>(dock);
+            boundAbstractDockRef = new WeakReference<>(abstractDock);
+            boundBoxRef = new WeakReference<>(box);
         }
 
         private void armPreDrawIfAttached(View turbo) {
