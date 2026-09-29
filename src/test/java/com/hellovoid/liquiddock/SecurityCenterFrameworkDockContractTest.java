@@ -71,7 +71,7 @@ public class SecurityCenterFrameworkDockContractTest {
     }
 
     @Test
-    public void frameworkOwnershipCoversDockToolboxAndAllAppsButNeverTheTurboRoot() throws Exception {
+    public void frameworkOwnershipCoversBothDockBackgroundsToolboxAndAllAppsButNeverTheTurboRoot() throws Exception {
         String policy = SourceContractText.read(
                 MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
@@ -84,12 +84,15 @@ public class SecurityCenterFrameworkDockContractTest {
                 bridge.contains("clearVendorTarget(turboView)"));
         assertTrue("Dock vendor material must be cleared at the custom handoff",
                 bridge.contains("clearVendorTarget(dockLayout)"));
+        assertTrue("the native abstract Dock carrier must be cleared at the custom handoff",
+                bridge.contains("clearVendorTarget(abstractDockLayout)"));
         assertTrue("the upper toolbox carrier must be cleared at the custom handoff",
                 bridge.contains("clearVendorTarget(boxMaterialView)"));
         assertTrue("All Apps vendor material must be cleared at the custom handoff",
                 bridge.contains("clearVendorTarget(allAppsLayout)"));
-        assertTrue("the claim must register exactly the three cleared carriers",
-                bridge.contains("dockLayout, boxMaterialView, allAppsLayout"));
+        assertTrue("the claim must include the native abstract Dock carrier",
+                bridge.contains("abstractDockLayout")
+                        && bridge.contains("SecurityCenterVendorMaterialState.claimOwner("));
     }
 
     @Test
