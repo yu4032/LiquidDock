@@ -696,8 +696,9 @@ final class Launcher450SideSlideHoldHook {
             state.arrow = arrow;
             // Capture the exact visible spring position before release starts. Renderer and
             // Security Center now share this same source center until handoff completes.
-            state.releaseMiniCenterX =
-                    Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
+            state.releaseMiniCenterX = !Float.isNaN(state.lockedMiniCenterX)
+                    ? state.lockedMiniCenterX
+                    : Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
                             arrow,
                             state.leftEdge,
                             state.arrowStartX,
@@ -990,8 +991,11 @@ final class Launcher450SideSlideHoldHook {
                 : (!Float.isNaN(state.lastRawY) ? state.lastRawY : state.downRawY);
 
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
-        float projectedCenterScreenX = Float.NaN;
-        if (arrow != null) {
+        // Keep Launcher and Security Center on the same screen-space center. GestureBackArrowView
+        // may move with its gesture window between the confirmation frame and ACTION_UP; using a
+        // fresh getLocationOnScreen() at release produces the observed few-pixel horizontal jump.
+        float projectedCenterScreenX = state.lockedMiniCenterScreenX;
+        if (Float.isNaN(projectedCenterScreenX) && arrow != null) {
             float localCenter = !Float.isNaN(state.releaseMiniCenterX)
                     ? state.releaseMiniCenterX
                     : Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
