@@ -463,7 +463,7 @@ final class Launcher450SideSlideHoldHook {
             LauncherSideSlidePreview preview) {
         Context context = owner.getContext();
         if (context == null) {
-            state.policy.onArmResult(false, generation);
+            if (preview != null) preview.finishHandoff(false);
             return;
         }
         int[] geometry = sourceGeometry(owner, state);
