@@ -49,6 +49,10 @@ final class Launcher450SideSlideHoldHook {
     private static final float OS4_SOURCE_WIDTH_DP = 24f;
     private static final float OS4_SOURCE_HEIGHT_DP = 53f;
     private static final float OS4_SOURCE_RADIUS_DP = 8f;
+    // GestureBackArrowView::on_swipe_stop creates a 100 ms ValueAnimator before its listener
+    // completes the release transition. Do not tear down the Launcher visual on SC start earlier
+    // than that native release window.
+    private static final long OS4_RELEASE_DURATION_MS = 100L;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<Object, GestureState> STATES =
@@ -692,8 +696,19 @@ final class Launcher450SideSlideHoldHook {
                     View owner = target.owner instanceof View ? (View) target.owner : null;
                     Runnable finish = () -> finishConfirmationVisual(
                             target, generation, "vendor animation started");
-                    if (owner != null) owner.post(finish);
-                    else finish.run();
+                    long releaseStarted = target.releaseStartedAtUptimeMs;
+                    long elapsed = releaseStarted > 0L
+                            ? Math.max(0L, SystemClock.uptimeMillis() - releaseStarted)
+                            : OS4_RELEASE_DURATION_MS;
+                    long remaining = Math.max(0L, OS4_RELEASE_DURATION_MS - elapsed);
+                    if (owner != null) {
+                        if (remaining > 0L) owner.postDelayed(finish, remaining);
+                        else owner.post(finish);
+                    } else if (remaining > 0L) {
+                        MAIN.postDelayed(finish, remaining);
+                    } else {
+                        finish.run();
+                    }
                 }
             };
             try {
