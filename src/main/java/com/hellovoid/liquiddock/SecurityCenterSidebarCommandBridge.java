@@ -12,6 +12,8 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.view.View;
+import android.view.ViewParent;
+import android.view.WindowManager;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -38,6 +40,10 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile Method[] availabilityMethods;
     private static volatile Method vendorShowEntryMethod;
     private static volatile boolean vendorShowProbeInstalled;
+    private static volatile boolean turboTouchReleaseHookInstalled;
+    private static final int MIUI_FLAG_CLICK_PASS_DOWN = 0x20;
+    private static final String TURBO_LAYOUT_CLASS =
+            "com.miui.gamebooster.windowmanager.newbox.TurboLayout";
     private static volatile Object vendorAnimationCallback;
     private static volatile Method vendorAnimationCallbackRegisterMethod;
     private static volatile int pendingLauncherGeneration = Integer.MIN_VALUE;
@@ -185,6 +191,7 @@ final class SecurityCenterSidebarCommandBridge {
             appContext = context;
             bindVendorService(context);
             installVendorShowProbe(source);
+            installTurboTouchReleaseHook(source.getClassLoader());
             SideSlideHoldDiagnostics.log(TAG
                     + " receiver ready from DockWindowManagerService.onCreate");
         } catch (Throwable error) {
@@ -204,6 +211,81 @@ final class SecurityCenterSidebarCommandBridge {
             if (!bound) clearBinder("bindService returned false");
         } catch (Throwable error) {
             clearBinder("bindService failed: " + error);
+        }
+    }
+
+    /**
+     * Restores touch pass-through when the stable Security Center TurboLayout becomes hidden.
+     *
+     * <p>OS4's native sidebar window uses MIUI window flag 0x20 as the click-pass-down bit.
+     * showNewDockFromLauncher removes that bit while the panel is interactive. The native exit
+     * animation finishes by setting TurboLayout INVISIBLE/GONE. Hooking that stable lifecycle
+     * boundary avoids any dependency on R8-obfuscated DockWindowManager method names.</p>
+     */
+    private static void installTurboTouchReleaseHook(ClassLoader classLoader) {
+        if (turboTouchReleaseHookInstalled || classLoader == null) return;
+        try {
+            Class<?> turboLayoutClass = Class.forName(
+                    TURBO_LAYOUT_CLASS, false, classLoader);
+            Method setVisibility = HookUtil.findMethodExact(
+                    View.class, "setVisibility", int.class);
+            HookUtil.hook(setVisibility, chain -> {
+                Object owner = chain.getThisObject();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (!turboLayoutClass.isInstance(owner)) return result;
+
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                int visibility = args.length == 1 && args[0] instanceof Number
+                        ? ((Number) args[0]).intValue()
+                        : View.VISIBLE;
+                if (visibility != View.VISIBLE && owner instanceof View) {
+                    restoreClickPassDown((View) owner);
+                }
+                return result;
+            });
+            turboTouchReleaseHookInstalled = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " TurboLayout touch-release hook installed");
+        } catch (Throwable error) {
+            turboTouchReleaseHookInstalled = false;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " TurboLayout touch-release hook install failed", error);
+        }
+    }
+
+    private static void restoreClickPassDown(View turboLayout) {
+        if (turboLayout == null) return;
+        try {
+            View windowRoot = turboLayout;
+            ViewParent parent = turboLayout.getParent();
+            while (parent instanceof View) {
+                windowRoot = (View) parent;
+                parent = parent.getParent();
+            }
+
+            Object params = windowRoot.getLayoutParams();
+            if (!(params instanceof WindowManager.LayoutParams)) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " touch release skipped: window LayoutParams unavailable");
+                return;
+            }
+            WindowManager.LayoutParams layoutParams = (WindowManager.LayoutParams) params;
+            Field miuiFlags = WindowManager.LayoutParams.class.getDeclaredField("miuiFlags");
+            miuiFlags.setAccessible(true);
+            int flags = miuiFlags.getInt(layoutParams);
+            if ((flags & MIUI_FLAG_CLICK_PASS_DOWN) != 0) return;
+
+            miuiFlags.setInt(layoutParams, flags | MIUI_FLAG_CLICK_PASS_DOWN);
+            WindowManager windowManager =
+                    (WindowManager) windowRoot.getContext().getSystemService(Context.WINDOW_SERVICE);
+            if (windowManager != null && windowRoot.isAttachedToWindow()) {
+                windowManager.updateViewLayout(windowRoot, layoutParams);
+            }
+            SideSlideHoldDiagnostics.log(TAG
+                    + " restored Sidebar click-pass-down after TurboLayout hidden");
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " restore Sidebar click-pass-down failed", error);
         }
     }
 
