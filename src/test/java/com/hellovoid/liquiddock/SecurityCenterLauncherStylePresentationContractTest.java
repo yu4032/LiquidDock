@@ -142,15 +142,17 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 sink.contains("OPTICAL_OUTSET_PX = 3f"));
         assertTrue("Shape and presentation crop must remain separable",
                 geometry.contains("inheritedTransform("));
-        assertTrue("root-space outputs lock one local material envelope per sink",
+        assertTrue("root-space outputs lock one stable envelope per sink",
                 sink.contains("outputEnvelopeLocked")
                         && sink.contains("outputEnvelopeWidth = layoutWidth")
-                        && sink.contains("outputEnvelopeHeight = layoutHeight")
                         && sink.contains("if (!outputEnvelopeLocked)"));
-        assertTrue("Dock may receive exactly one peer-envelope correction from stable toolbox bounds",
-                sink.contains("outputEnvelopePeerCorrected")
-                        && sink.contains("ensureOutputEnvelopeAtLeast(")
-                        && coordinator.contains("dockSink.ensureOutputEnvelopeAtLeast("));
+        assertTrue("New Dock uses a local-width root-height strip so animated height cannot clip",
+                sink.contains("verticalDockEnvelope")
+                        && sink.contains("Math.max(layoutHeight, root.getHeight())")
+                        && sink.contains("float outputY = verticalDockEnvelope ? 0f"));
+        assertFalse("toolbox bounds must not proxy Dock geometry or output sizing",
+                sink.contains("ensureOutputEnvelopeAtLeast(")
+                        || coordinator.contains("dockSink.ensureOutputEnvelopeAtLeast("));
         assertFalse("root-space output must not allocate one full-root TextureView per sink",
                 sink.contains("rootSpaceOutput ? material.getRootView() : material"));
         assertFalse("Folme visual scale must not grow the EGL output envelope every frame",
