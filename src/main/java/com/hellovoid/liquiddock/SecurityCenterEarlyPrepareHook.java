@@ -80,11 +80,9 @@ final class SecurityCenterEarlyPrepareHook {
                     && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
-            if (pending.type == ASSISTANT_GLOBAL_DOCK) {
-                SecurityCenterSidebarDrawableGeometry.bindDock(dock);
-            } else {
-                SecurityCenterSidebarDrawableGeometry.clearRuntime();
-            }
+            // DockLayout and its native Folme transform are the sole animation authority.
+            // Do not bind a second drawable-rect morph model here: that creates a separate
+            // glass trajectory which can diverge from the real toolbox/window animation.
             SecurityCenterGlassRuntimeState.bindAssistant(
                     turbo, dock, boxMaterial, pending.type);
             log("deferred prepare bound type=" + pending.type
