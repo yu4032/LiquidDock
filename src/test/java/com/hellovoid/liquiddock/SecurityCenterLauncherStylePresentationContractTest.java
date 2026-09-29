@@ -137,6 +137,7 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String sink = SourceContractText.read(
                 MAIN.resolve("SecurityCenterGlassSinkView.java"));
         String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
+        String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         assertTrue("Prismal edge shell reaches about 2.2 logical pixels outside the SDF",
                 sink.contains("OPTICAL_OUTSET_PX = 3f"));
         assertTrue("Shape and presentation crop must remain separable",
