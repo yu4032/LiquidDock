@@ -550,27 +550,10 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static void logVendorShowEntry(Object manager, Object[] args) {
-        int dockType = -1;
         boolean wrapperPresent = false;
         boolean wrapperAttached = false;
         int lineVisibility = -1;
         try {
-            Object dockState = resolveDockState(manager);
-            if (dockState != null) {
-                for (Method method : dockState.getClass().getMethods()) {
-                    if (method.getParameterTypes().length != 0
-                            || method.getReturnType() != int.class) continue;
-                    int value = ((Number) method.invoke(dockState)).intValue();
-                    if (value == 0 || value == 1 || value == 3
-                            || value == 4 || value == 5) {
-                        if (value == 4) {
-                            dockType = 4;
-                            break;
-                        }
-                        if (dockType == -1) dockType = value;
-                    }
-                }
-            }
             Object wrapper = resolveMainSidebarWrapper(manager);
             wrapperPresent = wrapper != null;
             View line = wrapper != null ? resolveSidebarLineView(wrapper) : null;
@@ -583,7 +566,7 @@ final class SecurityCenterSidebarCommandBridge {
         }
 
         SideSlideHoldDiagnostics.log(TAG
-                + " VENDOR_SHOW_ENTRY dockType=" + dockType
+                + " VENDOR_SHOW_ENTRY"
                 + " wrapper=" + wrapperPresent
                 + " attached=" + wrapperAttached
                 + " lineVisibility=" + lineVisibility
