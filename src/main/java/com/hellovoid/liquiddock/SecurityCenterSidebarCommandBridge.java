@@ -111,6 +111,11 @@ final class SecurityCenterSidebarCommandBridge {
             if (intent == null) return;
             String action = intent.getAction();
             if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
+                boolean desktop = intent.getBooleanExtra(
+                        SidebarCommandContract.EXTRA_DESKTOP, false);
+                if (desktop) {
+                    ensureDesktopDockContext();
+                }
                 boolean ready = vendorShowEndpointReady();
                 if (ready) logVendorBooleanDiagnostics();
                 setResultCode(ready
@@ -119,6 +124,9 @@ final class SecurityCenterSidebarCommandBridge {
                 return;
             }
             if (SidebarCommandContract.ACTION_CONFIRM_START.equals(action)) {
+                boolean desktop = intent.getBooleanExtra(
+                        SidebarCommandContract.EXTRA_DESKTOP, false);
+                if (desktop) ensureDesktopDockContext();
                 performNativeConfirmationHaptic();
                 return;
             }
@@ -132,6 +140,7 @@ final class SecurityCenterSidebarCommandBridge {
                     intent.getIntExtra(SidebarCommandContract.EXTRA_WIDTH, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_HEIGHT, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_RADIUS, 0),
+                    intent.getBooleanExtra(SidebarCommandContract.EXTRA_DESKTOP, false),
                     intent.getIntExtra(
                             SidebarCommandContract.EXTRA_GENERATION,
                             Integer.MIN_VALUE));
@@ -550,10 +559,27 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static void logVendorShowEntry(Object manager, Object[] args) {
+        int dockType = -1;
         boolean wrapperPresent = false;
         boolean wrapperAttached = false;
         int lineVisibility = -1;
         try {
+            Object dockState = resolveDockState(manager);
+            if (dockState != null) {
+                for (Method method : dockState.getClass().getMethods()) {
+                    if (method.getParameterTypes().length != 0
+                            || method.getReturnType() != int.class) continue;
+                    int value = ((Number) method.invoke(dockState)).intValue();
+                    if (value == 0 || value == 1 || value == 3
+                            || value == 4 || value == 5) {
+                        if (value == 4) {
+                            dockType = 4;
+                            break;
+                        }
+                        if (dockType == -1) dockType = value;
+                    }
+                }
+            }
             Object wrapper = resolveMainSidebarWrapper(manager);
             wrapperPresent = wrapper != null;
             View line = wrapper != null ? resolveSidebarLineView(wrapper) : null;
@@ -566,7 +592,7 @@ final class SecurityCenterSidebarCommandBridge {
         }
 
         SideSlideHoldDiagnostics.log(TAG
-                + " VENDOR_SHOW_ENTRY"
+                + " VENDOR_SHOW_ENTRY dockType=" + dockType
                 + " wrapper=" + wrapperPresent
                 + " attached=" + wrapperAttached
                 + " lineVisibility=" + lineVisibility
@@ -741,6 +767,111 @@ final class SecurityCenterSidebarCommandBridge {
         return null;
     }
 
+    private static void ensureDesktopDockContext() {
+        Object service = serviceOwner;
+        if (service == null) return;
+        try {
+            Object manager = resolveDockWindowManager(service);
+            if (manager == null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " desktop dock context unavailable: manager unresolved");
+                return;
+            }
+
+            Object dockState = resolveDockState(manager);
+            if (dockState == null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " desktop dock context unavailable: dock state unresolved");
+                return;
+            }
+            Method setType = resolveUniqueVoidIntMethod(dockState.getClass());
+            if (setType == null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " desktop dock context unavailable: dock type setter ambiguous");
+                return;
+            }
+
+            // Prepare the vendor wrapper while the desktop still has dockType=0. The native
+            // prepare capability keeps its line inactive in that state. Switching to type 4
+            // first exposes the unrelated thin Sidebar line on the target build.
+            Object wrapper = resolveMainSidebarWrapper(manager);
+            if (wrapper == null) {
+                wrapper = prepareMainSidebarWrapper(manager);
+            }
+            setType.invoke(dockState, 4);
+
+            SideSlideHoldDiagnostics.log(TAG
+                    + " desktop dock context wrapper-before-type4 state=" + dockState
+                    + " wrapperReady=" + (wrapper != null));
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " desktop dock context setup failed", error);
+        }
+    }
+
+    private static Object prepareMainSidebarWrapper(Object manager)
+            throws ReflectiveOperationException {
+        boolean foundEntry = false;
+        for (Method method : manager.getClass().getMethods()) {
+            if (method.isSynthetic() || method.getParameterTypes().length != 0) continue;
+            if (!isSidebarWrapperType(method.getReturnType())) continue;
+            foundEntry = true;
+            Object wrapper = method.invoke(manager);
+            if (wrapper != null && resolveSidebarLineView(wrapper) != null) {
+                SideSlideHoldDiagnostics.log(TAG + " main SidebarWrapper prepared");
+                return wrapper;
+            }
+        }
+        if (!foundEntry) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " prepare SidebarWrapper entry unavailable");
+        }
+        return null;
+    }
+
+    private static Object resolveDockState(Object manager) throws IllegalAccessException {
+        Object match = null;
+        for (Field field : manager.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers())) continue;
+            field.setAccessible(true);
+            Object candidate = field.get(manager);
+            if (candidate == null) continue;
+
+            String stateText;
+            try {
+                stateText = String.valueOf(candidate);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            if (!stateText.startsWith("DockWindowType{")
+                    || !stateText.contains("dockType=")
+                    || !stateText.contains("lastType=")) {
+                continue;
+            }
+            if (resolveUniqueVoidIntMethod(candidate.getClass()) == null) continue;
+
+            if (match != null) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " dock state semantic match ambiguous");
+                return null;
+            }
+            match = candidate;
+        }
+        return match;
+    }
+
+    private static Method resolveUniqueVoidIntMethod(Class<?> type) {
+        Method match = null;
+        for (Method method : type.getMethods()) {
+            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 1 || params[0] != int.class) continue;
+            if (match != null) return null;
+            match = method;
+        }
+        return match;
+    }
+
     private static boolean vendorShowEndpointReady() {
         IBinder binder = sidebarBinder;
         Method show = showMethod;
@@ -772,7 +903,9 @@ final class SecurityCenterSidebarCommandBridge {
             int width,
             int height,
             int radius,
+            boolean desktop,
             int generation) {
+        if (desktop) ensureDesktopDockContext();
         IBinder binder = sidebarBinder;
         Method show = showMethod;
         if (binder == null || show == null || !binder.isBinderAlive()) {
