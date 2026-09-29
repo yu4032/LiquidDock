@@ -72,6 +72,8 @@ final class SecurityCenterGlassSinkView extends TextureView
     private boolean windowVisibilityInterrupted;
     private ValueAnimator exitFadeAnimator;
     private float exitFadeMultiplier = 1f;
+    private float lastNativeTransformScale = Float.NaN;
+    private boolean exitContractionPending;
 
     private SecurityCenterGlassSinkView(
             Context context,
@@ -258,15 +260,43 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     void onNativeMaterialTransformMutated() {
         if (disposed || session.isShutdown()) return;
+        View material = materialRef.get();
+        float currentScale = material != null
+                ? Math.min(Math.abs(material.getScaleX()), Math.abs(material.getScaleY()))
+                : Float.NaN;
+        if (materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
+                && authorizedVisible
+                && finite(lastNativeTransformScale)
+                && finite(currentScale)
+                && lastNativeTransformScale >= 0.97f
+                && currentScale < lastNativeTransformScale - 0.002f) {
+            exitContractionPending = true;
+        }
+        if (finite(currentScale)) lastNativeTransformScale = currentScale;
         syncFromMaterial();
         session.onMaterialTransformMutated(this);
+    }
+
+    boolean consumeExitContractionStart() {
+        if (!exitContractionPending) return false;
+        exitContractionPending = false;
+        return true;
     }
 
     void setAuthorizedVisible(boolean visible) {
         if (disposed || session.isShutdown()) return;
         if (authorizedVisible == visible) return;
         authorizedVisible = visible;
-        if (!visible) cancelExitFade(false);
+        if (!visible) {
+            cancelExitFade(false);
+            exitContractionPending = false;
+        } else {
+            View material = materialRef.get();
+            if (material != null) {
+                lastNativeTransformScale = Math.min(
+                        Math.abs(material.getScaleX()), Math.abs(material.getScaleY()));
+            }
+        }
         syncFromMaterial();
     }
 
@@ -364,6 +394,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (disposed) return;
         disposed = true;
         authorizedVisible = false;
+        exitContractionPending = false;
         cancelExitFade(false);
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
