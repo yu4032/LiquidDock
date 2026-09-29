@@ -395,13 +395,13 @@ final class Launcher450SideSlideHoldHook {
                     return;
                 }
 
-                // OS4 starts the Security Center launcher-origin transform at confirmation time:
-                // native haptic first, then vendor y2()/SidebarAnimUtils expands the dark source
-                // droplet into the full panel. ACTION_UP only finalizes gesture ownership.
+                // OS4 confirmation is a preview stage: Security Center activates its native
+                // confirmation visual and haptic here. The full launcher-origin transform remains
+                // deferred until ACTION_UP.
                 state.confirmationVisible = true;
-                sendConfirmationThenShow(owner, state, generation);
+                sendConfirmation(owner, true, state);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar preflight ready -> haptic then start native SC transform");
+                        + " Sidebar preflight ready -> native SC preview armed; wait ACTION_UP");
             }
         };
         try {
@@ -425,15 +425,12 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
         cancelDwell(owner, state);
-        if (state.confirmationVisible) {
-            sendConfirmation(owner, false, state);
-            state.confirmationVisible = false;
-        }
-        SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> finalize Sidebar gesture");
-        if (!state.sidebarShowIssued) {
-            // Fail-safe only: normally OS4-style presentation already starts at dwell confirmation.
-            showSidebar(owner, state, generation);
-        }
+        SideSlideHoldDiagnostics.log(TAG
+                + " ACTION_UP -> commit SC preview into full Sidebar transform");
+        showSidebar(owner, state, generation);
+        // A successful release consumes the confirmation preview into the panel transform.
+        // Do not narrow it first; ACTION_CONFIRM_END is reserved for cancellation.
+        state.confirmationVisible = false;
         if (!state.desktopAtDown) {
             forceVendorCleanupToBack(state);
         }
@@ -444,40 +441,6 @@ final class Launcher450SideSlideHoldHook {
         sendConfirmation(owner, false, state);
         state.confirmationVisible = false;
         SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
-    }
-
-    private static void sendConfirmationThenShow(
-            View owner, GestureState state, int generation) {
-        Context context = owner.getContext();
-        if (context == null) return;
-        Intent intent = new Intent(SidebarCommandContract.ACTION_CONFIRM_START)
-                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
-                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
-                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown);
-        BroadcastReceiver afterHaptic = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context ignored, Intent ignoredIntent) {
-                if (state.scheduledGeneration != generation) return;
-                state.sidebarShowIssued = true;
-                SideSlideHoldDiagnostics.log(TAG
-                        + " native confirmation haptic complete -> start SC transform");
-                showSidebar(owner, state, generation);
-            }
-        };
-        try {
-            // Ordered delivery makes the bridge finish native haptic work before the launcher-origin
-            // show request is issued, matching the observed OS4 confirmation -> droplet sequence.
-            context.sendOrderedBroadcast(
-                    intent,
-                    null,
-                    afterHaptic,
-                    MAIN,
-                    0,
-                    null,
-                    null);
-        } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " confirmation/show sequence failed", error);
-        }
     }
 
     private static void sendConfirmation(View owner, boolean start, GestureState state) {
@@ -588,7 +551,6 @@ final class Launcher450SideSlideHoldHook {
         state.desktopAtDown = false;
         state.arrow = null;
         state.confirmationVisible = false;
-        state.sidebarShowIssued = false;
         state.workspaceCancelled = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
@@ -611,7 +573,6 @@ final class Launcher450SideSlideHoldHook {
         boolean desktopAtDown;
         boolean leftEdge;
         boolean confirmationVisible;
-        boolean sidebarShowIssued;
         boolean workspaceCancelled;
         Object arrow;
         float downX;
