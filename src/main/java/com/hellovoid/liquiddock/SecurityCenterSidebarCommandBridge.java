@@ -453,7 +453,6 @@ final class SecurityCenterSidebarCommandBridge {
         int generation = pendingLauncherGeneration;
         if (generation == Integer.MIN_VALUE) return;
         pendingLauncherGeneration = Integer.MIN_VALUE;
-        SecurityCenterVideoLauncherHandoffGeometry.disarm(reason);
         Context context = appContext;
         if (context == null) return;
         try {
@@ -773,6 +772,7 @@ final class SecurityCenterSidebarCommandBridge {
         vendorAnimationCallback = null;
         vendorAnimationCallbackRegisterMethod = null;
         pendingLauncherGeneration = Integer.MIN_VALUE;
+        SecurityCenterVideoLauncherHandoffGeometry.disarm(reason);
         SideSlideHoldDiagnostics.log(TAG + " not ready: " + reason);
     }
 }
