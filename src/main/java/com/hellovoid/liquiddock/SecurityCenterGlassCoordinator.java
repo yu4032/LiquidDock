@@ -125,6 +125,7 @@ final class SecurityCenterGlassCoordinator
     private WeakReference<View> dockRef = new WeakReference<>(null);
     private WeakReference<View> abstractDockRef = new WeakReference<>(null);
     private WeakReference<View> boxRef = new WeakReference<>(null);
+    private WeakReference<View> motionBoxRef = new WeakReference<>(null);
     private WeakReference<View> appsRef = new WeakReference<>(null);
     private WeakReference<View> rootRef = new WeakReference<>(null);
     private WeakReference<View> customOwnerTurboRef = new WeakReference<>(null);
@@ -204,7 +205,7 @@ final class SecurityCenterGlassCoordinator
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {
-        bindAssistant(turboLayout, dockLayout, null, null, ASSISTANT_GLOBAL_DOCK);
+        bindAssistant(turboLayout, dockLayout, null, null, null, ASSISTANT_GLOBAL_DOCK);
     }
 
     /**
@@ -216,6 +217,7 @@ final class SecurityCenterGlassCoordinator
             View dockLayout,
             View abstractDockLayout,
             View boxLayout,
+            View motionBoxLayout,
             int type) {
         if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return;
@@ -232,6 +234,7 @@ final class SecurityCenterGlassCoordinator
         abstractDockRef = new WeakReference<>(
                 type == ASSISTANT_GLOBAL_DOCK ? abstractDockLayout : null);
         boxRef = new WeakReference<>(boxLayout);
+        motionBoxRef = new WeakReference<>(motionBoxLayout);
         appsRef = new WeakReference<>(null);
         assistantType = type;
         appsLive = false;
@@ -251,7 +254,8 @@ final class SecurityCenterGlassCoordinator
                 + " generation=" + generation
                 + " turbo@" + identity(turboLayout)
                 + " dock@" + identity(dockLayout)
-                + " box@" + identity(boxLayout), null);
+                + " box@" + identity(boxLayout)
+                + " motionBox@" + identity(motionBoxLayout), null);
     }
 
     void updateAllAppsLayout(View turboLayout, View appsLayout) {
@@ -928,6 +932,7 @@ final class SecurityCenterGlassCoordinator
             dockRef = new WeakReference<>(null);
             abstractDockRef = new WeakReference<>(null);
             boxRef = new WeakReference<>(null);
+            motionBoxRef = new WeakReference<>(null);
             appsRef = new WeakReference<>(null);
         }
     }
