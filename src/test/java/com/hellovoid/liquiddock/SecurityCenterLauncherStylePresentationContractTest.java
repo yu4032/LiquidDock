@@ -146,6 +146,10 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                         && sink.contains("outputEnvelopeWidth = layoutWidth")
                         && sink.contains("outputEnvelopeHeight = layoutHeight")
                         && sink.contains("if (!outputEnvelopeLocked)"));
+        assertTrue("Dock may receive exactly one peer-envelope correction from stable toolbox bounds",
+                sink.contains("outputEnvelopePeerCorrected")
+                        && sink.contains("ensureOutputEnvelopeAtLeast(")
+                        && coordinator.contains("dockSink.ensureOutputEnvelopeAtLeast("));
         assertFalse("root-space output must not allocate one full-root TextureView per sink",
                 sink.contains("rootSpaceOutput ? material.getRootView() : material"));
         assertFalse("Folme visual scale must not grow the EGL output envelope every frame",
