@@ -60,6 +60,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float BRIDGE_CONTROL = 0.7f;
     private static final float BRIDGE_HALF_WIDTH_START_DP = 8f;
     private static final float BRIDGE_HALF_WIDTH_END_DP = 1.5f;
+    // DAT_00270624: native split renderer compresses teardrop vertically as 1 - 0.72*split.
+    private static final float TEARDROP_SPLIT_VERTICAL_COEFF = 0.72f;
 
     // build_teardrop_path native constants.
     private static final float PROFILE_HEIGHT = 775f;
@@ -119,6 +121,12 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 return paint;
             });
     private static final ThreadLocal<Path> PATH =
+            ThreadLocal.withInitial(Path::new);
+    private static final ThreadLocal<Path> TEARDROP_PATH =
+            ThreadLocal.withInitial(Path::new);
+    private static final ThreadLocal<Path> BODY_PATH =
+            ThreadLocal.withInitial(Path::new);
+    private static final ThreadLocal<Path> UNION_PATH =
             ThreadLocal.withInitial(Path::new);
 
     private Launcher450Os4SidebarConfirmationRenderer() {}
@@ -254,49 +262,75 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 splitProgress,
                 density);
 
-        // Teardrop remains rooted at the original gesture baseline.
-        float teardropCenterX = leftEdge
-                ? baselineX + halfWidth
-                : baselineX - halfWidth;
+        // OS4 build_teardrop_path receives calculate_positions() endpoints, not the
+        // 24x53 Sidebar body dimensions. On OS3 the equivalent span is mBackWidth * visual
+        // gesture progress. Native split rendering clamps that placement progress to 0.8.
+        float nativeBackWidth =
+                !Float.isNaN(arrowBackWidth) && arrowBackWidth > 0f
+                        ? arrowBackWidth
+                        : PROFILE_WIDTH * density;
+        float projectedGestureProgress = Math.min(clamp01(gestureProgress), SPLIT_START_PROGRESS);
+        float gestureSpan = nativeBackWidth * projectedGestureProgress;
+        float profileLeft = leftEdge ? baselineX : baselineX - gestureSpan;
+        float profileRight = leftEdge ? baselineX + gestureSpan : baselineX;
+        float profileHeight = !Float.isNaN(arrowExpectedHeight) && arrowExpectedHeight > 0f
+                ? arrowExpectedHeight
+                : Math.min(viewHeight, PROFILE_HEIGHT * density);
+        float verticalFactor =
+                Math.max(0f, 1f - TEARDROP_SPLIT_VERTICAL_COEFF * clamp01(splitProgress));
 
-        // The water-drop path shares the same baseline as OS3's stock Back background.
-        if (teardropFactor > 0.001f && bridgeFactor > 0.001f) {
-            float profileLeft = leftEdge ? baselineX : teardropCenterX - halfWidth;
-            float profileRight = leftEdge ? teardropCenterX + halfWidth : baselineX;
-            if (profileRight - profileLeft > 0.001f) {
-                Path path = PATH.get();
-                buildNativeTeardropPath(
-                        path,
-                        profileLeft,
-                        profileRight,
-                        centerY,
-                        height,
-                        !leftEdge,
-                        1f,
-                        teardropFactor);
-                canvas.drawPath(path, FILL_PAINT.get());
-                canvas.drawPath(path, BORDER_PAINT.get());
-            }
+        Path teardropPath = TEARDROP_PATH.get();
+        boolean hasTeardrop = teardropFactor > 0.001f
+                && bridgeFactor > 0.001f
+                && profileRight - profileLeft > 0.001f;
+        if (hasTeardrop) {
+            buildNativeTeardropPath(
+                    teardropPath,
+                    profileLeft,
+                    profileRight,
+                    centerY,
+                    profileHeight,
+                    !leftEdge,
+                    verticalFactor,
+                    teardropFactor);
+        } else {
+            teardropPath.reset();
         }
 
-        if (splitProgress > 0.001f) {
-            // 0x9bdea8 draws an additional closed bridge/neck path between the teardrop and the
-            // mini Sidebar before drawing the body. Keep it as a separate layer; otherwise the
-            // animation collapses visually into a single ball.
-            drawNativeSplitBridge(
-                    canvas,
-                    leftEdge,
-                    baselineX,
-                    miniCenterX,
-                    centerY,
-                    width,
-                    height,
+        if (splitProgress <= 0.001f) {
+            if (hasTeardrop) {
+                canvas.drawPath(teardropPath, FILL_PAINT.get());
+                canvas.drawPath(teardropPath, BORDER_PAINT.get());
+            }
+        } else {
+            // The native main split path raster-composes the current teardrop and the animated
+            // round-rect, then extracts/smooths the union contour. Android Path.op(UNION) gives
+            // the same topology without introducing Bitmap/raster allocation into LiquidDock.
+            Path bodyPath = BODY_PATH.get();
+            bodyPath.reset();
+            float dynamicHalfWidth = width * 0.5f;
+            float dynamicHalfHeight = height * 0.5f;
+            bodyPath.addRoundRect(
+                    miniCenterX - dynamicHalfWidth,
+                    centerY - dynamicHalfHeight,
+                    miniCenterX + dynamicHalfWidth,
+                    centerY + dynamicHalfHeight,
                     radius,
-                    splitProgress,
-                    teardropFactor,
-                    density,
-                    FILL_PAINT.get(),
-                    BORDER_PAINT.get());
+                    radius,
+                    Path.Direction.CW);
+
+            Path unionPath = UNION_PATH.get();
+            unionPath.reset();
+            boolean unioned = false;
+            if (hasTeardrop) {
+                unioned = unionPath.op(teardropPath, bodyPath, Path.Op.UNION);
+            }
+            if (unioned) {
+                canvas.drawPath(unionPath, FILL_PAINT.get());
+            } else {
+                if (hasTeardrop) canvas.drawPath(teardropPath, FILL_PAINT.get());
+                canvas.drawPath(bodyPath, FILL_PAINT.get());
+            }
 
             // The mini Sidebar is Launcher-owned and appears during the held gesture, immediately
             // after the water-drop enters the native split state. It is already present before
