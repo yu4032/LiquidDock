@@ -161,6 +161,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     centerY,
                     width,
                     height,
+                    viewWidth,
                     density,
                     teardropFactor,
                     bridgeFactor);
