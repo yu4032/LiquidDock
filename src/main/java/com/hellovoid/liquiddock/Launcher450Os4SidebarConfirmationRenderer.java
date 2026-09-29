@@ -52,7 +52,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     // full split target at 1.0. These values are recovered as DAT_0026d2c4=0.8 and
     // DAT_0026e09c=0.2.
     private static final float SPLIT_START_PROGRESS = 0.8f;
-    private static final float SPLIT_RANGE = 0.2f;
 
     // Native bridge-path constants from 0x9bdea8.
     private static final float BRIDGE_PROFILE_BASE = 0.2f;
@@ -508,111 +507,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         icon.setAlpha(oldAlpha);
     }
 
-    private static void drawNativeSplitBridge(
-            Canvas canvas,
-            boolean leftEdge,
-            float baselineX,
-            float bodyCenterX,
-            float centerY,
-            float bodyWidth,
-            float bodyHeight,
-            float bodyRadius,
-            float splitProgress,
-            float teardropFactor,
-            float density,
-            Paint fill,
-            Paint border) {
-        // Direct translation of the closed bridge path in PathBackgroundProxy::draw @ 0x9bdea8.
-        // The native renderer samples the teardrop profile at:
-        // ((split_progress * 0.1) + 0.2) * (count - 1).
-        float profileT = clamp01(
-                BRIDGE_PROFILE_BASE + splitProgress * BRIDGE_PROFILE_SPAN);
-        int profileIndex = Math.min(
-                OS4_PROFILE.length - 1,
-                Math.max(0, (int) (profileT * (OS4_PROFILE.length - 1))));
-        float profileX = OS4_PROFILE[profileIndex][0];
-        float profileY = OS4_PROFILE[profileIndex][1];
-
-        float direction = leftEdge ? 1f : -1f;
-        float bodyHalfWidth = bodyWidth * 0.5f;
-        float bodyHalfHeight = bodyHeight * 0.5f;
-
-        // fVar56 = split * -0.72 + 1.0, followed by the current sidebar-height/profile mapping.
-        float profileVerticalScale = 1f - 0.72f * splitProgress;
-        float profileOffsetY = profileVerticalScale
-                * ((bodyHeight / PROFILE_HEIGHT) * profileX - bodyHeight * 0.5f);
-        float rootY0 = centerY + profileOffsetY;
-        float rootY1 = centerY - profileOffsetY;
-        float rootTop = Math.min(rootY0, rootY1);
-        float rootBottom = Math.max(rootY0, rootY1);
-
-        // Same horizontal profile projection used by build_teardrop_path.
-        float rootX = baselineX
-                + direction
-                * (bodyWidth / PROFILE_WIDTH)
-                * profileY
-                * teardropFactor;
-
-        // Native radius/angle preparation:
-        // quarter span -> max(0.3 * span, (1 - 0.85*split) * span)
-        // -> asin(normalized by body half-width)
-        // -> split * ((PI - asin) - PI/4) + PI/4.
-        float profileQuarterSpan = Math.abs(rootBottom - rootTop) * 0.25f;
-        float angleNumerator = Math.max(
-                profileQuarterSpan * 0.3f,
-                profileQuarterSpan * (1f - 0.85f * splitProgress));
-        float ratio = clamp01(angleNumerator / Math.max(bodyHalfWidth, 1f));
-        float angle = splitProgress
-                * (((float) Math.PI - (float) Math.asin(ratio))
-                - ((float) Math.PI * 0.25f))
-                + ((float) Math.PI * 0.25f);
-
-        float cos = (float) Math.cos(angle);
-        float sin = (float) Math.sin(angle);
-        float outerX = bodyCenterX + direction * bodyHalfWidth * cos;
-
-        float bodyTop = centerY - bodyHalfHeight;
-        float bodyBottom = centerY + bodyHalfHeight;
-        float outerTop = Math.max(
-                centerY - bodyHalfHeight * sin,
-                bodyTop + bodyRadius * 0.3f);
-        float outerBottom = Math.min(
-                centerY + bodyHalfHeight * sin,
-                bodyBottom - bodyRadius * 0.3f);
-
-        // Decompiled path uses 0.3 and 0.7 horizontal control interpolation.
-        float controlX1 = rootX + (outerX - rootX) * 0.3f;
-        float controlX2 = rootX + (outerX - rootX) * BRIDGE_CONTROL;
-
-        // Native bridge neck half-width shrinks 8dp -> 1.5dp with split_progress.
-        float bridgeHalfWidth = lerp(
-                BRIDGE_HALF_WIDTH_START_DP * density,
-                BRIDGE_HALF_WIDTH_END_DP * density,
-                splitProgress);
-
-        Path path = PATH.get();
-        path.reset();
-        path.moveTo(rootX, rootTop);
-        path.cubicTo(
-                controlX1,
-                centerY - bridgeHalfWidth,
-                controlX2,
-                centerY - bridgeHalfWidth,
-                outerX,
-                outerTop);
-        path.lineTo(outerX, outerBottom);
-        path.cubicTo(
-                controlX2,
-                centerY + bridgeHalfWidth,
-                controlX1,
-                centerY + bridgeHalfWidth,
-                rootX,
-                rootBottom);
-        path.close();
-        canvas.drawPath(path, fill);
-        canvas.drawPath(path, border);
-    }
-
     private static void buildNativeTeardropPath(
             Path path,
             float leftX,
@@ -741,12 +635,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                         * (float) Math.sin(omegaD * t);
         float value = 1f - envelope * phase;
         return Math.max(0f, Math.min(value, 1.20f));
-    }
-
-    private static float smoothStep(float edge0, float edge1, float x) {
-        if (edge1 <= edge0) return x >= edge1 ? 1f : 0f;
-        float t = clamp01((x - edge0) / (edge1 - edge0));
-        return t * t * (3f - 2f * t);
     }
 
     private static float clamp01(float value) {
