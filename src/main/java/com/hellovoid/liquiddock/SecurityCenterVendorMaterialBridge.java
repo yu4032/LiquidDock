@@ -47,23 +47,33 @@ final class SecurityCenterVendorMaterialBridge {
     }
 
     void protectVendorFallback(
-            Object turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
+            Object turboLayout,
+            View dockLayout,
+            View abstractDockLayout,
+            View boxMaterialView,
+            View allAppsLayout) {
         if (!(turboLayout instanceof View) || dockLayout == null) {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
         if (!protectVendorFallbackInternal(
-                (View) turboLayout, dockLayout, boxMaterialView, allAppsLayout)) {
+                (View) turboLayout, dockLayout, abstractDockLayout,
+                boxMaterialView, allAppsLayout)) {
             throw new IllegalStateException("Security Center vendor fallback unavailable");
         }
     }
 
     void claimCustom(
-            Object turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
+            Object turboLayout,
+            View dockLayout,
+            View abstractDockLayout,
+            View boxMaterialView,
+            View allAppsLayout) {
         if (!(turboLayout instanceof View) || dockLayout == null) {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
         if (!claimCustomInternal(
-                (View) turboLayout, dockLayout, boxMaterialView, allAppsLayout)) {
+                (View) turboLayout, dockLayout, abstractDockLayout,
+                boxMaterialView, allAppsLayout)) {
             throw new IllegalStateException("Security Center Dock material unavailable");
         }
     }
@@ -74,7 +84,11 @@ final class SecurityCenterVendorMaterialBridge {
     }
 
     private synchronized boolean protectVendorFallbackInternal(
-            View turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
+            View turboLayout,
+            View dockLayout,
+            View abstractDockLayout,
+            View boxMaterialView,
+            View allAppsLayout) {
         if (turboLayout == null || dockLayout == null) return false;
         Object previousOwner = claimedOwner.get();
         if (previousOwner != null && previousOwner != turboLayout) {
@@ -86,15 +100,22 @@ final class SecurityCenterVendorMaterialBridge {
     }
 
     private synchronized boolean claimCustomInternal(
-            View turboLayout, View dockLayout, View boxMaterialView, View allAppsLayout) {
+            View turboLayout,
+            View dockLayout,
+            View abstractDockLayout,
+            View boxMaterialView,
+            View allAppsLayout) {
         if (!protectVendorFallbackInternal(
-                turboLayout, dockLayout, boxMaterialView, allAppsLayout)) return false;
+                turboLayout, dockLayout, abstractDockLayout,
+                boxMaterialView, allAppsLayout)) return false;
         try {
             SecurityCenterVendorMaterialState.claimOwner(
-                    turboLayout, dockLayout, boxMaterialView, allAppsLayout);
+                    turboLayout, dockLayout, abstractDockLayout,
+                    boxMaterialView, allAppsLayout);
             claimedOwner = new WeakReference<>(turboLayout);
             SecurityCenterVendorMaterialState.runModuleMutation(() -> {
                 clearVendorTarget(dockLayout);
+                clearVendorTarget(abstractDockLayout);
                 clearVendorTarget(boxMaterialView);
                 clearVendorTarget(allAppsLayout);
             });
