@@ -38,6 +38,11 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float SPLIT_DAMPING = 0.90f;
     private static final float SPLIT_RESPONSE_S = 0.68f;
 
+    // OS4 on_vsync marks the gesture-pause/split path after >0x31 ms before launching the
+    // show=true AbstractSidebarSplitEffect. The mini Sidebar therefore starts while the pointer
+    // is still down; ACTION_UP is not its trigger.
+    private static final long NATIVE_SPLIT_ARM_DELAY_MS = 50L;
+
     // build_teardrop_path native constants.
     private static final float PROFILE_HEIGHT = 775f;
     private static final float PROFILE_WIDTH = 76f;
@@ -120,53 +125,51 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float bridgeFactor;
         float splitProgress;
 
-        if (!releasing) {
-            float elapsedSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
+        long heldMs = Math.max(0L, now - startedAtUptimeMs);
+        float splitSeconds =
+                Math.max(0L, heldMs - NATIVE_SPLIT_ARM_DELAY_MS) / 1000f;
 
-            // run_abstract_sidebar_anim_target(show=false):
-            // 24x53/r8 -> 30x30/r30, teardrop 0->1, bridge 0->1.
-            width = lerp(
-                    SIDEBAR_WIDTH_DP * density,
-                    CIRCLE_WIDTH_DP * density,
-                    springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
-            height = lerp(
-                    SIDEBAR_HEIGHT_DP * density,
-                    CIRCLE_HEIGHT_DP * density,
-                    springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
-            radius = lerp(
-                    SIDEBAR_RADIUS_DP * density,
-                    CIRCLE_RADIUS_DP * density,
-                    springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
-            teardropFactor = clamp01(
-                    springProgress(elapsedSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
-            bridgeFactor = clamp01(
-                    springProgress(elapsedSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
-            splitProgress = 0f;
-        } else {
+        // OS4 starts AbstractSidebarSplitEffect(show=true) from on_vsync while the gesture is
+        // still held. Its state evolves circle 30x30/r30 -> mini Sidebar 24x53/r8 while
+        // split_progress rises and teardrop/bridge collapse. This is why a sufficiently long pull
+        // can naturally lose the water-drop before ACTION_UP.
+        float widthProgress =
+                clamp01(springProgress(splitSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+        float heightProgress =
+                clamp01(springProgress(splitSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
+        float radiusProgress =
+                clamp01(springProgress(splitSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
+        splitProgress =
+                clamp01(springProgress(splitSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+        float nativeTeardropCollapse =
+                clamp01(springProgress(splitSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
+        float nativeBridgeCollapse =
+                clamp01(springProgress(splitSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+
+        width = lerp(CIRCLE_WIDTH_DP * density, SIDEBAR_WIDTH_DP * density, widthProgress);
+        height = lerp(CIRCLE_HEIGHT_DP * density, SIDEBAR_HEIGHT_DP * density, heightProgress);
+        radius = lerp(CIRCLE_RADIUS_DP * density, SIDEBAR_RADIUS_DP * density, radiusProgress);
+        teardropFactor = 1f - nativeTeardropCollapse;
+        bridgeFactor = 1f - nativeBridgeCollapse;
+
+        if (releasing) {
+            // ACTION_UP does not create the mini Sidebar. It only ends the Launcher water-drop
+            // contribution and leaves the already-created mini body as Security Center's source.
             float releaseSeconds =
                     Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
+            float releaseDrop =
+                    clamp01(springProgress(releaseSeconds, TEARDROP_DAMPING, 0.10f));
+            teardropFactor *= 1f - releaseDrop;
+            bridgeFactor *= 1f - releaseDrop;
 
-            // run_abstract_sidebar_anim_target(show=true):
-            // the circular water-drop endpoint becomes the 24x53/r8 miniature Sidebar body,
-            // while teardrop_factor and bridge_factor collapse back to zero.
-            width = lerp(
-                    CIRCLE_WIDTH_DP * density,
-                    SIDEBAR_WIDTH_DP * density,
-                    springProgress(releaseSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
-            height = lerp(
-                    CIRCLE_HEIGHT_DP * density,
-                    SIDEBAR_HEIGHT_DP * density,
-                    springProgress(releaseSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
-            radius = lerp(
-                    CIRCLE_RADIUS_DP * density,
-                    SIDEBAR_RADIUS_DP * density,
-                    springProgress(releaseSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
-            teardropFactor = 1f - clamp01(
-                    springProgress(releaseSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
-            bridgeFactor = 1f - clamp01(
-                    springProgress(releaseSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
-            splitProgress = clamp01(
-                    springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+            // Let an only-just-triggered split continue to its native target after release rather
+            // than snapping back to a circle.
+            float releaseSplit =
+                    clamp01(springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+            splitProgress = Math.max(splitProgress, releaseSplit);
+            width = lerp(width, SIDEBAR_WIDTH_DP * density, releaseSplit);
+            height = lerp(height, SIDEBAR_HEIGHT_DP * density, releaseSplit);
+            radius = lerp(radius, SIDEBAR_RADIUS_DP * density, releaseSplit);
         }
 
         // OS3 already computes the authoritative local geometry in onActionDown(y,startX,height).
@@ -220,9 +223,10 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             }
         }
 
-        if (releasing && splitProgress > 0.001f) {
-            // split_progress is a separate OS4 state. Keep the body hidden at split=0 and let it
-            // emerge while the circle collapses into the 24x53/r8 miniature Sidebar.
+        if (splitProgress > 0.001f) {
+            // The mini Sidebar is Launcher-owned and appears during the held gesture, immediately
+            // after the water-drop enters the native split state. It is already present before
+            // ACTION_UP; release only removes the remaining teardrop and hands this body to SC.
             float reveal = smoothStep(0f, 0.20f, splitProgress);
             Paint fill = FILL_PAINT.get();
             Paint border = BORDER_PAINT.get();
@@ -250,7 +254,10 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             border.setAlpha(oldBorderAlpha);
         }
 
-        if (releasing || now - startedAtUptimeMs < MAX_FRAME_WINDOW_MS) {
+        if (releasing
+                || now - startedAtUptimeMs < MAX_FRAME_WINDOW_MS
+                || splitProgress < 0.999f
+                || teardropFactor > 0.001f) {
             arrowView.postInvalidateOnAnimation();
         }
     }
