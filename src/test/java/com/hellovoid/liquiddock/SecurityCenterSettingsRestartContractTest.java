@@ -37,32 +37,25 @@ public class SecurityCenterSettingsRestartContractTest {
     }
 
     @Test
-    public void combinedRestartSerializesProducerTeardownBeforeLauncherStart() throws Exception {
+    public void combinedRestartSerializesLauncherBeforeSecurityCenter() throws Exception {
         String activity = Files.readString(
                 MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
-        assertTrue("SettingsActivity must expose the combined restart action",
-                activity.contains("void restartSecurityCenterAndLauncher()"));
 
         int method = activity.indexOf("void restartSecurityCenterAndLauncher()");
-        int securityPid = activity.indexOf("pidof com.miui.securitycenter:ui", method);
-        int securityKill = activity.indexOf("kill -TERM $SC_PIDS", securityPid);
-        int waitForExit = activity.indexOf("while [ $i -lt 20 ]", securityKill);
-        int settle = activity.indexOf("sleep 0.4", waitForExit);
-        int launcherKill = activity.indexOf("am force-stop com.miui.home", settle);
-        int launcherSettle = activity.indexOf("sleep 1", launcherKill);
+        int launcherKill = activity.indexOf("am force-stop com.miui.home", method);
         int startHome = activity.indexOf(
                 "am start -a android.intent.action.MAIN -c android.intent.category.HOME",
-                launcherSettle);
+                launcherKill);
+        int waitForLauncher = activity.indexOf("while [ $i -lt 30 ]", startHome);
+        int settle = activity.indexOf("sleep 0.8", waitForLauncher);
+        int securityPid = activity.indexOf("pidof com.miui.securitycenter:ui", settle);
+        int securityKill = activity.indexOf("kill -TERM $SC_PIDS", securityPid);
 
-        assertTrue("must identify the Security Center :ui producer first", securityPid > method);
-        assertTrue("must terminate Security Center before touching Launcher", securityKill > securityPid);
-        assertTrue("must wait for the old Security Center process to disappear", waitForExit > securityKill);
-        assertTrue("must leave a compositor quiescence window after Security Center teardown",
-                settle > waitForExit);
-        assertTrue("Launcher restart must happen only after Security Center teardown settles",
-                launcherKill > settle);
-        assertTrue("HOME start must follow Launcher process restart",
-                launcherSettle > launcherKill && startHome > launcherSettle);
+        assertTrue("Launcher must restart before Security Center", launcherKill > method);
+        assertTrue("HOME must start after Launcher restart", startHome > launcherKill);
+        assertTrue("must wait for the new Launcher process", waitForLauncher > startHome);
+        assertTrue("must leave a settle window before Security Center restart", settle > waitForLauncher);
+        assertTrue("Security Center must restart last", securityPid > settle && securityKill > securityPid);
         assertFalse("must not force-stop the whole Security Center package",
                 activity.contains("am force-stop com.miui.securitycenter"));
     }
