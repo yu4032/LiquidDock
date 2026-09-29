@@ -70,12 +70,14 @@ final class SecurityCenterGlassSinkView extends TextureView
     private boolean parentRecoveryPosted;
     private int outputEnvelopeWidth;
     private int outputEnvelopeHeight;
+    private boolean outputEnvelopeLocked;
     private boolean hasBeenWindowVisible;
     private boolean windowVisibilityInterrupted;
     private ValueAnimator exitFadeAnimator;
     private float exitFadeMultiplier = 1f;
     private float lastNativeTransformScale = Float.NaN;
     private boolean exitContractionPending;
+    private boolean exitContractionLatched;
 
     private SecurityCenterGlassSinkView(
             Context context,
@@ -217,10 +219,15 @@ final class SecurityCenterGlassSinkView extends TextureView
         int layoutHeight = Math.max(1,
                 (int) Math.ceil(material.getHeight() + outset * 2f));
         if (rootSpaceOutput) {
-            // Root-space means geometry/crop coordinates, not a full-root EGL window.
-            // Keep one local envelope per material carrier and only grow it for real overshoot.
-            outputEnvelopeWidth = Math.max(outputEnvelopeWidth, Math.max(layoutWidth, visualWidth));
-            outputEnvelopeHeight = Math.max(outputEnvelopeHeight, Math.max(layoutHeight, visualHeight));
+            // Root-space is a coordinate/crop contract, not a full-root Surface contract.
+            // Lock the EGL output envelope once per material sink from its untransformed layout
+            // size. Folme scale/translation then changes only shape and placement, never Surface
+            // dimensions, so animation cannot produce an output-resize/source-retry storm.
+            if (!outputEnvelopeLocked) {
+                outputEnvelopeWidth = layoutWidth;
+                outputEnvelopeHeight = layoutHeight;
+                outputEnvelopeLocked = true;
+            }
         } else {
             outputEnvelopeWidth = visualWidth;
             outputEnvelopeHeight = visualHeight;
@@ -294,11 +301,13 @@ final class SecurityCenterGlassSinkView extends TextureView
                 : Float.NaN;
         if (materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
                 && authorizedVisible
+                && !exitContractionLatched
                 && finite(lastNativeTransformScale)
                 && finite(currentScale)
                 && lastNativeTransformScale >= 0.97f
                 && currentScale < lastNativeTransformScale - 0.002f) {
             exitContractionPending = true;
+            exitContractionLatched = true;
         }
         if (finite(currentScale)) lastNativeTransformScale = currentScale;
         syncFromMaterial();
@@ -319,6 +328,8 @@ final class SecurityCenterGlassSinkView extends TextureView
             cancelExitFade(false);
             exitContractionPending = false;
         } else {
+            exitContractionPending = false;
+            exitContractionLatched = false;
             View material = materialRef.get();
             if (material != null) {
                 lastNativeTransformScale = Math.min(
@@ -351,6 +362,10 @@ final class SecurityCenterGlassSinkView extends TextureView
         exitFadeAnimator = null;
         if (animator != null) animator.cancel();
         exitFadeMultiplier = restoreVisible ? 1f : Math.max(0f, Math.min(1f, exitFadeMultiplier));
+        if (restoreVisible) {
+            exitContractionPending = false;
+            exitContractionLatched = false;
+        }
         if (restoreVisible && !disposed && !session.isShutdown()) {
             syncFromMaterial();
             logFade("CANCEL");
@@ -423,6 +438,8 @@ final class SecurityCenterGlassSinkView extends TextureView
         disposed = true;
         authorizedVisible = false;
         exitContractionPending = false;
+        exitContractionLatched = false;
+        outputEnvelopeLocked = false;
         cancelExitFade(false);
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
