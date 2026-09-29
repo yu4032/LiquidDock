@@ -10,10 +10,10 @@ import java.lang.reflect.Method;
 
 import org.junit.Test;
 
-/** Animated material carriers use root-space output so backdrop pixels stay screen-stable. */
+/** Output-space policy preserves vendor animation ownership for each material role. */
 public class SecurityCenterSinkOutputPolicyTest {
     @Test
-    public void allAnimatedSecurityCenterRolesUseRootSpaceOutput() throws Exception {
+    public void sidebarDockInheritsNativeTransformWhileOtherRolesUseRootSpace() throws Exception {
         Class<?> policy;
         Class<?> role;
         try {
@@ -34,11 +34,17 @@ public class SecurityCenterSinkOutputPolicyTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Object allApps = Enum.valueOf((Class<? extends Enum>) role, "ALL_APPS");
 
-        assertTrue("Dock height/scale/radius are animated every frame and must not resize its Surface",
+        assertFalse("Dock glass must live inside DockLayout so Folme owns its transform",
                 (Boolean) method.invoke(null, dock));
         assertTrue((Boolean) method.invoke(null, toolbox));
         assertTrue((Boolean) method.invoke(null, allApps));
         assertFalse((Boolean) method.invoke(null, new Object[]{null}));
+
+        Method inherit = policy.getDeclaredMethod("inheritsMaterialTransform", role);
+        inherit.setAccessible(true);
+        assertTrue((Boolean) inherit.invoke(null, dock));
+        assertFalse((Boolean) inherit.invoke(null, toolbox));
+        assertFalse((Boolean) inherit.invoke(null, allApps));
     }
 
     @Test
