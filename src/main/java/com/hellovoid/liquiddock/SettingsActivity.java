@@ -332,10 +332,12 @@ public class SettingsActivity extends AppCompatActivity {
         }).start();
     }
 
-    void restartSecurityCenter() {
-        // Restart only the Security Center :ui process that hosts the sidebar/toolbox hooks.
-        // Do not force-stop the package: that would mark the whole app stopped and is broader
-        // than the test/recovery action needs. Android will recreate :ui on the next sidebar use.
+    void restartSecurityCenterAndLauncher() {
+        // Serialize the two restart-bound processes. Killing Security Center and MIUI Home from
+        // independent UI actions can overlap SurfaceFlinger/PassBlur producer teardown and startup.
+        // First retire the old Security Center :ui producer, wait until that exact process is gone,
+        // allow a short compositor quiescence window, then restart Launcher and explicitly enter HOME.
+        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
         new Thread(() -> {
             try {
                 Process p = new ProcessBuilder("su")
@@ -343,24 +345,34 @@ public class SettingsActivity extends AppCompatActivity {
                         .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
                         .start();
                 try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes("PIDS=$(pidof com.miui.securitycenter:ui); "
-                            + "if [ -z \"$PIDS\" ]; then exit 1; fi; "
-                            + "kill -TERM $PIDS\nexit\n");
+                    os.writeBytes(
+                            "SC_PIDS=$(pidof com.miui.securitycenter:ui 2>/dev/null || true); "
+                            + "if [ -n \"$SC_PIDS\" ]; then "
+                            + "kill -TERM $SC_PIDS; "
+                            + "i=0; while [ $i -lt 20 ] && [ -n \"$(pidof com.miui.securitycenter:ui 2>/dev/null)\" ]; do "
+                            + "sleep 0.1; i=$((i+1)); "
+                            + "done; "
+                            + "fi; "
+                            + "sleep 0.4; "
+                            + "am force-stop com.miui.home; "
+                            + "sleep 1; "
+                            + "am start -a android.intent.action.MAIN -c android.intent.category.HOME\n"
+                            + "exit\n");
                     os.flush();
                 }
-                if (!p.waitFor(8, TimeUnit.SECONDS)) {
+                if (!p.waitFor(10, TimeUnit.SECONDS)) {
                     p.destroy();
                     if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
-                    throw new IOException("su timed out while restarting Security Center");
+                    throw new IOException("su timed out while restarting Security Center and MIUI Home");
                 }
                 int exitCode = p.exitValue();
                 if (exitCode != 0) {
-                    throw new IOException("Security Center UI process is not running");
+                    throw new IOException("combined restart failed with exit code " + exitCode);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 runOnUiThread(() -> Toast.makeText(this,
-                        "Security Center restart interrupted", Toast.LENGTH_SHORT).show());
+                        "Combined restart interrupted", Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
                 runOnUiThread(() -> Toast.makeText(this,
                         "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
