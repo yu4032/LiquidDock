@@ -61,6 +61,7 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("arrowClass, \"onDraw\", new Class<?>[]{Canvas.class}"));
         assertTrue(hook.contains("Launcher450Os4SidebarConfirmationRenderer.draw"));
         assertTrue(hook.contains("bound GestureBackArrowView to active gesture via window fallback"));
+        assertTrue(hook.contains("candidate.arrow == arrow"));
         assertTrue(hook.contains("OS4 confirmation renderer first frame"));
         assertTrue(hook.contains("state.suppressStockAfterCommit = true"));
         assertTrue(hook.contains("state.awaitingVendorHandoff = true"));
