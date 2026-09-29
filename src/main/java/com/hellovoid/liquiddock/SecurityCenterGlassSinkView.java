@@ -257,9 +257,26 @@ final class SecurityCenterGlassSinkView extends TextureView
     }
 
     void setAuthorizedVisible(boolean visible) {
-        if (disposed || session.isShutdown() || authorizedVisible == visible) return;
+        if (disposed || session.isShutdown()) return;
+        if (visible) {
+            animate().cancel();
+            if (getAlpha() != 1f) setAlpha(1f);
+        }
+        if (authorizedVisible == visible) return;
         authorizedVisible = visible;
         syncFromMaterial();
+    }
+
+    void fadeOutFast(long durationMs) {
+        if (disposed || session.isShutdown() || !authorizedVisible) return;
+        animate().cancel();
+        animate().alpha(0f).setDuration(Math.max(1L, durationMs)).start();
+    }
+
+    void cancelExitFade() {
+        if (disposed || session.isShutdown()) return;
+        animate().cancel();
+        if (getAlpha() != 1f) setAlpha(1f);
     }
 
     void armPresentation(long serial, long generation) {
