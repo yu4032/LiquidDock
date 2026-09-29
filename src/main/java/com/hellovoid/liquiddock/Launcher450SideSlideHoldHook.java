@@ -191,14 +191,9 @@ final class Launcher450SideSlideHoldHook {
                         state.arrowStartX = (Float) args[1];
                         state.arrowExpectedHeight = (Float) args[2];
                         state.arrow = arrow;
-                        if (state.gestureActive && state.owner instanceof View) {
-                            snapshotSidebarSourceGeometry(
-                                    (View) state.owner,
-                                    state,
-                                    (View) arrow,
-                                    state.activeGeneration,
-                                    "arrow-onActionDown");
-                        }
+                        // Keep these values only for Launcher-local rendering. On this OS3 build
+                        // the ArrowView local Y can be negative in landscape and is not a stable
+                        // screen-space handoff coordinate.
                     }
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -845,29 +840,15 @@ final class Launcher450SideSlideHoldHook {
         int x;
         float centerY;
 
-        // Reuse the same local geometry that OS3 GestureBackArrowView receives in
-        // onActionDown(y,startX,height), then translate that exact anchor to screen coordinates.
-        // This keeps the Security Center handoff on the same point as the Launcher renderer.
-        View arrow = state.arrow instanceof View ? (View) state.arrow : null;
-        if (arrow != null
-                && !Float.isNaN(state.arrowLocalCenterY)
-                && !Float.isNaN(state.arrowStartX)) {
-            int[] location = new int[2];
-            arrow.getLocationOnScreen(location);
-            float localLeft = state.leftEdge
-                    ? state.arrowStartX
-                    : arrow.getWidth() - state.arrowStartX - width;
-            x = Math.round(location[0] + localLeft);
-            centerY = location[1] + state.arrowLocalCenterY;
-        } else {
-            x = state.leftEdge ? 0 : screenWidth - width;
-            centerY = !Float.isNaN(state.hoverAnchorY)
-                    ? state.hoverAnchorY
-                    : state.lastRawY;
-        }
+        // The OS3 ArrowView's local Y is not screen-authoritative on this landscape build
+        // (observed negative values while the visible gesture is mid-screen). Freeze the actual
+        // gesture confirmation point instead. Security Center derives left/right from x, so the
+        // source rect stays attached to the physical display edge.
+        x = state.leftEdge ? 0 : screenWidth - width;
+        centerY = !Float.isNaN(state.hoverAnchorY)
+                ? state.hoverAnchorY
+                : (!Float.isNaN(state.lastRawY) ? state.lastRawY : state.downRawY);
 
-        // Security Center still derives side from x. Keep the resolved source inside the display
-        // while preserving the native ArrowView inset when available.
         x = Math.max(0, Math.min(x, screenWidth - width));
         int y = Math.round(centerY - (height / 2f));
         y = Math.max(0, Math.min(y, screenHeight - height));
