@@ -53,6 +53,10 @@ final class Launcher450SideSlideHoldHook {
     // completes the release transition. Do not tear down the Launcher visual on SC start earlier
     // than that native release window.
     private static final long OS4_RELEASE_DURATION_MS = 100L;
+    // The following Launcher-owned circle -> 24x53 Sidebar morph is driven by recovered Folme
+    // springs; radius has the slowest response (0.68 s). SC may report its animation start much
+    // earlier, but OS4 keeps rendering the Launcher split effect while that morph is active.
+    private static final long OS4_SIDEBAR_MORPH_RESPONSE_MS = 680L;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<Object, GestureState> STATES =
@@ -91,6 +95,9 @@ final class Launcher450SideSlideHoldHook {
                     arrowClass, "setReadyFinish", new Class<?>[]{readyClass});
             Method onArrowDraw = HookUtil.findMethodExact(
                     arrowClass, "onDraw", new Class<?>[]{Canvas.class});
+            Method onArrowActionDown = HookUtil.findMethodExact(
+                    arrowClass, "onActionDown",
+                    new Class<?>[]{float.class, float.class, float.class});
             Method getLauncher = HookUtil.findMethodExact(
                     applicationClass, "getLauncher", new Class<?>[0]);
             Method isInState = HookUtil.findMethodExact(
@@ -171,6 +178,24 @@ final class Launcher450SideSlideHoldHook {
                 return chain.proceed(args);
             });
 
+            HookUtil.hook(onArrowActionDown, chain -> {
+                Object arrow = chain.getThisObject();
+                GestureState state = stateForArrow(arrow);
+                if (state != null) {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    if (args.length >= 3
+                            && args[0] instanceof Float
+                            && args[1] instanceof Float
+                            && args[2] instanceof Float) {
+                        state.arrowLocalCenterY = (Float) args[0];
+                        state.arrowStartX = (Float) args[1];
+                        state.arrowExpectedHeight = (Float) args[2];
+                        state.arrow = arrow;
+                    }
+                }
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+
             HookUtil.hook(onArrowDraw, chain -> {
                 Object arrow = chain.getThisObject();
                 GestureState state = stateForArrow(arrow);
@@ -192,6 +217,9 @@ final class Launcher450SideSlideHoldHook {
                                 canvas,
                                 (View) arrow,
                                 state.leftEdge,
+                                state.arrowLocalCenterY,
+                                state.arrowStartX,
+                                state.arrowExpectedHeight,
                                 !Float.isNaN(state.hoverAnchorY)
                                         ? state.hoverAnchorY
                                         : state.lastRawY,
@@ -700,7 +728,9 @@ final class Launcher450SideSlideHoldHook {
                     long elapsed = releaseStarted > 0L
                             ? Math.max(0L, SystemClock.uptimeMillis() - releaseStarted)
                             : OS4_RELEASE_DURATION_MS;
-                    long remaining = Math.max(0L, OS4_RELEASE_DURATION_MS - elapsed);
+                    long nativeLauncherWindow =
+                            Math.max(OS4_RELEASE_DURATION_MS, OS4_SIDEBAR_MORPH_RESPONSE_MS);
+                    long remaining = Math.max(0L, nativeLauncherWindow - elapsed);
                     if (owner != null) {
                         if (remaining > 0L) owner.postDelayed(finish, remaining);
                         else owner.post(finish);
@@ -844,6 +874,9 @@ final class Launcher450SideSlideHoldHook {
         float hoverAnchorX = Float.NaN;
         float hoverAnchorY = Float.NaN;
         float hoverAnchorLocalY = Float.NaN;
+        float arrowLocalCenterY = Float.NaN;
+        float arrowStartX = Float.NaN;
+        float arrowExpectedHeight = Float.NaN;
 
         GestureState(Object owner) {
             this.owner = owner;
