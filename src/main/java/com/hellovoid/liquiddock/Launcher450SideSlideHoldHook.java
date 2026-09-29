@@ -191,6 +191,14 @@ final class Launcher450SideSlideHoldHook {
                         state.arrowStartX = (Float) args[1];
                         state.arrowExpectedHeight = (Float) args[2];
                         state.arrow = arrow;
+                        if (state.gestureActive && state.owner instanceof View) {
+                            snapshotSidebarSourceGeometry(
+                                    (View) state.owner,
+                                    state,
+                                    (View) arrow,
+                                    state.activeGeneration,
+                                    "arrow-onActionDown");
+                        }
                     }
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -355,8 +363,14 @@ final class Launcher450SideSlideHoldHook {
             state.releaseStartedAtUptimeMs = 0L;
             state.confirmationDrawLogged = false;
             state.arrowFallbackBindingLogged = false;
+            state.arrowLocalCenterY = Float.NaN;
+            state.arrowStartX = Float.NaN;
+            state.arrowExpectedHeight = Float.NaN;
+            state.clearFrozenSourceGeometry();
             state.policy.onDown();
-            SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
+            state.activeGeneration = state.policy.generation();
+            SideSlideHoldDiagnostics.log(TAG + " DOWN generation=" + state.activeGeneration
+                    + " sideStub=" + state.sideStub
                     + " desktop=" + state.desktopAtDown
                     + " edge=" + (state.leftEdge ? "left" : "right"));
             return;
@@ -538,9 +552,12 @@ final class Launcher450SideSlideHoldHook {
                     View arrow = resolveArrowView(owner, state);
                     if (arrow != null) {
                         state.arrow = arrow;
-                        snapshotSidebarSourceGeometry(owner, state, arrow);
+                        snapshotSidebarSourceGeometry(
+                                owner, state, arrow, generation, "confirmation-arm");
                         arrow.postInvalidateOnAnimation();
                     } else {
+                        snapshotSidebarSourceGeometry(
+                                owner, state, null, generation, "confirmation-arm-fallback");
                         // GestureBackArrowView is a sibling window on this Launcher build.
                         // Invalidate the gesture root so its next traversal reaches onDraw and lets
                         // stateForArrow bind the active arrow through the existing window fallback.
@@ -619,7 +636,7 @@ final class Launcher450SideSlideHoldHook {
             state.policy.onArmResult(false, generation);
             return;
         }
-        int[] geometry = state.hasFrozenSourceGeometry()
+        int[] geometry = state.hasFrozenSourceGeometry(generation)
                 ? state.frozenSourceGeometry()
                 : sourceGeometry(owner, state);
         Intent intent = new Intent(SidebarCommandContract.ACTION_SHOW)
@@ -795,18 +812,24 @@ final class Launcher450SideSlideHoldHook {
     }
 
     private static void snapshotSidebarSourceGeometry(
-            View owner, GestureState state, View arrow) {
-        if (state == null || owner == null || arrow == null) return;
-        if (Float.isNaN(state.arrowLocalCenterY) || Float.isNaN(state.arrowStartX)) return;
+            View owner,
+            GestureState state,
+            View arrow,
+            int generation,
+            String reason) {
+        if (state == null || owner == null) return;
+        if (arrow != null) state.arrow = arrow;
         int[] geometry = sourceGeometry(owner, state);
         state.frozenSourceX = geometry[0];
         state.frozenSourceY = geometry[1];
         state.frozenSourceWidth = geometry[2];
         state.frozenSourceHeight = geometry[3];
         state.frozenSourceRadius = geometry[4];
+        state.frozenSourceGeneration = generation;
         SideSlideHoldDiagnostics.log(TAG
-                + " froze Sidebar source geometry="
-                + geometry[0] + "," + geometry[1]
+                + " froze Sidebar source geometry generation=" + generation
+                + " reason=" + reason
+                + " geometry=" + geometry[0] + "," + geometry[1]
                 + " " + geometry[2] + "x" + geometry[3]
                 + " r=" + geometry[4]);
     }
@@ -904,6 +927,7 @@ final class Launcher450SideSlideHoldHook {
         boolean workspaceCancelled;
         boolean confirmationDrawLogged;
         boolean arrowFallbackBindingLogged;
+        int activeGeneration = Integer.MIN_VALUE;
         int committedGeneration = Integer.MIN_VALUE;
         long confirmationStartedAtUptimeMs;
         long releaseStartedAtUptimeMs;
@@ -924,9 +948,11 @@ final class Launcher450SideSlideHoldHook {
         int frozenSourceWidth = Integer.MIN_VALUE;
         int frozenSourceHeight = Integer.MIN_VALUE;
         int frozenSourceRadius = Integer.MIN_VALUE;
+        int frozenSourceGeneration = Integer.MIN_VALUE;
 
-        boolean hasFrozenSourceGeometry() {
-            return frozenSourceX != Integer.MIN_VALUE
+        boolean hasFrozenSourceGeometry(int generation) {
+            return frozenSourceGeneration == generation
+                    && frozenSourceX != Integer.MIN_VALUE
                     && frozenSourceY != Integer.MIN_VALUE
                     && frozenSourceWidth > 0
                     && frozenSourceHeight > 0
@@ -949,6 +975,7 @@ final class Launcher450SideSlideHoldHook {
             frozenSourceWidth = Integer.MIN_VALUE;
             frozenSourceHeight = Integer.MIN_VALUE;
             frozenSourceRadius = Integer.MIN_VALUE;
+            frozenSourceGeneration = Integer.MIN_VALUE;
         }
 
         GestureState(Object owner) {
