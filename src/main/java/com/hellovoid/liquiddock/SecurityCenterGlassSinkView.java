@@ -458,11 +458,11 @@ final class SecurityCenterGlassSinkView extends TextureView
         boolean scaleRising = hadPrevious
                 && effectiveScale > lastEffectiveMaterialScale + EXIT_TREND_EPSILON;
 
-        if (alphaRising || scaleRising) {
+        if (exitFadeStartedAt < 0L && (alphaFalling || scaleFalling || structureLeaving)) {
+            exitFadeStartedAt = SystemClock.uptimeMillis();
+        } else if (!alphaFalling && !structureLeaving && (alphaRising || scaleRising)) {
             exitFadeStartedAt = -1L;
             exitFadeTickPosted = false;
-        } else if (exitFadeStartedAt < 0L && (alphaFalling || scaleFalling || structureLeaving)) {
-            exitFadeStartedAt = SystemClock.uptimeMillis();
         }
     }
 
@@ -470,7 +470,10 @@ final class SecurityCenterGlassSinkView extends TextureView
         long started = exitFadeStartedAt;
         if (started < 0L) return 1f;
         long elapsed = Math.max(0L, SystemClock.uptimeMillis() - started);
-        if (elapsed >= EXIT_FADE_MS) return 0f;
+        if (elapsed >= EXIT_FADE_MS) {
+            exitFadeStartedAt = -1L;
+            return 0f;
+        }
         return 1f - ((float) elapsed / (float) EXIT_FADE_MS);
     }
 
