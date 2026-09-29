@@ -170,6 +170,14 @@ final class SecurityCenterSidebarDrawableGeometry {
         }
     }
 
+    static boolean ownsRoot(View requestedRoot) {
+        synchronized (LOCK) {
+            return requestedRoot != null
+                    && requestedRoot == rootRef.get()
+                    && drawableOwnerRef.get() != null;
+        }
+    }
+
     static Snapshot currentRootGeometry(View requestedRoot) {
         View root;
         View owner;
