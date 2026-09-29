@@ -799,14 +799,33 @@ final class Launcher450SideSlideHoldHook {
         int screenWidth = Math.max(width, dm.widthPixels);
         int screenHeight = Math.max(height, dm.heightPixels);
 
-        // Security Center uses x itself as left/right authority.
-        int x = state.leftEdge ? 0 : screenWidth - width;
+        int x;
+        float centerY;
 
-        // OS3's GestureBackArrowView reports an unusable screen Y (observed as 0). Anchor the
-        // launcher-origin droplet to the center of the actual confirmed pull-out endpoint instead.
-        float centerY = !Float.isNaN(state.hoverAnchorY)
-                ? state.hoverAnchorY
-                : state.lastRawY;
+        // Reuse the same local geometry that OS3 GestureBackArrowView receives in
+        // onActionDown(y,startX,height), then translate that exact anchor to screen coordinates.
+        // This keeps the Security Center handoff on the same point as the Launcher renderer.
+        View arrow = state.arrow instanceof View ? (View) state.arrow : null;
+        if (arrow != null
+                && !Float.isNaN(state.arrowLocalCenterY)
+                && !Float.isNaN(state.arrowStartX)) {
+            int[] location = new int[2];
+            arrow.getLocationOnScreen(location);
+            float localLeft = state.leftEdge
+                    ? state.arrowStartX
+                    : arrow.getWidth() - state.arrowStartX - width;
+            x = Math.round(location[0] + localLeft);
+            centerY = location[1] + state.arrowLocalCenterY;
+        } else {
+            x = state.leftEdge ? 0 : screenWidth - width;
+            centerY = !Float.isNaN(state.hoverAnchorY)
+                    ? state.hoverAnchorY
+                    : state.lastRawY;
+        }
+
+        // Security Center still derives side from x. Keep the resolved source inside the display
+        // while preserving the native ArrowView inset when available.
+        x = Math.max(0, Math.min(x, screenWidth - width));
         int y = Math.round(centerY - (height / 2f));
         y = Math.max(0, Math.min(y, screenHeight - height));
 
