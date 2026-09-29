@@ -139,7 +139,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             long releaseStartedAtUptimeMs) {
         if (canvas == null || arrowView == null) return;
 
-        float density = arrowView.getResources().getDisplayMetrics().density;
+        float density = os4Density(arrowView);
         float viewWidth = arrowView.getWidth();
         float viewHeight = arrowView.getHeight();
         if (viewWidth <= 0f || viewHeight <= 0f) return;
@@ -163,9 +163,11 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 ? Math.max(0L, now - splitStartedAtUptimeMs) / 1000f
                 : 0f;
 
-        splitProgress = splitGateReached
-                ? clamp01(springProgress(splitSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S))
-                : 0f;
+        splitProgress = currentSplitProgress(
+                splitGateReached,
+                splitStartedAtUptimeMs,
+                releaseStartedAtUptimeMs,
+                now);
 
         float widthProgress = splitGateReached
                 ? clamp01(springProgress(splitSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S))
@@ -202,7 +204,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
 
             float releaseSplit =
                     clamp01(springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
-            splitProgress = Math.max(splitProgress, releaseSplit);
             width = lerp(width, SIDEBAR_WIDTH_DP * density, releaseSplit);
             height = lerp(height, SIDEBAR_HEIGHT_DP * density, releaseSplit);
             radius = lerp(radius, SIDEBAR_RADIUS_DP * density, releaseSplit);
@@ -244,25 +245,14 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         // where mScale == GesturesBackController.convertOffset(offset) / 20.
         // The OS4 separated body then starts with its center 12dp outside the display and lerps
         // to one body half-width past that endpoint.
-        float nativeBackWidth =
-                !Float.isNaN(arrowBackWidth) && arrowBackWidth > 0f
-                        ? arrowBackWidth
-                        : PROFILE_WIDTH * density;
-        // on_vsync clamps the gesture argument passed to calculate_positions() to 0.8.
-        // Once split mode begins, the mini Sidebar target therefore stops moving farther inward.
-        float projectedGestureProgress = Math.min(clamp01(gestureProgress), SPLIT_START_PROGRESS);
-        float gestureExtent = nativeBackWidth * projectedGestureProgress;
-        float gestureEndpointX = leftEdge
-                ? baselineX + gestureExtent
-                : baselineX - gestureExtent;
-        float targetHalfWidth = MINI_SIDEBAR_TARGET_HALF_WIDTH_DP * density;
-        float miniTargetCenterX = leftEdge
-                ? Math.min(gestureEndpointX + targetHalfWidth, viewWidth - targetHalfWidth)
-                : Math.max(targetHalfWidth, gestureEndpointX - targetHalfWidth);
-        float miniStartCenterX = leftEdge
-                ? -MINI_SIDEBAR_OUTSIDE_CENTER_DP * density
-                : viewWidth + MINI_SIDEBAR_OUTSIDE_CENTER_DP * density;
-        float miniCenterX = lerp(miniStartCenterX, miniTargetCenterX, splitProgress);
+        float miniCenterX = resolveMiniSidebarCenterX(
+                viewWidth,
+                leftEdge,
+                baselineX,
+                arrowBackWidth,
+                gestureProgress,
+                splitProgress,
+                density);
 
         // Teardrop remains rooted at the original gesture baseline.
         float teardropCenterX = leftEdge
@@ -343,6 +333,91 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 || teardropFactor > 0.001f) {
             arrowView.postInvalidateOnAnimation();
         }
+    }
+
+    static float os4Density(View view) {
+        if (view == null || view.getResources() == null) return 1f;
+        int densityDpi = view.getResources().getConfiguration().densityDpi;
+        return densityDpi > 0 ? densityDpi / 160f
+                : view.getResources().getDisplayMetrics().density;
+    }
+
+    static float currentMiniSidebarCenterX(
+            View arrowView,
+            boolean leftEdge,
+            float arrowStartX,
+            float arrowBackWidth,
+            float gestureProgress,
+            boolean splitActive,
+            long splitStartedAtUptimeMs,
+            long releaseStartedAtUptimeMs) {
+        if (arrowView == null) return Float.NaN;
+        float viewWidth = arrowView.getWidth();
+        if (viewWidth <= 0f) return Float.NaN;
+        float density = os4Density(arrowView);
+        float baselineX = !Float.isNaN(arrowStartX)
+                ? (leftEdge ? arrowStartX : viewWidth - arrowStartX)
+                : (leftEdge
+                        ? FALLBACK_EDGE_INSET_DP * density
+                        : viewWidth - FALLBACK_EDGE_INSET_DP * density);
+        float splitProgress = currentSplitProgress(
+                splitActive,
+                splitStartedAtUptimeMs,
+                releaseStartedAtUptimeMs,
+                SystemClock.uptimeMillis());
+        return resolveMiniSidebarCenterX(
+                viewWidth,
+                leftEdge,
+                baselineX,
+                arrowBackWidth,
+                gestureProgress,
+                splitProgress,
+                density);
+    }
+
+    private static float currentSplitProgress(
+            boolean splitActive,
+            long splitStartedAtUptimeMs,
+            long releaseStartedAtUptimeMs,
+            long now) {
+        float split = 0f;
+        if (splitActive && splitStartedAtUptimeMs > 0L) {
+            float seconds = Math.max(0L, now - splitStartedAtUptimeMs) / 1000f;
+            split = clamp01(springProgress(seconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+        }
+        if (releaseStartedAtUptimeMs > 0L) {
+            float seconds = Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
+            float release = clamp01(springProgress(seconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+            split = Math.max(split, release);
+        }
+        return split;
+    }
+
+    private static float resolveMiniSidebarCenterX(
+            float viewWidth,
+            boolean leftEdge,
+            float baselineX,
+            float arrowBackWidth,
+            float gestureProgress,
+            float splitProgress,
+            float density) {
+        float nativeBackWidth =
+                !Float.isNaN(arrowBackWidth) && arrowBackWidth > 0f
+                        ? arrowBackWidth
+                        : PROFILE_WIDTH * density;
+        float projectedGestureProgress = Math.min(clamp01(gestureProgress), SPLIT_START_PROGRESS);
+        float gestureExtent = nativeBackWidth * projectedGestureProgress;
+        float gestureEndpointX = leftEdge
+                ? baselineX + gestureExtent
+                : baselineX - gestureExtent;
+        float targetHalfWidth = MINI_SIDEBAR_TARGET_HALF_WIDTH_DP * density;
+        float targetCenterX = leftEdge
+                ? Math.min(gestureEndpointX + targetHalfWidth, viewWidth - targetHalfWidth)
+                : Math.max(targetHalfWidth, gestureEndpointX - targetHalfWidth);
+        float startCenterX = leftEdge
+                ? -MINI_SIDEBAR_OUTSIDE_CENTER_DP * density
+                : viewWidth + MINI_SIDEBAR_OUTSIDE_CENTER_DP * density;
+        return lerp(startCenterX, targetCenterX, clamp01(splitProgress));
     }
 
     private static void drawNativeMiniSidebarIcon(
