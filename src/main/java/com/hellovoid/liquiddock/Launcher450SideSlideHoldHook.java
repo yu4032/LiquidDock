@@ -158,24 +158,8 @@ final class Launcher450SideSlideHoldHook {
                         // active, keep BACK as the host state so that promotion cannot hide/reset
                         // the ArrowView underneath our mini Sidebar.
                         args[0] = readyStateBack;
-                    } else {
-                        boolean enteredRecent = state.policy.onReadyState(readyName);
-                        if (enteredRecent) {
-                            SideSlideHoldDiagnostics.log(TAG + " ReadyState entered RECENT");
-                        }
-                        if (enteredRecent && state.owner instanceof View) {
-                            if (secondStageDistanceReached(state)) {
-                                scheduleDwell((View) state.owner, state, "native RECENT");
-                            } else {
-                                SideSlideHoldDiagnostics.log(TAG
-                                        + " native RECENT ready; wait second-stage distance="
-                                        + state.secondStageDistancePx + "px");
-                            }
-                        } else if (!"READY_STATE_RECENT".equals(readyName)
-                                && state.owner instanceof View) {
-                            cancelDwell((View) state.owner, state);
-                            cancelConfirmation((View) state.owner, state);
-                        }
+                    } else if ("READY_STATE_RECENT".equals(readyName)) {
+                        SideSlideHoldDiagnostics.log(TAG + " ReadyState entered RECENT");
                     }
                 }
                 return chain.proceed(args);
@@ -217,14 +201,6 @@ final class Launcher450SideSlideHoldHook {
                         // finger crosses back over the mini Sidebar itself.
                         maybeEnterOs4Split(
                                 state, arrow instanceof View ? (View) arrow : null);
-                        if (!state.confirmationVisible
-                                && state.policy.isEligible()
-                                && state.owner instanceof View
-                                && state.dwellRunnable == null
-                                && secondStageDistanceReached(state)) {
-                            scheduleDwell(
-                                    (View) state.owner, state, "native RECENT + distance");
-                        }
                         if (state.confirmationVisible && arrow instanceof View) {
                             ((View) arrow).postInvalidateOnAnimation();
                         }
@@ -455,7 +431,44 @@ final class Launcher450SideSlideHoldHook {
             }
         }
 
-        // No scene-specific fallback: eligibility comes from the shared ReadyState path.
+        if (!state.sideStub || action != MotionEvent.ACTION_MOVE) return;
+
+        float dx = event.getRawX() - state.downX;
+        boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
+        boolean secondStageReached =
+                inward && Math.abs(dx) >= state.secondStageDistancePx;
+        boolean entered = state.policy.onSecondStageProgress(secondStageReached);
+
+        if (!secondStageReached) {
+            state.hoverAnchorX = Float.NaN;
+            state.hoverAnchorY = Float.NaN;
+            state.hoverAnchorLocalY = Float.NaN;
+            cancelDwell(view, state);
+            return;
+        }
+
+        state.hoverAnchorX = event.getRawX();
+        state.hoverAnchorY = event.getRawY();
+        state.hoverAnchorLocalY = event.getY();
+        if (!state.confirmationConsumedThisGesture
+                && (entered || state.dwellRunnable == null)) {
+            cancelDwell(view, state);
+            int generation = state.policy.generation();
+            state.scheduledGeneration = generation;
+            Runnable runnable = () -> {
+                if (state.scheduledGeneration != generation) return;
+                if (!state.policy.requestArm(generation)) return;
+                SideSlideHoldDiagnostics.log(TAG + " second-stage hold confirmed for "
+                        + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms"
+                        + " at x=" + state.hoverAnchorX + " y=" + state.hoverAnchorY);
+                prepareThenShowSidebar(view, state, generation);
+            };
+            state.dwellRunnable = runnable;
+            view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
+            SideSlideHoldDiagnostics.log(TAG
+                    + " second-stage armed dx=" + dx
+                    + " threshold=" + state.secondStageDistancePx + "px");
+        }
     }
 
     private static boolean isPadSideStub(View view) {
@@ -1100,6 +1113,7 @@ final class Launcher450SideSlideHoldHook {
 
         float dismissDistance = 4f * density;
         if (edgeDistance <= dismissDistance) {
+            state.policy.onSecondStageProgress(false);
             cancelDwell(owner, state);
             cancelConfirmation(owner, state);
             SideSlideHoldDiagnostics.log(TAG + " confirmation retracted through screen edge");
