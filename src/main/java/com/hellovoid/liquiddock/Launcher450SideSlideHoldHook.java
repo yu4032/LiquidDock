@@ -39,8 +39,6 @@ final class Launcher450SideSlideHoldHook {
     // On HOME only, where OS3 never publishes READY_STATE_RECENT, this is used as a visual
     // saturation boundary rather than as a claim about vendor Back completion semantics.
     private static final float HOME_VISUAL_SATURATION_PX = 180f;
-    // Hover means positional dwell, not merely elapsed time after crossing the boundary.
-    private static final float HOME_HOVER_SLOP_DP = 12f;
     // OS4 GestureBackArrowView visual source geometry used by Security Center's launcher-origin
     // transform. Side authority is kept separate: Security Center derives left/right solely from
     // the first x argument, so x must come from the gesture edge rather than the Arrow view.
@@ -255,32 +253,28 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
 
-        float x = event.getRawX();
-        float y = event.getRawY();
-        float hoverSlop = HOME_HOVER_SLOP_DP * view.getResources().getDisplayMetrics().density;
-        boolean anchorMissing = Float.isNaN(state.hoverAnchorX) || Float.isNaN(state.hoverAnchorY);
-        boolean movedOutsideHover = !anchorMissing
-                && (Math.abs(x - state.hoverAnchorX) > hoverSlop
-                || Math.abs(y - state.hoverAnchorY) > hoverSlop);
-        if (entered || anchorMissing || movedOutsideHover) {
-            state.hoverAnchorX = x;
-            state.hoverAnchorY = y;
-            state.hoverAnchorLocalY = event.getY();
+        // OS4 hold authority is continuous once the gesture enters the SideSlideHold region.
+        // Keep following the finger for handoff geometry, but do not restart the 300 ms timer for
+        // ordinary motion inside that region. The old 12dp positional-reset rule made activation
+        // depend on an unnaturally motionless finger and caused the observed probabilistic misses.
+        state.hoverAnchorX = event.getRawX();
+        state.hoverAnchorY = event.getRawY();
+        state.hoverAnchorLocalY = event.getY();
+        if (entered || state.dwellRunnable == null) {
             cancelDwell(view, state);
             int generation = state.policy.generation();
             state.scheduledGeneration = generation;
             Runnable runnable = () -> {
                 if (state.scheduledGeneration != generation) return;
                 if (!state.policy.requestArm(generation)) return;
-                SideSlideHoldDiagnostics.log(TAG + " HOME hover confirmed for "
+                SideSlideHoldDiagnostics.log(TAG + " HOME hold confirmed for "
                         + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms"
                         + " at x=" + state.hoverAnchorX + " y=" + state.hoverAnchorY);
                 prepareThenShowSidebar(view, state, generation);
             };
             state.dwellRunnable = runnable;
             view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
-            SideSlideHoldDiagnostics.log(TAG + " HOME hover armed dx=" + dx
-                    + " reset=" + movedOutsideHover);
+            SideSlideHoldDiagnostics.log(TAG + " HOME hold armed dx=" + dx);
         }
     }
 
@@ -385,33 +379,42 @@ final class Launcher450SideSlideHoldHook {
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
-                if (getResultCode() != SidebarCommandContract.RESULT_READY) {
-                    state.policy.onArmResult(false, generation);
+                final boolean ready =
+                        getResultCode() == SidebarCommandContract.RESULT_READY;
+                // GestureStubView is owned by FsGestureSecondaryThread on this Launcher build.
+                // Ordered-broadcast results arrive on MAIN because of the cross-process bridge,
+                // so every gesture-state/UI mutation must be posted back through the View itself.
+                owner.post(() -> {
+                    if (!ready) {
+                        state.policy.onArmResult(false, generation);
+                        SideSlideHoldDiagnostics.log(TAG
+                                + " Sidebar preflight unavailable/stale -> stock gesture");
+                        return;
+                    }
+                    if (state.scheduledGeneration != generation) {
+                        state.policy.onArmResult(false, generation);
+                        return;
+                    }
+
+                    if (!state.policy.onArmResult(true, generation)) {
+                        return;
+                    }
+
+                    // OS4 Launcher owns this phase: entering the SideSlideHold operate state
+                    // performs haptic feedback, then its back-panel renderer reveals the black
+                    // preview. Security Center is not asked to animate until ACTION_UP.
+                    state.confirmationVisible = true;
+                    owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    float previewCenterY = !Float.isNaN(state.hoverAnchorLocalY)
+                            ? state.hoverAnchorLocalY
+                            : state.lastLocalY;
+                    state.preview = LauncherSideSlidePreview.show(
+                            owner, state.leftEdge, previewCenterY);
                     SideSlideHoldDiagnostics.log(TAG
-                            + " Sidebar preflight unavailable/stale -> stock gesture");
-                    return;
-                }
-                if (state.scheduledGeneration != generation) {
-                    state.policy.onArmResult(false, generation);
-                    return;
-                }
-
-                if (!state.policy.onArmResult(true, generation)) {
-                    return;
-                }
-
-                // OS4 Launcher owns this phase: entering the SideSlideHold operate state
-                // performs haptic feedback, then its back-panel renderer reveals the black preview.
-                // Security Center is not asked to animate until ACTION_UP.
-                state.confirmationVisible = true;
-                owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                float previewCenterY = !Float.isNaN(state.hoverAnchorLocalY)
-                        ? state.hoverAnchorLocalY
-                        : state.lastLocalY;
-                state.preview = LauncherSideSlidePreview.show(
-                        owner, state.leftEdge, previewCenterY);
-                SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar preflight ready -> Launcher haptic + preview; wait ACTION_UP");
+                            + " Sidebar preflight ready -> Launcher haptic + preview"
+                            + " thread=" + Thread.currentThread().getName()
+                            + "; wait ACTION_UP");
+                });
             }
         };
         try {
@@ -481,12 +484,14 @@ final class Launcher450SideSlideHoldHook {
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
-                boolean accepted =
+                final boolean accepted =
                         getResultCode() == SidebarCommandContract.RESULT_ACCEPTED;
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar release show result accepted=" + accepted
                         + " desktop=" + requestWasDesktop);
-                if (preview != null) preview.finishHandoff(accepted);
+                if (preview != null) {
+                    owner.post(() -> preview.finishHandoff(accepted));
+                }
             }
         };
 
@@ -500,7 +505,7 @@ final class Launcher450SideSlideHoldHook {
                     null,
                     null);
         } catch (Throwable error) {
-            if (preview != null) preview.finishHandoff(false);
+            if (preview != null) owner.post(() -> preview.finishHandoff(false));
             SideSlideHoldDiagnostics.log(TAG + " Sidebar show request failed", error);
         }
     }
