@@ -155,16 +155,23 @@ final class SecurityCenterGlassHook {
             // synthetic show/hide/terminal callbacks destroyed our session in that gap, so the
             // second pull had no binding event with which to recreate the replacement. Observe the
             // methods for compatibility only; attach/detach/root replacement now perform teardown.
-            HookUtil.hook(sidebarLifecycle.show(), chain ->
-                    chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(sidebarLifecycle.show(), chain -> {
+                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+                if (live != null) live.cancelPanelExitFade();
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
             HookUtil.hook(sidebarLifecycle.hideImmediate(), chain ->
                     chain.proceed(chain.getArgs().toArray(new Object[0])));
             HookUtil.hook(sidebarLifecycle.hideAnimated(), chain ->
                     chain.proceed(chain.getArgs().toArray(new Object[0])));
 
             for (Method terminalMethod : terminalCleanup.methods()) {
-                HookUtil.hook(terminalMethod, chain ->
-                        chain.proceed(chain.getArgs().toArray(new Object[0])));
+                HookUtil.hook(terminalMethod, chain -> {
+                    SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+                    View turbo = resolveTerminalTurbo(chain.getArgs(), contract);
+                    if (live != null && turbo != null) live.fadePanelOnVendorExit(turbo);
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
             }
 
             ACTIVATION.onCallbacksRegistered();
@@ -209,7 +216,20 @@ final class SecurityCenterGlassHook {
         if (generation >= 0L) {
             live.onAllAppsToggleTargetResolved(turbo, targetPresent, generation);
         }
+        if (!targetPresent) live.fadeAllAppsOnExit(turbo);
         live.refreshTransitionFrame(turbo);
+    }
+
+    private static View resolveTerminalTurbo(
+            java.util.List<Object> args,
+            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
+        if (args == null || contract == null) return null;
+        for (Object arg : args) {
+            if (arg instanceof View && contract.turboClass().isInstance(arg)) {
+                return (View) arg;
+            }
+        }
+        return null;
     }
 
     private static SecurityCenterGlassCoordinator currentCoordinator(
