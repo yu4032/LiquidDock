@@ -39,6 +39,8 @@ public class SideSlideHoldArchitectureContractTest {
 
     @Test
     public void os4ConfirmationOrderDoesNotArmOnPreflight() throws Exception {
+        // Verify architectural operations and thread ownership, not exact diagnostic sentences.
+        // Log wording is intentionally allowed to change without breaking CI.
         String hook = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/Launcher450SideSlideHoldHook.java"));
         String bridge = Files.readString(Path.of(
@@ -48,12 +50,16 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> Launcher haptic + preview; wait ACTION_UP"));
+        assertTrue(hook.contains("Sidebar preflight ready -> Launcher haptic + preview"));
+        assertTrue(hook.contains("wait ACTION_UP"));
         assertTrue(hook.contains("ACTION_UP -> Launcher preview handoff -> commit Sidebar"));
         assertTrue(hook.contains("performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)"));
         assertTrue(hook.contains("LauncherSideSlidePreview.show"));
         assertTrue(hook.contains("owner.post(() ->"));
+        assertTrue(hook.contains("LauncherSideSlidePreview.show("));
+        assertTrue(hook.contains("owner.post(() -> preview.finishHandoff(accepted))"));
         assertTrue(hook.contains("Thread.currentThread().getName()"));
+        assertFalse(hook.contains("MAIN.post(() -> LauncherSideSlidePreview.show"));
         assertTrue(hook.contains("preview.beginRelease()"));
         assertTrue(hook.contains("preview.finishHandoff(accepted)"));
         assertFalse(hook.contains("sendConfirmation(owner, true, state)"));
