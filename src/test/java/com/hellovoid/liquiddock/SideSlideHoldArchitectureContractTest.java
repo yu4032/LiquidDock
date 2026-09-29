@@ -74,7 +74,7 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("logVendorBooleanDiagnostics"));
         assertTrue(bridge.contains("show.invoke"));
         assertTrue(contract.contains("EXTRA_GESTURE_Y"));
-        assertTrue(bridge.contains("native SC preview activate+haptic+widen"));
+        assertTrue(bridge.contains("native confirmation haptic"));
         assertTrue(bridge.contains("resolveDockState"));
         assertTrue(bridge.contains("DockWindowType{"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
