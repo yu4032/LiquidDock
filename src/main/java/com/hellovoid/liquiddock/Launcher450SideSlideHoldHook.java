@@ -934,8 +934,13 @@ final class Launcher450SideSlideHoldHook {
                     : screenWidth - projectedDistance - projectedOffset;
         }
 
-        int x = Math.round(projectedCenterScreenX - width * 0.5f);
-        x = Math.max(0, Math.min(x, screenWidth - width));
+        // Security Center's five-int launcher contract uses x to determine the physical
+        // origin edge for the panel transform. The Launcher mini Sidebar is intentionally drawn
+        // inward from that edge, so its visible screen-space center must NOT be reused as the
+        // vendor source-left coordinate. Doing so makes the full Video Toolbox appear to grow
+        // from inside the screen. Keep the visual mini where OS4 draws it, but hand SC an
+        // edge-anchored source rect just like the native launcher path.
+        int x = state.leftEdge ? 0 : Math.max(0, screenWidth - width);
         int y = Math.round(centerY - (height / 2f));
         y = Math.max(0, Math.min(y, screenHeight - height));
 
