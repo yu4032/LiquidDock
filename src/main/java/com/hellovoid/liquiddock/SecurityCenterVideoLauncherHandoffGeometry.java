@@ -6,8 +6,6 @@ import android.view.ViewParent;
 
 import java.lang.reflect.Method;
 
-import io.github.libxposed.api.XposedInterface;
-
 /**
  * Re-anchors the Video Toolbox child transform to the Launcher mini-Sidebar source only while
  * Security Center is consuming showNewDockFromLauncher geometry.
@@ -79,10 +77,23 @@ final class SecurityCenterVideoLauncherHandoffGeometry {
                 return chain.proceed(args);
             });
 
-            HookUtil.hook(setTranslationX, chain ->
-                    rewriteTranslation(chain, true));
-            HookUtil.hook(setTranslationY, chain ->
-                    rewriteTranslation(chain, false));
+            HookUtil.hook(setTranslationX, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                rewriteTranslationArgs(chain.getThisObject(), args, true);
+                return chain.proceed(args);
+            });
+            HookUtil.hook(setTranslationY, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                ActiveBox state = activeBox;
+                float vendor = args.length == 1 && args[0] instanceof Float
+                        ? (Float) args[0] : 0.0f;
+                rewriteTranslationArgs(chain.getThisObject(), args, false);
+                Object result = chain.proceed(args);
+                if (state != null && chain.getThisObject() == state.box) {
+                    maybeFinish(state, vendor);
+                }
+                return result;
+            });
 
             installed = true;
             SideSlideHoldDiagnostics.log(TAG + " structural video-origin hook installed");
@@ -116,14 +127,12 @@ final class SecurityCenterVideoLauncherHandoffGeometry {
         }
     }
 
-    private static Object rewriteTranslation(XposedInterface.Chain chain, boolean horizontal)
-            throws Throwable {
-        Object owner = chain.getThisObject();
-        Object[] args = chain.getArgs().toArray(new Object[0]);
+    private static void rewriteTranslationArgs(
+            Object owner, Object[] args, boolean horizontal) {
         ActiveBox state = activeBox;
         if (state == null || owner != state.box || args.length != 1
                 || !(args[0] instanceof Float)) {
-            return chain.proceed(args);
+            return;
         }
 
         float vendor = (Float) args[0];
@@ -134,23 +143,16 @@ final class SecurityCenterVideoLauncherHandoffGeometry {
             nativeInitial = vendor;
         }
 
-        float mapped = vendor;
-        if (nativeInitial != null && Math.abs(nativeInitial) > 0.5f) {
-            Float desiredInitial = horizontal ? state.desiredInitialX : state.desiredInitialY;
-            if (desiredInitial == null) {
-                desiredInitial = computeDesiredInitial(state, horizontal);
-                if (horizontal) state.desiredInitialX = desiredInitial;
-                else state.desiredInitialY = desiredInitial;
-            }
-            if (desiredInitial != null) {
-                mapped = desiredInitial * (vendor / nativeInitial);
-                args[0] = mapped;
-            }
+        if (nativeInitial == null || Math.abs(nativeInitial) <= 0.5f) return;
+        Float desiredInitial = horizontal ? state.desiredInitialX : state.desiredInitialY;
+        if (desiredInitial == null) {
+            desiredInitial = computeDesiredInitial(state, horizontal);
+            if (horizontal) state.desiredInitialX = desiredInitial;
+            else state.desiredInitialY = desiredInitial;
         }
-
-        Object result = chain.proceed(args);
-        if (!horizontal) maybeFinish(state, vendor);
-        return result;
+        if (desiredInitial != null) {
+            args[0] = desiredInitial * (vendor / nativeInitial);
+        }
     }
 
     private static Float computeDesiredInitial(ActiveBox state, boolean horizontal) {
