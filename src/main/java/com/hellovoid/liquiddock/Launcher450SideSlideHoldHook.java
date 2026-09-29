@@ -54,10 +54,12 @@ final class Launcher450SideSlideHoldHook {
     private static final float OS4_SOURCE_WIDTH_DP = 24f;
     private static final float OS4_SOURCE_HEIGHT_DP = 53f;
     private static final float OS4_SOURCE_RADIUS_DP = 8f;
-    // OS4 calculate_positions clamps projected Sidebar placement to gesture progress 0.8 and uses
-    // the native 76dp teardrop/profile width as its nominal horizontal span.
+    // OS4 calculate_positions clamps projected placement to gesture progress 0.8. Constructor
+    // field +0x1f0 is dp_to_px(30), the exact horizontal offset from the calculated endpoint to
+    // the separated mini Sidebar / projected evoke center.
     private static final float OS4_PROJECTED_PROFILE_WIDTH_DP = 76f;
     private static final float OS4_PROJECTED_POSITION_PROGRESS = 0.8f;
+    private static final float OS4_PROJECTED_CENTER_OFFSET_DP = 30f;
     // GestureBackArrowView::on_swipe_stop creates a 100 ms ValueAnimator before its listener
     // completes the release transition. Do not tear down the Launcher visual on SC start earlier
     // than that native release window.
@@ -929,10 +931,10 @@ final class Launcher450SideSlideHoldHook {
             float projectedDistance = OS4_PROJECTED_PROFILE_WIDTH_DP
                     * density
                     * OS4_PROJECTED_POSITION_PROGRESS;
-            float halfBody = width * 0.5f;
+            float projectedOffset = OS4_PROJECTED_CENTER_OFFSET_DP * density;
             projectedCenterScreenX = state.leftEdge
-                    ? projectedDistance + halfBody
-                    : screenWidth - projectedDistance - halfBody;
+                    ? projectedDistance + projectedOffset
+                    : screenWidth - projectedDistance - projectedOffset;
         }
 
         int x = Math.round(projectedCenterScreenX - width * 0.5f);
