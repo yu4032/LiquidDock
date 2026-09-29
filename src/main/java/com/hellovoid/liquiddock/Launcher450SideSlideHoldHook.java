@@ -479,22 +479,6 @@ final class Launcher450SideSlideHoldHook {
         return width > 0 && dm.widthPixels > 0 && width < dm.widthPixels / 3;
     }
 
-    private static void scheduleDwell(View owner, GestureState state, String authority) {
-        if (!state.sideStub || state.confirmationConsumedThisGesture) return;
-        cancelDwell(owner, state);
-        int generation = state.policy.generation();
-        state.scheduledGeneration = generation;
-        Runnable runnable = () -> {
-            if (state.scheduledGeneration != generation) return;
-            if (!state.policy.requestArm(generation)) return;
-            SideSlideHoldDiagnostics.log(TAG + " " + authority + " stable for "
-                    + SideSlideHoldPolicy.HOLD_DWELL_MS + "ms -> preflight Sidebar");
-            prepareThenShowSidebar(owner, state, generation);
-        };
-        state.dwellRunnable = runnable;
-        owner.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
-    }
-
     private static void prepareThenShowSidebar(View owner, GestureState state, int generation) {
         Context context = owner.getContext();
         if (context == null) {
@@ -1012,13 +996,6 @@ final class Launcher450SideSlideHoldHook {
             }
         }
         return clamp01(offset / BACK_VISUAL_SATURATION_PX);
-    }
-
-    private static boolean secondStageDistanceReached(GestureState state) {
-        if (state == null || !state.gestureActive) return false;
-        float dx = state.lastRawX - state.downX;
-        boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
-        return inward && Math.abs(dx) >= state.secondStageDistancePx;
     }
 
     private static void lockConfirmationGeometry(
