@@ -467,7 +467,6 @@ final class SecurityCenterSidebarCommandBridge {
         boolean wrapperPresent = false;
         boolean wrapperAttached = false;
         int lineVisibility = -1;
-        boolean lineActive = false;
         try {
             Object dockState = resolveDockState(manager);
             if (dockState != null) {
@@ -491,11 +490,6 @@ final class SecurityCenterSidebarCommandBridge {
             if (line != null) {
                 wrapperAttached = line.isAttachedToWindow() || line.getWindowToken() != null;
                 lineVisibility = line.getVisibility();
-                try {
-                    Method isActive = line.getClass().getMethod("isActive");
-                    lineActive = Boolean.TRUE.equals(isActive.invoke(line));
-                } catch (Throwable ignored) {
-                }
             }
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " vendor show entry diagnostics failed", error);
@@ -506,7 +500,6 @@ final class SecurityCenterSidebarCommandBridge {
                 + " wrapper=" + wrapperPresent
                 + " attached=" + wrapperAttached
                 + " lineVisibility=" + lineVisibility
-                + " lineActive=" + lineActive
                 + " geometry=" + formatGeometry(args));
     }
 
