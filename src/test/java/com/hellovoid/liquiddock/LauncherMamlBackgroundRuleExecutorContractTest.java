@@ -23,7 +23,8 @@ public class LauncherMamlBackgroundRuleExecutorContractTest {
         assertTrue(executor.contains("WidgetBackgroundRuleEngine.loadBundled()"));
         assertTrue(executor.contains("WidgetBackgroundIdentity"));
         assertTrue(executor.contains("rule.elementNames()"));
-        assertTrue(executor.contains("dumpNamedElementsOnce"));
+        assertFalse("production MAML executor must not retain registry-dump diagnostics",
+                executor.contains("dumpNamedElementsOnce"));
 
         assertFalse(allJava.contains("b8006e83-c497-4642-9815-f674b82842b0"));
         assertFalse(allJava.contains("c989887f-fa0d-4963-8c57-896c03e37efc"));
