@@ -107,11 +107,10 @@ final class SecurityCenterSidebarCommandBridge {
                 boolean desktop = intent.getBooleanExtra(
                         SidebarCommandContract.EXTRA_DESKTOP, false);
                 if (desktop) ensureDesktopDockContext();
-                performNativeConfirmationPreview(true);
+                performNativeConfirmationHaptic();
                 return;
             }
             if (SidebarCommandContract.ACTION_CONFIRM_END.equals(action)) {
-                performNativeConfirmationPreview(false);
                 return;
             }
             if (!SidebarCommandContract.ACTION_SHOW.equals(action)) return;
@@ -353,46 +352,25 @@ final class SecurityCenterSidebarCommandBridge {
         return matches.size() == 2 ? matches.toArray(new Method[0]) : null;
     }
 
-    private static void performNativeConfirmationPreview(boolean start) {
+    private static void performNativeConfirmationHaptic() {
         Object service = serviceOwner;
         if (service == null) {
-            SideSlideHoldDiagnostics.log(TAG
-                    + " confirmation preview unavailable: no service");
+            SideSlideHoldDiagnostics.log(TAG + " confirmation haptic unavailable: no service");
             return;
         }
         try {
             Object manager = resolveDockWindowManager(service);
             Object wrapper = manager != null ? resolveMainSidebarWrapper(manager) : null;
             View line = wrapper != null ? resolveSidebarLineView(wrapper) : null;
-            if (manager == null || wrapper == null || line == null) {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " confirmation preview unavailable: native objects unresolved");
-                return;
-            }
-
-            if (start) {
-                // OS4 SidebarTouchListener long-press confirmation sequence:
-                // DockWindowManager.L0(true,true) -> haptic -> SidebarWrapper.U().
-                Method activate = manager.getClass().getMethod(
-                        "L0", boolean.class, boolean.class);
-                Method widen = wrapper.getClass().getMethod("U");
-                activate.invoke(manager, true, true);
+            if (line != null) {
                 line.performHapticFeedback(0);
-                widen.invoke(wrapper);
-                SideSlideHoldDiagnostics.log(TAG
-                        + " native SC preview activate+haptic+widen");
+                SideSlideHoldDiagnostics.log(TAG + " native confirmation haptic");
             } else {
-                // Cancellation only. A successful ACTION_UP does not pass through this path;
-                // its preview is consumed directly by showNewDockFromLauncher().
-                Method hideMoving = wrapper.getClass().getMethod("D");
-                Method narrow = wrapper.getClass().getMethod("R");
-                hideMoving.invoke(wrapper);
-                narrow.invoke(wrapper);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " native SC preview cancel+narrow");
+                        + " confirmation haptic unavailable: Sidebar line unresolved");
             }
         } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " confirmation preview failed", error);
+            SideSlideHoldDiagnostics.log(TAG + " confirmation haptic failed", error);
         }
     }
 
