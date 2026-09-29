@@ -511,9 +511,18 @@ final class SecurityCenterGlassCoordinator
     private void reconcileSinks() {
         SecurityCenterGlassSession live = session;
         if (live == null || live.isShutdown()) return;
+        SecurityCenterGlassSinkView previousDockSink = dockSink;
         dockSink = reconcileSink(
                 dockSink, dockRef.get(), live,
                 SecurityCenterSinkOutputPolicy.MaterialRole.DOCK);
+        View motionBox = motionBoxRef.get();
+        if (previousDockSink != null && previousDockSink != dockSink && motionBox != null) {
+            SecurityCenterMaterialTransformSyncHook.unbind(motionBox, previousDockSink);
+        }
+        if (dockSink != null && assistantType == ASSISTANT_GLOBAL_DOCK
+                && motionBox != null && motionBox.isAttachedToWindow()) {
+            SecurityCenterMaterialTransformSyncHook.bind(motionBox, dockSink);
+        }
         previewSink = reconcileSink(
                 previewSink,
                 assistantType == ASSISTANT_GLOBAL_DOCK ? abstractDockRef.get() : null,
@@ -920,6 +929,10 @@ final class SecurityCenterGlassCoordinator
 
     private void disposeSinks() {
         SecurityCenterGlassSinkView oldDock = dockSink;
+        View oldMotionBox = motionBoxRef.get();
+        if (oldDock != null && oldMotionBox != null) {
+            SecurityCenterMaterialTransformSyncHook.unbind(oldMotionBox, oldDock);
+        }
         SecurityCenterGlassSinkView oldPreview = previewSink;
         SecurityCenterGlassSinkView oldBox = boxSink;
         SecurityCenterGlassSinkView oldApps = appsSink;
