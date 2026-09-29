@@ -48,17 +48,19 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> native confirm armed; wait ACTION_UP"));
-        assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
+        assertTrue(hook.contains("Sidebar preflight ready -> haptic then start native SC transform"));
+        assertTrue(hook.contains("native confirmation haptic complete -> start SC transform"));
+        assertTrue(hook.contains("ACTION_UP -> finalize Sidebar gesture"));
         assertTrue(hook.contains("Sidebar source geometry side="));
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
-        assertTrue(hook.contains("arrow.getLocationOnScreen(location)"));
-        assertTrue(hook.contains("y = location[1]"));
+        assertTrue(hook.contains("centerY = !Float.isNaN(state.hoverAnchorY)"));
+        assertTrue(hook.contains("state.hoverAnchorY"));
+        assertTrue(hook.contains("centerY - (height / 2f)"));
         assertTrue(hook.contains("OS4_SOURCE_WIDTH_DP = 30f"));
         assertTrue(hook.contains("OS4_SOURCE_HEIGHT_DP = 53f"));
         assertTrue(hook.contains("OS4_SOURCE_RADIUS_DP = 8f"));
-        assertTrue(hook.contains("state.downRawY - OS4_SOURCE_TOP_OFFSET_PX"));
-        assertFalse(hook.contains("location[0]"));
+        assertFalse(hook.contains("OS4_SOURCE_TOP_OFFSET_PX"));
+        assertFalse(hook.contains("getLocationOnScreen(location)"));
         assertFalse(bridge.contains("moveSidebarToGestureY"));
         assertFalse(bridge.contains("resolveOrPrepareMainSidebarWrapper"));
         assertTrue(hook.contains("shouldConsumeVendorCompletion"));
@@ -66,6 +68,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("HOME Workspace paging cancelled for edge side-slide"));
         assertTrue(hook.contains("finishCurrentGesture"));
         assertTrue(contract.contains("ACTION_CONFIRM_START"));
+        assertTrue(hook.contains("sendOrderedBroadcast"));
+        assertTrue(hook.contains("sidebarShowIssued"));
         assertTrue(contract.contains("ACTION_CONFIRM_END"));
         assertTrue(contract.contains("EXTRA_DESKTOP"));
         assertTrue(bridge.contains("vendorShowEndpointReady"));
