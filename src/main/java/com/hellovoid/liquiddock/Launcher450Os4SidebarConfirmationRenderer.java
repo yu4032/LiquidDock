@@ -25,6 +25,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float TARGET_WIDTH_DP = 24f;
     private static final float TARGET_HEIGHT_DP = 53f;
     private static final float TARGET_RADIUS_DP = 8f;
+    private static final float EDGE_SOURCE_OFFSET_DP = 12f;
+    private static final float RELEASE_SPLIT_TARGET = -1.5f;
 
     // Recovered AnimTarget configs:
     // width  {0.80, 0.58}, height {0.85, 0.40}, radius {0.90, 0.68}.
@@ -51,33 +53,60 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             View arrowView,
             boolean leftEdge,
             float gestureRawY,
-            long startedAtUptimeMs) {
+            long startedAtUptimeMs,
+            long releaseStartedAtUptimeMs) {
         if (canvas == null || arrowView == null) return;
 
         float density = arrowView.getResources().getDisplayMetrics().density;
-        float elapsedSeconds =
-                Math.max(0L, SystemClock.uptimeMillis() - startedAtUptimeMs) / 1000f;
+        long now = SystemClock.uptimeMillis();
+        float elapsedSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
+        boolean releasing = releaseStartedAtUptimeMs > 0L;
 
-        float width = lerp(
-                START_WIDTH_DP * density,
-                TARGET_WIDTH_DP * density,
-                springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
-        float height = lerp(
-                START_HEIGHT_DP * density,
-                TARGET_HEIGHT_DP * density,
-                springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
-        float radius = lerp(
-                START_RADIUS_DP * density,
-                TARGET_RADIUS_DP * density,
-                springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
+        float width;
+        float height;
+        float radius;
+        float splitProgress;
+        if (releasing) {
+            // OS4 on_swipe_stop does not enlarge the 24x53 body. It freezes body geometry and
+            // drives split_progress from its shown state toward the recovered -1.5f target while
+            // the real Sidebar pop animation takes ownership.
+            width = TARGET_WIDTH_DP * density;
+            height = TARGET_HEIGHT_DP * density;
+            radius = TARGET_RADIUS_DP * density;
+            float releaseSeconds = Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
+            splitProgress = lerp(
+                    1f,
+                    RELEASE_SPLIT_TARGET,
+                    springProgress(releaseSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+        } else {
+            width = lerp(
+                    START_WIDTH_DP * density,
+                    TARGET_WIDTH_DP * density,
+                    springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+            height = lerp(
+                    START_HEIGHT_DP * density,
+                    TARGET_HEIGHT_DP * density,
+                    springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
+            radius = lerp(
+                    START_RADIUS_DP * density,
+                    TARGET_RADIUS_DP * density,
+                    springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
+            // Hold-confirmation show phase resolves the split body toward split_progress=1.
+            splitProgress = springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S);
+        }
 
         float viewWidth = arrowView.getWidth();
         float viewHeight = arrowView.getHeight();
         if (viewWidth <= 0f || viewHeight <= 0f) return;
 
-        // OS4's confirmation body is edge-attached. Keeping the body half-width inside the edge
-        // reproduces the native endpoint while avoiding the old detached/synthetic preview.
-        float centerX = leftEdge ? width * 0.5f : viewWidth - width * 0.5f;
+        // OS4 on_vsync positions the split body as source + (target-source)*split_progress.
+        // The recovered source offset is 12dp beyond the active edge; the shown endpoint is the
+        // edge-attached 24dp body passed to Security Center for the real Sidebar transform.
+        float sourceX = leftEdge
+                ? -EDGE_SOURCE_OFFSET_DP * density
+                : viewWidth + EDGE_SOURCE_OFFSET_DP * density;
+        float targetX = leftEdge ? width * 0.5f : viewWidth - width * 0.5f;
+        float centerX = lerp(sourceX, targetX, splitProgress);
 
         int[] location = new int[2];
         arrowView.getLocationOnScreen(location);
@@ -99,7 +128,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 radius,
                 paint);
 
-        if (SystemClock.uptimeMillis() - startedAtUptimeMs < MAX_FRAME_WINDOW_MS) {
+        if (releasing || now - startedAtUptimeMs < MAX_FRAME_WINDOW_MS) {
             arrowView.postInvalidateOnAnimation();
         }
     }
