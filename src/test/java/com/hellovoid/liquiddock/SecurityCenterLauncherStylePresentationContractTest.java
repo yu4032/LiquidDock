@@ -220,9 +220,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 hook.contains("live.fadeAllAppsOnExit(turbo)"));
         assertTrue("fade must modulate Prismal composition alpha rather than TextureView alpha",
                 sink.contains("presentationPaint.setAlpha"));
-        assertTrue("fade diagnostics must expose start/cancel without per-frame spam",
+        assertFalse("production fade path must not retain temporary diagnostic logging",
                 sink.contains("[DC][SecurityCenterGlassFade]")
-                        && sink.contains("logFade(\"START\")"));
+                        || sink.contains("logFade("));
         assertFalse("terminal cleanup must remain observation-only and cannot start the fade late",
                 hook.contains("resolveTerminalTurbo(")
                         || hook.contains("fadePanelOnVendorExit(turbo)"));
