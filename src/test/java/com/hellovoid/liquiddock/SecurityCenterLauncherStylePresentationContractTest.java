@@ -133,24 +133,26 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue(sink.contains("recoverParentNow("));
     }
 
-    @Test public void perNodeOutputPreservesPrismalOuterEdgePixelsWithoutResizingRootSpaceOutput() throws Exception {
+    @Test public void perNodeOutputPreservesRootSpaceGeometryWithoutFullRootSurfaces() throws Exception {
         String sink = SourceContractText.read(
                 MAIN.resolve("SecurityCenterGlassSinkView.java"));
         String geometry = Files.readString(MAIN.resolve("SecurityCenterGlassGeometry.java"));
         assertTrue("Prismal edge shell reaches about 2.2 logical pixels outside the SDF",
                 sink.contains("OPTICAL_OUTSET_PX = 3f"));
-        assertTrue("Shape and presentation crop must be separable",
-                geometry.contains("expandedBy("));
-        assertTrue("animated All Apps must have a full-root crop without changing its shape",
-                geometry.contains("withRootCrop()"));
-        assertTrue("node-space output retains both sides of the optical margin",
-                sink.contains("outset * 2f"));
-        assertTrue("node-space crop expands while preserving original Prismal geometry",
-                sink.contains("shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)"));
-        assertTrue("root-space output must not resize its Surface with the animated node",
+        assertTrue("Shape and presentation crop must remain separable",
+                geometry.contains("inheritedTransform("));
+        assertTrue("root-space outputs use a stable local material envelope",
+                sink.contains("outputEnvelopeWidth")
+                        && sink.contains("outputEnvelopeHeight")
+                        && sink.contains("Math.max(layoutWidth, visualWidth)"));
+        assertFalse("root-space output must not allocate one full-root TextureView per sink",
                 sink.contains("rootSpaceOutput ? material.getRootView() : material"));
-        assertTrue("only root-space output uses the full-root crop",
-                sink.contains("rootSpaceOutput\n                    ? shape.withRootCrop()"));
+        assertTrue("presentation crop comes from the actual TextureView envelope in root space",
+                sink.contains("Bounds outputBounds = mapBounds(this, root)")
+                        && sink.contains("outputBounds.left")
+                        && sink.contains("outputBounds.bottom"));
+        assertTrue("node-space crop still preserves the optical margin",
+                sink.contains("shape.expandedBy(OPTICAL_OUTSET_PX * visualScale)"));
     }
 
     @Test public void sharedSessionHasMultipleSinkOutputsButOneProducer() throws Exception {
