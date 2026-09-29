@@ -601,12 +601,8 @@ final class Launcher450SideSlideHoldHook {
                     View arrow = resolveArrowView(owner, state);
                     if (arrow != null) {
                         state.arrow = arrow;
-                        snapshotSidebarSourceGeometry(
-                                owner, state, arrow, generation, "confirmation-arm");
                         arrow.postInvalidateOnAnimation();
                     } else {
-                        snapshotSidebarSourceGeometry(
-                                owner, state, null, generation, "confirmation-arm-fallback");
                         // GestureBackArrowView is a sibling window on this Launcher build.
                         // Invalidate the gesture root so its next traversal reaches onDraw and lets
                         // stateForArrow bind the active arrow through the existing window fallback.
@@ -656,6 +652,11 @@ final class Launcher450SideSlideHoldHook {
             state.arrow = arrow;
             arrow.postInvalidateOnAnimation();
         }
+        // Freeze the handoff rectangle at release, not at the 300ms arm point. OS4 hands the
+        // already-separated mini Sidebar to the vendor expansion, so the source geometry must
+        // match the final visible body on this exact frame.
+        snapshotSidebarSourceGeometry(
+                owner, state, arrow, generation, "release-handoff");
         SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
         showSidebar(owner, state, generation);
         if (!state.desktopAtDown) {
@@ -911,10 +912,12 @@ final class Launcher450SideSlideHoldHook {
         // calculate_positions projects the body inward using the 76dp nominal profile width at
         // clamped progress 0.8. Reuse ArrowView's local baseline when available and translate it
         // to screen space; otherwise fall back to the physical edge as baseline.
-        float projectedDistance = OS4_PROJECTED_PROFILE_WIDTH_DP
-                * dm.density
-                * OS4_PROJECTED_POSITION_PROGRESS;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
+        float nativeBackWidth = stableArrowBackWidth(state.arrow);
+        float projectedDistance = (!Float.isNaN(nativeBackWidth) && nativeBackWidth > 0f
+                ? nativeBackWidth
+                : OS4_PROJECTED_PROFILE_WIDTH_DP * dm.density)
+                * OS4_PROJECTED_POSITION_PROGRESS;
         float projectedCenterScreenX;
         if (arrow != null && !Float.isNaN(state.arrowStartX)) {
             int[] arrowLocation = new int[2];
@@ -922,14 +925,22 @@ final class Launcher450SideSlideHoldHook {
             float localBaseline = state.leftEdge
                     ? state.arrowStartX
                     : arrow.getWidth() - state.arrowStartX;
-            float localCenter = state.leftEdge
+            // Match Launcher450Os4SidebarConfirmationRenderer exactly: calculate_positions()
+            // yields the background endpoint, then the 24dp body center is one half-width beyond
+            // that endpoint.
+            float localEndpoint = state.leftEdge
                     ? localBaseline + projectedDistance
                     : localBaseline - projectedDistance;
+            float halfBody = width * 0.5f;
+            float localCenter = state.leftEdge
+                    ? localEndpoint + halfBody
+                    : localEndpoint - halfBody;
             projectedCenterScreenX = arrowLocation[0] + localCenter;
         } else {
+            float halfBody = width * 0.5f;
             projectedCenterScreenX = state.leftEdge
-                    ? projectedDistance
-                    : screenWidth - projectedDistance;
+                    ? projectedDistance + halfBody
+                    : screenWidth - projectedDistance - halfBody;
         }
         x = Math.round(projectedCenterScreenX - width * 0.5f);
         x = Math.max(0, Math.min(x, screenWidth - width));
