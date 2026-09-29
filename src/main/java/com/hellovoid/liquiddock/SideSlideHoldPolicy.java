@@ -25,8 +25,8 @@ final class SideSlideHoldPolicy {
         generation++;
     }
 
-    boolean onReadyState(String stateName) {
-        return setEligible("READY_STATE_RECENT".equals(stateName));
+    boolean onSecondStageProgress(boolean reachedThreshold) {
+        return setEligible(reachedThreshold);
     }
 
     private boolean setEligible(boolean nextEligible) {
