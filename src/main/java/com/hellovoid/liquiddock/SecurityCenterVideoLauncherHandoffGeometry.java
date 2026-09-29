@@ -6,6 +6,8 @@ import android.view.ViewParent;
 
 import java.lang.reflect.Method;
 
+import io.github.libxposed.api.XposedInterface;
+
 /**
  * Re-anchors the Video Toolbox child transform to the Launcher mini-Sidebar source only while
  * Security Center is consuming showNewDockFromLauncher geometry.
@@ -114,7 +116,7 @@ final class SecurityCenterVideoLauncherHandoffGeometry {
         }
     }
 
-    private static Object rewriteTranslation(HookUtil.HookChain chain, boolean horizontal)
+    private static Object rewriteTranslation(XposedInterface.Chain chain, boolean horizontal)
             throws Throwable {
         Object owner = chain.getThisObject();
         Object[] args = chain.getArgs().toArray(new Object[0]);
