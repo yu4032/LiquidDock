@@ -375,7 +375,8 @@ final class Launcher450SideSlideHoldHook {
         Intent prepare = new Intent(SidebarCommandContract.ACTION_PREPARE)
                 .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
                 .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
-                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
+                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
+                .putExtra(SidebarCommandContract.EXTRA_GENERATION, generation);
         BroadcastReceiver result = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ignored, Intent ignoredIntent) {
