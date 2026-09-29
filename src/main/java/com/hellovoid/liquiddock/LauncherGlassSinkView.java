@@ -252,11 +252,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
                         pressState.progress(), pressState.glowCenterX(), pressState.glowCenterY()));
     }
 
-    private static float clamp01(float value) {
-        if (!Float.isFinite(value)) return 0.5f;
-        return Math.max(0f, Math.min(1f, value));
-    }
-
     boolean syncFromMaterial() {
         View material = materialRef.get();
         if (disposed || material == null) return false;

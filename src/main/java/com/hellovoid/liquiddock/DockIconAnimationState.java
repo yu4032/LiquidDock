@@ -23,7 +23,6 @@ final class DockIconAnimationState {
     }
 
     private static final Sample VISIBLE_SAMPLE = new Sample(1f, false, false, null);
-    private static final Sample HIDDEN_SAMPLE = new Sample(0f, false, false, null);
 
     private static final class Record {
         long fadeStartedMs = HIDDEN;

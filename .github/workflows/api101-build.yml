@@ -45,6 +45,10 @@ jobs:
             echo "Forbidden Security Center/root PassBlur regression detected" >&2
             exit 1
           fi
+          if (( ${#files[@]} > 0 )) && grep -En '(^|[^A-Za-z0-9_])(ob|ja)\.[A-Za-z_$]|com\.miui\.dock\.sidebar\.[a-z](["$;.)]|$)|startsWith\("com\.miui\.dock\.sidebar\."' "${files[@]}"; then
+            echo "Forbidden Security Center obfuscated-name dependency detected" >&2
+            exit 1
+          fi
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4

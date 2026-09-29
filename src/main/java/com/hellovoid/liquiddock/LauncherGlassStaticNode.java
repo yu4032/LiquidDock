@@ -452,11 +452,6 @@ final class LauncherGlassStaticNode {
         return replacement;
     }
 
-    private static float clamp01(float value) {
-        if (!Float.isFinite(value)) return 0.5f;
-        return Math.max(0f, Math.min(1f, value));
-    }
-
     private static float distance(float x1, float y1, float x2, float y2) {
         float dx = x2 - x1;
         float dy = y2 - y1;

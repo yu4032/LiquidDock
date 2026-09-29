@@ -15,7 +15,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 
 class SearchboxSettingsActivity : SettingsActivity() {
-    override fun useLegacyPreferenceUi(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
