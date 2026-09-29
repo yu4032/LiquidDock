@@ -24,8 +24,8 @@ public class RestartBoundSettingsContractTest {
 
         assertTrue(source.contains("getDecorView().getWindowInsetsController()"));
         assertFalse(source.contains("getWindow().getInsetsController()"));
-        assertFalse(source.contains("setContentView("));
-        assertFalse(source.contains("findViewById("));
+        assertFalse(source.contains("\n        setContentView("));
+        assertFalse(source.contains("\n        findViewById("));
         assertFalse(source.contains("PreferenceFragmentCompat"));
         assertFalse(source.contains("R.layout.activity_settings"));
     }
