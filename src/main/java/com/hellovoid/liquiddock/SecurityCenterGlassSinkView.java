@@ -221,12 +221,20 @@ final class SecurityCenterGlassSinkView extends TextureView
                 (int) Math.ceil(material.getHeight() + outset * 2f));
         if (rootSpaceOutput) {
             // Root-space is a coordinate/crop contract, not a full-root Surface contract.
-            // Lock the EGL output envelope once per material sink from its untransformed layout
-            // size. Folme scale/translation then changes only shape and placement, never Surface
-            // dimensions, so animation cannot produce an output-resize/source-retry storm.
+            // New Dock mutates DockLayout height while animating. A one-time local-height lock can
+            // therefore capture only an early fraction of the eventual strip. Keep Dock outputs
+            // local in width but root-tall in Y, so native height/translation animation never
+            // resizes or clips the EGL window. Other material roles remain fully local.
             if (!outputEnvelopeLocked) {
                 outputEnvelopeWidth = layoutWidth;
-                outputEnvelopeHeight = layoutHeight;
+                boolean verticalDockEnvelope =
+                        materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
+                                || materialRole
+                                        == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK_PREVIEW;
+                View root = material.getRootView();
+                outputEnvelopeHeight = verticalDockEnvelope && root != null
+                        ? Math.max(layoutHeight, root.getHeight())
+                        : layoutHeight;
                 outputEnvelopeLocked = true;
             }
         } else {
@@ -244,7 +252,12 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
 
         changed |= setFloatIfChanged(getX(), bounds.left - outset, this::setX);
-        changed |= setFloatIfChanged(getY(), bounds.top - outset, this::setY);
+        boolean verticalDockEnvelope = rootSpaceOutput
+                && (materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
+                        || materialRole
+                                == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK_PREVIEW);
+        float outputY = verticalDockEnvelope ? 0f : bounds.top - outset;
+        changed |= setFloatIfChanged(getY(), outputY, this::setY);
         changed |= setFloatIfChanged(getPivotX(), 0f, this::setPivotX);
         changed |= setFloatIfChanged(getPivotY(), 0f, this::setPivotY);
         changed |= setFloatIfChanged(getScaleX(), 1f, this::setScaleX);
