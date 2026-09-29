@@ -25,9 +25,9 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float FALLBACK_EDGE_INSET_DP = 12f;
     // on_vsync's standalone mini-Sidebar layer starts with its center 12dp outside the edge.
     private static final float MINI_SIDEBAR_OUTSIDE_CENTER_DP = 12f;
-    // In the separated on_vsync branch the final 24dp body sits immediately after the
-    // calculate_positions endpoint, so its center is one 12dp half-width inward from that endpoint.
-    private static final float MINI_SIDEBAR_TARGET_HALF_WIDTH_DP = SIDEBAR_WIDTH_DP * 0.5f;
+    // GestureBackArrowView constructor maps +0x1f0 to dp_to_px(30). on_vsync places the
+    // separated mini Sidebar at calculate_positions endpoint +/- this exact offset.
+    private static final float MINI_SIDEBAR_TARGET_OFFSET_DP = 30f;
     // Exact CachedIconDp initializer recovered from OS4 Launcher:
     // dp_to_px(9), dp_to_px(3), dp_to_px(6), stored as item size, corner radius, gap.
     private static final float SIDEBAR_ICON_DOT_DP = 9f;
@@ -410,10 +410,11 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float gestureEndpointX = leftEdge
                 ? baselineX + gestureExtent
                 : baselineX - gestureExtent;
-        float targetHalfWidth = MINI_SIDEBAR_TARGET_HALF_WIDTH_DP * density;
+        float targetOffset = MINI_SIDEBAR_TARGET_OFFSET_DP * density;
+        float edgeClamp = MINI_SIDEBAR_OUTSIDE_CENTER_DP * density;
         float targetCenterX = leftEdge
-                ? Math.min(gestureEndpointX + targetHalfWidth, viewWidth - targetHalfWidth)
-                : Math.max(targetHalfWidth, gestureEndpointX - targetHalfWidth);
+                ? Math.min(gestureEndpointX + targetOffset, viewWidth - edgeClamp)
+                : Math.max(edgeClamp, gestureEndpointX - targetOffset);
         float startCenterX = leftEdge
                 ? -MINI_SIDEBAR_OUTSIDE_CENTER_DP * density
                 : viewWidth + MINI_SIDEBAR_OUTSIDE_CENTER_DP * density;
