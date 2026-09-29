@@ -7,25 +7,24 @@ import android.os.SystemClock;
 import android.view.View;
 
 /**
- * Source-level port of the OS4 Launcher 8.0 GestureBackArrowView Sidebar background.
+ * Source-level port of the OS4 Launcher 8.0 GestureBackArrowView Sidebar background/split morph.
  *
  * <p>The path kernel is translated from GestureBackArrowView::build_teardrop_path (0x801044).
- * The source control points and their Catmull-Rom expansion are translated from
- * GestureBackArrowView::create_background_proxy (0x7d7c88). PathBackgroundProxy::draw_teardrop
- * (0x7560c8) supplies the original fill + border paint pair.</p>
- *
- * <p>OS3 still owns the host View/Canvas and Security Center still owns the final Sidebar window;
- * no invented Bezier profile is used here.</p>
+ * The source control points and Catmull-Rom expansion are translated from
+ * GestureBackArrowView::create_background_proxy (0x7d7c88). The two-stage water-drop -> miniature
+ * Sidebar morph follows AbstractSidebarSplitEffect::run_abstract_sidebar_anim_target (0x75af08).
+ * PathBackgroundProxy::draw_teardrop (0x7560c8) supplies the original fill + border paint pair.</p>
  */
 final class Launcher450Os4SidebarConfirmationRenderer {
-    private static final float START_WIDTH_DP = 30f;
-    private static final float START_HEIGHT_DP = 30f;
-    private static final float START_RADIUS_DP = 30f;
-    private static final float TARGET_WIDTH_DP = 24f;
-    private static final float TARGET_HEIGHT_DP = 53f;
-    private static final float TARGET_RADIUS_DP = 8f;
-    private static final float EDGE_SOURCE_OFFSET_DP = 12f;
+    private static final float CIRCLE_WIDTH_DP = 30f;
+    private static final float CIRCLE_HEIGHT_DP = 30f;
+    private static final float CIRCLE_RADIUS_DP = 30f;
+    private static final float SIDEBAR_WIDTH_DP = 24f;
+    private static final float SIDEBAR_HEIGHT_DP = 53f;
+    private static final float SIDEBAR_RADIUS_DP = 8f;
+    private static final float FALLBACK_EDGE_INSET_DP = 12f;
 
+    // Exact Folme configs recovered from run_abstract_sidebar_anim_target.
     private static final float WIDTH_DAMPING = 0.80f;
     private static final float WIDTH_RESPONSE_S = 0.58f;
     private static final float HEIGHT_DAMPING = 0.85f;
@@ -45,8 +44,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float TANGENT_NORMAL = 0.15f;
     private static final float TANGENT_MIDDLE = 0.25f;
 
-    // Exact source table at DAT_002f17d8, recovered by structural scan of the original profile.
-    // create_background_proxy appends (775, 0) after interpolating these 16 segments.
+    // Exact source table recovered from create_background_proxy.
     private static final float[][] OS4_SOURCE_PROFILE = {
             {0f, 0f},
             {50f, 2f},
@@ -67,7 +65,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             {775f, 0f}
     };
 
-    // Exact 81-point vector built by create_background_proxy.
     private static final float[][] OS4_PROFILE = buildNativeProfile();
 
     private static final int BACKGROUND_COLOR = 0xCC000000;
@@ -98,110 +95,130 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             Canvas canvas,
             View arrowView,
             boolean leftEdge,
+            float arrowLocalCenterY,
+            float arrowStartX,
+            float arrowExpectedHeight,
             float gestureRawY,
             long startedAtUptimeMs,
             long releaseStartedAtUptimeMs) {
         if (canvas == null || arrowView == null) return;
 
         float density = arrowView.getResources().getDisplayMetrics().density;
-        long now = SystemClock.uptimeMillis();
-        float elapsedSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
-        boolean releasing = releaseStartedAtUptimeMs > 0L;
-
-        float widthProgress =
-                springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S);
-        float heightProgress =
-                springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S);
-        float radiusProgress =
-                springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S);
-        float teardropFactor =
-                springProgress(elapsedSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S);
-        // bridge_factor belongs to the split renderer's body/bridge composition. The native
-        // build_teardrop_path call takes teardrop_factor as its horizontal deformation factor;
-        // its ordinary vertical factor is 1.0.
-        float bridgeFactor =
-                springProgress(elapsedSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S);
-
-        float width = lerp(
-                START_WIDTH_DP * density,
-                TARGET_WIDTH_DP * density,
-                widthProgress);
-        float height = lerp(
-                START_HEIGHT_DP * density,
-                TARGET_HEIGHT_DP * density,
-                heightProgress);
-        float radius = lerp(
-                START_RADIUS_DP * density,
-                TARGET_RADIUS_DP * density,
-                radiusProgress);
-
         float viewWidth = arrowView.getWidth();
         float viewHeight = arrowView.getHeight();
         if (viewWidth <= 0f || viewHeight <= 0f) return;
 
-        float sourceX = leftEdge
-                ? -EDGE_SOURCE_OFFSET_DP * density
-                : viewWidth + EDGE_SOURCE_OFFSET_DP * density;
-        float targetX = leftEdge ? width * 0.5f : viewWidth - width * 0.5f;
+        long now = SystemClock.uptimeMillis();
+        boolean releasing = releaseStartedAtUptimeMs > 0L;
 
-        // OS4 split_progress is consumed by split_effect_renderer; it is not a direct position
-        // lerp. The previous implementation extrapolated targetX with -1.5 and pushed the panel
-        // offscreen. Once ACTION_UP begins, keep the Launcher source at its handoff endpoint.
-        float centerX = releasing
-                ? (leftEdge
-                        ? TARGET_WIDTH_DP * density * 0.5f
-                        : viewWidth - TARGET_WIDTH_DP * density * 0.5f)
-                : lerp(sourceX, targetX, widthProgress);
+        float width;
+        float height;
+        float radius;
+        float teardropFactor;
+        float bridgeFactor;
 
-        if (releasing) {
-            width = TARGET_WIDTH_DP * density;
-            height = TARGET_HEIGHT_DP * density;
-            radius = TARGET_RADIUS_DP * density;
-            teardropFactor = 1f;
-            bridgeFactor = 1f;
+        if (!releasing) {
+            float elapsedSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
+
+            // run_abstract_sidebar_anim_target(show=false):
+            // 24x53/r8 -> 30x30/r30, teardrop 0->1, bridge 0->1.
+            width = lerp(
+                    SIDEBAR_WIDTH_DP * density,
+                    CIRCLE_WIDTH_DP * density,
+                    springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+            height = lerp(
+                    SIDEBAR_HEIGHT_DP * density,
+                    CIRCLE_HEIGHT_DP * density,
+                    springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
+            radius = lerp(
+                    SIDEBAR_RADIUS_DP * density,
+                    CIRCLE_RADIUS_DP * density,
+                    springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
+            teardropFactor = clamp01(
+                    springProgress(elapsedSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
+            bridgeFactor = clamp01(
+                    springProgress(elapsedSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+        } else {
+            float releaseSeconds =
+                    Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
+
+            // run_abstract_sidebar_anim_target(show=true):
+            // the circular water-drop endpoint becomes the 24x53/r8 miniature Sidebar body,
+            // while teardrop_factor and bridge_factor collapse back to zero.
+            width = lerp(
+                    CIRCLE_WIDTH_DP * density,
+                    SIDEBAR_WIDTH_DP * density,
+                    springProgress(releaseSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+            height = lerp(
+                    CIRCLE_HEIGHT_DP * density,
+                    SIDEBAR_HEIGHT_DP * density,
+                    springProgress(releaseSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
+            radius = lerp(
+                    CIRCLE_RADIUS_DP * density,
+                    SIDEBAR_RADIUS_DP * density,
+                    springProgress(releaseSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
+            teardropFactor = 1f - clamp01(
+                    springProgress(releaseSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
+            bridgeFactor = 1f - clamp01(
+                    springProgress(releaseSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+        }
+
+        // OS3 already computes the authoritative local geometry in onActionDown(y,startX,height).
+        // Reuse it instead of rebuilding coordinates from MotionEvent/raw-screen values.
+        float baselineX;
+        if (!Float.isNaN(arrowStartX)) {
+            baselineX = leftEdge ? arrowStartX : viewWidth - arrowStartX;
+        } else {
+            baselineX = leftEdge
+                    ? FALLBACK_EDGE_INSET_DP * density
+                    : viewWidth - FALLBACK_EDGE_INSET_DP * density;
         }
 
         int[] location = new int[2];
         arrowView.getLocationOnScreen(location);
-        float centerY = gestureRawY - location[1];
-        float halfHeight = height * 0.5f;
-        centerY = Math.max(halfHeight, Math.min(centerY, viewHeight - halfHeight));
+        float centerY = !Float.isNaN(arrowLocalCenterY)
+                ? arrowLocalCenterY
+                : gestureRawY - location[1];
+
+        float nativeHalfHeight =
+                !Float.isNaN(arrowExpectedHeight) && arrowExpectedHeight > 0f
+                        ? arrowExpectedHeight * 0.5f
+                        : 0f;
+        if (nativeHalfHeight > 0f) {
+            centerY = Math.max(nativeHalfHeight, Math.min(centerY, viewHeight - nativeHalfHeight));
+        }
 
         float halfWidth = width * 0.5f;
-        float profileFarX;
-        float profileLeft;
-        float profileRight;
-        if (leftEdge) {
-            profileFarX = Math.max(0f, centerX + halfWidth);
-            profileLeft = 0f;
-            profileRight = profileFarX;
-        } else {
-            profileFarX = Math.min(viewWidth, centerX - halfWidth);
-            profileLeft = profileFarX;
-            profileRight = viewWidth;
+        float halfHeight = height * 0.5f;
+        float centerX = leftEdge
+                ? baselineX + halfWidth
+                : baselineX - halfWidth;
+
+        // The water-drop path shares the same baseline as OS3's stock Back background.
+        if (teardropFactor > 0.001f && bridgeFactor > 0.001f) {
+            float profileLeft = leftEdge ? baselineX : centerX - halfWidth;
+            float profileRight = leftEdge ? centerX + halfWidth : baselineX;
+            if (profileRight - profileLeft > 0.001f) {
+                Path path = PATH.get();
+                buildNativeTeardropPath(
+                        path,
+                        profileLeft,
+                        profileRight,
+                        centerY,
+                        height,
+                        !leftEdge,
+                        1f,
+                        teardropFactor);
+                canvas.drawPath(path, FILL_PAINT.get());
+                canvas.drawPath(path, BORDER_PAINT.get());
+            }
         }
 
-        if (profileRight - profileLeft > 0.001f && teardropFactor > 0.001f) {
-            Path path = PATH.get();
-            buildNativeTeardropPath(
-                    path,
-                    profileLeft,
-                    profileRight,
-                    centerY,
-                    height,
-                    !leftEdge,
-                    1f,
-                    teardropFactor);
-
-            // PathBackgroundProxy::draw_teardrop draws the same path with both native paints.
-            canvas.drawPath(path, FILL_PAINT.get());
-            canvas.drawPath(path, BORDER_PAINT.get());
-        }
-
-        // In OS4 the small rounded body belongs to the separated/split branch. Do not show our
-        // panel during dwell; before ACTION_UP the Launcher-owned visual is the teardrop itself.
         if (releasing) {
+            // This is the Launcher-owned miniature Sidebar pop that follows the water drop.
+            // Its dimensions/radius are not invented; they are the show=true Folme targets.
             Paint fill = FILL_PAINT.get();
+            Paint border = BORDER_PAINT.get();
             canvas.drawRoundRect(
                     centerX - halfWidth,
                     centerY - halfHeight,
@@ -210,6 +227,14 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     radius,
                     radius,
                     fill);
+            canvas.drawRoundRect(
+                    centerX - halfWidth,
+                    centerY - halfHeight,
+                    centerX + halfWidth,
+                    centerY + halfHeight,
+                    radius,
+                    radius,
+                    border);
         }
 
         if (releasing || now - startedAtUptimeMs < MAX_FRAME_WINDOW_MS) {
@@ -217,15 +242,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         }
     }
 
-    /**
-     * Exact Java translation of GestureBackArrowView::build_teardrop_path @ 0x801044.
-     *
-     * @param leftX native param_1
-     * @param rightX native param_2
-     * @param centerY native param_3
-     * @param verticalFactor native param_4
-     * @param horizontalFactor native param_5
-     */
     private static void buildNativeTeardropPath(
             Path path,
             float leftX,
@@ -297,12 +313,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         path.close();
     }
 
-    /**
-     * Exact source-vector expansion from create_background_proxy @ 0x7d7c88.
-     *
-     * <p>For each of the 16 native segments, OS4 writes P1 then samples Catmull-Rom at
-     * t={0.2,0.4,0.6,0.8}; after the loop it appends (775,0).</p>
-     */
     private static float[][] buildNativeProfile() {
         int segments = OS4_SOURCE_PROFILE.length - 1;
         float[][] result = new float[segments * 5 + 1][2];
@@ -360,6 +370,10 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                         * (float) Math.sin(omegaD * t);
         float value = 1f - envelope * phase;
         return Math.max(0f, Math.min(value, 1.20f));
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(value, 1f));
     }
 
     private static float lerp(float start, float end, float progress) {
