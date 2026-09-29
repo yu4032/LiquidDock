@@ -381,7 +381,6 @@ final class SecurityCenterGlassSinkView extends TextureView
             syncFromMaterial();
         });
         animator.start();
-        logFade("START");
     }
 
     void cancelExitFade(boolean restoreVisible) {
@@ -395,16 +394,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
         if (restoreVisible && !disposed && !session.isShutdown()) {
             syncFromMaterial();
-            logFade("CANCEL");
         }
-    }
-
-    private void logFade(String event) {
-        try {
-            Api101Bridge.log("[DC][SecurityCenterGlassFade] event=" + event
-                    + " role=" + materialRole
-                    + " multiplier=" + exitFadeMultiplier);
-        } catch (Throwable ignored) {}
     }
 
     void armPresentation(long serial, long generation) {
