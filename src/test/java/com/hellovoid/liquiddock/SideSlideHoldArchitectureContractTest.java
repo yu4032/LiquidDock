@@ -58,6 +58,10 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("Thread.currentThread().getName()"));
         assertFalse(hook.contains("LauncherSideSlidePreview"));
         assertFalse(hook.contains("sendConfirmation(owner, true, state)"));
+        assertTrue(hook.contains("arrowClass, \"onDraw\", new Class<?>[]{Canvas.class}"));
+        assertTrue(hook.contains("Launcher450Os4SidebarConfirmationRenderer.draw"));
+        assertTrue(hook.contains("state.suppressStockAfterCommit = true"));
+        assertTrue(hook.contains("if (state.suppressStockAfterCommit)"));
         assertTrue(hook.contains("Sidebar source geometry side="));
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
         assertTrue(hook.contains("centerY = !Float.isNaN(state.hoverAnchorY)"));
@@ -65,7 +69,7 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("state.dwellRunnable == null"));
         assertFalse(hook.contains("movedOutsideHover"));
         assertTrue(hook.contains("centerY - (height / 2f)"));
-        assertTrue(hook.contains("OS4_SOURCE_WIDTH_DP = 30f"));
+        assertTrue(hook.contains("OS4_SOURCE_WIDTH_DP = 24f"));
         assertTrue(hook.contains("OS4_SOURCE_HEIGHT_DP = 53f"));
         assertTrue(hook.contains("OS4_SOURCE_RADIUS_DP = 8f"));
         assertFalse(hook.contains("OS4_SOURCE_TOP_OFFSET_PX"));
