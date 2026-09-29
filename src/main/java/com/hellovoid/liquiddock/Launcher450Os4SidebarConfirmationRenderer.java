@@ -26,9 +26,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float TARGET_RADIUS_DP = 8f;
     private static final float EDGE_SOURCE_OFFSET_DP = 12f;
 
-    // Retained as animation state only. OS4 does not use this value as a direct X-coordinate lerp.
-    private static final float RELEASE_SPLIT_TARGET = -1.5f;
-
     private static final float WIDTH_DAMPING = 0.80f;
     private static final float WIDTH_RESPONSE_S = 0.58f;
     private static final float HEIGHT_DAMPING = 0.85f;
@@ -119,6 +116,9 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S);
         float teardropFactor =
                 springProgress(elapsedSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S);
+        // bridge_factor belongs to the split renderer's body/bridge composition. The native
+        // build_teardrop_path call takes teardrop_factor as its horizontal deformation factor;
+        // its ordinary vertical factor is 1.0.
         float bridgeFactor =
                 springProgress(elapsedSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S);
 
@@ -159,15 +159,6 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             radius = TARGET_RADIUS_DP * density;
             teardropFactor = 1f;
             bridgeFactor = 1f;
-
-            // Advance the recovered state for timing parity without treating it as a coordinate.
-            float releaseSeconds =
-                    Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
-            float releaseState = lerp(
-                    1f,
-                    RELEASE_SPLIT_TARGET,
-                    springProgress(releaseSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
-            if (Float.isNaN(releaseState)) return;
         }
 
         int[] location = new int[2];
@@ -199,7 +190,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     centerY,
                     height,
                     !leftEdge,
-                    bridgeFactor,
+                    1f,
                     teardropFactor);
 
             // PathBackgroundProxy::draw_teardrop draws the same path with both native paints.
