@@ -88,9 +88,10 @@ final class SecurityCenterEarlyPrepareHook {
                     && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
-            if (pending.type == ASSISTANT_GLOBAL_DOCK
-                    && !SecurityCenterSidebarDrawableGeometry.bindDock(dock)) {
-                return false;
+            if (pending.type == ASSISTANT_GLOBAL_DOCK) {
+                if (!SecurityCenterSidebarDrawableGeometry.bindDock(dock)) return false;
+            } else {
+                SecurityCenterSidebarDrawableGeometry.clearRuntime();
             }
             SecurityCenterGlassRuntimeState.bindAssistant(
                     turbo, dock, abstractDock, boxMaterial, pending.type);
