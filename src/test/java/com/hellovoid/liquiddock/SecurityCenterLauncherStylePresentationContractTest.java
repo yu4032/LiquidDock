@@ -16,10 +16,14 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String bridge = Files.readString(MAIN.resolve("SecurityCenterVendorMaterialBridge.java"));
         String policy = SourceContractText.read(
                 MAIN.resolve("SecurityCenterMaterialModePolicy.java"));
-        assertTrue("Dock, upper toolbox and All Apps are the claimed carriers",
-                bridge.contains("dockLayout, boxMaterialView, allAppsLayout"));
+        assertTrue("Dock, native abstract Dock, upper toolbox and All Apps are claimed carriers",
+                bridge.contains("abstractDockLayout")
+                        && bridge.contains("boxMaterialView")
+                        && bridge.contains("allAppsLayout"));
         assertTrue("Dock vendor material must be cleared before module material is applied",
                 bridge.contains("clearVendorTarget(dockLayout)"));
+        assertTrue("the native abstract Dock carrier must be cleared before module material is applied",
+                bridge.contains("clearVendorTarget(abstractDockLayout)"));
         assertTrue("the upper toolbox carrier must be cleared before module material is applied",
                 bridge.contains("clearVendorTarget(boxMaterialView)"));
         assertTrue("All Apps vendor material must be cleared before module material is applied",
@@ -87,8 +91,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 sink.contains("inheritMaterialTransform")
                         && sink.contains("getParent() == material")
                         && sink.contains("expectedParent = (ViewGroup) material"));
-        assertTrue("only Dock uses native material-transform inheritance",
-                policy.contains("return role == MaterialRole.DOCK"));
+        assertTrue("both native Sidebar background carriers inherit their own Folme transforms",
+                policy.contains("role == MaterialRole.DOCK")
+                        && policy.contains("role == MaterialRole.DOCK_PREVIEW"));
 
         assertTrue("toolbox/all-apps still resolve an outer overlay host",
                 sink.contains("resolveOverlayHost(material)"));
@@ -110,8 +115,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         String sink = SourceContractText.read(
                 MAIN.resolve("SecurityCenterGlassSinkView.java"));
-        assertTrue(coordinator.contains("dock.getClipToOutline()"));
-        assertTrue(coordinator.contains("dock.getOutlineProvider()"));
+        assertTrue(coordinator.contains("resolveLiveCornerRadius(View target)"));
+        assertTrue(coordinator.contains("target.getClipToOutline()"));
+        assertTrue(coordinator.contains("target.getOutlineProvider()"));
         assertTrue(coordinator.contains("outline.getRadius()"));
         assertTrue(coordinator.contains("outline.getRect(bounds)"));
         assertFalse(coordinator.contains("MiuixGlassHook.readNativeOpticsRadius"));
