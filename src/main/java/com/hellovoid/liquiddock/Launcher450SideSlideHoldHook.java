@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.os.Handler;
@@ -61,6 +62,7 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method workspaceFinishCurrentGestureMethod;
     private static volatile Class<?> launcherStateClass;
     private static volatile Object launcherStateNormal;
+    private static volatile boolean handoffReceiverRegistered;
     private static volatile boolean installed;
 
     private Launcher450SideSlideHoldHook() {}
@@ -174,6 +176,14 @@ final class Launcher450SideSlideHoldHook {
                             ? (Canvas) args[0] : null;
                     if (state.confirmationVisible && canvas != null) {
                         state.arrow = arrow;
+                        if (!state.confirmationDrawLogged) {
+                            state.confirmationDrawLogged = true;
+                            SideSlideHoldDiagnostics.log(TAG
+                                    + " OS4 confirmation renderer first frame"
+                                    + " view=" + ((View) arrow).getWidth()
+                                    + "x" + ((View) arrow).getHeight()
+                                    + " edge=" + (state.leftEdge ? "left" : "right"));
+                        }
                         Launcher450Os4SidebarConfirmationRenderer.draw(
                                 canvas,
                                 (View) arrow,
@@ -237,10 +247,40 @@ final class Launcher450SideSlideHoldHook {
 
     private static GestureState stateForArrow(Object arrow) {
         if (!(arrow instanceof View)) return null;
-        ViewParent parent = ((View) arrow).getParent();
-        if (parent == null) return null;
+        View view = (View) arrow;
+
+        // OS3 Launcher does not guarantee GestureBackArrowView is a direct child of the
+        // GestureStubView that owns the touch state. Walk the whole parent chain first.
+        ViewParent parent = view.getParent();
         synchronized (STATES) {
-            return STATES.get(parent);
+            while (parent != null) {
+                GestureState mapped = STATES.get(parent);
+                if (mapped != null) {
+                    mapped.arrow = arrow;
+                    return mapped;
+                }
+                parent = parent.getParent();
+            }
+
+            // The back arrow may live in a sibling gesture window. In that case bind it to the
+            // unique currently active edge gesture. Only one side can own a pointer stream.
+            GestureState active = null;
+            for (GestureState candidate : STATES.values()) {
+                if (candidate == null || !candidate.gestureActive || !candidate.sideStub) continue;
+                if (active != null && active != candidate) {
+                    return null;
+                }
+                active = candidate;
+            }
+            if (active != null) {
+                active.arrow = arrow;
+                if (!active.arrowFallbackBindingLogged) {
+                    active.arrowFallbackBindingLogged = true;
+                    SideSlideHoldDiagnostics.log(TAG
+                            + " bound GestureBackArrowView to active gesture via window fallback");
+                }
+            }
+            return active;
         }
     }
 
@@ -252,6 +292,11 @@ final class Launcher450SideSlideHoldHook {
 
         if (action == MotionEvent.ACTION_DOWN) {
             cancelDwell(view, state);
+            if (state.awaitingVendorHandoff) {
+                finishConfirmationVisual(state, state.committedGeneration, "next gesture");
+            }
+            ensureVendorHandoffReceiver(view.getContext());
+            state.gestureActive = true;
             state.sideStub = isPadSideStub(view);
             state.desktopAtDown = state.sideStub && isLauncherDesktop();
             state.downX = event.getRawX();
@@ -262,7 +307,11 @@ final class Launcher450SideSlideHoldHook {
             state.hoverAnchorLocalY = Float.NaN;
             state.workspaceCancelled = false;
             state.suppressStockAfterCommit = false;
+            state.awaitingVendorHandoff = false;
+            state.committedGeneration = Integer.MIN_VALUE;
             state.confirmationStartedAtUptimeMs = 0L;
+            state.confirmationDrawLogged = false;
+            state.arrowFallbackBindingLogged = false;
             state.policy.onDown();
             SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
                     + " desktop=" + state.desktopAtDown
@@ -474,8 +523,17 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
         cancelDwell(owner, state);
-        state.confirmationVisible = false;
+        // Keep the OS4 confirmation body alive through ACTION_UP. The real vendor Sidebar owns
+        // the next frame only after ISidebarAnimCallback reports its animation start.
+        state.confirmationVisible = true;
         state.suppressStockAfterCommit = true;
+        state.awaitingVendorHandoff = true;
+        state.committedGeneration = generation;
+        View arrow = state.arrow instanceof View ? (View) state.arrow : resolveArrowView(owner, state);
+        if (arrow != null) {
+            state.arrow = arrow;
+            arrow.postInvalidateOnAnimation();
+        }
         SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
         showSidebar(owner, state, generation);
         if (!state.desktopAtDown) {
@@ -488,6 +546,8 @@ final class Launcher450SideSlideHoldHook {
         state.confirmationVisible = false;
         state.suppressStockAfterCommit = false;
         state.confirmationStartedAtUptimeMs = 0L;
+        state.awaitingVendorHandoff = false;
+        state.committedGeneration = Integer.MIN_VALUE;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         if (arrow != null) arrow.postInvalidateOnAnimation();
         SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
@@ -511,7 +571,8 @@ final class Launcher450SideSlideHoldHook {
                 .putExtra(SidebarCommandContract.EXTRA_HEIGHT, geometry[3])
                 .putExtra(SidebarCommandContract.EXTRA_RADIUS, geometry[4])
                 .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown)
-                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY));
+                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
+                .putExtra(SidebarCommandContract.EXTRA_GENERATION, generation);
 
         final boolean requestWasDesktop = state.desktopAtDown;
         BroadcastReceiver result = new BroadcastReceiver() {
@@ -522,6 +583,10 @@ final class Launcher450SideSlideHoldHook {
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar release show result accepted=" + accepted
                         + " desktop=" + requestWasDesktop);
+                if (!accepted) {
+                    owner.post(() -> finishConfirmationVisual(
+                            state, generation, "vendor show rejected"));
+                }
             }
         };
 
@@ -550,6 +615,88 @@ final class Launcher450SideSlideHoldHook {
             }
         }
         return null;
+    }
+
+    private static void ensureVendorHandoffReceiver(Context context) {
+        if (handoffReceiverRegistered || context == null) return;
+        synchronized (Launcher450SideSlideHoldHook.class) {
+            if (handoffReceiverRegistered) return;
+            Context app = context.getApplicationContext();
+            if (app == null) app = context;
+            BroadcastReceiver receiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context ignored, Intent intent) {
+                    if (intent == null
+                            || !SidebarCommandContract.ACTION_VENDOR_ANIM_STARTED
+                            .equals(intent.getAction())) {
+                        return;
+                    }
+                    int generation = intent.getIntExtra(
+                            SidebarCommandContract.EXTRA_GENERATION, Integer.MIN_VALUE);
+                    GestureState match = null;
+                    synchronized (STATES) {
+                        for (GestureState candidate : STATES.values()) {
+                            if (candidate == null
+                                    || !candidate.awaitingVendorHandoff
+                                    || candidate.committedGeneration != generation) {
+                                continue;
+                            }
+                            if (match != null && match != candidate) {
+                                SideSlideHoldDiagnostics.log(TAG
+                                        + " vendor handoff generation ambiguous=" + generation);
+                                return;
+                            }
+                            match = candidate;
+                        }
+                    }
+                    if (match == null) {
+                        SideSlideHoldDiagnostics.log(TAG
+                                + " vendor handoff has no matching gesture generation="
+                                + generation);
+                        return;
+                    }
+                    GestureState target = match;
+                    View owner = target.owner instanceof View ? (View) target.owner : null;
+                    Runnable finish = () -> finishConfirmationVisual(
+                            target, generation, "vendor animation started");
+                    if (owner != null) owner.post(finish);
+                    else finish.run();
+                }
+            };
+            try {
+                app.registerReceiver(
+                        receiver,
+                        new IntentFilter(SidebarCommandContract.ACTION_VENDOR_ANIM_STARTED),
+                        Context.RECEIVER_EXPORTED);
+                handoffReceiverRegistered = true;
+                SideSlideHoldDiagnostics.log(TAG + " vendor animation handoff receiver registered");
+            } catch (Throwable error) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " vendor animation handoff receiver registration failed", error);
+            }
+        }
+    }
+
+    private static void finishConfirmationVisual(
+            GestureState state,
+            int generation,
+            String reason) {
+        if (state == null) return;
+        if (state.awaitingVendorHandoff
+                && state.committedGeneration != Integer.MIN_VALUE
+                && generation != Integer.MIN_VALUE
+                && state.committedGeneration != generation) {
+            return;
+        }
+        state.confirmationVisible = false;
+        state.suppressStockAfterCommit = false;
+        state.awaitingVendorHandoff = false;
+        state.committedGeneration = Integer.MIN_VALUE;
+        state.confirmationStartedAtUptimeMs = 0L;
+        state.confirmationDrawLogged = false;
+        View arrow = state.arrow instanceof View ? (View) state.arrow : null;
+        if (arrow != null) arrow.postInvalidateOnAnimation();
+        SideSlideHoldDiagnostics.log(TAG + " confirmation visual handoff: " + reason);
     }
 
     private static void forceVendorCleanupToBack(GestureState state) {
@@ -597,11 +744,16 @@ final class Launcher450SideSlideHoldHook {
     private static void finishGesture(Object owner, GestureState state) {
         if (owner instanceof View) cancelDwell((View) owner, state);
         state.policy.onFinish();
+        state.gestureActive = false;
         state.sideStub = false;
         state.desktopAtDown = false;
-        state.arrow = null;
-        state.confirmationVisible = false;
-        state.confirmationStartedAtUptimeMs = 0L;
+        if (!state.awaitingVendorHandoff) {
+            state.arrow = null;
+            state.confirmationVisible = false;
+            state.suppressStockAfterCommit = false;
+            state.confirmationStartedAtUptimeMs = 0L;
+            state.confirmationDrawLogged = false;
+        }
         state.workspaceCancelled = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
@@ -621,12 +773,17 @@ final class Launcher450SideSlideHoldHook {
         final SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         Runnable dwellRunnable;
         int scheduledGeneration = Integer.MIN_VALUE;
+        boolean gestureActive;
         boolean sideStub;
         boolean desktopAtDown;
         boolean leftEdge;
         boolean confirmationVisible;
         boolean suppressStockAfterCommit;
+        boolean awaitingVendorHandoff;
         boolean workspaceCancelled;
+        boolean confirmationDrawLogged;
+        boolean arrowFallbackBindingLogged;
+        int committedGeneration = Integer.MIN_VALUE;
         long confirmationStartedAtUptimeMs;
         Object arrow;
         float downX;
