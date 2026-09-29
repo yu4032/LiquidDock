@@ -45,7 +45,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float TEARDROP_RESPONSE_S = 0.60f;
     private static final float BRIDGE_DAMPING = 0.85f;
     private static final float BRIDGE_RESPONSE_S = 0.55f;
-    private static final float SPLIT_DAMPING = 0.90f;
+    private static final float SPLIT_DAMPING = 0.80f;
     private static final float SPLIT_RESPONSE_S = 0.68f;
 
     // OS4 split_effect_renderer enters the split branch at gesture progress 0.8 and reaches the
