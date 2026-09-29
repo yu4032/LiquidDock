@@ -28,12 +28,11 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     // In the separated on_vsync branch the final 24dp body sits immediately after the
     // calculate_positions endpoint, so its center is one 12dp half-width inward from that endpoint.
     private static final float MINI_SIDEBAR_TARGET_HALF_WIDTH_DP = SIDEBAR_WIDTH_DP * 0.5f;
-    // CachedIconDp is rendered by on_vsync as three white rounded rects. The exact draw formula
-    // is ported below; these three cached dp values remain isolated constants so they can be
-    // replaced directly when the optimized icon_dp() initializer is fully recovered.
-    private static final float SIDEBAR_ICON_DOT_DP = 3f;
-    private static final float SIDEBAR_ICON_GAP_DP = 3f;
-    private static final float SIDEBAR_ICON_RADIUS_DP = 1.5f;
+    // Exact CachedIconDp initializer recovered from OS4 Launcher:
+    // dp_to_px(9), dp_to_px(3), dp_to_px(6), stored as item size, corner radius, gap.
+    private static final float SIDEBAR_ICON_DOT_DP = 9f;
+    private static final float SIDEBAR_ICON_RADIUS_DP = 3f;
+    private static final float SIDEBAR_ICON_GAP_DP = 6f;
 
     // Exact Folme configs recovered from run_abstract_sidebar_anim_target.
     private static final float WIDTH_DAMPING = 0.80f;
