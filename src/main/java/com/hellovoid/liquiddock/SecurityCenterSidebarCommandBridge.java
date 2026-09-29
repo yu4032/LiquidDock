@@ -7,12 +7,16 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.app.Service;
+import android.os.Binder;
 import android.os.IBinder;
+import android.os.Parcel;
+import android.os.RemoteException;
 import android.view.View;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +38,9 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile Method[] availabilityMethods;
     private static volatile Method vendorShowEntryMethod;
     private static volatile boolean vendorShowProbeInstalled;
+    private static volatile Object vendorAnimationCallback;
+    private static volatile Method vendorAnimationCallbackRegisterMethod;
+    private static volatile int pendingLauncherGeneration = Integer.MIN_VALUE;
 
     private static final ServiceConnection CONNECTION = new ServiceConnection() {
         @Override
@@ -59,6 +66,7 @@ final class SecurityCenterSidebarCommandBridge {
                 sidebarBinder = service;
                 showMethod = show;
                 availabilityMethods = states;
+                registerVendorAnimationCallback(service);
                 SideSlideHoldDiagnostics.log(TAG + " ready descriptor=" + descriptor);
             } catch (Throwable error) {
                 clearBinder("bind validation failed: " + error);
@@ -120,7 +128,10 @@ final class SecurityCenterSidebarCommandBridge {
                     intent.getIntExtra(SidebarCommandContract.EXTRA_WIDTH, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_HEIGHT, 0),
                     intent.getIntExtra(SidebarCommandContract.EXTRA_RADIUS, 0),
-                    intent.getBooleanExtra(SidebarCommandContract.EXTRA_DESKTOP, false));
+                    intent.getBooleanExtra(SidebarCommandContract.EXTRA_DESKTOP, false),
+                    intent.getIntExtra(
+                            SidebarCommandContract.EXTRA_GENERATION,
+                            Integer.MIN_VALUE));
             setResultCode(accepted
                     ? SidebarCommandContract.RESULT_ACCEPTED
                     : SidebarCommandContract.RESULT_UNAVAILABLE);
@@ -221,6 +232,128 @@ final class SecurityCenterSidebarCommandBridge {
                     + " vendor show probe installed method=" + entry.getName());
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " vendor show probe install failed", error);
+        }
+    }
+
+
+    private static void registerVendorAnimationCallback(IBinder service)
+            throws ReflectiveOperationException {
+        ClassLoader loader = service.getClass().getClassLoader();
+        Class<?> callbackInterface = Class.forName(
+                SidebarCommandContract.SIDEBAR_ANIM_CALLBACK_DESCRIPTOR,
+                false,
+                loader);
+        Method register = resolveAnimationCallbackRegisterMethod(
+                service.getClass(), callbackInterface);
+        if (register == null) {
+            throw new NoSuchMethodException(
+                    "unique ISidebarAnimCallback registration method unavailable");
+        }
+        register.setAccessible(true);
+
+        VendorAnimationCallbackBinder callbackBinder =
+                new VendorAnimationCallbackBinder();
+        Object callback = Proxy.newProxyInstance(
+                loader,
+                new Class<?>[]{callbackInterface},
+                (proxy, method, args) -> {
+                    if ("asBinder".equals(method.getName())
+                            && method.getParameterTypes().length == 0) {
+                        return callbackBinder;
+                    }
+                    Class<?>[] params = method.getParameterTypes();
+                    if (params.length == 1
+                            && params[0] == int.class
+                            && method.getReturnType() == void.class) {
+                        int state = args != null && args.length == 1
+                                ? ((Number) args[0]).intValue()
+                                : Integer.MIN_VALUE;
+                        onVendorAnimationCallback(state);
+                        return null;
+                    }
+                    if ("toString".equals(method.getName())
+                            && method.getParameterTypes().length == 0) {
+                        return "LiquidDockSidebarAnimCallback";
+                    }
+                    if ("hashCode".equals(method.getName())
+                            && method.getParameterTypes().length == 0) {
+                        return System.identityHashCode(proxy);
+                    }
+                    if ("equals".equals(method.getName())
+                            && method.getParameterTypes().length == 1) {
+                        return proxy == args[0];
+                    }
+                    return null;
+                });
+        callbackBinder.setOwner(callback);
+        register.invoke(service, callback);
+        vendorAnimationCallback = callback;
+        vendorAnimationCallbackRegisterMethod = register;
+        SideSlideHoldDiagnostics.log(TAG
+                + " vendor animation callback registered method=" + register.getName());
+    }
+
+    private static Method resolveAnimationCallbackRegisterMethod(
+            Class<?> binderClass,
+            Class<?> callbackInterface) {
+        Method match = null;
+        for (Method method : binderClass.getDeclaredMethods()) {
+            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 1 || params[0] != callbackInterface) continue;
+            if (match != null) return null;
+            match = method;
+        }
+        return match;
+    }
+
+    private static void onVendorAnimationCallback(int state) {
+        SideSlideHoldDiagnostics.log(TAG + " vendor animation callback state=" + state);
+        if (state != 0) return;
+        int generation = pendingLauncherGeneration;
+        if (generation == Integer.MIN_VALUE) return;
+        pendingLauncherGeneration = Integer.MIN_VALUE;
+        Context context = appContext;
+        if (context == null) return;
+        try {
+            Intent handoff = new Intent(SidebarCommandContract.ACTION_VENDOR_ANIM_STARTED)
+                    .setPackage(SidebarCommandContract.LAUNCHER_PACKAGE)
+                    .putExtra(SidebarCommandContract.EXTRA_GENERATION, generation);
+            context.sendBroadcast(handoff);
+            SideSlideHoldDiagnostics.log(TAG
+                    + " vendor Sidebar animation started -> Launcher handoff generation="
+                    + generation);
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG + " vendor animation handoff broadcast failed", error);
+        }
+    }
+
+    private static final class VendorAnimationCallbackBinder extends Binder {
+        private volatile Object owner;
+
+        VendorAnimationCallbackBinder() {
+            attachInterface(null, SidebarCommandContract.SIDEBAR_ANIM_CALLBACK_DESCRIPTOR);
+        }
+
+        void setOwner(Object owner) {
+            this.owner = owner;
+        }
+
+        @Override
+        protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
+                throws RemoteException {
+            if (code == INTERFACE_TRANSACTION) {
+                if (reply != null) {
+                    reply.writeString(SidebarCommandContract.SIDEBAR_ANIM_CALLBACK_DESCRIPTOR);
+                }
+                return true;
+            }
+            if (code == FIRST_CALL_TRANSACTION) {
+                data.enforceInterface(SidebarCommandContract.SIDEBAR_ANIM_CALLBACK_DESCRIPTOR);
+                onVendorAnimationCallback(data.readInt());
+                return true;
+            }
+            return super.onTransact(code, data, reply, flags);
         }
     }
 
@@ -580,7 +713,13 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static boolean showSidebar(
-            int x, int y, int width, int height, int radius, boolean desktop) {
+            int x,
+            int y,
+            int width,
+            int height,
+            int radius,
+            boolean desktop,
+            int generation) {
         if (desktop) ensureDesktopDockContext();
         IBinder binder = sidebarBinder;
         Method show = showMethod;
@@ -595,11 +734,15 @@ final class SecurityCenterSidebarCommandBridge {
             return false;
         }
         try {
+            pendingLauncherGeneration = generation;
             show.invoke(binder, x, y, width, height, radius);
             SideSlideHoldDiagnostics.log(TAG + " vendor show accepted geometry="
                     + x + "," + y + " " + width + "x" + height + " r=" + radius);
             return true;
         } catch (Throwable error) {
+            if (pendingLauncherGeneration == generation) {
+                pendingLauncherGeneration = Integer.MIN_VALUE;
+            }
             SideSlideHoldDiagnostics.log(TAG + " vendor show failed", error);
             return false;
         }
@@ -609,6 +752,9 @@ final class SecurityCenterSidebarCommandBridge {
         sidebarBinder = null;
         showMethod = null;
         availabilityMethods = null;
+        vendorAnimationCallback = null;
+        vendorAnimationCallbackRegisterMethod = null;
+        pendingLauncherGeneration = Integer.MIN_VALUE;
         SideSlideHoldDiagnostics.log(TAG + " not ready: " + reason);
     }
 }
