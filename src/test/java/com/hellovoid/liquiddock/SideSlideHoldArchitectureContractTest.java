@@ -48,10 +48,9 @@ public class SideSlideHoldArchitectureContractTest {
 
         assertTrue(contract.contains("ACTION_PREPARE"));
         assertTrue(contract.contains("RESULT_READY"));
-        assertTrue(hook.contains("Sidebar preflight ready -> native SC preview armed; wait ACTION_UP"));
-        assertTrue(hook.contains("ACTION_UP -> commit SC preview into full Sidebar transform"));
-        assertTrue(bridge.contains("native SC preview activate+haptic+widen"));
-        assertTrue(bridge.contains("native SC preview cancel+narrow"));
+        assertTrue(hook.contains("Sidebar preflight ready -> native haptic armed; wait ACTION_UP"));
+        assertTrue(hook.contains("ACTION_UP -> commit Sidebar"));
+        assertTrue(bridge.contains("native confirmation haptic"));
         assertTrue(hook.contains("Sidebar source geometry side="));
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
         assertTrue(hook.contains("centerY = !Float.isNaN(state.hoverAnchorY)"));
@@ -79,8 +78,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(bridge.contains("resolveDockState"));
         assertTrue(bridge.contains("DockWindowType{"));
         assertTrue(bridge.contains("resolveUniqueVoidIntMethod"));
-        assertTrue(bridge.contains("activate+haptic+widen"));
-        assertTrue(bridge.contains("cancel+narrow"));
+        assertFalse(bridge.contains("activate+haptic+widen"));
+        assertFalse(bridge.contains("cancel+narrow"));
         assertTrue(bridge.contains("RegionSamplingImageView"));
         assertTrue(bridge.contains("VENDOR_SHOW_ENTRY"));
         assertTrue(bridge.contains("resolveManagerFiveIntShowMethod"));
