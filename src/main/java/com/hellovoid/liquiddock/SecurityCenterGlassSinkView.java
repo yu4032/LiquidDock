@@ -71,7 +71,6 @@ final class SecurityCenterGlassSinkView extends TextureView
     private int outputEnvelopeWidth;
     private int outputEnvelopeHeight;
     private boolean outputEnvelopeLocked;
-    private boolean outputEnvelopePeerCorrected;
     private boolean hasBeenWindowVisible;
     private boolean windowVisibilityInterrupted;
     private ValueAnimator exitFadeAnimator;
@@ -271,32 +270,6 @@ final class SecurityCenterGlassSinkView extends TextureView
         return changed;
     }
 
-    boolean ensureOutputEnvelopeAtLeast(int minimumWidth, int minimumHeight) {
-        if (disposed || session.isShutdown() || outputEnvelopePeerCorrected
-                || minimumWidth <= 0 || minimumHeight <= 0) {
-            return false;
-        }
-        outputEnvelopePeerCorrected = true;
-        int targetWidth = Math.max(outputEnvelopeWidth,
-                (int) Math.ceil(minimumWidth + OPTICAL_OUTSET_PX * 2f));
-        int targetHeight = Math.max(outputEnvelopeHeight,
-                (int) Math.ceil(minimumHeight + OPTICAL_OUTSET_PX * 2f));
-        if (targetWidth == outputEnvelopeWidth && targetHeight == outputEnvelopeHeight) {
-            return false;
-        }
-        outputEnvelopeWidth = targetWidth;
-        outputEnvelopeHeight = targetHeight;
-        outputEnvelopeLocked = true;
-        ViewGroup.LayoutParams params = getLayoutParams();
-        if (params != null && (params.width != targetWidth || params.height != targetHeight)) {
-            params.width = targetWidth;
-            params.height = targetHeight;
-            setLayoutParams(params);
-            return true;
-        }
-        return false;
-    }
-
     SecurityCenterGlassGeometry captureGeometry(View root, float cornerRadiusPx) {
         View material = materialRef.get();
         if (disposed || session.isShutdown() || material == null
@@ -470,7 +443,6 @@ final class SecurityCenterGlassSinkView extends TextureView
         exitContractionPending = false;
         exitContractionLatched = false;
         outputEnvelopeLocked = false;
-        outputEnvelopePeerCorrected = false;
         cancelExitFade(false);
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
