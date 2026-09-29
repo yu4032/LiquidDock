@@ -29,10 +29,6 @@ final class SideSlideHoldPolicy {
         return setEligible("READY_STATE_RECENT".equals(stateName));
     }
 
-    boolean onDesktopProgress(boolean reachedVisualCommit) {
-        return setEligible(reachedVisualCommit);
-    }
-
     private boolean setEligible(boolean nextEligible) {
         if (!active || releaseCommitted) return false;
         if (nextEligible == eligible) return false;
