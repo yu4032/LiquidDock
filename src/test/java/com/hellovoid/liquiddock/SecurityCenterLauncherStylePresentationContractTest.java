@@ -196,9 +196,10 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 sink.contains("EXIT_FADE_MS = 80L")
                         && sink.contains("ValueAnimator.ofFloat(1f, 0f)")
                         && sink.contains("desiredAlpha *= exitFadeMultiplier"));
-        assertTrue("panel exits must use the already-resolved semantic terminal authorities",
-                hook.contains("resolveTerminalTurbo(chain.getArgs(), contract)")
-                        && hook.contains("live.fadePanelOnVendorExit(turbo)"));
+        assertTrue("panel exits must start on the first native Dock contraction, not terminal cleanup",
+                sink.contains("consumeExitContractionStart()")
+                        && coordinator.contains("sink == dockSink && sink.consumeExitContractionStart()")
+                        && coordinator.contains("fadePanelOnVendorExit(turbo)"));
         assertTrue("All Apps exits must use the stable dismiss authority",
                 hook.contains("live.fadeAllAppsOnExit(turbo)"));
         assertTrue("fade must modulate Prismal composition alpha rather than TextureView alpha",
@@ -206,6 +207,9 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         assertTrue("fade diagnostics must expose start/cancel without per-frame spam",
                 sink.contains("[DC][SecurityCenterGlassFade]")
                         && sink.contains("logFade(\"START\")"));
+        assertFalse("terminal cleanup must remain observation-only and cannot start the fade late",
+                hook.contains("resolveTerminalTurbo(")
+                        || hook.contains("fadePanelOnVendorExit(turbo)"));
         assertTrue("coordinator sidebar lifecycle callbacks remain no-op",
                 coordinator.contains("void onSidebarShowRequested() {}")
                         && coordinator.contains("void onSidebarHideRequested(boolean animated) {}"));
