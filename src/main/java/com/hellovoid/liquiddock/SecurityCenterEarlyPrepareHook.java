@@ -79,7 +79,6 @@ final class SecurityCenterEarlyPrepareHook {
                 if (!isLiveCarrier(turbo, abstractDock)) return false;
             }
 
-            View motionBox = resolveMotionBox(turbo, pending.contract);
             View boxMaterial = resolveBoxMaterial(
                     turbo,
                     pending.type,
@@ -89,15 +88,16 @@ final class SecurityCenterEarlyPrepareHook {
                     && !isLiveCarrier(turbo, boxMaterial)) {
                 return false;
             }
-            SecurityCenterSidebarDrawableGeometry.clearRuntime();
+            // DockLayout and its native Folme transform are the sole animation authority.
+            // Do not bind a second drawable-rect morph model here: that creates a separate
+            // glass trajectory which can diverge from the real toolbox/window animation.
             SecurityCenterGlassRuntimeState.bindAssistant(
-                    turbo, dock, abstractDock, boxMaterial, motionBox, pending.type);
+                    turbo, dock, abstractDock, boxMaterial, pending.type);
             log("deferred prepare bound type=" + pending.type
                     + " turbo@" + identity(turbo)
                     + " dock@" + identity(dock)
                     + " abstract@" + identity(abstractDock)
-                    + " box@" + identity(boxMaterial)
-                    + " motionBox@" + identity(motionBox), null);
+                    + " box@" + identity(boxMaterial), null);
             return true;
         } catch (Throwable error) {
             log("deferred prepare not ready", error);
@@ -133,14 +133,6 @@ final class SecurityCenterEarlyPrepareHook {
         int type = ((Number) value).intValue();
         return type == ASSISTANT_GAME || type == ASSISTANT_VIDEO || type == ASSISTANT_GLOBAL_DOCK
                 ? type : 0;
-    }
-
-    private static View resolveMotionBox(
-            View turbo,
-            SecurityCenterSemanticContractResolver.ResolvedContract contract) {
-        Object boxObject = invoke(contract.boxGetter(), turbo);
-        return boxObject instanceof View && isLiveCarrier(turbo, (View) boxObject)
-                ? (View) boxObject : null;
     }
 
     private static View resolveBoxMaterial(

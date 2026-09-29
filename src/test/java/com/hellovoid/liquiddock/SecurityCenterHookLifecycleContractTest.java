@@ -26,8 +26,8 @@ public class SecurityCenterHookLifecycleContractTest {
 
     @Test
     public void dockBoxAndAllAppsAreLateBoundIntoOneCoordinator() {
-        assertTrue("assistant binding must include Dock, abstract Dock, material box, motion box and type",
-                hasMethod(SecurityCenterGlassCoordinator.class, "bindAssistant", 6));
+        assertTrue("assistant binding must include Dock, abstract Dock, toolbox and type",
+                hasMethod(SecurityCenterGlassCoordinator.class, "bindAssistant", 5));
         assertTrue(hasMethod(SecurityCenterGlassCoordinator.class, "updateAllAppsLayout", 2));
         assertTrue(hasMethod(SecurityCenterGlassCoordinator.class, "refreshTransitionFrame", 1));
     }
