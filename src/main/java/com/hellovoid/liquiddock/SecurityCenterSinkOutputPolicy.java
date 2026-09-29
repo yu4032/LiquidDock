@@ -12,14 +12,16 @@ final class SecurityCenterSinkOutputPolicy {
     private SecurityCenterSinkOutputPolicy() {}
 
     static boolean usesRootSpaceOutput(MaterialRole role) {
-        // The Sidebar Dock glass lives inside DockLayout so it inherits the vendor Folme
-        // translation/scale/alpha directly. Root-space output would detach it from that animation
-        // and force us to reconstruct the motion asynchronously.
-        return role == MaterialRole.TOOLBOX
+        // All Security Center shader outputs stay in root space. Dock/preview motion is sampled
+        // synchronously from the real vendor carriers; making TextureView a child would transform
+        // an already screen-space-rendered backdrop a second time.
+        return role == MaterialRole.DOCK
+                || role == MaterialRole.DOCK_PREVIEW
+                || role == MaterialRole.TOOLBOX
                 || role == MaterialRole.ALL_APPS;
     }
 
     static boolean inheritsMaterialTransform(MaterialRole role) {
-        return role == MaterialRole.DOCK || role == MaterialRole.DOCK_PREVIEW;
+        return false;
     }
 }
