@@ -76,6 +76,7 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method launcherIsInStateMethod;
     private static volatile Method launcherGetWorkspaceMethod;
     private static volatile Method workspaceFinishCurrentGestureMethod;
+    private static volatile Method resetRenderPropertyMethod;
     private static volatile Class<?> launcherStateClass;
     private static volatile Object launcherStateNormal;
     private static volatile boolean handoffReceiverRegistered;
@@ -120,6 +121,8 @@ final class Launcher450SideSlideHoldHook {
                     launcherClass, "getWorkspace", new Class<?>[0]);
             Method finishCurrentGesture = HookUtil.findMethodExact(
                     workspaceClass, "finishCurrentGesture", new Class<?>[0]);
+            Method resetRenderProperty = HookUtil.findMethodExact(
+                    stubClass, "resetRenderProperty", new Class<?>[]{String.class});
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -133,6 +136,7 @@ final class Launcher450SideSlideHoldHook {
             launcherIsInStateMethod = isInState;
             launcherGetWorkspaceMethod = getWorkspace;
             workspaceFinishCurrentGestureMethod = finishCurrentGesture;
+            resetRenderPropertyMethod = resetRenderProperty;
             launcherStateClass = stateClass;
             launcherStateNormal = null;
 
@@ -174,7 +178,12 @@ final class Launcher450SideSlideHoldHook {
                     String readyName = requested instanceof Enum<?>
                             ? ((Enum<?>) requested).name()
                             : String.valueOf(requested);
-                    if (state.policy.shouldConsumeVendorCompletion()) {
+                    if (state.policy.shouldConsumeVendorCompletion()
+                            || (state.confirmationVisible && state.splitActive)) {
+                        // OS3's 1/3-screen quick-switch handler can promote the arrow to RECENT
+                        // while the finger is still down. Once OS4-style Sidebar confirmation is
+                        // active, keep BACK as the host state so that promotion cannot hide/reset
+                        // the ArrowView underneath our mini Sidebar.
                         args[0] = readyStateBack;
                     } else if (!state.desktopAtDown) {
                         boolean enteredRecent = state.policy.onReadyState(readyName);
@@ -223,7 +232,22 @@ final class Launcher450SideSlideHoldHook {
                         float offset = Math.abs((Float) args[0]);
                         state.arrowOffsetX = offset;
                         state.os4GestureProgress = os4ProgressFromOffset(offset);
-                        maybeEnterOs4Split(state, arrow instanceof View ? (View) arrow : null);
+                        if (state.confirmationVisible
+                                && state.releaseStartedAtUptimeMs <= 0L
+                                && state.os4GestureProgress < 0.65f) {
+                            // The user reversed back toward the edge without lifting. Cancel the
+                            // Sidebar arm and let the stock BACK gesture regain ownership.
+                            if (state.desktopAtDown && state.owner instanceof View) {
+                                state.policy.onDesktopProgress(false);
+                            }
+                            if (state.owner instanceof View) {
+                                cancelDwell((View) state.owner, state);
+                                cancelConfirmation((View) state.owner, state);
+                            }
+                        } else {
+                            maybeEnterOs4Split(
+                                    state, arrow instanceof View ? (View) arrow : null);
+                        }
                         if (state.confirmationVisible && arrow instanceof View) {
                             ((View) arrow).postInvalidateOnAnimation();
                         }
@@ -264,7 +288,8 @@ final class Launcher450SideSlideHoldHook {
                                         ? state.hoverAnchorY
                                         : state.lastRawY,
                                 state.confirmationStartedAtUptimeMs,
-                                state.releaseStartedAtUptimeMs);
+                                state.releaseStartedAtUptimeMs,
+                                state.releaseMiniCenterX);
                         return null;
                     }
                     if (state.suppressStockAfterCommit) {
@@ -402,6 +427,7 @@ final class Launcher450SideSlideHoldHook {
             state.os4GestureProgress = 0f;
             state.splitActive = false;
             state.splitStartedAtUptimeMs = 0L;
+            state.releaseMiniCenterX = Float.NaN;
             state.clearFrozenSourceGeometry();
             state.policy.onDown();
             state.activeGeneration = state.policy.generation();
@@ -647,16 +673,29 @@ final class Launcher450SideSlideHoldHook {
         state.suppressStockAfterCommit = true;
         state.awaitingVendorHandoff = true;
         state.committedGeneration = generation;
-        state.releaseStartedAtUptimeMs = SystemClock.uptimeMillis();
         state.confirmationDrawLogged = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : resolveArrowView(owner, state);
         if (arrow != null) {
             state.arrow = arrow;
+            // Capture the exact visible spring position before release starts. Renderer and
+            // Security Center now share this same source center until handoff completes.
+            state.releaseMiniCenterX =
+                    Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
+                            arrow,
+                            state.leftEdge,
+                            state.arrowStartX,
+                            stableArrowBackWidth(state.arrow),
+                            state.os4GestureProgress,
+                            state.splitActive,
+                            state.splitStartedAtUptimeMs,
+                            0L);
+        } else {
+            state.releaseMiniCenterX = Float.NaN;
+        }
+        state.releaseStartedAtUptimeMs = SystemClock.uptimeMillis();
+        if (arrow != null) {
             arrow.postInvalidateOnAnimation();
         }
-        // Freeze the handoff rectangle at release, not at the 300ms arm point. OS4 hands the
-        // already-separated mini Sidebar to the vendor expansion, so the source geometry must
-        // match the final visible body on this exact frame.
         snapshotSidebarSourceGeometry(
                 owner, state, arrow, generation, "release-handoff");
         SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
@@ -850,10 +889,26 @@ final class Launcher450SideSlideHoldHook {
         state.releaseStartedAtUptimeMs = 0L;
         state.splitActive = false;
         state.splitStartedAtUptimeMs = 0L;
+        state.releaseMiniCenterX = Float.NaN;
         state.confirmationDrawLogged = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         if (arrow != null) arrow.postInvalidateOnAnimation();
+        restoreGestureStubWindow(state, reason);
         SideSlideHoldDiagnostics.log(TAG + " confirmation visual handoff: " + reason);
+    }
+
+    private static void restoreGestureStubWindow(GestureState state, String reason) {
+        Method reset = resetRenderPropertyMethod;
+        Object owner = state != null ? state.owner : null;
+        if (reset == null || owner == null) return;
+        try {
+            reset.invoke(owner, "LiquidDockSidebarHandoff");
+            SideSlideHoldDiagnostics.log(TAG
+                    + " restored GestureStub window after Sidebar handoff reason=" + reason);
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(
+                    TAG + " failed to restore GestureStub window after Sidebar handoff", error);
+        }
     }
 
     private static void forceVendorCleanupToBack(GestureState state) {
@@ -910,15 +965,17 @@ final class Launcher450SideSlideHoldHook {
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         float projectedCenterScreenX = Float.NaN;
         if (arrow != null) {
-            float localCenter = Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
-                    arrow,
-                    state.leftEdge,
-                    state.arrowStartX,
-                    stableArrowBackWidth(state.arrow),
-                    state.os4GestureProgress,
-                    state.splitActive,
-                    state.splitStartedAtUptimeMs,
-                    state.releaseStartedAtUptimeMs);
+            float localCenter = !Float.isNaN(state.releaseMiniCenterX)
+                    ? state.releaseMiniCenterX
+                    : Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
+                            arrow,
+                            state.leftEdge,
+                            state.arrowStartX,
+                            stableArrowBackWidth(state.arrow),
+                            state.os4GestureProgress,
+                            state.splitActive,
+                            state.splitStartedAtUptimeMs,
+                            state.releaseStartedAtUptimeMs);
             if (!Float.isNaN(localCenter)) {
                 int[] arrowLocation = new int[2];
                 arrow.getLocationOnScreen(arrowLocation);
@@ -1065,6 +1122,7 @@ final class Launcher450SideSlideHoldHook {
         float arrowExpectedHeight = Float.NaN;
         float arrowOffsetX = Float.NaN;
         float os4GestureProgress;
+        float releaseMiniCenterX = Float.NaN;
         int frozenSourceX = Integer.MIN_VALUE;
         int frozenSourceY = Integer.MIN_VALUE;
         int frozenSourceWidth = Integer.MIN_VALUE;
