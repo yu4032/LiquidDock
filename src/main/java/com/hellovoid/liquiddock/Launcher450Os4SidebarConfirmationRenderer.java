@@ -332,13 +332,10 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 canvas.drawPath(bodyPath, FILL_PAINT.get());
             }
 
-            // The mini Sidebar is Launcher-owned and appears during the held gesture, immediately
-            // after the water-drop enters the native split state. It is already present before
-            // ACTION_UP; release only removes the remaining teardrop and hands this body to SC.
-            float reveal = smoothStep(0f, 0.20f, splitProgress);
+            // The standalone on_vsync branch draws this layer immediately at full paint alpha
+            // once SideSlide state=2 is active (gesture progress > 0.1). Its visual entrance comes
+            // from the center-X interpolation from 12dp outside the edge, not from alpha fading.
             Paint fill = FILL_PAINT.get();
-            int oldFillAlpha = fill.getAlpha();
-            fill.setAlpha(Math.round(oldFillAlpha * reveal));
 
             // Exact standalone mini-Sidebar geometry from GestureBackArrowView::on_vsync:
             // 24dp x 53dp, radius 8dp. It is independent from the split renderer's intermediate
@@ -356,9 +353,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     fill);
             // OS4's standalone separated body branch is fill-only (0xCC000000); the
             // 0x20000000 stroke belongs to PathBackgroundProxy's teardrop path, not this body.
-            drawNativeMiniSidebarIcon(canvas, miniCenterX, centerY, reveal, density);
-
-            fill.setAlpha(oldFillAlpha);
+            drawNativeMiniSidebarIcon(canvas, miniCenterX, centerY, 1f, density);
         }
 
         if (releasing
