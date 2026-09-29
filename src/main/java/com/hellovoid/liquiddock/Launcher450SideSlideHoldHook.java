@@ -892,57 +892,50 @@ final class Launcher450SideSlideHoldHook {
 
     private static int[] sourceGeometry(View owner, GestureState state) {
         DisplayMetrics dm = owner.getResources().getDisplayMetrics();
-        int width = Math.max(1, Math.round(OS4_SOURCE_WIDTH_DP * dm.density));
-        int height = Math.max(1, Math.round(OS4_SOURCE_HEIGHT_DP * dm.density));
-        int radius = Math.max(1, Math.round(OS4_SOURCE_RADIUS_DP * dm.density));
+        float density = owner.getResources().getConfiguration().densityDpi > 0
+                ? owner.getResources().getConfiguration().densityDpi / 160f
+                : dm.density;
+        int width = Math.max(1, Math.round(OS4_SOURCE_WIDTH_DP * density));
+        int height = Math.max(1, Math.round(OS4_SOURCE_HEIGHT_DP * density));
+        int radius = Math.max(1, Math.round(OS4_SOURCE_RADIUS_DP * density));
         int screenWidth = Math.max(width, dm.widthPixels);
         int screenHeight = Math.max(height, dm.heightPixels);
 
-        int x;
-        float centerY;
-
-        // The OS3 ArrowView's local Y is not screen-authoritative on this landscape build
-        // (observed negative values while the visible gesture is mid-screen). Freeze the actual
-        // gesture confirmation point instead.
-        centerY = !Float.isNaN(state.hoverAnchorY)
+        float centerY = !Float.isNaN(state.hoverAnchorY)
                 ? state.hoverAnchorY
                 : (!Float.isNaN(state.lastRawY) ? state.lastRawY : state.downRawY);
 
-        // Match the standalone OS4 mini-Sidebar target used by on_vsync. It is not edge-flush:
-        // calculate_positions projects the body inward using the 76dp nominal profile width at
-        // clamped progress 0.8. Reuse ArrowView's local baseline when available and translate it
-        // to screen space; otherwise fall back to the physical edge as baseline.
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
-        float nativeBackWidth = stableArrowBackWidth(state.arrow);
-        float projectedDistance = (!Float.isNaN(nativeBackWidth) && nativeBackWidth > 0f
-                ? nativeBackWidth
-                : OS4_PROJECTED_PROFILE_WIDTH_DP * dm.density)
-                * OS4_PROJECTED_POSITION_PROGRESS;
-        float projectedCenterScreenX;
-        if (arrow != null && !Float.isNaN(state.arrowStartX)) {
-            int[] arrowLocation = new int[2];
-            arrow.getLocationOnScreen(arrowLocation);
-            float localBaseline = state.leftEdge
-                    ? state.arrowStartX
-                    : arrow.getWidth() - state.arrowStartX;
-            // Match Launcher450Os4SidebarConfirmationRenderer exactly: calculate_positions()
-            // yields the background endpoint, then the 24dp body center is one half-width beyond
-            // that endpoint.
-            float localEndpoint = state.leftEdge
-                    ? localBaseline + projectedDistance
-                    : localBaseline - projectedDistance;
-            float halfBody = width * 0.5f;
-            float localCenter = state.leftEdge
-                    ? localEndpoint + halfBody
-                    : localEndpoint - halfBody;
-            projectedCenterScreenX = arrowLocation[0] + localCenter;
-        } else {
+        float projectedCenterScreenX = Float.NaN;
+        if (arrow != null) {
+            float localCenter = Launcher450Os4SidebarConfirmationRenderer.currentMiniSidebarCenterX(
+                    arrow,
+                    state.leftEdge,
+                    state.arrowStartX,
+                    stableArrowBackWidth(state.arrow),
+                    state.os4GestureProgress,
+                    state.splitActive,
+                    state.splitStartedAtUptimeMs,
+                    state.releaseStartedAtUptimeMs);
+            if (!Float.isNaN(localCenter)) {
+                int[] arrowLocation = new int[2];
+                arrow.getLocationOnScreen(arrowLocation);
+                projectedCenterScreenX = arrowLocation[0] + localCenter;
+            }
+        }
+        if (Float.isNaN(projectedCenterScreenX)) {
+            // Only a fallback for a missing ArrowView. The normal release path uses the exact
+            // local center from the same renderer that drew the visible mini Sidebar.
+            float projectedDistance = OS4_PROJECTED_PROFILE_WIDTH_DP
+                    * density
+                    * OS4_PROJECTED_POSITION_PROGRESS;
             float halfBody = width * 0.5f;
             projectedCenterScreenX = state.leftEdge
                     ? projectedDistance + halfBody
                     : screenWidth - projectedDistance - halfBody;
         }
-        x = Math.round(projectedCenterScreenX - width * 0.5f);
+
+        int x = Math.round(projectedCenterScreenX - width * 0.5f);
         x = Math.max(0, Math.min(x, screenWidth - width));
         int y = Math.round(centerY - (height / 2f));
         y = Math.max(0, Math.min(y, screenHeight - height));
