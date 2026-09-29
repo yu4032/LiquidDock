@@ -68,6 +68,19 @@ public class SideSlideHoldPolicyTest {
     }
 
     @Test
+    public void desktopVisualProgressUsesSameArmReleaseContract() {
+        SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
+        policy.onDown();
+        assertTrue(policy.onDesktopProgress(true));
+        int generation = policy.generation();
+
+        assertTrue(policy.requestArm(generation));
+        assertTrue(policy.onArmResult(true, generation));
+        assertTrue(policy.commitRelease(generation));
+        assertTrue(policy.shouldConsumeVendorCompletion());
+    }
+
+    @Test
     public void unavailablePreflightFailsOpen() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
