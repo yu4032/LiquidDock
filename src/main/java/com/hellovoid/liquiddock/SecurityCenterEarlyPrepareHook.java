@@ -71,6 +71,14 @@ final class SecurityCenterEarlyPrepareHook {
             View dock = (View) dockObject;
             if (!isLiveCarrier(turbo, dock)) return false;
 
+            View abstractDock = null;
+            if (pending.type == ASSISTANT_GLOBAL_DOCK) {
+                Object abstractObject = invoke(pending.contract.abstractDockGetter(), turbo);
+                if (!(abstractObject instanceof View)) return false;
+                abstractDock = (View) abstractObject;
+                if (!isLiveCarrier(turbo, abstractDock)) return false;
+            }
+
             View boxMaterial = resolveBoxMaterial(
                     turbo,
                     pending.type,
@@ -84,10 +92,11 @@ final class SecurityCenterEarlyPrepareHook {
             // Do not bind a second drawable-rect morph model here: that creates a separate
             // glass trajectory which can diverge from the real toolbox/window animation.
             SecurityCenterGlassRuntimeState.bindAssistant(
-                    turbo, dock, boxMaterial, pending.type);
+                    turbo, dock, abstractDock, boxMaterial, pending.type);
             log("deferred prepare bound type=" + pending.type
                     + " turbo@" + identity(turbo)
                     + " dock@" + identity(dock)
+                    + " abstract@" + identity(abstractDock)
                     + " box@" + identity(boxMaterial), null);
             return true;
         } catch (Throwable error) {
