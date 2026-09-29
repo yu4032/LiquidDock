@@ -13,10 +13,10 @@ public class SideSlideHoldPolicyTest {
     }
 
     @Test
-    public void backReadyNeverArmsSidebar() {
+    public void belowSecondStageNeverArmsSidebar() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
-        policy.onReadyState("READY_STATE_BACK");
+        policy.onSecondStageProgress(false);
         int generation = policy.generation();
 
         assertFalse(policy.requestArm(generation));
@@ -24,13 +24,13 @@ public class SideSlideHoldPolicyTest {
     }
 
     @Test
-    public void enteringRecentCreatesOneArmOpportunity() {
+    public void enteringSecondStageCreatesOneArmOpportunity() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
 
-        assertTrue(policy.onReadyState("READY_STATE_RECENT"));
+        assertTrue(policy.onSecondStageProgress(true));
         int generation = policy.generation();
-        assertFalse(policy.onReadyState("READY_STATE_RECENT"));
+        assertFalse(policy.onSecondStageProgress(true));
         assertTrue(policy.requestArm(generation));
         assertFalse(policy.requestArm(generation));
     }
@@ -39,7 +39,7 @@ public class SideSlideHoldPolicyTest {
     public void successfulDwellOnlyArmsUntilRelease() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
-        policy.onReadyState("READY_STATE_RECENT");
+        policy.onSecondStageProgress(true);
         int generation = policy.generation();
 
         assertTrue(policy.requestArm(generation));
@@ -55,12 +55,12 @@ public class SideSlideHoldPolicyTest {
     public void leavingEligibleStateCancelsArm() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
-        policy.onReadyState("READY_STATE_RECENT");
+        policy.onSecondStageProgress(true);
         int generation = policy.generation();
         assertTrue(policy.requestArm(generation));
         assertTrue(policy.onArmResult(true, generation));
 
-        policy.onReadyState("READY_STATE_BACK");
+        policy.onSecondStageProgress(false);
 
         assertFalse(policy.isArmed());
         assertFalse(policy.commitRelease(generation));
@@ -71,7 +71,7 @@ public class SideSlideHoldPolicyTest {
     public void unavailablePreflightFailsOpen() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
-        policy.onReadyState("READY_STATE_RECENT");
+        policy.onSecondStageProgress(true);
         int generation = policy.generation();
 
         assertTrue(policy.requestArm(generation));
@@ -85,7 +85,7 @@ public class SideSlideHoldPolicyTest {
     public void finishInvalidatesArmedGesture() {
         SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         policy.onDown();
-        policy.onReadyState("READY_STATE_RECENT");
+        policy.onSecondStageProgress(true);
         int generation = policy.generation();
         assertTrue(policy.requestArm(generation));
         assertTrue(policy.onArmResult(true, generation));
