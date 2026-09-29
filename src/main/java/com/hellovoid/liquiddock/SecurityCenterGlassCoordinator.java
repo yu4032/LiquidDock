@@ -305,18 +305,6 @@ final class SecurityCenterGlassCoordinator
     void onSidebarShowRequested() {}
     void onSidebarHideRequested(boolean animated) {}
 
-    void cancelVideoToolboxExitFade() {
-        if (assistantType != ASSISTANT_VIDEO) return;
-        if (dockSink != null) dockSink.cancelExitFade();
-        if (boxSink != null) boxSink.cancelExitFade();
-    }
-
-    void fadeVideoToolboxOnExit() {
-        if (assistantType != ASSISTANT_VIDEO) return;
-        if (dockSink != null) dockSink.fadeOutFast(80L);
-        if (boxSink != null) boxSink.fadeOutFast(80L);
-    }
-
     @Override
     public void releaseAll() {
         SecurityCenterVendorMaterialBridge.releaseClaim();
