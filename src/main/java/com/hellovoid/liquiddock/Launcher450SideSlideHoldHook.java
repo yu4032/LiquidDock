@@ -78,6 +78,7 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method workspaceFinishCurrentGestureMethod;
     private static volatile Method resetRenderPropertyMethod;
     private static volatile Method shouldRedirectEventMethod;
+    private static volatile Method onBackCancelledMethod;
     private static volatile Class<?> launcherStateClass;
     private static volatile Object launcherStateNormal;
     private static volatile boolean handoffReceiverRegistered;
@@ -127,6 +128,8 @@ final class Launcher450SideSlideHoldHook {
             Method shouldRedirectEvent = HookUtil.findMethodExact(
                     stubClass, "shouldRedirectEvent", new Class<?>[]{MotionEvent.class});
             shouldRedirectEvent.setAccessible(true);
+            Method onBackCancelled = HookUtil.findMethodExact(
+                    stubClass, "onBackCancelled", new Class<?>[0]);
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -142,6 +145,7 @@ final class Launcher450SideSlideHoldHook {
             workspaceFinishCurrentGestureMethod = finishCurrentGesture;
             resetRenderPropertyMethod = resetRenderProperty;
             shouldRedirectEventMethod = shouldRedirectEvent;
+            onBackCancelledMethod = onBackCancelled;
             launcherStateClass = stateClass;
             launcherStateNormal = null;
 
@@ -335,8 +339,9 @@ final class Launcher450SideSlideHoldHook {
             HookUtil.hook(injectBack, chain -> {
                 GestureState state = stateFor(chain.getThisObject());
                 if (state.policy.shouldConsumeVendorCompletion()) {
+                    cancelNativeBackSession(chain.getThisObject());
                     SideSlideHoldDiagnostics.log(
-                            TAG + " suppress vendor Back after Sidebar show acknowledgement");
+                            TAG + " cancel native Back session; suppress vendor Back after Sidebar show acknowledgement");
                     return null;
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -419,6 +424,17 @@ final class Launcher450SideSlideHoldHook {
                 }
             }
             return active;
+        }
+    }
+
+    private static void cancelNativeBackSession(Object owner) {
+        Method method = onBackCancelledMethod;
+        if (method == null || owner == null) return;
+        try {
+            method.invoke(owner);
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " failed to cancel native Back session", error);
         }
     }
 
