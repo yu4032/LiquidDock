@@ -90,6 +90,13 @@ final class SecurityCenterGlassRuntimeState {
         }
     }
 
+    static void onSidebarBackgroundGeometryChanged() {
+        Owner currentOwner = owner;
+        if (currentOwner instanceof SecurityCenterGlassCoordinator) {
+            ((SecurityCenterGlassCoordinator) currentOwner).onSidebarBackgroundGeometryChanged();
+        }
+    }
+
     static void onSourceAuthorityChanged(Object previousAuthority, Object currentAuthority) {
         if (!isEnabled() || previousAuthority == null || currentAuthority == null
                 || previousAuthority.equals(currentAuthority)) return;
