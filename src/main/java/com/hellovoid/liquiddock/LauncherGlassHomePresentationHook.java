@@ -5,12 +5,18 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 
+import java.lang.reflect.Method;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 /** Gates Workspace wallpaper capture across HOME and keyguard presentation boundaries. */
 final class LauncherGlassHomePresentationHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String WINDOW_ELEMENT = "com.miui.home.recents.anim.WindowElement";
-    private static final String HOME_END_CALLBACK =
-            "com.miui.home.recents.anim.WindowElement$mRectFSpringAnimListener$1";
+    private static final String RECTF_SPRING_ANIM =
+            "com.miui.home.recents.util.RectFSpringAnim";
+    private static final String RECTF_SPRING_LISTENER =
+            "com.miui.home.recents.util.RectFSpringAnim$RectFSpringAnimListener";
     private static final String CLOSE_TO_HOME = "CLOSE_TO_HOME";
     private static final String CLOSE_TO_HOME_CENTER = "CLOSE_TO_HOME_CENTER";
     private static final String UNLOCK_STATE =
@@ -22,6 +28,9 @@ final class LauncherGlassHomePresentationHook {
     private static volatile long unlockBarrierSerial = -1L;
     private static volatile long unlockBarrierStartedAtMs = -1L;
     private static Handler unlockTimeoutHandler;
+    private static final ThreadLocal<Boolean> CAPTURING_HOME_END_LISTENER = new ThreadLocal<>();
+    private static final Set<Class<?>> HOOKED_HOME_END_LISTENER_CLASSES =
+            ConcurrentHashMap.newKeySet();
 
     private static final HomeTransitionAuthorityState HOME_AUTHORITY =
             new HomeTransitionAuthorityState();
@@ -55,21 +64,85 @@ final class LauncherGlassHomePresentationHook {
 
     private static void hookHomeEnd(ClassLoader classLoader) {
         try {
-            HookUtil.hookMethod(classLoader, HOME_END_CALLBACK, "onAnimationEnd", chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                HomeTransitionAuthorityState.Decision decision =
-                        HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
-                if (decision.releaseBarrier) {
-                    Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
-                    releaseHomeBarrier(decision.releaseWidgetBarrier);
-                    MainHook.log(TAG + " APP HOME barrier released by Launcher fallback");
-                } else if (decision.waitForSystemUi) {
-                    MainHook.log(TAG + " APP HOME Launcher end observed; waiting for SystemUI FINISH");
+            Class<?> windowElement = Class.forName(WINDOW_ELEMENT, false, classLoader);
+            Class<?> rectAnim = Class.forName(RECTF_SPRING_ANIM, false, classLoader);
+            Class<?> listenerInterface = Class.forName(
+                    RECTF_SPRING_LISTENER, false, classLoader);
+
+            Method addListener = HookUtil.findMethodExact(
+                    windowElement, "addListener", new Class<?>[]{rectAnim});
+            Method registerListener = resolveRectSpringListenerRegistration(
+                    rectAnim, listenerInterface);
+            if (registerListener == null) {
+                throw new NoSuchMethodException(
+                        "unique RectFSpringAnim listener registration method unavailable");
+            }
+
+            HookUtil.hook(registerListener, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (Boolean.TRUE.equals(CAPTURING_HOME_END_LISTENER.get())
+                        && args.length == 1
+                        && listenerInterface.isInstance(args[0])) {
+                    installHomeEndListenerHook(args[0], rectAnim);
                 }
-                return result;
-            }, "com.miui.home.recents.util.RectFSpringAnim");
+                return chain.proceed(args);
+            });
+
+            HookUtil.hook(addListener, chain -> {
+                CAPTURING_HOME_END_LISTENER.set(Boolean.TRUE);
+                try {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                } finally {
+                    CAPTURING_HOME_END_LISTENER.remove();
+                }
+            });
+            MainHook.log(TAG + " HOME capture end structural listener bridge installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " HOME capture end unavailable: " + error);
+        }
+    }
+
+    private static Method resolveRectSpringListenerRegistration(
+            Class<?> rectAnim, Class<?> listenerInterface) {
+        Method match = null;
+        for (Method method : rectAnim.getMethods()) {
+            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 1 || params[0] != listenerInterface) continue;
+            if (match != null) return null;
+            match = method;
+        }
+        return match;
+    }
+
+    private static void installHomeEndListenerHook(Object listener, Class<?> rectAnim) {
+        if (listener == null || rectAnim == null) return;
+        Class<?> listenerClass = listener.getClass();
+        if (!HOOKED_HOME_END_LISTENER_CLASSES.add(listenerClass)) return;
+        try {
+            Method onAnimationEnd = HookUtil.findMethodExact(
+                    listenerClass, "onAnimationEnd", new Class<?>[]{rectAnim});
+            HookUtil.hook(onAnimationEnd, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                onLauncherHomeAnimationEnded();
+                return result;
+            });
+            MainHook.log(TAG + " HOME capture end listener bound structurally");
+        } catch (Throwable error) {
+            HOOKED_HOME_END_LISTENER_CLASSES.remove(listenerClass);
+            MainHook.log(TAG + " HOME capture end listener bind failed: " + error);
+        }
+    }
+
+    private static void onLauncherHomeAnimationEnded() {
+        HomeTransitionAuthorityState.Decision decision =
+                HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
+        if (decision.releaseBarrier) {
+            Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
+            releaseHomeBarrier(decision.releaseWidgetBarrier);
+            MainHook.log(TAG + " APP HOME barrier released by Launcher fallback");
+        } else if (decision.waitForSystemUi) {
+            MainHook.log(TAG + " APP HOME Launcher end observed; waiting for SystemUI FINISH");
         }
     }
 
