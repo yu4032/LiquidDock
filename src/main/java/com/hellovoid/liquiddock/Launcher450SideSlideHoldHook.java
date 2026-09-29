@@ -849,7 +849,15 @@ final class Launcher450SideSlideHoldHook {
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar release show result accepted=" + accepted
                         + " desktop=" + requestWasDesktop);
-                if (!accepted) {
+                if (accepted) {
+                    // Security Center has synchronously consumed the frozen mini-Sidebar geometry
+                    // and scheduled its native transform. Stop drawing the Launcher copy on the
+                    // next display frame, while keeping stock Back suppressed until the vendor
+                    // animation-start callback completes the handoff state machine.
+                    owner.postOnAnimation(() ->
+                            hideConfirmationMiniForVendorHandoff(
+                                    state, generation, "vendor show accepted"));
+                } else {
                     owner.post(() -> finishConfirmationVisual(
                             state, generation, "vendor show rejected"));
                 }
@@ -965,6 +973,22 @@ final class Launcher450SideSlideHoldHook {
                         + " vendor animation handoff receiver registration failed", error);
             }
         }
+    }
+
+    private static void hideConfirmationMiniForVendorHandoff(
+            GestureState state,
+            int generation,
+            String reason) {
+        if (state == null
+                || !state.awaitingVendorHandoff
+                || state.committedGeneration != generation) {
+            return;
+        }
+        state.confirmationVisible = false;
+        View arrow = state.arrow instanceof View ? (View) state.arrow : null;
+        if (arrow != null) arrow.postInvalidateOnAnimation();
+        SideSlideHoldDiagnostics.log(TAG
+                + " confirmation mini released to vendor frame: " + reason);
     }
 
     private static void finishConfirmationVisual(
