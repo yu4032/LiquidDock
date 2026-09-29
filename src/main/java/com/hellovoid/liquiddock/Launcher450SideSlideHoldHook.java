@@ -77,6 +77,7 @@ final class Launcher450SideSlideHoldHook {
     private static volatile Method launcherGetWorkspaceMethod;
     private static volatile Method workspaceFinishCurrentGestureMethod;
     private static volatile Method resetRenderPropertyMethod;
+    private static volatile Method shouldRedirectEventMethod;
     private static volatile Class<?> launcherStateClass;
     private static volatile Object launcherStateNormal;
     private static volatile boolean handoffReceiverRegistered;
@@ -123,6 +124,9 @@ final class Launcher450SideSlideHoldHook {
                     workspaceClass, "finishCurrentGesture", new Class<?>[0]);
             Method resetRenderProperty = HookUtil.findMethodExact(
                     stubClass, "resetRenderProperty", new Class<?>[]{String.class});
+            Method shouldRedirectEvent = HookUtil.findMethodExact(
+                    stubClass, "shouldRedirectEvent", new Class<?>[]{MotionEvent.class});
+            shouldRedirectEvent.setAccessible(true);
 
             Object back = enumConstant(readyClass, "READY_STATE_BACK");
             if (back == null) {
@@ -137,6 +141,7 @@ final class Launcher450SideSlideHoldHook {
             launcherGetWorkspaceMethod = getWorkspace;
             workspaceFinishCurrentGestureMethod = finishCurrentGesture;
             resetRenderPropertyMethod = resetRenderProperty;
+            shouldRedirectEventMethod = shouldRedirectEvent;
             launcherStateClass = stateClass;
             launcherStateNormal = null;
 
@@ -146,15 +151,32 @@ final class Launcher450SideSlideHoldHook {
                 MotionEvent event = args.length > 0 && args[0] instanceof MotionEvent
                         ? (MotionEvent) args[0] : null;
                 GestureState state = stateFor(owner);
-                if (owner instanceof View && event != null) {
-                    observeTouchBefore((View) owner, event, state);
-                }
-
                 int action = event != null ? event.getActionMasked() : -1;
-                if (owner instanceof View && action == MotionEvent.ACTION_UP) {
-                    commitRelease((View) owner, state);
-                } else if (owner instanceof View && action == MotionEvent.ACTION_CANCEL) {
-                    cancelConfirmation((View) owner, state);
+                if (owner instanceof View && event != null) {
+                    if (action == MotionEvent.ACTION_DOWN) {
+                        state.nativeRedirectActive = shouldNativeRedirect(owner, event);
+                        if (state.nativeRedirectActive) {
+                            cancelDwell((View) owner, state);
+                            state.gestureActive = false;
+                            state.sideStub = false;
+                            state.confirmationVisible = false;
+                            state.suppressStockAfterCommit = false;
+                            state.awaitingVendorHandoff = false;
+                            state.clearFrozenSourceGeometry();
+                            SideSlideHoldDiagnostics.log(TAG
+                                    + " native redirect owns gesture; SideSlide bypassed");
+                        }
+                    }
+                    if (!state.nativeRedirectActive) {
+                        observeTouchBefore((View) owner, event, state);
+                    }
+                }
+                if (!state.nativeRedirectActive) {
+                    if (owner instanceof View && action == MotionEvent.ACTION_UP) {
+                        commitRelease((View) owner, state);
+                    } else if (owner instanceof View && action == MotionEvent.ACTION_CANCEL) {
+                        cancelConfirmation((View) owner, state);
+                    }
                 }
 
                 try {
@@ -163,7 +185,10 @@ final class Launcher450SideSlideHoldHook {
                     return chain.proceed(args);
                 } finally {
                     if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                        finishGesture(owner, state);
+                        if (!state.nativeRedirectActive) {
+                            finishGesture(owner, state);
+                        }
+                        state.nativeRedirectActive = false;
                     }
                 }
             });
@@ -394,6 +419,18 @@ final class Launcher450SideSlideHoldHook {
                 }
             }
             return active;
+        }
+    }
+
+    private static boolean shouldNativeRedirect(Object owner, MotionEvent event) {
+        Method method = shouldRedirectEventMethod;
+        if (method == null || owner == null || event == null) return false;
+        try {
+            return Boolean.TRUE.equals(method.invoke(owner, event));
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " native redirect preflight failed; fail closed", error);
+            return true;
         }
     }
 
@@ -1268,6 +1305,7 @@ final class Launcher450SideSlideHoldHook {
         boolean retractingConfirmation;
         boolean confirmationConsumedThisGesture;
         boolean confirmationHapticFired;
+        boolean nativeRedirectActive;
         int activeGeneration = Integer.MIN_VALUE;
         int committedGeneration = Integer.MIN_VALUE;
         long confirmationStartedAtUptimeMs;
