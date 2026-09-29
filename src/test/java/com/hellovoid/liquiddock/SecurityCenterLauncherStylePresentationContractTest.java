@@ -192,14 +192,15 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
-        assertTrue("native animated hide should trigger the visual fade hook",
-                hook.contains("live.onSidebarHideRequested(true)"));
+        assertTrue("native animated hide should trigger the visual-only fade hook",
+                hook.contains("live.fadeVideoToolboxOnExit()"));
         assertTrue("Video Toolbox fade must stay scoped to assistant type 3",
                 coordinator.contains("assistantType != ASSISTANT_VIDEO"));
         assertTrue("exit fade should be intentionally very short",
                 coordinator.contains("fadeOutFast(80L)"));
         assertTrue("show must cancel any surviving exit fade",
-                coordinator.contains("cancelExitFade()"));
+                hook.contains("live.cancelVideoToolboxExitFade()")
+                        && coordinator.contains("cancelExitFade()"));
         assertTrue("sink fade uses View alpha without introducing delayed teardown",
                 sink.contains("animate().alpha(0f)")
                         && sink.contains("setDuration(Math.max(1L, durationMs))"));
