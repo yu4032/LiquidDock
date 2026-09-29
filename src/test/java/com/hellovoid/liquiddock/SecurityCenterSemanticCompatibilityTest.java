@@ -398,6 +398,7 @@ public class SecurityCenterSemanticCompatibilityTest {
         public void configurePanel(Wrapper wrapper, boolean left, String pkg, int mode, Type type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
@@ -407,6 +408,7 @@ public class SecurityCenterSemanticCompatibilityTest {
     public static class LegacyTurbo extends FakeView {
         private Wrapper wrapper;
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Box getBoxView() { return null; }
     }
 
@@ -430,6 +432,7 @@ public class SecurityCenterSemanticCompatibilityTest {
         public void configurePanel(AmbiguousWrapper wrapper, boolean left, String pkg, int mode, Type type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
@@ -443,6 +446,7 @@ public class SecurityCenterSemanticCompatibilityTest {
         public void configurePanel(MissingWrapper wrapper, boolean left, String pkg, int mode, Type type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
@@ -462,6 +466,7 @@ public class SecurityCenterSemanticCompatibilityTest {
         public void configurePanel(BadTypeWrapper wrapper, boolean left, String pkg, int mode, BadType type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
@@ -481,6 +486,7 @@ public class SecurityCenterSemanticCompatibilityTest {
         public void configurePanel(BadGameWrapper wrapper, boolean left, String pkg, int mode, Type type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public BadGame getGameTurboLayout() { return null; }
@@ -500,6 +506,7 @@ public class SecurityCenterSemanticCompatibilityTest {
         public void configurePanel(BadAdapterWrapper wrapper, boolean left, String pkg, int mode, Type type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
