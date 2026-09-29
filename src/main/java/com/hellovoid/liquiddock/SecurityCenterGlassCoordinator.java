@@ -302,8 +302,18 @@ final class SecurityCenterGlassCoordinator
     }
 
     // AIDL show/hide is not a material lifetime boundary. Carrier/root lifecycle owns teardown.
-    void onSidebarShowRequested() {}
-    void onSidebarHideRequested(boolean animated) {}
+    // It is only a visual authority for a very short custom fade on Video Toolbox exit.
+    void onSidebarShowRequested() {
+        if (assistantType != ASSISTANT_VIDEO) return;
+        if (dockSink != null) dockSink.cancelExitFade();
+        if (boxSink != null) boxSink.cancelExitFade();
+    }
+
+    void onSidebarHideRequested(boolean animated) {
+        if (assistantType != ASSISTANT_VIDEO || !animated) return;
+        if (dockSink != null) dockSink.fadeOutFast(80L);
+        if (boxSink != null) boxSink.fadeOutFast(80L);
+    }
 
     @Override
     public void releaseAll() {
