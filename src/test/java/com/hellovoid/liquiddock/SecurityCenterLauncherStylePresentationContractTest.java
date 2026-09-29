@@ -188,23 +188,28 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 early.contains("postDelayed("));
     }
 
-    @Test public void videoToolboxAnimatedExitUsesFastVisualFadeOnly() throws Exception {
+    @Test public void allSecurityCenterGlassUsesFastNativeExitTrendFade() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
-        assertTrue("native animated hide should trigger the visual-only fade hook",
-                hook.contains("live.fadeVideoToolboxOnExit()"));
-        assertTrue("Video Toolbox fade must stay scoped to assistant type 3",
-                coordinator.contains("assistantType != ASSISTANT_VIDEO"));
-        assertTrue("exit fade should be intentionally very short",
-                coordinator.contains("fadeOutFast(80L)"));
-        assertTrue("show must cancel any surviving exit fade",
-                hook.contains("live.cancelVideoToolboxExitFade()")
-                        && coordinator.contains("cancelExitFade()"));
-        assertTrue("sink fade uses View alpha without introducing delayed teardown",
-                sink.contains("animate().alpha(0f)")
-                        && sink.contains("setDuration(Math.max(1L, durationMs))"));
-        assertFalse("visual fade must not schedule lifecycle cleanup",
+        assertTrue("exit fade must live in every sink instead of one assistant type",
+                sink.contains("EXIT_FADE_MS = 80L")
+                        && sink.contains("updateExitFadeState(")
+                        && sink.contains("exitFadeMultiplier()"));
+        assertTrue("alpha and scale contraction must both be accepted as native exit signals",
+                sink.contains("alphaFalling")
+                        && sink.contains("scaleFalling")
+                        && sink.contains("structureLeaving"));
+        assertTrue("fade must modulate Prismal composition alpha rather than TextureView alpha",
+                sink.contains("desiredAlpha *= exitFadeMultiplier()")
+                        && sink.contains("presentationPaint.setAlpha"));
+        assertFalse("sidebar AIDL lifecycle must remain unrelated to fade authority",
+                hook.contains("fadeVideoToolboxOnExit")
+                        || hook.contains("cancelVideoToolboxExitFade"));
+        assertTrue("coordinator sidebar lifecycle callbacks remain no-op",
+                coordinator.contains("void onSidebarShowRequested() {}")
+                        && coordinator.contains("void onSidebarHideRequested(boolean animated) {}"));
+        assertFalse("visual fade must not schedule delayed lifecycle cleanup",
                 coordinator.contains("postDelayed("));
     }
 
