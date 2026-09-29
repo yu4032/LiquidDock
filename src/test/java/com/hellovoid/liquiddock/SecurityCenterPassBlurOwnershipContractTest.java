@@ -90,9 +90,12 @@ public class SecurityCenterPassBlurOwnershipContractTest {
                         && !coordinator.contains("usesDirectNativeMaterial()"));
         assertTrue("Prismal output must replace the vendor material at handoff",
                 bridge.contains("claimCustom(")
-                        && coordinator.contains("bridge.claimCustom(turbo, dock, box, apps)"));
-        assertTrue("Dock, upper toolbox, and All Apps vendor carriers must all be cleared",
-                bridge.contains("dockLayout, boxMaterialView, allAppsLayout")
+                        && coordinator.contains("abstractDockRef.get()")
+                        && coordinator.contains("bridge.claimCustom("));
+        assertTrue("Dock, native abstract Dock, upper toolbox, and All Apps carriers must all be cleared",
+                bridge.contains("abstractDockLayout")
+                        && bridge.contains("clearVendorTarget(dockLayout)")
+                        && bridge.contains("clearVendorTarget(abstractDockLayout)")
                         && bridge.contains("clearVendorTarget(boxMaterialView)")
                         && bridge.contains("clearVendorTarget(allAppsLayout)"));
         assertTrue("Security Center must not fall back to ordinary vendor background blur",
