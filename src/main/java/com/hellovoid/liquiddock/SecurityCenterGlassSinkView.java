@@ -257,6 +257,30 @@ final class SecurityCenterGlassSinkView extends TextureView
         return changed;
     }
 
+    boolean ensureOutputEnvelopeAtLeast(int minimumWidth, int minimumHeight) {
+        if (disposed || session.isShutdown() || minimumWidth <= 0 || minimumHeight <= 0) {
+            return false;
+        }
+        int targetWidth = Math.max(outputEnvelopeWidth,
+                (int) Math.ceil(minimumWidth + OPTICAL_OUTSET_PX * 2f));
+        int targetHeight = Math.max(outputEnvelopeHeight,
+                (int) Math.ceil(minimumHeight + OPTICAL_OUTSET_PX * 2f));
+        if (targetWidth == outputEnvelopeWidth && targetHeight == outputEnvelopeHeight) {
+            return false;
+        }
+        outputEnvelopeWidth = targetWidth;
+        outputEnvelopeHeight = targetHeight;
+        outputEnvelopeLocked = true;
+        ViewGroup.LayoutParams params = getLayoutParams();
+        if (params != null && (params.width != targetWidth || params.height != targetHeight)) {
+            params.width = targetWidth;
+            params.height = targetHeight;
+            setLayoutParams(params);
+            return true;
+        }
+        return false;
+    }
+
     SecurityCenterGlassGeometry captureGeometry(View root, float cornerRadiusPx) {
         View material = materialRef.get();
         if (disposed || session.isShutdown() || material == null
