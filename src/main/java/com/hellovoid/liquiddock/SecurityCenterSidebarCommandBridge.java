@@ -43,6 +43,8 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile boolean vendorShowProbeInstalled;
     private static volatile boolean turboTouchReleaseHookInstalled;
     private static volatile boolean sidebarRootClickReleaseHookInstalled;
+    private static volatile boolean windowLayoutPassDownGuardHookInstalled;
+    private static volatile View releasedSidebarWindowRoot;
     private static final int MIUI_FLAG_CLICK_PASS_DOWN = 0x20;
     private static final String TURBO_LAYOUT_CLASS =
             "com.miui.gamebooster.windowmanager.newbox.TurboLayout";
@@ -197,6 +199,7 @@ final class SecurityCenterSidebarCommandBridge {
             installVendorShowProbe(source);
             installTurboTouchReleaseHook(source.getClassLoader());
             installSidebarRootClickReleaseHook(source.getClassLoader());
+            installWindowLayoutPassDownGuardHook(source.getClassLoader());
             SideSlideHoldDiagnostics.log(TAG
                     + " receiver ready from DockWindowManagerService.onCreate");
         } catch (Throwable error) {
@@ -307,6 +310,51 @@ final class SecurityCenterSidebarCommandBridge {
         return false;
     }
 
+    /**
+     * Keeps the released Sidebar window pass-through across Security Center animation-time
+     * updateViewLayout calls. The native exit path may rewrite the same LayoutParams after the
+     * outside-click handler returns; without this guard that stale write clears bit 0x20 again.
+     */
+    private static void installWindowLayoutPassDownGuardHook(ClassLoader classLoader) {
+        if (windowLayoutPassDownGuardHookInstalled) return;
+        try {
+            Class<?> windowManagerImpl = Class.forName(
+                    "android.view.WindowManagerImpl", false, classLoader);
+            Method updateViewLayout = HookUtil.findMethodExact(
+                    windowManagerImpl,
+                    "updateViewLayout",
+                    new Class<?>[]{View.class, ViewGroup.LayoutParams.class});
+            HookUtil.hook(updateViewLayout, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (args.length >= 2
+                        && args[0] == releasedSidebarWindowRoot
+                        && args[1] instanceof WindowManager.LayoutParams) {
+                    ensureClickPassDownBit((WindowManager.LayoutParams) args[1]);
+                    SideSlideHoldDiagnostics.log(TAG
+                            + " preserved Sidebar click-pass-down across updateViewLayout");
+                }
+                return chain.proceed(args);
+            });
+            windowLayoutPassDownGuardHookInstalled = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " Sidebar updateViewLayout pass-down guard installed");
+        } catch (Throwable error) {
+            windowLayoutPassDownGuardHookInstalled = false;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " Sidebar updateViewLayout pass-down guard install failed", error);
+        }
+    }
+
+    private static void ensureClickPassDownBit(WindowManager.LayoutParams layoutParams)
+            throws ReflectiveOperationException {
+        Field miuiFlags = WindowManager.LayoutParams.class.getDeclaredField("miuiFlags");
+        miuiFlags.setAccessible(true);
+        int flags = miuiFlags.getInt(layoutParams);
+        if ((flags & MIUI_FLAG_CLICK_PASS_DOWN) == 0) {
+            miuiFlags.setInt(layoutParams, flags | MIUI_FLAG_CLICK_PASS_DOWN);
+        }
+    }
+
     private static void restoreClickPassDown(View turboLayout) {
         if (turboLayout == null) return;
         try {
@@ -324,19 +372,15 @@ final class SecurityCenterSidebarCommandBridge {
                 return;
             }
             WindowManager.LayoutParams layoutParams = (WindowManager.LayoutParams) params;
-            Field miuiFlags = WindowManager.LayoutParams.class.getDeclaredField("miuiFlags");
-            miuiFlags.setAccessible(true);
-            int flags = miuiFlags.getInt(layoutParams);
-            if ((flags & MIUI_FLAG_CLICK_PASS_DOWN) != 0) return;
-
-            miuiFlags.setInt(layoutParams, flags | MIUI_FLAG_CLICK_PASS_DOWN);
+            ensureClickPassDownBit(layoutParams);
+            releasedSidebarWindowRoot = windowRoot;
             WindowManager windowManager =
                     (WindowManager) windowRoot.getContext().getSystemService(Context.WINDOW_SERVICE);
             if (windowManager != null && windowRoot.isAttachedToWindow()) {
                 windowManager.updateViewLayout(windowRoot, layoutParams);
             }
             SideSlideHoldDiagnostics.log(TAG
-                    + " restored Sidebar click-pass-down after TurboLayout hidden");
+                    + " restored Sidebar click-pass-down and armed layout guard");
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG
                     + " restore Sidebar click-pass-down failed", error);
@@ -875,6 +919,7 @@ final class SecurityCenterSidebarCommandBridge {
             return false;
         }
         try {
+            releasedSidebarWindowRoot = null;
             pendingLauncherGeneration = generation;
             show.invoke(binder, x, y, width, height, radius);
             SideSlideHoldDiagnostics.log(TAG + " vendor show accepted geometry="
