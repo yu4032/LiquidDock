@@ -49,11 +49,14 @@ public class SettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         migratePreferences();
         Window w = getWindow();
+        // Compose installs content after this base onCreate returns. Without the former XML
+        // setContentView(), PhoneWindow may not have created DecorView yet, and
+        // Window#getInsetsController() dereferences that missing decor on HyperOS.
+        WindowInsetsController insetsController = w.getDecorView().getWindowInsetsController();
         // targetSdk 35+ is edge-to-edge: the system/theme owns the status-bar background.
         // Only request icon contrast through the modern insets controller.
         int uiMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         boolean night = uiMode == Configuration.UI_MODE_NIGHT_YES;
-        WindowInsetsController insetsController = w.getInsetsController();
         if (insetsController != null) {
             insetsController.setSystemBarsAppearance(
                     night ? 0 : WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
