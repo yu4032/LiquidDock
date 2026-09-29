@@ -270,6 +270,27 @@ final class SecurityCenterGlassSinkView extends TextureView
         session.onMaterialTransformMutated(this);
     }
 
+    static SecurityCenterGlassGeometry captureViewGeometry(
+            View material, View root, float cornerRadiusPx) {
+        if (material == null || root == null || !material.isAttachedToWindow()
+                || !root.isAttachedToWindow() || material.getWidth() <= 0 || material.getHeight() <= 0
+                || root.getWidth() <= 0 || root.getHeight() <= 0
+                || !finite(cornerRadiusPx) || cornerRadiusPx < 0f) return null;
+        try {
+            Bounds bounds = mapBounds(material, root);
+            if (bounds == null) return null;
+            float visualScale = Math.min(bounds.horizontalScale, bounds.verticalScale);
+            if (!finite(visualScale) || visualScale <= 0f) return null;
+            return SecurityCenterGlassGeometry.resolve(
+                    root.getWidth(), root.getHeight(),
+                    0f, 0f,
+                    bounds.left, bounds.top, bounds.right, bounds.bottom,
+                    cornerRadiusPx * visualScale);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     void setAuthorizedVisible(boolean visible) {
         if (disposed || session.isShutdown() || authorizedVisible == visible) return;
         authorizedVisible = visible;
