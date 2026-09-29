@@ -80,6 +80,7 @@ final class SecurityCenterGlassCoordinator
                 Object session,
                 Object sink,
                 Object dockSink,
+                Object previewSink,
                 Object boxSink,
                 Object appsSink,
                 boolean runtimeEnabled) {
@@ -89,7 +90,8 @@ final class SecurityCenterGlassCoordinator
                     && sink != null
                     && root == currentRoot
                     && session == currentSession
-                    && (sink == dockSink || sink == boxSink || sink == appsSink);
+                    && (sink == dockSink || sink == previewSink
+                            || sink == boxSink || sink == appsSink);
         }
 
         synchronized ReleaseDecision releaseAll() {
@@ -121,6 +123,7 @@ final class SecurityCenterGlassCoordinator
 
     private WeakReference<View> turboRef = new WeakReference<>(null);
     private WeakReference<View> dockRef = new WeakReference<>(null);
+    private WeakReference<View> abstractDockRef = new WeakReference<>(null);
     private WeakReference<View> boxRef = new WeakReference<>(null);
     private WeakReference<View> appsRef = new WeakReference<>(null);
     private WeakReference<View> rootRef = new WeakReference<>(null);
@@ -129,6 +132,7 @@ final class SecurityCenterGlassCoordinator
     private SecurityCenterGlassFrameGeometry currentFrame;
     private SecurityCenterGlassSession session;
     private SecurityCenterGlassSinkView dockSink;
+    private SecurityCenterGlassSinkView previewSink;
     private SecurityCenterGlassSinkView boxSink;
     private SecurityCenterGlassSinkView appsSink;
     private long generation;
@@ -200,14 +204,19 @@ final class SecurityCenterGlassCoordinator
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {
-        bindAssistant(turboLayout, dockLayout, null, ASSISTANT_GLOBAL_DOCK);
+        bindAssistant(turboLayout, dockLayout, null, null, ASSISTANT_GLOBAL_DOCK);
     }
 
     /**
      * The vendor may reuse TurboLayout/root while rebuilding its material children. Root identity
      * therefore owns the capture session, while carrier identity owns material epochs and sinks.
      */
-    void bindAssistant(View turboLayout, View dockLayout, View boxLayout, int type) {
+    void bindAssistant(
+            View turboLayout,
+            View dockLayout,
+            View abstractDockLayout,
+            View boxLayout,
+            int type) {
         if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return;
 
@@ -220,6 +229,8 @@ final class SecurityCenterGlassCoordinator
                 turboLayout, dockLayout, boxLayout, type);
         turboRef = new WeakReference<>(turboLayout);
         dockRef = new WeakReference<>(dockLayout);
+        abstractDockRef = new WeakReference<>(
+                type == ASSISTANT_GLOBAL_DOCK ? abstractDockLayout : null);
         boxRef = new WeakReference<>(boxLayout);
         appsRef = new WeakReference<>(null);
         assistantType = type;
@@ -334,7 +345,7 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
         View root = rootRef.get();
         if (!policy.acceptsOutputReady(
-                root, callbackSession, sink, dockSink, boxSink, appsSink,
+                root, callbackSession, sink, dockSink, previewSink, boxSink, appsSink,
                 SecurityCenterGlassRuntimeState.isEnabled())) return;
         if (callbackSession != session || callbackSession.isShutdown()
                 || sink.isDisposed() || !sink.isPresentationReady()
@@ -475,6 +486,11 @@ final class SecurityCenterGlassCoordinator
         dockSink = reconcileSink(
                 dockSink, dockRef.get(), live,
                 SecurityCenterSinkOutputPolicy.MaterialRole.DOCK);
+        previewSink = reconcileSink(
+                previewSink,
+                assistantType == ASSISTANT_GLOBAL_DOCK ? abstractDockRef.get() : null,
+                live,
+                SecurityCenterSinkOutputPolicy.MaterialRole.DOCK_PREVIEW);
         boxSink = reconcileSink(
                 boxSink, boxRef.get(), live,
                 SecurityCenterSinkOutputPolicy.MaterialRole.TOOLBOX);
@@ -512,26 +528,25 @@ final class SecurityCenterGlassCoordinator
         return apps != null && apps.isAttachedToWindow() ? apps : null;
     }
 
-    private float resolveLiveDockCornerRadius() {
-        View dock = dockRef.get();
-        if (dock == null || dock.getWidth() <= 0 || dock.getHeight() <= 0
-                || !dock.getClipToOutline()) return Float.NaN;
-        ViewOutlineProvider provider = dock.getOutlineProvider();
+    private float resolveLiveCornerRadius(View target) {
+        if (target == null || target.getWidth() <= 0 || target.getHeight() <= 0
+                || !target.getClipToOutline()) return Float.NaN;
+        ViewOutlineProvider provider = target.getOutlineProvider();
         if (provider == null) return Float.NaN;
         try {
             Outline outline = new Outline();
-            provider.getOutline(dock, outline);
+            provider.getOutline(target, outline);
             Rect bounds = new Rect();
             if (!outline.getRect(bounds)) return Float.NaN;
             float radius = outline.getRadius();
             if (!Float.isFinite(radius) || radius <= 0f
                     || bounds.left != 0 || bounds.top != 0
-                    || bounds.right != dock.getWidth() || bounds.bottom != dock.getHeight()) {
+                    || bounds.right != target.getWidth() || bounds.bottom != target.getHeight()) {
                 return Float.NaN;
             }
             return radius;
         } catch (Throwable error) {
-            log("live Dock outline unavailable", error);
+            log("live material outline unavailable", error);
             return Float.NaN;
         }
     }
@@ -545,6 +560,7 @@ final class SecurityCenterGlassCoordinator
     private boolean syncSinksFromMaterials() {
         boolean changed = false;
         if (dockSink != null) changed |= dockSink.syncFromMaterial();
+        if (previewSink != null) changed |= previewSink.syncFromMaterial();
         if (boxSink != null) changed |= boxSink.syncFromMaterial();
         if (appsSink != null) changed |= appsSink.syncFromMaterial();
         return changed;
@@ -553,6 +569,10 @@ final class SecurityCenterGlassCoordinator
     private void setAuthorizedSinksForFrame(SecurityCenterGlassFrameGeometry frame) {
         boolean hasFrame = frame != null;
         if (dockSink != null) dockSink.setAuthorizedVisible(hasFrame);
+        if (previewSink != null) {
+            previewSink.setAuthorizedVisible(
+                    hasFrame && frame.previewGeometry() != null);
+        }
         if (boxSink != null) {
             boxSink.setAuthorizedVisible(hasFrame && frame.boxGeometry() != null);
         }
@@ -571,7 +591,8 @@ final class SecurityCenterGlassCoordinator
             return;
         }
         try {
-            bridge.protectVendorFallback(turbo, dock, boxRef.get(), liveAppsView());
+            bridge.protectVendorFallback(
+                    turbo, dock, abstractDockRef.get(), boxRef.get(), liveAppsView());
         } catch (Throwable error) {
             log("vendor fallback latch failed closed", error);
             return;
@@ -606,7 +627,8 @@ final class SecurityCenterGlassCoordinator
         renderedGeneration = rendered;
         try {
             if (firstHandoff) ownership.onCustomPresented();
-            bridge.claimCustom(turbo, dock, box, apps);
+            bridge.claimCustom(
+                    turbo, dock, abstractDockRef.get(), box, apps);
             if (firstHandoff && session != null
                     && !session.requestSourceRebind("security-center-material-handoff")) {
                 log("PassBlur source rebind deferred after material handoff", null);
@@ -641,6 +663,10 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassSinkView[] sinks = new SecurityCenterGlassSinkView[count];
         int cursor = 0;
         sinks[cursor++] = dockSink;
+        if (frame.previewGeometry() != null) {
+            if (previewSink == null || !previewSink.isPresentationReady()) return;
+            sinks[cursor++] = previewSink;
+        }
         if (frame.boxGeometry() != null) {
             if (boxSink == null || !boxSink.isPresentationReady()) return;
             sinks[cursor++] = boxSink;
@@ -690,10 +716,23 @@ final class SecurityCenterGlassCoordinator
     private SecurityCenterGlassFrameGeometry captureFrame() {
         View root = rootRef.get();
         if (dockSink == null || !dockSink.isPresentationReady()) return null;
-        float dockRadius = resolveLiveDockCornerRadius();
+        float dockRadius = resolveLiveCornerRadius(dockRef.get());
         if (!Float.isFinite(dockRadius) || dockRadius <= 0f) return null;
         SecurityCenterGlassGeometry dock = dockSink.captureGeometry(root, dockRadius);
         if (dock == null) return null;
+
+        SecurityCenterGlassGeometry preview = null;
+        View abstractDock = abstractDockRef.get();
+        if (assistantType == ASSISTANT_GLOBAL_DOCK
+                && abstractDock != null
+                && abstractDock.isAttachedToWindow()
+                && abstractDock.getVisibility() == View.VISIBLE) {
+            if (previewSink == null || !previewSink.isPresentationReady()) return null;
+            float previewRadius = resolveLiveCornerRadius(abstractDock);
+            if (!Float.isFinite(previewRadius) || previewRadius <= 0f) return null;
+            preview = previewSink.captureGeometry(root, previewRadius);
+            if (preview == null) return null;
+        }
 
         View appsView = liveAppsView();
         if (appsView != null && appsView.getVisibility() == View.VISIBLE) {
@@ -703,7 +742,7 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterGlassGeometry apps = appsSink.captureGeometry(root, appsRadius);
             if (apps == null) return null;
             try {
-                return SecurityCenterGlassFrameGeometry.compose(dock, null, apps);
+                return SecurityCenterGlassFrameGeometry.compose(dock, preview, null, apps);
             } catch (IllegalArgumentException error) {
                 log("All Apps frame composition rejected", error);
                 return null;
@@ -724,7 +763,7 @@ final class SecurityCenterGlassCoordinator
             if (box == null) return null;
         }
         try {
-            return SecurityCenterGlassFrameGeometry.compose(dock, box, null);
+            return SecurityCenterGlassFrameGeometry.compose(dock, preview, box, null);
         } catch (IllegalArgumentException error) {
             log("frame composition rejected", error);
             return null;
@@ -784,6 +823,7 @@ final class SecurityCenterGlassCoordinator
 
     private void hideCustomOnly() {
         if (dockSink != null && !dockSink.isDisposed()) dockSink.setAuthorizedVisible(false);
+        if (previewSink != null && !previewSink.isDisposed()) previewSink.setAuthorizedVisible(false);
         if (boxSink != null && !boxSink.isDisposed()) boxSink.setAuthorizedVisible(false);
         if (appsSink != null && !appsSink.isDisposed()) appsSink.setAuthorizedVisible(false);
     }
@@ -843,12 +883,15 @@ final class SecurityCenterGlassCoordinator
 
     private void disposeSinks() {
         SecurityCenterGlassSinkView oldDock = dockSink;
+        SecurityCenterGlassSinkView oldPreview = previewSink;
         SecurityCenterGlassSinkView oldBox = boxSink;
         SecurityCenterGlassSinkView oldApps = appsSink;
         dockSink = null;
+        previewSink = null;
         boxSink = null;
         appsSink = null;
         if (oldDock != null) oldDock.dispose();
+        if (oldPreview != null) oldPreview.dispose();
         if (oldBox != null) oldBox.dispose();
         if (oldApps != null) oldApps.dispose();
     }
@@ -867,6 +910,7 @@ final class SecurityCenterGlassCoordinator
             attachObservedTurbo = null;
             turboRef = new WeakReference<>(null);
             dockRef = new WeakReference<>(null);
+            abstractDockRef = new WeakReference<>(null);
             boxRef = new WeakReference<>(null);
             appsRef = new WeakReference<>(null);
         }
