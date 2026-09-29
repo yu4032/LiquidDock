@@ -78,21 +78,10 @@ final class SecurityCenterGlassGeometry {
             return null;
         }
 
-        // Security Center lays the Global Dock material View out at its final size before the
-        // sidebar's visible drawable has finished morphing. Replace only that exact material
-        // candidate with the drawable's live root-local RectF. Toolbox / All Apps do not match the
-        // bound Dock material and therefore continue through the existing geometry path unchanged.
-        SecurityCenterSidebarDrawableGeometry.Snapshot liveSidebar =
-                SecurityCenterSidebarDrawableGeometry.overrideForCandidate(
-                        rootWidth, rootHeight,
-                        targetScreenLeft, targetScreenTop,
-                        targetScreenRight, targetScreenBottom);
-        if (liveSidebar != null) {
-            targetScreenLeft = liveSidebar.left;
-            targetScreenTop = liveSidebar.top;
-            targetScreenRight = liveSidebar.right;
-            targetScreenBottom = liveSidebar.bottom;
-        }
+        // Use the carrier's actual screen-space bounds directly. SidebarAnimUtils/Folme updates
+        // DockLayout layout/scale/translation/alpha every frame; reconstructing a second shape
+        // from SidebarLineDrawable produces an independent animation that does not stay locked to
+        // the real panel/content transform.
 
         float localLeft = targetScreenLeft - rootScreenLeft;
         float localTop = targetScreenTop - rootScreenTop;
