@@ -131,6 +131,10 @@ final class SecurityCenterGlassSinkView extends TextureView
             host.parent.addView(sink, index, new ViewGroup.LayoutParams(1, 1));
         }
         sink.syncFromMaterial();
+        if (materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
+                || materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK_PREVIEW) {
+            SecurityCenterMaterialTransformSyncHook.bind(material, sink);
+        }
         return sink;
     }
 
@@ -246,6 +250,12 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
     }
 
+    void onNativeMaterialTransformMutated() {
+        if (disposed || session.isShutdown()) return;
+        syncFromMaterial();
+        session.onMaterialTransformMutated(this);
+    }
+
     void setAuthorizedVisible(boolean visible) {
         if (disposed || session.isShutdown() || authorizedVisible == visible) return;
         authorizedVisible = visible;
@@ -315,6 +325,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         setAlpha(0f);
         View material = materialRef.get();
         if (material != null) {
+            SecurityCenterMaterialTransformSyncHook.unbind(material, this);
             try { material.removeOnAttachStateChangeListener(materialAttachListener); }
             catch (Throwable ignored) {}
         }
