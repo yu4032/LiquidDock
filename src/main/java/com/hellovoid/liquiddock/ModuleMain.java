@@ -56,6 +56,10 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
+                if (runtimeConfig.enabled && sideSlideEnabled) {
+                    SecurityCenterSidebarCommandBridge.install(classLoader);
+                }
                 SecurityCenterGlassRuntimeState.initialize(
                         Api101Bridge.remotePreferences("config"),
                         runtimeConfig.enabled,
@@ -122,6 +126,9 @@ public final class ModuleMain extends XposedModule {
             Launcher450IconSizeHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
                     runtimeConfig.grid.iconSizePercent);
+            if (runtimeConfig.enabled && SideSlideHoldFeatureConfig.isEnabled(configReader)) {
+                Launcher450SideSlideHoldHook.install(classLoader);
+            }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
 

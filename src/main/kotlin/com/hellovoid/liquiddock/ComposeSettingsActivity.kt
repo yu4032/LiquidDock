@@ -59,7 +59,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 
 class ComposeSettingsActivity : SettingsActivity() {
-    override fun useLegacyPreferenceUi(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +72,7 @@ class ComposeSettingsActivity : SettingsActivity() {
 private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
+    SecurityCenterSidebar(R.string.page_security_center_sidebar),
     Liquid(R.string.page_liquid), DialogCustomization(R.string.page_dialog_customization),
     ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
     WidgetComponents(R.string.page_widget_components),
@@ -433,7 +433,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page != Page.Home) TextButton(text = stringResource(R.string.action_back), onClick = { page = parentPage(page) })
                 },
                 actions = {
-                    if (page == Page.Liquid) {
+                    if (page == Page.SecurityCenterSidebar) {
                         TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
                     }
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
@@ -481,6 +481,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
+                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                )
                 Page.Liquid -> LiquidPage(
                     padding = padding,
                     prefs = prefs,
@@ -520,7 +525,16 @@ private fun HomePage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.app_name)) }
         item { SmallTitle(stringResource(R.string.category_master)) }
-        item { SettingsCard { BooleanSetting(prefs, ConfigSchema.Core.ENABLED, stringResource(R.string.enable_liquiddock), stringResource(R.string.enable_liquiddock_summary)) { onMasterChanged(it) } } }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Core.ENABLED,
+                    stringResource(R.string.enable_liquiddock),
+                    stringResource(R.string.enable_liquiddock_summary),
+                ) { onMasterChanged(it) }
+            }
+        }
         item { SmallTitle(stringResource(R.string.category_customization)) }
         item {
             SettingsCard {
@@ -529,6 +543,11 @@ private fun HomePage(
                 ArrowPreference(stringResource(R.string.page_divider), summary = stringResource(R.string.home_divider_summary), onClick = { open(Page.Divider) })
                 ArrowPreference(stringResource(R.string.page_workstation), summary = stringResource(R.string.home_workstation_summary), onClick = { open(Page.Workstation) })
                 ArrowPreference(stringResource(R.string.page_recents), summary = stringResource(R.string.home_recents_summary), onClick = { open(Page.Recents) })
+                ArrowPreference(
+                    stringResource(R.string.page_security_center_sidebar),
+                    summary = stringResource(R.string.home_security_center_sidebar_summary),
+                    onClick = { open(Page.SecurityCenterSidebar) },
+                )
                 ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
                 ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
                 ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
@@ -666,6 +685,44 @@ private fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, master
 }
 
 @Composable
+private fun SecurityCenterSidebarPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidGlassEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_security_center_sidebar),
+                stringResource(R.string.security_center_sidebar_header_summary),
+            )
+        }
+        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
+        item {
+            SettingsCard {
+                SideSlideHoldSetting(prefs, masterEnabled)
+            }
+        }
+        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.SECURITY_CENTER_GLASS,
+                    stringResource(R.string.liquid_security_center_glass_enable),
+                    stringResource(R.string.liquid_security_center_glass_enable_summary),
+                    masterEnabled && liquidGlassEnabled,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun LiquidPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
@@ -701,13 +758,6 @@ private fun LiquidPage(
             summary = "Gboard 等第三方应用的独立液态玻璃适配",
             enabled = masterEnabled && liquidGlass,
             onClick = openThirdPartyApps,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SECURITY_CENTER_GLASS,
-            stringResource(R.string.liquid_security_center_glass_enable),
-            stringResource(R.string.liquid_security_center_glass_enable_summary),
-            masterEnabled && liquidGlass,
         )
         BooleanSetting(
             prefs,

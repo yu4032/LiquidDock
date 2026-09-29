@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -12,14 +11,10 @@ import java.util.WeakHashMap;
 /** Executes declarative MAML hide-element rules without widget-specific Java branches. */
 final class LauncherMamlBackgroundRuleExecutor {
     private static final String LOG_TAG = "[MamlWidgetBg]";
-    private static final String DUMP_LOG_TAG = "[MamlWidgetBgDump]";
-    private static final int DUMP_CHUNK_SIZE = 16;
     private static final WidgetBackgroundRuleEngine RULES =
             WidgetBackgroundRuleEngine.loadBundled();
 
     private static final Map<View, Claim> CLAIMS =
-            Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<Object, Boolean> DUMPED_ROOTS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherMamlBackgroundRuleExecutor() {}
@@ -69,7 +64,6 @@ final class LauncherMamlBackgroundRuleExecutor {
                     + " rule=" + rule.id()
                     + " root=" + root.getClass().getSimpleName()
                     + " diagnosticOnly=true suppressed=false");
-            dumpNamedElementsOnce(identity, rule, root);
             return;
         }
 
@@ -92,7 +86,6 @@ final class LauncherMamlBackgroundRuleExecutor {
                     + " root=" + root.getClass().getSimpleName()
                     + " target=" + missingName
                     + " targetFound=false suppressed=false");
-            dumpNamedElementsOnce(identity, rule, root);
             return;
         }
 
@@ -199,54 +192,11 @@ final class LauncherMamlBackgroundRuleExecutor {
         }
     }
 
-    /** Dump Launcher 4.50's real ScreenElementRoot registry once per root, diagnostic-only. */
-    private static void dumpNamedElementsOnce(
-            WidgetBackgroundIdentity identity, WidgetBackgroundRule rule, Object root) {
-        if (root == null) return;
-        synchronized (DUMPED_ROOTS) {
-            if (DUMPED_ROOTS.containsKey(root)) return;
-            DUMPED_ROOTS.put(root, Boolean.TRUE);
-        }
-
-        Object value = readField(root, "mElements");
-        if (!(value instanceof Map)) {
-            MainHook.log(DUMP_LOG_TAG + describe(identity)
-                    + " rule=" + rule.id() + " registry=mElements unavailable");
-            return;
-        }
-
-        Map<?, ?> elements = (Map<?, ?>) value;
-        List<String> names = new ArrayList<>(elements.size());
-        for (Map.Entry<?, ?> entry : elements.entrySet()) {
-            String name = String.valueOf(entry.getKey());
-            Object stored = entry.getValue();
-            Object element = stored instanceof WeakReference
-                    ? ((WeakReference<?>) stored).get() : stored;
-            String type = element != null ? element.getClass().getSimpleName() : "collected";
-            names.add(name + ":" + type);
-        }
-        Collections.sort(names);
-
-        int chunks = Math.max(1, (names.size() + DUMP_CHUNK_SIZE - 1) / DUMP_CHUNK_SIZE);
-        if (names.isEmpty()) {
-            MainHook.log(DUMP_LOG_TAG + describe(identity)
-                    + " rule=" + rule.id() + " count=0 chunk=1/1 names=[]");
-            return;
-        }
-        for (int chunk = 0; chunk < chunks; chunk++) {
-            int from = chunk * DUMP_CHUNK_SIZE;
-            int to = Math.min(names.size(), from + DUMP_CHUNK_SIZE);
-            MainHook.log(DUMP_LOG_TAG + describe(identity)
-                    + " rule=" + rule.id()
-                    + " count=" + names.size()
-                    + " chunk=" + (chunk + 1) + "/" + chunks
-                    + " names=" + names.subList(from, to));
-        }
-    }
-
     private static String describe(WidgetBackgroundIdentity identity) {
-        return " productId=" + identity.productId
-                + " appPackage=" + identity.appPackage
+        if (identity == null) return " identity=null";
+        return " type=" + identity.type
+                + " productId=" + identity.productId
+                + " package=" + identity.appPackage
                 + " span=" + identity.spanX + "x" + identity.spanY
                 + " configSpan=" + identity.configSpanX + "x" + identity.configSpanY;
     }
