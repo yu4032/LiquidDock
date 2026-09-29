@@ -43,6 +43,11 @@ final class Launcher450SideSlideHoldHook {
     // On HOME only, where OS3 never publishes READY_STATE_RECENT, this is used as a visual
     // saturation boundary rather than as a claim about vendor Back completion semantics.
     private static final float HOME_VISUAL_SATURATION_PX = 180f;
+    // OS4 split_effect_renderer starts at gesture progress 0.8 and reaches its full split at 1.0.
+    // Map OS3's observed 180px visual boundary to that same 0.8 point.
+    private static final float OS4_SPLIT_START_PROGRESS = 0.8f;
+    private static final float OS4_GESTURE_FULL_DISTANCE_PX =
+            HOME_VISUAL_SATURATION_PX / OS4_SPLIT_START_PROGRESS;
     // OS4 GestureBackArrowView visual source geometry used by Security Center's launcher-origin
     // transform. Side authority is kept separate: Security Center derives left/right solely from
     // the first x argument, so x must come from the gesture edge rather than the Arrow view.
@@ -98,6 +103,8 @@ final class Launcher450SideSlideHoldHook {
             Method onArrowActionDown = HookUtil.findMethodExact(
                     arrowClass, "onActionDown",
                     new Class<?>[]{float.class, float.class, float.class});
+            Method onArrowActionMove = HookUtil.findMethodExact(
+                    arrowClass, "onActionMove", new Class<?>[]{float.class});
             Method getLauncher = HookUtil.findMethodExact(
                     applicationClass, "getLauncher", new Class<?>[0]);
             Method isInState = HookUtil.findMethodExact(
@@ -199,6 +206,23 @@ final class Launcher450SideSlideHoldHook {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
 
+            HookUtil.hook(onArrowActionMove, chain -> {
+                Object arrow = chain.getThisObject();
+                GestureState state = stateForArrow(arrow);
+                if (state != null) {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    if (args.length > 0 && args[0] instanceof Float) {
+                        float offset = Math.abs((Float) args[0]);
+                        state.arrowOffsetX = offset;
+                        state.os4GestureProgress = clamp01(offset / OS4_GESTURE_FULL_DISTANCE_PX);
+                        if (state.confirmationVisible && arrow instanceof View) {
+                            ((View) arrow).postInvalidateOnAnimation();
+                        }
+                    }
+                }
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+
             HookUtil.hook(onArrowDraw, chain -> {
                 Object arrow = chain.getThisObject();
                 GestureState state = stateForArrow(arrow);
@@ -223,6 +247,7 @@ final class Launcher450SideSlideHoldHook {
                                 state.arrowLocalCenterY,
                                 state.arrowStartX,
                                 state.arrowExpectedHeight,
+                                state.os4GestureProgress,
                                 !Float.isNaN(state.hoverAnchorY)
                                         ? state.hoverAnchorY
                                         : state.lastRawY,
@@ -361,6 +386,8 @@ final class Launcher450SideSlideHoldHook {
             state.arrowLocalCenterY = Float.NaN;
             state.arrowStartX = Float.NaN;
             state.arrowExpectedHeight = Float.NaN;
+            state.arrowOffsetX = Float.NaN;
+            state.os4GestureProgress = 0f;
             state.clearFrozenSourceGeometry();
             state.policy.onDown();
             state.activeGeneration = state.policy.generation();
@@ -369,6 +396,14 @@ final class Launcher450SideSlideHoldHook {
                     + " desktop=" + state.desktopAtDown
                     + " edge=" + (state.leftEdge ? "left" : "right"));
             return;
+        }
+
+        if (state.sideStub && action == MotionEvent.ACTION_MOVE) {
+            float rawDx = Math.abs(event.getRawX() - state.downX);
+            if (Float.isNaN(state.arrowOffsetX)) {
+                state.os4GestureProgress =
+                        clamp01(rawDx / OS4_GESTURE_FULL_DISTANCE_PX);
+            }
         }
 
         if (!state.sideStub || !state.desktopAtDown || action != MotionEvent.ACTION_MOVE) return;
@@ -886,6 +921,10 @@ final class Launcher450SideSlideHoldHook {
         state.scheduledGeneration = Integer.MIN_VALUE;
     }
 
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(value, 1f));
+    }
+
     private static void cancelDwell(View owner, GestureState state) {
         Runnable runnable = state.dwellRunnable;
         if (runnable != null) owner.removeCallbacks(runnable);
@@ -924,6 +963,8 @@ final class Launcher450SideSlideHoldHook {
         float arrowLocalCenterY = Float.NaN;
         float arrowStartX = Float.NaN;
         float arrowExpectedHeight = Float.NaN;
+        float arrowOffsetX = Float.NaN;
+        float os4GestureProgress;
         int frozenSourceX = Integer.MIN_VALUE;
         int frozenSourceY = Integer.MIN_VALUE;
         int frozenSourceWidth = Integer.MIN_VALUE;
