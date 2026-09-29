@@ -66,6 +66,7 @@ public class SecurityCenterRealManagerShapeRegressionTest {
         public void configurePanel(Wrapper wrapper, boolean left, String pkg, int mode, Type type,
                                    boolean force, boolean vertical, boolean extra) {}
         public Dock getDockLayout() { return null; }
+        public Dock getAbstractDockLayout() { return null; }
         public Apps getAppsLayout() { return null; }
         public Box getBoxView() { return null; }
         public Game getGameTurboLayout() { return null; }
