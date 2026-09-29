@@ -215,6 +215,7 @@ final class Launcher450SideSlideHoldHook {
                         float offset = Math.abs((Float) args[0]);
                         state.arrowOffsetX = offset;
                         state.os4GestureProgress = clamp01(offset / OS4_GESTURE_FULL_DISTANCE_PX);
+                        maybeEnterOs4Split(state, arrow instanceof View ? (View) arrow : null);
                         if (state.confirmationVisible && arrow instanceof View) {
                             ((View) arrow).postInvalidateOnAnimation();
                         }
@@ -248,6 +249,8 @@ final class Launcher450SideSlideHoldHook {
                                 state.arrowStartX,
                                 state.arrowExpectedHeight,
                                 state.os4GestureProgress,
+                                state.splitActive,
+                                state.splitStartedAtUptimeMs,
                                 !Float.isNaN(state.hoverAnchorY)
                                         ? state.hoverAnchorY
                                         : state.lastRawY,
@@ -388,6 +391,8 @@ final class Launcher450SideSlideHoldHook {
             state.arrowExpectedHeight = Float.NaN;
             state.arrowOffsetX = Float.NaN;
             state.os4GestureProgress = 0f;
+            state.splitActive = false;
+            state.splitStartedAtUptimeMs = 0L;
             state.clearFrozenSourceGeometry();
             state.policy.onDown();
             state.activeGeneration = state.policy.generation();
@@ -403,6 +408,7 @@ final class Launcher450SideSlideHoldHook {
             if (Float.isNaN(state.arrowOffsetX)) {
                 state.os4GestureProgress =
                         clamp01(rawDx / OS4_GESTURE_FULL_DISTANCE_PX);
+                maybeEnterOs4Split(state, state.arrow instanceof View ? (View) state.arrow : null);
             }
         }
 
@@ -578,6 +584,9 @@ final class Launcher450SideSlideHoldHook {
                     state.confirmationVisible = true;
                     state.confirmationStartedAtUptimeMs = SystemClock.uptimeMillis();
                     state.releaseStartedAtUptimeMs = 0L;
+                    state.splitActive = false;
+                    state.splitStartedAtUptimeMs = 0L;
+                    maybeEnterOs4Split(state, state.arrow instanceof View ? (View) state.arrow : null);
                     state.confirmationDrawLogged = false;
                     View arrow = resolveArrowView(owner, state);
                     if (arrow != null) {
@@ -650,6 +659,8 @@ final class Launcher450SideSlideHoldHook {
         state.suppressStockAfterCommit = false;
         state.confirmationStartedAtUptimeMs = 0L;
         state.releaseStartedAtUptimeMs = 0L;
+        state.splitActive = false;
+        state.splitStartedAtUptimeMs = 0L;
         state.awaitingVendorHandoff = false;
         state.committedGeneration = Integer.MIN_VALUE;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
@@ -822,6 +833,8 @@ final class Launcher450SideSlideHoldHook {
         state.committedGeneration = Integer.MIN_VALUE;
         state.confirmationStartedAtUptimeMs = 0L;
         state.releaseStartedAtUptimeMs = 0L;
+        state.splitActive = false;
+        state.splitStartedAtUptimeMs = 0L;
         state.confirmationDrawLogged = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         if (arrow != null) arrow.postInvalidateOnAnimation();
@@ -921,6 +934,22 @@ final class Launcher450SideSlideHoldHook {
         state.scheduledGeneration = Integer.MIN_VALUE;
     }
 
+    private static void maybeEnterOs4Split(GestureState state, View arrow) {
+        if (state == null
+                || !state.confirmationVisible
+                || state.splitActive
+                || state.releaseStartedAtUptimeMs > 0L
+                || state.os4GestureProgress < OS4_SPLIT_START_PROGRESS) {
+            return;
+        }
+        state.splitActive = true;
+        state.splitStartedAtUptimeMs = SystemClock.uptimeMillis();
+        SideSlideHoldDiagnostics.log(TAG
+                + " OS4 split entered progress=" + state.os4GestureProgress
+                + " generation=" + state.activeGeneration);
+        if (arrow != null) arrow.postInvalidateOnAnimation();
+    }
+
     private static float clamp01(float value) {
         return Math.max(0f, Math.min(value, 1f));
     }
@@ -947,10 +976,12 @@ final class Launcher450SideSlideHoldHook {
         boolean workspaceCancelled;
         boolean confirmationDrawLogged;
         boolean arrowFallbackBindingLogged;
+        boolean splitActive;
         int activeGeneration = Integer.MIN_VALUE;
         int committedGeneration = Integer.MIN_VALUE;
         long confirmationStartedAtUptimeMs;
         long releaseStartedAtUptimeMs;
+        long splitStartedAtUptimeMs;
         Object arrow;
         float downX;
         float downRawY;
