@@ -76,22 +76,31 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 resolver.contains("finalBackground"));
     }
 
-    @Test public void securityCenterUsesOverlayBoundSinkMappedFromVendorMaterial() throws Exception {
+    @Test public void securityCenterUsesRoleSpecificNativePresentationHierarchy() throws Exception {
         Path sinkPath = MAIN.resolve("SecurityCenterGlassSinkView.java");
         assertTrue(Files.exists(sinkPath));
         String sink = Files.readString(sinkPath);
+        String policy = Files.readString(MAIN.resolve("SecurityCenterSinkOutputPolicy.java"));
         assertTrue(sink.contains("syncFromMaterial()"));
-        assertTrue("sink must resolve an outer overlay host instead of joining vendor measurement",
+
+        assertTrue("Sidebar Dock glass must be able to join DockLayout and inherit Folme directly",
+                sink.contains("inheritMaterialTransform")
+                        && sink.contains("getParent() == material")
+                        && sink.contains("expectedParent = (ViewGroup) material"));
+        assertTrue("only Dock uses native material-transform inheritance",
+                policy.contains("return role == MaterialRole.DOCK"));
+
+        assertTrue("toolbox/all-apps still resolve an outer overlay host",
                 sink.contains("resolveOverlayHost(material)"));
-        assertTrue("material animation geometry must be mapped through the real transform chain",
+        assertTrue("overlay material geometry remains mapped through the real transform chain",
                 sink.contains("material.transformMatrixToGlobal(materialToGlobal)"));
-        assertTrue("overlay-local placement must invert the host transform",
+        assertTrue("overlay-local placement still inverts the host transform",
                 sink.contains("target.transformMatrixToGlobal(targetToGlobal)"));
-        assertTrue("visual alpha remains inherited without controlling readiness",
-                sink.contains("effectiveMaterialAlpha(material, host.parent)"));
-        assertTrue("vendor visibility remains authoritative",
-                sink.contains("isStructurallyVisible(material, host.parent)"));
-        assertFalse("direct material scale mirroring would reintroduce Surface/layout coupling",
+        assertTrue("overlay visual alpha remains inherited",
+                sink.contains("effectiveMaterialAlpha(material, expectedParent)"));
+        assertTrue("overlay vendor visibility remains authoritative",
+                sink.contains("isStructurallyVisible(material, expectedParent)"));
+        assertFalse("direct property mirroring is unnecessary when hierarchy owns the transform",
                 sink.contains("setScaleX(material.getScaleX())"));
         assertFalse("global-visible-rect heuristics must not replace transform mapping",
                 sink.contains("getGlobalVisibleRect"));
