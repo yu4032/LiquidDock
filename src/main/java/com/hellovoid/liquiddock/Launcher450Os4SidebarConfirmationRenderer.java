@@ -144,7 +144,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             long splitStartedAtUptimeMs,
             float gestureRawY,
             long startedAtUptimeMs,
-            long releaseStartedAtUptimeMs) {
+            long releaseStartedAtUptimeMs,
+            float releaseMiniCenterX) {
         if (canvas == null || arrowView == null) return;
 
         float density = os4Density(arrowView);
@@ -201,20 +202,14 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         bridgeFactor = 1f - bridgeCollapse;
 
         if (releasing) {
-            // By ACTION_UP the mini Sidebar already exists. Release only removes any residual
-            // water-drop/bridge while keeping the body at its split endpoint for vendor handoff.
-            float releaseSeconds =
-                    Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
-            float releaseDrop =
-                    clamp01(springProgress(releaseSeconds, TEARDROP_DAMPING, 0.10f));
-            teardropFactor *= 1f - releaseDrop;
-            bridgeFactor *= 1f - releaseDrop;
-
-            float releaseSplit =
-                    clamp01(springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
-            width = lerp(width, SIDEBAR_WIDTH_DP * density, releaseSplit);
-            height = lerp(height, SIDEBAR_HEIGHT_DP * density, releaseSplit);
-            radius = lerp(radius, SIDEBAR_RADIUS_DP * density, releaseSplit);
+            // ACTION_UP freezes the visible mini Sidebar and hands that exact rectangle to
+            // Security Center. Do not continue the Launcher-side split spring after the source
+            // geometry has been captured, otherwise the two animations visibly jump apart.
+            teardropFactor = 0f;
+            bridgeFactor = 0f;
+            width = SIDEBAR_WIDTH_DP * density;
+            height = SIDEBAR_HEIGHT_DP * density;
+            radius = SIDEBAR_RADIUS_DP * density;
         }
 
         // OS3 already computes the authoritative local geometry in onActionDown(y,startX,height).
@@ -253,14 +248,16 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         // where mScale == GesturesBackController.convertOffset(offset) / 20.
         // The OS4 separated body then starts with its center 12dp outside the display and lerps
         // to one body half-width past that endpoint.
-        float miniCenterX = resolveMiniSidebarCenterX(
-                viewWidth,
-                leftEdge,
-                baselineX,
-                arrowBackWidth,
-                gestureProgress,
-                splitProgress,
-                density);
+        float miniCenterX = releasing && !Float.isNaN(releaseMiniCenterX)
+                ? releaseMiniCenterX
+                : resolveMiniSidebarCenterX(
+                        viewWidth,
+                        leftEdge,
+                        baselineX,
+                        arrowBackWidth,
+                        gestureProgress,
+                        splitProgress,
+                        density);
 
         // OS4 build_teardrop_path receives calculate_positions() endpoints, not the
         // 24x53 Sidebar body dimensions. On OS3 the equivalent span is mBackWidth * visual
@@ -280,7 +277,10 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 Math.max(0f, 1f - TEARDROP_SPLIT_VERTICAL_COEFF * clamp01(splitProgress));
 
         Path teardropPath = TEARDROP_PATH.get();
-        boolean hasTeardrop = teardropFactor > 0.001f
+        boolean miniSidebarSettled = splitProgress >= 0.98f;
+        boolean hasTeardrop = !releasing
+                && !miniSidebarSettled
+                && teardropFactor > 0.001f
                 && bridgeFactor > 0.001f
                 && profileRight - profileLeft > 0.001f;
         if (hasTeardrop) {
