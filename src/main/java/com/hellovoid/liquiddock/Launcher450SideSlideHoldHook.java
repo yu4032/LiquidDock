@@ -191,7 +191,8 @@ final class Launcher450SideSlideHoldHook {
                                 !Float.isNaN(state.hoverAnchorY)
                                         ? state.hoverAnchorY
                                         : state.lastRawY,
-                                state.confirmationStartedAtUptimeMs);
+                                state.confirmationStartedAtUptimeMs,
+                                state.releaseStartedAtUptimeMs);
                         return null;
                     }
                     if (state.suppressStockAfterCommit) {
@@ -319,6 +320,7 @@ final class Launcher450SideSlideHoldHook {
             state.awaitingVendorHandoff = false;
             state.committedGeneration = Integer.MIN_VALUE;
             state.confirmationStartedAtUptimeMs = 0L;
+            state.releaseStartedAtUptimeMs = 0L;
             state.confirmationDrawLogged = false;
             state.arrowFallbackBindingLogged = false;
             state.policy.onDown();
@@ -499,10 +501,20 @@ final class Launcher450SideSlideHoldHook {
                     owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                     state.confirmationVisible = true;
                     state.confirmationStartedAtUptimeMs = SystemClock.uptimeMillis();
+                    state.releaseStartedAtUptimeMs = 0L;
+                    state.confirmationDrawLogged = false;
                     View arrow = resolveArrowView(owner, state);
                     if (arrow != null) {
                         state.arrow = arrow;
                         arrow.postInvalidateOnAnimation();
+                    } else {
+                        // GestureBackArrowView is a sibling window on this Launcher build.
+                        // Invalidate the gesture root so its next traversal reaches onDraw and lets
+                        // stateForArrow bind the active arrow through the existing window fallback.
+                        View root = owner.getRootView();
+                        if (root != null) root.postInvalidateOnAnimation();
+                        SideSlideHoldDiagnostics.log(TAG
+                                + " confirmation armed; ArrowView unresolved, invalidate root");
                     }
                     SideSlideHoldDiagnostics.log(TAG
                             + " Sidebar preflight ready -> Launcher haptic + OS4 confirmation"
@@ -538,6 +550,8 @@ final class Launcher450SideSlideHoldHook {
         state.suppressStockAfterCommit = true;
         state.awaitingVendorHandoff = true;
         state.committedGeneration = generation;
+        state.releaseStartedAtUptimeMs = SystemClock.uptimeMillis();
+        state.confirmationDrawLogged = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : resolveArrowView(owner, state);
         if (arrow != null) {
             state.arrow = arrow;
@@ -555,6 +569,7 @@ final class Launcher450SideSlideHoldHook {
         state.confirmationVisible = false;
         state.suppressStockAfterCommit = false;
         state.confirmationStartedAtUptimeMs = 0L;
+        state.releaseStartedAtUptimeMs = 0L;
         state.awaitingVendorHandoff = false;
         state.committedGeneration = Integer.MIN_VALUE;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
@@ -615,13 +630,22 @@ final class Launcher450SideSlideHoldHook {
 
     private static View resolveArrowView(View owner, GestureState state) {
         if (state.arrow instanceof View) return (View) state.arrow;
-        if (!(owner instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) owner;
+        View local = findArrowView(owner);
+        if (local != null) return local;
+        View root = owner.getRootView();
+        return root != null && root != owner ? findArrowView(root) : null;
+    }
+
+    private static View findArrowView(View candidate) {
+        if (candidate == null) return null;
+        if (ARROW_VIEW.equals(candidate.getClass().getName())) {
+            return candidate;
+        }
+        if (!(candidate instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) candidate;
         for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child != null && ARROW_VIEW.equals(child.getClass().getName())) {
-                return child;
-            }
+            View match = findArrowView(group.getChildAt(i));
+            if (match != null) return match;
         }
         return null;
     }
@@ -702,6 +726,7 @@ final class Launcher450SideSlideHoldHook {
         state.awaitingVendorHandoff = false;
         state.committedGeneration = Integer.MIN_VALUE;
         state.confirmationStartedAtUptimeMs = 0L;
+        state.releaseStartedAtUptimeMs = 0L;
         state.confirmationDrawLogged = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         if (arrow != null) arrow.postInvalidateOnAnimation();
@@ -794,6 +819,7 @@ final class Launcher450SideSlideHoldHook {
         boolean arrowFallbackBindingLogged;
         int committedGeneration = Integer.MIN_VALUE;
         long confirmationStartedAtUptimeMs;
+        long releaseStartedAtUptimeMs;
         Object arrow;
         float downX;
         float downRawY;
