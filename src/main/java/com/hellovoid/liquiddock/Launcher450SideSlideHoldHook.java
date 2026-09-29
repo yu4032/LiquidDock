@@ -179,7 +179,7 @@ final class Launcher450SideSlideHoldHook {
                             ? ((Enum<?>) requested).name()
                             : String.valueOf(requested);
                     if (state.policy.shouldConsumeVendorCompletion()
-                            || (state.confirmationVisible && state.splitActive)) {
+                            || state.confirmationVisible) {
                         // OS3's 1/3-screen quick-switch handler can promote the arrow to RECENT
                         // while the finger is still down. Once OS4-style Sidebar confirmation is
                         // active, keep BACK as the host state so that promotion cannot hide/reset
@@ -232,22 +232,12 @@ final class Launcher450SideSlideHoldHook {
                         float offset = Math.abs((Float) args[0]);
                         state.arrowOffsetX = offset;
                         state.os4GestureProgress = os4ProgressFromOffset(offset);
-                        if (state.confirmationVisible
-                                && state.releaseStartedAtUptimeMs <= 0L
-                                && state.os4GestureProgress < 0.65f) {
-                            // The user reversed back toward the edge without lifting. Cancel the
-                            // Sidebar arm and let the stock BACK gesture regain ownership.
-                            if (state.desktopAtDown && state.owner instanceof View) {
-                                state.policy.onDesktopProgress(false);
-                            }
-                            if (state.owner instanceof View) {
-                                cancelDwell((View) state.owner, state);
-                                cancelConfirmation((View) state.owner, state);
-                            }
-                        } else {
-                            maybeEnterOs4Split(
-                                    state, arrow instanceof View ? (View) arrow : null);
-                        }
+                        // Once confirmation is committed by the dwell gate, pointer distance no
+                        // longer owns visibility. The mini Sidebar stays latched in place; only
+                        // observeTouchBefore() may begin the explicit edgeward retract after the
+                        // finger crosses back over the mini Sidebar itself.
+                        maybeEnterOs4Split(
+                                state, arrow instanceof View ? (View) arrow : null);
                         if (state.confirmationVisible && arrow instanceof View) {
                             ((View) arrow).postInvalidateOnAnimation();
                         }
@@ -289,7 +279,8 @@ final class Launcher450SideSlideHoldHook {
                                         : state.lastRawY,
                                 state.confirmationStartedAtUptimeMs,
                                 state.releaseStartedAtUptimeMs,
-                                state.releaseMiniCenterX);
+                                state.releaseMiniCenterX,
+                                state.interactiveMiniCenterX);
                         return null;
                     }
                     if (state.suppressStockAfterCommit) {
@@ -428,6 +419,13 @@ final class Launcher450SideSlideHoldHook {
             state.splitActive = false;
             state.splitStartedAtUptimeMs = 0L;
             state.releaseMiniCenterX = Float.NaN;
+            state.interactiveMiniCenterX = Float.NaN;
+            state.lockedMiniCenterX = Float.NaN;
+            state.lockedMiniCenterScreenX = Float.NaN;
+            state.confirmationFingerRawX = Float.NaN;
+            state.retractingConfirmation = false;
+            state.confirmationConsumedThisGesture = false;
+            state.confirmationHapticFired = false;
             state.clearFrozenSourceGeometry();
             state.policy.onDown();
             state.activeGeneration = state.policy.generation();
@@ -447,6 +445,14 @@ final class Launcher450SideSlideHoldHook {
                 state.os4GestureProgress =
                         clamp01(rawDx / HOME_VISUAL_SATURATION_PX);
                 maybeEnterOs4Split(state, state.arrow instanceof View ? (View) state.arrow : null);
+            }
+
+            if (state.confirmationVisible && state.releaseStartedAtUptimeMs <= 0L) {
+                // Confirmation is a one-way latch until the user deliberately crosses back over
+                // the mini Sidebar and continues toward the physical edge. Ordinary inward/outward
+                // motion must neither move nor dismiss it.
+                updateLatchedConfirmationDrag(view, event, state);
+                return;
             }
         }
 
@@ -475,7 +481,8 @@ final class Launcher450SideSlideHoldHook {
         state.hoverAnchorX = event.getRawX();
         state.hoverAnchorY = event.getRawY();
         state.hoverAnchorLocalY = event.getY();
-        if (entered || state.dwellRunnable == null) {
+        if (!state.confirmationConsumedThisGesture
+                && (entered || state.dwellRunnable == null)) {
             cancelDwell(view, state);
             int generation = state.policy.generation();
             state.scheduledGeneration = generation;
@@ -566,7 +573,7 @@ final class Launcher450SideSlideHoldHook {
     }
 
     private static void scheduleDwell(View owner, GestureState state, String authority) {
-        if (!state.sideStub) return;
+        if (!state.sideStub || state.confirmationConsumedThisGesture) return;
         cancelDwell(owner, state);
         int generation = state.policy.generation();
         state.scheduledGeneration = generation;
@@ -617,18 +624,28 @@ final class Launcher450SideSlideHoldHook {
                     }
 
                     // OS4 confirmation is rendered by the existing Launcher GestureBackArrowView.
-                    // This replaces, rather than overlays, OS3's bitmap Back animation.
-                    owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    // This replaces, rather than overlays, OS3's bitmap Back animation. The
+                    // confirmation commit is latched for the remainder of this pointer stream:
+                    // exactly one haptic, one popup, and no distance-based disappearance.
+                    state.confirmationConsumedThisGesture = true;
+                    if (!state.confirmationHapticFired) {
+                        owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        state.confirmationHapticFired = true;
+                    }
                     state.confirmationVisible = true;
                     state.confirmationStartedAtUptimeMs = SystemClock.uptimeMillis();
                     state.releaseStartedAtUptimeMs = 0L;
                     state.splitActive = false;
                     state.splitStartedAtUptimeMs = 0L;
+                    state.confirmationFingerRawX = state.lastRawX;
+                    state.retractingConfirmation = false;
+                    state.interactiveMiniCenterX = Float.NaN;
                     maybeEnterOs4Split(state, state.arrow instanceof View ? (View) state.arrow : null);
                     state.confirmationDrawLogged = false;
                     View arrow = resolveArrowView(owner, state);
                     if (arrow != null) {
                         state.arrow = arrow;
+                        lockConfirmationGeometry(owner, state, arrow);
                         arrow.postInvalidateOnAnimation();
                     } else {
                         // GestureBackArrowView is a sibling window on this Launcher build.
@@ -715,6 +732,11 @@ final class Launcher450SideSlideHoldHook {
         state.splitStartedAtUptimeMs = 0L;
         state.awaitingVendorHandoff = false;
         state.committedGeneration = Integer.MIN_VALUE;
+        state.interactiveMiniCenterX = Float.NaN;
+        state.lockedMiniCenterX = Float.NaN;
+        state.lockedMiniCenterScreenX = Float.NaN;
+        state.confirmationFingerRawX = Float.NaN;
+        state.retractingConfirmation = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         if (arrow != null) arrow.postInvalidateOnAnimation();
         SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
@@ -890,6 +912,11 @@ final class Launcher450SideSlideHoldHook {
         state.splitActive = false;
         state.splitStartedAtUptimeMs = 0L;
         state.releaseMiniCenterX = Float.NaN;
+        state.interactiveMiniCenterX = Float.NaN;
+        state.lockedMiniCenterX = Float.NaN;
+        state.lockedMiniCenterScreenX = Float.NaN;
+        state.confirmationFingerRawX = Float.NaN;
+        state.retractingConfirmation = false;
         state.confirmationDrawLogged = false;
         View arrow = state.arrow instanceof View ? (View) state.arrow : null;
         if (arrow != null) arrow.postInvalidateOnAnimation();
@@ -1060,6 +1087,98 @@ final class Launcher450SideSlideHoldHook {
         return clamp01(offset / HOME_VISUAL_SATURATION_PX);
     }
 
+    private static void lockConfirmationGeometry(
+            View owner, GestureState state, View arrow) {
+        if (owner == null || state == null || arrow == null) return;
+        float center = Launcher450Os4SidebarConfirmationRenderer.settledMiniSidebarCenterX(
+                arrow,
+                state.leftEdge,
+                state.arrowStartX,
+                stableArrowBackWidth(state.arrow),
+                state.os4GestureProgress);
+        if (Float.isNaN(center)) return;
+        int[] location = new int[2];
+        arrow.getLocationOnScreen(location);
+        state.lockedMiniCenterX = center;
+        state.lockedMiniCenterScreenX = location[0] + center;
+        state.interactiveMiniCenterX = Float.NaN;
+        SideSlideHoldDiagnostics.log(TAG
+                + " confirmation mini locked localX=" + center
+                + " screenX=" + state.lockedMiniCenterScreenX);
+    }
+
+    private static void updateLatchedConfirmationDrag(
+            View owner, MotionEvent event, GestureState state) {
+        if (owner == null || event == null || state == null || !state.confirmationVisible) return;
+
+        View arrow = state.arrow instanceof View ? (View) state.arrow : resolveArrowView(owner, state);
+        if (arrow != null && Float.isNaN(state.lockedMiniCenterScreenX)) {
+            state.arrow = arrow;
+            lockConfirmationGeometry(owner, state, arrow);
+        }
+
+        float currentRawX = event.getRawX();
+        float previousRawX = state.confirmationFingerRawX;
+        state.confirmationFingerRawX = currentRawX;
+
+        if (Float.isNaN(state.lockedMiniCenterScreenX)
+                || Float.isNaN(state.lockedMiniCenterX)
+                || arrow == null) {
+            // Even when the ArrowView cannot be resolved, keep the confirmation latched rather
+            // than falling back to the old distance-based cancellation behavior.
+            return;
+        }
+
+        boolean crossedTowardEdge;
+        if (state.leftEdge) {
+            crossedTowardEdge = !Float.isNaN(previousRawX)
+                    && previousRawX >= state.lockedMiniCenterScreenX
+                    && currentRawX < state.lockedMiniCenterScreenX
+                    && currentRawX < previousRawX;
+        } else {
+            crossedTowardEdge = !Float.isNaN(previousRawX)
+                    && previousRawX <= state.lockedMiniCenterScreenX
+                    && currentRawX > state.lockedMiniCenterScreenX
+                    && currentRawX > previousRawX;
+        }
+
+        if (!state.retractingConfirmation && crossedTowardEdge) {
+            state.retractingConfirmation = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " confirmation retract started after crossing mini Sidebar");
+        }
+        if (!state.retractingConfirmation) return;
+
+        DisplayMetrics dm = owner.getResources().getDisplayMetrics();
+        float density = owner.getResources().getConfiguration().densityDpi > 0
+                ? owner.getResources().getConfiguration().densityDpi / 160f
+                : dm.density;
+        float screenWidth = Math.max(1f, dm.widthPixels);
+        float edgeDistance = state.leftEdge
+                ? Math.max(0f, currentRawX)
+                : Math.max(0f, screenWidth - currentRawX);
+        float lockedEdgeDistance = state.leftEdge
+                ? Math.max(1f, state.lockedMiniCenterScreenX)
+                : Math.max(1f, screenWidth - state.lockedMiniCenterScreenX);
+        float retractProgress = clamp01(edgeDistance / lockedEdgeDistance);
+        float outsideCenter = state.leftEdge
+                ? -OS4_SOURCE_WIDTH_DP * density * 0.5f
+                : arrow.getWidth() + OS4_SOURCE_WIDTH_DP * density * 0.5f;
+        state.interactiveMiniCenterX = outsideCenter
+                + (state.lockedMiniCenterX - outsideCenter) * retractProgress;
+        arrow.postInvalidateOnAnimation();
+
+        float dismissDistance = 4f * density;
+        if (edgeDistance <= dismissDistance) {
+            if (state.desktopAtDown) {
+                state.policy.onDesktopProgress(false);
+            }
+            cancelDwell(owner, state);
+            cancelConfirmation(owner, state);
+            SideSlideHoldDiagnostics.log(TAG + " confirmation retracted through screen edge");
+        }
+    }
+
     private static void maybeEnterOs4Split(GestureState state, View arrow) {
         if (state == null
                 || !state.confirmationVisible
@@ -1103,6 +1222,9 @@ final class Launcher450SideSlideHoldHook {
         boolean confirmationDrawLogged;
         boolean arrowFallbackBindingLogged;
         boolean splitActive;
+        boolean retractingConfirmation;
+        boolean confirmationConsumedThisGesture;
+        boolean confirmationHapticFired;
         int activeGeneration = Integer.MIN_VALUE;
         int committedGeneration = Integer.MIN_VALUE;
         long confirmationStartedAtUptimeMs;
@@ -1123,6 +1245,10 @@ final class Launcher450SideSlideHoldHook {
         float arrowOffsetX = Float.NaN;
         float os4GestureProgress;
         float releaseMiniCenterX = Float.NaN;
+        float interactiveMiniCenterX = Float.NaN;
+        float lockedMiniCenterX = Float.NaN;
+        float lockedMiniCenterScreenX = Float.NaN;
+        float confirmationFingerRawX = Float.NaN;
         int frozenSourceX = Integer.MIN_VALUE;
         int frozenSourceY = Integer.MIN_VALUE;
         int frozenSourceWidth = Integer.MIN_VALUE;
