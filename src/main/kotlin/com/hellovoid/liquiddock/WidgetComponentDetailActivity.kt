@@ -42,8 +42,6 @@ class WidgetComponentDetailActivity : SettingsActivity() {
         const val EXTRA_WIDGET_KEY = "widget_key"
     }
 
-    override fun useLegacyPreferenceUi(): Boolean = false
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val widgetKey = intent.getStringExtra(EXTRA_WIDGET_KEY)
