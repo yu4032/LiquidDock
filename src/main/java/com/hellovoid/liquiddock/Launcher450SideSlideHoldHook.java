@@ -33,6 +33,8 @@ final class Launcher450SideSlideHoldHook {
     private static final String TAG = "[DC][SideSlideHold450]";
     private static final String GESTURE_STUB = "com.miui.home.recents.GestureStubView";
     private static final String ARROW_VIEW = "com.miui.home.recents.GestureBackArrowView";
+    private static final String GESTURES_BACK_CONTROLLER =
+            "com.miui.home.recents.GesturesBackController";
     private static final String READY_STATE =
             "com.miui.home.recents.GestureBackArrowView$ReadyState";
     private static final String LAUNCHER_APPLICATION = "com.miui.home.launcher.Application";
@@ -46,8 +48,6 @@ final class Launcher450SideSlideHoldHook {
     // OS4 split_effect_renderer starts at gesture progress 0.8 and reaches its full split at 1.0.
     // Map OS3's observed 180px visual boundary to that same 0.8 point.
     private static final float OS4_SPLIT_START_PROGRESS = 0.8f;
-    private static final float OS4_GESTURE_FULL_DISTANCE_PX =
-            HOME_VISUAL_SATURATION_PX / OS4_SPLIT_START_PROGRESS;
     // OS4 GestureBackArrowView visual source geometry used by Security Center's launcher-origin
     // transform. Side authority is kept separate: Security Center derives left/right solely from
     // the first x argument, so x must come from the gesture edge rather than the Arrow view.
@@ -64,6 +64,7 @@ final class Launcher450SideSlideHoldHook {
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private static volatile Method setReadyFinishMethod;
+    private static volatile Method convertOffsetMethod;
     private static volatile Object readyStateBack;
     private static volatile Method applicationGetLauncherMethod;
     private static volatile Method launcherIsInStateMethod;
@@ -82,6 +83,8 @@ final class Launcher450SideSlideHoldHook {
         try {
             Class<?> stubClass = Class.forName(GESTURE_STUB, false, classLoader);
             Class<?> arrowClass = Class.forName(ARROW_VIEW, false, classLoader);
+            Class<?> gesturesBackControllerClass =
+                    Class.forName(GESTURES_BACK_CONTROLLER, false, classLoader);
             Class<?> readyClass = Class.forName(READY_STATE, false, classLoader);
             Class<?> applicationClass = Class.forName(LAUNCHER_APPLICATION, false, classLoader);
             Class<?> launcherClass = Class.forName(LAUNCHER_CLASS, false, classLoader);
@@ -94,6 +97,8 @@ final class Launcher450SideSlideHoldHook {
                     stubClass, "injectBackKeyEvent", new Class<?>[]{boolean.class});
             Method setReadyFinish = HookUtil.findMethodExact(
                     arrowClass, "setReadyFinish", new Class<?>[]{readyClass});
+            Method convertOffset = HookUtil.findMethodExact(
+                    gesturesBackControllerClass, "convertOffset", new Class<?>[]{float.class});
             Method onArrowDraw = HookUtil.findMethodExact(
                     arrowClass, "onDraw", new Class<?>[]{Canvas.class});
             Method onArrowActionDown = HookUtil.findMethodExact(
@@ -116,6 +121,7 @@ final class Launcher450SideSlideHoldHook {
                 return false;
             }
             setReadyFinishMethod = setReadyFinish;
+            convertOffsetMethod = convertOffset;
             readyStateBack = back;
             applicationGetLauncherMethod = getLauncher;
             launcherIsInStateMethod = isInState;
@@ -210,7 +216,7 @@ final class Launcher450SideSlideHoldHook {
                     if (args.length > 0 && args[0] instanceof Float) {
                         float offset = Math.abs((Float) args[0]);
                         state.arrowOffsetX = offset;
-                        state.os4GestureProgress = clamp01(offset / OS4_GESTURE_FULL_DISTANCE_PX);
+                        state.os4GestureProgress = os4ProgressFromOffset(offset);
                         maybeEnterOs4Split(state, arrow instanceof View ? (View) arrow : null);
                         if (state.confirmationVisible && arrow instanceof View) {
                             ((View) arrow).postInvalidateOnAnimation();
@@ -402,8 +408,11 @@ final class Launcher450SideSlideHoldHook {
         if (state.sideStub && action == MotionEvent.ACTION_MOVE) {
             float rawDx = Math.abs(event.getRawX() - state.downX);
             if (Float.isNaN(state.arrowOffsetX)) {
+                // Fallback only until GestureBackArrowView.onActionMove supplies the vendor
+                // converted progress. OS3's public predictive-back stream already defines
+                // abs(dx)/180 as its normalized 0..1 visual progress.
                 state.os4GestureProgress =
-                        clamp01(rawDx / OS4_GESTURE_FULL_DISTANCE_PX);
+                        clamp01(rawDx / HOME_VISUAL_SATURATION_PX);
                 maybeEnterOs4Split(state, state.arrow instanceof View ? (View) state.arrow : null);
             }
         }
@@ -930,6 +939,23 @@ final class Launcher450SideSlideHoldHook {
             state.clearFrozenSourceGeometry();
         }
         state.scheduledGeneration = Integer.MIN_VALUE;
+    }
+
+    private static float os4ProgressFromOffset(float offset) {
+        Method method = convertOffsetMethod;
+        if (method != null) {
+            try {
+                Object converted = method.invoke(null, offset);
+                if (converted instanceof Number) {
+                    return clamp01(((Number) converted).floatValue() / 20f);
+                }
+            } catch (Throwable error) {
+                SideSlideHoldDiagnostics.log(
+                        TAG + " convertOffset unavailable for SideSlide progress; use fallback",
+                        error);
+            }
+        }
+        return clamp01(offset / HOME_VISUAL_SATURATION_PX);
     }
 
     private static void maybeEnterOs4Split(GestureState state, View arrow) {
