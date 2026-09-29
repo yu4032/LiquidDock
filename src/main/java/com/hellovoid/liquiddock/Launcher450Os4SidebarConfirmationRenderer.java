@@ -38,10 +38,18 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float SPLIT_DAMPING = 0.90f;
     private static final float SPLIT_RESPONSE_S = 0.68f;
 
-    // OS4 on_vsync marks the gesture-pause/split path after >0x31 ms before launching the
-    // show=true AbstractSidebarSplitEffect. The mini Sidebar therefore starts while the pointer
-    // is still down; ACTION_UP is not its trigger.
-    private static final long NATIVE_SPLIT_ARM_DELAY_MS = 50L;
+    // OS4 split_effect_renderer enters the split branch at gesture progress 0.8 and reaches the
+    // full split target at 1.0. These values are recovered as DAT_0026d2c4=0.8 and
+    // DAT_0026e09c=0.2.
+    private static final float SPLIT_START_PROGRESS = 0.8f;
+    private static final float SPLIT_RANGE = 0.2f;
+
+    // Native bridge-path constants from 0x9bdea8.
+    private static final float BRIDGE_PROFILE_BASE = 0.2f;
+    private static final float BRIDGE_PROFILE_SPAN = 0.1f;
+    private static final float BRIDGE_CONTROL = 0.7f;
+    private static final float BRIDGE_HALF_WIDTH_START_DP = 8f;
+    private static final float BRIDGE_HALF_WIDTH_END_DP = 1.5f;
 
     // build_teardrop_path native constants.
     private static final float PROFILE_HEIGHT = 775f;
@@ -105,6 +113,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             float arrowLocalCenterY,
             float arrowStartX,
             float arrowExpectedHeight,
+            float gestureProgress,
             float gestureRawY,
             long startedAtUptimeMs,
             long releaseStartedAtUptimeMs) {
@@ -125,51 +134,54 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float bridgeFactor;
         float splitProgress;
 
-        long heldMs = Math.max(0L, now - startedAtUptimeMs);
-        float splitSeconds =
-                Math.max(0L, heldMs - NATIVE_SPLIT_ARM_DELAY_MS) / 1000f;
+        float sourceProgress = clamp01(gestureProgress);
+        float requestedSplit =
+                clamp01((sourceProgress - SPLIT_START_PROGRESS) / SPLIT_RANGE);
 
-        // OS4 starts AbstractSidebarSplitEffect(show=true) from on_vsync while the gesture is
-        // still held. Its state evolves circle 30x30/r30 -> mini Sidebar 24x53/r8 while
-        // split_progress rises and teardrop/bridge collapse. This is why a sufficiently long pull
-        // can naturally lose the water-drop before ACTION_UP.
+        // run_abstract_sidebar_anim_target(show=true) is armed by on_vsync while the pointer is
+        // still down. Once the 0.8 progress threshold is crossed, OS4's Folme target moves
+        // 30x30/r30 -> 24x53/r8 while split_progress rises and teardrop/bridge target 0.
+        // Keep the native spring shape, but gate it with the real gesture threshold instead of
+        // starting it from elapsed wall-clock time.
+        float activeSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
+        float splitSpring =
+                clamp01(springProgress(activeSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
+        splitProgress = requestedSplit * splitSpring;
+
         float widthProgress =
-                clamp01(springProgress(splitSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+                splitProgress * clamp01(
+                        springProgress(activeSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
         float heightProgress =
-                clamp01(springProgress(splitSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
+                splitProgress * clamp01(
+                        springProgress(activeSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
         float radiusProgress =
-                clamp01(springProgress(splitSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
-        splitProgress =
-                clamp01(springProgress(splitSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
-        float nativeTeardropCollapse =
-                clamp01(springProgress(splitSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
-        float nativeBridgeCollapse =
-                clamp01(springProgress(splitSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+                splitProgress * clamp01(
+                        springProgress(activeSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
 
         width = lerp(CIRCLE_WIDTH_DP * density, SIDEBAR_WIDTH_DP * density, widthProgress);
         height = lerp(CIRCLE_HEIGHT_DP * density, SIDEBAR_HEIGHT_DP * density, heightProgress);
         radius = lerp(CIRCLE_RADIUS_DP * density, SIDEBAR_RADIUS_DP * density, radiusProgress);
-        teardropFactor = 1f - nativeTeardropCollapse;
-        bridgeFactor = 1f - nativeBridgeCollapse;
+
+        float teardropCollapse =
+                splitProgress * clamp01(
+                        springProgress(activeSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
+        float bridgeCollapse =
+                splitProgress * clamp01(
+                        springProgress(activeSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+        teardropFactor = 1f - teardropCollapse;
+        bridgeFactor = 1f - bridgeCollapse;
 
         if (releasing) {
-            // ACTION_UP does not create the mini Sidebar. It only ends the Launcher water-drop
-            // contribution and leaves the already-created mini body as Security Center's source.
+            // ACTION_UP does not create the mini Sidebar. The held gesture has already created it.
+            // Release only removes the remaining water-drop/bridge contribution while preserving
+            // the split/body endpoint for Security Center's expansion.
             float releaseSeconds =
                     Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
             float releaseDrop =
                     clamp01(springProgress(releaseSeconds, TEARDROP_DAMPING, 0.10f));
             teardropFactor *= 1f - releaseDrop;
             bridgeFactor *= 1f - releaseDrop;
-
-            // Let an only-just-triggered split continue to its native target after release rather
-            // than snapping back to a circle.
-            float releaseSplit =
-                    clamp01(springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
-            splitProgress = Math.max(splitProgress, releaseSplit);
-            width = lerp(width, SIDEBAR_WIDTH_DP * density, releaseSplit);
-            height = lerp(height, SIDEBAR_HEIGHT_DP * density, releaseSplit);
-            radius = lerp(radius, SIDEBAR_RADIUS_DP * density, releaseSplit);
+            splitProgress = Math.max(splitProgress, requestedSplit);
         }
 
         // OS3 already computes the authoritative local geometry in onActionDown(y,startX,height).
@@ -224,6 +236,23 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         }
 
         if (splitProgress > 0.001f) {
+            // 0x9bdea8 draws an additional closed bridge/neck path between the teardrop and the
+            // mini Sidebar before drawing the body. Keep it as a separate layer; otherwise the
+            // animation collapses visually into a single ball.
+            drawNativeSplitBridge(
+                    canvas,
+                    leftEdge,
+                    baselineX,
+                    centerX,
+                    centerY,
+                    width,
+                    height,
+                    splitProgress,
+                    teardropFactor,
+                    density,
+                    FILL_PAINT.get(),
+                    BORDER_PAINT.get());
+
             // The mini Sidebar is Launcher-owned and appears during the held gesture, immediately
             // after the water-drop enters the native split state. It is already present before
             // ACTION_UP; release only removes the remaining teardrop and hands this body to SC.
@@ -260,6 +289,89 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 || teardropFactor > 0.001f) {
             arrowView.postInvalidateOnAnimation();
         }
+    }
+
+    private static void drawNativeSplitBridge(
+            Canvas canvas,
+            boolean leftEdge,
+            float baselineX,
+            float bodyCenterX,
+            float centerY,
+            float bodyWidth,
+            float bodyHeight,
+            float splitProgress,
+            float teardropFactor,
+            float density,
+            Paint fill,
+            Paint border) {
+        // Native renderer indexes the same teardrop profile with
+        // ((split_progress * 0.1) + 0.2) * (count - 1).
+        float profileT = clamp01(
+                BRIDGE_PROFILE_BASE + splitProgress * BRIDGE_PROFILE_SPAN);
+        int profileIndex = Math.min(
+                OS4_PROFILE.length - 1,
+                Math.max(0, Math.round(profileT * (OS4_PROFILE.length - 1))));
+        float profileAmplitude = OS4_PROFILE[profileIndex][1] / PROFILE_WIDTH;
+
+        // Native bridge half-width shrinks 8dp -> 1.5dp with split_progress.
+        float bridgeHalfWidth = lerp(
+                BRIDGE_HALF_WIDTH_START_DP * density,
+                BRIDGE_HALF_WIDTH_END_DP * density,
+                splitProgress);
+
+        // Recovered bridge angle:
+        // split * ((PI - asin(ratio)) - PI/4) + PI/4.
+        // Express ratio in our already-resolved body/profile geometry so the Java port follows the
+        // same normalized relation without depending on Rust's temporary raster bounds.
+        float bodyHalfHeight = bodyHeight * 0.5f;
+        float ratio = clamp01(
+                (bodyHalfHeight * 0.25f * (1f - 0.85f * splitProgress))
+                        / Math.max(bodyHalfHeight, 1f));
+        float angle = splitProgress
+                * (((float) Math.PI - (float) Math.asin(ratio))
+                - ((float) Math.PI * 0.25f))
+                + ((float) Math.PI * 0.25f);
+
+        float direction = leftEdge ? 1f : -1f;
+        float bodyEdgeX = leftEdge
+                ? bodyCenterX + bodyWidth * 0.5f
+                : bodyCenterX - bodyWidth * 0.5f;
+
+        // Project the bridge root into the same teardrop profile used by build_teardrop_path.
+        float rootX = baselineX
+                + direction
+                * Math.max(0f, bodyWidth * profileAmplitude * teardropFactor);
+        float verticalReach = Math.max(
+                bridgeHalfWidth,
+                bodyHalfHeight * (float) Math.sin(angle));
+        float topY = centerY - verticalReach;
+        float bottomY = centerY + verticalReach;
+
+        float outerX = bodyEdgeX;
+        float control1X = rootX + (outerX - rootX) * splitProgress;
+        float control2X = rootX + (outerX - rootX) * BRIDGE_CONTROL;
+
+        Path path = PATH.get();
+        path.reset();
+        path.moveTo(rootX, centerY - bridgeHalfWidth);
+        path.cubicTo(
+                control1X,
+                centerY - bridgeHalfWidth,
+                control2X,
+                centerY - bridgeHalfWidth,
+                outerX,
+                topY);
+        path.lineTo(outerX, bottomY);
+        path.cubicTo(
+                control2X,
+                centerY + bridgeHalfWidth,
+                control1X,
+                centerY + bridgeHalfWidth,
+                rootX,
+                centerY + bridgeHalfWidth);
+        path.close();
+        canvas.drawPath(path, fill);
+        canvas.drawPath(path, border);
     }
 
     private static void buildNativeTeardropPath(
