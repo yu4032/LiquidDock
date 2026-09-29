@@ -43,6 +43,7 @@ public final class BetaContract {
                 RailShell wrapper, boolean left, String pkg, int mode, ModeToken type,
                 boolean force, boolean vertical, boolean extra) {}
         public DockSurface getDockLayout() { return null; }
+        public DockSurface getAbstractDockLayout() { return null; }
         public AppSurface getAppsLayout() { return apps; }
         public BoxSurface getBoxView() { return null; }
         public GameContainer getGameTurboLayout() { return game; }
