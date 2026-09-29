@@ -12,6 +12,7 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.WindowManager;
 
@@ -41,6 +42,7 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile Method vendorShowEntryMethod;
     private static volatile boolean vendorShowProbeInstalled;
     private static volatile boolean turboTouchReleaseHookInstalled;
+    private static volatile boolean sidebarRootClickReleaseHookInstalled;
     private static final int MIUI_FLAG_CLICK_PASS_DOWN = 0x20;
     private static final String TURBO_LAYOUT_CLASS =
             "com.miui.gamebooster.windowmanager.newbox.TurboLayout";
@@ -194,6 +196,7 @@ final class SecurityCenterSidebarCommandBridge {
             bindVendorService(context);
             installVendorShowProbe(source);
             installTurboTouchReleaseHook(source.getClassLoader());
+            installSidebarRootClickReleaseHook(source.getClassLoader());
             SideSlideHoldDiagnostics.log(TAG
                     + " receiver ready from DockWindowManagerService.onCreate");
         } catch (Throwable error) {
@@ -253,6 +256,55 @@ final class SecurityCenterSidebarCommandBridge {
             SideSlideHoldDiagnostics.log(TAG
                     + " TurboLayout touch-release hook install failed", error);
         }
+    }
+
+    /**
+     * Releases the Sidebar window as soon as its stable outside-click root handles a click.
+     *
+     * <p>The normal outside-tap exit is dispatched to the top-level container rather than to
+     * TurboLayout itself, so TurboLayout visibility may remain unchanged while the exit animation
+     * runs. We identify that root structurally by the presence of a TurboLayout descendant and
+     * restore click pass-down after the native click handler has started its dismissal.</p>
+     */
+    private static void installSidebarRootClickReleaseHook(ClassLoader classLoader) {
+        if (sidebarRootClickReleaseHookInstalled || classLoader == null) return;
+        try {
+            Class<?> turboLayoutClass = Class.forName(
+                    TURBO_LAYOUT_CLASS, false, classLoader);
+            Method performClick = HookUtil.findMethodExact(
+                    View.class, "performClick", new Class<?>[0]);
+            HookUtil.hook(performClick, chain -> {
+                Object owner = chain.getThisObject();
+                boolean sidebarRoot = owner instanceof ViewGroup
+                        && containsTurboLayout((ViewGroup) owner, turboLayoutClass);
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (sidebarRoot) {
+                    restoreClickPassDown((View) owner);
+                }
+                return result;
+            });
+            sidebarRootClickReleaseHookInstalled = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " Sidebar root outside-click touch-release hook installed");
+        } catch (Throwable error) {
+            sidebarRootClickReleaseHookInstalled = false;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " Sidebar root outside-click hook install failed", error);
+        }
+    }
+
+    private static boolean containsTurboLayout(
+            ViewGroup root, Class<?> turboLayoutClass) {
+        if (root == null || turboLayoutClass == null) return false;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (turboLayoutClass.isInstance(child)) return true;
+            if (child instanceof ViewGroup
+                    && containsTurboLayout((ViewGroup) child, turboLayoutClass)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void restoreClickPassDown(View turboLayout) {
