@@ -13,8 +13,22 @@ import org.junit.Test;
 public class RestartBoundSettingsContractTest {
     private static final Path UI = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
+    private static final Path SETTINGS_BASE = Path.of(
+            "src/main/java/com/hellovoid/liquiddock/SettingsActivity.java");
     private static final Path EN = Path.of("src/main/res/values/strings.xml");
     private static final Path ZH = Path.of("src/main/res/values-zh-rCN/strings.xml");
+
+    @Test
+    public void composeOnlySettingsBaseCreatesDecorBeforeInsetsAndKeepsNoLegacyLayout() throws Exception {
+        String source = Files.readString(SETTINGS_BASE);
+
+        assertTrue(source.contains("getDecorView().getWindowInsetsController()"));
+        assertFalse(source.contains("getWindow().getInsetsController()"));
+        assertFalse(source.contains("setContentView("));
+        assertFalse(source.contains("findViewById("));
+        assertFalse(source.contains("PreferenceFragmentCompat"));
+        assertFalse(source.contains("R.layout.activity_settings"));
+    }
 
     @Test
     public void structuralBooleanSwitchesSayRestartIsRequired() throws Exception {
