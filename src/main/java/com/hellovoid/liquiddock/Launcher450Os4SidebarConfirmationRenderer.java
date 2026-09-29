@@ -25,11 +25,12 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float FALLBACK_EDGE_INSET_DP = 12f;
     // on_vsync's standalone mini-Sidebar layer starts with its center 12dp outside the edge.
     private static final float MINI_SIDEBAR_OUTSIDE_CENTER_DP = 12f;
-    // calculate_positions uses the native 76dp profile width and clamps gesture progress to 0.8
-    // for the projected Sidebar location.
-    private static final float PROJECTED_POSITION_PROGRESS = 0.8f;
-    // CachedIconDp is rendered by on_vsync as three white rounded squares. The native layout is
-    // three equal 3dp dots with 3dp gaps and a 1.5dp radius.
+    // In the separated on_vsync branch the final 24dp body sits immediately after the
+    // calculate_positions endpoint, so its center is one 12dp half-width inward from that endpoint.
+    private static final float MINI_SIDEBAR_TARGET_HALF_WIDTH_DP = SIDEBAR_WIDTH_DP * 0.5f;
+    // CachedIconDp is rendered by on_vsync as three white rounded rects. The exact draw formula
+    // is ported below; these three cached dp values remain isolated constants so they can be
+    // replaced directly when the optimized icon_dp() initializer is fully recovered.
     private static final float SIDEBAR_ICON_DOT_DP = 3f;
     private static final float SIDEBAR_ICON_GAP_DP = 3f;
     private static final float SIDEBAR_ICON_RADIUS_DP = 1.5f;
@@ -130,6 +131,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             float arrowLocalCenterY,
             float arrowStartX,
             float arrowExpectedHeight,
+            float arrowBackWidth,
             float gestureProgress,
             boolean splitActive,
             long splitStartedAtUptimeMs,
@@ -235,18 +237,30 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float halfWidth = width * 0.5f;
         float halfHeight = height * 0.5f;
 
-        // Keep teardrop coordinates and mini-Sidebar coordinates separate. OS4 on_vsync starts
-        // the mini body with its center 12dp outside the display, then interpolates that center to
-        // calculate_positions(width, ...)'s projected location using split_progress.
-        float projectedDistance =
-                PROFILE_WIDTH * density * PROJECTED_POSITION_PROGRESS;
-        float projectedCenterX = leftEdge
-                ? baselineX + projectedDistance
-                : baselineX - projectedDistance;
+        // Exact cross-version position mapping:
+        // OS4 calculate_positions() uses the current gesture-background endpoint. OS3's own
+        // GestureBackArrowView.onDraw() defines that same endpoint as:
+        //   left:  mStartX + mBackWidth * mScale
+        //   right: viewWidth - (mStartX + mBackWidth * mScale)
+        // where mScale == GesturesBackController.convertOffset(offset) / 20.
+        // The OS4 separated body then starts with its center 12dp outside the display and lerps
+        // to one body half-width past that endpoint.
+        float nativeBackWidth =
+                !Float.isNaN(arrowBackWidth) && arrowBackWidth > 0f
+                        ? arrowBackWidth
+                        : PROFILE_WIDTH * density;
+        float gestureExtent = nativeBackWidth * clamp01(gestureProgress);
+        float gestureEndpointX = leftEdge
+                ? baselineX + gestureExtent
+                : baselineX - gestureExtent;
+        float targetHalfWidth = MINI_SIDEBAR_TARGET_HALF_WIDTH_DP * density;
+        float miniTargetCenterX = leftEdge
+                ? Math.min(gestureEndpointX + targetHalfWidth, viewWidth - targetHalfWidth)
+                : Math.max(targetHalfWidth, gestureEndpointX - targetHalfWidth);
         float miniStartCenterX = leftEdge
                 ? -MINI_SIDEBAR_OUTSIDE_CENTER_DP * density
                 : viewWidth + MINI_SIDEBAR_OUTSIDE_CENTER_DP * density;
-        float miniCenterX = lerp(miniStartCenterX, projectedCenterX, splitProgress);
+        float miniCenterX = lerp(miniStartCenterX, miniTargetCenterX, splitProgress);
 
         // Teardrop remains rooted at the original gesture baseline.
         float teardropCenterX = leftEdge
@@ -297,11 +311,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             // ACTION_UP; release only removes the remaining teardrop and hands this body to SC.
             float reveal = smoothStep(0f, 0.20f, splitProgress);
             Paint fill = FILL_PAINT.get();
-            Paint border = BORDER_PAINT.get();
             int oldFillAlpha = fill.getAlpha();
-            int oldBorderAlpha = border.getAlpha();
             fill.setAlpha(Math.round(oldFillAlpha * reveal));
-            border.setAlpha(Math.round(oldBorderAlpha * reveal));
 
             // Exact standalone mini-Sidebar geometry from GestureBackArrowView::on_vsync:
             // 24dp x 53dp, radius 8dp. It is independent from the split renderer's intermediate
@@ -317,19 +328,11 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     miniRadius,
                     miniRadius,
                     fill);
-            canvas.drawRoundRect(
-                    miniCenterX - miniHalfWidth,
-                    centerY - miniHalfHeight,
-                    miniCenterX + miniHalfWidth,
-                    centerY + miniHalfHeight,
-                    miniRadius,
-                    miniRadius,
-                    border);
-
+            // OS4's standalone separated body branch is fill-only (0xCC000000); the
+            // 0x20000000 stroke belongs to PathBackgroundProxy's teardrop path, not this body.
             drawNativeMiniSidebarIcon(canvas, miniCenterX, centerY, reveal, density);
 
             fill.setAlpha(oldFillAlpha);
-            border.setAlpha(oldBorderAlpha);
         }
 
         if (releasing
