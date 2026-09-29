@@ -82,11 +82,12 @@ final class SecurityCenterGlassRuntimeState {
         return isMaterialEnabled();
     }
 
-    static void bindAssistant(View turbo, View dock, View abstractDock, View box, int type) {
+    static void bindAssistant(
+            View turbo, View dock, View abstractDock, View box, View motionBox, int type) {
         Owner currentOwner = owner;
         if (currentOwner instanceof SecurityCenterGlassCoordinator) {
             ((SecurityCenterGlassCoordinator) currentOwner)
-                    .bindAssistant(turbo, dock, abstractDock, box, type);
+                    .bindAssistant(turbo, dock, abstractDock, box, motionBox, type);
         }
     }
 
