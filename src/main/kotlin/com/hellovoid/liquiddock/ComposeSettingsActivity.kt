@@ -433,11 +433,13 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     if (page != Page.Home) TextButton(text = stringResource(R.string.action_back), onClick = { page = parentPage(page) })
                 },
                 actions = {
-                    if (page == Page.SecurityCenterSidebar) {
-                        TextButton(text = stringResource(R.string.action_restart_security_center), onClick = { activity.restartSecurityCenter() })
-                    }
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
-                    if (descriptor != null) {
+                    if (page == Page.SecurityCenterSidebar) {
+                        TextButton(
+                            text = stringResource(R.string.action_restart_security_center_and_launcher),
+                            onClick = { activity.restartSecurityCenterAndLauncher() },
+                        )
+                    } else if (descriptor != null) {
                         TextButton(
                             text = stringResource(descriptor.restartLabelRes),
                             onClick = {
