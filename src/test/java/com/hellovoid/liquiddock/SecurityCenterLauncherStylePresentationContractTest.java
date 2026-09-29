@@ -80,32 +80,33 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 resolver.contains("finalBackground"));
     }
 
-    @Test public void securityCenterUsesRoleSpecificNativePresentationHierarchy() throws Exception {
+    @Test public void securityCenterUsesRootSpaceOutputWithNativeMutationAuthority() throws Exception {
         Path sinkPath = MAIN.resolve("SecurityCenterGlassSinkView.java");
         assertTrue(Files.exists(sinkPath));
         String sink = Files.readString(sinkPath);
         String policy = Files.readString(MAIN.resolve("SecurityCenterSinkOutputPolicy.java"));
+        String sync = Files.readString(MAIN.resolve("SecurityCenterMaterialTransformSyncHook.java"));
         assertTrue(sink.contains("syncFromMaterial()"));
 
-        assertTrue("Sidebar Dock glass must be able to join DockLayout and inherit Folme directly",
-                sink.contains("inheritMaterialTransform")
-                        && sink.contains("getParent() == material")
-                        && sink.contains("expectedParent = (ViewGroup) material"));
-        assertTrue("both native Sidebar background carriers inherit their own Folme transforms",
+        assertTrue("Dock and abstract Dock shader outputs must remain root-space",
                 policy.contains("role == MaterialRole.DOCK")
-                        && policy.contains("role == MaterialRole.DOCK_PREVIEW"));
-
-        assertTrue("toolbox/all-apps still resolve an outer overlay host",
-                sink.contains("resolveOverlayHost(material)"));
-        assertTrue("overlay material geometry remains mapped through the real transform chain",
+                        && policy.contains("role == MaterialRole.DOCK_PREVIEW")
+                        && policy.contains("return false;"));
+        assertTrue("native View mutations must synchronously refresh only registered material carriers",
+                sync.contains("setScaleX")
+                        && sync.contains("setScaleY")
+                        && sync.contains("setTranslationX")
+                        && sync.contains("setTranslationY")
+                        && sync.contains("setAlpha")
+                        && sync.contains("setLayoutParams")
+                        && sync.contains("notifyMutation(chain.getThisObject())"));
+        assertTrue("Dock sinks must bind to the stable mutation observer",
+                sink.contains("SecurityCenterMaterialTransformSyncHook.bind(material, sink)"));
+        assertTrue("root-space material geometry remains mapped through the real transform chain",
                 sink.contains("material.transformMatrixToGlobal(materialToGlobal)"));
         assertTrue("overlay-local placement still inverts the host transform",
                 sink.contains("target.transformMatrixToGlobal(targetToGlobal)"));
-        assertTrue("overlay visual alpha remains inherited",
-                sink.contains("effectiveMaterialAlpha(material, expectedParent)"));
-        assertTrue("overlay vendor visibility remains authoritative",
-                sink.contains("isStructurallyVisible(material, expectedParent)"));
-        assertFalse("direct property mirroring is unnecessary when hierarchy owns the transform",
+        assertFalse("glass must not mirror animation values by copying vendor properties",
                 sink.contains("setScaleX(material.getScaleX())"));
         assertFalse("global-visible-rect heuristics must not replace transform mapping",
                 sink.contains("getGlobalVisibleRect"));
