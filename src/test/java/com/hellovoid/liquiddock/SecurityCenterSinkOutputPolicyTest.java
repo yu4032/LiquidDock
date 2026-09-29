@@ -13,7 +13,7 @@ import org.junit.Test;
 /** Output-space policy preserves vendor animation ownership for each material role. */
 public class SecurityCenterSinkOutputPolicyTest {
     @Test
-    public void sidebarDockInheritsNativeTransformWhileOtherRolesUseRootSpace() throws Exception {
+    public void sidebarDockAndPreviewUseRootSpaceWithoutInheritedTextureTransform() throws Exception {
         Class<?> policy;
         Class<?> role;
         try {
@@ -36,9 +36,9 @@ public class SecurityCenterSinkOutputPolicyTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Object allApps = Enum.valueOf((Class<? extends Enum>) role, "ALL_APPS");
 
-        assertFalse("Dock glass must live inside DockLayout so Folme owns its transform",
+        assertTrue("Dock glass must stay root-space to avoid double-transforming sampled pixels",
                 (Boolean) method.invoke(null, dock));
-        assertFalse("abstract Dock preview must also inherit its native Folme transform",
+        assertTrue("abstract Dock preview must also stay root-space",
                 (Boolean) method.invoke(null, preview));
         assertTrue((Boolean) method.invoke(null, toolbox));
         assertTrue((Boolean) method.invoke(null, allApps));
@@ -46,8 +46,8 @@ public class SecurityCenterSinkOutputPolicyTest {
 
         Method inherit = policy.getDeclaredMethod("inheritsMaterialTransform", role);
         inherit.setAccessible(true);
-        assertTrue((Boolean) inherit.invoke(null, dock));
-        assertTrue((Boolean) inherit.invoke(null, preview));
+        assertFalse((Boolean) inherit.invoke(null, dock));
+        assertFalse((Boolean) inherit.invoke(null, preview));
         assertFalse((Boolean) inherit.invoke(null, toolbox));
         assertFalse((Boolean) inherit.invoke(null, allApps));
     }
