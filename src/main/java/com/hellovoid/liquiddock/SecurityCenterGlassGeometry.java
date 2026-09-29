@@ -100,6 +100,41 @@ final class SecurityCenterGlassGeometry {
                 rootWidth, rootHeight, left, top, right - left, bottom - top, safeRadius);
     }
 
+
+    /**
+     * Uses one root-local rectangle for the Prismal shape and a different current screen-space
+     * rectangle for presentation sampling. This is required when the output View inherits the
+     * material carrier's own Folme transform: baking that transform into the SDF and then letting
+     * the parent transform the TextureView would apply the motion twice.
+     */
+    static SecurityCenterGlassGeometry inheritedTransform(
+            int rootWidth,
+            int rootHeight,
+            float shapeLeft,
+            float shapeTop,
+            float shapeRight,
+            float shapeBottom,
+            float cropLeft,
+            float cropTop,
+            float cropRight,
+            float cropBottom,
+            float cornerRadiusPx) {
+        SecurityCenterGlassGeometry shape = resolve(
+                rootWidth, rootHeight, 0f, 0f,
+                shapeLeft, shapeTop, shapeRight, shapeBottom, cornerRadiusPx);
+        if (shape == null) return null;
+        float safeCropLeft = clamp(cropLeft, 0f, rootWidth);
+        float safeCropTop = clamp(cropTop, 0f, rootHeight);
+        float safeCropRight = clamp(cropRight, 0f, rootWidth);
+        float safeCropBottom = clamp(cropBottom, 0f, rootHeight);
+        if (safeCropRight <= safeCropLeft || safeCropBottom <= safeCropTop) return null;
+        return new SecurityCenterGlassGeometry(
+                rootWidth, rootHeight,
+                shape.left, shape.top, shape.width, shape.height, shape.cornerRadius,
+                safeCropLeft, safeCropTop,
+                safeCropRight - safeCropLeft, safeCropBottom - safeCropTop);
+    }
+
     /**
      * Expands only the presentation crop. The Prismal SDF shape remains exactly unchanged so
      * outside-AA/highlight pixels have transparent room without moving the visible glass edge.
