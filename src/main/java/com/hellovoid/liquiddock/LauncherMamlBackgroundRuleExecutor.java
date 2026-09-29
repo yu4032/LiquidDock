@@ -192,6 +192,15 @@ final class LauncherMamlBackgroundRuleExecutor {
         }
     }
 
+    private static String describe(WidgetBackgroundIdentity identity) {
+        if (identity == null) return " identity=null";
+        return " source=" + identity.source()
+                + " productId=" + identity.productId()
+                + " package=" + identity.packageName()
+                + " span=" + identity.spanX() + "x" + identity.spanY()
+                + " configSpan=" + identity.configSpanX() + "x" + identity.configSpanY();
+    }
+
     private static Object readField(Object target, String name) {
         if (target == null) return null;
         try { return HookUtil.getField(target, name); }
