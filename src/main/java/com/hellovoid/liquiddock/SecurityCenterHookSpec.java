@@ -11,6 +11,7 @@ final class SecurityCenterHookSpec {
 
     // Public semantic getters verified across the managed JADX corpus.
     static final String DOCK_LAYOUT_GETTER = "getDockLayout";
+    static final String ABSTRACT_DOCK_LAYOUT_GETTER = "getAbstractDockLayout";
     static final String APPS_LAYOUT_GETTER = "getAppsLayout";
     static final String BOX_VIEW_GETTER = "getBoxView";
     static final String GAME_BOX_GETTER = "getGameTurboLayout";
