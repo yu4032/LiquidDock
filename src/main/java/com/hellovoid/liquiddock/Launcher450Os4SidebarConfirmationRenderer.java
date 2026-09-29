@@ -249,7 +249,10 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                 !Float.isNaN(arrowBackWidth) && arrowBackWidth > 0f
                         ? arrowBackWidth
                         : PROFILE_WIDTH * density;
-        float gestureExtent = nativeBackWidth * clamp01(gestureProgress);
+        // on_vsync clamps the gesture argument passed to calculate_positions() to 0.8.
+        // Once split mode begins, the mini Sidebar target therefore stops moving farther inward.
+        float projectedGestureProgress = Math.min(clamp01(gestureProgress), SPLIT_START_PROGRESS);
+        float gestureExtent = nativeBackWidth * projectedGestureProgress;
         float gestureEndpointX = leftEdge
                 ? baselineX + gestureExtent
                 : baselineX - gestureExtent;
