@@ -262,6 +262,15 @@ final class Launcher450SideSlideHoldHook {
                 parent = parent.getParent();
             }
 
+            // Once a sibling-window arrow has been bound, keep that identity authoritative even
+            // after ACTION_UP marks the pointer stream inactive. The OS4 confirmation remains
+            // visible until the real Sidebar animation-start callback takes ownership.
+            for (GestureState candidate : STATES.values()) {
+                if (candidate != null && candidate.arrow == arrow) {
+                    return candidate;
+                }
+            }
+
             // The back arrow may live in a sibling gesture window. In that case bind it to the
             // unique currently active edge gesture. Only one side can own a pointer stream.
             GestureState active = null;
