@@ -536,6 +536,12 @@ final class SecurityCenterGlassCoordinator
         boxSink = reconcileSink(
                 boxSink, boxRef.get(), live,
                 SecurityCenterSinkOutputPolicy.MaterialRole.TOOLBOX);
+        View liveBox = boxRef.get();
+        if (dockSink != null && liveBox != null && liveBox.isAttachedToWindow()) {
+            dockSink.ensureOutputEnvelopeAtLeast(
+                    Math.max(liveBox.getWidth(), liveBox.getMeasuredWidth()),
+                    Math.max(liveBox.getHeight(), liveBox.getMeasuredHeight()));
+        }
         appsSink = reconcileSink(
                 appsSink, liveAppsView(), live,
                 SecurityCenterSinkOutputPolicy.MaterialRole.ALL_APPS);
