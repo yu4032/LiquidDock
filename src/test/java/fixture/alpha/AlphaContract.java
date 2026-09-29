@@ -42,6 +42,7 @@ public final class AlphaContract {
                 Wrapper wrapper, boolean left, String pkg, int mode, AssistantType type,
                 boolean force, boolean vertical, boolean extra) {}
         public DockView getDockLayout() { return null; }
+        public DockView getAbstractDockLayout() { return null; }
         public AllAppsView getAppsLayout() { return apps; }
         public BoxView getBoxView() { return null; }
         public GameBox getGameTurboLayout() { return game; }
