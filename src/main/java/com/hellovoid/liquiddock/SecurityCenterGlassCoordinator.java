@@ -359,6 +359,15 @@ final class SecurityCenterGlassCoordinator
                 + " role=" + sink.materialRole(), null);
     }
 
+    void onSidebarBackgroundGeometryChanged() {
+        if (!SecurityCenterGlassRuntimeState.isEnabled()
+                || assistantType != ASSISTANT_GLOBAL_DOCK
+                || session == null || session.isShutdown()) return;
+        // Runs directly from SidebarLineDrawable.resize2PanelRect(RectF, radius) after the vendor
+        // has committed this frame's exact background path.
+        refreshCurrentFrame(true);
+    }
+
     @Override
     public void onMaterialTransformMutated(
             SecurityCenterGlassSession callbackSession, SecurityCenterGlassSinkView sink) {
@@ -736,18 +745,10 @@ final class SecurityCenterGlassCoordinator
         SecurityCenterGlassGeometry dock = dockSink.captureGeometry(root, dockRadius);
         if (dock == null) return null;
 
+        // Global Dock has one visible background authority: sidebar_background's native
+        // SidebarLineDrawable. DockLayout/abstractDockLayout animate content carriers, but must
+        // not create a second glass background.
         SecurityCenterGlassGeometry preview = null;
-        View abstractDock = abstractDockRef.get();
-        if (assistantType == ASSISTANT_GLOBAL_DOCK
-                && abstractDock != null
-                && abstractDock.isAttachedToWindow()
-                && abstractDock.getVisibility() == View.VISIBLE) {
-            if (previewSink == null || !previewSink.isPresentationReady()) return null;
-            float previewRadius = resolveLiveCornerRadius(abstractDock);
-            if (!Float.isFinite(previewRadius) || previewRadius <= 0f) return null;
-            preview = previewSink.captureGeometry(root, previewRadius);
-            if (preview == null) return null;
-        }
 
         View appsView = liveAppsView();
         if (appsView != null && appsView.getVisibility() == View.VISIBLE) {
