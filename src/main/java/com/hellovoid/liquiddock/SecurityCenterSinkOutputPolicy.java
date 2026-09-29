@@ -4,6 +4,7 @@ package com.hellovoid.liquiddock;
 final class SecurityCenterSinkOutputPolicy {
     enum MaterialRole {
         DOCK,
+        DOCK_PREVIEW,
         TOOLBOX,
         ALL_APPS
     }
@@ -19,6 +20,6 @@ final class SecurityCenterSinkOutputPolicy {
     }
 
     static boolean inheritsMaterialTransform(MaterialRole role) {
-        return role == MaterialRole.DOCK;
+        return role == MaterialRole.DOCK || role == MaterialRole.DOCK_PREVIEW;
     }
 }
