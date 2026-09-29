@@ -191,7 +191,13 @@ final class Launcher450SideSlideHoldHook {
                             SideSlideHoldDiagnostics.log(TAG + " ReadyState entered RECENT");
                         }
                         if (enteredRecent && state.owner instanceof View) {
-                            scheduleDwell((View) state.owner, state, "native RECENT");
+                            if (secondStageDistanceReached(state)) {
+                                scheduleDwell((View) state.owner, state, "native RECENT");
+                            } else {
+                                SideSlideHoldDiagnostics.log(TAG
+                                        + " native RECENT ready; wait second-stage distance="
+                                        + state.secondStageDistancePx + "px");
+                            }
                         } else if (!"READY_STATE_RECENT".equals(readyName)
                                 && state.owner instanceof View) {
                             cancelDwell((View) state.owner, state);
@@ -238,6 +244,15 @@ final class Launcher450SideSlideHoldHook {
                         // finger crosses back over the mini Sidebar itself.
                         maybeEnterOs4Split(
                                 state, arrow instanceof View ? (View) arrow : null);
+                        if (!state.desktopAtDown
+                                && !state.confirmationVisible
+                                && state.policy.isEligible()
+                                && state.owner instanceof View
+                                && state.dwellRunnable == null
+                                && secondStageDistanceReached(state)) {
+                            scheduleDwell(
+                                    (View) state.owner, state, "native RECENT + distance");
+                        }
                         if (state.confirmationVisible && arrow instanceof View) {
                             ((View) arrow).postInvalidateOnAnimation();
                         }
@@ -427,12 +442,15 @@ final class Launcher450SideSlideHoldHook {
             state.confirmationConsumedThisGesture = false;
             state.confirmationHapticFired = false;
             state.clearFrozenSourceGeometry();
+            state.secondStageDistancePx =
+                    SideSlideHoldFeatureConfig.secondStageDistancePx(ConfigReader.load());
             state.policy.onDown();
             state.activeGeneration = state.policy.generation();
             SideSlideHoldDiagnostics.log(TAG + " DOWN generation=" + state.activeGeneration
                     + " sideStub=" + state.sideStub
                     + " desktop=" + state.desktopAtDown
-                    + " edge=" + (state.leftEdge ? "left" : "right"));
+                    + " edge=" + (state.leftEdge ? "left" : "right")
+                    + " secondStage=" + state.secondStageDistancePx + "px");
             return;
         }
 
@@ -460,17 +478,18 @@ final class Launcher450SideSlideHoldHook {
 
         float dx = event.getRawX() - state.downX;
         boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
-        boolean saturated = inward && Math.abs(dx) >= HOME_VISUAL_SATURATION_PX;
-        boolean entered = state.policy.onDesktopProgress(saturated);
-        if (saturated && !state.workspaceCancelled) {
+        boolean visualSaturated = inward && Math.abs(dx) >= HOME_VISUAL_SATURATION_PX;
+        boolean secondStageReached =
+                inward && Math.abs(dx) >= state.secondStageDistancePx;
+        boolean entered = state.policy.onDesktopProgress(secondStageReached);
+        if (visualSaturated && !state.workspaceCancelled) {
             cancelWorkspacePaging(view, state);
         }
-        if (!saturated) {
+        if (!secondStageReached) {
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
             state.hoverAnchorLocalY = Float.NaN;
             cancelDwell(view, state);
-            cancelConfirmation(view, state);
             return;
         }
 
@@ -496,7 +515,9 @@ final class Launcher450SideSlideHoldHook {
             };
             state.dwellRunnable = runnable;
             view.postDelayed(runnable, SideSlideHoldPolicy.HOLD_DWELL_MS);
-            SideSlideHoldDiagnostics.log(TAG + " HOME hold armed dx=" + dx);
+            SideSlideHoldDiagnostics.log(TAG
+                    + " HOME second-stage armed dx=" + dx
+                    + " threshold=" + state.secondStageDistancePx + "px");
         }
     }
 
@@ -1091,6 +1112,13 @@ final class Launcher450SideSlideHoldHook {
         return clamp01(offset / HOME_VISUAL_SATURATION_PX);
     }
 
+    private static boolean secondStageDistanceReached(GestureState state) {
+        if (state == null || !state.gestureActive) return false;
+        float dx = state.lastRawX - state.downX;
+        boolean inward = state.leftEdge ? dx > 0f : dx < 0f;
+        return inward && Math.abs(dx) >= state.secondStageDistancePx;
+    }
+
     private static void lockConfirmationGeometry(
             View owner, GestureState state, View arrow) {
         if (owner == null || state == null || arrow == null) return;
@@ -1133,30 +1161,39 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
 
+        DisplayMetrics dm = owner.getResources().getDisplayMetrics();
+        float density = owner.getResources().getConfiguration().densityDpi > 0
+                ? owner.getResources().getConfiguration().densityDpi / 160f
+                : dm.density;
+        float miniHalfWidth = OS4_SOURCE_WIDTH_DP * density * 0.5f;
+        float outerBoundary = state.leftEdge
+                ? state.lockedMiniCenterScreenX - miniHalfWidth
+                : state.lockedMiniCenterScreenX + miniHalfWidth;
+
+        // "Cross the Dock" means the finger must pass the whole miniature body, not merely its
+        // center line. The previous center crossing made a small outward correction look like an
+        // explicit retract and is exactly what the latest device log shows before disappearance.
         boolean crossedTowardEdge;
         if (state.leftEdge) {
             crossedTowardEdge = !Float.isNaN(previousRawX)
-                    && previousRawX >= state.lockedMiniCenterScreenX
-                    && currentRawX < state.lockedMiniCenterScreenX
+                    && previousRawX >= outerBoundary
+                    && currentRawX < outerBoundary
                     && currentRawX < previousRawX;
         } else {
             crossedTowardEdge = !Float.isNaN(previousRawX)
-                    && previousRawX <= state.lockedMiniCenterScreenX
-                    && currentRawX > state.lockedMiniCenterScreenX
+                    && previousRawX <= outerBoundary
+                    && currentRawX > outerBoundary
                     && currentRawX > previousRawX;
         }
 
         if (!state.retractingConfirmation && crossedTowardEdge) {
             state.retractingConfirmation = true;
             SideSlideHoldDiagnostics.log(TAG
-                    + " confirmation retract started after crossing mini Sidebar");
+                    + " confirmation retract started after crossing full mini Sidebar"
+                    + " boundary=" + outerBoundary);
         }
         if (!state.retractingConfirmation) return;
 
-        DisplayMetrics dm = owner.getResources().getDisplayMetrics();
-        float density = owner.getResources().getConfiguration().densityDpi > 0
-                ? owner.getResources().getConfiguration().densityDpi / 160f
-                : dm.density;
         float screenWidth = Math.max(1f, dm.widthPixels);
         float edgeDistance = state.leftEdge
                 ? Math.max(0f, currentRawX)
@@ -1215,6 +1252,8 @@ final class Launcher450SideSlideHoldHook {
         final SideSlideHoldPolicy policy = new SideSlideHoldPolicy();
         Runnable dwellRunnable;
         int scheduledGeneration = Integer.MIN_VALUE;
+        int secondStageDistancePx =
+                SideSlideHoldFeatureConfig.DEFAULT_SECOND_STAGE_DISTANCE_PX;
         boolean gestureActive;
         boolean sideStub;
         boolean desktopAtDown;
