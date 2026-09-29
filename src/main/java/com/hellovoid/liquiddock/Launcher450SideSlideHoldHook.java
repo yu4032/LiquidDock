@@ -58,10 +58,6 @@ final class Launcher450SideSlideHoldHook {
     // completes the release transition. Do not tear down the Launcher visual on SC start earlier
     // than that native release window.
     private static final long OS4_RELEASE_DURATION_MS = 100L;
-    // The following Launcher-owned circle -> 24x53 Sidebar morph is driven by recovered Folme
-    // springs; radius has the slowest response (0.68 s). SC may report its animation start much
-    // earlier, but OS4 keeps rendering the Launcher split effect while that morph is active.
-    private static final long OS4_SIDEBAR_MORPH_RESPONSE_MS = 680L;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<Object, GestureState> STATES =
@@ -789,9 +785,11 @@ final class Launcher450SideSlideHoldHook {
                     long elapsed = releaseStarted > 0L
                             ? Math.max(0L, SystemClock.uptimeMillis() - releaseStarted)
                             : OS4_RELEASE_DURATION_MS;
-                    long nativeLauncherWindow =
-                            Math.max(OS4_RELEASE_DURATION_MS, OS4_SIDEBAR_MORPH_RESPONSE_MS);
-                    long remaining = Math.max(0L, nativeLauncherWindow - elapsed);
+                    // OS4 SidebarPopAnimListener::on_anim_started hands ownership away at
+                    // the actual Sidebar animation-start callback. Keep only the native 100 ms
+                    // GestureBackArrowView release floor so an unusually early callback cannot
+                    // truncate the release frame; do not add an artificial 680 ms hold.
+                    long remaining = Math.max(0L, OS4_RELEASE_DURATION_MS - elapsed);
                     if (owner != null) {
                         if (remaining > 0L) owner.postDelayed(finish, remaining);
                         else owner.post(finish);
