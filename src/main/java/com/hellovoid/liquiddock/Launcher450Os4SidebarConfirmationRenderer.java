@@ -35,6 +35,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float TEARDROP_RESPONSE_S = 0.60f;
     private static final float BRIDGE_DAMPING = 0.85f;
     private static final float BRIDGE_RESPONSE_S = 0.55f;
+    private static final float SPLIT_DAMPING = 0.90f;
+    private static final float SPLIT_RESPONSE_S = 0.68f;
 
     // build_teardrop_path native constants.
     private static final float PROFILE_HEIGHT = 775f;
@@ -116,6 +118,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float radius;
         float teardropFactor;
         float bridgeFactor;
+        float splitProgress;
 
         if (!releasing) {
             float elapsedSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
@@ -138,6 +141,7 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     springProgress(elapsedSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
             bridgeFactor = clamp01(
                     springProgress(elapsedSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+            splitProgress = 0f;
         } else {
             float releaseSeconds =
                     Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
@@ -161,6 +165,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     springProgress(releaseSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S));
             bridgeFactor = 1f - clamp01(
                     springProgress(releaseSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S));
+            splitProgress = clamp01(
+                    springProgress(releaseSeconds, SPLIT_DAMPING, SPLIT_RESPONSE_S));
         }
 
         // OS3 already computes the authoritative local geometry in onActionDown(y,startX,height).
@@ -214,11 +220,16 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             }
         }
 
-        if (releasing) {
-            // This is the Launcher-owned miniature Sidebar pop that follows the water drop.
-            // Its dimensions/radius are not invented; they are the show=true Folme targets.
+        if (releasing && splitProgress > 0.001f) {
+            // split_progress is a separate OS4 state. Keep the body hidden at split=0 and let it
+            // emerge while the circle collapses into the 24x53/r8 miniature Sidebar.
+            float reveal = smoothStep(0f, 0.20f, splitProgress);
             Paint fill = FILL_PAINT.get();
             Paint border = BORDER_PAINT.get();
+            int oldFillAlpha = fill.getAlpha();
+            int oldBorderAlpha = border.getAlpha();
+            fill.setAlpha(Math.round(oldFillAlpha * reveal));
+            border.setAlpha(Math.round(oldBorderAlpha * reveal));
             canvas.drawRoundRect(
                     centerX - halfWidth,
                     centerY - halfHeight,
@@ -235,6 +246,8 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                     radius,
                     radius,
                     border);
+            fill.setAlpha(oldFillAlpha);
+            border.setAlpha(oldBorderAlpha);
         }
 
         if (releasing || now - startedAtUptimeMs < MAX_FRAME_WINDOW_MS) {
@@ -370,6 +383,12 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                         * (float) Math.sin(omegaD * t);
         float value = 1f - envelope * phase;
         return Math.max(0f, Math.min(value, 1.20f));
+    }
+
+    private static float smoothStep(float edge0, float edge1, float x) {
+        if (edge1 <= edge0) return x >= edge1 ? 1f : 0f;
+        float t = clamp01((x - edge0) / (edge1 - edge0));
+        return t * t * (3f - 2f * t);
     }
 
     private static float clamp01(float value) {
