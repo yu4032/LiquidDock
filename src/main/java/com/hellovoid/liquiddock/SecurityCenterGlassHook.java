@@ -155,12 +155,18 @@ final class SecurityCenterGlassHook {
             // synthetic show/hide/terminal callbacks destroyed our session in that gap, so the
             // second pull had no binding event with which to recreate the replacement. Observe the
             // methods for compatibility only; attach/detach/root replacement now perform teardown.
-            HookUtil.hook(sidebarLifecycle.show(), chain ->
-                    chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(sidebarLifecycle.show(), chain -> {
+                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+                if (live != null) live.onSidebarShowRequested();
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
             HookUtil.hook(sidebarLifecycle.hideImmediate(), chain ->
                     chain.proceed(chain.getArgs().toArray(new Object[0])));
-            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain ->
-                    chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain -> {
+                SecurityCenterGlassCoordinator live = currentCoordinator(contract);
+                if (live != null) live.onSidebarHideRequested(true);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
 
             for (Method terminalMethod : terminalCleanup.methods()) {
                 HookUtil.hook(terminalMethod, chain ->
