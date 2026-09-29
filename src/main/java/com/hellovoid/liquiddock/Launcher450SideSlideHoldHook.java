@@ -400,18 +400,13 @@ final class Launcher450SideSlideHoldHook {
                         return;
                     }
 
-                    // OS4 Launcher owns this phase: entering the SideSlideHold operate state
-                    // performs haptic feedback, then its back-panel renderer reveals the black
-                    // preview. Security Center is not asked to animate until ACTION_UP.
+                    // Keep confirmation on the gesture thread, but do not synthesize the OS4
+                    // visual. The OS4 8.0 SideSlideHold renderer is Rust/native and must be ported
+                    // from its original pipeline rather than approximated with an Android View.
                     state.confirmationVisible = true;
                     owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                    float previewCenterY = !Float.isNaN(state.hoverAnchorLocalY)
-                            ? state.hoverAnchorLocalY
-                            : state.lastLocalY;
-                    state.preview = LauncherSideSlidePreview.show(
-                            owner, state.leftEdge, previewCenterY);
                     SideSlideHoldDiagnostics.log(TAG
-                            + " Sidebar preflight ready -> Launcher haptic + preview"
+                            + " Sidebar preflight ready -> Launcher haptic"
                             + " thread=" + Thread.currentThread().getName()
                             + "; wait ACTION_UP");
                 });
@@ -438,35 +433,27 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
         cancelDwell(owner, state);
-        LauncherSideSlidePreview preview = state.preview;
-        state.preview = null;
-        if (preview != null) preview.beginRelease();
         state.confirmationVisible = false;
-        SideSlideHoldDiagnostics.log(TAG
-                + " ACTION_UP -> Launcher preview handoff -> commit Sidebar");
-        showSidebar(owner, state, generation, preview);
+        SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
+        showSidebar(owner, state, generation);
         if (!state.desktopAtDown) {
             forceVendorCleanupToBack(state);
         }
     }
 
     private static void cancelConfirmation(View owner, GestureState state) {
-        if (!state.confirmationVisible && state.preview == null) return;
-        LauncherSideSlidePreview preview = state.preview;
-        state.preview = null;
-        if (preview != null) preview.cancel();
+        if (!state.confirmationVisible) return;
         state.confirmationVisible = false;
-        SideSlideHoldDiagnostics.log(TAG + " Launcher preview cancelled");
+        SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
     }
 
     private static void showSidebar(
             View owner,
             GestureState state,
-            int generation,
-            LauncherSideSlidePreview preview) {
+            int generation) {
         Context context = owner.getContext();
         if (context == null) {
-            if (preview != null) preview.finishHandoff(false);
+            state.policy.onArmResult(false, generation);
             return;
         }
         int[] geometry = sourceGeometry(owner, state);
@@ -489,9 +476,6 @@ final class Launcher450SideSlideHoldHook {
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar release show result accepted=" + accepted
                         + " desktop=" + requestWasDesktop);
-                if (preview != null) {
-                    owner.post(() -> preview.finishHandoff(accepted));
-                }
             }
         };
 
@@ -505,7 +489,6 @@ final class Launcher450SideSlideHoldHook {
                     null,
                     null);
         } catch (Throwable error) {
-            if (preview != null) owner.post(() -> preview.finishHandoff(false));
             SideSlideHoldDiagnostics.log(TAG + " Sidebar show request failed", error);
         }
     }
@@ -583,7 +566,6 @@ final class Launcher450SideSlideHoldHook {
         boolean leftEdge;
         boolean confirmationVisible;
         boolean workspaceCancelled;
-        LauncherSideSlidePreview preview;
         Object arrow;
         float downX;
         float downRawY;
