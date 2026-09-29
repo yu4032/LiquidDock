@@ -2,23 +2,24 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.os.SystemClock;
 import android.view.View;
 
 /**
- * Direct Java/Canvas transliteration of the OS4 Launcher 8.0 Sidebar confirmation body.
+ * Launcher-side translation of the OS4 Launcher 8.0 Sidebar split effect.
  *
- * <p>The vendor implementation lives in
- * recents/sidebar/abstract_sidebar_split_effect.rs and is rasterized from
- * GestureBackArrowView::on_vsync through RustCanvas_draw_round_rect. HyperOS 3 Launcher does not
- * ship libapp_launcher.so / hyper_folme / RustCanvas, so this class keeps the recovered geometry
- * and spring parameters while targeting the Canvas already owned by OS3 GestureBackArrowView.
- * It intentionally does not invent the inner Sidebar icon: its CachedIconDp constants are still
- * outlined in the native binary and are not evidence-complete yet.</p>
+ * <p>Native evidence recovered from libapp_launcher.so:
+ * GestureBackArrowView::build_teardrop_path @ 0x801044,
+ * PathBackgroundProxy::draw_teardrop @ 0x7560c8,
+ * AbstractSidebarSplitEffect::run_abstract_sidebar_anim_target @ 0x75af08, and
+ * GestureBackArrowView::on_swipe_stop @ 0x7d607c.</p>
+ *
+ * <p>This renderer deliberately keeps Security Center as the final Sidebar owner. It only
+ * reproduces the Launcher-owned confirmation/split presentation that OS3 is missing.</p>
  */
 final class Launcher450Os4SidebarConfirmationRenderer {
-    // run_abstract_sidebar_anim_target(is_show=1):
-    // current fallback = 30dp circle; show target = 24dp x 53dp, radius 8dp.
+    // run_abstract_sidebar_anim_target(show): 30dp fallback -> 24x53dp body, radius 8dp.
     private static final float START_WIDTH_DP = 30f;
     private static final float START_HEIGHT_DP = 30f;
     private static final float START_RADIUS_DP = 30f;
@@ -26,25 +27,34 @@ final class Launcher450Os4SidebarConfirmationRenderer {
     private static final float TARGET_HEIGHT_DP = 53f;
     private static final float TARGET_RADIUS_DP = 8f;
     private static final float EDGE_SOURCE_OFFSET_DP = 12f;
+
+    // on_swipe_stop @ 0x7d607c explicitly drives split_progress to -1.5f.
     private static final float RELEASE_SPLIT_TARGET = -1.5f;
 
-    // Recovered AnimTarget configs:
-    // width  {0.80, 0.58}, height {0.85, 0.40}, radius {0.90, 0.68}.
-    // Treat the first value as damping ratio and the second as response seconds, matching the
-    // hyper_folme spring parameter domain used by the native target.
+    // Recovered hyper_folme target configs.
     private static final float WIDTH_DAMPING = 0.80f;
     private static final float WIDTH_RESPONSE_S = 0.58f;
     private static final float HEIGHT_DAMPING = 0.85f;
     private static final float HEIGHT_RESPONSE_S = 0.40f;
     private static final float RADIUS_DAMPING = 0.90f;
     private static final float RADIUS_RESPONSE_S = 0.68f;
+    private static final float TEARDROP_DAMPING = 0.70f;
+    private static final float TEARDROP_RESPONSE_S = 0.60f;
+    private static final float BRIDGE_DAMPING = 0.85f;
+    private static final float BRIDGE_RESPONSE_S = 0.55f;
+
+    // The native show target is 1 for both properties. on_swipe_stop keeps the current values
+    // unchanged while split_progress performs the release transition.
+    private static final float TEARDROP_TARGET = 1f;
+    private static final float BRIDGE_TARGET = 1f;
 
     private static final int PANEL_COLOR = 0xCC000000;
-    // Stop requesting frames after the slowest recovered spring has visually converged.
     private static final long MAX_FRAME_WINDOW_MS = 900L;
 
     private static final ThreadLocal<Paint> PAINT =
             ThreadLocal.withInitial(() -> new Paint(Paint.ANTI_ALIAS_FLAG));
+    private static final ThreadLocal<Path> PATH =
+            ThreadLocal.withInitial(Path::new);
 
     private Launcher450Os4SidebarConfirmationRenderer() {}
 
@@ -62,49 +72,70 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         float elapsedSeconds = Math.max(0L, now - startedAtUptimeMs) / 1000f;
         boolean releasing = releaseStartedAtUptimeMs > 0L;
 
+        float showWidthProgress =
+                springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S);
+        float showHeightProgress =
+                springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S);
+        float showRadiusProgress =
+                springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S);
+        float teardropFactor =
+                TEARDROP_TARGET
+                        * springProgress(
+                                elapsedSeconds, TEARDROP_DAMPING, TEARDROP_RESPONSE_S);
+        float bridgeFactor =
+                BRIDGE_TARGET
+                        * springProgress(
+                                elapsedSeconds, BRIDGE_DAMPING, BRIDGE_RESPONSE_S);
+
         float width;
         float height;
         float radius;
         float splitProgress;
         if (releasing) {
-            // OS4 on_swipe_stop does not enlarge the 24x53 body. It freezes body geometry and
-            // drives split_progress from its shown state toward the recovered -1.5f target while
-            // the real Sidebar pop animation takes ownership.
             width = TARGET_WIDTH_DP * density;
             height = TARGET_HEIGHT_DP * density;
             radius = TARGET_RADIUS_DP * density;
-            float releaseSeconds = Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
-            splitProgress = lerp(
-                    1f,
-                    RELEASE_SPLIT_TARGET,
-                    springProgress(releaseSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+
+            float releaseSeconds =
+                    Math.max(0L, now - releaseStartedAtUptimeMs) / 1000f;
+            splitProgress =
+                    lerp(
+                            1f,
+                            RELEASE_SPLIT_TARGET,
+                            springProgress(
+                                    releaseSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
+
+            // OS4 on_swipe_stop adds current -> current targets for teardrop_factor and
+            // bridge_factor. Do not collapse either shape during the Sidebar handoff.
+            teardropFactor = TEARDROP_TARGET;
+            bridgeFactor = BRIDGE_TARGET;
         } else {
-            width = lerp(
-                    START_WIDTH_DP * density,
-                    TARGET_WIDTH_DP * density,
-                    springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S));
-            height = lerp(
-                    START_HEIGHT_DP * density,
-                    TARGET_HEIGHT_DP * density,
-                    springProgress(elapsedSeconds, HEIGHT_DAMPING, HEIGHT_RESPONSE_S));
-            radius = lerp(
-                    START_RADIUS_DP * density,
-                    TARGET_RADIUS_DP * density,
-                    springProgress(elapsedSeconds, RADIUS_DAMPING, RADIUS_RESPONSE_S));
-            // Hold-confirmation show phase resolves the split body toward split_progress=1.
-            splitProgress = springProgress(elapsedSeconds, WIDTH_DAMPING, WIDTH_RESPONSE_S);
+            width =
+                    lerp(
+                            START_WIDTH_DP * density,
+                            TARGET_WIDTH_DP * density,
+                            showWidthProgress);
+            height =
+                    lerp(
+                            START_HEIGHT_DP * density,
+                            TARGET_HEIGHT_DP * density,
+                            showHeightProgress);
+            radius =
+                    lerp(
+                            START_RADIUS_DP * density,
+                            TARGET_RADIUS_DP * density,
+                            showRadiusProgress);
+            splitProgress = showWidthProgress;
         }
 
         float viewWidth = arrowView.getWidth();
         float viewHeight = arrowView.getHeight();
         if (viewWidth <= 0f || viewHeight <= 0f) return;
 
-        // OS4 on_vsync positions the split body as source + (target-source)*split_progress.
-        // The recovered source offset is 12dp beyond the active edge; the shown endpoint is the
-        // edge-attached 24dp body passed to Security Center for the real Sidebar transform.
-        float sourceX = leftEdge
-                ? -EDGE_SOURCE_OFFSET_DP * density
-                : viewWidth + EDGE_SOURCE_OFFSET_DP * density;
+        float sourceX =
+                leftEdge
+                        ? -EDGE_SOURCE_OFFSET_DP * density
+                        : viewWidth + EDGE_SOURCE_OFFSET_DP * density;
         float targetX = leftEdge ? width * 0.5f : viewWidth - width * 0.5f;
         float centerX = lerp(sourceX, targetX, splitProgress);
 
@@ -118,6 +149,23 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(PANEL_COLOR);
         paint.setAlpha(255);
+
+        // Native draw() renders the teardrop path and the split body's round-rect in the same
+        // frame. Port that composition instead of replacing the whole effect with one rectangle.
+        if (teardropFactor > 0.001f && bridgeFactor > 0.001f) {
+            Path path = PATH.get();
+            buildTeardropPath(
+                    path,
+                    leftEdge,
+                    centerX,
+                    centerY,
+                    width,
+                    height,
+                    density,
+                    teardropFactor,
+                    bridgeFactor);
+            canvas.drawPath(path, paint);
+        }
 
         canvas.drawRoundRect(
                 centerX - width * 0.5f,
@@ -133,6 +181,83 @@ final class Launcher450Os4SidebarConfirmationRenderer {
         }
     }
 
+    /**
+     * Structural translation of build_teardrop_path().
+     *
+     * <p>The native function builds a closed Path from the screen-edge baseline, a sampled
+     * deformation profile, and cubic segments. The exact native sample table is not yet exported,
+     * so this first port preserves the same authority and topology (edge baseline -> cubic bridge
+     * -> body -> cubic bridge -> edge baseline) while keeping the recovered animated
+     * teardrop_factor/bridge_factor separate. The sample table can be substituted later without
+     * changing the gesture state machine.</p>
+     */
+    private static void buildTeardropPath(
+            Path path,
+            boolean leftEdge,
+            float bodyCenterX,
+            float centerY,
+            float bodyWidth,
+            float bodyHeight,
+            float density,
+            float teardropFactor,
+            float bridgeFactor) {
+        path.reset();
+
+        float direction = leftEdge ? 1f : -1f;
+        float edgeX = leftEdge ? 0f : bodyCenterX + bodyWidth * 0.5f;
+        if (!leftEdge) {
+            // The active edge is the ArrowView's right boundary. bodyCenterX can overshoot during
+            // split release, so derive it from the body edge and the known body width.
+            edgeX = bodyCenterX + bodyWidth * 0.5f;
+        }
+
+        float bodyNearX = bodyCenterX - direction * bodyWidth * 0.5f;
+        float halfBody = bodyHeight * 0.5f;
+
+        // The native profile displacement is normalized by 76.0 in build_teardrop_path.
+        float maxBridge = 76f * density;
+        float bridgeLength =
+                Math.min(
+                        maxBridge,
+                        Math.max(0f, Math.abs(bodyNearX - edgeX)))
+                        * clamp01(bridgeFactor);
+        float neckX = edgeX + direction * bridgeLength;
+
+        float neckHalf =
+                lerp(
+                        Math.max(2f * density, halfBody * 0.12f),
+                        halfBody * 0.52f,
+                        clamp01(teardropFactor));
+        float shoulderHalf =
+                lerp(
+                        neckHalf,
+                        halfBody * 0.82f,
+                        clamp01(teardropFactor));
+
+        float upperEdgeY = centerY - neckHalf;
+        float lowerEdgeY = centerY + neckHalf;
+        float upperBodyY = centerY - shoulderHalf;
+        float lowerBodyY = centerY + shoulderHalf;
+
+        path.moveTo(edgeX, upperEdgeY);
+        path.cubicTo(
+                edgeX + direction * bridgeLength * 0.34f,
+                upperEdgeY,
+                neckX - direction * bridgeLength * 0.20f,
+                upperBodyY,
+                bodyNearX,
+                upperBodyY);
+        path.lineTo(bodyNearX, lowerBodyY);
+        path.cubicTo(
+                neckX - direction * bridgeLength * 0.20f,
+                lowerBodyY,
+                edgeX + direction * bridgeLength * 0.34f,
+                lowerEdgeY,
+                edgeX,
+                lowerEdgeY);
+        path.close();
+    }
+
     private static float springProgress(float t, float damping, float responseSeconds) {
         if (t <= 0f) return 0f;
         float omega0 = (float) (2.0 * Math.PI / responseSeconds);
@@ -144,8 +269,11 @@ final class Launcher450Os4SidebarConfirmationRenderer {
                         + (damping / (float) Math.sqrt(oneMinusZetaSq))
                         * (float) Math.sin(omegaD * t);
         float value = 1f - envelope * phase;
-        // Geometry must stay valid even if the native-style spring overshoots.
         return Math.max(0f, Math.min(value, 1.20f));
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(value, 1f));
     }
 
     private static float lerp(float start, float end, float progress) {
