@@ -198,19 +198,14 @@ final class Launcher450Os4SidebarConfirmationRenderer {
             float centerY,
             float bodyWidth,
             float bodyHeight,
+            float viewWidth,
             float density,
             float teardropFactor,
             float bridgeFactor) {
         path.reset();
 
         float direction = leftEdge ? 1f : -1f;
-        float edgeX = leftEdge ? 0f : bodyCenterX + bodyWidth * 0.5f;
-        if (!leftEdge) {
-            // The active edge is the ArrowView's right boundary. bodyCenterX can overshoot during
-            // split release, so derive it from the body edge and the known body width.
-            edgeX = bodyCenterX + bodyWidth * 0.5f;
-        }
-
+        float edgeX = leftEdge ? 0f : viewWidth;
         float bodyNearX = bodyCenterX - direction * bodyWidth * 0.5f;
         float halfBody = bodyHeight * 0.5f;
 
