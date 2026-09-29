@@ -174,6 +174,20 @@ public class SecurityCenterLauncherStylePresentationContractTest {
                 early.contains("postDelayed("));
     }
 
+    @Test public void videoToolboxMaterialIdentityIsWatchedAcrossRebuilds() throws Exception {
+        String early = Files.readString(MAIN.resolve("SecurityCenterEarlyPrepareHook.java"));
+        assertTrue("Video Toolbox must keep watching because za.p can rebuild its View tree",
+                early.contains("return type == ASSISTANT_VIDEO;"));
+        assertTrue("carrier identity, not one successful readiness bind, controls rebinding",
+                early.contains("shouldRebind(dock, abstractDock, boxMaterial)")
+                        && early.contains("boundBoxRef.get() != box"));
+        assertTrue("a replacement main_content must advance through the normal assistant bind path",
+                early.contains("SecurityCenterGlassRuntimeState.bindAssistant(")
+                        && early.contains("markBound(dock, abstractDock, boxMaterial)"));
+        assertFalse("Video carrier recovery must not use a timer",
+                early.contains("postDelayed("));
+    }
+
     @Test public void timingUsesVendorMotionAndTexturePresentationAuthorities() throws Exception {
         String hook = Files.readString(MAIN.resolve("SecurityCenterGlassHook.java"));
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
