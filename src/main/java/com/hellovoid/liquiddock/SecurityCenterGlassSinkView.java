@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -19,6 +20,9 @@ final class SecurityCenterGlassSinkView extends TextureView
     // Prismal's outer edge shell reaches roughly 2.2 logical pixels beyond the SDF boundary.
     // Three pixels preserves that AA/highlight work area without changing the actual glass shape.
     private static final float OPTICAL_OUTSET_PX = 3f;
+    private static final long EXIT_FADE_MS = 80L;
+    private static final float EXIT_TREND_EPSILON = 0.004f;
+    private static final float EXIT_STABLE_THRESHOLD = 0.97f;
 
     private static final class OverlayHost {
         final ViewGroup parent;
@@ -68,6 +72,11 @@ final class SecurityCenterGlassSinkView extends TextureView
     private boolean parentRecoveryPosted;
     private boolean hasBeenWindowVisible;
     private boolean windowVisibilityInterrupted;
+    private boolean lastStructurallyVisible;
+    private float lastEffectiveMaterialAlpha = Float.NaN;
+    private float lastEffectiveMaterialScale = Float.NaN;
+    private long exitFadeStartedAt = -1L;
+    private boolean exitFadeTickPosted;
 
     private SecurityCenterGlassSinkView(
             Context context,
@@ -170,14 +179,21 @@ final class SecurityCenterGlassSinkView extends TextureView
                 : isStructurallyVisible(material, expectedParent)
                         && material.getWindowVisibility() == View.VISIBLE;
         float effectiveAlpha = inheritMaterialTransform
-                ? 1f
+                ? material.getAlpha()
                 : effectiveMaterialAlpha(material, expectedParent);
-        int desiredVisibility = structurallyVisible ? View.VISIBLE : View.INVISIBLE;
+        float effectiveScale = inheritMaterialTransform
+                ? Math.min(Math.abs(material.getScaleX()), Math.abs(material.getScaleY()))
+                : effectiveMaterialScale(material, expectedParent);
+
+        updateExitFadeState(structurallyVisible, effectiveAlpha, effectiveScale);
+        boolean fadingOut = exitFadeStartedAt >= 0L;
+        int desiredVisibility = structurallyVisible || fadingOut ? View.VISIBLE : View.INVISIBLE;
         if (getVisibility() != desiredVisibility) {
             setVisibility(desiredVisibility);
             changed = true;
         }
-        if (!SecurityCenterSinkPresentationState.shouldCompose(structurallyVisible)) {
+        if (!SecurityCenterSinkPresentationState.shouldCompose(structurallyVisible) && !fadingOut) {
+            rememberMaterialPresentation(structurallyVisible, effectiveAlpha, effectiveScale);
             return setContentAlphaIfChanged(0f) || changed;
         }
 
@@ -219,7 +235,10 @@ final class SecurityCenterGlassSinkView extends TextureView
 
         float desiredAlpha = SecurityCenterSinkPresentationState.contentAlpha(
                 true, authorizedVisible, effectiveAlpha);
+        desiredAlpha *= exitFadeMultiplier();
         changed |= setContentAlphaIfChanged(desiredAlpha);
+        rememberMaterialPresentation(structurallyVisible, effectiveAlpha, effectiveScale);
+        if (exitFadeStartedAt >= 0L) scheduleExitFadeTick();
         return changed;
     }
 
@@ -258,25 +277,13 @@ final class SecurityCenterGlassSinkView extends TextureView
 
     void setAuthorizedVisible(boolean visible) {
         if (disposed || session.isShutdown()) return;
-        if (visible) {
-            animate().cancel();
-            if (getAlpha() != 1f) setAlpha(1f);
+        if (visible && !authorizedVisible) {
+            exitFadeStartedAt = -1L;
+            exitFadeTickPosted = false;
         }
         if (authorizedVisible == visible) return;
         authorizedVisible = visible;
         syncFromMaterial();
-    }
-
-    void fadeOutFast(long durationMs) {
-        if (disposed || session.isShutdown() || !authorizedVisible) return;
-        animate().cancel();
-        animate().alpha(0f).setDuration(Math.max(1L, durationMs)).start();
-    }
-
-    void cancelExitFade() {
-        if (disposed || session.isShutdown()) return;
-        animate().cancel();
-        if (getAlpha() != 1f) setAlpha(1f);
     }
 
     void armPresentation(long serial, long generation) {
@@ -336,6 +343,8 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (disposed) return;
         disposed = true;
         authorizedVisible = false;
+        exitFadeStartedAt = -1L;
+        exitFadeTickPosted = false;
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
         armedSurfaceUpdateSequence = surfaceUpdateSequence;
@@ -425,6 +434,79 @@ final class SecurityCenterGlassSinkView extends TextureView
             current = parent instanceof View ? (View) parent : null;
         }
         return current == stopParent;
+    }
+
+    private void updateExitFadeState(
+            boolean structurallyVisible, float effectiveAlpha, float effectiveScale) {
+        if (!authorizedVisible) {
+            exitFadeStartedAt = -1L;
+            rememberMaterialPresentation(structurallyVisible, effectiveAlpha, effectiveScale);
+            return;
+        }
+
+        boolean hadPrevious = finite(lastEffectiveMaterialAlpha)
+                && finite(lastEffectiveMaterialScale);
+        boolean alphaFalling = hadPrevious
+                && lastEffectiveMaterialAlpha >= EXIT_STABLE_THRESHOLD
+                && effectiveAlpha < lastEffectiveMaterialAlpha - EXIT_TREND_EPSILON;
+        boolean scaleFalling = hadPrevious
+                && lastEffectiveMaterialScale >= EXIT_STABLE_THRESHOLD
+                && effectiveScale < lastEffectiveMaterialScale - EXIT_TREND_EPSILON;
+        boolean structureLeaving = lastStructurallyVisible && !structurallyVisible;
+        boolean alphaRising = hadPrevious
+                && effectiveAlpha > lastEffectiveMaterialAlpha + EXIT_TREND_EPSILON;
+        boolean scaleRising = hadPrevious
+                && effectiveScale > lastEffectiveMaterialScale + EXIT_TREND_EPSILON;
+
+        if (alphaRising || scaleRising) {
+            exitFadeStartedAt = -1L;
+            exitFadeTickPosted = false;
+        } else if (exitFadeStartedAt < 0L && (alphaFalling || scaleFalling || structureLeaving)) {
+            exitFadeStartedAt = SystemClock.uptimeMillis();
+        }
+    }
+
+    private float exitFadeMultiplier() {
+        long started = exitFadeStartedAt;
+        if (started < 0L) return 1f;
+        long elapsed = Math.max(0L, SystemClock.uptimeMillis() - started);
+        if (elapsed >= EXIT_FADE_MS) return 0f;
+        return 1f - ((float) elapsed / (float) EXIT_FADE_MS);
+    }
+
+    private void scheduleExitFadeTick() {
+        if (exitFadeTickPosted || disposed || session.isShutdown()) return;
+        exitFadeTickPosted = true;
+        postOnAnimation(() -> {
+            exitFadeTickPosted = false;
+            if (disposed || session.isShutdown() || exitFadeStartedAt < 0L) return;
+            syncFromMaterial();
+            if (exitFadeMultiplier() > 0f) {
+                scheduleExitFadeTick();
+            }
+        });
+    }
+
+    private void rememberMaterialPresentation(
+            boolean structurallyVisible, float effectiveAlpha, float effectiveScale) {
+        lastStructurallyVisible = structurallyVisible;
+        lastEffectiveMaterialAlpha = finite(effectiveAlpha) ? effectiveAlpha : 0f;
+        lastEffectiveMaterialScale = finite(effectiveScale) ? effectiveScale : 0f;
+    }
+
+    private static float effectiveMaterialScale(View material, ViewGroup stopParent) {
+        if (material == null || stopParent == null) return 0f;
+        float scale = 1f;
+        View current = material;
+        while (current != null && current != stopParent) {
+            if (current.getVisibility() != View.VISIBLE) return 0f;
+            float local = Math.min(Math.abs(current.getScaleX()), Math.abs(current.getScaleY()));
+            if (!finite(local) || local <= 0f) return 0f;
+            scale *= local;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return current == stopParent ? scale : 0f;
     }
 
     private static float effectiveMaterialAlpha(View material, ViewGroup stopParent) {
