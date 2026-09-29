@@ -32,6 +32,7 @@ final class SidebarCommandContract {
     static final String EXTRA_WIDTH = "width";
     static final String EXTRA_HEIGHT = "height";
     static final String EXTRA_RADIUS = "radius";
+    static final String EXTRA_DESKTOP = "desktop";
     static final String EXTRA_GESTURE_Y = "gesture_y";
     static final String EXTRA_GENERATION = "generation";
 
