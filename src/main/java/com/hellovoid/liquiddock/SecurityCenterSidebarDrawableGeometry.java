@@ -170,6 +170,24 @@ final class SecurityCenterSidebarDrawableGeometry {
         }
     }
 
+    static Snapshot currentRootGeometry(View requestedRoot) {
+        View root;
+        View owner;
+        Snapshot local;
+        synchronized (LOCK) {
+            root = rootRef.get();
+            owner = drawableOwnerRef.get();
+            local = LIVE.snapshot();
+        }
+        if (local == null || root == null || owner == null || requestedRoot != root
+                || !root.isAttachedToWindow() || !owner.isAttachedToWindow()
+                || owner.getRootView() != root) return null;
+        Snapshot mapped = mapRectToRoot(
+                owner, root, local.left, local.top, local.right, local.bottom);
+        if (mapped == null) return null;
+        return new Snapshot(mapped.left, mapped.top, mapped.right, mapped.bottom, local.radius);
+    }
+
     /**
      * Replace a candidate only when it is the currently bound Dock material's own static bounds.
      * Other nodes (toolbox / All Apps) therefore keep their existing geometry path.
