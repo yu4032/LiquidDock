@@ -71,6 +71,7 @@ final class SecurityCenterGlassSinkView extends TextureView
     private int outputEnvelopeWidth;
     private int outputEnvelopeHeight;
     private boolean outputEnvelopeLocked;
+    private boolean outputEnvelopePeerCorrected;
     private boolean hasBeenWindowVisible;
     private boolean windowVisibilityInterrupted;
     private ValueAnimator exitFadeAnimator;
@@ -258,9 +259,11 @@ final class SecurityCenterGlassSinkView extends TextureView
     }
 
     boolean ensureOutputEnvelopeAtLeast(int minimumWidth, int minimumHeight) {
-        if (disposed || session.isShutdown() || minimumWidth <= 0 || minimumHeight <= 0) {
+        if (disposed || session.isShutdown() || outputEnvelopePeerCorrected
+                || minimumWidth <= 0 || minimumHeight <= 0) {
             return false;
         }
+        outputEnvelopePeerCorrected = true;
         int targetWidth = Math.max(outputEnvelopeWidth,
                 (int) Math.ceil(minimumWidth + OPTICAL_OUTSET_PX * 2f));
         int targetHeight = Math.max(outputEnvelopeHeight,
@@ -464,6 +467,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         exitContractionPending = false;
         exitContractionLatched = false;
         outputEnvelopeLocked = false;
+        outputEnvelopePeerCorrected = false;
         cancelExitFade(false);
         pendingPresentationSerial = -1L;
         pendingPresentationGeneration = -1L;
