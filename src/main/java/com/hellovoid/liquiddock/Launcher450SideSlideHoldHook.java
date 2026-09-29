@@ -4,12 +4,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 
 import java.lang.reflect.Method;
@@ -42,7 +45,7 @@ final class Launcher450SideSlideHoldHook {
     // OS4 GestureBackArrowView visual source geometry used by Security Center's launcher-origin
     // transform. Side authority is kept separate: Security Center derives left/right solely from
     // the first x argument, so x must come from the gesture edge rather than the Arrow view.
-    private static final float OS4_SOURCE_WIDTH_DP = 30f;
+    private static final float OS4_SOURCE_WIDTH_DP = 24f;
     private static final float OS4_SOURCE_HEIGHT_DP = 53f;
     private static final float OS4_SOURCE_RADIUS_DP = 8f;
 
@@ -80,6 +83,8 @@ final class Launcher450SideSlideHoldHook {
                     stubClass, "injectBackKeyEvent", new Class<?>[]{boolean.class});
             Method setReadyFinish = HookUtil.findMethodExact(
                     arrowClass, "setReadyFinish", new Class<?>[]{readyClass});
+            Method onArrowDraw = HookUtil.findMethodExact(
+                    arrowClass, "onDraw", new Class<?>[]{Canvas.class});
             Method getLauncher = HookUtil.findMethodExact(
                     applicationClass, "getLauncher", new Class<?>[0]);
             Method isInState = HookUtil.findMethodExact(
@@ -160,6 +165,34 @@ final class Launcher450SideSlideHoldHook {
                 return chain.proceed(args);
             });
 
+            HookUtil.hook(onArrowDraw, chain -> {
+                Object arrow = chain.getThisObject();
+                GestureState state = stateForArrow(arrow);
+                if (state != null && arrow instanceof View) {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Canvas canvas = args.length > 0 && args[0] instanceof Canvas
+                            ? (Canvas) args[0] : null;
+                    if (state.confirmationVisible && canvas != null) {
+                        state.arrow = arrow;
+                        Launcher450Os4SidebarConfirmationRenderer.draw(
+                                canvas,
+                                (View) arrow,
+                                state.leftEdge,
+                                !Float.isNaN(state.hoverAnchorY)
+                                        ? state.hoverAnchorY
+                                        : state.lastRawY,
+                                state.confirmationStartedAtUptimeMs);
+                        return null;
+                    }
+                    if (state.suppressStockAfterCommit) {
+                        // ACTION_UP has committed Sidebar ownership. Keep OS3's bitmap Back
+                        // animation out of the display list until the next gesture begins.
+                        return null;
+                    }
+                }
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+
             HookUtil.hook(injectBack, chain -> {
                 GestureState state = stateFor(chain.getThisObject());
                 if (state.policy.shouldConsumeVendorCompletion()) {
@@ -228,6 +261,8 @@ final class Launcher450SideSlideHoldHook {
             state.hoverAnchorY = Float.NaN;
             state.hoverAnchorLocalY = Float.NaN;
             state.workspaceCancelled = false;
+            state.suppressStockAfterCommit = false;
+            state.confirmationStartedAtUptimeMs = 0L;
             state.policy.onDown();
             SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
                     + " desktop=" + state.desktopAtDown
@@ -401,13 +436,18 @@ final class Launcher450SideSlideHoldHook {
                         return;
                     }
 
-                    // Keep confirmation on the gesture thread, but do not synthesize the OS4
-                    // visual. The OS4 8.0 SideSlideHold renderer is Rust/native and must be ported
-                    // from its original pipeline rather than approximated with an Android View.
-                    state.confirmationVisible = true;
+                    // OS4 confirmation is rendered by the existing Launcher GestureBackArrowView.
+                    // This replaces, rather than overlays, OS3's bitmap Back animation.
                     owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    state.confirmationVisible = true;
+                    state.confirmationStartedAtUptimeMs = SystemClock.uptimeMillis();
+                    View arrow = resolveArrowView(owner, state);
+                    if (arrow != null) {
+                        state.arrow = arrow;
+                        arrow.postInvalidateOnAnimation();
+                    }
                     SideSlideHoldDiagnostics.log(TAG
-                            + " Sidebar preflight ready -> Launcher haptic"
+                            + " Sidebar preflight ready -> Launcher haptic + OS4 confirmation"
                             + " thread=" + Thread.currentThread().getName()
                             + "; wait ACTION_UP");
                 });
@@ -435,6 +475,7 @@ final class Launcher450SideSlideHoldHook {
         }
         cancelDwell(owner, state);
         state.confirmationVisible = false;
+        state.suppressStockAfterCommit = true;
         SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
         showSidebar(owner, state, generation);
         if (!state.desktopAtDown) {
@@ -445,6 +486,10 @@ final class Launcher450SideSlideHoldHook {
     private static void cancelConfirmation(View owner, GestureState state) {
         if (!state.confirmationVisible) return;
         state.confirmationVisible = false;
+        state.suppressStockAfterCommit = false;
+        state.confirmationStartedAtUptimeMs = 0L;
+        View arrow = state.arrow instanceof View ? (View) state.arrow : null;
+        if (arrow != null) arrow.postInvalidateOnAnimation();
         SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
     }
 
@@ -492,6 +537,19 @@ final class Launcher450SideSlideHoldHook {
         } catch (Throwable error) {
             SideSlideHoldDiagnostics.log(TAG + " Sidebar show request failed", error);
         }
+    }
+
+    private static View resolveArrowView(View owner, GestureState state) {
+        if (state.arrow instanceof View) return (View) state.arrow;
+        if (!(owner instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) owner;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child != null && ARROW_VIEW.equals(child.getClass().getName())) {
+                return child;
+            }
+        }
+        return null;
     }
 
     private static void forceVendorCleanupToBack(GestureState state) {
@@ -543,6 +601,7 @@ final class Launcher450SideSlideHoldHook {
         state.desktopAtDown = false;
         state.arrow = null;
         state.confirmationVisible = false;
+        state.confirmationStartedAtUptimeMs = 0L;
         state.workspaceCancelled = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
@@ -566,7 +625,9 @@ final class Launcher450SideSlideHoldHook {
         boolean desktopAtDown;
         boolean leftEdge;
         boolean confirmationVisible;
+        boolean suppressStockAfterCommit;
         boolean workspaceCancelled;
+        long confirmationStartedAtUptimeMs;
         Object arrow;
         float downX;
         float downRawY;
