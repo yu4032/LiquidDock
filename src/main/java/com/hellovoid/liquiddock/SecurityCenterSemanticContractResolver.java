@@ -138,6 +138,8 @@ final class SecurityCenterSemanticContractResolver {
 
         Method dockGetter = namedZeroArg(turboClass,
                 SecurityCenterHookSpec.DOCK_LAYOUT_GETTER, "dock getter");
+        Method abstractDockGetter = namedZeroArg(turboClass,
+                SecurityCenterHookSpec.ABSTRACT_DOCK_LAYOUT_GETTER, "abstract-dock getter");
         Method appsGetter = namedZeroArg(turboClass,
                 SecurityCenterHookSpec.APPS_LAYOUT_GETTER, "all-apps getter");
         Method boxGetter = namedZeroArg(turboClass,
@@ -147,6 +149,7 @@ final class SecurityCenterSemanticContractResolver {
         Method videoGetter = namedZeroArg(turboClass,
                 SecurityCenterHookSpec.VIDEO_ADAPTER_GETTER, "video-adapter getter");
         requireViewReturn(dockGetter, viewClass, "dock getter");
+        requireViewReturn(abstractDockGetter, viewClass, "abstract-dock getter");
         requireViewReturn(appsGetter, viewClass, "all-apps getter");
         requireViewReturn(boxGetter, viewClass, "box getter");
         requireViewReturn(gameGetter, viewClass, "game-box getter");
@@ -170,7 +173,7 @@ final class SecurityCenterSemanticContractResolver {
                 turboClass, wrapperClass, managerClass, assistantTypeClass,
                 gameBoxClass, gameMaterialClass, videoAdapterClass, allAppsClass,
                 configure, wrapperTurboGetter,
-                dockGetter, appsGetter, boxGetter, gameGetter,
+                dockGetter, abstractDockGetter, appsGetter, boxGetter, gameGetter,
                 gameMaterialGetter, videoGetter, discriminator);
     }
 
@@ -483,6 +486,7 @@ final class SecurityCenterSemanticContractResolver {
         private final Method configure;
         private final Method wrapperTurboGetter;
         private final Method dockGetter;
+        private final Method abstractDockGetter;
         private final Method appsGetter;
         private final Method boxGetter;
         private final Method gameGetter;
@@ -494,8 +498,8 @@ final class SecurityCenterSemanticContractResolver {
                 Class<?> turboClass, Class<?> wrapperClass, Class<?> managerClass,
                 Class<?> assistantTypeClass, Class<?> gameBoxClass, Class<?> gameMaterialClass,
                 Class<?> videoAdapterClass, Class<?> allAppsClass, Method configure,
-                Method wrapperTurboGetter, Method dockGetter, Method appsGetter,
-                Method boxGetter, Method gameGetter, Method gameMaterialGetter,
+                Method wrapperTurboGetter, Method dockGetter, Method abstractDockGetter,
+                Method appsGetter, Method boxGetter, Method gameGetter, Method gameMaterialGetter,
                 Method videoAdapterGetter, Method assistantTypeDiscriminator) {
             this.turboClass = turboClass;
             this.wrapperClass = wrapperClass;
@@ -508,6 +512,7 @@ final class SecurityCenterSemanticContractResolver {
             this.configure = configure;
             this.wrapperTurboGetter = wrapperTurboGetter;
             this.dockGetter = dockGetter;
+            this.abstractDockGetter = abstractDockGetter;
             this.appsGetter = appsGetter;
             this.boxGetter = boxGetter;
             this.gameGetter = gameGetter;
@@ -527,6 +532,7 @@ final class SecurityCenterSemanticContractResolver {
         Method configure() { return configure; }
         Method wrapperTurboGetter() { return wrapperTurboGetter; }
         Method dockGetter() { return dockGetter; }
+        Method abstractDockGetter() { return abstractDockGetter; }
         Method appsGetter() { return appsGetter; }
         Method boxGetter() { return boxGetter; }
         Method gameGetter() { return gameGetter; }
