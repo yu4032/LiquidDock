@@ -7,6 +7,7 @@ import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
@@ -215,6 +216,7 @@ final class Launcher450SideSlideHoldHook {
     private static void observeTouchBefore(View view, MotionEvent event, GestureState state) {
         state.lastRawX = event.getRawX();
         state.lastRawY = event.getRawY();
+        state.lastLocalY = event.getY();
         int action = event.getActionMasked();
 
         if (action == MotionEvent.ACTION_DOWN) {
@@ -226,6 +228,7 @@ final class Launcher450SideSlideHoldHook {
             state.leftEdge = state.downX < view.getResources().getDisplayMetrics().widthPixels / 2f;
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
+            state.hoverAnchorLocalY = Float.NaN;
             state.workspaceCancelled = false;
             state.policy.onDown();
             SideSlideHoldDiagnostics.log(TAG + " DOWN sideStub=" + state.sideStub
@@ -246,6 +249,7 @@ final class Launcher450SideSlideHoldHook {
         if (!saturated) {
             state.hoverAnchorX = Float.NaN;
             state.hoverAnchorY = Float.NaN;
+            state.hoverAnchorLocalY = Float.NaN;
             cancelDwell(view, state);
             cancelConfirmation(view, state);
             return;
@@ -261,6 +265,7 @@ final class Launcher450SideSlideHoldHook {
         if (entered || anchorMissing || movedOutsideHover) {
             state.hoverAnchorX = x;
             state.hoverAnchorY = y;
+            state.hoverAnchorLocalY = event.getY();
             cancelDwell(view, state);
             int generation = state.policy.generation();
             state.scheduledGeneration = generation;
@@ -395,12 +400,18 @@ final class Launcher450SideSlideHoldHook {
                     return;
                 }
 
-                // Confirmation only arms the gesture and performs native haptic feedback.
-                // Keep the full vendor show deferred until ACTION_UP.
+                // OS4 Launcher owns this phase: entering the SideSlideHold operate state
+                // performs haptic feedback, then its back-panel renderer reveals the black preview.
+                // Security Center is not asked to animate until ACTION_UP.
                 state.confirmationVisible = true;
-                sendConfirmation(owner, true, state);
+                owner.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                float previewCenterY = !Float.isNaN(state.hoverAnchorLocalY)
+                        ? state.hoverAnchorLocalY
+                        : state.lastLocalY;
+                state.preview = LauncherSideSlidePreview.show(
+                        owner, state.leftEdge, previewCenterY);
                 SideSlideHoldDiagnostics.log(TAG
-                        + " Sidebar preflight ready -> native haptic armed; wait ACTION_UP");
+                        + " Sidebar preflight ready -> Launcher haptic + preview; wait ACTION_UP");
             }
         };
         try {
@@ -424,41 +435,32 @@ final class Launcher450SideSlideHoldHook {
             return;
         }
         cancelDwell(owner, state);
-        if (state.confirmationVisible) {
-            sendConfirmation(owner, false, state);
-            state.confirmationVisible = false;
-        }
-        SideSlideHoldDiagnostics.log(TAG + " ACTION_UP -> commit Sidebar");
-        showSidebar(owner, state, generation);
+        LauncherSideSlidePreview preview = state.preview;
+        state.preview = null;
+        if (preview != null) preview.beginRelease();
+        state.confirmationVisible = false;
+        SideSlideHoldDiagnostics.log(TAG
+                + " ACTION_UP -> Launcher preview handoff -> commit Sidebar");
+        showSidebar(owner, state, generation, preview);
         if (!state.desktopAtDown) {
             forceVendorCleanupToBack(state);
         }
     }
 
     private static void cancelConfirmation(View owner, GestureState state) {
-        if (!state.confirmationVisible) return;
-        sendConfirmation(owner, false, state);
+        if (!state.confirmationVisible && state.preview == null) return;
+        LauncherSideSlidePreview preview = state.preview;
+        state.preview = null;
+        if (preview != null) preview.cancel();
         state.confirmationVisible = false;
-        SideSlideHoldDiagnostics.log(TAG + " confirmation cancelled");
+        SideSlideHoldDiagnostics.log(TAG + " Launcher preview cancelled");
     }
 
-    private static void sendConfirmation(View owner, boolean start, GestureState state) {
-        Context context = owner.getContext();
-        if (context == null) return;
-        Intent intent = new Intent(start
-                ? SidebarCommandContract.ACTION_CONFIRM_START
-                : SidebarCommandContract.ACTION_CONFIRM_END)
-                .setPackage(SidebarCommandContract.SECURITY_CENTER_PACKAGE)
-                .putExtra(SidebarCommandContract.EXTRA_GESTURE_Y, Math.round(state.lastRawY))
-                .putExtra(SidebarCommandContract.EXTRA_DESKTOP, state.desktopAtDown);
-        try {
-            context.sendBroadcast(intent);
-        } catch (Throwable error) {
-            SideSlideHoldDiagnostics.log(TAG + " confirmation command failed", error);
-        }
-    }
-
-    private static void showSidebar(View owner, GestureState state, int generation) {
+    private static void showSidebar(
+            View owner,
+            GestureState state,
+            int generation,
+            LauncherSideSlidePreview preview) {
         Context context = owner.getContext();
         if (context == null) {
             state.policy.onArmResult(false, generation);
@@ -484,6 +486,7 @@ final class Launcher450SideSlideHoldHook {
                 SideSlideHoldDiagnostics.log(TAG
                         + " Sidebar release show result accepted=" + accepted
                         + " desktop=" + requestWasDesktop);
+                if (preview != null) preview.finishHandoff(accepted);
             }
         };
 
@@ -497,6 +500,7 @@ final class Launcher450SideSlideHoldHook {
                     null,
                     null);
         } catch (Throwable error) {
+            if (preview != null) preview.finishHandoff(false);
             SideSlideHoldDiagnostics.log(TAG + " Sidebar show request failed", error);
         }
     }
@@ -553,6 +557,7 @@ final class Launcher450SideSlideHoldHook {
         state.workspaceCancelled = false;
         state.hoverAnchorX = Float.NaN;
         state.hoverAnchorY = Float.NaN;
+        state.hoverAnchorLocalY = Float.NaN;
         state.scheduledGeneration = Integer.MIN_VALUE;
     }
 
@@ -573,13 +578,16 @@ final class Launcher450SideSlideHoldHook {
         boolean leftEdge;
         boolean confirmationVisible;
         boolean workspaceCancelled;
+        LauncherSideSlidePreview preview;
         Object arrow;
         float downX;
         float downRawY;
         float lastRawX;
         float lastRawY;
+        float lastLocalY;
         float hoverAnchorX = Float.NaN;
         float hoverAnchorY = Float.NaN;
+        float hoverAnchorLocalY = Float.NaN;
 
         GestureState(Object owner) {
             this.owner = owner;
