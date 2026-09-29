@@ -247,8 +247,8 @@ final class SecurityCenterEarlyPrepareHook {
         }
 
         private boolean keepsWatchingCarrierIdentity() {
-            // Video Toolbox is rebuilt through its za.p adapter while TurboLayout/root may be
-            // reused. A one-shot bind leaves LiquidDock attached to a stale main_content View.
+            // Video Toolbox can rebuild its adapter-created View tree while TurboLayout/root may
+            // be reused. A one-shot bind leaves LiquidDock attached to a stale main_content View.
             return type == ASSISTANT_VIDEO;
         }
 
