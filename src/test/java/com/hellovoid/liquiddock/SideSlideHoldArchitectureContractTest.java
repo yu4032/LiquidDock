@@ -27,8 +27,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertFalse(hook.contains(
                 "Object normal = stateClass.getField(\"NORMAL\").get(null);"));
         assertTrue(hook.contains("HOME_VISUAL_SATURATION_PX"));
-        assertTrue(hook.contains("HOME_HOVER_SLOP_DP"));
-        assertTrue(hook.contains("HOME hover confirmed"));
+        assertFalse(hook.contains("HOME_HOVER_SLOP_DP"));
+        assertTrue(hook.contains("HOME hold confirmed"));
         assertTrue(hook.contains("abs(dx) / 180f"));
 
         assertFalse(hook.contains("BACK_COMPLETE_DISTANCE_PX"));
@@ -52,6 +52,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("ACTION_UP -> Launcher preview handoff -> commit Sidebar"));
         assertTrue(hook.contains("performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)"));
         assertTrue(hook.contains("LauncherSideSlidePreview.show"));
+        assertTrue(hook.contains("owner.post(() ->"));
+        assertTrue(hook.contains("Thread.currentThread().getName()"));
         assertTrue(hook.contains("preview.beginRelease()"));
         assertTrue(hook.contains("preview.finishHandoff(accepted)"));
         assertFalse(hook.contains("sendConfirmation(owner, true, state)"));
@@ -59,6 +61,8 @@ public class SideSlideHoldArchitectureContractTest {
         assertTrue(hook.contains("int x = state.leftEdge ? 0 : screenWidth - width;"));
         assertTrue(hook.contains("centerY = !Float.isNaN(state.hoverAnchorY)"));
         assertTrue(hook.contains("state.hoverAnchorY"));
+        assertTrue(hook.contains("state.dwellRunnable == null"));
+        assertFalse(hook.contains("movedOutsideHover"));
         assertTrue(hook.contains("centerY - (height / 2f)"));
         assertTrue(hook.contains("OS4_SOURCE_WIDTH_DP = 30f"));
         assertTrue(hook.contains("OS4_SOURCE_HEIGHT_DP = 53f"));
