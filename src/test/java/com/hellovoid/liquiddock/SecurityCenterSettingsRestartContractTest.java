@@ -8,26 +8,30 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Regression contract for the Liquid glass page Security Center restart action. */
+/** Regression contract for the dedicated Security Center sidebar restart action. */
 public class SecurityCenterSettingsRestartContractTest {
     private static final Path MAIN = Path.of("src/main");
 
     @Test
-    public void liquidPageShowsSecurityCenterRestartImmediatelyBeforeLauncherRestart() throws Exception {
+    public void dedicatedSidebarPageOwnsSecurityCenterRestartAction() throws Exception {
         String compose = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
-        String marker = "if (page == Page.Liquid)";
-        int liquidGuard = compose.indexOf(marker);
-        assertTrue("Liquid glass page must own a Security Center restart action", liquidGuard >= 0);
+        String marker = "if (page == Page.SecurityCenterSidebar)";
+        int sidebarGuard = compose.indexOf(marker);
+        assertTrue("Security Center sidebar page must own the restart action", sidebarGuard >= 0);
 
-        int securityCenter = compose.indexOf("R.string.action_restart_security_center", liquidGuard);
-        int launcher = compose.indexOf("R.string.action_restart_launcher", liquidGuard);
-        assertTrue("Security Center restart must be rendered on the Liquid glass page",
-                securityCenter > liquidGuard);
+        int securityCenter = compose.indexOf("R.string.action_restart_security_center", sidebarGuard);
+        int launcher = compose.indexOf("R.string.action_restart_launcher", sidebarGuard);
+        assertTrue("Security Center restart must be rendered on the dedicated sidebar page",
+                securityCenter > sidebarGuard);
         assertTrue("Security Center restart must appear to the left of Restart desktop",
                 launcher > securityCenter);
         assertTrue("Security Center restart button must call the dedicated activity action",
                 compose.indexOf("activity.restartSecurityCenter()", securityCenter) > securityCenter);
+
+        int liquidGuard = compose.indexOf("if (page == Page.Liquid)");
+        assertFalse("Liquid glass page must no longer own the Security Center restart action",
+                liquidGuard >= 0);
     }
 
     @Test
