@@ -54,6 +54,10 @@ final class Launcher450SideSlideHoldHook {
     private static final float OS4_SOURCE_WIDTH_DP = 24f;
     private static final float OS4_SOURCE_HEIGHT_DP = 53f;
     private static final float OS4_SOURCE_RADIUS_DP = 8f;
+    // OS4 calculate_positions clamps projected Sidebar placement to gesture progress 0.8 and uses
+    // the native 76dp teardrop/profile width as its nominal horizontal span.
+    private static final float OS4_PROJECTED_PROFILE_WIDTH_DP = 76f;
+    private static final float OS4_PROJECTED_POSITION_PROGRESS = 0.8f;
     // GestureBackArrowView::on_swipe_stop creates a 100 ms ValueAnimator before its listener
     // completes the release transition. Do not tear down the Launcher visual on SC start earlier
     // than that native release window.
@@ -897,13 +901,36 @@ final class Launcher450SideSlideHoldHook {
 
         // The OS3 ArrowView's local Y is not screen-authoritative on this landscape build
         // (observed negative values while the visible gesture is mid-screen). Freeze the actual
-        // gesture confirmation point instead. Security Center derives left/right from x, so the
-        // source rect stays attached to the physical display edge.
-        x = state.leftEdge ? 0 : screenWidth - width;
+        // gesture confirmation point instead.
         centerY = !Float.isNaN(state.hoverAnchorY)
                 ? state.hoverAnchorY
                 : (!Float.isNaN(state.lastRawY) ? state.lastRawY : state.downRawY);
 
+        // Match the standalone OS4 mini-Sidebar target used by on_vsync. It is not edge-flush:
+        // calculate_positions projects the body inward using the 76dp nominal profile width at
+        // clamped progress 0.8. Reuse ArrowView's local baseline when available and translate it
+        // to screen space; otherwise fall back to the physical edge as baseline.
+        float projectedDistance = OS4_PROJECTED_PROFILE_WIDTH_DP
+                * dm.density
+                * OS4_PROJECTED_POSITION_PROGRESS;
+        View arrow = state.arrow instanceof View ? (View) state.arrow : null;
+        float projectedCenterScreenX;
+        if (arrow != null && !Float.isNaN(state.arrowStartX)) {
+            int[] arrowLocation = new int[2];
+            arrow.getLocationOnScreen(arrowLocation);
+            float localBaseline = state.leftEdge
+                    ? state.arrowStartX
+                    : arrow.getWidth() - state.arrowStartX;
+            float localCenter = state.leftEdge
+                    ? localBaseline + projectedDistance
+                    : localBaseline - projectedDistance;
+            projectedCenterScreenX = arrowLocation[0] + localCenter;
+        } else {
+            projectedCenterScreenX = state.leftEdge
+                    ? projectedDistance
+                    : screenWidth - projectedDistance;
+        }
+        x = Math.round(projectedCenterScreenX - width * 0.5f);
         x = Math.max(0, Math.min(x, screenWidth - width));
         int y = Math.round(centerY - (height / 2f));
         y = Math.max(0, Math.min(y, screenHeight - height));
