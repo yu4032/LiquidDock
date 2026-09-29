@@ -109,6 +109,24 @@ public class SideSlideHoldArchitectureContractTest {
         assertFalse(bridge.contains("tryInvokeActivityThreadCurrentApplication"));
     }
 
+
+    @Test
+    public void os4ConfirmationRendererIncludesNativeTeardropAndBridgeState() throws Exception {
+        String renderer = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Launcher450Os4SidebarConfirmationRenderer.java"));
+
+        assertTrue(renderer.contains("buildTeardropPath"));
+        assertTrue(renderer.contains("teardropFactor"));
+        assertTrue(renderer.contains("bridgeFactor"));
+        assertTrue(renderer.contains("TEARDROP_TARGET = 1f"));
+        assertTrue(renderer.contains("BRIDGE_TARGET = 1f"));
+        assertTrue(renderer.contains("RELEASE_SPLIT_TARGET = -1.5f"));
+        assertTrue(renderer.contains("canvas.drawPath"));
+        assertTrue(renderer.contains("canvas.drawRoundRect"));
+        assertTrue(renderer.contains("on_swipe_stop"));
+        assertFalse(renderer.contains("Direct Java/Canvas transliteration of the OS4 Launcher 8.0 Sidebar confirmation body"));
+    }
+
     @Test
     public void vendorBinderContractRemainsNameIndependent() throws Exception {
         String bridge = Files.readString(Path.of(
