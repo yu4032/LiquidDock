@@ -23,6 +23,13 @@ public final class ModuleMain extends XposedModule {
         loadedProcessName = param.getProcessName();
         Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
+        if ("system".equals(loadedProcessName)) {
+            try {
+                WallpaperForceClientCompositionExperiment.install();
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][WALLPAPER_CLIENT] system process install failed", error);
+            }
+        }
     }
 
     @Override
