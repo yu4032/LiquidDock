@@ -45,6 +45,10 @@ public final class ConfigMigration {
 
     private static void migrateWithDensity(float density, SharedPreferences preferences) {
         if (preferences == null) return;
+        // Detect and seed a genuinely empty store before compatibility migrations populate
+        // individual schema keys. Otherwise those migration writes make the store look non-empty
+        // and the bundled default profile is never installed on a fresh setup.
+        seedDefaultProfileIfEmpty(preferences);
         float safeDensity = Math.max(0.1f, density);
         removeRetiredGlassPreferences(preferences);
         resetUnsupportedGlassConfigGeneration(preferences);
@@ -56,7 +60,6 @@ public final class ConfigMigration {
         migrateCornersToDp(safeDensity, preferences);
         migrateDockDimensionsToDp(safeDensity, preferences);
         migrateAxisDistances(preferences);
-        seedDefaultProfileIfEmpty(preferences);
     }
 
     private static void seedDefaultProfileIfEmpty(SharedPreferences sp) {

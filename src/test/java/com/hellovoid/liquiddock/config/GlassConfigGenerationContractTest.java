@@ -13,6 +13,19 @@ public class GlassConfigGenerationContractTest {
             "src/main/java/com/hellovoid/liquiddock/config/ConfigMigration.java");
 
     @Test
+    public void emptyStoreIsSeededBeforeCompatibilityMigrationsCanPopulateKeys() throws Exception {
+        String source = Files.readString(SOURCE);
+
+        int seed = source.indexOf("seedDefaultProfileIfEmpty(preferences);");
+        int firstMigration = source.indexOf("removeRetiredGlassPreferences(preferences);");
+
+        assertTrue("default profile seeding must run before migration writes",
+                seed >= 0 && firstMigration >= 0 && seed < firstMigration);
+        assertTrue("default profile seeding should occur exactly once",
+                seed == source.lastIndexOf("seedDefaultProfileIfEmpty(preferences);"));
+    }
+
+    @Test
     public void glassConfigUsesCurrentPresetGenerationInsteadOfHistoricalValueConversions() throws Exception {
         String source = Files.readString(SOURCE);
 
