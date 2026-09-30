@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.Set;
@@ -97,8 +98,10 @@ final class LauncherGlassHomePresentationHook {
                     CAPTURING_HOME_END_LISTENER.remove();
                 }
             });
+            launcherHomeEndAuthorityAvailable = true;
             MainHook.log(TAG + " HOME capture end structural listener bridge installed");
         } catch (Throwable error) {
+            launcherHomeEndAuthorityAvailable = false;
             MainHook.log(TAG + " HOME capture end unavailable: " + error);
         }
     }
@@ -128,10 +131,8 @@ final class LauncherGlassHomePresentationHook {
                 onLauncherHomeAnimationEnded();
                 return result;
             });
-            launcherHomeEndAuthorityAvailable = true;
             MainHook.log(TAG + " HOME capture end listener bound structurally");
         } catch (Throwable error) {
-            launcherHomeEndAuthorityAvailable = false;
             HOOKED_HOME_END_LISTENER_CLASSES.remove(listenerClass);
             MainHook.log(TAG + " HOME capture end listener bind failed: " + error);
         }
