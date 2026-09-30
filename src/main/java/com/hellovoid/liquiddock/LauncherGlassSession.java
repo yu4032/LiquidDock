@@ -158,6 +158,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private boolean outputRenderQueued;
     private volatile boolean staticGeometryDirtyAll = true;
     private volatile boolean continuousStaticGeometryTracking;
+    // Recents entry animates Workspace ancestors through scale/translation/visibility setters that
+    // do not produce layout callbacks. Track only until the real Workspace geometry becomes fully
+    // hidden, then automatically return to dirty/event-driven stable-state updates.
+    private volatile boolean recentsEntryGeometryTracking;
     private volatile boolean sourceEndpointDirty = true;
 
     private ViewTreeObserver rootObserver;
@@ -348,6 +352,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void setContinuousStaticGeometryTracking(boolean enabled) {
         if (shuttingDown || continuousStaticGeometryTracking == enabled) return;
         continuousStaticGeometryTracking = enabled;
+        markAllStaticGeometryDirty();
+    }
+
+    void setRecentsEntryGeometryTracking(boolean enabled) {
+        if (shuttingDown || recentsEntryGeometryTracking == enabled) return;
+        recentsEntryGeometryTracking = enabled;
         markAllStaticGeometryDirty();
     }
 
@@ -696,8 +706,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
+        boolean recentsEntryTracking = recentsEntryGeometryTracking;
         boolean scanAllStatic = rootGeometryChanged
-                || continuousStaticGeometryTracking || staticGeometryDirtyAll;
+                || continuousStaticGeometryTracking || recentsEntryTracking
+                || staticGeometryDirtyAll;
         List<StaticNodeState> staticSnapshot = null;
         synchronized (staticNodes) {
             if (scanAllStatic && !staticNodes.isEmpty()) {
@@ -712,6 +724,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             dirtyStaticNodes.clear();
             staticGeometryDirtyAll = false;
         }
+        boolean recentsEntryHasVisibleGeometry = false;
         if (staticSnapshot != null && !staticSnapshot.isEmpty()) {
             Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
             for (StaticNodeState state : staticSnapshot) {
@@ -722,6 +735,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 LauncherGlassGeometry.Snapshot old =
                         oldFrame != null ? oldFrame.geometry : null;
                 if (observed == null && old != null && node.retainLastGeometryDuringFade()) {
+                    if (recentsEntryTracking) recentsEntryHasVisibleGeometry = true;
                     continue;
                 }
                 if ((old == null) != (observed == null)
@@ -733,7 +747,15 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
                     staticChanged = true;
                 }
+                if (recentsEntryTracking && observed != null) {
+                    recentsEntryHasVisibleGeometry = true;
+                }
             }
+        }
+        if (recentsEntryTracking && !recentsEntryHasVisibleGeometry) {
+            // The actual Workspace hierarchy has reached its Recents-hidden presentation state.
+            // Stop O(N) tracking on that same frame; no timeout or fixed animation duration is used.
+            recentsEntryGeometryTracking = false;
         }
 
         boolean endpointNeedsReconcile = rootGeometryChanged || sourceEndpointDirty
