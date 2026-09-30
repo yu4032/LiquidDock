@@ -1,14 +1,16 @@
 package com.hellovoid.liquiddock;
 
-/** Pure write policy for vendor blur APIs after LiquidDock owns a Launcher material. */
+/** Pure decision policy for vendor blur writes after LiquidDock owns a Launcher material. */
 final class LauncherVendorBlurWritePolicy {
     private LauncherVendorBlurWritePolicy() {}
 
-    static boolean passWindowBlurEnabled(boolean ownedByLiquidDock, boolean requested) {
-        return ownedByLiquidDock ? false : requested;
+    static boolean shouldSuppressPassWindowWrite(
+            boolean ownedByLiquidDock, boolean requestedEnabled) {
+        return ownedByLiquidDock && requestedEnabled;
     }
 
-    static int blurModeOrRadius(boolean ownedByLiquidDock, int requested) {
-        return ownedByLiquidDock && requested > 0 ? 0 : requested;
+    static boolean shouldSuppressPositiveBlurWrite(
+            boolean ownedByLiquidDock, int requestedValue) {
+        return ownedByLiquidDock && requestedValue > 0;
     }
 }
