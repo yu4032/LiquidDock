@@ -186,22 +186,24 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.released || state.layer != null || state.session == null) {
             return state != null && state.layer != null;
         }
-        View decor = state.popupDecorRef.get();
-        View popup = state.popupRef.get();
-        if (!(decor instanceof ViewGroup) || popup == null || !popup.isAttachedToWindow()) {
+        View content = state.contentRef.get();
+        if (!(content instanceof ViewGroup) || !content.isAttachedToWindow()) {
             return false;
         }
-        ViewGroup decorGroup = (ViewGroup) decor;
-        int popupIndex = decorGroup.indexOfChild(popup);
-        if (popupIndex < 0) return false;
 
+        // The stock HyperOS ShortcutMenu material is applied directly to PopupView.getContentView().
+        // Mount our output in that exact host instead of emulating its screen-space position with a
+        // root-wide sibling. This makes layout, pivot, scale, translation, clipping and PopupView
+        // reveal animation authoritative automatically.
+        ViewGroup contentGroup = (ViewGroup) content;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
-                decor.getContext(), state.session);
-        decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
+                content.getContext(), state.session);
+        contentGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
         updateGeometry(state);
-        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
+        MainHook.log(TAG + " content-bound output inserted into vendor material host"
+                + " host=" + content.getClass().getName()
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
