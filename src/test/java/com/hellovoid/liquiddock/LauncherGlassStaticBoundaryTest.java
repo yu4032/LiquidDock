@@ -50,7 +50,14 @@ public class LauncherGlassStaticBoundaryTest {
         assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(pending)"));
         assertTrue(controller.contains(
                 "created.session.setContinuousStaticGeometryTracking(created.homeTransitionPending)"));
+        assertTrue(controller.contains(
+                "created.session.setRecentsEntryGeometryTracking(created.recentsCovered)"));
+        assertTrue(controller.contains("session.setRecentsEntryGeometryTracking(covered)"));
         assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(false)"));
+        assertTrue(controller.contains("session.setRecentsEntryGeometryTracking(false)"));
+        assertTrue(session.contains("recentsEntryGeometryTracking"));
+        assertTrue(session.contains("recentsEntryHasVisibleGeometry"));
+        assertTrue(session.contains("recentsEntryGeometryTracking = false;"));
         assertTrue(session.contains("sourceEndpointDirty"));
         assertTrue(session.contains("sourceBackend.isEndpointGenerationCurrent()"));
         assertTrue(session.contains("addOnGlobalLayoutListener(layoutListener)"));
