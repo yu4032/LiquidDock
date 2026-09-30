@@ -64,6 +64,7 @@ final class Miuix307MaterialPipeline {
         }
 
         try {
+            LauncherVendorBlurWriteSuppressor.install();
             installCompatBackgroundBlurSuppression(classLoader);
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
