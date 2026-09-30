@@ -36,6 +36,7 @@ final class GboardStockVisualAuthority {
     private static Method addView;
     private static boolean installAttempted;
     private static boolean installed;
+    private static volatile boolean hasActiveClaims;
 
     private GboardStockVisualAuthority() {}
 
@@ -53,6 +54,7 @@ final class GboardStockVisualAuthority {
             claim = new Claim(structure);
             if (!reserveStructureLocked(claim)) return false;
             BY_BASE.put(structure.keyboardArea, claim);
+            hasActiveClaims = true;
         }
 
         try {
@@ -125,6 +127,9 @@ final class GboardStockVisualAuthority {
             if (isModuleMutation()) {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             }
+            if (!hasActiveClaims) {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
             Object receiver = chain.getThisObject();
             if (!(receiver instanceof View)) {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -192,6 +197,7 @@ final class GboardStockVisualAuthority {
     }
 
     private static void onChildAdded(ViewGroup parent, View child) {
+        if (!hasActiveClaims) return;
         Claim claim;
         synchronized (LOCK) {
             claim = CLAIM_BY_HOLDER.get(parent);
@@ -223,6 +229,8 @@ final class GboardStockVisualAuthority {
         if (claim == null || target == null) return;
         boolean shouldApply;
         synchronized (LOCK) {
+            Claim existing = OWNER_BY_VIEW.get(target);
+            if (existing != null && existing != claim) return;
             Snapshot snapshot = claim.snapshotLocked(target);
             OWNER_BY_VIEW.put(target, claim);
             shouldApply = !snapshot.background.isClaimed();
@@ -266,6 +274,7 @@ final class GboardStockVisualAuthority {
         List<RestoreEntry> restores = new ArrayList<>();
         synchronized (LOCK) {
             BY_BASE.remove(claim.structure.keyboardArea);
+            hasActiveClaims = !BY_BASE.isEmpty();
             for (Map.Entry<ViewGroup, View.OnLayoutChangeListener> entry
                     : claim.holderLayoutListeners.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
