@@ -59,7 +59,7 @@ final class GboardStockVisualAuthority {
             claimInitialStructure(claim);
             return true;
         } catch (Throwable error) {
-            releaseClaim(claim, false);
+            releaseClaim(claim, true);
             log("initial stock visual claim failed", error);
             return false;
         }
