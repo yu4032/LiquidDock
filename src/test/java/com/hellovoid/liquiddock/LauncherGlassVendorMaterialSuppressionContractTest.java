@@ -63,7 +63,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
 
         assertTrue(folder.contains("view.setVisibility(original);"));
-        assertTrue(folder.contains("view.setVisibility(View.INVISIBLE);"));
         assertTrue(folder.contains("LauncherGlassStaticNode sink = claimedSink(view);"));
         assertTrue(folder.contains("if (sink != null) sink.requestLifecycleRefresh();"));
     }

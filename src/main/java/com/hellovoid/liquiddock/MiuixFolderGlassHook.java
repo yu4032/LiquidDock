@@ -678,8 +678,6 @@ final class MiuixFolderGlassHook {
             ORIGINAL_COVERED_VISIBILITY.put(view, view.getVisibility());
         }
         view.setVisibility(View.INVISIBLE);
-        LauncherGlassStaticNode sink = claimedSink(view);
-        if (sink != null) sink.requestLifecycleRefresh();
     }
 
     private static void restoreCoveredVisibility(View view) {
