@@ -48,6 +48,9 @@ public class LauncherGlassStaticBoundaryTest {
         assertTrue(node.contains("addOnLayoutChangeListener(materialLayoutListener)"));
         assertTrue(node.contains("live.markStaticGeometryDirty(this)"));
         assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(pending)"));
+        assertTrue(controller.contains(
+                "created.session.setContinuousStaticGeometryTracking(created.homeTransitionPending)"));
+        assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(false)"));
         assertTrue(session.contains("sourceEndpointDirty"));
         assertTrue(session.contains("sourceBackend.isEndpointGenerationCurrent()"));
         assertTrue(session.contains("addOnGlobalLayoutListener(layoutListener)"));
