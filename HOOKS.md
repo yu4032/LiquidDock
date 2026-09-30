@@ -19,7 +19,7 @@ com.android.quicksearchbox
 | Package / process | 当前职责 |
 | --- | --- |
 | `com.miui.home` | Launcher / Dock / Grid / Workstation / Recents / Launcher glass |
-| `com.android.systemui` | HOME/keyguard timing + optional app-caption menu glass |
+| `com.android.systemui` | keyguard timing + optional app-caption menu glass |
 | `com.miui.securitycenter:ui` | Security Center sidebar glass |
 | `com.google.android.inputmethod.latin` | Gboard floating/toolbar glass |
 | `com.android.quicksearchbox` | MIUI Search main-background glass |
@@ -273,18 +273,14 @@ Wallpaper change 和 Recents return settle 是不同 authority。
 
 ## 14. HOME / keyguard timing
 
-SystemUI：
+HOME 与 keyguard 现在使用不同 authority：
 
-- `SystemUiKeyguardGoneSource`；
-- `SystemUiHomeTransitionSource`。
+- HOME：`LauncherGlassHomePresentationHook` 直接观察 Launcher 4.50 的 `WindowElement + RectFSpringAnim` 原生生命周期；
+- HOME barrier 只在真实 spring start 或已运行 spring 的 `runningAnimUpdate` 进入 `CLOSE_TO_HOME(_CENTER)` 后建立；
+- spring end / cancel 只记录物理动画状态；当前 HOME owner 进入 `WindowElement.finishTransition(...)` 后，真正的 release 统一等对应 `onFinishCompleted()`，merge 不会提前放行；
+- keyguard 仍由 `SystemUiKeyguardGoneSource` → `SystemUiKeyguardGoneRuntime` 提供跨进程时序。
 
-Launcher：
-
-- `SystemUiKeyguardGoneRuntime`；
-- `SystemUiHomeTransitionRuntime`；
-- `LauncherGlassHomePresentationHook`。
-
-SystemUI source 只发布时序，不直接管理 Launcher Workspace session。
+HOME 不再依赖 SystemUI 自行重建的 transition START/FINISH token 生命周期。
 
 ---
 
