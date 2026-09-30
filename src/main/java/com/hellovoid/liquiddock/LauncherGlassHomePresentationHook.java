@@ -161,14 +161,14 @@ final class LauncherGlassHomePresentationHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 onLauncherSpringPhysicalTerminal(
-                        args.length > 0 ? args[0] : null, "end");
+                        args.length > 0 ? args[0] : null);
                 return result;
             });
             HookUtil.hook(onAnimationCancel, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 onLauncherSpringPhysicalTerminal(
-                        args.length > 0 ? args[0] : null, "cancel");
+                        args.length > 0 ? args[0] : null);
                 return result;
             });
             MainHook.log(TAG + " HOME WindowElement spring listener bound structurally");
@@ -203,7 +203,7 @@ final class LauncherGlassHomePresentationHook {
         releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation));
     }
 
-    private static void onLauncherSpringPhysicalTerminal(Object animation, String reason) {
+    private static void onLauncherSpringPhysicalTerminal(Object animation) {
         HOME_STATE.onSpringPhysicalTerminal(animation);
     }
 
