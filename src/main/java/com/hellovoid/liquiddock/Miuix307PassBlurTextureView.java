@@ -267,6 +267,15 @@ final class Miuix307PassBlurTextureView extends TextureView
     private ViewTreeObserver preDrawObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
 
+    private Class<?> cachedViewRootClass;
+    private Field cachedSurfaceSizeField;
+    private Field cachedWinFrameField;
+    private Method cachedGetSurfaceControlMethod;
+
+    private static volatile Method cachedGetViewRootImplMethod;
+    private static volatile Method cachedGetInstallOrientationMethod;
+    private static volatile Method cachedIsSameSurfaceMethod;
+
     Miuix307PassBlurTextureView(Context context, View materialHost) {
         super(context);
         materialHostRef = new WeakReference<>(materialHost);
@@ -1172,7 +1181,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         int visibleHeight = outputHeight > 0 ? outputHeight : getHeight();
         if (visibleWidth <= 0 || visibleHeight <= 0) return;
 
-        Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
+        Rect winFrame = readWindowFrame(this);
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
         int[] viewScreen = new int[2];
         getLocationOnScreen(viewScreen);
@@ -1279,9 +1288,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         try {
             Object viewRoot = getViewRootImpl(materialHost);
             if (viewRoot == null) return null;
-            Field sizeField = findField(viewRoot.getClass(), "mSurfaceSize");
-            sizeField.setAccessible(true);
-            Object value = sizeField.get(viewRoot);
+            ensureViewRootAccessors(viewRoot);
+            Object value = cachedSurfaceSizeField.get(viewRoot);
             if (!(value instanceof Point)) return null;
             Point surfaceSize = (Point) value;
             int surfaceWidth = surfaceSize.x;
@@ -1296,9 +1304,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 bufferHeight = surfaceWidth;
             }
 
-            Method getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-            getSurfaceControl.setAccessible(true);
-            Object surface = getSurfaceControl.invoke(viewRoot);
+            Object surface = cachedGetSurfaceControlMethod.invoke(viewRoot);
             SurfaceControl rootSurface = surface instanceof SurfaceControl
                     ? (SurfaceControl) surface : null;
             return new ProducerGeometry(
@@ -1608,8 +1614,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (display == null) return 0;
         int installOrientation = 0;
         try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
+            Method method = getInstallOrientationMethod();
+            Object value = method != null ? method.invoke(display) : null;
             if (value instanceof Number) installOrientation = ((Number) value).intValue();
         } catch (Throwable ignored) {}
         int rotation = display.getRotation();
@@ -1617,24 +1623,68 @@ final class Miuix307PassBlurTextureView extends TextureView
         return result < 0 ? result + 4 : result;
     }
 
-    private static Rect readViewRootRectField(View view, String fieldName) {
+    private Rect readWindowFrame(View view) {
         if (view == null) return null;
         try {
             Object viewRoot = getViewRootImpl(view);
             if (viewRoot == null) return null;
-            Field field = findField(viewRoot.getClass(), fieldName);
-            field.setAccessible(true);
-            Object value = field.get(viewRoot);
+            ensureViewRootAccessors(viewRoot);
+            Object value = cachedWinFrameField.get(viewRoot);
             return value instanceof Rect ? new Rect((Rect) value) : null;
         } catch (Throwable ignored) {
             return null;
         }
     }
 
+    private void ensureViewRootAccessors(Object viewRoot) throws Exception {
+        Class<?> type = viewRoot.getClass();
+        if (cachedViewRootClass == type
+                && cachedSurfaceSizeField != null
+                && cachedWinFrameField != null
+                && cachedGetSurfaceControlMethod != null) {
+            return;
+        }
+        Field surfaceSize = findField(type, "mSurfaceSize");
+        surfaceSize.setAccessible(true);
+        Field winFrame = findField(type, "mWinFrameInScreen");
+        winFrame.setAccessible(true);
+        Method getSurfaceControl = type.getDeclaredMethod("getSurfaceControl");
+        getSurfaceControl.setAccessible(true);
+        cachedViewRootClass = type;
+        cachedSurfaceSizeField = surfaceSize;
+        cachedWinFrameField = winFrame;
+        cachedGetSurfaceControlMethod = getSurfaceControl;
+    }
+
     private static Object getViewRootImpl(View view) throws Exception {
-        Method method = View.class.getDeclaredMethod("getViewRootImpl");
-        method.setAccessible(true);
+        Method method = cachedGetViewRootImplMethod;
+        if (method == null) {
+            synchronized (Miuix307PassBlurTextureView.class) {
+                method = cachedGetViewRootImplMethod;
+                if (method == null) {
+                    method = View.class.getDeclaredMethod("getViewRootImpl");
+                    method.setAccessible(true);
+                    cachedGetViewRootImplMethod = method;
+                }
+            }
+        }
         return method.invoke(view);
+    }
+
+    private static Method getInstallOrientationMethod() {
+        Method method = cachedGetInstallOrientationMethod;
+        if (method != null) return method;
+        synchronized (Miuix307PassBlurTextureView.class) {
+            method = cachedGetInstallOrientationMethod;
+            if (method != null) return method;
+            try {
+                method = Display.class.getMethod("getInstallOrientation");
+                cachedGetInstallOrientationMethod = method;
+                return method;
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
     }
 
     private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
@@ -1653,7 +1703,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (first == second) return true;
         if (first == null || second == null) return false;
         try {
-            Method method = SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class);
+            Method method = cachedIsSameSurfaceMethod;
+            if (method == null) {
+                synchronized (Miuix307PassBlurTextureView.class) {
+                    method = cachedIsSameSurfaceMethod;
+                    if (method == null) {
+                        method = SurfaceControl.class.getMethod(
+                                "isSameSurface", SurfaceControl.class);
+                        cachedIsSameSurfaceMethod = method;
+                    }
+                }
+            }
             Object value = method.invoke(first, second);
             return value instanceof Boolean && (Boolean) value;
         } catch (Throwable ignored) {
