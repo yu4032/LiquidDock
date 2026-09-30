@@ -37,17 +37,17 @@ final class DockGlassItemNode {
     }
     long uiFingerprint(View dockRoot) {
         View cursor = viewRef.get();
-        if (cursor == null || !belongsTo(dockRoot)) return Long.MIN_VALUE;
+        if (cursor == null || dockRoot == null || !cursor.isAttachedToWindow()) {
+            return Long.MIN_VALUE;
+        }
         long hash = 0xcbf29ce484222325L;
-        while (cursor != null && cursor != dockRoot) {
+        while (cursor != null) {
             hash = mixViewGeometry(hash, cursor);
+            if (cursor == dockRoot) return hash;
             ViewParent parent = cursor.getParent();
             cursor = parent instanceof View ? (View) parent : null;
         }
-        // HotSeats itself can resize/recenter when items are added or removed while every child
-        // keeps the same local coordinates. captureStatic() uses transformMatrixToGlobal(), so
-        // the cache fingerprint must include the ownership root that participates in that matrix.
-        return mixViewGeometry(hash, dockRoot);
+        return Long.MIN_VALUE;
     }
 
     LauncherGlassGeometry.Snapshot capture(View ownershipRoot, Matrix outputInverse,
