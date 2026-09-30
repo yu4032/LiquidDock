@@ -334,6 +334,7 @@ final class Miuix307PassBlurBridge {
 
     private static void ensureSurfaceSequenceAccessor(Class<?> runtimeClass) {
         if (runtimeClass == null) return;
+        if (cachedSurfaceSequenceClass == runtimeClass && cachedSurfaceSequenceResolved) return;
         synchronized (Miuix307PassBlurBridge.class) {
             if (cachedSurfaceSequenceClass == runtimeClass && cachedSurfaceSequenceResolved) return;
             cachedSurfaceSequenceClass = runtimeClass;
