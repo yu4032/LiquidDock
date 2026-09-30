@@ -6,7 +6,7 @@
 
 ## P1 · Runtime performance hot paths
 
-**状态：P1实现已完成，CI通过后进入真机回归；合并前保留本节作为验收清单。**
+**状态：P1实现已完成，CI #6764通过；待真机回归，合并前保留本节作为验收清单。**
 
 本轮实现原则：稳定态只保留 O(1) 的轻量 generation/dirty 守卫；完整几何扫描、
 ViewRoot/Surface reconcile、GL location 查询和 Dock scene rebuild 均只在真实 dirty 事件、
