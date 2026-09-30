@@ -47,4 +47,24 @@ public class Miuix307MaterialHandoffContractTest {
         assertTrue("a transient OUTSIDE mapping must not clear an already visible frame",
                 textureView.contains("if (hasPresentedFrame) return false;"));
     }
+
+    @Test
+    public void vendorBlurIsSuppressedAtWriteBoundaryNotRootPreDraw() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String suppressor = Files.readString(
+                MAIN.resolve("LauncherVendorBlurWriteSuppressor.java"));
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+
+        assertTrue("Launcher material ownership must install the hidden View write suppressor",
+                pipeline.contains("LauncherVendorBlurWriteSuppressor.install()"));
+        assertTrue(suppressor.contains("\"setPassWindowBlurEnabled\""));
+        assertTrue(suppressor.contains("\"setMiViewBlurMode\""));
+        assertTrue(suppressor.contains("\"setMiBackgroundBlurMode\""));
+        assertTrue(suppressor.contains("\"setMiBackgroundBlurRadius\""));
+        assertTrue("pre-draw may preserve the transparent vendor body",
+                hook.contains("suppressVendorMaterialBody(background, readRadius(background));"));
+        assertFalse("root pre-draw must never fight vendor compositor blur every frame",
+                hook.contains("suppressVendorGpuBlur(background);\n"
+                        + "                suppressVendorMaterialBody(background"));
+    }
 }
