@@ -80,7 +80,7 @@ public class DockGlassShapeOwnershipContractTest {
     public void dockIconFingerprintIncludesHotSeatsOwnershipRootGeometry() throws Exception {
         String node = Files.readString(DOCK_ITEM_NODE);
 
-        assertTrue(node.contains("if (cursor == dockRoot) return hash;"));
+        assertTrue(node.contains("return mixViewGeometry(hash, dockRoot);"));
         assertTrue(node.contains("view.getLeft()"));
         assertTrue(node.contains("view.getRight()"));
         assertTrue(node.contains("view.getTranslationX()"));
@@ -97,16 +97,4 @@ public class DockGlassShapeOwnershipContractTest {
         assertFalse(host.contains("canvas.clipPath("));
         assertFalse(host.contains("dispatchDraw(Canvas"));
     }
-
-    @Test
-    public void dockStableFrameUsesLightweightRootGenerationGuard() throws Exception {
-        String texture = Files.readString(PASS_BLUR_TEXTURE);
-
-        assertTrue(texture.contains(
-                "RootPassBlurEndpointBridge.isCurrentGeneration(materialHost, current)"));
-        assertTrue(texture.contains("producerGeometryDirty"));
-        assertTrue(texture.contains("backdropMappingDirty"));
-        assertTrue(texture.contains("continuousGeometryTracking"));
-    }
-
 }

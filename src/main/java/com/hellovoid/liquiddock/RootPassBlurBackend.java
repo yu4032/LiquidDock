@@ -82,12 +82,6 @@ final class RootPassBlurBackend {
     private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface eglPbufferSurface = EGL14.EGL_NO_SURFACE;
     private int normalizeProgram;
-    private GlQuadBindings normalizeQuad;
-    private int normalizeTextureUniform = -1;
-    private int normalizeTexMatrixUniform = -1;
-    private int normalizeConfigRotUniform = -1;
-    private int normalizeValidDockRectUniform = -1;
-    private int normalizeBackdropRectUniform = -1;
     private int oesTexture;
     private int normalizedTexture;
     private int normalizedFramebuffer;
@@ -273,13 +267,6 @@ final class RootPassBlurBackend {
         return !shuttingDown && RootPassBlurEndpointBridge.isBindingValid(binding);
     }
 
-    boolean isEndpointGenerationCurrent() {
-        if (shuttingDown) return false;
-        View root = rootRef.get();
-        return root != null && root.isAttachedToWindow()
-                && RootPassBlurEndpointBridge.isCurrentGeneration(root, binding);
-    }
-
     boolean postToRenderThread(Runnable runnable) {
         if (runnable == null || shuttingDown || !renderThread.isAlive()) return false;
         try {
@@ -463,12 +450,6 @@ final class RootPassBlurBackend {
             normalizeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
-            normalizeQuad = GlQuadBindings.resolve(normalizeProgram);
-            normalizeTextureUniform = requireUniform(normalizeProgram, "uTexture");
-            normalizeTexMatrixUniform = requireUniform(normalizeProgram, "uTexMatrix");
-            normalizeConfigRotUniform = requireUniform(normalizeProgram, "uConfigRot");
-            normalizeValidDockRectUniform = requireUniform(normalizeProgram, "uValidDockRect");
-            normalizeBackdropRectUniform = requireUniform(normalizeProgram, "uBackdropRect");
         }
         if (oesTexture == 0 || inputSurfaceTexture == null || inputProducerSurface == null) {
             createInputProducer();
@@ -593,20 +574,20 @@ final class RootPassBlurBackend {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
-        normalizeQuad.bind(quadBuffer);
+        bindQuad(normalizeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(normalizeTextureUniform, 0);
-        GLES20.glUniformMatrix4fv(normalizeTexMatrixUniform,
+        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);
+        GLES20.glUniformMatrix4fv(requireUniform(normalizeProgram, "uTexMatrix"),
                 1, false, textureMatrix, 0);
-        GLES20.glUniform1i(normalizeConfigRotUniform, rotation);
-        GLES20.glUniform4f(normalizeValidDockRectUniform,
+        GLES20.glUniform1i(requireUniform(normalizeProgram, "uConfigRot"), rotation);
+        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),
                 0f, 0f, 1f, 1f);
         RootPassBlurContentRect rect = contentRect;
-        GLES20.glUniform4f(normalizeBackdropRectUniform,
+        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
                 rect.left, rect.bottom, rect.width, rect.height);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        normalizeQuad.unbind();
+        unbindQuad(normalizeProgram);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 
         return new RootPassBlurFrame(
@@ -762,12 +743,6 @@ final class RootPassBlurBackend {
         try { releaseInputProducerEndpointOnRenderThread(); } catch (Throwable ignored) {}
         if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
         normalizeProgram = 0;
-        normalizeQuad = null;
-        normalizeTextureUniform = -1;
-        normalizeTexMatrixUniform = -1;
-        normalizeConfigRotUniform = -1;
-        normalizeValidDockRectUniform = -1;
-        normalizeBackdropRectUniform = -1;
         if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
             try { EGL14.eglDestroySurface(eglDisplay, eglPbufferSurface); } catch (Throwable ignored) {}
         }
@@ -799,6 +774,27 @@ final class RootPassBlurBackend {
                 catch (Throwable ignored) {}
             });
         }
+    }
+
+    private void bindQuad(int program) {
+        int position = GLES20.glGetAttribLocation(program, "aPosition");
+        int uv = GLES20.glGetAttribLocation(program, "aUv");
+        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
+        quadBuffer.position(0);
+        GLES20.glEnableVertexAttribArray(position);
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false,
+                4 * Float.BYTES, quadBuffer);
+        quadBuffer.position(2);
+        GLES20.glEnableVertexAttribArray(uv);
+        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false,
+                4 * Float.BYTES, quadBuffer);
+    }
+
+    private void unbindQuad(int program) {
+        int position = GLES20.glGetAttribLocation(program, "aPosition");
+        int uv = GLES20.glGetAttribLocation(program, "aUv");
+        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
+        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
     }
 
     private static int createTexture2D(int width, int height) {

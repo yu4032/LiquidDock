@@ -133,7 +133,6 @@ final class Miuix307ZeroCopyRenderer {
     static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
-        gpuBackdrop.setContinuousGeometryTracking(true);
 
         final long serial = ++homeFreshnessSerial;
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
@@ -149,8 +148,6 @@ final class Miuix307ZeroCopyRenderer {
 
     /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
     static void onHomeOpeningFinished() {
-        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop != null) gpuBackdrop.setContinuousGeometryTracking(false);
         if (homeFreshnessSerial <= 0L) return;
         HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
         MainHook.log(TAG + " HOME finish observed without presentation barrier serial="

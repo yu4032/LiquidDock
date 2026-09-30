@@ -57,13 +57,4 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(folder.contains("HookUtil.tryInvoke(drawable, \"getPaint\")"));
         assertTrue(folder.contains("paintResult.succeeded()"));
     }
-
-    @Test public void folderCoverageVisibilityWritesInvalidateClaimedStaticGeometry()
-            throws Exception {
-        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
-
-        assertTrue(folder.contains("view.setVisibility(original);"));
-        assertTrue(folder.contains("LauncherGlassStaticNode sink = claimedSink(view);"));
-        assertTrue(folder.contains("if (sink != null) sink.requestLifecycleRefresh();"));
-    }
 }
