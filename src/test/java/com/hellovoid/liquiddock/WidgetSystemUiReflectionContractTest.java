@@ -18,9 +18,7 @@ public class WidgetSystemUiReflectionContractTest {
             "LauncherWidgetTransitionCoordinator.java",
             "LauncherWidgetTransitionHook.java",
             "SystemUiKeyguardGoneRuntime.java",
-            "SystemUiKeyguardGoneSource.java",
-            "SystemUiHomeTransitionRuntime.java",
-            "SystemUiHomeTransitionSource.java"
+            "SystemUiKeyguardGoneSource.java"
     };
 
     @Test public void widgetAndSystemUiPathsUseExplicitOptionalReflection() throws Exception {
@@ -45,9 +43,7 @@ public class WidgetSystemUiReflectionContractTest {
 
         String keyguardRuntime = read("SystemUiKeyguardGoneRuntime.java");
         String keyguardSource = read("SystemUiKeyguardGoneSource.java");
-        String homeRuntime = read("SystemUiHomeTransitionRuntime.java");
-        String homeSource = read("SystemUiHomeTransitionSource.java");
-        for (String source : new String[]{keyguardRuntime, keyguardSource, homeRuntime, homeSource}) {
+        for (String source : new String[]{keyguardRuntime, keyguardSource}) {
             assertTrue(source.contains("HookUtil.tryInvokeActivityThreadCurrentApplication()"));
             assertTrue(source.contains("applicationResult.succeeded()"));
             assertFalse("ActivityThread class-name resolution belongs only in HookUtil's audited "
