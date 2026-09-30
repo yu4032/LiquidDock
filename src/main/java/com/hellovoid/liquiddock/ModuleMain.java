@@ -156,6 +156,7 @@ public final class ModuleMain extends XposedModule {
                             ConfigSchema.Grid.PROFILE.runtimeFallback())));
             boolean customGridEnabled = runtimeConfig.enabled && runtimeConfig.grid.enabled;
 
+            ShortcutMenuGridPositionHook.install(classLoader, customGridEnabled);
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
             MiuixShortcutMenuGlassHook.install(classLoader, runtimeConfig);
