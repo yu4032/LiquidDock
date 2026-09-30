@@ -68,6 +68,9 @@ final class Miuix307MaterialPipeline {
                 MainHook.log("[DC] MiuiX 307 material disabled: vendor blur write boundary unavailable");
                 return false;
             }
+            // Temporary non-mutating diagnostic: identify standard SurfaceControl blur writes
+            // that can change Wallpaper client/device composition eligibility.
+            LauncherCompositionDecisionTrace.install();
             installCompatBackgroundBlurSuppression(classLoader);
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
