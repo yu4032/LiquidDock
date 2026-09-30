@@ -4,6 +4,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
+import com.hellovoid.liquiddock.config.PresetManager;
 
 import org.junit.Test;
 
@@ -13,6 +14,8 @@ public class WallpaperClientCompositionPolicyTest {
         assertFalse(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.uiDefault());
         assertFalse(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
         assertTrue(ConfigSchema.all().contains(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX));
+        assertFalse((Boolean) PresetManager.defaultValues().get(
+                ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name()));
     }
 
     @Test
