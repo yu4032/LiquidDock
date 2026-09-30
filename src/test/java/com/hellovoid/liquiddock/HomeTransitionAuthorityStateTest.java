@@ -74,7 +74,7 @@ public class HomeTransitionAuthorityStateTest {
         state.onLauncherHomeStarted();
 
         HomeTransitionAuthorityState.Decision recovered =
-                state.onColdStartBarrierRecovery();
+                state.forceColdStartBarrierRecovery();
 
         assertTrue(recovered.releaseBarrier);
         assertTrue(recovered.releaseWidgetBarrier);
@@ -86,7 +86,7 @@ public class HomeTransitionAuthorityStateTest {
         state.onSystemUiStarted(true, 41L, 100L);
 
         HomeTransitionAuthorityState.Decision recovered =
-                state.onColdStartBarrierRecovery();
+                state.forceColdStartBarrierRecovery();
 
         assertTrue(recovered.releaseBarrier);
         assertTrue(recovered.releaseWidgetBarrier);
