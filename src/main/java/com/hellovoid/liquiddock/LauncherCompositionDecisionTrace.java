@@ -8,14 +8,12 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Temporary composition-decision experiment.
+ * Temporary, non-mutating composition diagnostic.
  *
  * <p>HyperOS Launcher drives the standard SurfaceControl background-blur fields from
  * WindowBlurUtils for Folder/Drawer/Recents transitions. AOSP CompositionEngine uses these fields
- * when deciding whether layers below a blur layer must stay in client/GPU composition. For the
- * Launcher root SurfaceControl only, keep a zero radius at 1 while LiquidDock is enabled so the
- * client-composition eligibility never drops at the 1 -> 0 boundary. All non-zero radii and every
- * other SurfaceControl field pass through unchanged.
+ * when deciding whether layers below a blur layer must stay in client/GPU composition. This tracer
+ * records those writes and the transaction apply boundary without changing any argument or state.
  */
 final class LauncherCompositionDecisionTrace {
     private static final String TAG = "[DC][COMPTRACE]";
@@ -37,10 +35,6 @@ final class LauncherCompositionDecisionTrace {
         if (hookBackgroundBlurRadius()) hooked++;
         if (hookBlurRegions()) hooked++;
         if (hookBlurScaleRatio()) hooked++;
-        if (hookPassBlurSurface()) hooked++;
-        if (hookUpdateTextureFlag()) hooked++;
-        if (hookAutoSingleState()) hooked++;
-        if (hookForceRefresh()) hooked++;
         if (hookApply()) hooked++;
 
         installed = hooked >= 2;
@@ -54,40 +48,27 @@ final class LauncherCompositionDecisionTrace {
                     "setBackgroundBlurRadius", SurfaceControl.class, int.class);
             HookUtil.hook(method, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                SurfaceControl sc = args.length >= 2 && args[0] instanceof SurfaceControl
-                        ? (SurfaceControl) args[0]
-                        : null;
-                Integer requestedRadius = args.length >= 2 && args[1] instanceof Number
-                        ? Integer.valueOf(((Number) args[1]).intValue())
-                        : null;
-                boolean held = sc != null
-                        && requestedRadius != null
-                        && requestedRadius.intValue() == 0
-                        && GlassRuntimeState.isEnabled()
-                        && isLauncherRoot(sc);
-                if (held) {
-                    args[1] = Integer.valueOf(1);
-                }
-
                 Object result = chain.proceed(args);
-
-                if (sc != null && requestedRadius != null && isRelevant(sc)) {
-                    int appliedRadius = held ? 1 : requestedRadius.intValue();
-                    String key = surfaceKey(sc);
-                    Integer previous;
-                    synchronized (LauncherCompositionDecisionTrace.class) {
-                        previous = LAST_RADIUS.put(key, Integer.valueOf(appliedRadius));
-                        markPending(chain.getThisObject());
+                if (args.length >= 2
+                        && args[0] instanceof SurfaceControl
+                        && args[1] instanceof Number) {
+                    SurfaceControl sc = (SurfaceControl) args[0];
+                    if (isRelevant(sc)) {
+                        int radius = ((Number) args[1]).intValue();
+                        String key = surfaceKey(sc);
+                        Integer previous;
+                        synchronized (LauncherCompositionDecisionTrace.class) {
+                            previous = LAST_RADIUS.put(key, Integer.valueOf(radius));
+                            markPending(chain.getThisObject());
+                        }
+                        MainHook.log(TAG + " bgRadius"
+                                + " txn=" + transactionId(chain.getThisObject())
+                                + " layer=" + key
+                                + " old=" + (previous == null ? "?" : previous)
+                                + " new=" + radius
+                                + " forceClient=" + (radius > 0)
+                                + " caller=" + launcherCallerStack());
                     }
-                    MainHook.log(TAG + " bgRadius"
-                            + " txn=" + transactionId(chain.getThisObject())
-                            + " layer=" + key
-                            + " old=" + (previous == null ? "?" : previous)
-                            + " requested=" + requestedRadius
-                            + " applied=" + appliedRadius
-                            + " holdZero=" + held
-                            + " forceClient=" + (appliedRadius > 0)
-                            + " caller=" + launcherCallerStack());
                 }
                 return result;
             });
@@ -165,127 +146,6 @@ final class LauncherCompositionDecisionTrace {
         }
     }
 
-
-    private static boolean hookPassBlurSurface() {
-        try {
-            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
-                    "SetPassBlurSurface", SurfaceControl.class, android.view.Surface.class);
-            HookUtil.hook(method, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                if (args.length >= 2 && args[0] instanceof SurfaceControl) {
-                    SurfaceControl sc = (SurfaceControl) args[0];
-                    if (isRelevant(sc)) {
-                        synchronized (LauncherCompositionDecisionTrace.class) {
-                            markPending(chain.getThisObject());
-                        }
-                        MainHook.log(TAG + " passBlurSurface"
-                                + " txn=" + transactionId(chain.getThisObject())
-                                + " layer=" + surfaceKey(sc)
-                                + " attached=" + (args[1] != null)
-                                + " caller=" + launcherCallerStack());
-                    }
-                }
-                return result;
-            });
-            return true;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " hook unavailable SetPassBlurSurface: " + error);
-            return false;
-        }
-    }
-
-    private static boolean hookUpdateTextureFlag() {
-        try {
-            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
-                    "setUpdateTextureFlag",
-                    SurfaceControl.class,
-                    boolean.class,
-                    float.class);
-            HookUtil.hook(method, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                if (args.length >= 3 && args[0] instanceof SurfaceControl) {
-                    SurfaceControl sc = (SurfaceControl) args[0];
-                    if (isRelevant(sc)) {
-                        synchronized (LauncherCompositionDecisionTrace.class) {
-                            markPending(chain.getThisObject());
-                        }
-                        MainHook.log(TAG + " passBlurUpdates"
-                                + " txn=" + transactionId(chain.getThisObject())
-                                + " layer=" + surfaceKey(sc)
-                                + " enabled=" + args[1]
-                                + " scale=" + args[2]
-                                + " caller=" + launcherCallerStack());
-                    }
-                }
-                return result;
-            });
-            return true;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " hook unavailable setUpdateTextureFlag: " + error);
-            return false;
-        }
-    }
-
-    private static boolean hookAutoSingleState() {
-        try {
-            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
-                    "setAutoSingleState", SurfaceControl.class, boolean.class);
-            HookUtil.hook(method, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                if (args.length >= 2 && args[0] instanceof SurfaceControl) {
-                    SurfaceControl sc = (SurfaceControl) args[0];
-                    if (isRelevant(sc)) {
-                        synchronized (LauncherCompositionDecisionTrace.class) {
-                            markPending(chain.getThisObject());
-                        }
-                        MainHook.log(TAG + " autoSingle"
-                                + " txn=" + transactionId(chain.getThisObject())
-                                + " layer=" + surfaceKey(sc)
-                                + " enabled=" + args[1]
-                                + " caller=" + launcherCallerStack());
-                    }
-                }
-                return result;
-            });
-            return true;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " hook unavailable setAutoSingleState: " + error);
-            return false;
-        }
-    }
-
-    private static boolean hookForceRefresh() {
-        try {
-            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
-                    "setForceRefresh", SurfaceControl.class, int.class);
-            HookUtil.hook(method, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                if (args.length >= 2 && args[0] instanceof SurfaceControl) {
-                    SurfaceControl sc = (SurfaceControl) args[0];
-                    if (isRelevant(sc)) {
-                        synchronized (LauncherCompositionDecisionTrace.class) {
-                            markPending(chain.getThisObject());
-                        }
-                        MainHook.log(TAG + " forceRefresh"
-                                + " txn=" + transactionId(chain.getThisObject())
-                                + " layer=" + surfaceKey(sc)
-                                + " timeoutMs=" + args[1]
-                                + " caller=" + launcherCallerStack());
-                    }
-                }
-                return result;
-            });
-            return true;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " hook unavailable setForceRefresh: " + error);
-            return false;
-        }
-    }
-
     private static boolean hookApply() {
         try {
             Method method = SurfaceControl.Transaction.class.getDeclaredMethod("apply");
@@ -322,13 +182,6 @@ final class LauncherCompositionDecisionTrace {
         return transaction == null
                 ? "null"
                 : Integer.toHexString(System.identityHashCode(transaction));
-    }
-
-    private static boolean isLauncherRoot(SurfaceControl sc) {
-        if (sc == null) return false;
-        String name = surfaceName(sc);
-        return name.startsWith("com.miui.home/com.miui.home.launcher.Launcher#")
-                || name.equals("com.miui.home/com.miui.home.launcher.Launcher");
     }
 
     private static boolean isRelevant(SurfaceControl sc) {
