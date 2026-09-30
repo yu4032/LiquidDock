@@ -80,4 +80,30 @@ public class PrismalModuleBoundaryContractTest {
         assertTrue(view.contains("if (backdropSnapshot != mapping"));
         assertTrue(composite.contains("uCropRect.xy + vUv * uCropRect.zw"));
     }
+
+    @Test
+    public void appCompositeProgramsResolveLocationsOnceAfterLink() throws Exception {
+        String[] files = new String[]{
+                "LauncherGlassSession.java",
+                "RootPassBlurBackend.java",
+                "Miuix307PassBlurTextureView.java",
+                "ShortcutPopupGlassSession.java",
+                "GboardFloatingGlassSession.java",
+                "MiuiSearchboxGlassSession.java",
+                "RecentsCapsuleGlassSession.java",
+                "SecurityCenterGlassSession.java",
+                "SystemUiHandleMenuPrismalSession.java"
+        };
+        for (String file : files) {
+            String source = Files.readString(APP.resolve(file));
+            assertTrue(file + " must use cached fullscreen-quad bindings",
+                    source.contains("GlQuadBindings"));
+            assertFalse(file + " must not contain cached-uniform self assignment",
+                    source.matches("(?s).*\\b(\\w+Uniform)\\s*=\\s*\\1\\s*;.*"));
+        }
+
+        String quad = Files.readString(APP.resolve("GlQuadBindings.java"));
+        assertTrue(quad.contains("glGetAttribLocation(program, \"aPosition\")"));
+        assertTrue(quad.contains("glGetAttribLocation(program, \"aUv\")"));
+    }
 }
