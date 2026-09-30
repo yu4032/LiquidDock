@@ -10,6 +10,7 @@ import java.util.WeakHashMap;
 /** Sole owner of Workspace glass visibility, bootstrap freshness and scene generation. */
 final class LauncherGlassSceneController {
     private static final String TAG = "[DC][GlassScene]";
+    private static final String TRACE_TAG = "[DC][WorkspaceStartupTrace]";
     private static final WeakHashMap<View, LauncherGlassSceneController> BY_ROOT = new WeakHashMap<>();
     private static boolean vendorRecentsCovered;
     private static boolean vendorFolderCovered;
@@ -154,6 +155,8 @@ final class LauncherGlassSceneController {
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
+    private Boolean lastTracedLayerVisible;
+    private Boolean lastTracedHardCover;
 
     // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
     // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
@@ -194,6 +197,11 @@ final class LauncherGlassSceneController {
             created.state.setCovered(true);
         }
         BY_ROOT.put(root, created);
+        created.trace("ACQUIRE inherited recents=" + created.recentsCovered
+                + " folder=" + created.folderCovered
+                + " home=" + created.homeTransitionPending
+                + " unlock=" + created.unlockTransitionPending
+                + " wallpaperSettle=" + created.recentsWallpaperSettlePending);
         return created;
     }
 
@@ -246,8 +254,11 @@ final class LauncherGlassSceneController {
     static void setFolderCoveredForAll(boolean covered) {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
+            boolean previous = vendorFolderCovered;
             vendorFolderCovered = covered;
             snapshot = new ArrayList<>(BY_ROOT.values());
+            MainHook.log(TRACE_TAG + " GLOBAL_FOLDER previous=" + previous
+                    + " next=" + covered + " controllers=" + snapshot.size());
         }
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setFolderCovered(covered);
@@ -330,7 +341,13 @@ final class LauncherGlassSceneController {
     static void onFreshFrameRendered(
             View root, long generation, long wallpaperGeneration, boolean wallpaperAuthoritative) {
         LauncherGlassSceneController controller = findRoot(root);
-        if (controller == null) return;
+        if (controller == null) {
+            MainHook.log(TRACE_TAG + " FRESH_RENDERED_DROP no-controller generation=" + generation);
+            return;
+        }
+        controller.trace("FRESH_RENDERED callback generation=" + generation
+                + " wallpaperGeneration=" + wallpaperGeneration
+                + " authoritative=" + wallpaperAuthoritative);
         controller.onFreshFrameReady(generation);
         if (wallpaperGeneration >= 0L) {
             controller.onWallpaperFrameConsumed(
@@ -371,7 +388,9 @@ final class LauncherGlassSceneController {
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         SystemUiHomeTransitionRuntime.ensureRegistered(root.getContext());
+        trace("ROOT_READY before");
         state.onRootReady();
+        trace("ROOT_READY after-state");
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
         if (state.state() == State.COVERED
@@ -386,21 +405,41 @@ final class LauncherGlassSceneController {
             if (liveRoot == null || !liveRoot.isAttachedToWindow()) return;
             reconcileExistingWorkspace();
             state.onBootstrapReconciled();
+            trace("BOOTSTRAP_RECONCILED");
             applyLayerVisibility();
             requestFreshBackdrop(state.generation());
         });
     }
 
     private void requestFreshBackdrop(long generation) {
-        if (isPresentationPending()) return;
-        if (state.state() == State.COVERED || generation != state.generation()) return;
+        if (isPresentationPending()) {
+            trace("FRESH_REQUEST_BLOCKED generation=" + generation
+                    + " reason=presentation-pending");
+            return;
+        }
+        if (state.state() == State.COVERED) {
+            trace("FRESH_REQUEST_BLOCKED generation=" + generation + " reason=covered");
+            return;
+        }
+        if (generation != state.generation()) {
+            trace("FRESH_REQUEST_BLOCKED generation=" + generation
+                    + " reason=stale current=" + state.generation());
+            return;
+        }
         deferInFlightWallpaperPulse();
+        trace("FRESH_REQUEST_ACCEPT generation=" + generation);
         session.requestFreshBackdrop(generation);
     }
 
     private void onFreshFrameReady(long generation) {
         boolean rotationWasPending = state.isRotationPresentationPending();
+        State before = state.state();
+        long current = state.generation();
         state.onFreshFrameReady(generation);
+        trace("FRESH_READY generation=" + generation
+                + " before=" + before + " expected=" + current
+                + " acceptedState=" + state.state()
+                + " layerVisible=" + state.isLayerVisible());
         applyLayerVisibility();
         if (rotationWasPending && !state.isRotationPresentationPending()) {
             MainHook.log(TAG + " rotation presentation released generation=" + generation);
@@ -558,7 +597,11 @@ final class LauncherGlassSceneController {
     }
 
     private void setFolderCovered(boolean covered) {
-        if (folderCovered == covered) return;
+        if (folderCovered == covered) {
+            trace("FOLDER_COVER_NOOP value=" + covered);
+            return;
+        }
+        trace("FOLDER_COVER_CHANGE previous=" + folderCovered + " next=" + covered);
         folderCovered = covered;
         if (covered) {
             state.setHardCovered(true);
@@ -642,8 +685,31 @@ final class LauncherGlassSceneController {
             boolean hardPresentationCover =
                     folderCovered || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
+            if (lastTracedLayerVisible == null || lastTracedLayerVisible != visible
+                    || lastTracedHardCover == null || lastTracedHardCover != hardPresentationCover) {
+                trace("LAYER_VISIBILITY visible=" + visible
+                        + " hardCover=" + hardPresentationCover);
+                lastTracedLayerVisible = visible;
+                lastTracedHardCover = hardPresentationCover;
+            }
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }
+    }
+
+    private void trace(String event) {
+        MainHook.log(TRACE_TAG + " root@"
+                + Integer.toHexString(System.identityHashCode(rootRef.get()))
+                + " t=" + android.os.SystemClock.uptimeMillis()
+                + " event=" + event
+                + " state=" + state.state()
+                + " generation=" + state.generation()
+                + " cachedVisible=" + state.isLayerVisible()
+                + " folder=" + folderCovered
+                + " recents=" + recentsCovered
+                + " home=" + homeTransitionPending
+                + " unlock=" + unlockTransitionPending
+                + " wallpaperSettle=" + recentsWallpaperSettlePending
+                + " rotationPending=" + state.isRotationPresentationPending());
     }
 
     private static int readDisplayRotation(View root) {
