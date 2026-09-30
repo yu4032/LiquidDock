@@ -11,6 +11,7 @@ import io.github.libxposed.api.XposedModule;
 
 /** libxposed API 101 entry point with process-specific timing and opt-in glass integrations. */
 public final class ModuleMain extends XposedModule {
+    private static final String SYSTEM_SERVER_PACKAGE = "system";
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
@@ -22,11 +23,26 @@ public final class ModuleMain extends XposedModule {
         loadedProcessName = param.getProcessName();
         Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
+        if ("system".equals(loadedProcessName)) {
+            try {
+                WallpaperForceClientCompositionExperiment.install();
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][WALLPAPER_CLIENT] system process install failed", error);
+            }
+        }
     }
 
     @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
         String packageName = param.getPackageName();
+        if (SYSTEM_SERVER_PACKAGE.equals(packageName) && "system".equals(loadedProcessName)) {
+            try {
+                WallpaperForceClientCompositionExperiment.install();
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][WALLPAPER_CLIENT] system_server install failed", error);
+            }
+            return;
+        }
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             try {
                 ClassLoader classLoader = param.getClassLoader();
