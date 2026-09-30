@@ -277,7 +277,7 @@ HOME 与 keyguard 现在使用不同 authority：
 
 - HOME：`LauncherGlassHomePresentationHook` 直接观察 Launcher 4.50 的 `WindowElement + RectFSpringAnim` 原生生命周期；
 - HOME barrier 只在真实 spring start 或已运行 spring 的 `runningAnimUpdate` 进入 `CLOSE_TO_HOME(_CENTER)` 后建立；
-- spring end / cancel 只记录物理动画状态；真正的 HOME release 以 `WindowElement.finishTransition(toHome=true)` 后的 `onFinishCompleted()` 为准，merge 不会提前放行；
+- spring end / cancel 只记录物理动画状态；当前 HOME owner 进入 `WindowElement.finishTransition(...)` 后，真正的 release 统一等对应 `onFinishCompleted()`，merge 不会提前放行；
 - keyguard 仍由 `SystemUiKeyguardGoneSource` → `SystemUiKeyguardGoneRuntime` 提供跨进程时序。
 
 HOME 不再依赖 SystemUI 自行重建的 transition START/FINISH token 生命周期。
