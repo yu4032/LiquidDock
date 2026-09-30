@@ -2,6 +2,12 @@
 
 > 本文件按版本记录当时的变化，历史条目不会为追随当前实现而改写。当前行为请以 `main` 生产源码和 [README.md](README.md)、[FEATURES.md](FEATURES.md)、[ARCHITECTURE.md](ARCHITECTURE.md)、[HOOKS.md](HOOKS.md) 为准。
 
+## v2.5.3 (2026-09-30)
+
+### Workspace 液态玻璃
+
+- 修复上版本引入的重启桌面后 Workspace 玻璃不显示问题：改用 Launcher 4.50 的 WindowElement 与 RectFSpringAnim 作为 HOME 展示时序唯一权威，移除失效的请求时 HOME 预置和旧 SystemUI HOME 生命周期桥接
+
 ## v2.5.1 (2026-09-26)
 
 ### Dock 液态玻璃
