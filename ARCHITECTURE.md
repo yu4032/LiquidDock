@@ -307,7 +307,7 @@ Launcher app launch / return HOME 时，MIUI floating icon proxy 是 transition 
 
 LiquidDock 避免静态玻璃图标与系统 floating icon 同时可见，并通过：
 
-- `LauncherGlassHomePresentationHook`：以 `WindowElement + RectFSpringAnim` 的真实 start/update/end/cancel 为 HOME capture fence；
+- `LauncherGlassHomePresentationHook`：以 `WindowElement + RectFSpringAnim` 的真实 start/running-update 建立 HOME capture fence，并以 `WindowElement.onFinishCompleted()` 作为 merge-safe 完成边界；
 - `SystemUiKeyguardGoneRuntime`：仅负责 keyguard 解锁返回；
 - fresh-frame barrier；
 
