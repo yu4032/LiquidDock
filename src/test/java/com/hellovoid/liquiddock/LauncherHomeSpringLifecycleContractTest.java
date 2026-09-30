@@ -20,6 +20,9 @@ public class LauncherHomeSpringLifecycleContractTest {
         assertTrue(source.contains("\"onAnimationStart\""));
         assertTrue(source.contains("\"onAnimationEnd\""));
         assertTrue(source.contains("\"onAnimationCancel\""));
+        assertTrue(source.contains("\"runningAnimUpdate\""));
+        assertTrue(source.contains("\"finishTransition\""));
+        assertTrue(source.contains("\"onFinishCompleted\""));
         assertTrue(source.contains("\"getLastAminType\""));
         assertTrue(source.contains("CLOSE_TO_HOME"));
         assertTrue(source.contains("CLOSE_TO_HOME_CENTER"));
@@ -29,6 +32,7 @@ public class LauncherHomeSpringLifecycleContractTest {
         assertFalse(source.contains("resolveRectSpringListenerRegistration"));
         assertFalse(source.contains("SystemUiHomeTransition"));
         assertFalse(source.contains("waitForSystemUi"));
+        assertFalse(source.contains("unique RectFSpringAnim listener registration method unavailable"));
     }
 
     @Test public void homeTimingNoLongerCrossesSystemUiProcess() throws Exception {
