@@ -273,7 +273,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniform4f(compositeCropUniform,
                 crop[0], crop[1], crop[2], crop[3]);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         sourceBackend.swapBuffers(current.eglSurface);
     }
 
