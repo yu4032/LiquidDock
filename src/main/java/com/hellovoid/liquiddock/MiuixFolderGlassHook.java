@@ -274,19 +274,9 @@ final class MiuixFolderGlassHook {
     private static void restoreOpenedFolderOwner() {
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
-
-        // FolderStatusServiceImpl is a useful early semantic signal, but it is not guaranteed to
-        // dispatch every close path on Launcher 4.50. Folder.onClose completion is the final
-        // animation boundary we already observe, so reconcile the global hard-cover state here as
-        // an idempotent close authority as well. Otherwise a missed dispatchFolderClose leaves
-        // vendorFolderCovered=true and permanently hides every Workspace glass node.
-        setNativeFolderMaterialsCovered(false);
-        LauncherGlassSceneController.setFolderCoveredForAll(false);
         if (owner != null && !folderStatusDispatcherInstalled) {
-            // Keep the root-local fallback for builds where the semantic dispatcher was unavailable.
             LauncherGlassSceneController.setWorkspaceCovered(owner, false);
         }
-
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
         if (sink != null) sink.setSuppressedByFolderOpen(false);
