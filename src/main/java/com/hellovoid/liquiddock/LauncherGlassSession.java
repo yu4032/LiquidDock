@@ -115,6 +115,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private final Map<LauncherGlassStaticNode, Boolean> dirtyStaticNodes = new WeakHashMap<>();
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final Object outputWorkLock = new Object();
@@ -155,6 +156,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
     private boolean outputRenderQueued;
+    private volatile boolean staticGeometryDirtyAll = true;
+    private volatile boolean continuousStaticGeometryTracking;
 
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
@@ -308,6 +311,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (node == null || shuttingDown) return;
         synchronized (staticNodes) {
             if (!staticNodes.containsKey(node)) staticNodes.put(node, new StaticNodeState(node));
+            dirtyStaticNodes.put(node, Boolean.TRUE);
         }
         syncSceneOnUiThread();
         requestStaticRedraw();
@@ -315,8 +319,34 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
         if (node == null) return;
-        synchronized (staticNodes) { staticNodes.remove(node); }
+        synchronized (staticNodes) {
+            staticNodes.remove(node);
+            dirtyStaticNodes.remove(node);
+        }
         requestStaticRedraw();
+    }
+
+    void markStaticGeometryDirty(LauncherGlassStaticNode node) {
+        if (node == null || shuttingDown) return;
+        synchronized (staticNodes) {
+            if (!staticNodes.containsKey(node)) return;
+            dirtyStaticNodes.put(node, Boolean.TRUE);
+        }
+        View root = rootRef.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    void markAllStaticGeometryDirty() {
+        if (shuttingDown) return;
+        staticGeometryDirtyAll = true;
+        View root = rootRef.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    void setContinuousStaticGeometryTracking(boolean enabled) {
+        if (shuttingDown || continuousStaticGeometryTracking == enabled) return;
+        continuousStaticGeometryTracking = enabled;
+        markAllStaticGeometryDirty();
     }
 
     void updateStaticInteraction(
@@ -428,6 +458,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
+        // Paging may also animate per-page transforms beyond raw scrollX. Keep full geometry
+        // tracking during the mutation frame; stable HOME returns to dirty-node updates.
+        markAllStaticGeometryDirty();
         requestStaticRedraw();
     }
 
@@ -642,9 +675,23 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
-        Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-        List<StaticNodeState> staticSnapshot;
-        synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
+        boolean scanAllStatic = rootGeometryChanged
+                || continuousStaticGeometryTracking || staticGeometryDirtyAll;
+        List<StaticNodeState> staticSnapshot = new ArrayList<>();
+        synchronized (staticNodes) {
+            if (scanAllStatic) {
+                staticSnapshot.addAll(staticNodes.values());
+            } else if (!dirtyStaticNodes.isEmpty()) {
+                for (LauncherGlassStaticNode node : new ArrayList<>(dirtyStaticNodes.keySet())) {
+                    StaticNodeState state = staticNodes.get(node);
+                    if (state != null) staticSnapshot.add(state);
+                }
+            }
+            dirtyStaticNodes.clear();
+            staticGeometryDirtyAll = false;
+        }
+        Integer workspaceScrollX = staticSnapshot.isEmpty()
+                ? null : LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
