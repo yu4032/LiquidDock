@@ -7,6 +7,7 @@ import android.util.Log;
 
 import com.hellovoid.liquiddock.Api101Bridge;
 import com.hellovoid.liquiddock.ConfigReader;
+import com.hellovoid.liquiddock.WidgetComponentStore;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,7 +45,7 @@ public final class ConfigMigration {
     }
 
     private static void migrateWithDensity(float density, SharedPreferences preferences) {
-        if (preferences == null) return;
+        if (preferences == null || isEffectivelyEmpty(preferences)) return;
         float safeDensity = Math.max(0.1f, density);
         removeRetiredGlassPreferences(preferences);
         resetUnsupportedGlassConfigGeneration(preferences);
@@ -56,21 +57,21 @@ public final class ConfigMigration {
         migrateCornersToDp(safeDensity, preferences);
         migrateDockDimensionsToDp(safeDensity, preferences);
         migrateAxisDistances(preferences);
-        seedDefaultProfileIfEmpty(preferences);
     }
 
-    private static void seedDefaultProfileIfEmpty(SharedPreferences sp) {
-        for (ConfigKey<?> key : ConfigSchema.all()) {
-            if (sp.contains(key.name())) return;
-            if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS
-                    && sp.contains(key.name() + "_tenths")) {
-                return;
+    static boolean isEffectivelyEmpty(SharedPreferences sp) {
+        if (sp == null) return true;
+        Map<String, ?> all = sp.getAll();
+        if (all == null || all.isEmpty()) return true;
+        for (String key : all.keySet()) {
+            if (GLASS_CONFIG_GENERATION_KEY.equals(key)
+                    || WidgetComponentStore.DISCOVERY_TOKEN_KEY.equals(key)
+                    || WidgetComponentStore.DISCOVERY_REQUEST_KEY.equals(key)) {
+                continue;
             }
+            return false;
         }
-        for (String key : sp.getAll().keySet()) {
-            if (key.startsWith("third_party_glass.")) return;
-        }
-        PresetManager.applyDefault(sp.edit());
+        return true;
     }
 
     private static void removeRetiredGlassPreferences(SharedPreferences sp) {
