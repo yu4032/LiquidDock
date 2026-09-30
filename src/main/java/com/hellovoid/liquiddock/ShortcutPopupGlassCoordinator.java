@@ -237,8 +237,10 @@ final class ShortcutPopupGlassCoordinator {
 
         // The sibling is laid out at the host origin. Recreate content's local frame and transform
         // exactly once; do not copy alpha because ShortcutPopupGlassLayer owns reveal/dismiss alpha.
-        layer.setTranslationX(content.getLeft() + content.getTranslationX());
-        layer.setTranslationY(content.getTop() + content.getTranslationY());
+        layer.setTranslationX(
+                (content.getLeft() - layer.getLeft()) + content.getTranslationX());
+        layer.setTranslationY(
+                (content.getTop() - layer.getTop()) + content.getTranslationY());
         layer.setPivotX(content.getPivotX());
         layer.setPivotY(content.getPivotY());
         layer.setScaleX(content.getScaleX());
