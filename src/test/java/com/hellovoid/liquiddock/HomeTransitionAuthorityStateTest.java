@@ -69,7 +69,7 @@ public class HomeTransitionAuthorityStateTest {
         assertFalse(state.isSystemUiAuthorityActive());
     }
 
-    @Test public void coldStartRecoveryReleasesOnlyOwnerlessLauncherBarrier() {
+    @Test public void coldStartRecoveryResetsLauncherAuthority() {
         HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
         state.onLauncherHomeStarted();
 
@@ -80,7 +80,7 @@ public class HomeTransitionAuthorityStateTest {
         assertTrue(recovered.releaseWidgetBarrier);
     }
 
-    @Test public void coldStartRecoveryAlsoClearsStartupSystemUiAuthority() {
+    @Test public void coldStartRecoveryResetsSystemUiAuthority() {
         HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
         state.onLauncherHomeStarted();
         state.onSystemUiStarted(true, 41L, 100L);
