@@ -49,6 +49,23 @@ public class Miuix307MaterialHandoffContractTest {
     }
 
     @Test
+    public void independentDockPassBlurIsNeverPausedByVendorSnapshotPowerState() throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue("Dock PassBlur contract must stay continuous-on-bind",
+                bridge.contains("The independent Dock relies on that historical behavior"));
+        assertFalse("vendor static snapshot mode must not pause LiquidDock's independent Dock producer",
+                pipeline.contains("setMingouStaticDockSnapshotMode"));
+        assertFalse("vendor live-blur visibility must not gate LiquidDock's independent Dock producer",
+                pipeline.contains("setMingouStaticDockLiveBlurVisible"));
+        assertFalse("Dock binding must not be re-gated from vendor snapshot state after rebind",
+                pipeline.contains("vendor-snapshot-state-after-bind"));
+        assertFalse("Dock material pipeline must not retain vendor snapshot state",
+                pipeline.contains("vendorStaticSnapshotMode"));
+    }
+
+    @Test
     public void vendorBlurIsSuppressedAtWriteBoundaryNotRootPreDraw() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
         String suppressor = Files.readString(
