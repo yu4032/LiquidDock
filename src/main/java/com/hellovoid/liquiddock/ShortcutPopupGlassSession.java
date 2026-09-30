@@ -217,7 +217,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
-            presentFull(prismalRenderer.outputTexture(), currentOutput);
+            presentCropped(prismalRenderer.outputTexture(), currentOutput, currentGeometry);
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -256,7 +256,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState current) {
+    private void presentCropped(
+            int sceneTexture,
+            OutputState current,
+            LauncherGlassGeometry.Snapshot geometry) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -269,7 +272,11 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                geometry.cropLeft,
+                geometry.cropBottom,
+                geometry.cropWidth,
+                geometry.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
