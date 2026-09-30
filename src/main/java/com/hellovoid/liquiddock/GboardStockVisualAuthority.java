@@ -31,6 +31,7 @@ final class GboardStockVisualAuthority {
     private static final Map<ViewGroup, Claim> CLAIM_BY_HOLDER = new WeakHashMap<>();
 
     private static Method setBackground;
+    private static Method setBackgroundDrawable;
     private static Method setAlpha;
     private static Method setElevation;
     private static Method addView;
@@ -82,6 +83,8 @@ final class GboardStockVisualAuthority {
         try {
             setBackground = requireTrackable(
                     View.class, "setBackground", new Class<?>[]{Drawable.class});
+            setBackgroundDrawable = requireTrackable(
+                    View.class, "setBackgroundDrawable", new Class<?>[]{Drawable.class});
             setAlpha = requireTrackable(
                     View.class, "setAlpha", new Class<?>[]{float.class});
             setElevation = requireTrackable(
@@ -91,6 +94,7 @@ final class GboardStockVisualAuthority {
                     new Class<?>[]{View.class, int.class, ViewGroup.LayoutParams.class});
 
             hookVisualWrite(setBackground, VisualProperty.BACKGROUND);
+            hookVisualWrite(setBackgroundDrawable, VisualProperty.BACKGROUND);
             hookVisualWrite(setAlpha, VisualProperty.ALPHA);
             hookVisualWrite(setElevation, VisualProperty.ELEVATION);
             HookUtil.hook(addView, chain -> {
@@ -174,17 +178,17 @@ final class GboardStockVisualAuthority {
     }
 
     private static void claimInitialStructure(Claim claim) {
-        claimBackground(claim, claim.structure.keyboardArea);
+        claimBackground(claim, claim.structure.keyboardArea, null);
         claimElevation(claim, claim.structure.keyboardArea);
         claimAlpha(claim, claim.structure.stockBackground);
-        claimBackground(claim, claim.structure.contentColumn);
-        claimBackground(claim, claim.structure.keyboardHolder);
-        claimBackground(claim, claim.structure.bottomFrame);
-        claimBackground(claim, claim.structure.topEdge);
+        claimBackground(claim, claim.structure.contentColumn, null);
+        claimBackground(claim, claim.structure.keyboardHolder, null);
+        claimBackground(claim, claim.structure.bottomFrame, null);
+        claimBackground(claim, claim.structure.topEdge, null);
 
         for (ViewGroup holder : claim.structure.keyboardViewHolders) {
             if (holder == null) continue;
-            claimBackground(claim, holder);
+            claimBackground(claim, holder, null);
             View.OnLayoutChangeListener listener =
                     (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
                             claimCurrentContent((ViewGroup) view, claim);
@@ -203,7 +207,7 @@ final class GboardStockVisualAuthority {
             claim = CLAIM_BY_HOLDER.get(parent);
         }
         if (claim == null || !isEligibleContent(parent, child)) return;
-        claimBackground(claim, child);
+        claimBackground(claim, child, parent);
     }
 
     private static void claimCurrentContent(ViewGroup holder, Claim claim) {
@@ -211,7 +215,7 @@ final class GboardStockVisualAuthority {
         int count = holder.getChildCount();
         for (int i = 0; i < count; i++) {
             View content = holder.getChildAt(i);
-            if (isEligibleContent(holder, content)) claimBackground(claim, content);
+            if (isEligibleContent(holder, content)) claimBackground(claim, content, holder);
         }
     }
 
@@ -225,7 +229,8 @@ final class GboardStockVisualAuthority {
                 && content.getHeight() >= Math.max(1, holderHeight / 2);
     }
 
-    private static void claimBackground(Claim claim, View target) {
+    private static void claimBackground(
+            Claim claim, View target, ViewGroup dynamicHolder) {
         if (claim == null || target == null) return;
         boolean shouldApply;
         synchronized (LOCK) {
@@ -233,6 +238,7 @@ final class GboardStockVisualAuthority {
             if (existing != null && existing != claim) return;
             Snapshot snapshot = claim.snapshotLocked(target);
             OWNER_BY_VIEW.put(target, claim);
+            if (dynamicHolder != null) snapshot.dynamicHolder = dynamicHolder;
             shouldApply = !snapshot.background.isClaimed();
             if (shouldApply) snapshot.background.claim(target.getBackground());
         }
@@ -372,6 +378,13 @@ final class GboardStockVisualAuthority {
             if (snapshot == null) return false;
             switch (property) {
                 case BACKGROUND:
+                    if (snapshot.dynamicHolder != null
+                            && target.getParent() != snapshot.dynamicHolder) {
+                        snapshot.background.release();
+                        snapshots.remove(target);
+                        if (OWNER_BY_VIEW.get(target) == this) OWNER_BY_VIEW.remove(target);
+                        return false;
+                    }
                     return snapshot.background.recordVendorWrite((Drawable) rawValue);
                 case ALPHA:
                     return rawValue instanceof Number
@@ -387,6 +400,7 @@ final class GboardStockVisualAuthority {
 
     private static final class Snapshot {
         final GboardVendorIntentState<Drawable> background = new GboardVendorIntentState<>();
+        ViewGroup dynamicHolder;
         final GboardVendorIntentState<Float> alpha = new GboardVendorIntentState<>();
         final GboardVendorIntentState<Float> elevation = new GboardVendorIntentState<>();
 
