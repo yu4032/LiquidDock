@@ -141,10 +141,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private long wallpaperRequestedGeneration = -1L;
     private long wallpaperRequestedSceneGeneration = -1L;
     private boolean wallpaperRequestedAuthoritative;
-    // Render-thread only: a fresh backdrop may arrive before the root TextureView Surface exists.
-    private long pendingStaticFreshGeneration = -1L;
-    private long pendingStaticWallpaperGeneration = -1L;
-    private boolean pendingStaticWallpaperAuthoritative;
+    // A fresh backdrop may arrive before the root TextureView Surface exists.
+    private final LauncherGlassStaticFreshHandoffState staticFreshHandoff =
+            new LauncherGlassStaticFreshHandoffState();
 
     // Launcher-specific Shell rotation settle policy intentionally stays above the root backend.
     private volatile long rotationSettleSerial;
@@ -511,16 +510,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 staticOutput = next;
-                long readyGeneration = pendingStaticFreshGeneration;
-                if (backdropPrepared && readyGeneration >= 0L
-                        && readyGeneration == sceneGeneration
+                LauncherGlassStaticFreshHandoffState.Pending pending =
+                        staticFreshHandoff.pendingFor(sceneGeneration);
+                long readyGeneration = pending.generation;
+                if (backdropPrepared && pending.ready()
                         && sourceBackend.hasFreshFrame(readyGeneration)) {
                     renderStaticScene(prismalParams);
-                    long wallpaperGeneration = pendingStaticWallpaperGeneration;
-                    boolean wallpaperAuthoritative = pendingStaticWallpaperAuthoritative;
                     clearPendingStaticFresh();
                     postStaticFreshPresented(
-                            readyGeneration, wallpaperGeneration, wallpaperAuthoritative);
+                            readyGeneration,
+                            pending.wallpaperGeneration,
+                            pending.wallpaperAuthoritative);
                 } else {
                     mainHandler.post(() -> {
                         if (shuttingDown) return;
@@ -903,9 +903,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         wallpaperFrame.generation,
                         wallpaperFrame.authoritative);
             } else {
-                pendingStaticFreshGeneration = renderedGeneration;
-                pendingStaticWallpaperGeneration = wallpaperFrame.generation;
-                pendingStaticWallpaperAuthoritative = wallpaperFrame.authoritative;
+                staticFreshHandoff.record(
+                        renderedGeneration,
+                        wallpaperFrame.generation,
+                        wallpaperFrame.authoritative);
                 MainHook.log(TAG + " fresh backdrop awaiting static output " + debugLabel()
                         + " generation=" + renderedGeneration);
             }
@@ -936,9 +937,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void clearPendingStaticFresh() {
-        pendingStaticFreshGeneration = -1L;
-        pendingStaticWallpaperGeneration = -1L;
-        pendingStaticWallpaperAuthoritative = false;
+        staticFreshHandoff.clear();
     }
 
     @Override
