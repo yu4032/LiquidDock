@@ -59,16 +59,14 @@ final class LauncherHomeTransitionState {
         return Decision.release();
     }
 
-    synchronized boolean onSpringPhysicalTerminal(Object animation) {
-        if (animation == null || activeAnimation != animation) return false;
+    synchronized void onSpringPhysicalTerminal(Object animation) {
+        if (animation == null || activeAnimation != animation) return;
         springPhysicallyActive = false;
-        return true;
     }
 
-    synchronized boolean onOwnerFinishRequested(Object owner) {
-        if (owner == null || activeOwner != owner || activeAnimation == null) return false;
+    synchronized void onOwnerFinishRequested(Object owner) {
+        if (owner == null || activeOwner != owner || activeAnimation == null) return;
         finishRequestedCycle = activeCycle;
-        return true;
     }
 
     synchronized Decision onOwnerFinishCompleted(Object owner) {
@@ -82,10 +80,6 @@ final class LauncherHomeTransitionState {
 
     synchronized boolean isArmed() {
         return activeAnimation != null;
-    }
-
-    synchronized long activeCycle() {
-        return activeCycle;
     }
 
     private boolean matches(Object owner, Object animation) {
