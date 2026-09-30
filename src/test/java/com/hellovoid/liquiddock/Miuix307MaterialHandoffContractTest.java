@@ -67,4 +67,21 @@ public class Miuix307MaterialHandoffContractTest {
                 hook.contains("suppressVendorGpuBlur(background);\n"
                         + "                suppressVendorMaterialBody(background"));
     }
+
+    @Test
+    public void dockUsesStandardSurfaceControlBlurAsClientCompositionHold() throws Exception {
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+
+        assertTrue("the hold must use SurfaceControl.Transaction, not MiUI View blur state",
+                bridge.contains("\"setBackgroundBlurRadius\", SurfaceControl.class, Integer.TYPE"));
+        assertTrue("only the Dock root should receive this discriminative composition hold",
+                bridge.contains("domain == PassBlurDomain.DOCK"));
+        assertTrue("the hold must stay visually minimal",
+                bridge.contains("DOCK_CLIENT_COMPOSITION_HOLD_RADIUS_PX = 1"));
+        assertTrue("bind must apply the standard background-blur field to the root SurfaceControl",
+                bridge.contains("Integer.valueOf(DOCK_CLIENT_COMPOSITION_HOLD_RADIUS_PX)"));
+        assertTrue("unbind must release the composition hold instead of leaking it",
+                bridge.contains("transaction, binding.rootSurface, Integer.valueOf(0)"));
+    }
+
 }

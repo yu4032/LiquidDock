@@ -19,6 +19,10 @@ import java.util.Arrays;
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
     private static final int INITIAL_UPDATE_FRAMES = 4;
+    // Standard SurfaceControl background blur participates directly in CompositionEngine\'s
+    // force-client decision for layers below this surface. Keep the radius minimal: Prismal is
+    // still the visible material; this is only a compositor eligibility hold for the Dock root.
+    private static final int DOCK_CLIENT_COMPOSITION_HOLD_RADIUS_PX = 1;
 
     static final class Binding {
         final SurfaceControl rootSurface;
@@ -26,6 +30,7 @@ final class Miuix307PassBlurBridge {
         final Method setPassBlurSurface;
         final Method setUpdateTextureFlag;
         final Method setMiBlurWinExc;
+        final Method setBackgroundBlurRadius;
         final float scale;
         final String rootName;
         final int viewRootIdentity;
@@ -41,6 +46,7 @@ final class Miuix307PassBlurBridge {
                 Method setPassBlurSurface,
                 Method setUpdateTextureFlag,
                 Method setMiBlurWinExc,
+                Method setBackgroundBlurRadius,
                 float scale,
                 String rootName,
                 int viewRootIdentity,
@@ -52,6 +58,7 @@ final class Miuix307PassBlurBridge {
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
+            this.setBackgroundBlurRadius = setBackgroundBlurRadius;
             this.scale = scale;
             this.rootName = rootName;
             this.viewRootIdentity = viewRootIdentity;
@@ -106,6 +113,10 @@ final class Miuix307PassBlurBridge {
                     "setUpdateTextureFlag", SurfaceControl.class, Boolean.TYPE, Float.TYPE);
             Method setMiBlurWinExc = transactionClass.getMethod(
                     "setMiBlurWinExc", SurfaceControl.class, String[].class);
+            Method setBackgroundBlurRadius = domain == PassBlurDomain.DOCK
+                    ? transactionClass.getMethod(
+                            "setBackgroundBlurRadius", SurfaceControl.class, Integer.TYPE)
+                    : null;
 
             String rootName = surfaceName(rootSurface);
             int viewRootIdentity = System.identityHashCode(viewRoot);
@@ -129,6 +140,12 @@ final class Miuix307PassBlurBridge {
             }
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                if (setBackgroundBlurRadius != null) {
+                    setBackgroundBlurRadius.invoke(
+                            transaction,
+                            rootSurface,
+                            Integer.valueOf(DOCK_CLIENT_COMPOSITION_HOLD_RADIUS_PX));
+                }
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
                 setUpdateTextureFlag.invoke(
@@ -142,6 +159,7 @@ final class Miuix307PassBlurBridge {
                     setPassBlurSurface,
                     setUpdateTextureFlag,
                     setMiBlurWinExc,
+                    setBackgroundBlurRadius,
                     scale,
                     rootName,
                     viewRootIdentity,
@@ -158,6 +176,10 @@ final class Miuix307PassBlurBridge {
                     + " launcherWorkspace=" + launcherWorkspace
                     + " output=TextureView-in-root"
                     + " mode=continuous-on-bind"
+                    + " clientCompositionHold="
+                    + (setBackgroundBlurRadius != null
+                            ? "surface-background-blur:" + DOCK_CLIENT_COMPOSITION_HOLD_RADIUS_PX
+                            : "none")
                     + " exclusions=" + Arrays.toString(exclusions));
             return binding;
         } catch (Throwable error) {
@@ -267,6 +289,10 @@ final class Miuix307PassBlurBridge {
             }
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
+                if (binding.setBackgroundBlurRadius != null) {
+                    binding.setBackgroundBlurRadius.invoke(
+                            transaction, binding.rootSurface, Integer.valueOf(0));
+                }
                 binding.setUpdateTextureFlag.invoke(
                         transaction,
                         binding.rootSurface,
