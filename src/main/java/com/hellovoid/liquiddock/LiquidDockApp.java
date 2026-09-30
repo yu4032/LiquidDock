@@ -148,7 +148,7 @@ public final class LiquidDockApp extends Application
         SharedPreferences remote = remotePreferences(ConfigReader.REMOTE_GROUP);
         if (remote == null) {
             internal.edit().putBoolean(PENDING_REMOTE_CONFIG_CLEAR, true).commit();
-            return true;
+            return false;
         }
 
         copyAll(local, remote);
