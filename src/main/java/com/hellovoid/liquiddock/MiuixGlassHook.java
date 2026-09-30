@@ -245,7 +245,6 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         backgroundRef = new WeakReference<>(dockBg);
         hostRef = new WeakReference<>(host);
 
-        if (nativeVisualOwner) suppressVendorGpuBlur(dockBg);
         installVendorMaterialBodyPreserver(dockBg);
 
         if (zeroCopyCandidate) {
@@ -317,7 +316,6 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         DockLiquidGlassHostView host = currentHost();
         if (host == null || host.getParent() != dockBg) return;
         if (isNativeVisualOwner(dockBg)) {
-            suppressVendorGpuBlur(dockBg);
             suppressVendorMaterialBody(dockBg, readRadius(dockBg));
         }
         host.bringToFront();
@@ -329,8 +327,6 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (dockBg == null || config == null || dockBg != currentBackground()) return;
         DockLiquidGlassHostView host = currentHost();
         if (host == null || host.getParent() != dockBg) return;
-
-        if (isNativeVisualOwner(dockBg)) suppressVendorGpuBlur(dockBg);
 
         float nativeRadius = readRadius(dockBg);
         suppressVendorMaterialBody(dockBg, nativeRadius);
