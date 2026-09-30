@@ -121,17 +121,16 @@ final class LauncherGlassHomePresentationHook {
 
             HookUtil.hook(finishTransition, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
                 boolean toHome = args.length > 0 && Boolean.TRUE.equals(args[0]);
-                if (toHome) {
-                    onLauncherOwnerTerminal(chain.getThisObject(), "finishTransition");
-                }
-                return result;
+                onLauncherOwnerFinishRequested(
+                        chain.getThisObject(), toHome, "finishTransition");
+                return chain.proceed(args);
             });
 
             HookUtil.hook(finishCompleted, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                onLauncherOwnerTerminal(chain.getThisObject(), "onFinishCompleted");
+                onLauncherOwnerFinishCompleted(
+                        chain.getThisObject(), "onFinishCompleted");
                 return result;
             });
 
@@ -164,13 +163,15 @@ final class LauncherGlassHomePresentationHook {
             HookUtil.hook(onAnimationEnd, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
-                onLauncherSpringTerminal(args.length > 0 ? args[0] : null, "end");
+                onLauncherSpringPhysicalTerminal(
+                        args.length > 0 ? args[0] : null, "end");
                 return result;
             });
             HookUtil.hook(onAnimationCancel, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
-                onLauncherSpringTerminal(args.length > 0 ? args[0] : null, "cancel");
+                onLauncherSpringPhysicalTerminal(
+                        args.length > 0 ? args[0] : null, "cancel");
                 return result;
             });
             MainHook.log(TAG + " HOME WindowElement spring listener bound structurally");
@@ -185,15 +186,17 @@ final class LauncherGlassHomePresentationHook {
         String animType = readAnimationType(animation);
         if (!isHomeCloseType(animType)) return;
 
-        runHomeLifecycleOnMain(() -> {
-            LauncherHomeTransitionState.Decision decision =
-                    HOME_STATE.onHomeAnimationStarted(owner, animation);
-            if (!decision.freezeBarrier) return;
+        LauncherHomeTransitionState.Decision decision =
+                HOME_STATE.onHomeAnimationStarted(owner, animation);
+        if (!decision.freezeBarrier) return;
 
+        runHomeLifecycleOnMain(() -> {
+            if (!HOME_STATE.isArmed()) return;
             Miuix307ZeroCopyRenderer.onHomeOpeningStarted();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
             LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
-            MainHook.log(TAG + " APP HOME spring START type=" + animType + " source=" + source);
+            MainHook.log(TAG + " APP HOME spring START type=" + animType
+                    + " source=" + source + " cycle=" + HOME_STATE.activeCycle());
         });
     }
 
@@ -203,37 +206,40 @@ final class LauncherGlassHomePresentationHook {
             onLauncherSpringStarted(owner, animation, "running-update");
             return;
         }
-        runHomeLifecycleOnMain(() -> {
-            LauncherHomeTransitionState.Decision decision =
-                    HOME_STATE.onAnimationRetargetedAway(owner, animation);
-            releaseHomeBarrier(decision, "running-retarget/" + animType);
-        });
+        LauncherHomeTransitionState.Decision decision =
+                HOME_STATE.onAnimationRetargetedAway(owner, animation);
+        releaseHomeBarrierOnMain(decision, "running-retarget/" + animType);
     }
 
-    private static void onLauncherSpringTerminal(Object animation, String reason) {
-        runHomeLifecycleOnMain(() -> {
-            LauncherHomeTransitionState.Decision decision =
-                    HOME_STATE.onHomeAnimationTerminal(animation);
-            releaseHomeBarrier(decision, reason);
-        });
+    private static void onLauncherSpringPhysicalTerminal(Object animation, String reason) {
+        HOME_STATE.onSpringPhysicalTerminal(animation);
+        MainHook.log(TAG + " APP HOME spring physical-terminal=" + reason);
     }
 
-    private static void onLauncherOwnerTerminal(Object owner, String reason) {
-        runHomeLifecycleOnMain(() -> {
-            LauncherHomeTransitionState.Decision decision =
-                    HOME_STATE.onHomeOwnerTerminal(owner);
-            releaseHomeBarrier(decision, reason);
-        });
+    private static void onLauncherOwnerFinishRequested(
+            Object owner, boolean toHome, String reason) {
+        LauncherHomeTransitionState.Decision decision =
+                HOME_STATE.onOwnerFinishRequested(owner, toHome);
+        releaseHomeBarrierOnMain(decision, reason + "/away");
     }
 
-    private static void releaseHomeBarrier(
+    private static void onLauncherOwnerFinishCompleted(Object owner, String reason) {
+        LauncherHomeTransitionState.Decision decision =
+                HOME_STATE.onOwnerFinishCompleted(owner);
+        releaseHomeBarrierOnMain(decision, reason);
+    }
+
+    private static void releaseHomeBarrierOnMain(
             LauncherHomeTransitionState.Decision decision, String reason) {
         if (decision == null || !decision.releaseBarrier) return;
-
-        Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
-        LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
-        LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
-        MainHook.log(TAG + " APP HOME terminal=" + reason + "; capture barrier released");
+        runHomeLifecycleOnMain(() -> {
+            // A newer HOME cycle may have started before an off-main terminal reached the UI queue.
+            if (HOME_STATE.isArmed()) return;
+            Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
+            LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+            LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
+            MainHook.log(TAG + " APP HOME terminal=" + reason + "; capture barrier released");
+        });
     }
 
     private static void runHomeLifecycleOnMain(Runnable task) {
