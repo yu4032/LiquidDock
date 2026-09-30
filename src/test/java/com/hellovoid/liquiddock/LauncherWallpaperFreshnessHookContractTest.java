@@ -143,25 +143,29 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
     }
 
-    @Test public void workspaceHomeLiveProducerOwnsVendorUpdateFlagWrites() throws Exception {
+    @Test public void workspacePassBlurDiagnosticsObserveWithoutRewritingVendorWrites()
+            throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
-        String authority = Files.readString(
-                MAIN.resolve("LauncherWorkspacePassBlurContinuousAuthority.java"));
+        String diagnostics = Files.readString(
+                MAIN.resolve("LauncherWorkspacePassBlurDiagnostics.java"));
+        String backend = Files.readString(MAIN.resolve("RootPassBlurBackend.java"));
 
-        assertTrue(pipeline.contains("LauncherWorkspacePassBlurContinuousAuthority.install()"));
-        assertTrue(bridge.contains(
-                "LauncherWorkspacePassBlurContinuousAuthority.claim("));
-        assertTrue(bridge.contains(
-                "LauncherWorkspacePassBlurContinuousAuthority.setUpdatesEnabled("));
-        assertTrue(bridge.contains(
-                "LauncherWorkspacePassBlurContinuousAuthority.release("));
+        assertTrue(pipeline.contains("LauncherWorkspacePassBlurDiagnostics.install()"));
+        assertTrue(bridge.contains("LauncherWorkspacePassBlurDiagnostics.claim("));
+        assertTrue(bridge.contains("LauncherWorkspacePassBlurDiagnostics.release("));
+        assertTrue(diagnostics.contains("\"setUpdateTextureFlag\""));
+        assertTrue(diagnostics.contains("\"SetPassBlurSurface\""));
+        assertTrue(diagnostics.contains("callerTrace()"));
+        assertTrue(diagnostics.contains("LauncherGlassSceneController.diagnosticState(host)"));
+        assertFalse("diagnostic hook must not rewrite vendor update state",
+                diagnostics.contains("args[1] = Boolean.valueOf"));
+        assertFalse("diagnostic hook must not rewrite vendor scale",
+                diagnostics.contains("args[2] = Float.valueOf"));
+        assertFalse("diagnostic hook must not replace vendor PassBlur surfaces",
+                diagnostics.contains("args[1] = claim.surface"));
 
-        assertTrue(authority.contains("\"setUpdateTextureFlag\""));
-        assertTrue(authority.contains(
-                "args[1] = Boolean.valueOf(claim.updatesEnabled)"));
-        assertTrue(authority.contains("args[2] = Float.valueOf(claim.scale)"));
-        assertFalse("Workspace authority must not steal vendor PassBlur surface ownership",
-                authority.contains("\"SetPassBlurSurface\""));
+        assertTrue(backend.contains("[DC][WorkspacePBTrace] oes-gap-ms="));
+        assertTrue(backend.contains("[DC][WorkspacePBTrace] oes-window"));
     }
 }

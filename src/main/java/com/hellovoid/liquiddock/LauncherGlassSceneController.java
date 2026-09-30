@@ -215,6 +215,34 @@ final class LauncherGlassSceneController {
         return vendorRecentsCovered;
     }
 
+    static synchronized String diagnosticState(View anyView) {
+        View root = LauncherGlassSessionRegistry.resolveStableRoot(anyView);
+        LauncherGlassSceneController controller = root != null ? BY_ROOT.get(root) : null;
+        if (controller == null) {
+            return "scene={controller=null"
+                    + ",vendorRecentsCovered=" + vendorRecentsCovered
+                    + ",vendorFolderCovered=" + vendorFolderCovered
+                    + ",vendorHomePending=" + vendorHomeTransitionPending
+                    + ",vendorUnlockPending=" + vendorUnlockTransitionPending
+                    + ",vendorRecentsWallpaperPending=" + vendorRecentsWallpaperSettlePending
+                    + "}";
+        }
+        return "scene={state=" + controller.state.state()
+                + ",generation=" + controller.state.generation()
+                + ",layerVisible=" + controller.state.isLayerVisible()
+                + ",recentsCovered=" + controller.recentsCovered
+                + ",folderCovered=" + controller.folderCovered
+                + ",homePending=" + controller.homeTransitionPending
+                + ",unlockPending=" + controller.unlockTransitionPending
+                + ",recentsWallpaperPending=" + controller.recentsWallpaperSettlePending
+                + ",vendorRecentsCovered=" + vendorRecentsCovered
+                + ",vendorFolderCovered=" + vendorFolderCovered
+                + ",vendorHomePending=" + vendorHomeTransitionPending
+                + ",vendorUnlockPending=" + vendorUnlockTransitionPending
+                + ",vendorRecentsWallpaperPending=" + vendorRecentsWallpaperSettlePending
+                + "}";
+    }
+
     long widgetTransitionSceneGeneration() {
         return state.generation();
     }
