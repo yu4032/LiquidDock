@@ -158,6 +158,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private boolean outputRenderQueued;
     private volatile boolean staticGeometryDirtyAll = true;
     private volatile boolean continuousStaticGeometryTracking;
+    private volatile boolean sourceEndpointDirty = true;
 
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
@@ -634,7 +635,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // Parent/page rearrangements can move a material without changing its local bounds.
             // Mark the static scene dirty at the real layout boundary instead of polling all nodes.
             staticGeometryDirtyAll = true;
+            sourceEndpointDirty = true;
         };
+        sourceEndpointDirty = true;
         observer.addOnGlobalLayoutListener(layoutListener);
         observer.addOnPreDrawListener(listener);
         rootObserver = observer;
@@ -724,22 +727,27 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
-        int nextRotation = readLauncherConfigRotation(root);
-        if (nextRotation != configRotation) {
-            configRotation = nextRotation;
-            beginRotationSettle(nextRotation);
-            sourceBackend.setUpdatesEnabled(false, "launcher-rotation-settle");
-            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
-            scheduleRotationSettle(root, nextRotation);
-            return;
-        }
+        boolean endpointNeedsReconcile = rootGeometryChanged || sourceEndpointDirty
+                || !sourceBackend.isEndpointGenerationCurrent();
+        if (endpointNeedsReconcile) {
+            sourceEndpointDirty = false;
+            int nextRotation = readLauncherConfigRotation(root);
+            if (nextRotation != configRotation) {
+                configRotation = nextRotation;
+                beginRotationSettle(nextRotation);
+                sourceBackend.setUpdatesEnabled(false, "launcher-rotation-settle");
+                long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+                if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+                scheduleRotationSettle(root, nextRotation);
+                return;
+            }
 
-        boolean sourceGeometryChanged = sourceBackend.reconcileRoot();
-        if (sourceGeometryChanged) {
-            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
-            return;
+            boolean sourceGeometryChanged = sourceBackend.reconcileRoot();
+            if (sourceGeometryChanged) {
+                long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+                if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+                return;
+            }
         }
         if (rootGeometryChanged) {
             sourceBackend.requestFresh(
@@ -762,6 +770,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             retryFreshBackdropRecovery(generation, attempt);
             return;
         }
+        sourceEndpointDirty = false;
         boolean sourceChanged = sourceBackend.reconcileRoot();
         if (sourceChanged) {
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
