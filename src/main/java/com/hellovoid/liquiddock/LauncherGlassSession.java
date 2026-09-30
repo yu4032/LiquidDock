@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private static final String TAG = "[DC][LauncherGlass]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    private static final int MAX_TERMINAL_RECOVERY_ATTEMPTS = 3;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
@@ -143,6 +144,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile long rotationSettleSerial;
     private volatile boolean rotationSettlePending;
     private volatile int rotationSettleTargetRotation = -1;
+    private volatile long terminalRecoverySerial;
+    private volatile boolean terminalRecoveryPending;
 
     // Render-thread only Launcher output objects.
     private OutputState staticOutput;
@@ -843,14 +846,72 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
-        if (shuttingDown || generation != sceneGeneration) return;
+        if (shuttingDown) return;
+        if (generation >= 0L && generation != sceneGeneration) return;
+
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
+
         Runnable listener = terminalFailureListener;
         if (listener != null) {
             mainHandler.post(() -> {
                 if (!shuttingDown && terminalFailureListener == listener) listener.run();
             });
+            return;
+        }
+
+        scheduleWorkspaceTerminalRecovery();
+    }
+
+    private void scheduleWorkspaceTerminalRecovery() {
+        if (shuttingDown || terminalRecoveryPending) return;
+        terminalRecoveryPending = true;
+        long serial = ++terminalRecoverySerial;
+        mainHandler.post(() -> recoverWorkspaceTerminalSource(serial, 0));
+    }
+
+    private void recoverWorkspaceTerminalSource(long serial, int attempt) {
+        if (shuttingDown || serial != terminalRecoverySerial || !terminalRecoveryPending) return;
+        if (attempt >= MAX_TERMINAL_RECOVERY_ATTEMPTS) {
+            terminalRecoveryPending = false;
+            MainHook.log(TAG + " terminal source recovery exhausted " + debugLabel()
+                    + " generation=" + sceneGeneration);
+            return;
+        }
+
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) {
+            if (root != null) {
+                root.postOnAnimation(() -> recoverWorkspaceTerminalSource(serial, attempt + 1));
+            } else {
+                terminalRecoveryPending = false;
+            }
+            return;
+        }
+
+        if (sourceBackend.isRebindPending()) {
+            root.postOnAnimation(() -> recoverWorkspaceTerminalSource(serial, attempt));
+            return;
+        }
+
+        boolean accepted = sourceBackend.requestRebind(
+                "launcher-terminal-bind-recovery",
+                success -> {
+                    if (shuttingDown || serial != terminalRecoverySerial
+                            || !terminalRecoveryPending) return;
+                    if (!success) {
+                        root.postOnAnimation(
+                                () -> recoverWorkspaceTerminalSource(serial, attempt + 1));
+                        return;
+                    }
+
+                    terminalRecoveryPending = false;
+                    MainHook.log(TAG + " terminal source recovery rebound " + debugLabel()
+                            + " generation=" + sceneGeneration);
+                    LauncherGlassSceneController.requestFreshForRoot(root);
+                });
+        if (!accepted) {
+            root.postOnAnimation(() -> recoverWorkspaceTerminalSource(serial, attempt + 1));
         }
     }
 
@@ -1039,6 +1100,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         rotationSettleSerial++;
         rotationSettlePending = false;
         rotationSettleTargetRotation = -1;
+        terminalRecoverySerial++;
+        terminalRecoveryPending = false;
         clearWallpaperRequest();
         View root = rootRef.get();
         removeRootObserver();
