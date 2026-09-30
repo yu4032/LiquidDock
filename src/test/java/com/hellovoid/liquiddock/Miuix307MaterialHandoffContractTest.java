@@ -49,22 +49,21 @@ public class Miuix307MaterialHandoffContractTest {
     }
 
     @Test
-    public void vendorBlurIsSuppressedAtWriteBoundaryNotRootPreDraw() throws Exception {
+    public void compositionAbPreservesVendorBlurWhilePassBlurSamplingRemainsActive() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
-        String suppressor = Files.readString(
-                MAIN.resolve("LauncherVendorBlurWriteSuppressor.java"));
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
 
-        assertTrue("Launcher material ownership must install the hidden View write suppressor",
+        assertTrue("A/B build must clearly preserve native Dock blur",
+                pipeline.contains("vendor Dock blur suppression BYPASSED"));
+        assertFalse("A/B build must not install the hidden View blur suppressor",
                 pipeline.contains("LauncherVendorBlurWriteSuppressor.install()"));
-        assertTrue(suppressor.contains("\"setPassWindowBlurEnabled\""));
-        assertTrue(suppressor.contains("\"setMiViewBlurMode\""));
-        assertTrue(suppressor.contains("\"setMiBackgroundBlurMode\""));
-        assertTrue(suppressor.contains("\"setMiBackgroundBlurRadius\""));
-        assertTrue("pre-draw may preserve the transparent vendor body",
+        assertFalse("A/B build must not install compat BlurUtilities suppression",
+                pipeline.contains("installCompatBackgroundBlurSuppression(classLoader);"));
+        assertTrue("PassBlur/Prismal installation must remain active",
+                hook.contains("Miuix307ZeroCopyRenderer.install("));
+        assertFalse("A/B build must not clear native pass-window blur",
+                hook.contains("MiBlurBridge.clearPassWindowBlur(dockBg);"));
+        assertTrue("material body remains transparent so geometry ownership stays unchanged",
                 hook.contains("suppressVendorMaterialBody(background, readRadius(background));"));
-        assertFalse("root pre-draw must never fight vendor compositor blur every frame",
-                hook.contains("suppressVendorGpuBlur(background);\n"
-                        + "                suppressVendorMaterialBody(background"));
     }
 }
