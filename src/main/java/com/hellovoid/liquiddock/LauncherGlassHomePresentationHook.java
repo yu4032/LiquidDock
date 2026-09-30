@@ -112,8 +112,10 @@ final class LauncherGlassHomePresentationHook {
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
                 Object animation = readWindowElementAnimation(owner);
+                Object params = args.length > 0 ? args[0] : null;
                 rememberSpringOwner(owner, animation);
-                onLauncherSpringStarted(owner, animation, "running-update");
+                onLauncherRunningAnimationAccepted(
+                        owner, animation, readParamsAnimationType(params));
                 return result;
             });
 
@@ -195,6 +197,19 @@ final class LauncherGlassHomePresentationHook {
         });
     }
 
+    private static void onLauncherRunningAnimationAccepted(
+            Object owner, Object animation, String animType) {
+        if (isHomeCloseType(animType)) {
+            onLauncherSpringStarted(owner, animation, "running-update");
+            return;
+        }
+        runHomeLifecycleOnMain(() -> {
+            LauncherHomeTransitionState.Decision decision =
+                    HOME_STATE.onAnimationRetargetedAway(owner, animation);
+            releaseHomeBarrier(decision, "running-retarget/" + animType);
+        });
+    }
+
     private static void onLauncherSpringTerminal(Object animation, String reason) {
         runHomeLifecycleOnMain(() -> {
             LauncherHomeTransitionState.Decision decision =
@@ -249,6 +264,16 @@ final class LauncherGlassHomePresentationHook {
         return result.value();
     }
 
+    private static String readParamsAnimationType(Object params) {
+        if (params == null) return null;
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(params, "getAnimType");
+        if (!result.succeeded()) {
+            MainHook.log(TAG + " HOME running-update type unavailable: " + result.failure());
+            return null;
+        }
+        return enumName(result.value());
+    }
+
     private static String readAnimationType(Object animation) {
         if (animation == null) return null;
         HookUtil.InvocationResult<Object> result =
@@ -257,7 +282,11 @@ final class LauncherGlassHomePresentationHook {
             MainHook.log(TAG + " HOME spring type unavailable: " + result.failure());
             return null;
         }
-        Object value = result.value();
+        return enumName(result.value());
+    }
+
+    private static String enumName(Object value) {
+        if (value instanceof Enum<?>) return ((Enum<?>) value).name();
         return value != null ? String.valueOf(value) : null;
     }
 
