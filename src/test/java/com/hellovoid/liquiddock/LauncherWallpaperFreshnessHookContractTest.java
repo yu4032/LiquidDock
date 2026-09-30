@@ -142,4 +142,26 @@ public class LauncherWallpaperFreshnessHookContractTest {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
     }
+
+    @Test public void workspaceHomeLiveProducerOwnsVendorUpdateFlagWrites() throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String authority = Files.readString(
+                MAIN.resolve("LauncherWorkspacePassBlurContinuousAuthority.java"));
+
+        assertTrue(pipeline.contains("LauncherWorkspacePassBlurContinuousAuthority.install()"));
+        assertTrue(bridge.contains(
+                "LauncherWorkspacePassBlurContinuousAuthority.claim("));
+        assertTrue(bridge.contains(
+                "LauncherWorkspacePassBlurContinuousAuthority.setUpdatesEnabled("));
+        assertTrue(bridge.contains(
+                "LauncherWorkspacePassBlurContinuousAuthority.release("));
+
+        assertTrue(authority.contains("\"setUpdateTextureFlag\""));
+        assertTrue(authority.contains(
+                "args[1] = Boolean.valueOf(claim.updatesEnabled)"));
+        assertTrue(authority.contains("args[2] = Float.valueOf(claim.scale)"));
+        assertFalse("Workspace authority must not steal vendor PassBlur surface ownership",
+                authority.contains("\"SetPassBlurSurface\""));
+    }
 }

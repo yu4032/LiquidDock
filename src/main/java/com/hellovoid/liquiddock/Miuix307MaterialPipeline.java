@@ -73,6 +73,9 @@ final class Miuix307MaterialPipeline {
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);
             installVendorStaticDockSnapshotPowerHook(classLoader);
+            if (!LauncherWorkspacePassBlurContinuousAuthority.install()) {
+                MainHook.log("[DC][LauncherGlass] Workspace PassBlur update authority unavailable");
+            }
             LauncherWallpaperFreshnessHook.install(classLoader);
 
             HookUtil.hookMethod(classLoader,
