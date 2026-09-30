@@ -15,16 +15,12 @@ public class LauncherVendorBlurWritePolicyTest {
         assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(false, 100));
     }
 
-    @Test public void liquidDockOwnerKeepsGateAndModesAuthoritative() {
+    @Test public void liquidDockOwnerKeepsGateModesAndRadiusAuthoritative() {
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(true, true));
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(true, false));
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(true, 0));
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(true, 1));
-    }
-
-    @Test public void zeroRadiusMayPassButVisibleVendorRadiusIsSuppressed() {
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 0));
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, -1));
+        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 0));
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 1));
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 100));
     }

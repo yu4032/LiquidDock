@@ -20,9 +20,13 @@ final class LauncherVendorBlurWritePolicy {
         return ownedByLiquidDock;
     }
 
-    /** Positive radius would make the vendor blur visible; zero is safe and may pass through. */
+    /**
+     * Radius is part of the composition hold. Vendor zero writes would remove the blur region and
+     * let HWC promote Wallpaper back to DEVICE composition; positive writes would make native
+     * blur visible. While owned, both are suppressed. LiquidDock teardown bypasses this policy.
+     */
     static boolean shouldSuppressBlurRadiusWrite(
             boolean ownedByLiquidDock, int requestedValue) {
-        return ownedByLiquidDock && requestedValue > 0;
+        return ownedByLiquidDock;
     }
 }

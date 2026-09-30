@@ -182,16 +182,21 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         return readRadius(dockBg);
     }
 
-    static int suppressCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
+    static int stabilizeCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
         if (!GlassRuntimeState.isEnabled()) return requestedRadius;
-        if (dockBg == null || requestedRadius <= 0) return requestedRadius;
+        if (dockBg == null) return requestedRadius;
         if (!COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName())) return requestedRadius;
+
+        // A zero radius removes BackgroundBlurDrawable from ViewRootImpl's blur-region
+        // aggregator. Keep the minimum positive radius so SurfaceFlinger sees a real
+        // background-blur region and keeps layers below Floating Dock (notably Wallpaper)
+        // in CLIENT/GPU composition. Prismal remains the visible renderer above this 1px hold.
         if (compatBackgroundBlurLoggedFor.get() != dockBg) {
             compatBackgroundBlurLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " compat BlurBackground2 parent GPU blur suppressed "
-                    + requestedRadius + " -> 0");
+            MainHook.log(TAG + " compat BlurBackground2 GPU composition hold "
+                    + requestedRadius + " -> 1");
         }
-        return 0;
+        return 1;
     }
 
     static boolean install(View dockBg, LiquidDockConfig config) {

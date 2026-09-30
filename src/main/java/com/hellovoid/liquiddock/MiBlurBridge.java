@@ -165,8 +165,10 @@ final class MiBlurBridge {
      * <p>Disabling pass-window blur entirely lets SurfaceFlinger promote the wallpaper back to
      * HWC/device composition. With LiquidDock PassBlur active that promotion can oscillate against
      * later blur/scene changes, producing a periodic full-wallpaper focus flicker. Keep the native
-     * gate and modes enabled, but hold radius at zero and remove blend colors so Prismal remains
-     * the only visible glass renderer.</p>
+     * gate and modes enabled, with the minimum positive radius and no blend colors. A positive
+     * background-blur radius is the actual composition-engine signal that forces lower layers
+     * (including Wallpaper) through CLIENT/GPU composition; radius zero is only an enabled flag
+     * and does not provide that guarantee. Prismal remains the visible glass renderer.</p>
      */
     static boolean holdPassWindowBlurComposition(View view) {
         if (!PASS_BLUR_AVAILABLE || view == null) return false;
@@ -175,7 +177,7 @@ final class MiBlurBridge {
             Object gateResult = SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true);
             SET_MI_VIEW_BLUR_MODE.invoke(view, 1);
             SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1);
-            Object radiusResult = SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 0);
+            Object radiusResult = SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 1);
             CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
             boolean gateOk = !(gateResult instanceof Boolean) || (Boolean) gateResult;
             boolean radiusOk = !(radiusResult instanceof Boolean) || (Boolean) radiusResult;
