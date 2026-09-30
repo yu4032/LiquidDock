@@ -1,8 +1,217 @@
 # LiquidDock TODO FOR AGENT
 
-当前主线：**v2.5.1 / HyperOS 3.0.307+ / Launcher 4.50 / libxposed API 101**。
+当前主线：**v2.5.3 / HyperOS 3.0.307+ / Launcher 4.50 / libxposed API 101**。
 
 本文件只记录当前生产代码仍存在的工程债务、兼容性风险和未完成收口。已经落地并通过真机/CI 验证的修复不再保留为 active TODO。
+
+## P1 · Runtime performance hot paths
+
+**状态：已完成静态热点审计，尚未系统优化。**
+
+当前最高价值的性能债务集中在“稳定态仍按帧执行”的路径。原则是优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
+
+### P1-A · Launcher Workspace glass per-frame node scan
+
+`LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
+
+稳定态仍会：
+
+- 复制 drag/static node 集合；
+- 遍历全部 Workspace glass node；
+- 对 drag sink 执行 `syncFromMaterial()`；
+- 对 static node 执行 `captureGeometry()`；
+- 对每个 static node 做 ancestor visibility/alpha 检查；
+- 调用 `transformMatrixToGlobal()`、矩阵 invert/map；
+- 检查 root rotation；
+- 调用 source backend `reconcileRoot()`。
+
+图标/文件夹/Widget glass 数量增加时，UI 线程成本近似随 node 数量线性增长；在 120Hz 设备上尤其值得优化。
+
+目标：
+
+- 建立 explicit dirty-node / dirty-scene 模型；
+- layout / attach / detach / visibility / scale / translation / drag / proxy 等真实事件只标记对应 node dirty；
+- Workspace scroll 继续使用现有 scroll projection，而不是为每个 node 重算完整全局矩阵；
+- 下一帧只更新 dirty node；
+- 完全静止的 Workspace 应接近 `O(1)` UI-thread bookkeeping，而不是 `O(N)` node scan。
+
+必须保持：
+
+- HOME spring scaling；
+- Workspace paging；
+- drag/proxy geometry；
+- icon/folder/widget visibility；
+- current-page reconciliation；
+- fresh generation / source authority；
+- 不重新引入固定时间 capture pump。
+
+### P1-B · Dock PassBlur geometry polling
+
+`Miuix307PassBlurTextureView` 当前 root pre-draw 每帧：
+
+1. `refreshProducerGeometryInPlace()`；
+2. `updateBackdropMapping()`。
+
+其中 `readSurfaceGeometry()` 会反复读取/反射 ViewRoot / Surface 状态，包括：
+
+- `mSurfaceSize`；
+- `getSurfaceControl()`；
+- config rotation；
+
+`updateBackdropMapping()` 还会：
+
+- 读取 `mWinFrameInScreen`；
+- `getLocationOnScreen()`；
+- 重新计算 sampling insets / UV mapping；
+- 调用 `DockGlassCompositor.refreshUiSceneIfNeeded()`。
+
+即使最终判定 geometry 未变化，上述前置工作已经发生。
+
+第一步低风险收口：
+
+- 缓存稳定的 `Field/Method` 解析结果；
+- 避免每帧重新 lookup / `setAccessible`；
+- 只在 ViewRoot identity 变化时重新解析。
+
+最终目标：
+
+- surface/root replacement；
+- rotation；
+- size/layout；
+- Dock geometry/reflow；
+- window-frame change
+
+这些真实事件标记 geometry dirty，再在下一帧统一 reconcile。
+
+禁止用轮询间隔或 fixed-delay 代替真实 geometry authority。
+
+### P1-C · GL program location caching
+
+当前多个 production session 在 render loop 中重复调用：
+
+- `glGetAttribLocation(program, "aPosition")`；
+- `glGetAttribLocation(program, "aUv")`；
+- `glGetUniformLocation(program, "uTexture")`；
+- `glGetUniformLocation(program, "uCropRect")`；
+- 其它 normalize/composite uniform 查询。
+
+受影响路径包括但不限于：
+
+- `LauncherGlassSession`；
+- `RootPassBlurBackend`；
+- `Miuix307PassBlurTextureView`；
+- `ShortcutPopupGlassSession`；
+- `GboardFloatingGlassSession`；
+- `MiuiSearchboxGlassSession`；
+- `RecentsCapsuleGlassSession`；
+- `SecurityCenterGlassSession`；
+- `SystemUiHandleMenuPrismalSession`。
+
+目标：
+
+- program link 成功后一次性解析 attribute/uniform location；
+- program 生命周期内直接复用 cached int；
+- draw loop 禁止重新 `glGet*Location`；
+- 后续结合公共 GL primitive 收口 `compileShader/createProgram/bindQuad/unbindQuad` 重复。
+
+这是低风险、高确定性的优化，优先于大规模 GL 架构重写。
+
+### P1-D · DockGlassCompositor stable-frame allocations
+
+`DockGlassCompositor.refreshUiSceneIfNeeded()` 当前即使最终场景未变化，也可能先：
+
+- 按 icon 数量分配 `long[] uiFingerprints`；
+- 分配 `long[] proxyFingerprints`；
+- 分配 `DockIconAnimationState.Sample[]`；
+- 遍历全部 Dock item；
+- 每个 item 计算 parent-chain UI fingerprint；
+- 构造临时输出 `ArrayList`。
+
+目标：
+
+- 充分利用 `DockGlassItemRegistry.revision()`；
+- 如果 registry revision、output geometry、workstation state 均未变化且没有 active icon animation/proxy，直接 stable fast-path return；
+- scratch arrays / sample storage 尽量复用；
+- 只有真正 dirty 的 item 重新 capture geometry；
+- 稳定 Dock 不应持续制造短命数组/列表对象。
+
+必须保持：
+
+- Dock resize/recenter；
+- icon add/remove/reorder；
+- drag/floating proxy；
+- opacity animation；
+- workstation radius；
+- output-root transform。
+
+---
+
+## P2 · Secondary performance cleanup
+
+**状态：未完成。**
+
+这些路径目前不是首要瓶颈，但可以在 P1 hot paths 收口后继续处理。
+
+### Launcher Dialog material guard
+
+`LauncherDialogGlassCoordinator` 仍通过 pre-draw 检查：
+
+- dialog dim；
+- panel background；
+- transparent clone alpha；
+- pass-window blur gate。
+
+后续目标参考已经完成的 Launcher HotSeats / Gboard ownership 模式：
+
+- vendor setter/write boundary interception；
+- claimed 期间记录 latest vendor intent；
+- release 时 replay；
+- 尽量移除 material-state pre-draw reassertion。
+
+Dialog 生命周期短，因此优先级低于 Workspace/Dock。
+
+### Geometry-only pre-draw observers
+
+继续评估以下 pre-draw 是否可缩为“仅动画/移动期间启用”或真实 layout/translation dirty event：
+
+- Gboard floating geometry；
+- Shortcut popup geometry；
+- Searchbox geometry；
+- Recents capsule geometry；
+- page indicator translation guard。
+
+不要为了消灭 `OnPreDrawListener` 本身而牺牲实时跟随；只有在真实事件足够完整时才替换。
+
+### Debug logging I/O
+
+`MainHook.log()` 在 debug logging 开启时不仅输出 API/logcat，还同步：
+
+- 创建时间格式对象；
+- open file；
+- append write；
+- close file。
+
+高频动画/producer/trace 日志会明显污染性能测量。
+
+目标：
+
+- 默认行为保持 debug off；
+- 如需长期文件日志，改为独立线程 + buffered writer / batched flush；
+- per-frame trace 只在显式诊断模式启用；
+- 性能测试时不能让同步文件日志成为主要干扰源。
+
+### Remove historical production trace
+
+`DockAnimationTrace` 仍是生产源码中的短期诊断设施，触发时会：
+
+- 安装 pre-draw listener；
+- 调用反射/语义查询；
+- 构造大量状态字符串；
+- 进入 debug logging。
+
+若当前 Dock handoff 问题已经不再需要该 trace，应删除或迁为显式 debug-only instrumentation。
+
+---
 
 ## P1 · Workstation composite runtime restore
 
