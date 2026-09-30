@@ -188,6 +188,7 @@ final class SecurityCenterSidebarCommandBridge {
             installTurboTouchReleaseHook(source.getClassLoader());
             installSidebarRootClickReleaseHook(source.getClassLoader());
             installWindowLayoutPassDownGuardHook(source.getClassLoader());
+            SecurityCenterVideoLauncherHandoffGeometry.install(source.getClassLoader());
             SideSlideHoldDiagnostics.log(TAG
                     + " receiver ready from DockWindowManagerService.onCreate");
         } catch (Throwable error) {
@@ -748,6 +749,8 @@ final class SecurityCenterSidebarCommandBridge {
         try {
             releasedSidebarWindowRoot = null;
             pendingLauncherGeneration = generation;
+            SecurityCenterVideoLauncherHandoffGeometry.arm(
+                    generation, x, y, width, height);
             show.invoke(binder, x, y, width, height, radius);
             SideSlideHoldDiagnostics.log(TAG + " vendor show accepted geometry="
                     + x + "," + y + " " + width + "x" + height + " r=" + radius);
@@ -756,6 +759,7 @@ final class SecurityCenterSidebarCommandBridge {
             if (pendingLauncherGeneration == generation) {
                 pendingLauncherGeneration = Integer.MIN_VALUE;
             }
+            SecurityCenterVideoLauncherHandoffGeometry.disarm("vendor show failed");
             SideSlideHoldDiagnostics.log(TAG + " vendor show failed", error);
             return false;
         }
@@ -768,6 +772,7 @@ final class SecurityCenterSidebarCommandBridge {
         vendorAnimationCallback = null;
         vendorAnimationCallbackRegisterMethod = null;
         pendingLauncherGeneration = Integer.MIN_VALUE;
+        SecurityCenterVideoLauncherHandoffGeometry.disarm(reason);
         SideSlideHoldDiagnostics.log(TAG + " not ready: " + reason);
     }
 }
