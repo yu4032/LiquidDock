@@ -6,11 +6,17 @@
 
 ## P1 · Runtime performance hot paths
 
-**状态：已完成静态热点审计，尚未系统优化。**
+**状态：P1实现已完成，CI通过后进入真机回归；合并前保留本节作为验收清单。**
+
+本轮实现原则：稳定态只保留 O(1) 的轻量 generation/dirty 守卫；完整几何扫描、
+ViewRoot/Surface reconcile、GL location 查询和 Dock scene rebuild 均只在真实 dirty 事件、
+HOME 连续动画或 source generation 变化时执行。
 
 当前最高价值的性能债务集中在“稳定态仍按帧执行”的路径。原则是优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
 
 ### P1-A · Launcher Workspace glass per-frame node scan
+
+**实现状态：已改为 dirty static-node / global-layout / HOME-continuous 模型；稳定态不再全量克隆 static node registry，并移除空 drag/static snapshot 分配。**
 
 `LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
 
@@ -46,6 +52,8 @@
 - 不重新引入固定时间 capture pump。
 
 ### P1-B · Dock PassBlur geometry polling
+
+**实现状态：已缓存 ViewRoot/Surface 反射成员，并把 producer/backdrop geometry 改为 dirty-driven；稳定态只保留轻量 source-generation 守卫，HOME spring期间才连续跟踪。**
 
 `Miuix307PassBlurTextureView` 当前 root pre-draw 每帧：
 
@@ -87,6 +95,8 @@
 
 ### P1-C · GL program location caching
 
+**实现状态：已覆盖 Launcher、Dock、RootPassBlur、Shortcut、Gboard、Searchbox、Recents、Security Center、SystemUI Handle Menu；program link后一次解析并缓存 attrib/uniform location。**
+
 当前多个 production session 在 render loop 中重复调用：
 
 - `glGetAttribLocation(program, "aPosition")`；
@@ -117,6 +127,8 @@
 这是低风险、高确定性的优化，优先于大规模 GL 架构重写。
 
 ### P1-D · DockGlassCompositor stable-frame allocations
+
+**实现状态：已复用 frame scratch arrays、去除重复 parent traversal，并让 scene refresh 由 explicit dirty/animation请求驱动；稳定Dock不再每帧构造短命数组。**
 
 `DockGlassCompositor.refreshUiSceneIfNeeded()` 当前即使最终场景未变化，也可能先：
 
