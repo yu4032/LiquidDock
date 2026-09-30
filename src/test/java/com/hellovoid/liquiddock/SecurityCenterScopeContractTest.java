@@ -29,6 +29,7 @@ public class SecurityCenterScopeContractTest {
         List<String> lines = Files.readAllLines(
                 Path.of("src/main/resources/META-INF/xposed/scope.list"));
         assertEquals(List.of(
+                "system",
                 "com.miui.home",
                 "com.android.systemui",
                 "com.miui.securitycenter",
