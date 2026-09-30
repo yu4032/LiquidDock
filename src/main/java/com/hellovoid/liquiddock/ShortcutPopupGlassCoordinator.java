@@ -223,6 +223,29 @@ final class ShortcutPopupGlassCoordinator {
                 decor.getWidth(), decor.getHeight(),
                 bounds.left, bounds.top, bounds.right, bounds.bottom,
                 resolveShortcutMenuCornerRadius(content));
+        ShortcutPopupGlassLayer layer = state.layer;
+        int[] layerScreen = new int[2];
+        int layerWidth = -1;
+        int layerHeight = -1;
+        if (layer != null) {
+            try {
+                layer.getLocationOnScreen(layerScreen);
+                layerWidth = layer.getWidth();
+                layerHeight = layer.getHeight();
+            } catch (Throwable ignored) {}
+        }
+        MainHook.log(TAG + " [YDIAG] geometry"
+                + " contentGlobal=" + rect.toShortString()
+                + " decorScreen=" + root[0] + "," + root[1]
+                + " decorSize=" + decor.getWidth() + "x" + decor.getHeight()
+                + " relative=" + bounds.left + "," + bounds.top
+                + "-" + bounds.right + "," + bounds.bottom
+                + " layerScreen=" + layerScreen[0] + "," + layerScreen[1]
+                + " layerSize=" + layerWidth + "x" + layerHeight
+                + (geometry != null
+                        ? " prismalCenter=" + geometry.centerX + "," + geometry.centerY
+                            + " prismalSize=" + geometry.width + "x" + geometry.height
+                        : " prismal=null"));
         if (geometry != null) session.updateGeometry(geometry);
     }
 
