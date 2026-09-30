@@ -149,7 +149,6 @@ final class LauncherGlassSceneController {
     private boolean folderCovered;
     private boolean recentsCovered;
     private boolean homeTransitionPending;
-    private boolean inheritedHomeTransitionPending;
     private boolean unlockTransitionPending;
     private boolean recentsWallpaperSettlePending;
     private int displayRotation;
@@ -187,7 +186,6 @@ final class LauncherGlassSceneController {
         created.recentsCovered = vendorRecentsCovered;
         created.folderCovered = vendorFolderCovered;
         created.homeTransitionPending = vendorHomeTransitionPending;
-        created.inheritedHomeTransitionPending = vendorHomeTransitionPending;
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.folderCovered) {
@@ -369,21 +367,6 @@ final class LauncherGlassSceneController {
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
     }
 
-    static boolean shouldRecoverInheritedHomeBarrier(View anyView) {
-        LauncherGlassSceneController controller = find(anyView);
-        if (controller == null || !controller.inheritedHomeTransitionPending
-                || !controller.homeTransitionPending
-                || controller.folderCovered || controller.recentsCovered
-                || controller.unlockTransitionPending
-                || controller.recentsWallpaperSettlePending) {
-            return false;
-        }
-        State sceneState = controller.state.state();
-        return (sceneState == State.BOOTSTRAPPING
-                || sceneState == State.HOME_WAITING_FRESH_FRAME)
-                && !controller.state.isLayerVisible();
-    }
-
     void onRootReady() {
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
@@ -404,7 +387,6 @@ final class LauncherGlassSceneController {
             reconcileExistingWorkspace();
             state.onBootstrapReconciled();
             applyLayerVisibility();
-            LauncherGlassHomePresentationHook.onGlassBootstrapReconciled(liveRoot);
             requestFreshBackdrop(state.generation());
         });
     }
@@ -523,7 +505,6 @@ final class LauncherGlassSceneController {
     private void setHomeTransitionPending(boolean pending) {
         boolean wasPending = homeTransitionPending;
         homeTransitionPending = pending;
-        if (!pending) inheritedHomeTransitionPending = false;
         onHomePresentationPendingChanged(wasPending, pending);
     }
 
