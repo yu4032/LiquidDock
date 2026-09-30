@@ -129,6 +129,20 @@ final class MiuixShortcutMenuGlassHook {
                         + " dockWindowHeight=" + safeIntField(owner, "mDockWindowHeight")
                         + " item=" + (itemInfo != null ? itemInfo.getClass().getName() : "null"));
                 logViewGeometry("position/buddy-icon", buddy);
+                if (buddy != null) {
+                    String iconSize = safeInvokeNoArg(buddy, "getIconSize");
+                    String cellWidth = safeInvokeNoArg(buddy, "getCellWidth");
+                    MainHook.log(TAG + " [YDIAG] buddy-metrics"
+                            + " class=" + buddy.getClass().getName()
+                            + " measured=" + buddy.getMeasuredWidth() + "x"
+                            + buddy.getMeasuredHeight()
+                            + " padding=" + buddy.getPaddingLeft() + ","
+                            + buddy.getPaddingTop() + ","
+                            + buddy.getPaddingRight() + ","
+                            + buddy.getPaddingBottom()
+                            + " cellWidth=" + cellWidth
+                            + " iconSize=" + iconSize);
+                }
                 logAncestorChain(buddy, null, "buddy-chain");
             } catch (Throwable error) {
                 MainHook.log(TAG + " [YDIAG] position read failed: " + error);
@@ -160,6 +174,10 @@ final class MiuixShortcutMenuGlassHook {
                 deviceConfigClass, "getCellWidth", new Class<?>[0]);
         Method getCellHeight = HookUtil.findMethodExact(
                 deviceConfigClass, "getCellHeight", new Class<?>[0]);
+        Method getCellCountX = HookUtil.findMethodExact(
+                deviceConfigClass, "getCellCountX", new Class<?>[0]);
+        Method getCellCountY = HookUtil.findMethodExact(
+                deviceConfigClass, "getCellCountY", new Class<?>[0]);
         Method getHotSeatsHeight = HookUtil.findMethodExact(
                 deviceConfigClass, "getHotSeatsHeight", new Class<?>[0]);
         Method getHotSeatsMarginBottom = HookUtil.findMethodExact(
@@ -188,6 +206,8 @@ final class MiuixShortcutMenuGlassHook {
                     isInHalfSoscSplitMode,
                     getCellWidth,
                     getCellHeight,
+                    getCellCountX,
+                    getCellCountY,
                     getHotSeatsHeight,
                     getHotSeatsMarginBottom,
                     getSoscController,
@@ -210,6 +230,8 @@ final class MiuixShortcutMenuGlassHook {
             Method isInHalfSoscSplitMode,
             Method getCellWidth,
             Method getCellHeight,
+            Method getCellCountX,
+            Method getCellCountY,
             Method getHotSeatsHeight,
             Method getHotSeatsMarginBottom,
             Method getSoscController,
@@ -249,6 +271,7 @@ final class MiuixShortcutMenuGlassHook {
                     + " halfSosc=" + isInHalfSoscSplitMode.invoke(null)
                     + " laptopMode=" + isLaptopMode.invoke(null)
                     + " cell=" + getCellWidth.invoke(null) + "x" + getCellHeight.invoke(null)
+                    + " count=" + getCellCountX.invoke(null) + "x" + getCellCountY.invoke(null)
                     + " hotseatHeight=" + getHotSeatsHeight.invoke(null)
                     + " hotseatMarginBottom=" + getHotSeatsMarginBottom.invoke(null)
                     + " sosc=" + sosc);
@@ -323,6 +346,15 @@ final class MiuixShortcutMenuGlassHook {
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " [YDIAG] " + stage + " chain failed: " + error);
+        }
+    }
+
+    private static String safeInvokeNoArg(Object target, String methodName) {
+        if (target == null) return "null";
+        try {
+            return String.valueOf(HookUtil.requireInvoke(target, methodName));
+        } catch (Throwable error) {
+            return "ERR";
         }
     }
 
