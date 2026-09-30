@@ -79,12 +79,14 @@ final class WallpaperForceClientCompositionExperiment {
         if (lower.contains("keyguard")
                 || lower.contains("pictorial")
                 || lower.contains("lockscreen")
-                || lower.contains("showwhenlocked=true")) {
+                || lower.contains("showwhenlocked=true")
+                || lower.contains("wrapper-lock")) {
             return false;
         }
         return lower.contains("imagewallpaper")
                 || lower.contains("wallpaperwindowtoken")
-                || lower.contains("miwallpaper.desktop");
+                || lower.contains("miwallpaper.desktop")
+                || lower.contains("wallpaper bbq wrapper");
     }
 
     private static boolean isWallpaperAnimationCaller() {
