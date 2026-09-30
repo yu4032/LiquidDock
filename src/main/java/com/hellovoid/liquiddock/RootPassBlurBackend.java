@@ -599,7 +599,7 @@ final class RootPassBlurBackend {
         GLES20.glUniform4f(normalizeBackdropRectUniform,
                 rect.left, rect.bottom, rect.width, rect.height);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unnormalizeQuad.bind(quadBuffer);
+        normalizeQuad.unbind();
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 
         return new RootPassBlurFrame(
