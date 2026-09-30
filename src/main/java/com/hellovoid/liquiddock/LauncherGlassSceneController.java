@@ -504,12 +504,14 @@ final class LauncherGlassSceneController {
     private void setHomeTransitionPending(boolean pending) {
         boolean wasPending = homeTransitionPending;
         homeTransitionPending = pending;
+        session.setContinuousStaticGeometryTracking(pending);
         onHomePresentationPendingChanged(wasPending, pending);
     }
 
     private void setUnlockTransitionPending(boolean pending) {
         boolean wasPending = isSourceBlockingPresentationPending();
         unlockTransitionPending = pending;
+        session.markAllStaticGeometryDirty();
         onSourceBlockingPresentationPendingChanged(
                 wasPending, isSourceBlockingPresentationPending(), "unlock");
     }
