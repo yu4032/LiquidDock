@@ -13,9 +13,10 @@ import java.lang.reflect.Field;
 /**
  * MiuiX-specific zero-copy glass installer for HyperOS 3.0.307+ docks.
  *
- * The vendor background remains the authoritative Dock geometry shell. Parent compositor blur and
+ * The vendor background remains the authoritative Dock geometry shell. Visible vendor blur and
  * the vendor material body are suppressed for both supported HotSeats owners once the attached
- * Prismal host takes ownership. LiquidDock renders PassBlur -> OES -> Prismal in a child
+ * Prismal host takes ownership, while the zero-radius native pass-window gate stays enabled to
+ * keep wallpaper composition on the GPU/client path. LiquidDock renders PassBlur -> OES -> Prismal in a child
  * TextureView. There is deliberately no screen-capture fallback.
  */
 final class MiuixGlassHook {
@@ -69,6 +70,7 @@ final class MiuixGlassHook {
         DockLiquidGlassHostView host = currentHost();
         removeVendorMaterialBodyPreserver();
         Miuix307ZeroCopyRenderer.clear();
+        if (background != null) MiBlurBridge.clearPassWindowBlur(background);
         restoreVendorMaterialBody();
         clearTrackedViews();
         if (host != null && host.getParent() instanceof ViewGroup) {
@@ -96,6 +98,8 @@ final class MiuixGlassHook {
         }
         removeVendorMaterialBodyPreserver();
         Miuix307ZeroCopyRenderer.clear();
+        View background = currentBackground();
+        if (background != null) MiBlurBridge.clearPassWindowBlur(background);
         restoreVendorMaterialBody();
         clearTrackedViews();
     });
@@ -217,6 +221,8 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (previousHost != null && previousHost.getParent() instanceof ViewGroup) {
             ((ViewGroup) previousHost.getParent()).removeView(previousHost);
         }
+        View previousBackground = currentBackground();
+        if (previousBackground != null) MiBlurBridge.clearPassWindowBlur(previousBackground);
         restoreVendorMaterialBody();
         clearTrackedViews();
 
@@ -359,17 +365,18 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     static void suppressVendorGpuBlur(View dockBg) {
         if (!GlassRuntimeState.isEnabled()) return;
         if (dockBg == null || !isNativeVisualOwner(dockBg)) return;
-        MiBlurBridge.clearPassWindowBlur(dockBg);
+        boolean compositionHeld = MiBlurBridge.holdPassWindowBlurComposition(dockBg);
         if (vendorGpuBlurLoggedFor.get() != dockBg) {
             vendorGpuBlurLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " vendor parent GPU blur disabled class="
-                    + dockBg.getClass().getSimpleName());
+            MainHook.log(TAG + " vendor visible blur suppressed; GPU composition hold="
+                    + compositionHeld + " class=" + dockBg.getClass().getSimpleName());
         }
     }
 
     /**
-     * Preserve only the vendor material body at pre-draw. Compositor blur is suppressed at the
-     * hidden View setter boundary by LauncherVendorBlurWriteSuppressor; never mutate blur state
+     * Preserve only the vendor material body at pre-draw. Visible compositor blur is suppressed
+     * at the hidden View setter boundary while the zero-radius composition hold is retained; never
+     * mutate blur state
      * from the root-wide draw loop.
      */
     private static void installVendorMaterialBodyPreserver(View dockBg) {

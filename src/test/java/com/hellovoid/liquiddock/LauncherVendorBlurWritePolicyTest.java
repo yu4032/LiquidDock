@@ -9,19 +9,23 @@ public class LauncherVendorBlurWritePolicyTest {
     @Test public void unownedVendorWritesAlwaysPassThrough() {
         assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(false, true));
         assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(false, false));
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(false, 1));
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(false, 100));
+        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(false, 0));
+        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(false, 1));
+        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(false, 0));
+        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(false, 100));
     }
 
-    @Test public void liquidDockOwnerSuppressesOnlyBlurEnablingWrites() {
+    @Test public void liquidDockOwnerKeepsGateAndModesAuthoritative() {
         assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(true, true));
-        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(true, 1));
-        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(true, 100));
+        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(true, false));
+        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(true, 0));
+        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(true, 1));
     }
 
-    @Test public void vendorDisableWritesRemainAuthoritative() {
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(true, false));
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(true, 0));
-        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(true, -1));
+    @Test public void zeroRadiusMayPassButVisibleVendorRadiusIsSuppressed() {
+        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 0));
+        assertFalse(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, -1));
+        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 1));
+        assertTrue(LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(true, 100));
     }
 }

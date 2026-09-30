@@ -67,4 +67,33 @@ public class Miuix307MaterialHandoffContractTest {
                 hook.contains("suppressVendorGpuBlur(background);\n"
                         + "                suppressVendorMaterialBody(background"));
     }
+
+    @Test
+    public void zeroRadiusNativeGateKeepsWallpaperOnStableGpuCompositionPath() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String bridge = Files.readString(MAIN.resolve("MiBlurBridge.java"));
+        String suppressor = Files.readString(
+                MAIN.resolve("LauncherVendorBlurWriteSuppressor.java"));
+
+        assertTrue("material handoff must retain native composition eligibility",
+                hook.contains("MiBlurBridge.holdPassWindowBlurComposition(dockBg)"));
+        assertTrue("runtime teardown must release the composition hold",
+                hook.contains("MiBlurBridge.clearPassWindowBlur(background)"));
+
+        assertTrue(bridge.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
+        assertTrue(bridge.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 1)"));
+        assertTrue(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1)"));
+        assertTrue("native blur must remain visually zero while holding client composition",
+                bridge.contains("SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 0)"));
+        assertTrue(bridge.contains("CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view)"));
+
+        assertTrue("module-owned keepalive writes must bypass vendor suppression",
+                suppressor.contains("beginInternalWrite()"));
+        assertTrue("vendor disable writes must not be able to drop the keepalive",
+                suppressor.contains("shouldSuppressPassWindowWrite"));
+        assertTrue("vendor mode-zero writes must not be able to drop the keepalive",
+                suppressor.contains("shouldSuppressBlurModeWrite"));
+        assertTrue("positive vendor radius must remain suppressed",
+                suppressor.contains("shouldSuppressBlurRadiusWrite"));
+    }
 }
