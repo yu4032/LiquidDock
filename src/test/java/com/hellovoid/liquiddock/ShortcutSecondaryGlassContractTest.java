@@ -26,10 +26,13 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
         assertTrue(coordinator.contains("ensurePopupOutput(state)"));
         assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
-        assertTrue(coordinator.contains("content instanceof ViewGroup"));
-        assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
-        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
-        assertTrue(coordinator.contains("stock HyperOS ShortcutMenu material is applied directly"));
+        assertTrue(coordinator.contains("ViewParent parent = content.getParent()"));
+        assertTrue(coordinator.contains("host.addView(layer, contentIndex"));
+        assertTrue(coordinator.contains("syncLayerToContent(state)"));
+        assertTrue(coordinator.contains("layer.setTranslationY(content.getTop() + content.getTranslationY())"));
+        assertTrue(coordinator.contains("layer.setScaleY(content.getScaleY())"));
+        assertTrue(coordinator.contains("layer.setPivotY(content.getPivotY())"));
+        assertFalse(coordinator.contains("contentGroup.addView(layer, 0"));
         assertFalse(coordinator.contains("decorGroup.addView(layer, popupIndex"));
         assertTrue(coordinator.contains("private static void onPresented(State state)"));
         assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
