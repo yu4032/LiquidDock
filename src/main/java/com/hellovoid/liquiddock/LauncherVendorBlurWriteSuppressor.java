@@ -12,12 +12,14 @@ import java.lang.reflect.Method;
  */
 final class LauncherVendorBlurWriteSuppressor {
     private static final String TAG = "[DC][MG]";
+    private static boolean attempted;
     private static boolean installed;
 
     private LauncherVendorBlurWriteSuppressor() {}
 
     static synchronized boolean install() {
-        if (installed) return true;
+        if (attempted) return installed;
+        attempted = true;
 
         int hooked = 0;
         hooked += hookBoolean("setPassWindowBlurEnabled") ? 1 : 0;
@@ -25,11 +27,11 @@ final class LauncherVendorBlurWriteSuppressor {
         hooked += hookInt("setMiBackgroundBlurMode") ? 1 : 0;
         hooked += hookInt("setMiBackgroundBlurRadius") ? 1 : 0;
 
-        installed = hooked > 0;
+        installed = hooked == 4;
         if (installed) {
             MainHook.log(TAG + " vendor blur write suppression installed methods=" + hooked);
         } else {
-            MainHook.log(TAG + " vendor blur write suppression unavailable");
+            MainHook.log(TAG + " vendor blur write suppression incomplete methods=" + hooked);
         }
         return installed;
     }
