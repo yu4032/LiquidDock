@@ -21,11 +21,12 @@ public class LauncherHomeTransitionStateTest {
 
     @Test public void duplicateListenerStartIsIdempotent() {
         LauncherHomeTransitionState state = new LauncherHomeTransitionState();
+        Object owner = new Object();
         Object animation = new Object();
-        state.onHomeAnimationStarted(new Object(), animation);
+        state.onHomeAnimationStarted(owner, animation);
 
         LauncherHomeTransitionState.Decision duplicate =
-                state.onHomeAnimationStarted(new Object(), animation);
+                state.onHomeAnimationStarted(owner, animation);
 
         assertFalse(duplicate.freezeBarrier);
         assertFalse(duplicate.releaseBarrier);
@@ -68,6 +69,7 @@ public class LauncherHomeTransitionStateTest {
         assertTrue(finalEnd.releaseBarrier);
         assertFalse(state.isArmed());
     }
+
     @Test public void ownerTerminalReleasesWhenSpringCallbackIsUnavailable() {
         LauncherHomeTransitionState state = new LauncherHomeTransitionState();
         Object owner = new Object();
@@ -83,5 +85,4 @@ public class LauncherHomeTransitionStateTest {
         assertTrue(released.releaseBarrier);
         assertFalse(state.isArmed());
     }
-
 }
