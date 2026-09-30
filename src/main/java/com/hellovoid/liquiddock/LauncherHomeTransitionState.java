@@ -64,16 +64,9 @@ final class LauncherHomeTransitionState {
         springPhysicallyActive = false;
     }
 
-    synchronized Decision onOwnerFinishRequested(Object owner, boolean toHome) {
-        if (owner == null || activeOwner != owner || activeAnimation == null) {
-            return Decision.none();
-        }
-        if (!toHome) {
-            clear();
-            return Decision.release();
-        }
+    synchronized void onOwnerFinishRequested(Object owner) {
+        if (owner == null || activeOwner != owner || activeAnimation == null) return;
         finishRequestedCycle = activeCycle;
-        return Decision.none();
     }
 
     synchronized Decision onOwnerFinishCompleted(Object owner) {
