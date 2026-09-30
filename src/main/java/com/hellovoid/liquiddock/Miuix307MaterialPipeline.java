@@ -64,6 +64,10 @@ final class Miuix307MaterialPipeline {
         }
 
         try {
+            if (!LauncherVendorBlurWriteSuppressor.install()) {
+                MainHook.log("[DC] MiuiX 307 material disabled: vendor blur write boundary unavailable");
+                return false;
+            }
             installCompatBackgroundBlurSuppression(classLoader);
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
