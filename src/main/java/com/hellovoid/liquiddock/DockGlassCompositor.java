@@ -41,6 +41,10 @@ final class DockGlassCompositor {
     private float lastInsetL = Float.NaN, lastInsetT = Float.NaN;
     private float lastScaleX = Float.NaN, lastScaleY = Float.NaN;
     private boolean lastWorkstationMode;
+    private long[] scratchUiFingerprints = new long[0];
+    private long[] scratchProxyFingerprints = new long[0];
+    private DockIconAnimationState.Sample[] scratchAnimationSamples =
+            new DockIconAnimationState.Sample[0];
 
     DockGlassCompositor(View ownershipRoot, View outputRoot) {
         ownershipRootRef = new WeakReference<>(ownershipRoot);
@@ -115,11 +119,12 @@ final class DockGlassCompositor {
         long nowMs = SystemClock.uptimeMillis();
         long fingerprint = HASH_SEED;
         long outputFingerprint = mixOutputRoot(HASH_SEED, outputRoot);
-        long[] uiFingerprints = new long[cached.size()];
-        long[] proxyFingerprints = new long[cached.size()];
-        DockIconAnimationState.Sample[] animationSamples =
-                new DockIconAnimationState.Sample[cached.size()];
-        for (int i = 0; i < cached.size(); i++) {
+        int itemCount = cached.size();
+        ensureScratchCapacity(itemCount);
+        long[] uiFingerprints = scratchUiFingerprints;
+        long[] proxyFingerprints = scratchProxyFingerprints;
+        DockIconAnimationState.Sample[] animationSamples = scratchAnimationSamples;
+        for (int i = 0; i < itemCount; i++) {
             CachedItem cachedItem = cached.get(i);
             DockGlassItemNode item = cachedItem.node;
             long uiFingerprint = item.uiFingerprint(ownershipRoot);
@@ -204,6 +209,14 @@ final class DockGlassCompositor {
         lastScaleX = scaleX;
         lastScaleY = scaleY;
         return true;
+    }
+
+    private void ensureScratchCapacity(int count) {
+        if (scratchUiFingerprints.length >= count) return;
+        int capacity = Math.max(count, Math.max(4, scratchUiFingerprints.length * 2));
+        scratchUiFingerprints = new long[capacity];
+        scratchProxyFingerprints = new long[capacity];
+        scratchAnimationSamples = new DockIconAnimationState.Sample[capacity];
     }
 
     DockGlassSceneSnapshot latestScene() { return latestScene; }
