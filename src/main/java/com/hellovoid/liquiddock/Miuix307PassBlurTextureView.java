@@ -653,14 +653,14 @@ final class Miuix307PassBlurTextureView extends TextureView
             throw new IllegalStateException("Prismal adapter program creation failed");
         }
         normalizeQuad = GlQuadBindings.resolve(normalizeProgram);
-        normalizeTextureUniform = normalizeTextureUniform;
-        normalizeTexMatrixUniform = normalizeTexMatrixUniform;
-        normalizeBackdropRectUniform = normalizeBackdropRectUniform;
-        normalizeConfigRotUniform = normalizeConfigRotUniform;
-        normalizeValidDockRectUniform = normalizeValidDockRectUniform;
+        normalizeTextureUniform = requireUniform(normalizeProgram, "uTexture");
+        normalizeTexMatrixUniform = requireUniform(normalizeProgram, "uTexMatrix");
+        normalizeBackdropRectUniform = requireUniform(normalizeProgram, "uBackdropRect");
+        normalizeConfigRotUniform = requireUniform(normalizeProgram, "uConfigRot");
+        normalizeValidDockRectUniform = requireUniform(normalizeProgram, "uValidDockRect");
         compositeQuad = GlQuadBindings.resolve(compositeProgram);
-        compositeTextureUniform = compositeTextureUniform;
-        compositeCropUniform = compositeCropUniform;
+        compositeTextureUniform = requireUniform(compositeProgram, "uTexture");
+        compositeCropUniform = requireUniform(compositeProgram, "uCropRect");
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
 
         createInputProducer();
