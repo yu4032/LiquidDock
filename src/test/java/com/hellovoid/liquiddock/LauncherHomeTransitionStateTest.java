@@ -85,4 +85,20 @@ public class LauncherHomeTransitionStateTest {
         assertTrue(released.releaseBarrier);
         assertFalse(state.isArmed());
     }
+    @Test public void acceptedRetargetAwayReleasesOnlyMatchingHomeSpring() {
+        LauncherHomeTransitionState state = new LauncherHomeTransitionState();
+        Object owner = new Object();
+        Object animation = new Object();
+        state.onHomeAnimationStarted(owner, animation);
+
+        LauncherHomeTransitionState.Decision wrong =
+                state.onAnimationRetargetedAway(new Object(), animation);
+        LauncherHomeTransitionState.Decision released =
+                state.onAnimationRetargetedAway(owner, animation);
+
+        assertFalse(wrong.releaseBarrier);
+        assertTrue(released.releaseBarrier);
+        assertFalse(state.isArmed());
+    }
+
 }
