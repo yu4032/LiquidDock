@@ -195,8 +195,7 @@ final class LauncherGlassHomePresentationHook {
         }
 
         HomeTransitionAuthorityState.Decision decision =
-                HOME_AUTHORITY.onColdStartBarrierRecovery();
-        if (!decision.releaseBarrier) return;
+                HOME_AUTHORITY.forceColdStartBarrierRecovery();
 
         Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
         releaseHomeBarrier(decision.releaseWidgetBarrier);
