@@ -29,7 +29,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("ViewParent parent = content.getParent()"));
         assertTrue(coordinator.contains("host.addView(layer, contentIndex"));
         assertTrue(coordinator.contains("syncLayerToContent(state)"));
-        assertTrue(coordinator.contains("layer.setTranslationY(content.getTop() + content.getTranslationY())"));
+        assertTrue(coordinator.contains("(content.getTop() - layer.getTop()) + content.getTranslationY()"));
         assertTrue(coordinator.contains("layer.setScaleY(content.getScaleY())"));
         assertTrue(coordinator.contains("layer.setPivotY(content.getPivotY())"));
         assertFalse(coordinator.contains("contentGroup.addView(layer, 0"));
