@@ -855,7 +855,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 mapping.validSampleLeft, mapping.validSampleBottom,
                 mapping.validSampleRight, mapping.validSampleTop);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unnormalizeQuad.bind(quadBuffer);
+        normalizeQuad.unbind();
     }
 
     private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {
@@ -921,7 +921,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         GLES20.glUniform4f(compositeCropUniform,
                 mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         return true;
@@ -1331,7 +1331,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         getLocationOnScreen(viewScreen);
         materialHost.getLocationOnScreen(hostScreen);
         root.getLocationOnScreen(rootScreen);
-        Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
+        Rect winFrame = readWindowFrame(this);
 
         float[] bl = mapFinalCoordinate(
                 mapping.backdropX, mapping.backdropY, mapping.configRotation, matrixSnapshot);
