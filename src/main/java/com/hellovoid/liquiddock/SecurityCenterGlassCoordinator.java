@@ -292,6 +292,8 @@ final class SecurityCenterGlassCoordinator
     }
 
     void fadePanelOnVendorExit(View turboLayout) {
+        log("fade timeline fadePanel requested turbo@" + identity(turboLayout)
+                + " current=" + isCurrentTurbo(turboLayout), null);
         if (!isCurrentTurbo(turboLayout)) return;
         if (dockSink != null) dockSink.startExitFade();
         if (previewSink != null) previewSink.startExitFade();
@@ -300,6 +302,7 @@ final class SecurityCenterGlassCoordinator
     }
 
     void cancelPanelExitFade() {
+        log("fade timeline cancelPanelExitFade", null);
         if (dockSink != null) dockSink.cancelExitFade(true);
         if (previewSink != null) previewSink.cancelExitFade(true);
         if (boxSink != null) boxSink.cancelExitFade(true);
@@ -391,9 +394,16 @@ final class SecurityCenterGlassCoordinator
         // This callback runs in the same View setter call stack that Folme uses. The first
         // Dock contraction after a stable expanded frame is the real exit-animation start edge.
         // Fade every custom sink there; do not wait for terminal cleanup callbacks.
-        if (sink == dockSink && sink.consumeExitContractionStart()) {
-            View turbo = turboRef.get();
-            if (turbo != null) fadePanelOnVendorExit(turbo);
+        if (sink == dockSink) {
+            boolean contractionStart = sink.consumeExitContractionStart();
+            log("fade timeline dock mutation contractionStart=" + contractionStart
+                    + " generation=" + generation
+                    + " owner=" + ownership.owner(), null);
+            if (contractionStart) {
+                View turbo = turboRef.get();
+                log("fade timeline trigger turbo@" + identity(turbo), null);
+                if (turbo != null) fadePanelOnVendorExit(turbo);
+            }
         }
 
         // Re-sample the carrier geometry immediately instead of waiting for root pre-draw, which
