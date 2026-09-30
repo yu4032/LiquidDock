@@ -256,7 +256,10 @@ final class LauncherGlassStaticNode {
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
+        if (live != null) {
+            live.markStaticGeometryDirty(this);
+            live.requestStaticRedraw();
+        }
         return !hadGeometry;
     }
 
