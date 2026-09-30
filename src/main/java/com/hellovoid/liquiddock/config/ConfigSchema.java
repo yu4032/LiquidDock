@@ -245,6 +245,9 @@ public final class ConfigSchema {
     public static final class Glass {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
+                "liquid_wallpaper_flicker_fix", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SECURITY_CENTER_GLASS = bool(
                 "liquid_security_center_glass", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
@@ -646,7 +649,8 @@ public final class ConfigSchema {
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
-        add(keys, Glass.ENABLED, Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
+        add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
+                Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,
                 Glass.DIALOG_DARK_MODE, Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
