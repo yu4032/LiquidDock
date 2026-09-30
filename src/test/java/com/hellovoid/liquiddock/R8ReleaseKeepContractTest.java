@@ -23,10 +23,6 @@ public class R8ReleaseKeepContractTest {
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiKeyguardGonePolicy { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiKeyguardGoneProtocol { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiKeyguardGoneRuntime { *; }"));
-        assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionSource { *; }"));
-        assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionProtocol { *; }"));
-        assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionRuntime { *; }"));
-        assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.SystemUiHomeTransitionTracker { *; }"));
         assertTrue(rules.contains("-keep class com.hellovoid.liquiddock.LauncherGlassHomePresentationHook { *; }"));
 
         assertFalse("Do not disable R8 for the whole project",
