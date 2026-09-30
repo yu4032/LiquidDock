@@ -41,6 +41,7 @@ public class LauncherGlassStaticBoundaryTest {
         String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
         String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
         String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+        String hierarchy = Files.readString(MAIN.resolve("LauncherGlassHierarchy.java"));
 
         assertTrue(session.contains("dirtyStaticNodes"));
         assertTrue(session.contains("markStaticGeometryDirty"));
@@ -50,20 +51,19 @@ public class LauncherGlassStaticBoundaryTest {
         assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(pending)"));
         assertTrue(controller.contains(
                 "created.session.setContinuousStaticGeometryTracking(created.homeTransitionPending)"));
-        assertTrue(controller.contains(
-                "created.session.setRecentsEntryGeometryTracking(created.recentsCovered)"));
-        assertTrue(controller.contains("session.setRecentsEntryGeometryTracking(covered)"));
         assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(false)"));
-        assertTrue(controller.contains("session.setRecentsEntryGeometryTracking(false)"));
-        assertTrue(session.contains("recentsEntryGeometryTracking"));
-        assertTrue(session.contains("recentsEntryHasVisibleGeometry"));
-        assertTrue(session.contains("recentsEntryGeometryTracking = false;"));
+        assertTrue(session.contains("observeWorkspaceAncestorTransform"));
+        assertTrue(session.contains("captureWorkspaceAncestorTransformSignature"));
+        assertTrue(session.contains("workspaceAncestorMatrixValues"));
+        assertTrue(hierarchy.contains("findWorkspaceRoot"));
+        assertFalse(session.contains("recentsEntryGeometryTracking"));
         assertTrue(session.contains("sourceEndpointDirty"));
         assertTrue(session.contains("sourceBackend.isEndpointGenerationCurrent()"));
         assertTrue(session.contains("addOnGlobalLayoutListener(layoutListener)"));
 
-        // Static nodes may still scan continuously during HOME spring / paging, but stable HOME
-        // must not unconditionally clone and traverse the entire static-node registry each frame.
+        // Static nodes may still scan continuously during HOME spring / paging. Stable HOME only
+        // samples the constant-size Workspace ancestor transform chain and must not unconditionally
+        // clone/traverse the entire static-node registry each frame.
         assertFalse(session.contains(
                 "synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }"));
         assertTrue(session.contains("List<NodeState> dragSnapshot = null;"));
