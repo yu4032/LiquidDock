@@ -847,18 +847,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
         if (shuttingDown) return;
-        if (generation >= 0L && generation != sceneGeneration) return;
+        Runnable listener = terminalFailureListener;
+        if (!LauncherGlassTerminalRecoveryPolicy.shouldSelfRecover(
+                generation, sceneGeneration, listener != null)) {
+            if (listener != null && (generation < 0L || generation == sceneGeneration)) {
+                mainHandler.post(() -> {
+                    if (!shuttingDown && terminalFailureListener == listener) listener.run();
+                });
+            }
+            return;
+        }
 
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
-
-        Runnable listener = terminalFailureListener;
-        if (listener != null) {
-            mainHandler.post(() -> {
-                if (!shuttingDown && terminalFailureListener == listener) listener.run();
-            });
-            return;
-        }
 
         scheduleWorkspaceTerminalRecovery();
     }
