@@ -38,6 +38,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private static final String TAG = "[DC][LauncherGlass]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
     private static final int MAX_TERMINAL_RECOVERY_ATTEMPTS = 3;
+    private static final int FRESH_FRAME_WATCHDOG_FRAMES = 24;
+    private static final int MAX_FRESH_FRAME_RECOVERY_ATTEMPTS = 2;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
@@ -146,6 +148,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int rotationSettleTargetRotation = -1;
     private volatile long terminalRecoverySerial;
     private volatile boolean terminalRecoveryPending;
+    private volatile long freshWatchdogSerial;
+    private volatile int freshRecoveryAttempt;
 
     // Render-thread only Launcher output objects.
     private OutputState staticOutput;
@@ -711,6 +715,61 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.requestFresh(
                 generation,
                 WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
+        armFreshFrameWatchdog(root, generation);
+    }
+
+    private void armFreshFrameWatchdog(View root, long generation) {
+        if (shuttingDown || root == null || generation != sceneGeneration) return;
+        long serial = ++freshWatchdogSerial;
+        watchFreshFrame(root, generation, serial, 0);
+    }
+
+    private void watchFreshFrame(View root, long generation, long serial, int frame) {
+        if (shuttingDown || serial != freshWatchdogSerial || generation != sceneGeneration
+                || rootRef.get() != root || !root.isAttachedToWindow()) {
+            return;
+        }
+        if (sourceBackend.hasFreshFrame(generation)) {
+            freshRecoveryAttempt = 0;
+            return;
+        }
+        if (frame < FRESH_FRAME_WATCHDOG_FRAMES) {
+            root.postOnAnimation(() -> watchFreshFrame(root, generation, serial, frame + 1));
+            return;
+        }
+
+        if (freshRecoveryAttempt >= MAX_FRESH_FRAME_RECOVERY_ATTEMPTS
+                || sourceBackend.isRebindPending()) {
+            MainHook.log(TAG + " fresh frame watchdog exhausted " + debugLabel()
+                    + " generation=" + generation + " recoveryAttempt=" + freshRecoveryAttempt);
+            return;
+        }
+
+        int attempt = ++freshRecoveryAttempt;
+        MainHook.log(TAG + " fresh frame watchdog rebinding silent producer " + debugLabel()
+                + " generation=" + generation + " recoveryAttempt=" + attempt);
+        boolean accepted = sourceBackend.requestRebind(
+                "launcher-fresh-frame-timeout",
+                success -> {
+                    if (shuttingDown || serial != freshWatchdogSerial
+                            || generation != sceneGeneration) {
+                        return;
+                    }
+                    if (!success) {
+                        root.postOnAnimation(() -> armFreshFrameWatchdog(root, generation));
+                        return;
+                    }
+                    mainHandler.post(() -> {
+                        if (shuttingDown || generation != sceneGeneration
+                                || rootRef.get() != root || !root.isAttachedToWindow()) {
+                            return;
+                        }
+                        LauncherGlassSceneController.requestFreshForRoot(root);
+                    });
+                });
+        if (!accepted) {
+            root.postOnAnimation(() -> armFreshFrameWatchdog(root, generation));
+        }
     }
 
     private void retryFreshBackdropRecovery(long generation, int attempt) {
@@ -799,6 +858,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (root == null || !root.isAttachedToWindow()) return;
         PrismalParams params = prismalParams;
         if (params == null) return;
+        freshWatchdogSerial++;
+        freshRecoveryAttempt = 0;
         try {
             ensureLauncherGl();
             rootWidth = frame.logicalWidth;
@@ -1103,6 +1164,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         rotationSettleTargetRotation = -1;
         terminalRecoverySerial++;
         terminalRecoveryPending = false;
+        freshWatchdogSerial++;
+        freshRecoveryAttempt = 0;
         clearWallpaperRequest();
         View root = rootRef.get();
         removeRootObserver();
