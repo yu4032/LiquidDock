@@ -94,6 +94,13 @@ final class HomeTransitionAuthorityState {
         return Decision.release(true);
     }
 
+    synchronized Decision forceColdStartBarrierRecovery() {
+        launcherHomeArmed = false;
+        systemUiHomeArmed = false;
+        activeSystemUiSerial = -1L;
+        return Decision.release(true);
+    }
+
     synchronized boolean isSystemUiAuthorityActive() {
         return systemUiHomeArmed;
     }

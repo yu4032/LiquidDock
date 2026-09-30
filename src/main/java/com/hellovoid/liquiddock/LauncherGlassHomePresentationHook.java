@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.Set;
@@ -25,6 +26,7 @@ final class LauncherGlassHomePresentationHook {
     private static final long UNLOCK_CAPTURE_FAIL_OPEN_MS = 2_000L;
 
     private static boolean installed;
+    private static volatile boolean launcherHomeEndAuthorityAvailable;
     private static volatile long unlockBarrierSerial = -1L;
     private static volatile long unlockBarrierStartedAtMs = -1L;
     private static Handler unlockTimeoutHandler;
@@ -96,8 +98,10 @@ final class LauncherGlassHomePresentationHook {
                     CAPTURING_HOME_END_LISTENER.remove();
                 }
             });
+            launcherHomeEndAuthorityAvailable = true;
             MainHook.log(TAG + " HOME capture end structural listener bridge installed");
         } catch (Throwable error) {
+            launcherHomeEndAuthorityAvailable = false;
             MainHook.log(TAG + " HOME capture end unavailable: " + error);
         }
     }
@@ -182,6 +186,21 @@ final class LauncherGlassHomePresentationHook {
         releaseHomeBarrier(decision.releaseWidgetBarrier);
         MainHook.log(TAG + " SystemUI HOME FINISH authority serial=" + serial
                 + " t=" + eventTimeNanos + " aborted=" + aborted);
+    }
+
+    static void onGlassBootstrapReconciled(View root) {
+        if (launcherHomeEndAuthorityAvailable || root == null
+                || !LauncherGlassSceneController.shouldRecoverColdStartHomeBarrier(root)) {
+            return;
+        }
+
+        HomeTransitionAuthorityState.Decision decision =
+                HOME_AUTHORITY.forceColdStartBarrierRecovery();
+
+        Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
+        releaseHomeBarrier(decision.releaseWidgetBarrier);
+        MainHook.log("[DC][WorkspaceStartupTrace] HOME_BARRIER_RECOVERED"
+                + " reason=cold-start-without-launcher-end-authority");
     }
 
     private static void applyHomeStartDecision(HomeTransitionAuthorityState.Decision decision) {

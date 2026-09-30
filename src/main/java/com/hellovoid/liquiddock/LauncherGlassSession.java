@@ -36,7 +36,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private static final String TAG = "[DC][LauncherGlass]";
+    private static final String TRACE_TAG = "[DC][WorkspaceStartupTrace]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    private static final int MAX_TERMINAL_RECOVERY_ATTEMPTS = 3;
+    private static final int FRESH_FRAME_WATCHDOG_FRAMES = 24;
+    private static final int MAX_FRESH_FRAME_RECOVERY_ATTEMPTS = 2;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
@@ -138,11 +142,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private long wallpaperRequestedGeneration = -1L;
     private long wallpaperRequestedSceneGeneration = -1L;
     private boolean wallpaperRequestedAuthoritative;
+    // A fresh backdrop may arrive before the root TextureView Surface exists.
+    private final LauncherGlassStaticFreshHandoffState staticFreshHandoff =
+            new LauncherGlassStaticFreshHandoffState();
 
     // Launcher-specific Shell rotation settle policy intentionally stays above the root backend.
     private volatile long rotationSettleSerial;
     private volatile boolean rotationSettlePending;
     private volatile int rotationSettleTargetRotation = -1;
+    private volatile long terminalRecoverySerial;
+    private volatile boolean terminalRecoveryPending;
+    private volatile long freshWatchdogSerial;
+    private volatile int freshRecoveryAttempt;
 
     // Render-thread only Launcher output objects.
     private OutputState staticOutput;
@@ -333,6 +344,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void invalidateGeneration(long generation) {
         if (shuttingDown || generation < sceneGeneration) return;
+        if (generation != sceneGeneration) clearPendingStaticFresh();
         sceneGeneration = generation;
     }
 
@@ -341,10 +353,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestFreshBackdrop(long generation) {
-        if (shuttingDown || generation < sceneGeneration) return;
+        trace("SESSION_FRESH_REQUEST generation=" + generation
+                + " sceneGeneration=" + sceneGeneration
+                + " shuttingDown=" + shuttingDown
+                + " rotationSettle=" + rotationSettlePending);
+        if (shuttingDown || generation < sceneGeneration) {
+            trace("SESSION_FRESH_REQUEST_DROP generation=" + generation);
+            return;
+        }
         if (rotationSettlePending && generation == sceneGeneration) {
             MainHook.log(TAG + " fresh backdrop deferred for rotation settle generation="
                     + generation + " rotation=" + rotationSettleTargetRotation);
+            trace("SESSION_FRESH_REQUEST_DEFER rotation=" + rotationSettleTargetRotation);
             return;
         }
         clearWallpaperRequest();
@@ -499,11 +519,33 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 staticOutput = next;
-                mainHandler.post(() -> {
-                    if (shuttingDown) return;
-                    View root = rootRef.get();
-                    if (root != null) LauncherGlassSceneController.requestFreshForRoot(root);
-                });
+                LauncherGlassStaticFreshHandoffState.Pending pending =
+                        staticFreshHandoff.pendingFor(sceneGeneration);
+                trace("STATIC_OUTPUT_ATTACH size=" + width + "x" + height
+                        + " sceneGeneration=" + sceneGeneration
+                        + " backdropPrepared=" + backdropPrepared
+                        + " pendingReady=" + pending.ready()
+                        + " pendingGeneration=" + pending.generation
+                        + " sourceFresh=" + (pending.ready()
+                                && sourceBackend.hasFreshFrame(pending.generation)));
+                long readyGeneration = pending.generation;
+                if (backdropPrepared && pending.ready()
+                        && sourceBackend.hasFreshFrame(readyGeneration)) {
+                    trace("STATIC_OUTPUT_HANDOFF_RENDER generation=" + readyGeneration);
+                    renderStaticScene(prismalParams);
+                    clearPendingStaticFresh();
+                    postStaticFreshPresented(
+                            readyGeneration,
+                            pending.wallpaperGeneration,
+                            pending.wallpaperAuthoritative);
+                } else {
+                    trace("STATIC_OUTPUT_REQUEST_NEW_FRESH sceneGeneration=" + sceneGeneration);
+                    mainHandler.post(() -> {
+                        if (shuttingDown) return;
+                        View root = rootRef.get();
+                        if (root != null) LauncherGlassSceneController.requestFreshForRoot(root);
+                    });
+                }
             } catch (Throwable error) {
                 MainHook.log(TAG + " attach static output failed " + debugLabel() + ": " + error);
                 surface.release();
@@ -524,6 +566,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void detachStaticOutput(Surface surface) {
+        trace("STATIC_OUTPUT_DETACH hasOutput=" + (staticOutput != null)
+                + " sceneGeneration=" + sceneGeneration);
         if (shuttingDown) {
             if (surface != null) surface.release();
             return;
@@ -687,27 +731,98 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void recoverFreshBackdropOnUi(long generation, int attempt) {
-        if (shuttingDown || generation != sceneGeneration) return;
+        trace("RECOVER_FRESH_ENTER generation=" + generation + " attempt=" + attempt
+                + " sceneGeneration=" + sceneGeneration);
+        if (shuttingDown || generation != sceneGeneration) {
+            trace("RECOVER_FRESH_DROP reason=shutdown-or-generation");
+            return;
+        }
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) {
+            trace("RECOVER_FRESH_RETRY reason=root-not-attached");
             retryFreshBackdropRecovery(generation, attempt);
             return;
         }
         installRootObserver();
         if (readLauncherConfigRotation(root) != configRotation || rotationSettlePending) {
+            trace("RECOVER_FRESH_RETRY reason=rotation config="
+                    + readLauncherConfigRotation(root) + "/" + configRotation
+                    + " settle=" + rotationSettlePending);
             retryFreshBackdropRecovery(generation, attempt);
             return;
         }
         boolean sourceChanged = sourceBackend.reconcileRoot();
         if (sourceChanged) {
+            trace("RECOVER_FRESH_SOURCE_CHANGED generation=" + generation);
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
             if (nextGeneration > 0L) sceneGeneration = nextGeneration;
             return;
         }
-        if (generation != sceneGeneration) return;
+        if (generation != sceneGeneration) {
+            trace("RECOVER_FRESH_DROP reason=generation-changed current=" + sceneGeneration);
+            return;
+        }
+        trace("RECOVER_FRESH_REQUEST_SOURCE generation=" + generation
+                + " staticOutput=" + (staticOutput != null)
+                + " backdropPrepared=" + backdropPrepared);
         sourceBackend.requestFresh(
                 generation,
                 WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
+        armFreshFrameWatchdog(root, generation);
+    }
+
+    private void armFreshFrameWatchdog(View root, long generation) {
+        if (shuttingDown || root == null || generation != sceneGeneration) return;
+        long serial = ++freshWatchdogSerial;
+        watchFreshFrame(root, generation, serial, 0);
+    }
+
+    private void watchFreshFrame(View root, long generation, long serial, int frame) {
+        if (shuttingDown || serial != freshWatchdogSerial || generation != sceneGeneration
+                || rootRef.get() != root || !root.isAttachedToWindow()) {
+            return;
+        }
+        if (sourceBackend.hasFreshFrame(generation)) {
+            freshRecoveryAttempt = 0;
+            return;
+        }
+        if (frame < FRESH_FRAME_WATCHDOG_FRAMES) {
+            root.postOnAnimation(() -> watchFreshFrame(root, generation, serial, frame + 1));
+            return;
+        }
+
+        if (freshRecoveryAttempt >= MAX_FRESH_FRAME_RECOVERY_ATTEMPTS
+                || sourceBackend.isRebindPending()) {
+            MainHook.log(TAG + " fresh frame watchdog exhausted " + debugLabel()
+                    + " generation=" + generation + " recoveryAttempt=" + freshRecoveryAttempt);
+            return;
+        }
+
+        int attempt = ++freshRecoveryAttempt;
+        MainHook.log(TAG + " fresh frame watchdog rebinding silent producer " + debugLabel()
+                + " generation=" + generation + " recoveryAttempt=" + attempt);
+        boolean accepted = sourceBackend.requestRebind(
+                "launcher-fresh-frame-timeout",
+                success -> {
+                    if (shuttingDown || serial != freshWatchdogSerial
+                            || generation != sceneGeneration) {
+                        return;
+                    }
+                    if (!success) {
+                        root.postOnAnimation(() -> armFreshFrameWatchdog(root, generation));
+                        return;
+                    }
+                    mainHandler.post(() -> {
+                        if (shuttingDown || generation != sceneGeneration
+                                || rootRef.get() != root || !root.isAttachedToWindow()) {
+                            return;
+                        }
+                        LauncherGlassSceneController.requestFreshForRoot(root);
+                    });
+                });
+        if (!accepted) {
+            root.postOnAnimation(() -> armFreshFrameWatchdog(root, generation));
+        }
     }
 
     private void retryFreshBackdropRecovery(long generation, int attempt) {
@@ -791,11 +906,30 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != sceneGeneration || rotationSettlePending) return;
+                || frame.generation != sceneGeneration || rotationSettlePending) {
+            trace("FRESH_CALLBACK_DROP frameGeneration="
+                    + (frame != null ? frame.generation : -999L)
+                    + " sceneGeneration=" + sceneGeneration
+                    + " backendMatch=" + (backend == sourceBackend)
+                    + " rotationSettle=" + rotationSettlePending
+                    + " shuttingDown=" + shuttingDown);
+            return;
+        }
         View root = rootRef.get();
-        if (root == null || !root.isAttachedToWindow()) return;
+        if (root == null || !root.isAttachedToWindow()) {
+            trace("FRESH_CALLBACK_DROP reason=root-not-attached generation=" + frame.generation);
+            return;
+        }
         PrismalParams params = prismalParams;
-        if (params == null) return;
+        if (params == null) {
+            trace("FRESH_CALLBACK_DROP reason=params-null generation=" + frame.generation);
+            return;
+        }
+        trace("FRESH_CALLBACK_ACCEPT generation=" + frame.generation
+                + " staticOutput=" + (staticOutput != null)
+                + " backdropPreparedBefore=" + backdropPrepared);
+        freshWatchdogSerial++;
+        freshRecoveryAttempt = 0;
         try {
             ensureLauncherGl();
             rootWidth = frame.logicalWidth;
@@ -811,29 +945,25 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             backdropPrepared = true;
             renderOutputs(true, true);
             WallpaperFrameToken wallpaperFrame = takeWallpaperFrameToken(frame.generation);
-            boolean renderedStaticOutput = staticOutput != null;
             long renderedGeneration = frame.generation;
             if (WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(MainHook.isWorkstationMode())) {
                 sourceBackend.setUpdatesEnabled(false, "launcher-workstation-frame-consumed");
             }
-            if (renderedStaticOutput) {
-                // Queue one render-thread turn after this callback. RootPassBlurBackend publishes
-                // freshness only after onFreshFrame returns, so the main-thread authority callback
-                // cannot race ahead of the production freshness state.
-                sourceBackend.postToRenderThread(() -> {
-                    if (shuttingDown || !sourceBackend.hasFreshFrame(renderedGeneration)
-                            || renderedGeneration != sceneGeneration) return;
-                    mainHandler.post(() -> {
-                        if (shuttingDown || rootRef.get() != root || !ownsRoot(root)
-                                || renderedGeneration != sceneGeneration
-                                || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
-                        LauncherGlassSceneController.onFreshFrameRendered(
-                                root,
-                                renderedGeneration,
-                                wallpaperFrame.generation,
-                                wallpaperFrame.authoritative);
-                    });
-                });
+            if (staticOutput != null) {
+                trace("FRESH_CALLBACK_STATIC_PRESENT generation=" + renderedGeneration);
+                clearPendingStaticFresh();
+                postStaticFreshPresented(
+                        renderedGeneration,
+                        wallpaperFrame.generation,
+                        wallpaperFrame.authoritative);
+            } else {
+                trace("FRESH_CALLBACK_HANDOFF_STORE generation=" + renderedGeneration);
+                staticFreshHandoff.record(
+                        renderedGeneration,
+                        wallpaperFrame.generation,
+                        wallpaperFrame.authoritative);
+                MainHook.log(TAG + " fresh backdrop awaiting static output " + debugLabel()
+                        + " generation=" + renderedGeneration);
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " fresh Prismal render failed " + debugLabel() + ": " + error);
@@ -841,16 +971,125 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
+    private void postStaticFreshPresented(
+            long generation, long wallpaperGeneration, boolean wallpaperAuthoritative) {
+        trace("STATIC_PRESENT_POST generation=" + generation
+                + " staticOutput=" + (staticOutput != null)
+                + " sourceFresh=" + sourceBackend.hasFreshFrame(generation));
+        sourceBackend.postToRenderThread(() -> {
+            boolean fresh = sourceBackend.hasFreshFrame(generation);
+            if (shuttingDown || !fresh
+                    || generation != sceneGeneration || staticOutput == null) {
+                trace("STATIC_PRESENT_DROP_RENDER generation=" + generation
+                        + " fresh=" + fresh
+                        + " current=" + sceneGeneration
+                        + " staticOutput=" + (staticOutput != null)
+                        + " shuttingDown=" + shuttingDown);
+                return;
+            }
+            mainHandler.post(() -> {
+                View root = rootRef.get();
+                boolean rootOwned = root != null && ownsRoot(root);
+                boolean stillFresh = sourceBackend.hasFreshFrame(generation);
+                if (shuttingDown || root == null || !rootOwned
+                        || generation != sceneGeneration || !stillFresh) {
+                    trace("STATIC_PRESENT_DROP_MAIN generation=" + generation
+                            + " root=" + (root != null)
+                            + " ownsRoot=" + rootOwned
+                            + " fresh=" + stillFresh
+                            + " current=" + sceneGeneration
+                            + " shuttingDown=" + shuttingDown);
+                    return;
+                }
+                trace("STATIC_PRESENT_DISPATCH generation=" + generation);
+                LauncherGlassSceneController.onFreshFrameRendered(
+                        root, generation, wallpaperGeneration, wallpaperAuthoritative);
+            });
+        });
+    }
+
+    private void clearPendingStaticFresh() {
+        staticFreshHandoff.clear();
+    }
+
+    private void trace(String event) {
+        View root = rootRef.get();
+        MainHook.log(TRACE_TAG + " session#" + sessionId
+                + " root@" + (root == null
+                        ? "none" : Integer.toHexString(System.identityHashCode(root)))
+                + " t=" + android.os.SystemClock.uptimeMillis()
+                + " " + event);
+    }
+
     @Override
     public void onTerminalFailure(long generation, Throwable error) {
-        if (shuttingDown || generation != sceneGeneration) return;
+        if (shuttingDown) return;
+        Runnable listener = terminalFailureListener;
+        if (!LauncherGlassTerminalRecoveryPolicy.shouldSelfRecover(
+                generation, sceneGeneration, listener != null)) {
+            if (listener != null && (generation < 0L || generation == sceneGeneration)) {
+                mainHandler.post(() -> {
+                    if (!shuttingDown && terminalFailureListener == listener) listener.run();
+                });
+            }
+            return;
+        }
+
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
-        Runnable listener = terminalFailureListener;
-        if (listener != null) {
-            mainHandler.post(() -> {
-                if (!shuttingDown && terminalFailureListener == listener) listener.run();
-            });
+
+        scheduleWorkspaceTerminalRecovery();
+    }
+
+    private void scheduleWorkspaceTerminalRecovery() {
+        if (shuttingDown || terminalRecoveryPending) return;
+        terminalRecoveryPending = true;
+        long serial = ++terminalRecoverySerial;
+        mainHandler.post(() -> recoverWorkspaceTerminalSource(serial, 0));
+    }
+
+    private void recoverWorkspaceTerminalSource(long serial, int attempt) {
+        if (shuttingDown || serial != terminalRecoverySerial || !terminalRecoveryPending) return;
+        if (attempt >= MAX_TERMINAL_RECOVERY_ATTEMPTS) {
+            terminalRecoveryPending = false;
+            MainHook.log(TAG + " terminal source recovery exhausted " + debugLabel()
+                    + " generation=" + sceneGeneration);
+            return;
+        }
+
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) {
+            if (root != null) {
+                root.postOnAnimation(() -> recoverWorkspaceTerminalSource(serial, attempt + 1));
+            } else {
+                terminalRecoveryPending = false;
+            }
+            return;
+        }
+
+        if (sourceBackend.isRebindPending()) {
+            root.postOnAnimation(() -> recoverWorkspaceTerminalSource(serial, attempt));
+            return;
+        }
+
+        boolean accepted = sourceBackend.requestRebind(
+                "launcher-terminal-bind-recovery",
+                success -> {
+                    if (shuttingDown || serial != terminalRecoverySerial
+                            || !terminalRecoveryPending) return;
+                    if (!success) {
+                        root.postOnAnimation(
+                                () -> recoverWorkspaceTerminalSource(serial, attempt + 1));
+                        return;
+                    }
+
+                    terminalRecoveryPending = false;
+                    MainHook.log(TAG + " terminal source recovery rebound " + debugLabel()
+                            + " generation=" + sceneGeneration);
+                    LauncherGlassSceneController.requestFreshForRoot(root);
+                });
+        if (!accepted) {
+            root.postOnAnimation(() -> recoverWorkspaceTerminalSource(serial, attempt + 1));
         }
     }
 
@@ -1039,6 +1278,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         rotationSettleSerial++;
         rotationSettlePending = false;
         rotationSettleTargetRotation = -1;
+        terminalRecoverySerial++;
+        terminalRecoveryPending = false;
+        freshWatchdogSerial++;
+        freshRecoveryAttempt = 0;
+        clearPendingStaticFresh();
         clearWallpaperRequest();
         View root = rootRef.get();
         removeRootObserver();
