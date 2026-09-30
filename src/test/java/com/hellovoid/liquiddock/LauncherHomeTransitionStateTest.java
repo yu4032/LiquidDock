@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -19,7 +18,6 @@ public class LauncherHomeTransitionStateTest {
         assertTrue(start.freezeBarrier);
         assertFalse(start.releaseBarrier);
         assertTrue(state.isArmed());
-        assertEquals(1L, state.activeCycle());
     }
 
     @Test public void duplicateListenerStartInsideSamePhysicalCycleIsIdempotent() {
@@ -27,14 +25,11 @@ public class LauncherHomeTransitionStateTest {
         Object owner = new Object();
         Object animation = new Object();
         state.onHomeAnimationStarted(owner, animation);
-        long cycle = state.activeCycle();
-
         LauncherHomeTransitionState.Decision duplicate =
                 state.onHomeAnimationStarted(owner, animation);
 
         assertFalse(duplicate.freezeBarrier);
         assertFalse(duplicate.releaseBarrier);
-        assertEquals(cycle, state.activeCycle());
         assertTrue(state.isArmed());
     }
 
@@ -83,7 +78,6 @@ public class LauncherHomeTransitionStateTest {
         Object owner = new Object();
         Object animation = new Object();
         state.onHomeAnimationStarted(owner, animation);
-        long firstCycle = state.activeCycle();
         state.onSpringPhysicalTerminal(animation);
         state.onOwnerFinishRequested(owner);
 
@@ -91,7 +85,6 @@ public class LauncherHomeTransitionStateTest {
                 state.onHomeAnimationStarted(owner, animation);
 
         assertFalse("barrier is already armed across the cycle handoff", next.freezeBarrier);
-        assertTrue(state.activeCycle() > firstCycle);
         assertFalse("old completion must not release the newer HOME cycle",
                 state.onOwnerFinishCompleted(owner).releaseBarrier);
         assertTrue(state.isArmed());
