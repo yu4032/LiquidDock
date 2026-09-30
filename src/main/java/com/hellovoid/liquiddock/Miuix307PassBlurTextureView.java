@@ -277,10 +277,10 @@ final class Miuix307PassBlurTextureView extends TextureView
                 postInvalidateOnAnimation();
             };
 
-    private Class<?> cachedViewRootClass;
-    private Field cachedSurfaceSizeField;
-    private Field cachedWinFrameField;
-    private Method cachedGetSurfaceControlMethod;
+    private volatile Class<?> cachedViewRootClass;
+    private volatile Field cachedSurfaceSizeField;
+    private volatile Field cachedWinFrameField;
+    private volatile Method cachedGetSurfaceControlMethod;
 
     private static volatile Method cachedGetViewRootImplMethod;
     private static volatile Method cachedGetInstallOrientationMethod;
