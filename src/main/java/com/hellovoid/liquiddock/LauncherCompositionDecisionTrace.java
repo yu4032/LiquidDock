@@ -35,6 +35,10 @@ final class LauncherCompositionDecisionTrace {
         if (hookBackgroundBlurRadius()) hooked++;
         if (hookBlurRegions()) hooked++;
         if (hookBlurScaleRatio()) hooked++;
+        if (hookPassBlurSurface()) hooked++;
+        if (hookUpdateTextureFlag()) hooked++;
+        if (hookAutoSingleState()) hooked++;
+        if (hookForceRefresh()) hooked++;
         if (hookApply()) hooked++;
 
         installed = hooked >= 2;
@@ -142,6 +146,127 @@ final class LauncherCompositionDecisionTrace {
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hook unavailable setBlurScaleRatio: " + error);
+            return false;
+        }
+    }
+
+
+    private static boolean hookPassBlurSurface() {
+        try {
+            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
+                    "SetPassBlurSurface", SurfaceControl.class, android.view.Surface.class);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                if (args.length >= 2 && args[0] instanceof SurfaceControl) {
+                    SurfaceControl sc = (SurfaceControl) args[0];
+                    if (isRelevant(sc)) {
+                        synchronized (LauncherCompositionDecisionTrace.class) {
+                            markPending(chain.getThisObject());
+                        }
+                        MainHook.log(TAG + " passBlurSurface"
+                                + " txn=" + transactionId(chain.getThisObject())
+                                + " layer=" + surfaceKey(sc)
+                                + " attached=" + (args[1] != null)
+                                + " caller=" + launcherCallerStack());
+                    }
+                }
+                return result;
+            });
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " hook unavailable SetPassBlurSurface: " + error);
+            return false;
+        }
+    }
+
+    private static boolean hookUpdateTextureFlag() {
+        try {
+            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
+                    "setUpdateTextureFlag",
+                    SurfaceControl.class,
+                    boolean.class,
+                    float.class);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                if (args.length >= 3 && args[0] instanceof SurfaceControl) {
+                    SurfaceControl sc = (SurfaceControl) args[0];
+                    if (isRelevant(sc)) {
+                        synchronized (LauncherCompositionDecisionTrace.class) {
+                            markPending(chain.getThisObject());
+                        }
+                        MainHook.log(TAG + " passBlurUpdates"
+                                + " txn=" + transactionId(chain.getThisObject())
+                                + " layer=" + surfaceKey(sc)
+                                + " enabled=" + args[1]
+                                + " scale=" + args[2]
+                                + " caller=" + launcherCallerStack());
+                    }
+                }
+                return result;
+            });
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " hook unavailable setUpdateTextureFlag: " + error);
+            return false;
+        }
+    }
+
+    private static boolean hookAutoSingleState() {
+        try {
+            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
+                    "setAutoSingleState", SurfaceControl.class, boolean.class);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                if (args.length >= 2 && args[0] instanceof SurfaceControl) {
+                    SurfaceControl sc = (SurfaceControl) args[0];
+                    if (isRelevant(sc)) {
+                        synchronized (LauncherCompositionDecisionTrace.class) {
+                            markPending(chain.getThisObject());
+                        }
+                        MainHook.log(TAG + " autoSingle"
+                                + " txn=" + transactionId(chain.getThisObject())
+                                + " layer=" + surfaceKey(sc)
+                                + " enabled=" + args[1]
+                                + " caller=" + launcherCallerStack());
+                    }
+                }
+                return result;
+            });
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " hook unavailable setAutoSingleState: " + error);
+            return false;
+        }
+    }
+
+    private static boolean hookForceRefresh() {
+        try {
+            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
+                    "setForceRefresh", SurfaceControl.class, int.class);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                if (args.length >= 2 && args[0] instanceof SurfaceControl) {
+                    SurfaceControl sc = (SurfaceControl) args[0];
+                    if (isRelevant(sc)) {
+                        synchronized (LauncherCompositionDecisionTrace.class) {
+                            markPending(chain.getThisObject());
+                        }
+                        MainHook.log(TAG + " forceRefresh"
+                                + " txn=" + transactionId(chain.getThisObject())
+                                + " layer=" + surfaceKey(sc)
+                                + " timeoutMs=" + args[1]
+                                + " caller=" + launcherCallerStack());
+                    }
+                }
+                return result;
+            });
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " hook unavailable setForceRefresh: " + error);
             return false;
         }
     }
