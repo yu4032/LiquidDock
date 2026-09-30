@@ -37,6 +37,25 @@ public class LauncherGlassStaticBoundaryTest {
     }
 
     @Test
+    public void stableWorkspaceUsesDirtyStaticGeometryInsteadOfFullFrameScan() throws Exception {
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+
+        assertTrue(session.contains("dirtyStaticNodes"));
+        assertTrue(session.contains("markStaticGeometryDirty"));
+        assertTrue(session.contains("continuousStaticGeometryTracking"));
+        assertTrue(node.contains("addOnLayoutChangeListener(materialLayoutListener)"));
+        assertTrue(node.contains("live.markStaticGeometryDirty(this)"));
+        assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(pending)"));
+
+        // Static nodes may still scan continuously during HOME spring / paging, but stable HOME
+        // must not unconditionally clone and traverse the entire static-node registry each frame.
+        assertFalse(session.contains(
+                "synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }"));
+    }
+
+    @Test
     public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
