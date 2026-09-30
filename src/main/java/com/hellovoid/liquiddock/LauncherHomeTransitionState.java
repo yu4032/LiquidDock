@@ -3,9 +3,9 @@ package com.hellovoid.liquiddock;
 /**
  * Android-free owner state for Launcher HOME spring capture fencing.
  *
- * <p>The vendor RectFSpringAnim object is the lifecycle identity. Duplicate listener callbacks for
- * the same spring are idempotent, a newer spring supersedes an older one without dropping the
- * barrier, and only the active spring may release it.</p>
+ * <p>The WindowElement + RectFSpringAnim pair is the lifecycle identity. Duplicate callbacks are
+ * idempotent, a newer spring may supersede an older one without dropping the barrier, and either
+ * the matching spring terminal or the matching WindowElement terminal may release it.</p>
  */
 final class LauncherHomeTransitionState {
     static final class Decision {
@@ -30,24 +30,37 @@ final class LauncherHomeTransitionState {
         }
     }
 
+    private Object activeOwner;
     private Object activeAnimation;
 
-    synchronized Decision onHomeAnimationStarted(Object animation) {
-        if (animation == null) return Decision.none();
-        if (activeAnimation == animation) return Decision.none();
+    synchronized Decision onHomeAnimationStarted(Object owner, Object animation) {
+        if (owner == null || animation == null) return Decision.none();
+        if (activeOwner == owner && activeAnimation == animation) return Decision.none();
 
         boolean alreadyArmed = activeAnimation != null;
+        activeOwner = owner;
         activeAnimation = animation;
         return alreadyArmed ? Decision.none() : Decision.freeze();
     }
 
     synchronized Decision onHomeAnimationTerminal(Object animation) {
         if (animation == null || activeAnimation != animation) return Decision.none();
-        activeAnimation = null;
+        clear();
+        return Decision.release();
+    }
+
+    synchronized Decision onHomeOwnerTerminal(Object owner) {
+        if (owner == null || activeOwner != owner) return Decision.none();
+        clear();
         return Decision.release();
     }
 
     synchronized boolean isArmed() {
         return activeAnimation != null;
+    }
+
+    private void clear() {
+        activeOwner = null;
+        activeAnimation = null;
     }
 }
