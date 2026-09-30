@@ -5,8 +5,8 @@ package com.hellovoid.liquiddock;
  *
  * <p>WindowElement + RectFSpringAnim are the lifecycle identity. A physical spring end is not by
  * itself a presentation terminal because Launcher may defer the shell end while a transition is
- * merged. The barrier releases only when the current HOME cycle completes through WindowElement,
- * is retargeted away from HOME, or is explicitly finished away from HOME.</p>
+ * merged. The barrier releases only when the current HOME cycle completes through WindowElement
+ * or the running spring is explicitly retargeted away from HOME.</p>
  */
 final class LauncherHomeTransitionState {
     static final class Decision {
