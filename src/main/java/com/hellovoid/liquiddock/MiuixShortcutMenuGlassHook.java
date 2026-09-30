@@ -170,6 +170,12 @@ final class MiuixShortcutMenuGlassHook {
         Method getSoscController = HookUtil.findMethodExact(
                 soscControllerClass, "getInstance", new Class<?>[0]);
 
+        Class<?> launcherModeControllerClass =
+                Class.forName("com.miui.home.launcher.allapps.LauncherModeController",
+                        false, classLoader);
+        Method isLaptopMode = HookUtil.findMethodExact(
+                launcherModeControllerClass, "isLaptopMode", new Class<?>[0]);
+
         HookUtil.hook(resolve, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             View source = args.length > 0 && args[0] instanceof View ? (View) args[0] : null;
@@ -184,7 +190,8 @@ final class MiuixShortcutMenuGlassHook {
                     getCellHeight,
                     getHotSeatsHeight,
                     getHotSeatsMarginBottom,
-                    getSoscController);
+                    getSoscController,
+                    isLaptopMode);
             logAncestorChain(source, ancestor, "coord-before");
 
             Object result = chain.proceed(args);
@@ -205,7 +212,8 @@ final class MiuixShortcutMenuGlassHook {
             Method getCellHeight,
             Method getHotSeatsHeight,
             Method getHotSeatsMarginBottom,
-            Method getSoscController) {
+            Method getSoscController,
+            Method isLaptopMode) {
         try {
             Object launcher = getLauncher.invoke(null);
             String stateName = "null";
@@ -239,6 +247,7 @@ final class MiuixShortcutMenuGlassHook {
                     + flags
                     + " workspaceScale=" + getWorkspaceScale.invoke(null)
                     + " halfSosc=" + isInHalfSoscSplitMode.invoke(null)
+                    + " laptopMode=" + isLaptopMode.invoke(null)
                     + " cell=" + getCellWidth.invoke(null) + "x" + getCellHeight.invoke(null)
                     + " hotseatHeight=" + getHotSeatsHeight.invoke(null)
                     + " hotseatMarginBottom=" + getHotSeatsMarginBottom.invoke(null)
