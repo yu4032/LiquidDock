@@ -85,16 +85,19 @@ public class GboardFloatingGlassContractTest {
         assertFalse(coordinator.contains("postDelayed"));
     }
 
-    @Test public void stockAuthorityUsesPredrawAndNoObfuscatedManagerMembers() throws Exception {
+    @Test public void stockAuthorityInterceptsStableWritesWithoutPredrawReassertion() throws Exception {
         String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
-        assertTrue(authority.contains("OnPreDrawListener"));
-        assertTrue(authority.contains("addOnPreDrawListener"));
-        assertTrue(authority.contains("removeOnPreDrawListener"));
-        assertTrue(authority.contains("suppressCurrentContentBackgrounds"));
-        assertTrue(authority.contains("suppressBackground(claim, structure.keyboardArea)"));
-        assertTrue(authority.contains("suppressBackground(claim, structure.bottomFrame)"));
-        assertTrue(authority.contains("suppressBackground(claim, topEdge)"));
-        assertTrue(authority.contains("if (view.getBackground() != null) view.setBackground(null)"));
+        assertTrue(authority.contains("\"setBackground\""));
+        assertTrue(authority.contains("\"setBackgroundDrawable\""));
+        assertTrue(authority.contains("\"setAlpha\""));
+        assertTrue(authority.contains("\"setElevation\""));
+        assertTrue(authority.contains("\"addView\""));
+        assertTrue(authority.contains("addOnLayoutChangeListener"));
+        assertTrue(authority.contains("recordVendorWriteLocked"));
+        assertTrue(authority.contains("GboardVendorIntentState"));
+        assertFalse(authority.contains("OnPreDrawListener"));
+        assertFalse(authority.contains("addOnPreDrawListener"));
+        assertFalse(authority.contains("removeOnPreDrawListener"));
         assertFalse(authority.contains("loadClass(\"pef\")"));
         assertFalse(authority.contains("loadClass(\"pew\")"));
         assertFalse(authority.contains("getDeclaredMethod(\"j\""));
@@ -144,8 +147,10 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("onOutputPresented"));
         assertTrue(sink.contains("onSurfaceTextureUpdated"));
         assertTrue(sink.contains("session.onOutputPresented()"));
-        assertTrue(coordinator.contains("backgroundFrame.setAlpha(0f)"));
-        assertTrue(coordinator.contains("restoreStockBackground"));
+        assertTrue(coordinator.contains("GboardStockVisualAuthority.claim(state.structure)"));
+        assertTrue(coordinator.contains("GboardStockVisualAuthority.release(state.structure)"));
+        assertFalse(coordinator.contains("backgroundFrame.setAlpha(0f)"));
+        assertFalse(coordinator.contains("restoreStockBackground"));
         assertTrue(session.contains("swapBuffers"));
         assertTrue(session.contains("swapSucceeded = true"));
     }

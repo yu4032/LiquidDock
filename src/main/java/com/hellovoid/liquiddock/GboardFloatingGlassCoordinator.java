@@ -23,7 +23,6 @@ final class GboardFloatingGlassCoordinator {
         ViewGroup sinkHost;
         View backgroundFrame;
         View root;
-        float stockBackgroundAlpha = 1f;
         float cornerRadiusPx;
         GboardFloatingGlassSession session;
         GboardFloatingGlassView sink;
@@ -98,7 +97,6 @@ final class GboardFloatingGlassCoordinator {
 
         state.root = root;
         state.cornerRadiusPx = cornerRadiusPx;
-        state.stockBackgroundAlpha = state.backgroundFrame.getAlpha();
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
         state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
@@ -236,7 +234,6 @@ final class GboardFloatingGlassCoordinator {
             failClosed(state, "unable to claim floating stock visuals", null);
             return;
         }
-        backgroundFrame.setAlpha(0f);
         state.stockHidden = true;
     }
 
@@ -251,7 +248,7 @@ final class GboardFloatingGlassCoordinator {
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
         GboardStockVisualAuthority.release(state.structure);
-        restoreStockBackground(state);
+        state.stockHidden = false;
         if (state.attachListener != null) {
             try { state.popup.removeOnAttachStateChangeListener(state.attachListener); }
             catch (Throwable ignored) {}
@@ -286,16 +283,6 @@ final class GboardFloatingGlassCoordinator {
         if (session != null) {
             try { session.shutdown(); } catch (Throwable ignored) {}
         }
-    }
-
-    private static void restoreStockBackground(State state) {
-        if (state == null) return;
-        View backgroundFrame = state.backgroundFrame;
-        if (backgroundFrame != null) {
-            try { backgroundFrame.setAlpha(state.stockBackgroundAlpha); }
-            catch (Throwable ignored) {}
-        }
-        state.stockHidden = false;
     }
 
     private static void log(String message, Throwable error) {
