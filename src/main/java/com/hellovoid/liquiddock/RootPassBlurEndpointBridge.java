@@ -68,12 +68,12 @@ final class RootPassBlurEndpointBridge {
     private static volatile Method cachedGetViewRootImpl;
     private static volatile Method cachedInstallOrientation;
     private static volatile Method cachedSameSurface;
-    private static Class<?> cachedViewRootClass;
-    private static Field cachedSurfaceSizeField;
-    private static Field cachedWindowAttributesField;
-    private static Method cachedGetSurfaceControl;
-    private static Class<?> cachedWindowAttributesClass;
-    private static Field cachedSurfaceInsetsField;
+    private static volatile Class<?> cachedViewRootClass;
+    private static volatile Field cachedSurfaceSizeField;
+    private static volatile Field cachedWindowAttributesField;
+    private static volatile Method cachedGetSurfaceControl;
+    private static volatile Class<?> cachedWindowAttributesClass;
+    private static volatile Field cachedSurfaceInsetsField;
 
     private RootPassBlurEndpointBridge() {}
 
