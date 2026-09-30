@@ -251,8 +251,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
             compositeQuad = GlQuadBindings.resolve(compositeProgram);
-            compositeTextureUniform = compositeTextureUniform;
-            compositeCropUniform = compositeCropUniform;
+            compositeTextureUniform = requireUniform(compositeProgram, "uTexture");
+            compositeCropUniform = requireUniform(compositeProgram, "uCropRect");
         }
     }
 
