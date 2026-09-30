@@ -263,8 +263,18 @@ final class Miuix307MaterialPipeline {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (args.length >= 2 && args[0] instanceof View
                                 && args[1] instanceof Integer) {
-                            args[1] = MiuixGlassHook.suppressCompatBackgroundBlurRadius(
-                                    (View) args[0], (Integer) args[1]);
+                            int requestedRadius = (Integer) args[1];
+                            int effectiveRadius = MiuixGlassHook.suppressCompatBackgroundBlurRadius(
+                                    (View) args[0], requestedRadius);
+                            if (requestedRadius != effectiveRadius) {
+                                LauncherWorkspacePassBlurDiagnostics.traceBlurInterception(
+                                        "BlurUtilities#setBackgroundBlur",
+                                        (View) args[0],
+                                        Integer.valueOf(requestedRadius),
+                                        Integer.valueOf(effectiveRadius),
+                                        true);
+                            }
+                            args[1] = effectiveRadius;
                         }
                         return chain.proceed(args);
                     }, View.class, int.class, float[].class, int[][].class);

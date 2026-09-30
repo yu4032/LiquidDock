@@ -37,6 +37,7 @@ final class LauncherWorkspacePassBlurDiagnostics {
     }
 
     private static final Map<SurfaceControl, Claim> ACTIVE_ROOTS = new WeakHashMap<>();
+    private static final Map<View, String> LAST_BLUR_TRACE = new WeakHashMap<>();
     private static boolean installed;
 
     private LauncherWorkspacePassBlurDiagnostics() {}
@@ -164,6 +165,27 @@ final class LauncherWorkspacePassBlurDiagnostics {
                     + " " + viewState(host)
                     + " " + LauncherGlassSceneController.diagnosticState(host));
         }
+    }
+
+    static void traceBlurInterception(
+            String source, View receiver, Object requested, Object effective, boolean suppressed) {
+        if (receiver == null || source == null) return;
+        String signature = source + "|" + String.valueOf(requested)
+                + "|" + String.valueOf(effective) + "|" + suppressed
+                + "|" + receiver.getVisibility() + "|" + receiver.getWindowVisibility();
+        synchronized (LOCK) {
+            String previous = LAST_BLUR_TRACE.get(receiver);
+            if (signature.equals(previous)) return;
+            LAST_BLUR_TRACE.put(receiver, signature);
+        }
+        log("blur-write source=" + source
+                + " receiver=" + receiver.getClass().getName()
+                + " requested=" + requested
+                + " effective=" + effective
+                + " suppressed=" + suppressed
+                + " " + viewState(receiver)
+                + " " + LauncherGlassSceneController.diagnosticState(receiver)
+                + " caller=" + callerTrace());
     }
 
     private static Claim claimFor(SurfaceControl root) {

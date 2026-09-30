@@ -47,6 +47,8 @@ final class LauncherVendorBlurWriteSuppressor {
                     boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver);
                     if (LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(
                             owned, (Boolean) args[0])) {
+                        LauncherWorkspacePassBlurDiagnostics.traceBlurInterception(
+                                methodName, (View) receiver, args[0], "suppressed", true);
                         return successfulSuppressionResult(method);
                     }
                 }
@@ -71,6 +73,8 @@ final class LauncherVendorBlurWriteSuppressor {
                     boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver);
                     if (LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(
                             owned, ((Number) args[0]).intValue())) {
+                        LauncherWorkspacePassBlurDiagnostics.traceBlurInterception(
+                                methodName, (View) receiver, args[0], "suppressed", true);
                         return successfulSuppressionResult(method);
                     }
                 }

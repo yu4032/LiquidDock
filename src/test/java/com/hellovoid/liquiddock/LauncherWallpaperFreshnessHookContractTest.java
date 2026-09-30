@@ -158,6 +158,8 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(diagnostics.contains("\"SetPassBlurSurface\""));
         assertTrue(diagnostics.contains("callerTrace()"));
         assertTrue(diagnostics.contains("LauncherGlassSceneController.diagnosticState(host)"));
+        assertTrue(diagnostics.contains("traceBlurInterception("));
+        assertTrue(diagnostics.contains("[DC][WorkspacePBTrace]"));
         assertFalse("diagnostic hook must not rewrite vendor update state",
                 diagnostics.contains("args[1] = Boolean.valueOf"));
         assertFalse("diagnostic hook must not rewrite vendor scale",
@@ -167,5 +169,11 @@ public class LauncherWallpaperFreshnessHookContractTest {
 
         assertTrue(backend.contains("[DC][WorkspacePBTrace] oes-gap-ms="));
         assertTrue(backend.contains("[DC][WorkspacePBTrace] oes-window"));
+
+        String suppressor = Files.readString(MAIN.resolve("LauncherVendorBlurWriteSuppressor.java"));
+        assertTrue(suppressor.contains(
+                "LauncherWorkspacePassBlurDiagnostics.traceBlurInterception("));
+        assertTrue(pipeline.contains(
+                "\"BlurUtilities#setBackgroundBlur\""));
     }
 }
