@@ -57,26 +57,24 @@ public class LauncherHomeTransitionStateTest {
         state.onHomeAnimationStarted(owner, animation);
         state.onSpringPhysicalTerminal(animation);
 
-        LauncherHomeTransitionState.Decision request =
-                state.onOwnerFinishRequested(owner, true);
+        state.onOwnerFinishRequested(owner);
         LauncherHomeTransitionState.Decision completed =
                 state.onOwnerFinishCompleted(owner);
 
-        assertFalse(request.releaseBarrier);
         assertTrue(completed.releaseBarrier);
         assertFalse(state.isArmed());
     }
 
-    @Test public void finishAwayFromHomeReleasesImmediately() {
+    @Test public void finishRequestWaitsForLauncherCompletion() {
         LauncherHomeTransitionState state = new LauncherHomeTransitionState();
         Object owner = new Object();
         Object animation = new Object();
         state.onHomeAnimationStarted(owner, animation);
 
-        LauncherHomeTransitionState.Decision away =
-                state.onOwnerFinishRequested(owner, false);
+        state.onOwnerFinishRequested(owner);
 
-        assertTrue(away.releaseBarrier);
+        assertTrue(state.isArmed());
+        assertTrue(state.onOwnerFinishCompleted(owner).releaseBarrier);
         assertFalse(state.isArmed());
     }
 
@@ -87,7 +85,7 @@ public class LauncherHomeTransitionStateTest {
         state.onHomeAnimationStarted(owner, animation);
         long firstCycle = state.activeCycle();
         state.onSpringPhysicalTerminal(animation);
-        state.onOwnerFinishRequested(owner, true);
+        state.onOwnerFinishRequested(owner);
 
         LauncherHomeTransitionState.Decision next =
                 state.onHomeAnimationStarted(owner, animation);
@@ -113,7 +111,7 @@ public class LauncherHomeTransitionStateTest {
         assertFalse(supersede.freezeBarrier);
         assertTrue(state.isArmed());
 
-        state.onOwnerFinishRequested(owner, true);
+        state.onOwnerFinishRequested(owner);
         assertTrue(state.onOwnerFinishCompleted(owner).releaseBarrier);
         assertFalse(state.isArmed());
     }
