@@ -1114,7 +1114,11 @@ private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
     val cleared = LiquidDockApp.clearUserConfiguration(activity, prefs)
     Toast.makeText(
         activity,
-        if (cleared) "已清空保存配置，当前使用代码默认值" else "清空配置失败",
+        if (cleared) {
+            "已清空保存配置，当前使用代码默认值"
+        } else {
+            "本地配置已清空，等待 API101 远端同步；暂不重启桌面"
+        },
         Toast.LENGTH_LONG,
     ).show()
     if (cleared) activity.restartLauncher()
