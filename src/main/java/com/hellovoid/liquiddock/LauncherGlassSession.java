@@ -161,6 +161,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
+    private ViewTreeObserver.OnGlobalLayoutListener globalLayoutListener;
     private final View.OnAttachStateChangeListener rootAttachListener =
             new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) {
@@ -629,19 +630,32 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             syncSceneOnUiThread();
             return true;
         };
+        ViewTreeObserver.OnGlobalLayoutListener layoutListener = () -> {
+            // Parent/page rearrangements can move a material without changing its local bounds.
+            // Mark the static scene dirty at the real layout boundary instead of polling all nodes.
+            staticGeometryDirtyAll = true;
+        };
+        observer.addOnGlobalLayoutListener(layoutListener);
         observer.addOnPreDrawListener(listener);
         rootObserver = observer;
+        globalLayoutListener = layoutListener;
         preDrawListener = listener;
     }
 
     private void removeRootObserver() {
         ViewTreeObserver observer = rootObserver;
         ViewTreeObserver.OnPreDrawListener listener = preDrawListener;
+        ViewTreeObserver.OnGlobalLayoutListener layoutListener = globalLayoutListener;
         rootObserver = null;
         preDrawListener = null;
-        if (observer != null && listener != null) {
-            try { if (observer.isAlive()) observer.removeOnPreDrawListener(listener); }
-            catch (Throwable ignored) {}
+        globalLayoutListener = null;
+        if (observer != null && observer.isAlive()) {
+            try {
+                if (listener != null) observer.removeOnPreDrawListener(listener);
+            } catch (Throwable ignored) {}
+            try {
+                if (layoutListener != null) observer.removeOnGlobalLayoutListener(layoutListener);
+            } catch (Throwable ignored) {}
         }
     }
 
