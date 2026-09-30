@@ -150,7 +150,6 @@ final class LauncherGlassSceneController {
     private boolean folderCovered;
     private boolean recentsCovered;
     private boolean homeTransitionPending;
-    private boolean inheritedHomeTransitionPending;
     private boolean unlockTransitionPending;
     private boolean recentsWallpaperSettlePending;
     private int displayRotation;
@@ -190,7 +189,6 @@ final class LauncherGlassSceneController {
         created.recentsCovered = vendorRecentsCovered;
         created.folderCovered = vendorFolderCovered;
         created.homeTransitionPending = vendorHomeTransitionPending;
-        created.inheritedHomeTransitionPending = vendorHomeTransitionPending;
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.folderCovered) {
@@ -386,10 +384,9 @@ final class LauncherGlassSceneController {
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
     }
 
-    static boolean shouldRecoverInheritedHomeBarrier(View anyView) {
+    static boolean shouldRecoverColdStartHomeBarrier(View anyView) {
         LauncherGlassSceneController controller = find(anyView);
-        if (controller == null || !controller.inheritedHomeTransitionPending
-                || !controller.homeTransitionPending
+        if (controller == null || !controller.homeTransitionPending
                 || controller.folderCovered || controller.recentsCovered
                 || controller.unlockTransitionPending
                 || controller.recentsWallpaperSettlePending) {
@@ -562,7 +559,6 @@ final class LauncherGlassSceneController {
     private void setHomeTransitionPending(boolean pending) {
         boolean wasPending = homeTransitionPending;
         homeTransitionPending = pending;
-        if (!pending) inheritedHomeTransitionPending = false;
         onHomePresentationPendingChanged(wasPending, pending);
     }
 
