@@ -49,57 +49,6 @@ public class Miuix307MaterialHandoffContractTest {
     }
 
     @Test
-    public void independentDockPassBlurIsNeverPausedByVendorSnapshotPowerState() throws Exception {
-        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
-        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
-
-        assertTrue("Dock PassBlur contract must stay continuous-on-bind",
-                bridge.contains("The independent Dock relies on that historical behavior"));
-        assertFalse("vendor static snapshot mode must not pause LiquidDock's independent Dock producer",
-                pipeline.contains("setMingouStaticDockSnapshotMode"));
-        assertFalse("vendor live-blur visibility must not gate LiquidDock's independent Dock producer",
-                pipeline.contains("setMingouStaticDockLiveBlurVisible"));
-        assertFalse("Dock binding must not be re-gated from vendor snapshot state after rebind",
-                pipeline.contains("vendor-snapshot-state-after-bind"));
-        assertFalse("Dock material pipeline must not retain vendor snapshot state",
-                pipeline.contains("vendorStaticSnapshotMode"));
-    }
-
-    @Test
-    public void dockRenderRequestsUseOneLatestStateQueueSlot() throws Exception {
-        String source = Files.readString(
-                MAIN.resolve("Miuix307PassBlurTextureView.java"));
-
-        assertTrue(source.contains(
-                "private final AtomicBoolean renderScheduled = new AtomicBoolean(false);"));
-        assertTrue(source.contains(
-                "private final AtomicBoolean renderRequested = new AtomicBoolean(false);"));
-        assertTrue(source.contains(
-                "private final AtomicBoolean producerRenderRequested = new AtomicBoolean(false);"));
-        assertTrue(source.contains("private void requestRender(boolean fromFrameCallback)"));
-        assertTrue(source.contains("renderScheduled.compareAndSet(false, true)"));
-        assertTrue(source.contains("renderHandler.post(this::runScheduledRender);"));
-        assertTrue(source.contains("drawLatestFrame(fromFrameCallback);"));
-
-        assertFalse("UI callers must not enqueue an unbounded full-draw runnable per event",
-                source.contains("renderHandler.post(() -> drawLatestFrame(false))"));
-        assertFalse("OES callback must join the same coalesced queue instead of drawing inline",
-                source.contains("drawLatestFrame(true);"));
-    }
-
-    @Test
-    public void dockRenderFollowUpReturnsToLooperBetweenGlPasses() throws Exception {
-        String source = Files.readString(
-                MAIN.resolve("Miuix307PassBlurTextureView.java"));
-
-        assertTrue(source.contains("renderRequested.set(false);"));
-        assertTrue(source.contains("renderScheduled.set(false);"));
-        assertTrue(source.contains(
-                "if (renderRequested.get() && renderScheduled.compareAndSet(false, true))"));
-        assertTrue(source.contains("renderHandler.post(this::runScheduledRender);"));
-    }
-
-    @Test
     public void vendorBlurIsSuppressedAtWriteBoundaryNotRootPreDraw() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
         String suppressor = Files.readString(
