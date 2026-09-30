@@ -652,7 +652,12 @@ final class MiuixFolderGlassHook {
                     : new ArrayList<>(ORIGINAL_COVERED_VISIBILITY.entrySet())) {
                 View view = entry.getKey();
                 Integer original = entry.getValue();
-                if (view != null && original != null) view.setVisibility(original);
+                if (view == null || original == null) continue;
+                view.setVisibility(original);
+                // Restoring native folder material visibility must refresh its claimed glass node.
+                // The material may have cached null geometry while Folder hard-cover kept it hidden.
+                LauncherGlassStaticNode sink = claimedSink(view);
+                if (sink != null) sink.requestLifecycleRefresh();
             }
             ORIGINAL_COVERED_VISIBILITY.clear();
             return;
