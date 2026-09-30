@@ -121,16 +121,13 @@ final class LauncherGlassHomePresentationHook {
 
             HookUtil.hook(finishTransition, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                boolean toHome = args.length > 0 && Boolean.TRUE.equals(args[0]);
-                onLauncherOwnerFinishRequested(
-                        chain.getThisObject(), toHome, "finishTransition");
+                HOME_STATE.onOwnerFinishRequested(chain.getThisObject());
                 return chain.proceed(args);
             });
 
             HookUtil.hook(finishCompleted, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                onLauncherOwnerFinishCompleted(
-                        chain.getThisObject(), "onFinishCompleted");
+                onLauncherOwnerFinishCompleted(chain.getThisObject());
                 return result;
             });
 
@@ -157,7 +154,7 @@ final class LauncherGlassHomePresentationHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 Object animation = args.length > 0 ? args[0] : null;
-                onLauncherSpringStarted(springOwner(animation), animation, "listener-start");
+                onLauncherSpringStarted(springOwner(animation), animation);
                 return result;
             });
             HookUtil.hook(onAnimationEnd, chain -> {
@@ -181,8 +178,7 @@ final class LauncherGlassHomePresentationHook {
         }
     }
 
-    private static void onLauncherSpringStarted(
-            Object owner, Object animation, String source) {
+    private static void onLauncherSpringStarted(Object owner, Object animation) {
         String animType = readAnimationType(animation);
         if (!isHomeCloseType(animType)) return;
 
@@ -195,43 +191,28 @@ final class LauncherGlassHomePresentationHook {
             Miuix307ZeroCopyRenderer.onHomeOpeningStarted();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
             LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
-            MainHook.log(TAG + " APP HOME spring START type=" + animType
-                    + " source=" + source + " cycle=" + HOME_STATE.activeCycle());
         });
     }
 
     private static void onLauncherRunningAnimationAccepted(
             Object owner, Object animation, String animType) {
         if (isHomeCloseType(animType)) {
-            onLauncherSpringStarted(owner, animation, "running-update");
+            onLauncherSpringStarted(owner, animation);
             return;
         }
-        LauncherHomeTransitionState.Decision decision =
-                HOME_STATE.onAnimationRetargetedAway(owner, animation);
-        releaseHomeBarrierOnMain(decision, "running-retarget/" + animType);
+        releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation));
     }
 
     private static void onLauncherSpringPhysicalTerminal(Object animation, String reason) {
-        if (HOME_STATE.onSpringPhysicalTerminal(animation)) {
-            MainHook.log(TAG + " APP HOME spring physical-terminal=" + reason);
-        }
+        HOME_STATE.onSpringPhysicalTerminal(animation);
     }
 
-    private static void onLauncherOwnerFinishRequested(
-            Object owner, boolean toHome, String reason) {
-        if (HOME_STATE.onOwnerFinishRequested(owner)) {
-            MainHook.log(TAG + " APP HOME finish-request=" + reason + " toHome=" + toHome);
-        }
-    }
-
-    private static void onLauncherOwnerFinishCompleted(Object owner, String reason) {
-        LauncherHomeTransitionState.Decision decision =
-                HOME_STATE.onOwnerFinishCompleted(owner);
-        releaseHomeBarrierOnMain(decision, reason);
+    private static void onLauncherOwnerFinishCompleted(Object owner) {
+        releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner));
     }
 
     private static void releaseHomeBarrierOnMain(
-            LauncherHomeTransitionState.Decision decision, String reason) {
+            LauncherHomeTransitionState.Decision decision) {
         if (decision == null || !decision.releaseBarrier) return;
         postHomeLifecycleOnMain(() -> {
             // A newer HOME cycle may have started before an older terminal reached the UI queue.
@@ -239,7 +220,6 @@ final class LauncherGlassHomePresentationHook {
             Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
             LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
-            MainHook.log(TAG + " APP HOME terminal=" + reason + "; capture barrier released");
         });
     }
 
