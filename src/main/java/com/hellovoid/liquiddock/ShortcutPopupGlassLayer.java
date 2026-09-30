@@ -8,7 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 
-/** Stable full-screen popup glass output. Its Surface never follows MiuiX popup bounds animation. */
+/** Popup glass output mounted inside the vendor ShortcutMenu material host. */
 final class ShortcutPopupGlassLayer extends TextureView implements TextureView.SurfaceTextureListener {
     private static final long FAST_DISMISS_FADE_MS = 90L;
 
