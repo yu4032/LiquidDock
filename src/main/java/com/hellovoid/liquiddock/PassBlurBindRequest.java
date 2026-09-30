@@ -5,6 +5,7 @@ import android.view.View;
 /** Domain-explicit input for a native PassBlur producer binding. */
 final class PassBlurBindRequest {
     private static final String[] NO_EXTRA_EXCLUSIONS = new String[0];
+    private static final String[] LAUNCHER_WORKSPACE_EXTRA_EXCLUSIONS = {"TextureView"};
     private static final String[] DOCK_EXTRA_EXCLUSIONS = {"DockAssistantView"};
     private static final String[] MIUI_SEARCHBOX_EXTRA_EXCLUSIONS = {"MiuiSearchboxGlassView"};
     private static final String[] RECENTS_CAPSULE_EXTRA_EXCLUSIONS = {"RecentsCapsuleGlassSinkView"};
@@ -34,7 +35,7 @@ final class PassBlurBindRequest {
                 host,
                 PassBlurDomain.LAUNCHER_WORKSPACE,
                 requestedScale,
-                NO_EXTRA_EXCLUSIONS);
+                LAUNCHER_WORKSPACE_EXTRA_EXCLUSIONS);
     }
 
     static PassBlurBindRequest launcherDialog(View authoritativeRoot) {
