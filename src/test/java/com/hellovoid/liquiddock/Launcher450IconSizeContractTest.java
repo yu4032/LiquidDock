@@ -53,6 +53,25 @@ public class Launcher450IconSizeContractTest {
     }
 
     @Test
+    public void shortcutMenuUsesRealVerticalIconPaddingUnderCustomGrid() throws Exception {
+        String module = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
+        String hook = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/ShortcutMenuGridPositionHook.java"));
+
+        assertTrue(module.contains(
+                "ShortcutMenuGridPositionHook.install(classLoader, customGridEnabled)"));
+        assertTrue(hook.contains("ShortcutMenuPosition"));
+        assertTrue(hook.contains("getIconImageViewPaddingTop"));
+        assertTrue(hook.contains("getPaddingTop()"));
+        assertTrue(hook.contains("POSITION_TRANSACTION"));
+        assertTrue("correction must be scoped to workspace ShortcutIcon only",
+                hook.contains("LauncherGlassHierarchy.isWorkspace(icon)"));
+        assertFalse("do not compensate PopupView or mutate ShortcutMenu coordinates directly",
+                hook.contains("setTranslationY") || hook.contains("mPositionInfoY"));
+    }
+
+    @Test
     public void dockIconScalingPreservesVendorSlotWidth() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java"));
