@@ -43,6 +43,15 @@ final class LauncherHomeTransitionState {
         return alreadyArmed ? Decision.none() : Decision.freeze();
     }
 
+    synchronized Decision onAnimationRetargetedAway(Object owner, Object animation) {
+        if (owner == null || animation == null
+                || activeOwner != owner || activeAnimation != animation) {
+            return Decision.none();
+        }
+        clear();
+        return Decision.release();
+    }
+
     synchronized Decision onHomeAnimationTerminal(Object animation) {
         if (animation == null || activeAnimation != animation) return Decision.none();
         clear();
