@@ -68,7 +68,12 @@ final class Miuix307MaterialPipeline {
                 MainHook.log("[DC] MiuiX 307 material disabled: vendor blur write boundary unavailable");
                 return false;
             }
-            installCompatBackgroundBlurSuppression(classLoader);
+            // Diagnostic A/B: leave BlurBackground2's vendor background-blur transaction
+            // untouched. Device traces show the periodic wallpaper blur only after LiquidDock is
+            // enabled, while no LAUNCHER_WORKSPACE producer is active; the only confirmed altered
+            // blur path is HotSeatsListContentBlurBackground2 -> BlurUtilities#setBackgroundBlur.
+            // Keep Prismal/PassBlur and all other material suppression unchanged.
+            MainHook.log("[DC][WorkspacePBTrace] compat HotSeats background blur suppression BYPASSED for A/B");
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);

@@ -138,6 +138,15 @@ public class LauncherWallpaperFreshnessHookContractTest {
         // that the vendor Binder bridge wires both generation-supersession participants.
     }
 
+    @Test public void compatHotSeatsBlurSuppressionIsBypassedForFlickerAbTest()
+            throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        assertTrue(pipeline.contains(
+                "compat HotSeats background blur suppression BYPASSED for A/B"));
+        assertFalse("A/B build must not install the compat BlurUtilities radius rewrite",
+                pipeline.contains("installCompatBackgroundBlurSuppression(classLoader);"));
+    }
+
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
