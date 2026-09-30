@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.Rect;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewParent;
 
 import java.lang.reflect.Method;
 
@@ -44,6 +45,7 @@ final class MiuixShortcutMenuGlassHook {
                 installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
                 installEarlyDockCaptureHook(classLoader, glassConfig);
                 installPositionDiagnostics(classLoader);
+                installCoordinateAuthorityDiagnostics(classLoader);
                 HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object itemInfo = args.length > 0 ? args[0] : null;
@@ -121,6 +123,186 @@ final class MiuixShortcutMenuGlassHook {
             }
             return result;
         });
+    }
+
+    private static void installCoordinateAuthorityDiagnostics(ClassLoader classLoader)
+            throws Exception {
+        Class<?> layerClass = Class.forName(SHORTCUT_MENU_LAYER, false, classLoader);
+        Method resolve = HookUtil.findMethodExact(
+                layerClass,
+                "getDragViewLocationAndScaleInShortcutMenuLayer",
+                new Class<?>[]{View.class});
+
+        Class<?> applicationClass =
+                Class.forName("com.miui.home.launcher.Application", false, classLoader);
+        Method getLauncher = HookUtil.findMethodExact(
+                applicationClass, "getLauncher", new Class<?>[0]);
+
+        Class<?> deviceConfigClass =
+                Class.forName("com.miui.home.launcher.DeviceConfig", false, classLoader);
+        Method getWorkspaceScale = HookUtil.findMethodExact(
+                deviceConfigClass, "getWorkspaceScale", new Class<?>[0]);
+        Method isInHalfSoscSplitMode = HookUtil.findMethodExact(
+                deviceConfigClass, "isInHalfSoscSplitMode", new Class<?>[0]);
+        Method getCellWidth = HookUtil.findMethodExact(
+                deviceConfigClass, "getCellWidth", new Class<?>[0]);
+        Method getCellHeight = HookUtil.findMethodExact(
+                deviceConfigClass, "getCellHeight", new Class<?>[0]);
+        Method getHotSeatsHeight = HookUtil.findMethodExact(
+                deviceConfigClass, "getHotSeatsHeight", new Class<?>[0]);
+        Method getHotSeatsMarginBottom = HookUtil.findMethodExact(
+                deviceConfigClass, "getHotSeatsMarginBottom", new Class<?>[0]);
+
+        Class<?> soscControllerClass =
+                Class.forName("com.miui.home.launcher.LauncherSoscController", false, classLoader);
+        Method getSoscController = HookUtil.findMethodExact(
+                soscControllerClass, "getInstance", new Class<?>[0]);
+
+        HookUtil.hook(resolve, chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            View source = args.length > 0 && args[0] instanceof View ? (View) args[0] : null;
+            View ancestor = chain.getThisObject() instanceof View
+                    ? (View) chain.getThisObject() : null;
+
+            logLauncherState(
+                    getLauncher,
+                    getWorkspaceScale,
+                    isInHalfSoscSplitMode,
+                    getCellWidth,
+                    getCellHeight,
+                    getHotSeatsHeight,
+                    getHotSeatsMarginBottom,
+                    getSoscController);
+            logAncestorChain(source, ancestor, "coord-before");
+
+            Object result = chain.proceed(args);
+
+            MainHook.log(TAG + " [YDIAG] coord-result source="
+                    + (source != null ? source.getClass().getName() : "null")
+                    + " result=" + describeArray(result));
+            logAncestorChain(source, ancestor, "coord-after");
+            return result;
+        });
+    }
+
+    private static void logLauncherState(
+            Method getLauncher,
+            Method getWorkspaceScale,
+            Method isInHalfSoscSplitMode,
+            Method getCellWidth,
+            Method getCellHeight,
+            Method getHotSeatsHeight,
+            Method getHotSeatsMarginBottom,
+            Method getSoscController) {
+        try {
+            Object launcher = getLauncher.invoke(null);
+            String stateName = "null";
+            int editingState = Integer.MIN_VALUE;
+            String flags = "";
+            if (launcher != null) {
+                try {
+                    Object stateManager = HookUtil.getField(launcher, "mStateManager");
+                    Object state = HookUtil.requireInvoke(stateManager, "getState");
+                    stateName = state != null ? state.getClass().getSimpleName() : "null";
+                } catch (Throwable error) {
+                    stateName = "ERR:" + error.getClass().getSimpleName();
+                }
+                try {
+                    editingState = HookUtil.getIntField(launcher, "mEditingState");
+                } catch (Throwable ignored) {}
+                flags = " shortcut=" + invokeBoolean(launcher, "isInShortcutMenuState")
+                        + " editing=" + invokeBoolean(launcher, "isInEditing")
+                        + " normalEditing=" + invokeBoolean(launcher, "isInNormalEditing")
+                        + " folder=" + invokeBoolean(launcher, "isFolderShowing");
+            }
+
+            Object soscController = getSoscController.invoke(null);
+            Object soscEvent = soscController != null
+                    ? HookUtil.requireInvoke(soscController, "getSoscEvent") : null;
+            String sosc = describeSoscEvent(soscEvent);
+
+            MainHook.log(TAG + " [YDIAG] launcher-state"
+                    + " state=" + stateName
+                    + " editingState=" + editingState
+                    + flags
+                    + " workspaceScale=" + getWorkspaceScale.invoke(null)
+                    + " halfSosc=" + isInHalfSoscSplitMode.invoke(null)
+                    + " cell=" + getCellWidth.invoke(null) + "x" + getCellHeight.invoke(null)
+                    + " hotseatHeight=" + getHotSeatsHeight.invoke(null)
+                    + " hotseatMarginBottom=" + getHotSeatsMarginBottom.invoke(null)
+                    + " sosc=" + sosc);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " [YDIAG] launcher-state read failed: " + error);
+        }
+    }
+
+    private static String invokeBoolean(Object target, String methodName) {
+        if (target == null) return "null";
+        try {
+            Object value = HookUtil.requireInvoke(target, methodName);
+            return String.valueOf(value);
+        } catch (Throwable error) {
+            return "ERR";
+        }
+    }
+
+    private static String describeSoscEvent(Object event) {
+        if (event == null) return "null";
+        StringBuilder out = new StringBuilder(event.getClass().getSimpleName());
+        try { out.append("{state=").append(HookUtil.getIntField(event, "state")); }
+        catch (Throwable ignored) { out.append("{state=?"); }
+        try { out.append(",bounds=").append(HookUtil.getField(event, "bounds")); }
+        catch (Throwable ignored) {}
+        try { out.append(",rootBounds=").append(HookUtil.getField(event, "rootBounds")); }
+        catch (Throwable ignored) {}
+        try { out.append(",halfByState=").append(HookUtil.requireInvoke(event, "isHalfSoscSplitByState")); }
+        catch (Throwable ignored) {}
+        try { out.append(",topBottom=").append(HookUtil.requireInvoke(event, "isTopAndBottomSplit")); }
+        catch (Throwable ignored) {}
+        out.append('}');
+        return out.toString();
+    }
+
+    private static void logAncestorChain(View source, View stop, String stage) {
+        if (source == null) return;
+        try {
+            View current = source;
+            int depth = 0;
+            while (current != null && depth < 16) {
+                float[] matrix = new float[9];
+                current.getMatrix().getValues(matrix);
+                int[] screen = new int[2];
+                current.getLocationOnScreen(screen);
+                String idName = "no-id";
+                int id = current.getId();
+                if (id != View.NO_ID) {
+                    try { idName = current.getResources().getResourceEntryName(id); }
+                    catch (Throwable ignored) { idName = String.valueOf(id); }
+                }
+                MainHook.log(TAG + " [YDIAG] " + stage
+                        + " depth=" + depth
+                        + " class=" + current.getClass().getName()
+                        + " id=" + idName
+                        + " frame=" + current.getLeft() + "," + current.getTop()
+                        + "-" + current.getRight() + "," + current.getBottom()
+                        + " measured=" + current.getMeasuredWidth() + "x"
+                        + current.getMeasuredHeight()
+                        + " screen=" + screen[0] + "," + screen[1]
+                        + " scroll=" + current.getScrollX() + "," + current.getScrollY()
+                        + " translation=" + current.getTranslationX() + ","
+                        + current.getTranslationY()
+                        + " scale=" + current.getScaleX() + "," + current.getScaleY()
+                        + " pivot=" + current.getPivotX() + "," + current.getPivotY()
+                        + " matrix=[" + matrix[0] + "," + matrix[1] + "," + matrix[2]
+                        + ";" + matrix[3] + "," + matrix[4] + "," + matrix[5] + "]");
+                if (current == stop) break;
+                ViewParent parent = current.getParent();
+                current = parent instanceof View ? (View) parent : null;
+                depth++;
+            }
+        } catch (Throwable error) {
+            MainHook.log(TAG + " [YDIAG] " + stage + " chain failed: " + error);
+        }
     }
 
     private static String describeArray(Object value) {
