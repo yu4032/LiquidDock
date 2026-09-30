@@ -26,8 +26,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
         assertTrue(coordinator.contains("ensurePopupOutput(state)"));
         assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
-        assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
+        assertTrue(coordinator.contains("content instanceof ViewGroup"));
+        assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
         assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("vendor ShortcutMenu material is applied directly"));
+        assertFalse(coordinator.contains("decorGroup.addView(layer, popupIndex"));
         assertTrue(coordinator.contains("private static void onPresented(State state)"));
         assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
         assertFalse(coordinator.contains("if (!state.session.hasFrozenBackdrop())"));
@@ -35,6 +38,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(coordinator.contains("|| state.session == null || popupView == null"));
         assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
+        assertTrue(session.contains("presentCropped(prismalRenderer.outputTexture()"));
+        assertTrue(session.contains("geometry.cropLeft"));
+        assertTrue(session.contains("geometry.cropBottom"));
+        assertFalse(session.contains("presentFull(prismalRenderer.outputTexture()"));
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
         assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
         assertFalse(hook.contains("attachToExternalMaterial"));
