@@ -188,7 +188,7 @@ final class RootPassBlurEndpointBridge {
         return method.invoke(view);
     }
 
-    private static synchronized void ensureViewRootMembers(Object viewRoot) throws Exception {
+    private static void ensureViewRootMembers(Object viewRoot) throws Exception {
         Class<?> type = viewRoot.getClass();
         if (cachedViewRootClass == type
                 && cachedSurfaceSizeField != null
@@ -196,6 +196,13 @@ final class RootPassBlurEndpointBridge {
                 && cachedGetSurfaceControl != null) {
             return;
         }
+        synchronized (RootPassBlurEndpointBridge.class) {
+            if (cachedViewRootClass == type
+                    && cachedSurfaceSizeField != null
+                    && cachedWindowAttributesField != null
+                    && cachedGetSurfaceControl != null) {
+                return;
+            }
         Field surfaceSize = findField(type, "mSurfaceSize");
         surfaceSize.setAccessible(true);
         Field windowAttributes = findField(type, "mWindowAttributes");
@@ -208,15 +215,49 @@ final class RootPassBlurEndpointBridge {
         cachedGetSurfaceControl = getSurfaceControl;
         cachedWindowAttributesClass = null;
         cachedSurfaceInsetsField = null;
+        }
     }
 
-    private static synchronized void ensureWindowAttributesMembers(Object attrs) throws Exception {
+    private static void ensureWindowAttributesMembers(Object attrs) throws Exception {
         Class<?> type = attrs.getClass();
         if (cachedWindowAttributesClass == type && cachedSurfaceInsetsField != null) return;
+        synchronized (RootPassBlurEndpointBridge.class) {
+            if (cachedWindowAttributesClass == type && cachedSurfaceInsetsField != null) return;
         Field surfaceInsets = findField(type, "surfaceInsets");
         surfaceInsets.setAccessible(true);
         cachedWindowAttributesClass = type;
         cachedSurfaceInsetsField = surfaceInsets;
+        }
+    }
+
+    static boolean isCurrentGeneration(
+            View root, Miuix307PassBlurBridge.Binding binding) {
+        if (root == null || binding == null || !binding.bound
+                || binding.rootSurface == null || !binding.rootSurface.isValid()) {
+            return false;
+        }
+        try {
+            Object viewRoot = getViewRootImpl(root);
+            if (viewRoot == null
+                    || System.identityHashCode(viewRoot) != binding.viewRootIdentity) {
+                return false;
+            }
+            int sequence = Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot);
+            if (binding.surfaceSequenceId >= 0 && sequence >= 0) {
+                return binding.surfaceSequenceId == sequence;
+            }
+            ensureViewRootMembers(viewRoot);
+            Object value = cachedGetSurfaceControl.invoke(viewRoot);
+            if (!(value instanceof SurfaceControl)) return false;
+            SurfaceControl current = (SurfaceControl) value;
+            if (binding.rootLayerId >= 0) {
+                int layerId = Miuix307PassBlurBridge.surfaceLayerId(current);
+                if (layerId >= 0) return binding.rootLayerId == layerId;
+            }
+            return isSameSurface(binding.rootSurface, current);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static Method installOrientationMethod() {
