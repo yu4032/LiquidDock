@@ -49,7 +49,7 @@ jobs:
             echo "Forbidden Security Center obfuscated-name dependency detected" >&2
             exit 1
           fi
-      - name: Debug assembly (temporary diagnostic branch: tests disabled)
+      - name: "Debug assembly - temporary diagnostic branch, tests disabled"
         run: ./gradlew assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
