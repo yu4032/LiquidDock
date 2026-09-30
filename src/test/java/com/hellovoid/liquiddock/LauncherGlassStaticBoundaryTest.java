@@ -48,6 +48,9 @@ public class LauncherGlassStaticBoundaryTest {
         assertTrue(node.contains("addOnLayoutChangeListener(materialLayoutListener)"));
         assertTrue(node.contains("live.markStaticGeometryDirty(this)"));
         assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(pending)"));
+        assertTrue(session.contains("sourceEndpointDirty"));
+        assertTrue(session.contains("sourceBackend.isEndpointGenerationCurrent()"));
+        assertTrue(session.contains("addOnGlobalLayoutListener(layoutListener)"));
 
         // Static nodes may still scan continuously during HOME spring / paging, but stable HOME
         // must not unconditionally clone and traverse the entire static-node registry each frame.
