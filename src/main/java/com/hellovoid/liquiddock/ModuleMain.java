@@ -32,7 +32,6 @@ public final class ModuleMain extends XposedModule {
                 ClassLoader classLoader = param.getClassLoader();
                 if (classLoader == null) return;
                 SystemUiKeyguardGoneSource.install(classLoader);
-                SystemUiHomeTransitionSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 if (runtimeConfig.enabled && runtimeConfig.glass.enabled
@@ -147,7 +146,6 @@ public final class ModuleMain extends XposedModule {
             DockIconAnimationGlassHook.install(classLoader, runtimeConfig);
             LauncherGlassRecentsHook.install(classLoader, runtimeConfig);
             SystemUiKeyguardGoneRuntime.install();
-            SystemUiHomeTransitionRuntime.install();
             LauncherGlassHomePresentationHook.install(classLoader);
             DockGlassDropRefreshHook.install(classLoader);
             RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);

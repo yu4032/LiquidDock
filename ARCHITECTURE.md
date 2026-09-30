@@ -56,13 +56,14 @@ Launcher 是主功能进程，负责：
 
 SystemUI 当前承担两类职责：
 
-1. 为 Launcher 提供 HOME / keyguard 转场时序；
+1. 为 Launcher 提供 keyguard 转场时序；
 2. 可选地替换应用顶部窗口控制菜单的背景。
+
+HOME 返回时序不再跨进程转交给 SystemUI；它由 Launcher 4.50 自己的 `WindowElement + RectFSpringAnim` 生命周期负责。
 
 相关入口：
 
 - `SystemUiKeyguardGoneSource`；
-- `SystemUiHomeTransitionSource`；
 - `SystemUiHandleMenuSurfaceAnimationAuthority`；
 - `SystemUiHandleMenuGlassHook`。
 
@@ -306,12 +307,11 @@ Launcher app launch / return HOME 时，MIUI floating icon proxy 是 transition 
 
 LiquidDock 避免静态玻璃图标与系统 floating icon 同时可见，并通过：
 
-- `LauncherGlassHomePresentationHook`；
-- `SystemUiHomeTransitionRuntime`；
-- `SystemUiKeyguardGoneRuntime`；
+- `LauncherGlassHomePresentationHook`：以 `WindowElement + RectFSpringAnim` 的真实 start/running-update 建立 HOME capture fence，并以 `WindowElement.onFinishCompleted()` 作为 merge-safe 完成边界；
+- `SystemUiKeyguardGoneRuntime`：仅负责 keyguard 解锁返回；
 - fresh-frame barrier；
 
-恢复 Workspace presentation。
+恢复 Workspace presentation。HOME 不再等待 SystemUI HOME FINISH，也不在 `animTo()` 请求入口提前建立 barrier。
 
 解锁恢复不再依赖固定 fail-open 时间授权旧帧。
 
