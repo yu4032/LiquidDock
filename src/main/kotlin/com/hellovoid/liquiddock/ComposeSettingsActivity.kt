@@ -755,6 +755,13 @@ private fun LiquidPage(
             stringResource(R.string.liquid_enable_summary),
             masterEnabled,
         ) { liquidGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
+            "壁纸闪烁修复",
+            "仅在壁纸闪烁时开启；需要在 LSPosed 中为 LiquidDock 启用 System Framework（system）作用域，并重启设备后生效",
+            masterEnabled && liquidGlass,
+        )
         ArrowPreference(
             title = "第三方应用适配",
             summary = "Gboard 等第三方应用的独立液态玻璃适配",
