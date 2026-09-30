@@ -266,6 +266,16 @@ final class Miuix307PassBlurTextureView extends TextureView
     private long powerWindowStartedMs = SystemClock.uptimeMillis();
     private ViewTreeObserver preDrawObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
+    private View geometryRoot;
+    private volatile boolean producerGeometryDirty = true;
+    private volatile boolean backdropMappingDirty = true;
+    private volatile boolean continuousGeometryTracking;
+    private final View.OnLayoutChangeListener geometryLayoutListener =
+            (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                producerGeometryDirty = true;
+                backdropMappingDirty = true;
+                postInvalidateOnAnimation();
+            };
 
     private Class<?> cachedViewRootClass;
     private Field cachedSurfaceSizeField;
@@ -323,6 +333,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         passBlurCaptureScalePercent = glassConfig.passBlurCaptureScalePercent;
+        backdropMappingDirty = true;
         updateBackdropMapping();
         if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
     }
@@ -340,10 +351,19 @@ final class Miuix307PassBlurTextureView extends TextureView
         postOnAnimation(() -> {
             if (shuttingDown) return;
             dockCompositor.invalidateUiScene();
+            backdropMappingDirty = true;
             updateBackdropMapping();
             if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
             postInvalidateOnAnimation();
         });
+    }
+
+    void setContinuousGeometryTracking(boolean enabled) {
+        if (shuttingDown || continuousGeometryTracking == enabled) return;
+        continuousGeometryTracking = enabled;
+        producerGeometryDirty = true;
+        backdropMappingDirty = true;
+        postInvalidateOnAnimation();
     }
 
     /**
@@ -442,6 +462,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        producerGeometryDirty = true;
+        backdropMappingDirty = true;
         installGeometryObserver();
         updateBackdropMapping();
         if (isAvailable() && getSurfaceTexture() != null && outputWindowSurface == null) {
@@ -462,6 +484,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         outputWidth = Math.max(1, width);
         outputHeight = Math.max(1, height);
         hasPresentedFrame = false;
+        backdropMappingDirty = true;
         updateBackdropMapping();
         Surface window = new Surface(surface);
         Surface stale = outputWindowSurface;
@@ -475,6 +498,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         outputWidth = Math.max(1, width);
         outputHeight = Math.max(1, height);
         hasPresentedFrame = false;
+        backdropMappingDirty = true;
         updateBackdropMapping();
         renderHandler.post(() -> {
             if (eglWindowSurface == EGL14.EGL_NO_SURFACE) return;
@@ -1049,9 +1073,21 @@ final class Miuix307PassBlurTextureView extends TextureView
         View root = getRootView();
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
+        geometryRoot = root;
+        root.addOnLayoutChangeListener(geometryLayoutListener);
+        View materialHost = materialHostRef.get();
+        if (materialHost != null && materialHost != root) {
+            materialHost.addOnLayoutChangeListener(geometryLayoutListener);
+        }
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            refreshProducerGeometryInPlace();
-            updateBackdropMapping();
+            boolean continuous = continuousGeometryTracking;
+            if (continuous || producerGeometryDirty || rootSurfaceIdentityChanged()) {
+                producerGeometryDirty = false;
+                refreshProducerGeometryInPlace();
+            }
+            if (continuous || backdropMappingDirty) {
+                updateBackdropMapping();
+            }
             return true;
         };
         observer.addOnPreDrawListener(listener);
@@ -1062,12 +1098,41 @@ final class Miuix307PassBlurTextureView extends TextureView
     private void removeGeometryObserver() {
         ViewTreeObserver observer = preDrawObserver;
         ViewTreeObserver.OnPreDrawListener listener = preDrawListener;
+        View root = geometryRoot;
         preDrawObserver = null;
         preDrawListener = null;
+        geometryRoot = null;
+        if (root != null) {
+            try { root.removeOnLayoutChangeListener(geometryLayoutListener); }
+            catch (Throwable ignored) {}
+        }
+        View materialHost = materialHostRef.get();
+        if (materialHost != null && materialHost != root) {
+            try { materialHost.removeOnLayoutChangeListener(geometryLayoutListener); }
+            catch (Throwable ignored) {}
+        }
         if (observer == null || listener == null) return;
         try {
             if (observer.isAlive()) observer.removeOnPreDrawListener(listener);
         } catch (Throwable ignored) {}
+    }
+
+    private boolean rootSurfaceIdentityChanged() {
+        Miuix307PassBlurBridge.Binding current = binding;
+        View materialHost = materialHostRef.get();
+        if (current == null || materialHost == null) return false;
+        try {
+            Object viewRoot = getViewRootImpl(materialHost);
+            if (viewRoot == null) return false;
+            ensureViewRootAccessors(viewRoot);
+            Object value = cachedGetSurfaceControlMethod.invoke(viewRoot);
+            if (!(value instanceof SurfaceControl)) return false;
+            SurfaceControl observed = (SurfaceControl) value;
+            return !current.rootSurface.isValid()
+                    || !isSameSurface(current.rootSurface, observed);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private void refreshProducerGeometryInPlace() {
@@ -1111,6 +1176,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         firstMatrixLogged = false;
         stageBDiagnosticsLogged = false;
         prismalMappingLogged = false;
+        backdropMappingDirty = true;
         updateBackdropMapping();
         renderHandler.post(() -> {
             SurfaceTexture currentInput = inputSurfaceTexture;
@@ -1205,6 +1271,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         float nextDockUvHeight = visibleHeight / (float) sampleHeight;
         boolean dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
                 sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
+        backdropMappingDirty = false;
 
         BackdropSnapshot currentSnapshot = backdropSnapshot;
         boolean unchanged = currentSnapshot != null
@@ -1591,6 +1658,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         dockUvWidth = 1f;
         dockUvHeight = 1f;
         producerCoverage = Miuix307BackdropMapping.Coverage.FULL;
+        producerGeometryDirty = true;
+        backdropMappingDirty = true;
     }
 
     private void fail(String stage, Throwable error) {
