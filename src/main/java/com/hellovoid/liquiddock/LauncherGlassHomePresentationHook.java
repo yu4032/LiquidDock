@@ -218,9 +218,8 @@ final class LauncherGlassHomePresentationHook {
 
     private static void onLauncherOwnerFinishRequested(
             Object owner, boolean toHome, String reason) {
-        LauncherHomeTransitionState.Decision decision =
-                HOME_STATE.onOwnerFinishRequested(owner, toHome);
-        releaseHomeBarrierOnMain(decision, reason + "/away");
+        HOME_STATE.onOwnerFinishRequested(owner);
+        MainHook.log(TAG + " APP HOME finish-request=" + reason + " toHome=" + toHome);
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner, String reason) {
