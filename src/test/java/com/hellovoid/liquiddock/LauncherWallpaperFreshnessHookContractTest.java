@@ -151,7 +151,7 @@ public class LauncherWallpaperFreshnessHookContractTest {
                 MAIN.resolve("LauncherWorkspacePassBlurDiagnostics.java"));
         String backend = Files.readString(MAIN.resolve("RootPassBlurBackend.java"));
 
-        assertTrue(pipeline.contains("LauncherWorkspacePassBlurDiagnostics.install()"));
+        assertTrue(pipeline.contains("LauncherWorkspacePassBlurDiagnostics.install(classLoader)"));
         assertTrue(bridge.contains("LauncherWorkspacePassBlurDiagnostics.claim("));
         assertTrue(bridge.contains("LauncherWorkspacePassBlurDiagnostics.release("));
         assertTrue(diagnostics.contains("\"setUpdateTextureFlag\""));
@@ -159,6 +159,12 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(diagnostics.contains("callerTrace()"));
         assertTrue(diagnostics.contains("LauncherGlassSceneController.diagnosticState(host)"));
         assertTrue(diagnostics.contains("traceBlurInterception("));
+        assertTrue(diagnostics.contains("\"com.miui.home.launcher.Workspace\""));
+        assertTrue(diagnostics.contains("\"scrollTo\""));
+        assertTrue(diagnostics.contains("\"com.miui.home.launcher.Launcher\""));
+        assertTrue(diagnostics.contains("\"onWorkspaceScroll\""));
+        assertTrue(diagnostics.contains("workspace-first-scroll BEFORE"));
+        assertTrue(diagnostics.contains("launcher-first-onWorkspaceScroll AFTER"));
         assertTrue(diagnostics.contains("[DC][WorkspacePBTrace]"));
         assertFalse("diagnostic hook must not rewrite vendor update state",
                 diagnostics.contains("args[1] = Boolean.valueOf"));

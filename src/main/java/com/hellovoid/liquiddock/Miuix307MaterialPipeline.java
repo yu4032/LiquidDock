@@ -73,7 +73,7 @@ final class Miuix307MaterialPipeline {
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);
             installVendorStaticDockSnapshotPowerHook(classLoader);
-            if (!LauncherWorkspacePassBlurDiagnostics.install()) {
+            if (!LauncherWorkspacePassBlurDiagnostics.install(classLoader)) {
                 MainHook.log("[DC][WorkspacePBTrace] Workspace PassBlur diagnostics unavailable");
             }
             LauncherWallpaperFreshnessHook.install(classLoader);

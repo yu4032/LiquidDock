@@ -38,11 +38,13 @@ final class LauncherWorkspacePassBlurDiagnostics {
 
     private static final Map<SurfaceControl, Claim> ACTIVE_ROOTS = new WeakHashMap<>();
     private static final Map<View, String> LAST_BLUR_TRACE = new WeakHashMap<>();
+    private static final Map<View, Boolean> FIRST_SCROLL_SEEN = new WeakHashMap<>();
+    private static boolean firstLauncherScrollCallbackSeen;
     private static boolean installed;
 
     private LauncherWorkspacePassBlurDiagnostics() {}
 
-    static boolean install() {
+    static boolean install(ClassLoader classLoader) {
         synchronized (LOCK) {
             if (installed) return true;
             try {
@@ -109,6 +111,7 @@ final class LauncherWorkspacePassBlurDiagnostics {
                     return chain.proceed(args);
                 });
 
+                installWorkspaceScrollTrace(classLoader);
                 installed = true;
                 log("Workspace PassBlur diagnostics installed");
                 return true;
@@ -164,6 +167,93 @@ final class LauncherWorkspacePassBlurDiagnostics {
                     + " rootValid=" + root.isValid()
                     + " " + viewState(host)
                     + " " + LauncherGlassSceneController.diagnosticState(host));
+        }
+    }
+
+    private static void installWorkspaceScrollTrace(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader,
+                    "com.miui.home.launcher.Workspace",
+                    "scrollTo",
+                    chain -> {
+                        Object owner = chain.getThisObject();
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        if (!(owner instanceof View)
+                                || args.length < 2
+                                || !(args[0] instanceof Integer)
+                                || !(args[1] instanceof Integer)) {
+                            return chain.proceed(args);
+                        }
+                        View workspace = (View) owner;
+                        int beforeX = workspace.getScrollX();
+                        int beforeY = workspace.getScrollY();
+                        int targetX = (Integer) args[0];
+                        int targetY = (Integer) args[1];
+                        boolean firstRealMotion = false;
+                        if (targetX != beforeX || targetY != beforeY) {
+                            synchronized (LOCK) {
+                                if (!Boolean.TRUE.equals(FIRST_SCROLL_SEEN.get(workspace))) {
+                                    FIRST_SCROLL_SEEN.put(workspace, Boolean.TRUE);
+                                    firstRealMotion = true;
+                                }
+                            }
+                        }
+                        if (firstRealMotion) {
+                            log("workspace-first-scroll BEFORE"
+                                    + " from=" + beforeX + "," + beforeY
+                                    + " target=" + targetX + "," + targetY
+                                    + " " + viewState(workspace)
+                                    + " " + LauncherGlassSceneController.diagnosticState(workspace));
+                        }
+                        Object result = chain.proceed(args);
+                        if (firstRealMotion) {
+                            log("workspace-first-scroll AFTER"
+                                    + " actual=" + workspace.getScrollX() + "," + workspace.getScrollY()
+                                    + " " + viewState(workspace)
+                                    + " " + LauncherGlassSceneController.diagnosticState(workspace));
+                        }
+                        return result;
+                    },
+                    int.class, int.class);
+        } catch (Throwable error) {
+            log("Workspace.scrollTo trace unavailable: " + error);
+        }
+
+        try {
+            HookUtil.hookMethod(classLoader,
+                    "com.miui.home.launcher.Launcher",
+                    "onWorkspaceScroll",
+                    chain -> {
+                        Object launcher = chain.getThisObject();
+                        boolean first;
+                        synchronized (LOCK) {
+                            first = !firstLauncherScrollCallbackSeen;
+                            if (first) firstLauncherScrollCallbackSeen = true;
+                        }
+                        if (!first) return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Boolean beforeMoved = tryHasMoved(launcher);
+                        log("launcher-first-onWorkspaceScroll BEFORE"
+                                + " hasMoved=" + beforeMoved
+                                + " caller=" + callerTrace());
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Boolean afterMoved = tryHasMoved(launcher);
+                        log("launcher-first-onWorkspaceScroll AFTER"
+                                + " hasMoved=" + afterMoved);
+                        return result;
+                    });
+        } catch (Throwable error) {
+            log("Launcher.onWorkspaceScroll trace unavailable: " + error);
+        }
+    }
+
+    private static Boolean tryHasMoved(Object launcher) {
+        if (launcher == null) return null;
+        try {
+            Method method = launcher.getClass().getMethod("hasMoved");
+            Object value = method.invoke(launcher);
+            return value instanceof Boolean ? (Boolean) value : null;
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
