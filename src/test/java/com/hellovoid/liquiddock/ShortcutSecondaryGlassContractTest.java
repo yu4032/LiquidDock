@@ -29,7 +29,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("content instanceof ViewGroup"));
         assertTrue(coordinator.contains("contentGroup.addView(layer, 0"));
         assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
-        assertTrue(coordinator.contains("vendor ShortcutMenu material is applied directly"));
+        assertTrue(coordinator.contains("stock HyperOS ShortcutMenu material is applied directly"));
         assertFalse(coordinator.contains("decorGroup.addView(layer, popupIndex"));
         assertTrue(coordinator.contains("private static void onPresented(State state)"));
         assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
