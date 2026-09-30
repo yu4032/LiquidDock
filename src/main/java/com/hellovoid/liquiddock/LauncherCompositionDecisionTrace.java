@@ -8,12 +8,14 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Temporary, non-mutating composition diagnostic.
+ * Temporary composition-decision experiment.
  *
  * <p>HyperOS Launcher drives the standard SurfaceControl background-blur fields from
  * WindowBlurUtils for Folder/Drawer/Recents transitions. AOSP CompositionEngine uses these fields
- * when deciding whether layers below a blur layer must stay in client/GPU composition. This tracer
- * records those writes and the transaction apply boundary without changing any argument or state.
+ * when deciding whether layers below a blur layer must stay in client/GPU composition. For the
+ * Launcher root SurfaceControl only, keep a zero radius at 1 while LiquidDock is enabled so the
+ * client-composition eligibility never drops at the 1 -> 0 boundary. All non-zero radii and every
+ * other SurfaceControl field pass through unchanged.
  */
 final class LauncherCompositionDecisionTrace {
     private static final String TAG = "[DC][COMPTRACE]";
@@ -52,27 +54,40 @@ final class LauncherCompositionDecisionTrace {
                     "setBackgroundBlurRadius", SurfaceControl.class, int.class);
             HookUtil.hook(method, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                SurfaceControl sc = args.length >= 2 && args[0] instanceof SurfaceControl
+                        ? (SurfaceControl) args[0]
+                        : null;
+                Integer requestedRadius = args.length >= 2 && args[1] instanceof Number
+                        ? Integer.valueOf(((Number) args[1]).intValue())
+                        : null;
+                boolean held = sc != null
+                        && requestedRadius != null
+                        && requestedRadius.intValue() == 0
+                        && GlassRuntimeState.isEnabled()
+                        && isLauncherRoot(sc);
+                if (held) {
+                    args[1] = Integer.valueOf(1);
+                }
+
                 Object result = chain.proceed(args);
-                if (args.length >= 2
-                        && args[0] instanceof SurfaceControl
-                        && args[1] instanceof Number) {
-                    SurfaceControl sc = (SurfaceControl) args[0];
-                    if (isRelevant(sc)) {
-                        int radius = ((Number) args[1]).intValue();
-                        String key = surfaceKey(sc);
-                        Integer previous;
-                        synchronized (LauncherCompositionDecisionTrace.class) {
-                            previous = LAST_RADIUS.put(key, Integer.valueOf(radius));
-                            markPending(chain.getThisObject());
-                        }
-                        MainHook.log(TAG + " bgRadius"
-                                + " txn=" + transactionId(chain.getThisObject())
-                                + " layer=" + key
-                                + " old=" + (previous == null ? "?" : previous)
-                                + " new=" + radius
-                                + " forceClient=" + (radius > 0)
-                                + " caller=" + launcherCallerStack());
+
+                if (sc != null && requestedRadius != null && isRelevant(sc)) {
+                    int appliedRadius = held ? 1 : requestedRadius.intValue();
+                    String key = surfaceKey(sc);
+                    Integer previous;
+                    synchronized (LauncherCompositionDecisionTrace.class) {
+                        previous = LAST_RADIUS.put(key, Integer.valueOf(appliedRadius));
+                        markPending(chain.getThisObject());
                     }
+                    MainHook.log(TAG + " bgRadius"
+                            + " txn=" + transactionId(chain.getThisObject())
+                            + " layer=" + key
+                            + " old=" + (previous == null ? "?" : previous)
+                            + " requested=" + requestedRadius
+                            + " applied=" + appliedRadius
+                            + " holdZero=" + held
+                            + " forceClient=" + (appliedRadius > 0)
+                            + " caller=" + launcherCallerStack());
                 }
                 return result;
             });
@@ -307,6 +322,13 @@ final class LauncherCompositionDecisionTrace {
         return transaction == null
                 ? "null"
                 : Integer.toHexString(System.identityHashCode(transaction));
+    }
+
+    private static boolean isLauncherRoot(SurfaceControl sc) {
+        if (sc == null) return false;
+        String name = surfaceName(sc);
+        return name.startsWith("com.miui.home/com.miui.home.launcher.Launcher#")
+                || name.equals("com.miui.home/com.miui.home.launcher.Launcher");
     }
 
     private static boolean isRelevant(SurfaceControl sc) {
