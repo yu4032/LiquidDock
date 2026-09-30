@@ -407,19 +407,19 @@ final class SystemUiHandleMenuPrismalSession {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
             normalizeQuad = GlQuadBindings.resolve(normalizeProgram);
-            normalizeTextureUniform = normalizeTextureUniform;
-            normalizeTexMatrixUniform = normalizeTexMatrixUniform;
-            normalizeBackdropRectUniform = normalizeBackdropRectUniform;
-            normalizeConfigRotUniform = normalizeConfigRotUniform;
-            normalizeValidDockRectUniform = normalizeValidDockRectUniform;
+            normalizeTextureUniform = requireUniform(normalizeProgram, "uTexture");
+            normalizeTexMatrixUniform = requireUniform(normalizeProgram, "uTexMatrix");
+            normalizeBackdropRectUniform = requireUniform(normalizeProgram, "uBackdropRect");
+            normalizeConfigRotUniform = requireUniform(normalizeProgram, "uConfigRot");
+            normalizeValidDockRectUniform = requireUniform(normalizeProgram, "uValidDockRect");
         }
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
             compositeQuad = GlQuadBindings.resolve(compositeProgram);
-            compositeTextureUniform = compositeTextureUniform;
-            compositeCropUniform = compositeCropUniform;
+            compositeTextureUniform = requireUniform(compositeProgram, "uTexture");
+            compositeCropUniform = requireUniform(compositeProgram, "uCropRect");
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
