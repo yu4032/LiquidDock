@@ -80,7 +80,7 @@ public class DockGlassShapeOwnershipContractTest {
     public void dockIconFingerprintIncludesHotSeatsOwnershipRootGeometry() throws Exception {
         String node = Files.readString(DOCK_ITEM_NODE);
 
-        assertTrue(node.contains("return mixViewGeometry(hash, dockRoot);"));
+        assertTrue(node.contains("if (cursor == dockRoot) return hash;"));
         assertTrue(node.contains("view.getLeft()"));
         assertTrue(node.contains("view.getRight()"));
         assertTrue(node.contains("view.getTranslationX()"));
