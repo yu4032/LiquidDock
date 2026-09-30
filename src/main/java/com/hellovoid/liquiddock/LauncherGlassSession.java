@@ -675,30 +675,35 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        List<NodeState> dragSnapshot;
-        synchronized (nodes) { dragSnapshot = new ArrayList<>(nodes.values()); }
-        for (NodeState node : dragSnapshot) {
-            LauncherGlassSinkView sink = node.sinkRef.get();
-            if (sink == null) continue;
-            boolean localChanged = sink.syncFromMaterial();
-            dragChanged |= localChanged;
-            if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
-            LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
-            LauncherGlassGeometry.Snapshot old = node.geometry;
-            if ((old == null) != (observed == null)
-                    || (old != null && !old.sameAs(observed))) {
-                node.geometry = observed;
-                dragChanged = true;
+        List<NodeState> dragSnapshot = null;
+        synchronized (nodes) {
+            if (!nodes.isEmpty()) dragSnapshot = new ArrayList<>(nodes.values());
+        }
+        if (dragSnapshot != null) {
+            for (NodeState node : dragSnapshot) {
+                LauncherGlassSinkView sink = node.sinkRef.get();
+                if (sink == null) continue;
+                boolean localChanged = sink.syncFromMaterial();
+                dragChanged |= localChanged;
+                if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
+                LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
+                LauncherGlassGeometry.Snapshot old = node.geometry;
+                if ((old == null) != (observed == null)
+                        || (old != null && !old.sameAs(observed))) {
+                    node.geometry = observed;
+                    dragChanged = true;
+                }
             }
         }
 
         boolean scanAllStatic = rootGeometryChanged
                 || continuousStaticGeometryTracking || staticGeometryDirtyAll;
-        List<StaticNodeState> staticSnapshot = new ArrayList<>();
+        List<StaticNodeState> staticSnapshot = null;
         synchronized (staticNodes) {
-            if (scanAllStatic) {
-                staticSnapshot.addAll(staticNodes.values());
+            if (scanAllStatic && !staticNodes.isEmpty()) {
+                staticSnapshot = new ArrayList<>(staticNodes.values());
             } else if (!dirtyStaticNodes.isEmpty()) {
+                staticSnapshot = new ArrayList<>(dirtyStaticNodes.size());
                 for (LauncherGlassStaticNode node : new ArrayList<>(dirtyStaticNodes.keySet())) {
                     StaticNodeState state = staticNodes.get(node);
                     if (state != null) staticSnapshot.add(state);
@@ -707,23 +712,27 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             dirtyStaticNodes.clear();
             staticGeometryDirtyAll = false;
         }
-        Integer workspaceScrollX = staticSnapshot.isEmpty()
-                ? null : LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-        for (StaticNodeState state : staticSnapshot) {
-            LauncherGlassStaticNode node = state.nodeRef.get();
-            if (node == null) continue;
-            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
-            StaticGeometryFrame oldFrame = state.frame;
-            LauncherGlassGeometry.Snapshot old = oldFrame != null ? oldFrame.geometry : null;
-            if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
-            if ((old == null) != (observed == null)
-                    || (old != null && !old.sameAs(observed))) {
-                int anchor = workspaceScrollX != null
-                        ? workspaceScrollX : oldFrame != null ? oldFrame.workspaceScrollX : 0;
-                boolean anchorValid = workspaceScrollX != null
-                        || (oldFrame != null && oldFrame.workspaceScrollValid);
-                state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
-                staticChanged = true;
+        if (staticSnapshot != null && !staticSnapshot.isEmpty()) {
+            Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
+            for (StaticNodeState state : staticSnapshot) {
+                LauncherGlassStaticNode node = state.nodeRef.get();
+                if (node == null) continue;
+                LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+                StaticGeometryFrame oldFrame = state.frame;
+                LauncherGlassGeometry.Snapshot old =
+                        oldFrame != null ? oldFrame.geometry : null;
+                if (observed == null && old != null && node.retainLastGeometryDuringFade()) {
+                    continue;
+                }
+                if ((old == null) != (observed == null)
+                        || (old != null && !old.sameAs(observed))) {
+                    int anchor = workspaceScrollX != null
+                            ? workspaceScrollX : oldFrame != null ? oldFrame.workspaceScrollX : 0;
+                    boolean anchorValid = workspaceScrollX != null
+                            || (oldFrame != null && oldFrame.workspaceScrollValid);
+                    state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
+                    staticChanged = true;
+                }
             }
         }
 
