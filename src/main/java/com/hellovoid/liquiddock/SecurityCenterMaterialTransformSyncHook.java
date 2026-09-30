@@ -56,7 +56,8 @@ final class SecurityCenterMaterialTransformSyncHook {
                     View.class, name, new Class<?>[]{float.class});
             HookUtil.hook(method, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                notifyMutation(chain.getThisObject());
+                Object value = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
+                notifyMutation(chain.getThisObject(), name, value);
                 return result;
             });
         } catch (Throwable error) {
@@ -71,7 +72,7 @@ final class SecurityCenterMaterialTransformSyncHook {
                     new Class<?>[]{ViewGroup.LayoutParams.class});
             HookUtil.hook(method, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                notifyMutation(chain.getThisObject());
+                notifyMutation(chain.getThisObject(), "setLayoutParams", null);
                 return result;
             });
         } catch (Throwable error) {
@@ -79,7 +80,7 @@ final class SecurityCenterMaterialTransformSyncHook {
         }
     }
 
-    private static void notifyMutation(Object receiver) {
+    private static void notifyMutation(Object receiver, String source, Object value) {
         if (!(receiver instanceof View)) return;
         SecurityCenterGlassSinkView sink;
         synchronized (LOCK) {
@@ -87,7 +88,12 @@ final class SecurityCenterMaterialTransformSyncHook {
             sink = ref != null ? ref.get() : null;
             if (sink == null && ref != null) SINKS.remove((View) receiver);
         }
-        if (sink != null) sink.onNativeMaterialTransformMutated();
+        if (sink != null) {
+            log("mutation source=" + source
+                    + " value=" + value
+                    + " view@" + Integer.toHexString(System.identityHashCode(receiver)), null);
+            sink.onNativeMaterialTransformMutated(source);
+        }
     }
 
     private static void log(String message, Throwable error) {
