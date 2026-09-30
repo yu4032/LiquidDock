@@ -9,7 +9,7 @@ import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Gates Workspace wallpaper capture across HOME and keyguard presentation boundaries. */
+/** Gates Workspace wallpaper capture across Launcher HOME and keyguard presentation boundaries. */
 final class LauncherGlassHomePresentationHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String WINDOW_ELEMENT = "com.miui.home.recents.anim.WindowElement";
@@ -28,12 +28,19 @@ final class LauncherGlassHomePresentationHook {
     private static volatile long unlockBarrierSerial = -1L;
     private static volatile long unlockBarrierStartedAtMs = -1L;
     private static Handler unlockTimeoutHandler;
-    private static final ThreadLocal<Boolean> CAPTURING_HOME_END_LISTENER = new ThreadLocal<>();
-    private static final Set<Class<?>> HOOKED_HOME_END_LISTENER_CLASSES =
+
+    /**
+     * WindowElement.addListener(RectFSpringAnim) is the stable structural boundary that identifies
+     * the spring listener owned by Launcher. The actual HOME barrier begins only from that listener's
+     * real onAnimationStart callback, never from an animTo request that Launcher may reject.
+     */
+    private static final ThreadLocal<Boolean> CAPTURING_WINDOW_ELEMENT_LISTENER =
+            new ThreadLocal<>();
+    private static final Set<Class<?>> HOOKED_WINDOW_ELEMENT_LISTENER_CLASSES =
             ConcurrentHashMap.newKeySet();
 
-    private static final HomeTransitionAuthorityState HOME_AUTHORITY =
-            new HomeTransitionAuthorityState();
+    private static final LauncherHomeTransitionState HOME_STATE =
+            new LauncherHomeTransitionState();
     private static final UnlockCaptureRecoveryState UNLOCK_RECOVERY =
             new UnlockCaptureRecoveryState();
 
@@ -41,170 +48,131 @@ final class LauncherGlassHomePresentationHook {
 
     static void install(ClassLoader classLoader) {
         if (installed) return;
-        hookHomeStart(classLoader);
-        hookHomeEnd(classLoader);
+        hookHomeSpringLifecycle(classLoader);
         hookUnlockState(classLoader);
         LauncherWidgetTransitionHook.install(classLoader);
         installed = true;
     }
 
-    private static void hookHomeStart(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader, WINDOW_ELEMENT, "animTo", chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (containsHomeClose(args)) {
-                    applyHomeStartDecision(HOME_AUTHORITY.onLauncherHomeStarted());
-                }
-                return chain.proceed(args);
-            }, Object.class);
-        } catch (Throwable error) {
-            MainHook.log(TAG + " HOME capture start unavailable: " + error);
-        }
-    }
-
-    private static void hookHomeEnd(ClassLoader classLoader) {
+    /**
+     * Launcher 4.50 owns HOME presentation with one RectFSpringAnim. Capture the listener that
+     * WindowElement itself registers, then pair its real start/end/cancel callbacks. This avoids
+     * both the old animTo false-positive and the broken "unique listener-registration method"
+     * heuristic (RectFSpringAnim exposes both addAnimatorListener and removeAnimatorListener).
+     */
+    private static void hookHomeSpringLifecycle(ClassLoader classLoader) {
         try {
             Class<?> windowElement = Class.forName(WINDOW_ELEMENT, false, classLoader);
             Class<?> rectAnim = Class.forName(RECTF_SPRING_ANIM, false, classLoader);
             Class<?> listenerInterface = Class.forName(
                     RECTF_SPRING_LISTENER, false, classLoader);
 
-            Method addListener = HookUtil.findMethodExact(
+            Method windowAddListener = HookUtil.findMethodExact(
                     windowElement, "addListener", new Class<?>[]{rectAnim});
-            Method registerListener = resolveRectSpringListenerRegistration(
-                    rectAnim, listenerInterface);
-            if (registerListener == null) {
-                throw new NoSuchMethodException(
-                        "unique RectFSpringAnim listener registration method unavailable");
-            }
+            Method addSpringListener = HookUtil.findMethodExact(
+                    rectAnim, "addAnimatorListener", new Class<?>[]{listenerInterface});
 
-            HookUtil.hook(registerListener, chain -> {
+            HookUtil.hook(addSpringListener, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (Boolean.TRUE.equals(CAPTURING_HOME_END_LISTENER.get())
+                if (Boolean.TRUE.equals(CAPTURING_WINDOW_ELEMENT_LISTENER.get())
                         && args.length == 1
                         && listenerInterface.isInstance(args[0])) {
-                    installHomeEndListenerHook(args[0], rectAnim);
+                    installWindowElementSpringListenerHook(args[0], rectAnim);
                 }
                 return chain.proceed(args);
             });
 
-            HookUtil.hook(addListener, chain -> {
-                CAPTURING_HOME_END_LISTENER.set(Boolean.TRUE);
+            HookUtil.hook(windowAddListener, chain -> {
+                CAPTURING_WINDOW_ELEMENT_LISTENER.set(Boolean.TRUE);
                 try {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 } finally {
-                    CAPTURING_HOME_END_LISTENER.remove();
+                    CAPTURING_WINDOW_ELEMENT_LISTENER.remove();
                 }
             });
-            MainHook.log(TAG + " HOME capture end structural listener bridge installed");
+            MainHook.log(TAG + " HOME spring lifecycle authority installed");
         } catch (Throwable error) {
-            MainHook.log(TAG + " HOME capture end unavailable: " + error);
+            // Fail open: an unavailable HOME lifecycle must never leave Workspace capture blocked.
+            MainHook.log(TAG + " HOME spring lifecycle authority unavailable: " + error);
         }
     }
 
-    private static Method resolveRectSpringListenerRegistration(
-            Class<?> rectAnim, Class<?> listenerInterface) {
-        Method match = null;
-        for (Method method : rectAnim.getMethods()) {
-            if (method.isSynthetic() || method.getReturnType() != void.class) continue;
-            Class<?>[] params = method.getParameterTypes();
-            if (params.length != 1 || params[0] != listenerInterface) continue;
-            if (match != null) return null;
-            match = method;
-        }
-        return match;
-    }
-
-    private static void installHomeEndListenerHook(Object listener, Class<?> rectAnim) {
+    private static void installWindowElementSpringListenerHook(Object listener, Class<?> rectAnim) {
         if (listener == null || rectAnim == null) return;
         Class<?> listenerClass = listener.getClass();
-        if (!HOOKED_HOME_END_LISTENER_CLASSES.add(listenerClass)) return;
+        if (!HOOKED_WINDOW_ELEMENT_LISTENER_CLASSES.add(listenerClass)) return;
         try {
+            Method onAnimationStart = HookUtil.findMethodExact(
+                    listenerClass, "onAnimationStart", new Class<?>[]{rectAnim});
             Method onAnimationEnd = HookUtil.findMethodExact(
                     listenerClass, "onAnimationEnd", new Class<?>[]{rectAnim});
-            HookUtil.hook(onAnimationEnd, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                onLauncherHomeAnimationEnded();
+            Method onAnimationCancel = HookUtil.findMethodExact(
+                    listenerClass, "onAnimationCancel", new Class<?>[]{rectAnim});
+
+            HookUtil.hook(onAnimationStart, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                onLauncherSpringStarted(args.length > 0 ? args[0] : null);
                 return result;
             });
-            MainHook.log(TAG + " HOME capture end listener bound structurally");
+            HookUtil.hook(onAnimationEnd, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                onLauncherSpringTerminal(args.length > 0 ? args[0] : null, "end");
+                return result;
+            });
+            HookUtil.hook(onAnimationCancel, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                onLauncherSpringTerminal(args.length > 0 ? args[0] : null, "cancel");
+                return result;
+            });
+            MainHook.log(TAG + " HOME WindowElement spring listener bound structurally");
         } catch (Throwable error) {
-            HOOKED_HOME_END_LISTENER_CLASSES.remove(listenerClass);
-            MainHook.log(TAG + " HOME capture end listener bind failed: " + error);
+            HOOKED_WINDOW_ELEMENT_LISTENER_CLASSES.remove(listenerClass);
+            MainHook.log(TAG + " HOME WindowElement spring listener bind failed: " + error);
         }
     }
 
-    private static void onLauncherHomeAnimationEnded() {
-        HomeTransitionAuthorityState.Decision decision =
-                HOME_AUTHORITY.onLauncherHomeEnded(SystemClock.elapsedRealtimeNanos());
-        if (decision.releaseBarrier) {
-            Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
-            releaseHomeBarrier(decision.releaseWidgetBarrier);
-            MainHook.log(TAG + " APP HOME barrier released by Launcher fallback");
-        } else if (decision.waitForSystemUi) {
-            MainHook.log(TAG + " APP HOME Launcher end observed; waiting for SystemUI FINISH");
-        }
-    }
+    private static void onLauncherSpringStarted(Object animation) {
+        String animType = readAnimationType(animation);
+        if (!isHomeCloseType(animType)) return;
 
-    /**
-     * Precise HOME opening boundary from WMShell HomeTransitionObserver.onTransitionStarting.
-     * The source timestamp is SystemClock.elapsedRealtimeNanos() in SystemUI, so it can be compared
-     * directly with Launcher callback timestamps and stale broadcasts can be rejected even across
-     * the process boundary.
-     */
-    static void onSystemUiHomeTransitionStarted(
-            boolean homeVisible, long serial, long eventTimeNanos) {
-        HomeTransitionAuthorityState.Decision decision =
-                HOME_AUTHORITY.onSystemUiStarted(homeVisible, serial, eventTimeNanos);
-
-        if (decision.releaseBarrier) {
-            releaseHomeBarrier(decision.releaseWidgetBarrier);
-            MainHook.log(TAG + " SystemUI HOME opening superseded by HOME-hidden START"
-                    + " serial=" + serial);
-        }
+        LauncherHomeTransitionState.Decision decision =
+                HOME_STATE.onHomeAnimationStarted(animation);
         if (!decision.freezeBarrier) return;
 
-        // HOME transition tracking owns capture/freshness only. Cached Workspace glass stays in the
-        // Launcher root and is exposed by the same native surfaces that expose icons and widgets.
-        applyHomeStartDecision(decision);
-        MainHook.log(TAG + " SystemUI HOME START capture authority serial=" + serial
-                + " t=" + eventTimeNanos);
-    }
-
-    /** Matching WMShell onTransitionFinished boundary for the active HOME-opening serial. */
-    static void onSystemUiHomeTransitionFinished(
-            boolean homeVisible, long serial, long eventTimeNanos, boolean aborted) {
-        HomeTransitionAuthorityState.Decision decision =
-                HOME_AUTHORITY.onSystemUiFinished(homeVisible, serial, eventTimeNanos);
-        if (!decision.releaseBarrier) return;
-
-        Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
-        releaseHomeBarrier(decision.releaseWidgetBarrier);
-        MainHook.log(TAG + " SystemUI HOME FINISH authority serial=" + serial
-                + " t=" + eventTimeNanos + " aborted=" + aborted);
-    }
-
-    private static void applyHomeStartDecision(HomeTransitionAuthorityState.Decision decision) {
-        if (decision == null || !decision.freezeBarrier) return;
         Miuix307ZeroCopyRenderer.onHomeOpeningStarted();
         LauncherGlassSceneController.setHomeTransitionPendingForAll(true);
         LauncherWidgetTransitionCoordinator.onHomeOpeningStarted();
+        MainHook.log(TAG + " APP HOME spring START type=" + animType);
     }
 
-    private static void releaseHomeBarrier(boolean releaseWidgetBarrier) {
+    private static void onLauncherSpringTerminal(Object animation, String reason) {
+        LauncherHomeTransitionState.Decision decision =
+                HOME_STATE.onHomeAnimationTerminal(animation);
+        if (!decision.releaseBarrier) return;
+
+        Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
         LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
-        if (releaseWidgetBarrier) {
-            LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
-        }
+        LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
+        MainHook.log(TAG + " APP HOME spring " + reason + "; capture barrier released");
     }
 
-    private static boolean containsHomeClose(Object[] args) {
-        if (args == null) return false;
-        for (Object arg : args) {
-            String token = String.valueOf(arg);
-            if (token.contains(CLOSE_TO_HOME_CENTER) || token.contains(CLOSE_TO_HOME)) return true;
+    private static String readAnimationType(Object animation) {
+        if (animation == null) return null;
+        HookUtil.InvocationResult<Object> result =
+                HookUtil.tryInvoke(animation, "getLastAminType");
+        if (!result.succeeded()) {
+            MainHook.log(TAG + " HOME spring type unavailable: " + result.failure());
+            return null;
         }
-        return false;
+        Object value = result.value();
+        return value != null ? String.valueOf(value) : null;
+    }
+
+    private static boolean isHomeCloseType(String animType) {
+        return CLOSE_TO_HOME.equals(animType) || CLOSE_TO_HOME_CENTER.equals(animType);
     }
 
     /**
