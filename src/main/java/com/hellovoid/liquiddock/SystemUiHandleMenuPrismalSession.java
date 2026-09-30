@@ -338,7 +338,7 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glUniform4f(normalizeValidDockRectUniform,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unnormalizeQuad.bind(quadBuffer);
+        normalizeQuad.unbind();
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
     }
 
@@ -380,7 +380,7 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glUniform4f(compositeCropUniform,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         checkEgl("eglSwapBuffers", EGL14.eglSwapBuffers(eglDisplay, outputEglSurface));
 
         if (!firstFramePresented) {
