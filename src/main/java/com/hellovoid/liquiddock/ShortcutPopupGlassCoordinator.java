@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
@@ -187,29 +188,69 @@ final class ShortcutPopupGlassCoordinator {
             return state != null && state.layer != null;
         }
         View content = state.contentRef.get();
-        if (!(content instanceof ViewGroup) || !content.isAttachedToWindow()) {
-            return false;
-        }
+        if (content == null || !content.isAttachedToWindow()) return false;
+        ViewParent parent = content.getParent();
+        if (!(parent instanceof ViewGroup)) return false;
 
-        // The stock HyperOS ShortcutMenu material is applied directly to PopupView.getContentView().
-        // Mount our output in that exact host instead of emulating its screen-space position with a
-        // root-wide sibling. This makes layout, pivot, scale, translation, clipping and PopupView
-        // reveal animation authoritative automatically.
-        ViewGroup contentGroup = (ViewGroup) content;
+        // The stock ShortcutMenu material is owned by PopupView.getContentView(), but mounting our
+        // TextureView *inside* that View applies contentView's scale twice. Instead, become the
+        // content's immediate sibling in the same menu_layer and mirror the exact local frame and
+        // transform. PopupView remains the sole authority for placement/animation.
+        ViewGroup host = (ViewGroup) parent;
+        int contentIndex = host.indexOfChild(content);
+        if (contentIndex < 0) return false;
+
+        int width = Math.max(1, content.getWidth() > 0
+                ? content.getWidth() : content.getMeasuredWidth());
+        int height = Math.max(1, content.getHeight() > 0
+                ? content.getHeight() : content.getMeasuredHeight());
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
                 content.getContext(), state.session);
-        contentGroup.addView(layer, 0, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        host.addView(layer, contentIndex, new ViewGroup.LayoutParams(width, height));
         state.layer = layer;
+        syncLayerToContent(state);
         updateGeometry(state);
-        MainHook.log(TAG + " content-bound output inserted into vendor material host"
-                + " host=" + content.getClass().getName()
+        MainHook.log(TAG + " content-sibling output inserted"
+                + " host=" + host.getClass().getName()
+                + " index=" + contentIndex
+                + " size=" + width + "x" + height
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
 
+    private static void syncLayerToContent(State state) {
+        if (state == null || state.released) return;
+        View content = state.contentRef.get();
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (content == null || layer == null) return;
+
+        int width = Math.max(1, content.getWidth() > 0
+                ? content.getWidth() : content.getMeasuredWidth());
+        int height = Math.max(1, content.getHeight() > 0
+                ? content.getHeight() : content.getMeasuredHeight());
+        ViewGroup.LayoutParams lp = layer.getLayoutParams();
+        if (lp != null && (lp.width != width || lp.height != height)) {
+            lp.width = width;
+            lp.height = height;
+            layer.setLayoutParams(lp);
+        }
+
+        // The sibling is laid out at the host origin. Recreate content's local frame and transform
+        // exactly once; do not copy alpha because ShortcutPopupGlassLayer owns reveal/dismiss alpha.
+        layer.setTranslationX(content.getLeft() + content.getTranslationX());
+        layer.setTranslationY(content.getTop() + content.getTranslationY());
+        layer.setPivotX(content.getPivotX());
+        layer.setPivotY(content.getPivotY());
+        layer.setScaleX(content.getScaleX());
+        layer.setScaleY(content.getScaleY());
+        layer.setRotation(content.getRotation());
+        layer.setRotationX(content.getRotationX());
+        layer.setRotationY(content.getRotationY());
+    }
+
     private static void updateGeometry(State state) {
         if (state == null || state.released) return;
+        syncLayerToContent(state);
         View decor = state.popupDecorRef.get();
         View content = state.contentRef.get();
         ShortcutPopupGlassSession session = state.session;
