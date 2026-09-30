@@ -156,18 +156,27 @@ final class SecurityCenterGlassHook {
             // second pull had no binding event with which to recreate the replacement. Observe the
             // methods for compatibility only; attach/detach/root replacement now perform teardown.
             HookUtil.hook(sidebarLifecycle.show(), chain -> {
+                log("fade timeline SIDEBAR_SHOW method=" + sidebarLifecycle.show().getName(), null);
                 SecurityCenterGlassCoordinator live = currentCoordinator(contract);
                 if (live != null) live.cancelPanelExitFade();
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
-            HookUtil.hook(sidebarLifecycle.hideImmediate(), chain ->
-                    chain.proceed(chain.getArgs().toArray(new Object[0])));
-            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain ->
-                    chain.proceed(chain.getArgs().toArray(new Object[0])));
+            HookUtil.hook(sidebarLifecycle.hideImmediate(), chain -> {
+                log("fade timeline SIDEBAR_HIDE_IMMEDIATE method="
+                        + sidebarLifecycle.hideImmediate().getName(), null);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            HookUtil.hook(sidebarLifecycle.hideAnimated(), chain -> {
+                log("fade timeline SIDEBAR_HIDE_ANIMATED method="
+                        + sidebarLifecycle.hideAnimated().getName(), null);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
 
             for (Method terminalMethod : terminalCleanup.methods()) {
-                HookUtil.hook(terminalMethod, chain ->
-                        chain.proceed(chain.getArgs().toArray(new Object[0])));
+                HookUtil.hook(terminalMethod, chain -> {
+                    log("fade timeline TERMINAL method=" + terminalMethod.getName(), null);
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
             }
 
             ACTIVATION.onCallbacksRegistered();
