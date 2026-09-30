@@ -20,6 +20,13 @@ final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
     private static final int INITIAL_UPDATE_FRAMES = 4;
 
+    private static volatile Method cachedSurfaceLayerIdMethod;
+    private static volatile Method cachedSurfaceNameMethod;
+    private static Class<?> cachedSurfaceSequenceClass;
+    private static Method cachedSurfaceSequenceMethod;
+    private static java.lang.reflect.Field cachedSurfaceSequenceField;
+    private static boolean cachedSurfaceSequenceResolved;
+
     static final class Binding {
         final SurfaceControl rootSurface;
         final Surface producerSurface;
@@ -289,8 +296,17 @@ final class Miuix307PassBlurBridge {
     static int surfaceLayerId(SurfaceControl surface) {
         if (surface == null) return -1;
         try {
-            Method method = SurfaceControl.class.getDeclaredMethod("getLayerId");
-            method.setAccessible(true);
+            Method method = cachedSurfaceLayerIdMethod;
+            if (method == null) {
+                synchronized (Miuix307PassBlurBridge.class) {
+                    method = cachedSurfaceLayerIdMethod;
+                    if (method == null) {
+                        method = SurfaceControl.class.getDeclaredMethod("getLayerId");
+                        method.setAccessible(true);
+                        cachedSurfaceLayerIdMethod = method;
+                    }
+                }
+            }
             Object value = method.invoke(surface);
             return value instanceof Number ? ((Number) value).intValue() : -1;
         } catch (Throwable ignored) {
@@ -300,42 +316,75 @@ final class Miuix307PassBlurBridge {
 
     static int readSurfaceSequenceId(Object viewRoot) {
         if (viewRoot == null) return -1;
-        Class<?> type = viewRoot.getClass();
-        while (type != null) {
-            try {
-                Method method = type.getDeclaredMethod("getSurfaceSequenceId");
-                method.setAccessible(true);
+        try {
+            ensureSurfaceSequenceAccessor(viewRoot.getClass());
+            Method method = cachedSurfaceSequenceMethod;
+            if (method != null) {
                 Object value = method.invoke(viewRoot);
-                if (value instanceof Number) return ((Number) value).intValue();
-            } catch (NoSuchMethodException ignored) {
-                type = type.getSuperclass();
-                continue;
-            } catch (Throwable ignored) {
-                break;
+                return value instanceof Number ? ((Number) value).intValue() : -1;
             }
-        }
-        type = viewRoot.getClass();
-        while (type != null) {
-            try {
-                java.lang.reflect.Field field = type.getDeclaredField("mSurfaceSequenceId");
-                field.setAccessible(true);
+            java.lang.reflect.Field field = cachedSurfaceSequenceField;
+            if (field != null) {
                 Object value = field.get(viewRoot);
                 return value instanceof Number ? ((Number) value).intValue() : -1;
-            } catch (NoSuchFieldException ignored) {
-                type = type.getSuperclass();
-            } catch (Throwable ignored) {
-                return -1;
+            }
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
+    private static void ensureSurfaceSequenceAccessor(Class<?> runtimeClass) {
+        if (runtimeClass == null) return;
+        synchronized (Miuix307PassBlurBridge.class) {
+            if (cachedSurfaceSequenceClass == runtimeClass && cachedSurfaceSequenceResolved) return;
+            cachedSurfaceSequenceClass = runtimeClass;
+            cachedSurfaceSequenceMethod = null;
+            cachedSurfaceSequenceField = null;
+            cachedSurfaceSequenceResolved = true;
+
+            Class<?> type = runtimeClass;
+            while (type != null) {
+                try {
+                    Method method = type.getDeclaredMethod("getSurfaceSequenceId");
+                    method.setAccessible(true);
+                    cachedSurfaceSequenceMethod = method;
+                    return;
+                } catch (NoSuchMethodException ignored) {
+                    type = type.getSuperclass();
+                } catch (Throwable ignored) {
+                    break;
+                }
+            }
+            type = runtimeClass;
+            while (type != null) {
+                try {
+                    java.lang.reflect.Field field = type.getDeclaredField("mSurfaceSequenceId");
+                    field.setAccessible(true);
+                    cachedSurfaceSequenceField = field;
+                    return;
+                } catch (NoSuchFieldException ignored) {
+                    type = type.getSuperclass();
+                } catch (Throwable ignored) {
+                    return;
+                }
             }
         }
-        return -1;
     }
 
     private static String surfaceName(SurfaceControl surface) {
         if (surface == null) return "";
         try {
-            Method getName = SurfaceControl.class.getDeclaredMethod("getName");
-            getName.setAccessible(true);
-            Object value = getName.invoke(surface);
+            Method method = cachedSurfaceNameMethod;
+            if (method == null) {
+                synchronized (Miuix307PassBlurBridge.class) {
+                    method = cachedSurfaceNameMethod;
+                    if (method == null) {
+                        method = SurfaceControl.class.getDeclaredMethod("getName");
+                        method.setAccessible(true);
+                        cachedSurfaceNameMethod = method;
+                    }
+                }
+            }
+            Object value = method.invoke(surface);
             if (value instanceof String) return (String) value;
         } catch (Throwable ignored) {}
         return surface.toString();
