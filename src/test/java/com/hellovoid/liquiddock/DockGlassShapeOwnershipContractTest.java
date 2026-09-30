@@ -97,4 +97,16 @@ public class DockGlassShapeOwnershipContractTest {
         assertFalse(host.contains("canvas.clipPath("));
         assertFalse(host.contains("dispatchDraw(Canvas"));
     }
+
+    @Test
+    public void dockStableFrameUsesLightweightRootGenerationGuard() throws Exception {
+        String texture = Files.readString(PASS_BLUR_TEXTURE);
+
+        assertTrue(texture.contains(
+                "RootPassBlurEndpointBridge.isCurrentGeneration(materialHost, current)"));
+        assertTrue(texture.contains("producerGeometryDirty"));
+        assertTrue(texture.contains("backdropMappingDirty"));
+        assertTrue(texture.contains("continuousGeometryTracking"));
+    }
+
 }
