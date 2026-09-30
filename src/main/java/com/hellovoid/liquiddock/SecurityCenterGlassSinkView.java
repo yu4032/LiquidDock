@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -78,6 +79,7 @@ final class SecurityCenterGlassSinkView extends TextureView
     private float lastNativeTransformScale = Float.NaN;
     private boolean exitContractionPending;
     private boolean exitContractionLatched;
+    private int fadeLogBucket = -1;
 
     private SecurityCenterGlassSinkView(
             Context context,
@@ -306,21 +308,33 @@ final class SecurityCenterGlassSinkView extends TextureView
         }
     }
 
-    void onNativeMaterialTransformMutated() {
+    void onNativeMaterialTransformMutated(String source) {
         if (disposed || session.isShutdown()) return;
         View material = materialRef.get();
+        float previousScale = lastNativeTransformScale;
         float currentScale = material != null
                 ? Math.min(Math.abs(material.getScaleX()), Math.abs(material.getScaleY()))
                 : Float.NaN;
-        if (materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
+        boolean contraction = materialRole == SecurityCenterSinkOutputPolicy.MaterialRole.DOCK
                 && authorizedVisible
                 && !exitContractionLatched
-                && finite(lastNativeTransformScale)
+                && finite(previousScale)
                 && finite(currentScale)
-                && lastNativeTransformScale >= 0.97f
-                && currentScale < lastNativeTransformScale - 0.002f) {
+                && previousScale >= 0.97f
+                && currentScale < previousScale - 0.002f;
+        logFade("MUTATION source=" + source
+                + " prevScale=" + previousScale
+                + " scale=" + currentScale
+                + " alpha=" + (material != null ? material.getAlpha() : Float.NaN)
+                + " tx=" + (material != null ? material.getTranslationX() : Float.NaN)
+                + " ty=" + (material != null ? material.getTranslationY() : Float.NaN)
+                + " authorized=" + authorizedVisible
+                + " latched=" + exitContractionLatched
+                + " contraction=" + contraction);
+        if (contraction) {
             exitContractionPending = true;
             exitContractionLatched = true;
+            logFade("CONTRACTION_LATCH");
         }
         if (finite(currentScale)) lastNativeTransformScale = currentScale;
         syncFromMaterial();
@@ -328,8 +342,12 @@ final class SecurityCenterGlassSinkView extends TextureView
     }
 
     boolean consumeExitContractionStart() {
-        if (!exitContractionPending) return false;
+        if (!exitContractionPending) {
+            logFade("CONTRACTION_CONSUME result=false");
+            return false;
+        }
         exitContractionPending = false;
+        logFade("CONTRACTION_CONSUME result=true");
         return true;
     }
 
@@ -337,6 +355,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (disposed || session.isShutdown()) return;
         if (authorizedVisible == visible) return;
         authorizedVisible = visible;
+        logFade("AUTHORIZED visible=" + visible);
         if (!visible) {
             cancelExitFade(false);
             exitContractionPending = false;
@@ -353,9 +372,16 @@ final class SecurityCenterGlassSinkView extends TextureView
     }
 
     void startExitFade() {
-        if (disposed || session.isShutdown() || !authorizedVisible) return;
+        if (disposed || session.isShutdown() || !authorizedVisible) {
+            logFade("START_SKIPPED disposed=" + disposed
+                    + " shutdown=" + session.isShutdown()
+                    + " authorized=" + authorizedVisible);
+            return;
+        }
         cancelExitFade(false);
         exitFadeMultiplier = 1f;
+        fadeLogBucket = -1;
+        logFade("START durationMs=" + EXIT_FADE_MS);
         ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f);
         exitFadeAnimator = animator;
         animator.setDuration(EXIT_FADE_MS);
@@ -364,6 +390,13 @@ final class SecurityCenterGlassSinkView extends TextureView
             Object value = animation.getAnimatedValue();
             exitFadeMultiplier = value instanceof Number
                     ? ((Number) value).floatValue() : 0f;
+            int bucket = Math.max(0, Math.min(4, (int) Math.floor(exitFadeMultiplier * 4f)));
+            if (bucket != fadeLogBucket) {
+                fadeLogBucket = bucket;
+                logFade("TICK multiplier=" + exitFadeMultiplier
+                        + " contentAlpha=" + contentAlpha
+                        + " paintAlpha=" + presentationPaint.getAlpha());
+            }
             syncFromMaterial();
         });
         animator.start();
@@ -372,7 +405,13 @@ final class SecurityCenterGlassSinkView extends TextureView
     void cancelExitFade(boolean restoreVisible) {
         ValueAnimator animator = exitFadeAnimator;
         exitFadeAnimator = null;
-        if (animator != null) animator.cancel();
+        if (animator != null) {
+            logFade("CANCEL restore=" + restoreVisible
+                    + " multiplier=" + exitFadeMultiplier
+                    + " contentAlpha=" + contentAlpha
+                    + " paintAlpha=" + presentationPaint.getAlpha());
+            animator.cancel();
+        }
         exitFadeMultiplier = restoreVisible ? 1f : Math.max(0f, Math.min(1f, exitFadeMultiplier));
         if (restoreVisible) {
             exitContractionPending = false;
@@ -651,6 +690,13 @@ final class SecurityCenterGlassSinkView extends TextureView
         if (Math.abs(contentAlpha - desired) < 0.001f) return false;
         contentAlpha = desired;
         presentationPaint.setAlpha(Math.round(desired * 255f));
+        if (exitFadeAnimator != null && exitFadeAnimator.isRunning()) {
+            logFade("PAINT contentAlpha=" + contentAlpha
+                    + " paintAlpha=" + presentationPaint.getAlpha()
+                    + " visibility=" + getVisibility()
+                    + " attached=" + isAttachedToWindow()
+                    + " surface=" + (outputSurface != null));
+        }
         invalidate();
         return true;
     }
@@ -673,6 +719,19 @@ final class SecurityCenterGlassSinkView extends TextureView
         float dx = x2 - x1;
         float dy = y2 - y1;
         return (float) Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private void logFade(String message) {
+        try {
+            View material = materialRef.get();
+            Api101Bridge.log("[DC][SecurityCenterGlassFade]"
+                    + " t=" + SystemClock.uptimeMillis()
+                    + " role=" + materialRole
+                    + " sink@" + Integer.toHexString(System.identityHashCode(this))
+                    + " material@" + (material == null
+                            ? "none" : Integer.toHexString(System.identityHashCode(material)))
+                    + " " + message);
+        } catch (Throwable ignored) {}
     }
 
     private static boolean finite(float value) {
