@@ -651,7 +651,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniform4f(compositeCropUniform,
                 crop[0], crop[1], crop[2], crop[3]);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         int error = GLES20.glGetError();
         if (error != GLES20.GL_NO_ERROR) {
             throw new IllegalStateException(
