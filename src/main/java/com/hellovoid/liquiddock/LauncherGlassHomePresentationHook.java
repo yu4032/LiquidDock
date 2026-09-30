@@ -212,14 +212,16 @@ final class LauncherGlassHomePresentationHook {
     }
 
     private static void onLauncherSpringPhysicalTerminal(Object animation, String reason) {
-        HOME_STATE.onSpringPhysicalTerminal(animation);
-        MainHook.log(TAG + " APP HOME spring physical-terminal=" + reason);
+        if (HOME_STATE.onSpringPhysicalTerminal(animation)) {
+            MainHook.log(TAG + " APP HOME spring physical-terminal=" + reason);
+        }
     }
 
     private static void onLauncherOwnerFinishRequested(
             Object owner, boolean toHome, String reason) {
-        HOME_STATE.onOwnerFinishRequested(owner);
-        MainHook.log(TAG + " APP HOME finish-request=" + reason + " toHome=" + toHome);
+        if (HOME_STATE.onOwnerFinishRequested(owner)) {
+            MainHook.log(TAG + " APP HOME finish-request=" + reason + " toHome=" + toHome);
+        }
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner, String reason) {
@@ -231,14 +233,19 @@ final class LauncherGlassHomePresentationHook {
     private static void releaseHomeBarrierOnMain(
             LauncherHomeTransitionState.Decision decision, String reason) {
         if (decision == null || !decision.releaseBarrier) return;
-        runHomeLifecycleOnMain(() -> {
-            // A newer HOME cycle may have started before an off-main terminal reached the UI queue.
+        postHomeLifecycleOnMain(() -> {
+            // A newer HOME cycle may have started before an older terminal reached the UI queue.
             if (HOME_STATE.isArmed()) return;
             Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
             LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
             MainHook.log(TAG + " APP HOME terminal=" + reason + "; capture barrier released");
         });
+    }
+
+    private static void postHomeLifecycleOnMain(Runnable task) {
+        if (task == null) return;
+        homeLifecycleHandler().post(task);
     }
 
     private static void runHomeLifecycleOnMain(Runnable task) {
