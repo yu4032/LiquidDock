@@ -56,6 +56,10 @@ public class LauncherGlassStaticBoundaryTest {
         // must not unconditionally clone and traverse the entire static-node registry each frame.
         assertFalse(session.contains(
                 "synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }"));
+        assertTrue(session.contains("List<NodeState> dragSnapshot = null;"));
+        assertTrue(session.contains("List<StaticNodeState> staticSnapshot = null;"));
+        assertFalse(session.contains(
+                "List<StaticNodeState> staticSnapshot = new ArrayList<>();"));
     }
 
     @Test
