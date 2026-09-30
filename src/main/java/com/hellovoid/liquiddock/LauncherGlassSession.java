@@ -942,7 +942,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniform4f(compositeCropUniform,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
@@ -967,7 +967,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniform4f(compositeCropUniform,
                 geometry.cropLeft, geometry.cropBottom, geometry.cropWidth, geometry.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
