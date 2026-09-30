@@ -11,6 +11,7 @@ import io.github.libxposed.api.XposedModule;
 
 /** libxposed API 101 entry point with process-specific timing and opt-in glass integrations. */
 public final class ModuleMain extends XposedModule {
+    private static final String ANDROID_PACKAGE = "android";
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
@@ -27,6 +28,14 @@ public final class ModuleMain extends XposedModule {
     @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
         String packageName = param.getPackageName();
+        if (ANDROID_PACKAGE.equals(packageName) && "system_server".equals(loadedProcessName)) {
+            try {
+                WallpaperForceClientCompositionExperiment.install();
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][WALLPAPER_CLIENT] system_server install failed", error);
+            }
+            return;
+        }
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             try {
                 ClassLoader classLoader = param.getClassLoader();
