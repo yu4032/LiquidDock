@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
+import android.os.SystemClock;
 import android.view.SurfaceControl;
 
 import java.lang.reflect.Method;
@@ -19,7 +21,7 @@ final class WallpaperForceClientCompositionExperiment {
 
     private static boolean attempted;
     private static boolean installed;
-    private static String lastLoggedSurface;
+    private static long lastCandidateLogUptime;
 
     private WallpaperForceClientCompositionExperiment() {}
 
@@ -27,15 +29,16 @@ final class WallpaperForceClientCompositionExperiment {
         if (attempted) return installed;
         attempted = true;
 
+        boolean hooked = false;
         try {
-            Method method = SurfaceControl.Transaction.class.getDeclaredMethod(
+            Method floatMatrix = SurfaceControl.Transaction.class.getDeclaredMethod(
                     "setMatrix",
                     SurfaceControl.class,
                     float.class,
                     float.class,
                     float.class,
                     float.class);
-            HookUtil.hook(method, chain -> {
+            HookUtil.hook(floatMatrix, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 if (args.length == 5
                         && args[0] instanceof SurfaceControl
@@ -45,31 +48,66 @@ final class WallpaperForceClientCompositionExperiment {
                         && args[4] instanceof Number) {
                     SurfaceControl sc = (SurfaceControl) args[0];
                     String name = surfaceName(sc);
-                    if (isDesktopWallpaper(name) && isWallpaperAnimationCaller()) {
+                    boolean wallpaperCaller = isWallpaperAnimationCaller();
+                    if (wallpaperCaller) {
+                        logCandidate("float", name);
+                    }
+                    if (wallpaperCaller && isDesktopWallpaper(name)) {
                         float dtdx = ((Number) args[2]).floatValue();
                         float forcedDtdx = dtdx + SHEAR_EPSILON;
                         args[2] = Float.valueOf(forcedDtdx);
-
-                        if (!name.equals(lastLoggedSurface)) {
-                            lastLoggedSurface = name;
-                            Api101Bridge.log(TAG
-                                    + " force-client matrix surface=" + name
-                                    + " dsdx=" + args[1]
-                                    + " dtdx=" + dtdx + "->" + forcedDtdx
-                                    + " dtdy=" + args[3]
-                                    + " dsdy=" + args[4]);
-                        }
                     }
                 }
                 return chain.proceed(args);
             });
-            installed = true;
-            Api101Bridge.log(TAG + " installed=true epsilon=" + SHEAR_EPSILON);
+            hooked = true;
+            Api101Bridge.log(TAG + " hooked=float-matrix");
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " install failed", error);
-            installed = false;
+            Api101Bridge.log(TAG + " float-matrix hook unavailable", error);
         }
+
+        try {
+            Method objectMatrix = SurfaceControl.Transaction.class.getDeclaredMethod(
+                    "setMatrix",
+                    SurfaceControl.class,
+                    Matrix.class,
+                    float[].class);
+            HookUtil.hook(objectMatrix, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (args.length == 3
+                        && args[0] instanceof SurfaceControl
+                        && args[1] instanceof Matrix) {
+                    SurfaceControl sc = (SurfaceControl) args[0];
+                    String name = surfaceName(sc);
+                    boolean wallpaperCaller = isWallpaperAnimationCaller();
+                    if (wallpaperCaller) {
+                        logCandidate("object", name);
+                    }
+                    if (wallpaperCaller && isDesktopWallpaper(name)) {
+                        Matrix forced = new Matrix((Matrix) args[1]);
+                        forced.postSkew(SHEAR_EPSILON, 0.0f);
+                        args[1] = forced;
+                    }
+                }
+                return chain.proceed(args);
+            });
+            hooked = true;
+            Api101Bridge.log(TAG + " hooked=object-matrix");
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " object-matrix hook unavailable", error);
+        }
+
+        installed = hooked;
+        Api101Bridge.log(TAG + " installed=" + installed + " epsilon=" + SHEAR_EPSILON);
         return installed;
+    }
+
+    private static void logCandidate(String overload, String name) {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastCandidateLogUptime < 250L) return;
+        lastCandidateLogUptime = now;
+        Api101Bridge.log(TAG + " candidate overload=" + overload + " surface=" + name
+                + " desktopMatch=" + isDesktopWallpaper(name));
     }
 
     private static boolean isDesktopWallpaper(String name) {
