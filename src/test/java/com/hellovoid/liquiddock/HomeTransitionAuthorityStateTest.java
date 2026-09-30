@@ -74,25 +74,26 @@ public class HomeTransitionAuthorityStateTest {
         state.onLauncherHomeStarted();
 
         HomeTransitionAuthorityState.Decision recovered =
-                state.onColdStartLauncherBarrierRecovery();
+                state.onColdStartBarrierRecovery();
 
         assertTrue(recovered.releaseBarrier);
         assertTrue(recovered.releaseWidgetBarrier);
     }
 
-    @Test public void coldStartRecoveryDoesNotStealActiveSystemUiAuthority() {
+    @Test public void coldStartRecoveryAlsoClearsStartupSystemUiAuthority() {
         HomeTransitionAuthorityState state = new HomeTransitionAuthorityState();
         state.onLauncherHomeStarted();
         state.onSystemUiStarted(true, 41L, 100L);
 
         HomeTransitionAuthorityState.Decision recovered =
-                state.onColdStartLauncherBarrierRecovery();
+                state.onColdStartBarrierRecovery();
 
-        assertFalse(recovered.releaseBarrier);
-        assertTrue(state.isSystemUiAuthorityActive());
-        HomeTransitionAuthorityState.Decision finished =
+        assertTrue(recovered.releaseBarrier);
+        assertTrue(recovered.releaseWidgetBarrier);
+        assertFalse(state.isSystemUiAuthorityActive());
+        HomeTransitionAuthorityState.Decision lateFinish =
                 state.onSystemUiFinished(true, 41L, 200L);
-        assertTrue(finished.releaseBarrier);
+        assertFalse(lateFinish.releaseBarrier);
     }
 
     @Test public void staleTimestampAndInvalidFinishAreIgnored() {
