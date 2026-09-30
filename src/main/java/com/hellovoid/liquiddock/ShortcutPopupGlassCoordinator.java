@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
-import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -166,6 +165,7 @@ final class ShortcutPopupGlassCoordinator {
         if (state.preDrawListener == null) {
             ViewTreeObserver observer = decorView.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
+                ensurePopupOutput(state);
                 updateGeometry(state);
                 return true;
             };
@@ -192,18 +192,17 @@ final class ShortcutPopupGlassCoordinator {
         ViewParent parent = content.getParent();
         if (!(parent instanceof ViewGroup)) return false;
 
-        // The stock ShortcutMenu material is owned by PopupView.getContentView(), but mounting our
-        // TextureView *inside* that View applies contentView's scale twice. Instead, become the
-        // content's immediate sibling in the same menu_layer and mirror the exact local frame and
-        // transform. PopupView remains the sole authority for placement/animation.
+        // Never create a 1x1 placeholder. PopupView binds before content_view has completed its
+        // first layout; resizing a TextureView from pre-draw feeds another layout pass back into
+        // MiuiX's popup animation and causes the observed oscillation/jitter.
+        int width = content.getWidth();
+        int height = content.getHeight();
+        if (width <= 0 || height <= 0) return false;
+
         ViewGroup host = (ViewGroup) parent;
         int contentIndex = host.indexOfChild(content);
         if (contentIndex < 0) return false;
 
-        int width = Math.max(1, content.getWidth() > 0
-                ? content.getWidth() : content.getMeasuredWidth());
-        int height = Math.max(1, content.getHeight() > 0
-                ? content.getHeight() : content.getMeasuredHeight());
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
                 content.getContext(), state.session);
         host.addView(layer, contentIndex, new ViewGroup.LayoutParams(width, height));
@@ -214,6 +213,8 @@ final class ShortcutPopupGlassCoordinator {
                 + " host=" + host.getClass().getName()
                 + " index=" + contentIndex
                 + " size=" + width + "x" + height
+                + " frame=" + content.getLeft() + "," + content.getTop()
+                + "-" + content.getRight() + "," + content.getBottom()
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
@@ -224,23 +225,11 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassLayer layer = state.layer;
         if (content == null || layer == null) return;
 
-        int width = Math.max(1, content.getWidth() > 0
-                ? content.getWidth() : content.getMeasuredWidth());
-        int height = Math.max(1, content.getHeight() > 0
-                ? content.getHeight() : content.getMeasuredHeight());
-        ViewGroup.LayoutParams lp = layer.getLayoutParams();
-        if (lp != null && (lp.width != width || lp.height != height)) {
-            lp.width = width;
-            lp.height = height;
-            layer.setLayoutParams(lp);
-        }
-
-        // The sibling is laid out at the host origin. Recreate content's local frame and transform
-        // exactly once; do not copy alpha because ShortcutPopupGlassLayer owns reveal/dismiss alpha.
-        layer.setTranslationX(
-                (content.getLeft() - layer.getLeft()) + content.getTranslationX());
-        layer.setTranslationY(
-                (content.getTop() - layer.getTop()) + content.getTranslationY());
+        // Keep the Surface allocation/layout immutable after creation. x/y represent the
+        // untransformed frame in the common menu_layer parent; scale/pivot/rotation are then copied
+        // exactly once. Alpha remains owned by ShortcutPopupGlassLayer so dismiss fade is not reset.
+        layer.setX(content.getX());
+        layer.setY(content.getY());
         layer.setPivotX(content.getPivotX());
         layer.setPivotY(content.getPivotY());
         layer.setScaleX(content.getScaleX());
@@ -258,35 +247,47 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassSession session = state.session;
         if (decor == null || content == null || session == null || decor.getWidth() <= 0
                 || decor.getHeight() <= 0 || !content.isAttachedToWindow()) return;
-        Rect rect = new Rect();
-        if (!content.getGlobalVisibleRect(rect) || rect.width() <= 0 || rect.height() <= 0) return;
+        if (content.getWidth() <= 0 || content.getHeight() <= 0) return;
+        ViewParent parent = content.getParent();
+        if (!(parent instanceof View)) return;
+        View host = (View) parent;
+
         int[] root = new int[2];
+        int[] hostScreen = new int[2];
         decor.getLocationOnScreen(root);
+        host.getLocationOnScreen(hostScreen);
+
+        // Geometry describes the untransformed material frame. The sibling TextureView receives the
+        // content View's transform separately, so using getGlobalVisibleRect() here would apply the
+        // same scale twice and crop the source before the View transform runs.
+        float screenLeft = hostScreen[0] - host.getScrollX() + content.getX();
+        float screenTop = hostScreen[1] - host.getScrollY() + content.getY();
+        float screenRight = screenLeft + content.getWidth();
+        float screenBottom = screenTop + content.getHeight();
         LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
-                root[0], root[1], rect.left, rect.top, rect.right, rect.bottom);
+                root[0], root[1], screenLeft, screenTop, screenRight, screenBottom);
         LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
                 decor.getWidth(), decor.getHeight(),
                 bounds.left, bounds.top, bounds.right, bounds.bottom,
                 resolveShortcutMenuCornerRadius(content));
+
         ShortcutPopupGlassLayer layer = state.layer;
         int[] layerScreen = new int[2];
-        int layerWidth = -1;
-        int layerHeight = -1;
         if (layer != null) {
-            try {
-                layer.getLocationOnScreen(layerScreen);
-                layerWidth = layer.getWidth();
-                layerHeight = layer.getHeight();
-            } catch (Throwable ignored) {}
+            try { layer.getLocationOnScreen(layerScreen); } catch (Throwable ignored) {}
         }
-        MainHook.log(TAG + " [YDIAG] geometry"
-                + " contentGlobal=" + rect.toShortString()
-                + " decorScreen=" + root[0] + "," + root[1]
-                + " decorSize=" + decor.getWidth() + "x" + decor.getHeight()
-                + " relative=" + bounds.left + "," + bounds.top
+        MainHook.log(TAG + " [YDIAG] geometry-base"
+                + " hostScreen=" + hostScreen[0] + "," + hostScreen[1]
+                + " contentFrame=" + content.getLeft() + "," + content.getTop()
+                + "-" + content.getRight() + "," + content.getBottom()
+                + " contentXY=" + content.getX() + "," + content.getY()
+                + " contentScale=" + content.getScaleX() + "," + content.getScaleY()
+                + " contentPivot=" + content.getPivotX() + "," + content.getPivotY()
+                + " baseRelative=" + bounds.left + "," + bounds.top
                 + "-" + bounds.right + "," + bounds.bottom
                 + " layerScreen=" + layerScreen[0] + "," + layerScreen[1]
-                + " layerSize=" + layerWidth + "x" + layerHeight
+                + " layerSize=" + (layer != null ? layer.getWidth() : -1)
+                + "x" + (layer != null ? layer.getHeight() : -1)
                 + (geometry != null
                         ? " prismalCenter=" + geometry.centerX + "," + geometry.centerY
                             + " prismalSize=" + geometry.width + "x" + geometry.height
