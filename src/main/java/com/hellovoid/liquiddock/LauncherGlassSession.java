@@ -7,7 +7,6 @@ import android.os.Handler;
 import android.view.Display;
 import android.view.Surface;
 import android.view.View;
-import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import com.hellovoid.prismal.PrismalGeometry;
@@ -116,7 +115,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private final Map<LauncherGlassStaticNode, Boolean> dirtyStaticNodes = new WeakHashMap<>();
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final Object outputWorkLock = new Object();
@@ -150,26 +148,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private OutputState staticOutput;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
-    private GlQuadBindings compositeQuad;
-    private int compositeTextureUniform = -1;
-    private int compositeCropUniform = -1;
     private volatile boolean backdropPrepared;
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
     private boolean outputRenderQueued;
-    private volatile boolean staticGeometryDirtyAll = true;
-    private volatile boolean continuousStaticGeometryTracking;
-    // Android exposes no listener for ancestor matrix/alpha changes. Keep one constant-size
-    // Workspace->root transform sentinel so non-layout vendor animations only trigger an O(N)
-    // static-node scan when their effective transform actually changes.
-    private WeakReference<View> workspaceTransformAuthority = new WeakReference<>(null);
-    private long workspaceAncestorTransformSignature = Long.MIN_VALUE;
-    private final float[] workspaceAncestorMatrixValues = new float[9];
-    private volatile boolean sourceEndpointDirty = true;
 
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
-    private ViewTreeObserver.OnGlobalLayoutListener globalLayoutListener;
     private final View.OnAttachStateChangeListener rootAttachListener =
             new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) {
@@ -320,7 +305,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (node == null || shuttingDown) return;
         synchronized (staticNodes) {
             if (!staticNodes.containsKey(node)) staticNodes.put(node, new StaticNodeState(node));
-            dirtyStaticNodes.put(node, Boolean.TRUE);
         }
         syncSceneOnUiThread();
         requestStaticRedraw();
@@ -328,34 +312,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
         if (node == null) return;
-        synchronized (staticNodes) {
-            staticNodes.remove(node);
-            dirtyStaticNodes.remove(node);
-        }
+        synchronized (staticNodes) { staticNodes.remove(node); }
         requestStaticRedraw();
-    }
-
-    void markStaticGeometryDirty(LauncherGlassStaticNode node) {
-        if (node == null || shuttingDown) return;
-        synchronized (staticNodes) {
-            if (!staticNodes.containsKey(node)) return;
-            dirtyStaticNodes.put(node, Boolean.TRUE);
-        }
-        View root = rootRef.get();
-        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
-    }
-
-    void markAllStaticGeometryDirty() {
-        if (shuttingDown) return;
-        staticGeometryDirtyAll = true;
-        View root = rootRef.get();
-        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
-    }
-
-    void setContinuousStaticGeometryTracking(boolean enabled) {
-        if (shuttingDown || continuousStaticGeometryTracking == enabled) return;
-        continuousStaticGeometryTracking = enabled;
-        markAllStaticGeometryDirty();
     }
 
     void updateStaticInteraction(
@@ -467,9 +425,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
-        // Paging may also animate per-page transforms beyond raw scrollX. Keep full geometry
-        // tracking during the mutation frame; stable HOME returns to dirty-node updates.
-        markAllStaticGeometryDirty();
         requestStaticRedraw();
     }
 
@@ -638,92 +593,20 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             syncSceneOnUiThread();
             return true;
         };
-        ViewTreeObserver.OnGlobalLayoutListener layoutListener = () -> {
-            // Parent/page rearrangements can move a material without changing its local bounds.
-            // Mark the static scene dirty at the real layout boundary instead of polling all nodes.
-            staticGeometryDirtyAll = true;
-            sourceEndpointDirty = true;
-        };
-        sourceEndpointDirty = true;
-        observer.addOnGlobalLayoutListener(layoutListener);
         observer.addOnPreDrawListener(listener);
         rootObserver = observer;
-        globalLayoutListener = layoutListener;
         preDrawListener = listener;
     }
 
     private void removeRootObserver() {
         ViewTreeObserver observer = rootObserver;
         ViewTreeObserver.OnPreDrawListener listener = preDrawListener;
-        ViewTreeObserver.OnGlobalLayoutListener layoutListener = globalLayoutListener;
         rootObserver = null;
         preDrawListener = null;
-        globalLayoutListener = null;
-        if (observer != null && observer.isAlive()) {
-            try {
-                if (listener != null) observer.removeOnPreDrawListener(listener);
-            } catch (Throwable ignored) {}
-            try {
-                if (layoutListener != null) observer.removeOnGlobalLayoutListener(layoutListener);
-            } catch (Throwable ignored) {}
+        if (observer != null && listener != null) {
+            try { if (observer.isAlive()) observer.removeOnPreDrawListener(listener); }
+            catch (Throwable ignored) {}
         }
-    }
-
-    private boolean observeWorkspaceAncestorTransform(View root) {
-        View workspace = workspaceTransformAuthority.get();
-        if (workspace == null || !workspace.isAttachedToWindow() || workspace.getRootView() != root) {
-            workspace = resolveWorkspaceTransformAuthority(root);
-            workspaceTransformAuthority = new WeakReference<>(workspace);
-            workspaceAncestorTransformSignature = Long.MIN_VALUE;
-        }
-        if (workspace == null) return false;
-
-        long signature = captureWorkspaceAncestorTransformSignature(workspace, root);
-        long previous = workspaceAncestorTransformSignature;
-        workspaceAncestorTransformSignature = signature;
-        return previous != Long.MIN_VALUE && previous != signature;
-    }
-
-    private View resolveWorkspaceTransformAuthority(View root) {
-        synchronized (staticNodes) {
-            for (LauncherGlassStaticNode node : staticNodes.keySet()) {
-                if (node == null) continue;
-                View material = node.materialHost();
-                if (material == null || material.getRootView() != root) continue;
-                View workspace = LauncherGlassHierarchy.findWorkspaceRoot(material);
-                if (workspace != null) return workspace;
-            }
-        }
-        return null;
-    }
-
-    private long captureWorkspaceAncestorTransformSignature(View workspace, View root) {
-        long hash = 0xcbf29ce484222325L;
-        View cursor = workspace;
-        while (cursor != null) {
-            hash = mixTransformSignature(hash, System.identityHashCode(cursor));
-            hash = mixTransformSignature(hash, cursor.getVisibility());
-            hash = mixTransformSignature(hash, cursor.getWindowVisibility());
-            hash = mixTransformSignature(hash, Float.floatToIntBits(cursor.getAlpha()));
-            hash = mixTransformSignature(hash, cursor.getLeft());
-            hash = mixTransformSignature(hash, cursor.getTop());
-            hash = mixTransformSignature(hash, cursor.getRight());
-            hash = mixTransformSignature(hash, cursor.getBottom());
-            hash = mixTransformSignature(hash, cursor.getScrollX());
-            hash = mixTransformSignature(hash, cursor.getScrollY());
-            cursor.getMatrix().getValues(workspaceAncestorMatrixValues);
-            for (float value : workspaceAncestorMatrixValues) {
-                hash = mixTransformSignature(hash, Float.floatToIntBits(value));
-            }
-            if (cursor == root) break;
-            ViewParent parent = cursor.getParent();
-            cursor = parent instanceof View ? (View) parent : null;
-        }
-        return hash;
-    }
-
-    private static long mixTransformSignature(long hash, int value) {
-        return (hash ^ (value & 0xffffffffL)) * 0x100000001b3L;
     }
 
     private void syncSceneOnUiThread() {
@@ -739,91 +622,60 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        List<NodeState> dragSnapshot = null;
-        synchronized (nodes) {
-            if (!nodes.isEmpty()) dragSnapshot = new ArrayList<>(nodes.values());
-        }
-        if (dragSnapshot != null) {
-            for (NodeState node : dragSnapshot) {
-                LauncherGlassSinkView sink = node.sinkRef.get();
-                if (sink == null) continue;
-                boolean localChanged = sink.syncFromMaterial();
-                dragChanged |= localChanged;
-                if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
-                LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
-                LauncherGlassGeometry.Snapshot old = node.geometry;
-                if ((old == null) != (observed == null)
-                        || (old != null && !old.sameAs(observed))) {
-                    node.geometry = observed;
-                    dragChanged = true;
-                }
+        List<NodeState> dragSnapshot;
+        synchronized (nodes) { dragSnapshot = new ArrayList<>(nodes.values()); }
+        for (NodeState node : dragSnapshot) {
+            LauncherGlassSinkView sink = node.sinkRef.get();
+            if (sink == null) continue;
+            boolean localChanged = sink.syncFromMaterial();
+            dragChanged |= localChanged;
+            if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
+            LauncherGlassGeometry.Snapshot observed = sink.captureGeometry(root);
+            LauncherGlassGeometry.Snapshot old = node.geometry;
+            if ((old == null) != (observed == null)
+                    || (old != null && !old.sameAs(observed))) {
+                node.geometry = observed;
+                dragChanged = true;
             }
         }
 
-        boolean workspaceAncestorTransformChanged =
-                observeWorkspaceAncestorTransform(root);
-        boolean scanAllStatic = rootGeometryChanged
-                || continuousStaticGeometryTracking || workspaceAncestorTransformChanged
-                || staticGeometryDirtyAll;
-        List<StaticNodeState> staticSnapshot = null;
-        synchronized (staticNodes) {
-            if (scanAllStatic && !staticNodes.isEmpty()) {
-                staticSnapshot = new ArrayList<>(staticNodes.values());
-            } else if (!dirtyStaticNodes.isEmpty()) {
-                staticSnapshot = new ArrayList<>(dirtyStaticNodes.size());
-                for (LauncherGlassStaticNode node : new ArrayList<>(dirtyStaticNodes.keySet())) {
-                    StaticNodeState state = staticNodes.get(node);
-                    if (state != null) staticSnapshot.add(state);
-                }
-            }
-            dirtyStaticNodes.clear();
-            staticGeometryDirtyAll = false;
-        }
-        if (staticSnapshot != null && !staticSnapshot.isEmpty()) {
-            Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-            for (StaticNodeState state : staticSnapshot) {
-                LauncherGlassStaticNode node = state.nodeRef.get();
-                if (node == null) continue;
-                LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
-                StaticGeometryFrame oldFrame = state.frame;
-                LauncherGlassGeometry.Snapshot old =
-                        oldFrame != null ? oldFrame.geometry : null;
-                if (observed == null && old != null && node.retainLastGeometryDuringFade()) {
-                    continue;
-                }
-                if ((old == null) != (observed == null)
-                        || (old != null && !old.sameAs(observed))) {
-                    int anchor = workspaceScrollX != null
-                            ? workspaceScrollX : oldFrame != null ? oldFrame.workspaceScrollX : 0;
-                    boolean anchorValid = workspaceScrollX != null
-                            || (oldFrame != null && oldFrame.workspaceScrollValid);
-                    state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
-                    staticChanged = true;
-                }
+        Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
+        List<StaticNodeState> staticSnapshot;
+        synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
+        for (StaticNodeState state : staticSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+            StaticGeometryFrame oldFrame = state.frame;
+            LauncherGlassGeometry.Snapshot old = oldFrame != null ? oldFrame.geometry : null;
+            if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
+            if ((old == null) != (observed == null)
+                    || (old != null && !old.sameAs(observed))) {
+                int anchor = workspaceScrollX != null
+                        ? workspaceScrollX : oldFrame != null ? oldFrame.workspaceScrollX : 0;
+                boolean anchorValid = workspaceScrollX != null
+                        || (oldFrame != null && oldFrame.workspaceScrollValid);
+                state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
+                staticChanged = true;
             }
         }
 
-        boolean endpointNeedsReconcile = rootGeometryChanged || sourceEndpointDirty
-                || !sourceBackend.isEndpointGenerationCurrent();
-        if (endpointNeedsReconcile) {
-            sourceEndpointDirty = false;
-            int nextRotation = readLauncherConfigRotation(root);
-            if (nextRotation != configRotation) {
-                configRotation = nextRotation;
-                beginRotationSettle(nextRotation);
-                sourceBackend.setUpdatesEnabled(false, "launcher-rotation-settle");
-                long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-                if (nextGeneration > 0L) sceneGeneration = nextGeneration;
-                scheduleRotationSettle(root, nextRotation);
-                return;
-            }
+        int nextRotation = readLauncherConfigRotation(root);
+        if (nextRotation != configRotation) {
+            configRotation = nextRotation;
+            beginRotationSettle(nextRotation);
+            sourceBackend.setUpdatesEnabled(false, "launcher-rotation-settle");
+            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+            scheduleRotationSettle(root, nextRotation);
+            return;
+        }
 
-            boolean sourceGeometryChanged = sourceBackend.reconcileRoot();
-            if (sourceGeometryChanged) {
-                long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-                if (nextGeneration > 0L) sceneGeneration = nextGeneration;
-                return;
-            }
+        boolean sourceGeometryChanged = sourceBackend.reconcileRoot();
+        if (sourceGeometryChanged) {
+            long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
+            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+            return;
         }
         if (rootGeometryChanged) {
             sourceBackend.requestFresh(
@@ -846,7 +698,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             retryFreshBackdropRecovery(generation, attempt);
             return;
         }
-        sourceEndpointDirty = false;
         boolean sourceChanged = sourceBackend.reconcileRoot();
         if (sourceChanged) {
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
@@ -1009,9 +860,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
-            compositeQuad = GlQuadBindings.resolve(compositeProgram);
-            compositeTextureUniform = requireUniform(compositeProgram, "uTexture");
-            compositeCropUniform = requireUniform(compositeProgram, "uCropRect");
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
@@ -1081,14 +929,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        compositeQuad.bind(quadBuffer);
+        bindQuad(compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(compositeTextureUniform, 0);
-        GLES20.glUniform4f(compositeCropUniform,
+        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        compositeQuad.unbind();
+        unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
@@ -1106,14 +954,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        compositeQuad.bind(quadBuffer);
+        bindQuad(compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(compositeTextureUniform, 0);
-        GLES20.glUniform4f(compositeCropUniform,
+        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
                 geometry.cropLeft, geometry.cropBottom, geometry.cropWidth, geometry.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        compositeQuad.unbind();
+        unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
@@ -1217,10 +1065,28 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
         compositeProgram = 0;
-        compositeQuad = null;
-        compositeTextureUniform = -1;
-        compositeCropUniform = -1;
         backdropPrepared = false;
+    }
+
+    private void bindQuad(int program) {
+        int position = GLES20.glGetAttribLocation(program, "aPosition");
+        int uv = GLES20.glGetAttribLocation(program, "aUv");
+        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
+        quadBuffer.position(0);
+        GLES20.glEnableVertexAttribArray(position);
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false,
+                4 * Float.BYTES, quadBuffer);
+        quadBuffer.position(2);
+        GLES20.glEnableVertexAttribArray(uv);
+        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false,
+                4 * Float.BYTES, quadBuffer);
+    }
+
+    private void unbindQuad(int program) {
+        int position = GLES20.glGetAttribLocation(program, "aPosition");
+        int uv = GLES20.glGetAttribLocation(program, "aUv");
+        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
+        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {

@@ -37,7 +37,6 @@ final class LauncherGlassStaticNode {
     private ValueAnimator visibilityAnimator;
     private volatile float visibilityAlpha;
     private final View.OnAttachStateChangeListener materialAttachListener;
-    private final View.OnLayoutChangeListener materialLayoutListener;
 
     private LauncherGlassStaticNode(
             View materialHost,
@@ -68,13 +67,7 @@ final class LauncherGlassStaticNode {
                 if (live != null) live.unregisterStaticNode(LauncherGlassStaticNode.this);
             }
         };
-        materialLayoutListener = (view, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> {
-            LauncherGlassSession live = session;
-            if (live != null) live.markStaticGeometryDirty(LauncherGlassStaticNode.this);
-        };
         materialHost.addOnAttachStateChangeListener(materialAttachListener);
-        materialHost.addOnLayoutChangeListener(materialLayoutListener);
     }
 
     static LauncherGlassStaticNode attachToMaterial(
@@ -177,10 +170,7 @@ final class LauncherGlassStaticNode {
         View material = materialRef.get();
         View root = material != null ? material.getRootView() : null;
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
-        if (live != null) {
-            live.markStaticGeometryDirty(this);
-            live.requestStaticRedraw();
-        }
+        if (live != null) live.requestStaticRedraw();
     }
 
     void setSuppressedByFolderOpen(boolean suppressed) {
@@ -220,13 +210,7 @@ final class LauncherGlassStaticNode {
             if (visibilityAnimator != valueAnimator || disposed) return;
             visibilityAlpha = (Float) valueAnimator.getAnimatedValue();
             LauncherGlassSession live = session;
-            if (live != null) {
-                // captureGeometry() treats visibilityAlpha as geometry visibility. Once a suppressed
-                // node reached null geometry, every fade-in step must make that node dirty or the
-                // cached null frame can never recover under dirty/event-driven synchronization.
-                live.markStaticGeometryDirty(this);
-                live.requestStaticRedraw();
-            }
+            if (live != null) live.requestStaticRedraw();
         });
         animator.start();
     }
@@ -246,10 +230,7 @@ final class LauncherGlassStaticNode {
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) {
-            live.markStaticGeometryDirty(this);
-            live.requestStaticRedraw();
-        }
+        if (live != null) live.requestStaticRedraw();
         return true;
     }
 
@@ -262,10 +243,7 @@ final class LauncherGlassStaticNode {
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) {
-            live.markStaticGeometryDirty(this);
-            live.requestStaticRedraw();
-        }
+        if (live != null) live.requestStaticRedraw();
         return !hadGeometry;
     }
 
@@ -452,7 +430,6 @@ final class LauncherGlassStaticNode {
         View material = materialRef.get();
         if (material != null) {
             material.removeOnAttachStateChangeListener(materialAttachListener);
-            material.removeOnLayoutChangeListener(materialLayoutListener);
             WeakReference<LauncherGlassStaticNode> ref = BY_MATERIAL.get(material);
             if (ref != null && ref.get() == this) BY_MATERIAL.remove(material);
         }

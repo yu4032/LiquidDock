@@ -188,10 +188,6 @@ final class LauncherGlassSceneController {
         created.homeTransitionPending = vendorHomeTransitionPending;
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
-        // A session can be acquired after Launcher has already announced HOME START. Mirror the
-        // vendor snapshot into the session-side geometry authority instead of waiting for the next
-        // transition edge, otherwise the first controller may miss the active spring entirely.
-        created.session.setContinuousStaticGeometryTracking(created.homeTransitionPending);
         if (created.folderCovered) {
             created.state.setHardCovered(true);
         } else if (created.recentsCovered) {
@@ -508,14 +504,12 @@ final class LauncherGlassSceneController {
     private void setHomeTransitionPending(boolean pending) {
         boolean wasPending = homeTransitionPending;
         homeTransitionPending = pending;
-        session.setContinuousStaticGeometryTracking(pending);
         onHomePresentationPendingChanged(wasPending, pending);
     }
 
     private void setUnlockTransitionPending(boolean pending) {
         boolean wasPending = isSourceBlockingPresentationPending();
         unlockTransitionPending = pending;
-        session.markAllStaticGeometryDirty();
         onSourceBlockingPresentationPendingChanged(
                 wasPending, isSourceBlockingPresentationPending(), "unlock");
     }
@@ -708,9 +702,6 @@ final class LauncherGlassSceneController {
             wallpaperPulseInFlight = false;
             deferredWallpaperPulse = LauncherWallpaperContentState.Pulse.none();
         }
-        // Do not leave a replaced controller's session in continuous O(N) geometry tracking
-        // when disposal races the tail of a HOME spring.
-        session.setContinuousStaticGeometryTracking(false);
         state.detach();
         LauncherGlassStaticLayer current = layer;
         layer = null;

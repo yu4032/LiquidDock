@@ -652,13 +652,7 @@ final class MiuixFolderGlassHook {
                     : new ArrayList<>(ORIGINAL_COVERED_VISIBILITY.entrySet())) {
                 View view = entry.getKey();
                 Integer original = entry.getValue();
-                if (view == null || original == null) continue;
-                view.setVisibility(original);
-                // PR #247 restores these native folder materials at the final close boundary.
-                // P1 static geometry is event-driven now, so the child visibility write must also
-                // invalidate its claimed glass node; ancestor-transform tracking cannot see it.
-                LauncherGlassStaticNode sink = claimedSink(view);
-                if (sink != null) sink.requestLifecycleRefresh();
+                if (view != null && original != null) view.setVisibility(original);
             }
             ORIGINAL_COVERED_VISIBILITY.clear();
             return;

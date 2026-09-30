@@ -67,9 +67,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
-    private GlQuadBindings compositeQuad;
-    private int compositeTextureUniform = -1;
-    private int compositeCropUniform = -1;
     private OutputState output;
 
     MiuiSearchboxGlassSession(
@@ -245,9 +242,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             }
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
             compositeProgram = 0;
-            compositeQuad = null;
-            compositeTextureUniform = -1;
-            compositeCropUniform = -1;
             sourceBackend.shutdown();
         });
         if (!queued) sourceBackend.shutdown();
@@ -287,9 +281,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
-            compositeQuad = GlQuadBindings.resolve(compositeProgram);
-            compositeTextureUniform = requireUniform(compositeProgram, "uTexture");
-            compositeCropUniform = requireUniform(compositeProgram, "uCropRect");
         }
     }
 
@@ -302,13 +293,13 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        compositeQuad.bind(quadBuffer);
+        bindQuad(compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(compositeTextureUniform, 0);
-        GLES20.glUniform4f(compositeCropUniform, 0f, 0f, 1f, 1f);
+        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"), 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        compositeQuad.unbind();
+        unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
     }
 
@@ -338,6 +329,25 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         String message = error.getMessage();
         return error.getClass().getName()
                 + (message == null || message.isEmpty() ? "" : ": " + message);
+    }
+
+    private void bindQuad(int program) {
+        int position = GLES20.glGetAttribLocation(program, "aPosition");
+        int uv = GLES20.glGetAttribLocation(program, "aUv");
+        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
+        quadBuffer.position(0);
+        GLES20.glEnableVertexAttribArray(position);
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
+        quadBuffer.position(2);
+        GLES20.glEnableVertexAttribArray(uv);
+        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
+    }
+
+    private void unbindQuad(int program) {
+        int position = GLES20.glGetAttribLocation(program, "aPosition");
+        int uv = GLES20.glGetAttribLocation(program, "aUv");
+        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
+        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {

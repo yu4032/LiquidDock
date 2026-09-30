@@ -37,42 +37,6 @@ public class LauncherGlassStaticBoundaryTest {
     }
 
     @Test
-    public void stableWorkspaceUsesDirtyStaticGeometryInsteadOfFullFrameScan() throws Exception {
-        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
-        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
-        String controller = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
-        String hierarchy = Files.readString(MAIN.resolve("LauncherGlassHierarchy.java"));
-
-        assertTrue(session.contains("dirtyStaticNodes"));
-        assertTrue(session.contains("markStaticGeometryDirty"));
-        assertTrue(session.contains("continuousStaticGeometryTracking"));
-        assertTrue(node.contains("addOnLayoutChangeListener(materialLayoutListener)"));
-        assertTrue(node.contains("live.markStaticGeometryDirty(this)"));
-        assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(pending)"));
-        assertTrue(controller.contains(
-                "created.session.setContinuousStaticGeometryTracking(created.homeTransitionPending)"));
-        assertTrue(controller.contains("session.setContinuousStaticGeometryTracking(false)"));
-        assertTrue(session.contains("observeWorkspaceAncestorTransform"));
-        assertTrue(session.contains("captureWorkspaceAncestorTransformSignature"));
-        assertTrue(session.contains("workspaceAncestorMatrixValues"));
-        assertTrue(hierarchy.contains("findWorkspaceRoot"));
-        assertFalse(session.contains("recentsEntryGeometryTracking"));
-        assertTrue(session.contains("sourceEndpointDirty"));
-        assertTrue(session.contains("sourceBackend.isEndpointGenerationCurrent()"));
-        assertTrue(session.contains("addOnGlobalLayoutListener(layoutListener)"));
-
-        // Static nodes may still scan continuously during HOME spring / paging. Stable HOME only
-        // samples the constant-size Workspace ancestor transform chain and must not unconditionally
-        // clone/traverse the entire static-node registry each frame.
-        assertFalse(session.contains(
-                "synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }"));
-        assertTrue(session.contains("List<NodeState> dragSnapshot = null;"));
-        assertTrue(session.contains("List<StaticNodeState> staticSnapshot = null;"));
-        assertFalse(session.contains(
-                "List<StaticNodeState> staticSnapshot = new ArrayList<>();"));
-    }
-
-    @Test
     public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
