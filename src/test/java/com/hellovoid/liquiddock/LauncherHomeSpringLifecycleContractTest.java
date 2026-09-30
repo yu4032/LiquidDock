@@ -24,6 +24,7 @@ public class LauncherHomeSpringLifecycleContractTest {
         assertTrue(source.contains("\"finishTransition\""));
         assertTrue(source.contains("\"onFinishCompleted\""));
         assertTrue(source.contains("\"getLastAminType\""));
+        assertTrue(source.contains("\"getAnimType\""));
         assertTrue(source.contains("CLOSE_TO_HOME"));
         assertTrue(source.contains("CLOSE_TO_HOME_CENTER"));
 
