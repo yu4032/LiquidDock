@@ -192,7 +192,6 @@ final class LauncherGlassSceneController {
         // vendor snapshot into the session-side geometry authority instead of waiting for the next
         // transition edge, otherwise the first controller may miss the active spring entirely.
         created.session.setContinuousStaticGeometryTracking(created.homeTransitionPending);
-        created.session.setRecentsEntryGeometryTracking(created.recentsCovered);
         if (created.folderCovered) {
             created.state.setHardCovered(true);
         } else if (created.recentsCovered) {
@@ -590,7 +589,6 @@ final class LauncherGlassSceneController {
     private void setRecentsCovered(boolean covered) {
         if (recentsCovered == covered) return;
         recentsCovered = covered;
-        session.setRecentsEntryGeometryTracking(covered);
         if (covered) {
             if (folderCovered) state.setHardCovered(true);
             else state.setCovered(true);
@@ -713,7 +711,6 @@ final class LauncherGlassSceneController {
         // Do not leave a replaced controller's session in continuous O(N) geometry tracking
         // when disposal races the tail of a HOME spring.
         session.setContinuousStaticGeometryTracking(false);
-        session.setRecentsEntryGeometryTracking(false);
         state.detach();
         LauncherGlassStaticLayer current = layer;
         layer = null;

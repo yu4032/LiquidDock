@@ -220,7 +220,13 @@ final class LauncherGlassStaticNode {
             if (visibilityAnimator != valueAnimator || disposed) return;
             visibilityAlpha = (Float) valueAnimator.getAnimatedValue();
             LauncherGlassSession live = session;
-            if (live != null) live.requestStaticRedraw();
+            if (live != null) {
+                // captureGeometry() treats visibilityAlpha as geometry visibility. Once a suppressed
+                // node reached null geometry, every fade-in step must make that node dirty or the
+                // cached null frame can never recover under dirty/event-driven synchronization.
+                live.markStaticGeometryDirty(this);
+                live.requestStaticRedraw();
+            }
         });
         animator.start();
     }

@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.view.Display;
 import android.view.Surface;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import com.hellovoid.prismal.PrismalGeometry;
@@ -158,10 +159,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private boolean outputRenderQueued;
     private volatile boolean staticGeometryDirtyAll = true;
     private volatile boolean continuousStaticGeometryTracking;
-    // Recents entry animates Workspace ancestors through scale/translation/visibility setters that
-    // do not produce layout callbacks. Track only until the real Workspace geometry becomes fully
-    // hidden, then automatically return to dirty/event-driven stable-state updates.
-    private volatile boolean recentsEntryGeometryTracking;
+    // Android exposes no listener for ancestor matrix/alpha changes. Keep one constant-size
+    // Workspace->root transform sentinel so non-layout vendor animations only trigger an O(N)
+    // static-node scan when their effective transform actually changes.
+    private WeakReference<View> workspaceTransformAuthority = new WeakReference<>(null);
+    private long workspaceAncestorTransformSignature = Long.MIN_VALUE;
+    private final float[] workspaceAncestorMatrixValues = new float[9];
     private volatile boolean sourceEndpointDirty = true;
 
     private ViewTreeObserver rootObserver;
@@ -352,12 +355,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void setContinuousStaticGeometryTracking(boolean enabled) {
         if (shuttingDown || continuousStaticGeometryTracking == enabled) return;
         continuousStaticGeometryTracking = enabled;
-        markAllStaticGeometryDirty();
-    }
-
-    void setRecentsEntryGeometryTracking(boolean enabled) {
-        if (shuttingDown || recentsEntryGeometryTracking == enabled) return;
-        recentsEntryGeometryTracking = enabled;
         markAllStaticGeometryDirty();
     }
 
@@ -672,6 +669,63 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
+    private boolean observeWorkspaceAncestorTransform(View root) {
+        View workspace = workspaceTransformAuthority.get();
+        if (workspace == null || !workspace.isAttachedToWindow() || workspace.getRootView() != root) {
+            workspace = resolveWorkspaceTransformAuthority(root);
+            workspaceTransformAuthority = new WeakReference<>(workspace);
+            workspaceAncestorTransformSignature = Long.MIN_VALUE;
+        }
+        if (workspace == null) return false;
+
+        long signature = captureWorkspaceAncestorTransformSignature(workspace, root);
+        long previous = workspaceAncestorTransformSignature;
+        workspaceAncestorTransformSignature = signature;
+        return previous != Long.MIN_VALUE && previous != signature;
+    }
+
+    private View resolveWorkspaceTransformAuthority(View root) {
+        synchronized (staticNodes) {
+            for (LauncherGlassStaticNode node : staticNodes.keySet()) {
+                if (node == null) continue;
+                View material = node.materialHost();
+                if (material == null || material.getRootView() != root) continue;
+                View workspace = LauncherGlassHierarchy.findWorkspaceRoot(material);
+                if (workspace != null) return workspace;
+            }
+        }
+        return null;
+    }
+
+    private long captureWorkspaceAncestorTransformSignature(View workspace, View root) {
+        long hash = 0xcbf29ce484222325L;
+        View cursor = workspace;
+        while (cursor != null) {
+            hash = mixTransformSignature(hash, System.identityHashCode(cursor));
+            hash = mixTransformSignature(hash, cursor.getVisibility());
+            hash = mixTransformSignature(hash, cursor.getWindowVisibility());
+            hash = mixTransformSignature(hash, Float.floatToIntBits(cursor.getAlpha()));
+            hash = mixTransformSignature(hash, cursor.getLeft());
+            hash = mixTransformSignature(hash, cursor.getTop());
+            hash = mixTransformSignature(hash, cursor.getRight());
+            hash = mixTransformSignature(hash, cursor.getBottom());
+            hash = mixTransformSignature(hash, cursor.getScrollX());
+            hash = mixTransformSignature(hash, cursor.getScrollY());
+            cursor.getMatrix().getValues(workspaceAncestorMatrixValues);
+            for (float value : workspaceAncestorMatrixValues) {
+                hash = mixTransformSignature(hash, Float.floatToIntBits(value));
+            }
+            if (cursor == root) break;
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return hash;
+    }
+
+    private static long mixTransformSignature(long hash, int value) {
+        return (hash ^ (value & 0xffffffffL)) * 0x100000001b3L;
+    }
+
     private void syncSceneOnUiThread() {
         if (shuttingDown) return;
         View root = rootRef.get();
@@ -706,9 +760,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
-        boolean recentsEntryTracking = recentsEntryGeometryTracking;
+        boolean workspaceAncestorTransformChanged =
+                observeWorkspaceAncestorTransform(root);
         boolean scanAllStatic = rootGeometryChanged
-                || continuousStaticGeometryTracking || recentsEntryTracking
+                || continuousStaticGeometryTracking || workspaceAncestorTransformChanged
                 || staticGeometryDirtyAll;
         List<StaticNodeState> staticSnapshot = null;
         synchronized (staticNodes) {
@@ -724,7 +779,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             dirtyStaticNodes.clear();
             staticGeometryDirtyAll = false;
         }
-        boolean recentsEntryHasVisibleGeometry = false;
         if (staticSnapshot != null && !staticSnapshot.isEmpty()) {
             Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
             for (StaticNodeState state : staticSnapshot) {
@@ -735,7 +789,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 LauncherGlassGeometry.Snapshot old =
                         oldFrame != null ? oldFrame.geometry : null;
                 if (observed == null && old != null && node.retainLastGeometryDuringFade()) {
-                    if (recentsEntryTracking) recentsEntryHasVisibleGeometry = true;
                     continue;
                 }
                 if ((old == null) != (observed == null)
@@ -747,15 +800,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
                     staticChanged = true;
                 }
-                if (recentsEntryTracking && observed != null) {
-                    recentsEntryHasVisibleGeometry = true;
-                }
             }
-        }
-        if (recentsEntryTracking && !recentsEntryHasVisibleGeometry) {
-            // The actual Workspace hierarchy has reached its Recents-hidden presentation state.
-            // Stop O(N) tracking on that same frame; no timeout or fixed animation duration is used.
-            recentsEntryGeometryTracking = false;
         }
 
         boolean endpointNeedsReconcile = rootGeometryChanged || sourceEndpointDirty
