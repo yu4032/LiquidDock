@@ -84,6 +84,12 @@ final class RootPassBlurBackend {
     private long workspaceTraceRenderedCount;
     private long workspaceTraceDrainedCount;
     private long workspaceTraceMaxGapNs;
+    private long workspaceTraceLastSampleTimestampNs = Long.MIN_VALUE;
+    private long workspaceTraceTimestampAdvanceCount;
+    private long workspaceTraceTimestampRepeatCount;
+    private final float[] workspaceTraceLastMatrix = new float[16];
+    private boolean workspaceTraceMatrixInitialized;
+    private String workspaceTraceLastGeometry;
 
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
@@ -588,6 +594,10 @@ final class RootPassBlurBackend {
                     + " rendered=" + workspaceTraceRenderedCount
                     + " drained=" + workspaceTraceDrainedCount
                     + " maxGapMs=" + (workspaceTraceMaxGapNs / 1_000_000.0)
+                    + " tsAdvanced=" + workspaceTraceTimestampAdvanceCount
+                    + " tsRepeated=" + workspaceTraceTimestampRepeatCount
+                    + " lastTimestamp=" + workspaceTraceLastSampleTimestampNs
+                    + " geometry=" + workspaceTraceLastGeometry
                     + " generation=" + generation
                     + " requestedGeneration=" + state.requestedGeneration()
                     + " renderedGeneration=" + renderedGeneration
@@ -598,6 +608,8 @@ final class RootPassBlurBackend {
             workspaceTraceRenderedCount = 0L;
             workspaceTraceDrainedCount = 0L;
             workspaceTraceMaxGapNs = 0L;
+            workspaceTraceTimestampAdvanceCount = 0L;
+            workspaceTraceTimestampRepeatCount = 0L;
         }
     }
 
@@ -607,6 +619,7 @@ final class RootPassBlurBackend {
             makePbufferCurrentUnchecked();
             input.updateTexImage();
             input.getTransformMatrix(textureMatrix);
+            traceWorkspaceSampleState(input, false);
         } catch (Throwable error) {
             notifyTerminalFailure(error);
         }
@@ -618,6 +631,7 @@ final class RootPassBlurBackend {
             makePbufferCurrentUnchecked();
             input.updateTexImage();
             input.getTransformMatrix(textureMatrix);
+            traceWorkspaceSampleState(input, true);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
             RootPassBlurFrame frame = normalizeFrame(generation);
@@ -627,6 +641,48 @@ final class RootPassBlurBackend {
             }
         } catch (Throwable error) {
             notifyTerminalFailure(error);
+        }
+    }
+
+    private void traceWorkspaceSampleState(SurfaceTexture input, boolean renderedPath) {
+        if (bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE || input == null) return;
+        long timestamp = input.getTimestamp();
+        if (workspaceTraceLastSampleTimestampNs != Long.MIN_VALUE) {
+            if (timestamp == workspaceTraceLastSampleTimestampNs) workspaceTraceTimestampRepeatCount++;
+            else workspaceTraceTimestampAdvanceCount++;
+        }
+        workspaceTraceLastSampleTimestampNs = timestamp;
+
+        boolean matrixChanged = !workspaceTraceMatrixInitialized;
+        if (!matrixChanged) {
+            for (int i = 0; i < 16; i++) {
+                if (Math.abs(textureMatrix[i] - workspaceTraceLastMatrix[i]) > 0.000001f) {
+                    matrixChanged = true;
+                    break;
+                }
+            }
+        }
+        if (matrixChanged) {
+            System.arraycopy(textureMatrix, 0, workspaceTraceLastMatrix, 0, 16);
+            workspaceTraceMatrixInitialized = true;
+        }
+
+        RootPassBlurContentRect rect = contentRect;
+        String geometry = "logical=" + logicalWidth + "x" + logicalHeight
+                + " buffer=" + bufferWidth + "x" + bufferHeight
+                + " normalized=" + normalizedWidth + "x" + normalizedHeight
+                + " rotation=" + rotation
+                + " contentRect=[" + rect.left + "," + rect.bottom + ","
+                + rect.width + "," + rect.height + "]";
+        boolean geometryChanged = !geometry.equals(workspaceTraceLastGeometry);
+        if (geometryChanged) workspaceTraceLastGeometry = geometry;
+
+        if (matrixChanged || geometryChanged) {
+            MainHook.log("[DC][WorkspacePBTrace] sample-state"
+                    + " renderedPath=" + renderedPath
+                    + " timestamp=" + timestamp
+                    + " " + geometry
+                    + " matrix=" + java.util.Arrays.toString(textureMatrix));
         }
     }
 

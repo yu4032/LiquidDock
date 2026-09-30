@@ -165,6 +165,9 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(diagnostics.contains("\"onWorkspaceScroll\""));
         assertTrue(diagnostics.contains("workspace-first-scroll BEFORE"));
         assertTrue(diagnostics.contains("launcher-first-onWorkspaceScroll AFTER"));
+        assertTrue(backend.contains("sample-state"));
+        assertTrue(backend.contains("tsAdvanced="));
+        assertTrue(backend.contains("matrix="));
         assertTrue(diagnostics.contains("[DC][WorkspacePBTrace]"));
         assertFalse("diagnostic hook must not rewrite vendor update state",
                 diagnostics.contains("args[1] = Boolean.valueOf"));
