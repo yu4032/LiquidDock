@@ -190,19 +190,18 @@ final class LauncherGlassHomePresentationHook {
 
     static void onGlassBootstrapReconciled(View root) {
         if (launcherHomeEndAuthorityAvailable || root == null
-                || HOME_AUTHORITY.isSystemUiAuthorityActive()
-                || !LauncherGlassSceneController.shouldRecoverInheritedHomeBarrier(root)) {
+                || !LauncherGlassSceneController.shouldRecoverColdStartHomeBarrier(root)) {
             return;
         }
 
         HomeTransitionAuthorityState.Decision decision =
-                HOME_AUTHORITY.onColdStartLauncherBarrierRecovery();
+                HOME_AUTHORITY.onColdStartBarrierRecovery();
         if (!decision.releaseBarrier) return;
 
         Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
         releaseHomeBarrier(decision.releaseWidgetBarrier);
         MainHook.log("[DC][WorkspaceStartupTrace] HOME_BARRIER_RECOVERED"
-                + " reason=inherited-launcher-without-end-authority");
+                + " reason=cold-start-without-launcher-end-authority");
     }
 
     private static void applyHomeStartDecision(HomeTransitionAuthorityState.Decision decision) {
