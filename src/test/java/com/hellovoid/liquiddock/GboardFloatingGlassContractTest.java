@@ -88,6 +88,7 @@ public class GboardFloatingGlassContractTest {
     @Test public void stockAuthorityInterceptsStableWritesWithoutPredrawReassertion() throws Exception {
         String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
         assertTrue(authority.contains("\"setBackground\""));
+        assertTrue(authority.contains("\"setBackgroundDrawable\""));
         assertTrue(authority.contains("\"setAlpha\""));
         assertTrue(authority.contains("\"setElevation\""));
         assertTrue(authority.contains("\"addView\""));
