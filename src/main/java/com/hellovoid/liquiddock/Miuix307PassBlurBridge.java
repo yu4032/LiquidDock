@@ -22,10 +22,10 @@ final class Miuix307PassBlurBridge {
 
     private static volatile Method cachedSurfaceLayerIdMethod;
     private static volatile Method cachedSurfaceNameMethod;
-    private static Class<?> cachedSurfaceSequenceClass;
-    private static Method cachedSurfaceSequenceMethod;
-    private static java.lang.reflect.Field cachedSurfaceSequenceField;
-    private static boolean cachedSurfaceSequenceResolved;
+    private static volatile Class<?> cachedSurfaceSequenceClass;
+    private static volatile Method cachedSurfaceSequenceMethod;
+    private static volatile java.lang.reflect.Field cachedSurfaceSequenceField;
+    private static volatile boolean cachedSurfaceSequenceResolved;
 
     static final class Binding {
         final SurfaceControl rootSurface;
