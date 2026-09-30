@@ -111,13 +111,25 @@ final class MiuixShortcutMenuGlassHook {
                 Object dragLocation = HookUtil.getField(
                         owner, "mDragViewLocationInShortcutMenuLayer");
                 Object fingerLocation = HookUtil.getField(owner, "mFingerDragLocation");
+                Object itemInfo = HookUtil.getField(owner, "mItemInfo");
+                View buddy = null;
+                try {
+                    Object buddyObject = HookUtil.requireInvoke(itemInfo, "getBuddyIconView");
+                    if (buddyObject instanceof View) buddy = (View) buddyObject;
+                } catch (Throwable ignored) {}
                 MainHook.log(TAG + " [YDIAG] position"
                         + " drag=" + describeArray(dragLocation)
                         + " finger=" + describeArray(fingerLocation)
                         + " result=" + getPositionX.invoke(owner)
                         + "," + getPositionY.invoke(owner)
                         + " visualHeight=" + getVisualHeight.invoke(owner)
-                        + " gravity=" + getGravity.invoke(owner));
+                        + " gravity=" + getGravity.invoke(owner)
+                        + " shadowPadding=" + safeIntField(owner, "mShadowPadding")
+                        + " navBarHeight=" + safeIntField(owner, "mNavigationBarHeight")
+                        + " dockWindowHeight=" + safeIntField(owner, "mDockWindowHeight")
+                        + " item=" + (itemInfo != null ? itemInfo.getClass().getName() : "null"));
+                logViewGeometry("position/buddy-icon", buddy);
+                logAncestorChain(buddy, null, "buddy-chain");
             } catch (Throwable error) {
                 MainHook.log(TAG + " [YDIAG] position read failed: " + error);
             }
@@ -305,6 +317,14 @@ final class MiuixShortcutMenuGlassHook {
         }
     }
 
+    private static String safeIntField(Object target, String fieldName) {
+        try {
+            return String.valueOf(HookUtil.getIntField(target, fieldName));
+        } catch (Throwable error) {
+            return "ERR";
+        }
+    }
+
     private static String describeArray(Object value) {
         if (value instanceof float[]) {
             float[] array = (float[]) value;
@@ -440,6 +460,24 @@ final class MiuixShortcutMenuGlassHook {
                 logViewGeometry("show/popup-first-frame", popupView);
                 logViewGeometry("show/content-first-frame", contentView);
             });
+            contentView.postDelayed(() -> {
+                logViewGeometry("show/anchor-100ms", anchorView);
+                logViewGeometry("show/popup-100ms", popupView);
+                logViewGeometry("show/content-100ms", contentView);
+                logAncestorChain(contentView, null, "popup-chain-100ms");
+            }, 100L);
+            contentView.postDelayed(() -> {
+                logViewGeometry("show/anchor-250ms", anchorView);
+                logViewGeometry("show/popup-250ms", popupView);
+                logViewGeometry("show/content-250ms", contentView);
+                logAncestorChain(contentView, null, "popup-chain-250ms");
+            }, 250L);
+            contentView.postDelayed(() -> {
+                logViewGeometry("show/anchor-500ms", anchorView);
+                logViewGeometry("show/popup-500ms", popupView);
+                logViewGeometry("show/content-500ms", contentView);
+                logAncestorChain(contentView, null, "popup-chain-500ms");
+            }, 500L);
             if (darkModeEnabled) {
                 ShortcutMenuDarkModeController.attach(contentView);
             }
