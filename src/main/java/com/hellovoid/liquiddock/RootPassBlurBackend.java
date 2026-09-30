@@ -457,11 +457,11 @@ final class RootPassBlurBackend {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
             normalizeQuad = GlQuadBindings.resolve(normalizeProgram);
-            normalizeTextureUniform = normalizeTextureUniform;
-            normalizeTexMatrixUniform = normalizeTexMatrixUniform;
-            normalizeConfigRotUniform = normalizeConfigRotUniform;
-            normalizeValidDockRectUniform = normalizeValidDockRectUniform;
-            normalizeBackdropRectUniform = normalizeBackdropRectUniform;
+            normalizeTextureUniform = requireUniform(normalizeProgram, "uTexture");
+            normalizeTexMatrixUniform = requireUniform(normalizeProgram, "uTexMatrix");
+            normalizeConfigRotUniform = requireUniform(normalizeProgram, "uConfigRot");
+            normalizeValidDockRectUniform = requireUniform(normalizeProgram, "uValidDockRect");
+            normalizeBackdropRectUniform = requireUniform(normalizeProgram, "uBackdropRect");
         }
         if (oesTexture == 0 || inputSurfaceTexture == null || inputProducerSurface == null) {
             createInputProducer();
