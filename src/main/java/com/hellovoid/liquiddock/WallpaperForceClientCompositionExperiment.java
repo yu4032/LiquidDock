@@ -48,11 +48,10 @@ final class WallpaperForceClientCompositionExperiment {
                         && args[4] instanceof Number) {
                     SurfaceControl sc = (SurfaceControl) args[0];
                     String name = surfaceName(sc);
-                    boolean wallpaperCaller = isWallpaperAnimationCaller();
-                    if (wallpaperCaller) {
+                    if (isWallpaperSurface(name)) {
                         logCandidate("float", name);
                     }
-                    if (wallpaperCaller && isDesktopWallpaper(name)) {
+                    if (isDesktopWallpaper(name)) {
                         float dtdx = ((Number) args[2]).floatValue();
                         float forcedDtdx = dtdx + SHEAR_EPSILON;
                         args[2] = Float.valueOf(forcedDtdx);
@@ -79,11 +78,10 @@ final class WallpaperForceClientCompositionExperiment {
                         && args[1] instanceof Matrix) {
                     SurfaceControl sc = (SurfaceControl) args[0];
                     String name = surfaceName(sc);
-                    boolean wallpaperCaller = isWallpaperAnimationCaller();
-                    if (wallpaperCaller) {
+                    if (isWallpaperSurface(name)) {
                         logCandidate("object", name);
                     }
-                    if (wallpaperCaller && isDesktopWallpaper(name)) {
+                    if (isDesktopWallpaper(name)) {
                         Matrix forced = new Matrix((Matrix) args[1]);
                         forced.postSkew(SHEAR_EPSILON, 0.0f);
                         args[1] = forced;
@@ -127,19 +125,9 @@ final class WallpaperForceClientCompositionExperiment {
                 || lower.contains("wallpaper bbq wrapper");
     }
 
-    private static boolean isWallpaperAnimationCaller() {
-        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-        for (StackTraceElement frame : stack) {
-            if (frame == null) continue;
-            String cls = frame.getClassName();
-            if (cls == null) continue;
-            if (cls.contains("MiuiWallpaperSurfaceAnimation")
-                    || cls.contains("MiuiWallpaperAnimationManager")
-                    || cls.contains("WallpaperSurfaceAnimation")) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean isWallpaperSurface(String name) {
+        if (name == null || name.isEmpty()) return false;
+        return name.toLowerCase(java.util.Locale.ROOT).contains("wallpaper");
     }
 
     private static String surfaceName(SurfaceControl sc) {
