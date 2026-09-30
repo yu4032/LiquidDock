@@ -1121,18 +1121,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         Miuix307PassBlurBridge.Binding current = binding;
         View materialHost = materialHostRef.get();
         if (current == null || materialHost == null) return false;
-        try {
-            Object viewRoot = getViewRootImpl(materialHost);
-            if (viewRoot == null) return false;
-            ensureViewRootAccessors(viewRoot);
-            Object value = cachedGetSurfaceControlMethod.invoke(viewRoot);
-            if (!(value instanceof SurfaceControl)) return false;
-            SurfaceControl observed = (SurfaceControl) value;
-            return !current.rootSurface.isValid()
-                    || !isSameSurface(current.rootSurface, observed);
-        } catch (Throwable ignored) {
-            return false;
-        }
+        return !RootPassBlurEndpointBridge.isCurrentGeneration(materialHost, current);
     }
 
     private void refreshProducerGeometryInPlace() {
