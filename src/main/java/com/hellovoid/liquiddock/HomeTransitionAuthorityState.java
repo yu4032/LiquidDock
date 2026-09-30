@@ -94,10 +94,11 @@ final class HomeTransitionAuthorityState {
         return Decision.release(true);
     }
 
-    synchronized Decision onColdStartLauncherBarrierRecovery() {
-        if (systemUiHomeArmed) return Decision.none();
-        if (!launcherHomeArmed) return Decision.none();
+    synchronized Decision onColdStartBarrierRecovery() {
+        if (!launcherHomeArmed && !systemUiHomeArmed) return Decision.none();
         launcherHomeArmed = false;
+        systemUiHomeArmed = false;
+        activeSystemUiSerial = -1L;
         return Decision.release(true);
     }
 
