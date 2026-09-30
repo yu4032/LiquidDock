@@ -3,9 +3,18 @@ package com.hellovoid.liquiddock;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.hellovoid.liquiddock.config.ConfigSchema;
+
 import org.junit.Test;
 
 public class WallpaperClientCompositionPolicyTest {
+    @Test
+    public void flickerFixIsExplicitOptInRegisteredConfig() {
+        assertFalse(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.uiDefault());
+        assertFalse(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX));
+    }
+
     @Test
     public void acceptsVerifiedDesktopWallpaperSurfaces() {
         assertTrue(WallpaperClientCompositionPolicy.shouldForceClient(
