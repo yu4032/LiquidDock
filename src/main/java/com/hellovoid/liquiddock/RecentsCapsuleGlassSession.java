@@ -262,7 +262,7 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUniform4f(compositeCropUniform,
                 g.cropLeft, g.cropBottom, g.cropWidth, g.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        uncompositeQuad.bind(quadBuffer);
+        compositeQuad.unbind();
         sourceBackend.swapBuffers(current.eglSurface);
         signalPresented(target);
     }
