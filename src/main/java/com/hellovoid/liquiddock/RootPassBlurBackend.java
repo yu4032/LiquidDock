@@ -273,6 +273,13 @@ final class RootPassBlurBackend {
         return !shuttingDown && RootPassBlurEndpointBridge.isBindingValid(binding);
     }
 
+    boolean isEndpointGenerationCurrent() {
+        if (shuttingDown) return false;
+        View root = rootRef.get();
+        return root != null && root.isAttachedToWindow()
+                && RootPassBlurEndpointBridge.isCurrentGeneration(root, binding);
+    }
+
     boolean postToRenderThread(Runnable runnable) {
         if (runnable == null || shuttingDown || !renderThread.isAlive()) return false;
         try {
