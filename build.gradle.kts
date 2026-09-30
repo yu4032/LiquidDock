@@ -82,24 +82,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-
-// Temporary diagnostic packaging only: keep the checked-in scope contract unchanged, but inject
-// system_server ("android") into the packaged libxposed scope for the Wallpaper CLIENT experiment.
-tasks.matching { it.name.startsWith("process") && it.name.endsWith("JavaRes") }.configureEach {
-    doLast {
-        outputs.files.asFileTree
-            .matching { include("**/META-INF/xposed/scope.list") }
-            .files
-            .forEach { scopeFile ->
-                val lines = scopeFile.readLines().filter { it.isNotBlank() }.toMutableList()
-                if ("android" !in lines) {
-                    lines.add(0, "android")
-                    scopeFile.writeText(lines.joinToString("\n", postfix = "\n"))
-                }
-            }
-    }
-}
-
 base {
     archivesName.set("LiquidDock")
 }
