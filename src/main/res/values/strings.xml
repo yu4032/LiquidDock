@@ -8,6 +8,11 @@
     <string name="action_restart_system_ui">Restart System UI</string>
     <string name="page_grid">Home screen layout</string>
     <string name="page_dock">Dock size and blur</string>
+    <string name="page_dock_recent_blacklist">Recent apps blacklist</string>
+    <string name="dock_recent_blacklist_summary">Hide selected apps from the Dock recent-app recommendation area</string>
+    <string name="dock_recent_blacklist_header_summary">Shows the apps currently returned by the Launcher Dock recommendation source. Selected apps stay visible here but are filtered before the Dock list is built.</string>
+    <string name="dock_recent_blacklist_current_candidates">Current recommendation candidates</string>
+    <string name="dock_recent_blacklist_empty">No current candidates have been observed yet. Return to the desktop and let the Dock refresh, then open this page again.</string>
     <string name="page_divider">Dock divider</string>
     <string name="page_workstation">Workstation Dock</string>
     <string name="page_recents">Recents</string>
