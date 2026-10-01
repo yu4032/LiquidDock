@@ -73,9 +73,18 @@ internal fun DockRecentBlacklistPage(
         val next = HashSet(blocked)
         if (checked) next.add(packageName) else next.remove(packageName)
         blocked = next
-        prefs.edit()
+        val stored = prefs.edit()
             .putStringSet(DockRecentAppStore.BLACKLIST_KEY, HashSet(next))
-            .apply()
+            .commit()
+        if (!stored || !LiquidDockApp.syncToRemote(prefs)) {
+            Toast.makeText(
+                activity,
+                activity.getString(R.string.dock_recent_blacklist_apply_failed),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        activity.restartLauncher()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
