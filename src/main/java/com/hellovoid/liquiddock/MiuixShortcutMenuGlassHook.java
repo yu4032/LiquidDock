@@ -117,6 +117,13 @@ final class MiuixShortcutMenuGlassHook {
                     Object buddyObject = HookUtil.requireInvoke(itemInfo, "getBuddyIconView");
                     if (buddyObject instanceof View) buddy = (View) buddyObject;
                 } catch (Throwable ignored) {}
+                int probeX = ((Number) getPositionX.invoke(owner)).intValue();
+                int probeY = ((Number) getPositionY.invoke(owner)).intValue();
+                int probeW = HookUtil.getIntField(owner, "mMenuVisualWidth");
+                int probeH = ((Number) getVisualHeight.invoke(owner)).intValue();
+                int probeGravity = ((Number) getGravity.invoke(owner)).intValue();
+                ShortcutMenuPositionProbe.record(
+                        probeX, probeY, probeW, probeH, probeGravity);
                 MainHook.log(TAG + " [YDIAG] position"
                         + " drag=" + describeArray(dragLocation)
                         + " finger=" + describeArray(fingerLocation)
