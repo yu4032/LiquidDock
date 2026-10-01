@@ -42,7 +42,7 @@ public final class DockRecentAppStore {
         if (context == null || items == null) return;
         String token;
         try {
-            ConfigReader.Config config = ConfigReader.load();
+            ConfigReader config = ConfigReader.load();
             if (config.s(DISCOVERY_REQUEST_KEY, "").isEmpty()) return;
             token = config.s(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "");
         } catch (Throwable ignored) {
