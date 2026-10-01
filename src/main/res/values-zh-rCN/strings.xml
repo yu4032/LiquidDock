@@ -10,8 +10,11 @@
     <string name="page_dock">Dock 尺寸与模糊</string>
     <string name="page_dock_recent_blacklist">最近程序黑名单</string>
     <string name="dock_recent_blacklist_summary">阻止指定程序出现在 Dock 最近程序推荐区</string>
-    <string name="dock_recent_blacklist_header_summary">仅显示 Launcher 当前实际返回给 Dock 的最近程序推荐候选。加入黑名单后仍保留在此列表中，便于随时恢复。</string>
+    <string name="dock_recent_blacklist_header_summary">显示当前可进入 Dock 最近程序推荐的候选。已拉黑程序会单独列出，并在推荐时跳过，由后续可用程序补位。</string>
     <string name="dock_recent_blacklist_current_candidates">当前推荐候选</string>
+    <string name="dock_recent_blacklist_blocked_apps">已加入黑名单</string>
+    <string name="dock_recent_blacklist_blocked_empty">当前没有已拉黑程序。</string>
+    <string name="dock_recent_blacklist_blocked_active_item">已拉黑，当前仍可推荐 · %1$s</string>
     <string name="dock_recent_blacklist_empty">暂未观测到推荐候选。返回桌面让 Dock 刷新一次后，再进入此页面。</string>
     <string name="dock_recent_blacklist_candidate_item">当前候选 · %1$s</string>
     <string name="dock_recent_blacklist_blocked_inactive_item">已拉黑，当前不在候选 · %1$s</string>
