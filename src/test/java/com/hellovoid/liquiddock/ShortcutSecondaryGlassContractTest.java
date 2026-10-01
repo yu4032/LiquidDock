@@ -35,7 +35,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("layer.setScaleY(content.getScaleY())"));
         assertFalse(coordinator.contains("layer.setLayoutParams(lp)"));
         assertFalse(coordinator.contains("content.getGlobalVisibleRect"));
-        assertTrue(coordinator.contains("content.getWidth() <= 0 || content.getHeight() <= 0"));
+        assertTrue(coordinator.contains("if (width <= 0 || height <= 0) return false;"));
         assertTrue(coordinator.contains("layer.setClipBounds"));
         assertTrue(coordinator.contains("matrix.mapRect(transformed)"));
         assertTrue(coordinator.contains("geometry-visual"));
