@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.graphics.Color;
 import android.util.Log;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -222,20 +223,34 @@ final class ShortcutPopupGlassCoordinator {
         if (BISECT_VENDOR_POSITION_AUTHORITY) {
             ShortcutMenuPositionProbe.Snapshot probe = ShortcutMenuPositionProbe.latest();
             if (probe == null) {
-                Log.e("LiquidDockBisect2", "MISS no vendor position snapshot");
+                Log.e("LiquidDockBisect4", "MISS no vendor position snapshot");
                 return;
             }
-            Log.e("LiquidDockBisect2", "USE x=" + probe.x + " y=" + probe.y
-                    + " w=" + probe.width + " h=" + probe.height
+
+            RectF local = new RectF(0f, 0f, probe.width, probe.height);
+            content.getMatrix().mapRect(local);
+            float left = probe.x + local.left + content.getTranslationX();
+            float top = probe.y + local.top + content.getTranslationY();
+            float right = probe.x + local.right + content.getTranslationX();
+            float bottom = probe.y + local.bottom + content.getTranslationY();
+
+            Log.e("LiquidDockBisect4", "USE raw=" + probe.x + "," + probe.y
+                    + " " + probe.width + "x" + probe.height
+                    + " matrixRect=" + local.toShortString()
+                    + " scale=" + content.getScaleX() + "," + content.getScaleY()
+                    + " pivot=" + content.getPivotX() + "," + content.getPivotY()
+                    + " visual=" + left + "," + top + "-" + right + "," + bottom
                     + " gravity=" + probe.gravity);
+
             LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
                     decor.getWidth(), decor.getHeight(),
-                    probe.x, probe.y, probe.x + probe.width, probe.y + probe.height,
+                    left, top, right, bottom,
                     resolveShortcutMenuCornerRadius(content));
             if (geometry != null) session.updateGeometry(geometry);
-            MainHook.log(TAG + " [BISECT2] vendor-position"
-                    + " rect=" + probe.x + "," + probe.y
+            MainHook.log(TAG + " [BISECT4] vendor-plus-content-matrix"
+                    + " raw=" + probe.x + "," + probe.y
                     + " " + probe.width + "x" + probe.height
+                    + " visual=" + left + "," + top + "-" + right + "," + bottom
                     + " gravity=" + probe.gravity
                     + (geometry != null
                             ? " center=" + geometry.centerX + "," + geometry.centerY
