@@ -13,6 +13,7 @@ import java.lang.ref.WeakReference;
 final class ShortcutPopupGlassCoordinator {
     private static final String TAG = "[DC][ShortcutPopupGlass]";
     private static State current;
+    private static final boolean BISECT_VENDOR_POSITION_AUTHORITY = true;
 
     private ShortcutPopupGlassCoordinator() {}
 
@@ -90,6 +91,7 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner,
             String replaceReason) {
         releaseLocked(replaceReason);
+        ShortcutMenuPositionProbe.clear();
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
@@ -216,6 +218,24 @@ final class ShortcutPopupGlassCoordinator {
         if (decor == null || content == null || session == null || decor.getWidth() <= 0
                 || decor.getHeight() <= 0 || !content.isAttachedToWindow()
                 || content.getWidth() <= 0 || content.getHeight() <= 0) return;
+
+        if (BISECT_VENDOR_POSITION_AUTHORITY) {
+            ShortcutMenuPositionProbe.Snapshot probe = ShortcutMenuPositionProbe.latest();
+            if (probe == null) return;
+            LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
+                    decor.getWidth(), decor.getHeight(),
+                    probe.x, probe.y, probe.x + probe.width, probe.y + probe.height,
+                    resolveShortcutMenuCornerRadius(content));
+            if (geometry != null) session.updateGeometry(geometry);
+            MainHook.log(TAG + " [BISECT2] vendor-position"
+                    + " rect=" + probe.x + "," + probe.y
+                    + " " + probe.width + "x" + probe.height
+                    + " gravity=" + probe.gravity
+                    + (geometry != null
+                            ? " center=" + geometry.centerX + "," + geometry.centerY
+                            : " geometry=null"));
+            return;
+        }
 
         // Map the current material host, not an initial frame or its clipped visible Rect.
         // PopupAnimHelper changes its top/bottom/left/right directly on every fraction update.
