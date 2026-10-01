@@ -14,6 +14,16 @@ final class LauncherGlassScreenSpace {
                 bottom - rootScreenY);
     }
 
+    static Bounds relativeToRoot(
+            int rootScreenX, int rootScreenY,
+            float left, float top, float right, float bottom) {
+        return new Bounds(
+                left - rootScreenX,
+                top - rootScreenY,
+                right - rootScreenX,
+                bottom - rootScreenY);
+    }
+
     static final class Bounds {
         final float left;
         final float top;

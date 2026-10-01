@@ -2,13 +2,14 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.SurfaceTexture;
+import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 
-/** Stable full-screen popup glass output. Its Surface never follows MiuiX popup bounds animation. */
+/** Stable root-sized output; vendor background-host geometry is applied only by the renderer. */
 final class ShortcutPopupGlassLayer extends TextureView implements TextureView.SurfaceTextureListener {
     private static final long FAST_DISMISS_FADE_MS = 90L;
 
@@ -55,6 +56,10 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
     }
 
     @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+        Log.e("LiquidDockBisect3", "SURFACE_AVAILABLE view="
+                + getWidth() + "x" + getHeight()
+                + " measured=" + getMeasuredWidth() + "x" + getMeasuredHeight()
+                + " callback=" + width + "x" + height);
         if (disposed || texture == null) return;
         Surface next = new Surface(texture);
         Surface old = outputSurface;
@@ -64,6 +69,10 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
     }
 
     @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
+        Log.e("LiquidDockBisect3", "SURFACE_SIZE_CHANGED view="
+                + getWidth() + "x" + getHeight()
+                + " measured=" + getMeasuredWidth() + "x" + getMeasuredHeight()
+                + " callback=" + width + "x" + height);
         if (!disposed) session.resizeOutput(Math.max(1, width), Math.max(1, height));
     }
 
