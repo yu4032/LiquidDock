@@ -50,8 +50,14 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(store.contains("acknowledgeDiscoveryRequest"));
 
         String discovery = Files.readString(ROOT.resolve("LauncherWidgetComponentDiscovery.java"));
-        assertTrue(discovery.contains("if (!WidgetComponentStore.discoveryRequested()) return;"));
+        assertTrue(discovery.contains("WidgetComponentStore.discoveryRequested()"));
         assertTrue(discovery.contains("WidgetComponentStore.acknowledgeDiscoveryRequest"));
+        assertTrue(discovery.contains("scanTrackedHosts()"));
+
+        String bridge = Files.readString(ROOT.resolve("LauncherManualDiscoveryBridge.java"));
+        assertTrue(bridge.contains("KIND_WIDGETS = \"widgets\""));
+        assertTrue(bridge.contains("WidgetComponentStore.beginManualDiscoverySession()"));
+        assertTrue(bridge.contains("LauncherWidgetComponentDiscovery.scanTrackedHosts()"));
 
         String receiver = Files.readString(ROOT.resolve("WidgetDiscoveryReceiver.java"));
         assertTrue(receiver.contains("WidgetComponentStore.EXTRA_REQUEST_ACK"));
@@ -61,7 +67,9 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(picker.contains("UUID.randomUUID().toString()"));
         assertTrue(picker.contains("WidgetComponentStore.DISCOVERY_REQUEST_KEY"));
         assertTrue(picker.contains("LiquidDockApp.syncToRemote(prefs)"));
+        assertTrue(picker.contains("LauncherManualDiscoveryBridge.requestWidgetScan"));
         assertTrue(picker.contains("载入当前小组件"));
+        assertFalse(picker.contains("activity.restartLauncher()"));
         assertFalse(picker.contains("重新扫描桌面"));
     }
 

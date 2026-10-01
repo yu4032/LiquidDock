@@ -25,12 +25,19 @@ final class LauncherWidgetComponentDiscovery {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<Object, Boolean> DUMPED_MAML_ROOTS =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, Boolean> KNOWN_HOSTS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, MamlTarget> KNOWN_MAML =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private LauncherWidgetComponentDiscovery() {}
 
     static void scan(View host) {
+        if (host == null) return;
+        KNOWN_HOSTS.put(host, Boolean.TRUE);
+        LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
         if (!WidgetComponentStore.discoveryRequested()) return;
-        if (host == null || isMamlHost(host)) return;
+        if (isMamlHost(host)) return;
         View content = resolveRemoteViewsContent(host);
         if (content == null) return;
 
@@ -69,8 +76,11 @@ final class LauncherWidgetComponentDiscovery {
     }
 
     static void scanMaml(View host, WidgetBackgroundIdentity identity, Object root) {
-        if (!WidgetComponentStore.discoveryRequested()) return;
         if (host == null || identity == null || root == null) return;
+        KNOWN_HOSTS.put(host, Boolean.TRUE);
+        KNOWN_MAML.put(host, new MamlTarget(identity, root));
+        LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
+        if (!WidgetComponentStore.discoveryRequested()) return;
         synchronized (DUMPED_MAML_ROOTS) {
             if (DUMPED_MAML_ROOTS.containsKey(root)) return;
             DUMPED_MAML_ROOTS.put(root, Boolean.TRUE);
@@ -123,6 +133,32 @@ final class LauncherWidgetComponentDiscovery {
 
         WidgetComponentStore.publishBatch(host.getContext(), descriptors);
         WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
+    }
+
+    static void scanTrackedHosts() {
+        DUMPED_REMOTE_ROOTS.clear();
+        DUMPED_MAML_ROOTS.clear();
+
+        ArrayList<View> hosts;
+        synchronized (KNOWN_HOSTS) {
+            hosts = new ArrayList<>(KNOWN_HOSTS.keySet());
+        }
+        for (View host : hosts) {
+            if (host != null) scan(host);
+        }
+
+        ArrayList<Map.Entry<View, MamlTarget>> mamlTargets;
+        synchronized (KNOWN_MAML) {
+            mamlTargets = new ArrayList<>(KNOWN_MAML.entrySet());
+        }
+        for (Map.Entry<View, MamlTarget> entry : mamlTargets) {
+            View host = entry.getKey();
+            MamlTarget target = entry.getValue();
+            Object root = target == null ? null : target.root.get();
+            if (host != null && target != null && root != null) {
+                scanMaml(host, target.identity, root);
+            }
+        }
     }
 
     private static void scanMamlRenderChildren(
@@ -371,6 +407,16 @@ final class LauncherWidgetComponentDiscovery {
 
     private static String safe(String value) {
         return value == null ? "" : value.replace(' ', '_');
+    }
+
+    private static final class MamlTarget {
+        final WidgetBackgroundIdentity identity;
+        final WeakReference<Object> root;
+
+        MamlTarget(WidgetBackgroundIdentity identity, Object root) {
+            this.identity = identity;
+            this.root = new WeakReference<>(root);
+        }
     }
 
     private static final class DiscoveryMetadata {
