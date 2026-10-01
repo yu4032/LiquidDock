@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
-import android.util.Log;
 
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +15,6 @@ import java.security.MessageDigest;
  * Launcher process. Manual loads stay in Settings; Launcher is never force-stopped or brought HOME.
  */
 public final class LauncherManualDiscoveryBridge {
-    private static final String LOG_TAG = "LiquidDockManualDiscover";
     public static final String ACTION_REQUEST =
             "com.hellovoid.liquiddock.MANUAL_DISCOVERY_REQUEST";
     public static final String EXTRA_KIND = "kind";
@@ -33,8 +31,6 @@ public final class LauncherManualDiscoveryBridge {
     static void captureDockProvider(Object provider) {
         if (provider != null) {
             dockProvider = new WeakReference<>(provider);
-            Log.i(LOG_TAG, "[DC][ManualDiscover] captureDockProvider class="
-                    + provider.getClass().getName());
         }
     }
 
@@ -49,10 +45,6 @@ public final class LauncherManualDiscoveryBridge {
                     String token = intent.getStringExtra(EXTRA_TOKEN);
                     String kind = intent.getStringExtra(EXTRA_KIND);
                     boolean tokenValid = validToken(token);
-                    Log.i(LOG_TAG, "[DC][ManualDiscover] receive kind=" + kind
-                            + " tokenPresent=" + (token != null && !token.isEmpty())
-                            + " tokenValid=" + tokenValid
-                            + " providerAlive=" + (dockProvider.get() != null));
                     if (!tokenValid) return;
                     if (KIND_DOCK_RECENTS.equals(kind)) {
                         Object provider = dockProvider.get();
@@ -62,16 +54,12 @@ public final class LauncherManualDiscoveryBridge {
                         }
                         HookUtil.InvocationResult<Object> update =
                                 HookUtil.tryInvoke(provider, "requestUpdateRecommendTasks");
-                        Log.i(LOG_TAG, "[DC][ManualDiscover] requestUpdateRecommendTasks success="
-                                + update.succeeded()
-                                + (update.succeeded() ? "" : " failure=" + update.failure()));
                         if (!update.succeeded()) {
                             MainHook.log("[DC][ManualDiscover] Dock refresh failed: "
                                     + update.failure());
                         }
                     } else if (KIND_WIDGETS.equals(kind)) {
                         WidgetComponentStore.beginManualDiscoverySession();
-                        Log.i(LOG_TAG, "[DC][ManualDiscover] widget live scan begin");
                         LauncherWidgetComponentDiscovery.scanTrackedHosts();
                     }
                 }
@@ -84,8 +72,6 @@ public final class LauncherManualDiscoveryBridge {
             }
             receiverRegistered = true;
             MainHook.log("[DC][ManualDiscover] live request receiver installed");
-            Log.i(LOG_TAG, "[DC][ManualDiscover] receiverRegistered package="
-                    + app.getPackageName());
         }
     }
 
@@ -105,13 +91,8 @@ public final class LauncherManualDiscoveryBridge {
             intent.putExtra(EXTRA_KIND, kind);
             intent.putExtra(EXTRA_TOKEN, token);
             context.sendBroadcast(intent);
-            Log.i(LOG_TAG, "[DC][ManualDiscover] send kind=" + kind
-                    + " tokenPresent=" + !token.isEmpty()
-                    + " from=" + context.getPackageName()
-                    + " targetPackage=" + LAUNCHER_PACKAGE);
             return true;
         } catch (Throwable error) {
-            Log.e(LOG_TAG, "[DC][ManualDiscover] send failed kind=" + kind, error);
             return false;
         }
     }
