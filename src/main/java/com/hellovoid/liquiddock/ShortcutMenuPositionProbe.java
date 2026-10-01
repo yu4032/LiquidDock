@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import android.util.Log;
+
 /** Stage-2 diagnostic authority captured directly from HyperOS ShortcutMenuPosition. */
 final class ShortcutMenuPositionProbe {
     static final class Snapshot {
@@ -23,8 +25,14 @@ final class ShortcutMenuPositionProbe {
     private ShortcutMenuPositionProbe() {}
 
     static void record(int x, int y, int width, int height, int gravity) {
-        if (width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0) {
+            Log.e("LiquidDockBisect2", "RECORD_REJECT x=" + x + " y=" + y
+                    + " w=" + width + " h=" + height + " gravity=" + gravity);
+            return;
+        }
         latest = new Snapshot(x, y, width, height, gravity);
+        Log.e("LiquidDockBisect2", "RECORD x=" + x + " y=" + y
+                + " w=" + width + " h=" + height + " gravity=" + gravity);
     }
 
     static Snapshot latest() {
