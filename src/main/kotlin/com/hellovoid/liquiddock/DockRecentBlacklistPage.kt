@@ -84,7 +84,14 @@ internal fun DockRecentBlacklistPage(
             ).show()
             return
         }
-        activity.restartLauncher()
+        val token = prefs.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "").orEmpty()
+        if (!LauncherManualDiscoveryBridge.requestDockRefresh(activity, token)) {
+            Toast.makeText(
+                activity,
+                activity.getString(R.string.dock_recent_blacklist_apply_failed),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
@@ -117,7 +124,19 @@ internal fun DockRecentBlacklistPage(
                         }
                         candidatePrefs.edit().remove(DockRecentAppStore.CANDIDATE_KEY).commit()
                         candidateRevision++
-                        activity.restartLauncher()
+                        val token = prefs.getString(
+                            WidgetComponentStore.DISCOVERY_TOKEN_KEY,
+                            "",
+                        ).orEmpty()
+                        if (!LauncherManualDiscoveryBridge.requestDockRefresh(activity, token)) {
+                            prefs.edit().remove(DockRecentAppStore.DISCOVERY_REQUEST_KEY).commit()
+                            LiquidDockApp.syncToRemote(prefs)
+                            Toast.makeText(
+                                activity,
+                                activity.getString(R.string.dock_recent_blacklist_load_failed),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     },
                 )
             }
