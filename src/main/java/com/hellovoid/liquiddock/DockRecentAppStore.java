@@ -14,6 +14,7 @@ public final class DockRecentAppStore {
     public static final String BLACKLIST_KEY = "dock_recent_app_blacklist";
     public static final String CANDIDATE_PREFS = "dock_recent_app_candidates";
     public static final String CANDIDATE_KEY = "current";
+    public static final String DISCOVERY_REQUEST_KEY = "dock_recent_app_discovery_request";
     public static final String ACTION_CANDIDATES =
             "com.hellovoid.liquiddock.DOCK_RECENT_APP_CANDIDATES";
     public static final String EXTRA_PACKAGES = "packages";
@@ -41,7 +42,9 @@ public final class DockRecentAppStore {
         if (context == null || items == null) return;
         String token;
         try {
-            token = ConfigReader.load().s(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "");
+            ConfigReader.Config config = ConfigReader.load();
+            if (config.s(DISCOVERY_REQUEST_KEY, "").isEmpty()) return;
+            token = config.s(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "");
         } catch (Throwable ignored) {
             return;
         }
