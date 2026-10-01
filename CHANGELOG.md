@@ -2,6 +2,17 @@
 
 > 本文件按版本记录当时的变化，历史条目不会为追随当前实现而改写。当前行为请以 `main` 生产源码和 [README.md](README.md)、[FEATURES.md](FEATURES.md)、[ARCHITECTURE.md](ARCHITECTURE.md)、[HOOKS.md](HOOKS.md) 为准。
 
+## v2.6.0 (2026-10-01)
+
+### Dock 与壁纸
+
+- 新增 Dock 最近应用黑名单，可阻止指定程序出现在 Dock 最近程序推荐区
+- 新增可选的壁纸 GPU 渲染开关，用于缓解可能发生的壁纸闪烁；启用后需为 LiquidDock 开启 System Framework（system）作用域并重启设备
+
+### 桌面弹出菜单
+
+- 修复快捷菜单液态玻璃在不同坐标空间之间混用导致的位置偏移问题
+
 ## v2.5.3 (2026-09-30)
 
 ### Workspace 液态玻璃
