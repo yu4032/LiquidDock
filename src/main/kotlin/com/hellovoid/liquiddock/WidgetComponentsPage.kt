@@ -76,7 +76,7 @@ internal fun WidgetComponentsPage(
             Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 ArrowPreference(
                     title = "载入当前小组件",
-                    summary = "仅下一次桌面启动执行一轮扫描，完成后自动关闭扫描",
+                    summary = "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描",
                     onClick = {
                         val request = UUID.randomUUID().toString()
                         val stored = prefs.edit()
@@ -90,7 +90,19 @@ internal fun WidgetComponentsPage(
                         }
                         catalogPrefs.edit().remove(WidgetComponentStore.CATALOG_KEY).commit()
                         catalogRevision++
-                        activity.restartLauncher()
+                        val token = prefs.getString(
+                            WidgetComponentStore.DISCOVERY_TOKEN_KEY,
+                            "",
+                        ).orEmpty()
+                        if (!LauncherManualDiscoveryBridge.requestWidgetScan(activity, token)) {
+                            prefs.edit().remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY).commit()
+                            LiquidDockApp.syncToRemote(prefs)
+                            Toast.makeText(
+                                activity,
+                                "无法向桌面发送小组件扫描请求",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     },
                 )
             }

@@ -41,8 +41,9 @@ public final class WidgetComponentStore {
     public static final String TYPE_OTHER = "other";
     public static final String TYPE_INTERNAL = "internal";
 
-    // A manual load always restarts Launcher. Cache that process's request/token so clearing the
-    // persisted request does not interrupt the remainder of this one Launcher discovery session.
+    // Cache one manual discovery session in the Launcher process. A live request can refresh this
+    // state without restarting Launcher; clearing the persisted request must not interrupt the
+    // remainder of the already-started scan.
     private static volatile boolean discoverySessionLoaded;
     private static volatile boolean discoveryActive;
     private static volatile String discoveryToken = "";
@@ -53,6 +54,21 @@ public final class WidgetComponentStore {
     static boolean discoveryRequested() {
         ensureDiscoverySession();
         return discoveryActive;
+    }
+
+    static void beginManualDiscoverySession() {
+        synchronized (WidgetComponentStore.class) {
+            try {
+                ConfigReader config = ConfigReader.load();
+                discoveryToken = config.s(DISCOVERY_TOKEN_KEY, "");
+                discoveryActive = !blank(config.s(DISCOVERY_REQUEST_KEY, ""));
+            } catch (Throwable ignored) {
+                discoveryToken = "";
+                discoveryActive = false;
+            }
+            discoveryAckSent = false;
+            discoverySessionLoaded = true;
+        }
     }
 
     static void acknowledgeDiscoveryRequest(Context context) {

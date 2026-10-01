@@ -48,6 +48,9 @@ public class MainHook {
         }
         order.advance(LauncherInstallSequence.Stage.DOCK_FOUNDATION);
 
+        // Independent of the visual owner: filter only the vendor Dock recommendation source.
+        DockRecentAppBlacklistHook.install(classLoader);
+
         // Grid feature.
         DockDividerHook.install(classLoader);
         LauncherGridInstallConfig grid = LauncherGridInstallConfig.from(config, density);
