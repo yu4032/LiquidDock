@@ -3,7 +3,6 @@ package com.hellovoid.liquiddock;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -12,7 +11,6 @@ import java.util.Set;
 
 /** Contract for Dock recent-app blacklist and Launcher -> settings candidate snapshots. */
 public final class DockRecentAppStore {
-    private static final String LOG_TAG = "LiquidDockDockRecent";
     public static final String BLACKLIST_KEY = "dock_recent_app_blacklist";
     public static final String CANDIDATE_PREFS = "dock_recent_app_candidates";
     public static final String CANDIDATE_KEY = "current";
@@ -47,29 +45,18 @@ public final class DockRecentAppStore {
             ConfigReader config = ConfigReader.load();
             String request = config.s(DISCOVERY_REQUEST_KEY, "");
             if (request.isEmpty()) {
-                Log.i(LOG_TAG, "[DC][DockRecentBlacklist] publish skipped requestMissing"
-                        + " itemCount=" + items.size());
                 return;
             }
             token = config.s(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "");
-            Log.i(LOG_TAG, "[DC][DockRecentBlacklist] publish requestPresent=true"
-                    + " tokenPresent=" + (token != null && !token.isEmpty())
-                    + " itemCount=" + items.size());
         } catch (Throwable ignored) {
             return;
         }
         if (token == null || token.isEmpty()) return;
 
         LinkedHashSet<String> packages = new LinkedHashSet<>();
-        int index = 0;
         for (Object item : items) {
-            List<String> names = packageNamesOf(item);
-            Log.i(LOG_TAG, "[DC][DockRecentBlacklist] candidate item=" + index++
-                    + " type=" + (item == null ? "null" : item.getClass().getName())
-                    + " packages=" + names);
-            packages.addAll(names);
+            packages.addAll(packageNamesOf(item));
         }
-        Log.i(LOG_TAG, "[DC][DockRecentBlacklist] publish packages=" + packages);
 
         try {
             Intent intent = new Intent(ACTION_CANDIDATES);
@@ -78,8 +65,6 @@ public final class DockRecentAppStore {
             intent.putExtra(EXTRA_TOKEN, token);
             intent.putStringArrayListExtra(EXTRA_PACKAGES, new ArrayList<>(packages));
             context.sendBroadcast(intent);
-            Log.i(LOG_TAG, "[DC][DockRecentBlacklist] candidate broadcast sent"
-                    + " packageCount=" + packages.size());
         } catch (Throwable error) {
             MainHook.log("[DC][DockRecentBlacklist] candidate publish failed: " + error);
         }
