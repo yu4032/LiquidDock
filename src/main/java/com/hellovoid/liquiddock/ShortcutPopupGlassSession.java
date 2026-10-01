@@ -4,6 +4,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.util.Log;
 import android.view.Surface;
 import android.view.View;
 
@@ -27,6 +28,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     private static final String TAG = "[DC][ShortcutPopupGlass]";
     private static final long GENERATION = 1L;
+    // Stage-2 bisection: render only the vendor-position probe, bypassing all glass rendering.
+    private static final boolean BISECT_GEOMETRY_PROBE = true;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -203,21 +206,25 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 || logicalWidth <= 0 || logicalHeight <= 0) return;
         try {
             ensureGl();
-            sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrame();
-            prismalRenderer.drawGlass(
-                    new PrismalGeometry(
-                            logicalWidth,
-                            logicalHeight,
-                            currentGeometry.centerX,
-                            currentGeometry.centerY,
-                            currentGeometry.width,
-                            currentGeometry.height,
-                            currentGeometry.cornerRadius),
-                    prismalParams,
-                    highlightProfile,
-                    PrismalInteractionState.IDLE);
-            presentFull(prismalRenderer.outputTexture(), currentOutput);
+            if (BISECT_GEOMETRY_PROBE) {
+                presentGeometryProbe(currentOutput, currentGeometry);
+            } else {
+                sourceBackend.makePbufferCurrent();
+                prismalRenderer.beginGlassFrame();
+                prismalRenderer.drawGlass(
+                        new PrismalGeometry(
+                                logicalWidth,
+                                logicalHeight,
+                                currentGeometry.centerX,
+                                currentGeometry.centerY,
+                                currentGeometry.width,
+                                currentGeometry.height,
+                                currentGeometry.cornerRadius),
+                        prismalParams,
+                        highlightProfile,
+                        PrismalInteractionState.IDLE);
+                presentFull(prismalRenderer.outputTexture(), currentOutput);
+            }
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -254,6 +261,54 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
         }
+    }
+
+    private void presentGeometryProbe(
+            OutputState current,
+            LauncherGlassGeometry.Snapshot geometry) {
+        sourceBackend.makeCurrent(current.eglSurface);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glViewport(0, 0, current.width, current.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+
+        float sx = current.width / (float) logicalWidth;
+        float sy = current.height / (float) logicalHeight;
+        int left = Math.round((geometry.centerX - geometry.width * 0.5f) * sx);
+        int top = Math.round((geometry.centerY - geometry.height * 0.5f) * sy);
+        int width = Math.max(1, Math.round(geometry.width * sx));
+        int height = Math.max(1, Math.round(geometry.height * sy));
+        int bottom = current.height - top - height;
+
+        left = Math.max(0, Math.min(current.width - 1, left));
+        bottom = Math.max(0, Math.min(current.height - 1, bottom));
+        width = Math.max(1, Math.min(current.width - left, width));
+        height = Math.max(1, Math.min(current.height - bottom, height));
+
+        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glScissor(left, bottom, width, height);
+        // Deliberately flat diagnostic fill: no backdrop sampling, no Prismal, no crop/composite.
+        GLES20.glClearColor(0f, 1f, 0f, 0.55f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        // Cyan marker stripe at the probe's visual top makes Stage 2 impossible to confuse with
+        // Stage 1's magenta rectangle and exposes the exact top edge by eye.
+        int stripeHeight = Math.max(4, Math.min(16, height));
+        GLES20.glScissor(left, bottom + height - stripeHeight, width, stripeHeight);
+        GLES20.glClearColor(0f, 1f, 1f, 0.95f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        sourceBackend.swapBuffers(current.eglSurface);
+
+        Log.e("LiquidDockBisect2", "RENDER rect=" + left + "," + top
+                + " " + width + "x" + height
+                + " center=" + geometry.centerX + "," + geometry.centerY);
+        MainHook.log(TAG + " [BISECT2] geometry-probe"
+                + " logical=" + logicalWidth + "x" + logicalHeight
+                + " output=" + current.width + "x" + current.height
+                + " rect=" + left + "," + top + " " + width + "x" + height
+                + " center=" + geometry.centerX + "," + geometry.centerY);
     }
 
     private void presentFull(int sceneTexture, OutputState current) {
