@@ -71,6 +71,7 @@ class ComposeSettingsActivity : SettingsActivity() {
 
 private enum class Page(val titleRes: Int) {
     Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
+    DockRecentBlacklist(R.string.page_dock_recent_blacklist),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     SecurityCenterSidebar(R.string.page_security_center_sidebar),
     Liquid(R.string.page_liquid), DialogCustomization(R.string.page_dialog_customization),
@@ -83,6 +84,7 @@ private enum class Page(val titleRes: Int) {
 }
 
 private fun parentPage(page: Page): Page = when (page) {
+    Page.DockRecentBlacklist -> Page.Dock
     Page.Gboard -> Page.ThirdPartyApps
     Page.DialogCustomization, Page.ThirdPartyApps,
     Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
@@ -479,7 +481,8 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
             when (target) {
                 Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }) { page = it }
                 Page.Grid -> GridPage(padding, prefs, masterEnabled)
-                Page.Dock -> DockPage(padding, prefs, masterEnabled)
+                Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
+                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, prefs, masterEnabled)
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
@@ -633,13 +636,23 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
 }
 
 @Composable
-private fun DockPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
+private fun DockPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    openRecentBlacklist: () -> Unit,
+) {
     var dockEnabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())) }
     var resizeAnimation by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.RESIZE_ANIMATION.name(), ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault())) }
     var smoothResize by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault())) }
     SettingsList(padding, stringResource(R.string.page_dock)) {
         BooleanSetting(prefs, ConfigSchema.Dock.ENABLED, stringResource(R.string.dock_customization), stringResource(R.string.dock_customization_summary), masterEnabled) { dockEnabled = it }
         BooleanSetting(prefs, ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
+        ArrowPreference(
+            title = stringResource(R.string.page_dock_recent_blacklist),
+            summary = stringResource(R.string.dock_recent_blacklist_summary),
+            onClick = openRecentBlacklist,
+        )
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
