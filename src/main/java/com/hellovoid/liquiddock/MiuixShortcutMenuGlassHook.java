@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Rect;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
@@ -104,6 +105,7 @@ final class MiuixShortcutMenuGlassHook {
         Method getGravity = positionClass.getMethod("getGravity");
         calcPosition.setAccessible(true);
 
+        Log.e("LiquidDockBisect2", "INSTALLED ShortcutMenuPosition.CalcPositionInfo");
         HookUtil.hook(calcPosition, chain -> {
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
             Object owner = chain.getThisObject();
