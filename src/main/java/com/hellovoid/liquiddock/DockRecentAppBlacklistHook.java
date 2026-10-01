@@ -21,9 +21,22 @@ final class DockRecentAppBlacklistHook {
     private DockRecentAppBlacklistHook() {}
 
     static void install(ClassLoader classLoader) {
+        installProviderCapture(classLoader);
         installBlacklistFilter(classLoader);
         installCandidateSnapshot(classLoader);
         installContextCapture(classLoader);
+    }
+
+    private static void installProviderCapture(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, PROVIDER, "requestUpdateRecommendTasks", chain -> {
+                LauncherManualDiscoveryBridge.captureDockProvider(chain.getThisObject());
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            MainHook.log("[DC][DockRecentBlacklist] provider capture installed");
+        } catch (Throwable error) {
+            MainHook.log("[DC][DockRecentBlacklist] provider capture unavailable: " + error);
+        }
     }
 
     /**
@@ -44,6 +57,7 @@ final class DockRecentAppBlacklistHook {
                     PROVIDER,
                     "filterSupportLaunchPairApp",
                     chain -> {
+                        LauncherManualDiscoveryBridge.captureDockProvider(chain.getThisObject());
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object original = chain.proceed(args);
                         if (!(original instanceof Boolean) || !((Boolean) original)) {
@@ -76,6 +90,7 @@ final class DockRecentAppBlacklistHook {
     private static void installCandidateSnapshot(ClassLoader classLoader) {
         try {
             HookUtil.hookMethod(classLoader, PROVIDER, "updateFinalRecommendTasks", chain -> {
+                LauncherManualDiscoveryBridge.captureDockProvider(chain.getThisObject());
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Context context = launcherContext;
                 if (context == null) return result;
@@ -115,6 +130,7 @@ final class DockRecentAppBlacklistHook {
                             launcherContext = ((android.view.View) self)
                                     .getContext()
                                     .getApplicationContext();
+                            LauncherManualDiscoveryBridge.ensureRegistered(launcherContext);
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
