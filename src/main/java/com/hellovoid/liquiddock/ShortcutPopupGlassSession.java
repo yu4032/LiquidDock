@@ -259,11 +259,19 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private void presentFull(int sceneTexture, OutputState current) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        // Clear the whole EGL buffer first. The TextureView buffer can be taller than the
+        // Launcher logical root; stretching the root-wide Prismal texture to that buffer was the
+        // source of the vertical drift found by the stage-3 bisection. Draw the logical scene
+        // 1:1 and anchor it to the output's top-left instead.
         GLES20.glViewport(0, 0, current.width, current.height);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        int viewportWidth = Math.max(1, logicalWidth);
+        int viewportHeight = Math.max(1, logicalHeight);
+        int viewportBottom = current.height - viewportHeight;
+        GLES20.glViewport(0, viewportBottom, viewportWidth, viewportHeight);
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);

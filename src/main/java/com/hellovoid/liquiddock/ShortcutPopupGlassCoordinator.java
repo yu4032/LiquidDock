@@ -1,7 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
-import android.graphics.Rect;
+import android.view.ViewParent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -213,16 +213,50 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassSession session = state.session;
         if (decor == null || content == null || session == null || decor.getWidth() <= 0
                 || decor.getHeight() <= 0 || !content.isAttachedToWindow()) return;
-        Rect rect = new Rect();
-        if (!content.getGlobalVisibleRect(rect) || rect.width() <= 0 || rect.height() <= 0) return;
-        int[] root = new int[2];
-        decor.getLocationOnScreen(root);
-        LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
-                root[0], root[1], rect.left, rect.top, rect.right, rect.bottom);
-        LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
+        if (content.getWidth() <= 0 || content.getHeight() <= 0) return;
+
+        // ShortcutMenuPosition defines the layout-space frame. MiuiX then applies the material
+        // host's local Matrix (pivot/scale) before composition. Reconstruct that visual frame in
+        // decor/root coordinates with floats so the matrix is applied exactly once and without
+        // getGlobalVisibleRect() clipping/rounding.
+        float[] corners = {
+                0f, 0f,
+                content.getWidth(), 0f,
+                0f, content.getHeight(),
+                content.getWidth(), content.getHeight()
+        };
+        View current = content;
+        while (current != decor) {
+            ViewParent parent = current.getParent();
+            if (!(parent instanceof View)) return;
+            View parentView = (View) parent;
+            current.getMatrix().mapPoints(corners);
+            float dx = current.getLeft() - parentView.getScrollX();
+            float dy = current.getTop() - parentView.getScrollY();
+            for (int i = 0; i < corners.length; i += 2) {
+                corners[i] += dx;
+                corners[i + 1] += dy;
+            }
+            current = parentView;
+        }
+
+        float left = corners[0];
+        float top = corners[1];
+        float right = corners[0];
+        float bottom = corners[1];
+        for (int i = 2; i < corners.length; i += 2) {
+            left = Math.min(left, corners[i]);
+            top = Math.min(top, corners[i + 1]);
+            right = Math.max(right, corners[i]);
+            bottom = Math.max(bottom, corners[i + 1]);
+        }
+        float radiusScale = Math.min(
+                (right - left) / Math.max(1f, content.getWidth()),
+                (bottom - top) / Math.max(1f, content.getHeight()));
+        LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
                 decor.getWidth(), decor.getHeight(),
-                bounds.left, bounds.top, bounds.right, bounds.bottom,
-                resolveShortcutMenuCornerRadius(content));
+                left, top, right, bottom,
+                resolveShortcutMenuCornerRadius(content) * Math.max(0f, radiusScale));
         if (geometry != null) session.updateGeometry(geometry);
     }
 
