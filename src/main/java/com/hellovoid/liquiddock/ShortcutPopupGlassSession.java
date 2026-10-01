@@ -27,7 +27,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     private static final String TAG = "[DC][ShortcutPopupGlass]";
     private static final long GENERATION = 1L;
-    // Stage-1 bisection: isolate geometry/output placement from backdrop + Prismal rendering.
+    // Stage-2 bisection: render only the vendor-position probe, bypassing all glass rendering.
     private static final boolean BISECT_GEOMETRY_PROBE = true;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
@@ -289,12 +289,13 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
         GLES20.glScissor(left, bottom, width, height);
         // Deliberately flat diagnostic fill: no backdrop sampling, no Prismal, no crop/composite.
-        GLES20.glClearColor(1f, 0f, 1f, 0.45f);
+        // Green distinguishes stage 2 (vendor position authority) from stage 1 (content geometry).
+        GLES20.glClearColor(0f, 1f, 0f, 0.45f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         sourceBackend.swapBuffers(current.eglSurface);
 
-        MainHook.log(TAG + " [BISECT1] geometry-probe"
+        MainHook.log(TAG + " [BISECT2] geometry-probe"
                 + " logical=" + logicalWidth + "x" + logicalHeight
                 + " output=" + current.width + "x" + current.height
                 + " rect=" + left + "," + top + " " + width + "x" + height
