@@ -274,12 +274,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
-        float sx = current.width / (float) logicalWidth;
-        float sy = current.height / (float) logicalHeight;
-        int left = Math.round((geometry.centerX - geometry.width * 0.5f) * sx);
-        int top = Math.round((geometry.centerY - geometry.height * 0.5f) * sy);
-        int width = Math.max(1, Math.round(geometry.width * sx));
-        int height = Math.max(1, Math.round(geometry.height * sy));
+        // Stage 3: use vendor/root pixels verbatim. Do NOT rescale logical geometry to the
+        // TextureView/EGL buffer dimensions; the previous path introduced a ~1.025x Y scale.
+        int left = Math.round(geometry.centerX - geometry.width * 0.5f);
+        int top = Math.round(geometry.centerY - geometry.height * 0.5f);
+        int width = Math.max(1, Math.round(geometry.width));
+        int height = Math.max(1, Math.round(geometry.height));
         int bottom = current.height - top - height;
 
         left = Math.max(0, Math.min(current.width - 1, left));
@@ -301,10 +301,17 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         sourceBackend.swapBuffers(current.eglSurface);
 
-        Log.e("LiquidDockBisect2", "RENDER rect=" + left + "," + top
+        int[] eglWidth = new int[1];
+        int[] eglHeight = new int[1];
+        EGL14.eglQuerySurface(sourceBackend.display(), current.eglSurface, EGL14.EGL_WIDTH, eglWidth, 0);
+        EGL14.eglQuerySurface(sourceBackend.display(), current.eglSurface, EGL14.EGL_HEIGHT, eglHeight, 0);
+        Log.e("LiquidDockBisect3", "RENDER_RAW rect=" + left + "," + top
                 + " " + width + "x" + height
+                + " logical=" + logicalWidth + "x" + logicalHeight
+                + " output=" + current.width + "x" + current.height
+                + " egl=" + eglWidth[0] + "x" + eglHeight[0]
                 + " center=" + geometry.centerX + "," + geometry.centerY);
-        MainHook.log(TAG + " [BISECT2] geometry-probe"
+        MainHook.log(TAG + " [BISECT3] geometry-probe"
                 + " logical=" + logicalWidth + "x" + logicalHeight
                 + " output=" + current.width + "x" + current.height
                 + " rect=" + left + "," + top + " " + width + "x" + height
