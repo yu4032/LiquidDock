@@ -303,8 +303,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
         int[] eglWidth = new int[1];
         int[] eglHeight = new int[1];
-        EGL14.eglQuerySurface(sourceBackend.display(), current.eglSurface, EGL14.EGL_WIDTH, eglWidth, 0);
-        EGL14.eglQuerySurface(sourceBackend.display(), current.eglSurface, EGL14.EGL_HEIGHT, eglHeight, 0);
+        EGL14.eglQuerySurface(EGL14.eglGetCurrentDisplay(), current.eglSurface, EGL14.EGL_WIDTH, eglWidth, 0);
+        EGL14.eglQuerySurface(EGL14.eglGetCurrentDisplay(), current.eglSurface, EGL14.EGL_HEIGHT, eglHeight, 0);
         Log.e("LiquidDockBisect3", "RENDER_RAW rect=" + left + "," + top
                 + " " + width + "x" + height
                 + " logical=" + logicalWidth + "x" + logicalHeight
