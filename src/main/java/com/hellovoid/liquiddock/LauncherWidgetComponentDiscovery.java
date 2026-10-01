@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.util.Log;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -36,10 +37,18 @@ final class LauncherWidgetComponentDiscovery {
         if (host == null) return;
         KNOWN_HOSTS.put(host, Boolean.TRUE);
         LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
-        if (!WidgetComponentStore.discoveryRequested()) return;
+        boolean requested = WidgetComponentStore.discoveryRequested();
+        Log.i(TAG, "[DC][WidgetDiscover] scan host=" + host.getClass().getName()
+                + " requested=" + requested
+                + " maml=" + isMamlHost(host));
+        if (!requested) return;
         if (isMamlHost(host)) return;
         View content = resolveRemoteViewsContent(host);
-        if (content == null) return;
+        if (content == null) {
+            Log.i(TAG, "[DC][WidgetDiscover] scan remote content=null host="
+                    + host.getClass().getName());
+            return;
+        }
 
         // Launcher can expose a RemoteViews content root before a provider has finished populating
         // its descendants. Calendar does this during restore/update. A permanent "seen root" bit
@@ -80,7 +89,11 @@ final class LauncherWidgetComponentDiscovery {
         KNOWN_HOSTS.put(host, Boolean.TRUE);
         KNOWN_MAML.put(host, new MamlTarget(identity, root));
         LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
-        if (!WidgetComponentStore.discoveryRequested()) return;
+        boolean requested = WidgetComponentStore.discoveryRequested();
+        Log.i(TAG, "[DC][WidgetDiscover] scanMaml host=" + host.getClass().getName()
+                + " requested=" + requested
+                + " root=" + root.getClass().getName());
+        if (!requested) return;
         synchronized (DUMPED_MAML_ROOTS) {
             if (DUMPED_MAML_ROOTS.containsKey(root)) return;
             DUMPED_MAML_ROOTS.put(root, Boolean.TRUE);
@@ -139,10 +152,13 @@ final class LauncherWidgetComponentDiscovery {
         DUMPED_REMOTE_ROOTS.clear();
         DUMPED_MAML_ROOTS.clear();
 
+        Log.i(TAG, "[DC][WidgetDiscover] scanTrackedHosts begin");
+
         ArrayList<View> hosts;
         synchronized (KNOWN_HOSTS) {
             hosts = new ArrayList<>(KNOWN_HOSTS.keySet());
         }
+        Log.i(TAG, "[DC][WidgetDiscover] trackedRemoteHosts=" + hosts.size());
         for (View host : hosts) {
             if (host != null) scan(host);
         }
@@ -151,6 +167,7 @@ final class LauncherWidgetComponentDiscovery {
         synchronized (KNOWN_MAML) {
             mamlTargets = new ArrayList<>(KNOWN_MAML.entrySet());
         }
+        Log.i(TAG, "[DC][WidgetDiscover] trackedMamlHosts=" + mamlTargets.size());
         for (Map.Entry<View, MamlTarget> entry : mamlTargets) {
             View host = entry.getKey();
             MamlTarget target = entry.getValue();
