@@ -14,6 +14,7 @@
     <string name="dock_recent_blacklist_load_title">载入当前推荐候选</string>
     <string name="dock_recent_blacklist_load_summary">重启一次桌面并抓取当前 Dock 推荐列表</string>
     <string name="dock_recent_blacklist_load_failed">Xposed 服务未连接，无法载入推荐候选</string>
+    <string name="dock_recent_blacklist_apply_failed">Xposed 服务未连接，无法应用最近程序黑名单</string>
     <string name="dock_recent_blacklist_current_candidates">当前推荐候选</string>
     <string name="dock_recent_blacklist_blocked_apps">已加入黑名单</string>
     <string name="dock_recent_blacklist_blocked_empty">当前没有已拉黑程序。</string>
