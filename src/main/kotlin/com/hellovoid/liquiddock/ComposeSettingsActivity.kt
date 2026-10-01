@@ -482,7 +482,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }) { page = it }
                 Page.Grid -> GridPage(padding, prefs, masterEnabled)
                 Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
-                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, prefs, masterEnabled)
+                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
