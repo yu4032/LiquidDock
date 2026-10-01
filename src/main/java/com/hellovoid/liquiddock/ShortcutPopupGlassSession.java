@@ -4,6 +4,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.util.Log;
 import android.view.Surface;
 import android.view.View;
 
@@ -289,12 +290,20 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
         GLES20.glScissor(left, bottom, width, height);
         // Deliberately flat diagnostic fill: no backdrop sampling, no Prismal, no crop/composite.
-        // Green distinguishes stage 2 (vendor position authority) from stage 1 (content geometry).
-        GLES20.glClearColor(0f, 1f, 0f, 0.45f);
+        GLES20.glClearColor(0f, 1f, 0f, 0.55f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        // Cyan marker stripe at the probe's visual top makes Stage 2 impossible to confuse with
+        // Stage 1's magenta rectangle and exposes the exact top edge by eye.
+        int stripeHeight = Math.max(4, Math.min(16, height));
+        GLES20.glScissor(left, bottom + height - stripeHeight, width, stripeHeight);
+        GLES20.glClearColor(0f, 1f, 1f, 0.95f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         sourceBackend.swapBuffers(current.eglSurface);
 
+        Log.e("LiquidDockBisect2", "RENDER rect=" + left + "," + top
+                + " " + width + "x" + height
+                + " center=" + geometry.centerX + "," + geometry.centerY);
         MainHook.log(TAG + " [BISECT2] geometry-probe"
                 + " logical=" + logicalWidth + "x" + logicalHeight
                 + " output=" + current.width + "x" + current.height
