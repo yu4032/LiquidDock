@@ -8,7 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 
-/** Popup glass output mirrored as the vendor ShortcutMenu content's immediate sibling. */
+/** Stable root-sized output; vendor background-host geometry is applied only by the renderer. */
 final class ShortcutPopupGlassLayer extends TextureView implements TextureView.SurfaceTextureListener {
     private static final long FAST_DISMISS_FADE_MS = 90L;
 

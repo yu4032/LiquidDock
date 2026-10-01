@@ -1,9 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Rect;
-import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -190,140 +188,76 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.released || state.layer != null || state.session == null) {
             return state != null && state.layer != null;
         }
-        View content = state.contentRef.get();
-        if (content == null || !content.isAttachedToWindow()) return false;
-        ViewParent parent = content.getParent();
-        if (!(parent instanceof ViewGroup)) return false;
-
-        // Never create a 1x1 placeholder. PopupView binds before content_view has completed its
-        // first layout; resizing a TextureView from pre-draw feeds another layout pass back into
-        // MiuiX's popup animation and causes the observed oscillation/jitter.
-        int width = content.getWidth();
-        int height = content.getHeight();
-        if (width <= 0 || height <= 0) return false;
-
-        ViewGroup host = (ViewGroup) parent;
-        int contentIndex = host.indexOfChild(content);
-        if (contentIndex < 0) return false;
-
+        View decor = state.popupDecorRef.get();
+        View popup = state.popupRef.get();
+        if (!(decor instanceof ViewGroup) || popup == null || !popup.isAttachedToWindow()) {
+            return false;
+        }
+        ViewGroup decorGroup = (ViewGroup) decor;
+        int popupIndex = decorGroup.indexOfChild(popup);
+        if (popupIndex < 0) return false;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
-                content.getContext(), state.session);
-        host.addView(layer, contentIndex, new ViewGroup.LayoutParams(width, height));
+                decor.getContext(), state.session);
+        // Keep output outside PopupAnimHelper's animated/suppressed layout subtree.
+        // Only the shader shape follows the material host; the Surface never follows its frame.
+        decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
-        state.materialBaseLeft = content.getLeft();
-        state.materialBaseTop = content.getTop();
-        state.materialBaseWidth = width;
-        state.materialBaseHeight = height;
-        state.materialBaseCaptured = true;
-        syncLayerToContent(state);
         updateGeometry(state);
-        MainHook.log(TAG + " content-sibling output inserted"
-                + " host=" + host.getClass().getName()
-                + " index=" + contentIndex
-                + " size=" + width + "x" + height
-                + " frame=" + content.getLeft() + "," + content.getTop()
-                + "-" + content.getRight() + "," + content.getBottom()
-                + " backdropReady=" + state.session.hasFrozenBackdrop());
+        MainHook.log(TAG + " stable root output inserted below PopupView index=" + popupIndex);
         return true;
     }
 
-    private static void syncLayerToContent(State state) {
-        if (state == null || state.released || state.dismissFading || !state.materialBaseCaptured) {
-            return;
-        }
-        View content = state.contentRef.get();
-        ShortcutPopupGlassLayer layer = state.layer;
-        if (content == null || layer == null) return;
-
-        // Keep one immutable full-size Surface at the material's settled frame. MiuiX performs its
-        // reveal by mutating content_view's frame (for example right-to-left width growth), not by
-        // changing the material allocation. Mirroring those frame mutations into TextureView layout
-        // caused clipping/resize feedback. Represent them only as a local clip.
-        layer.setX(state.materialBaseLeft + content.getTranslationX());
-        layer.setY(state.materialBaseTop + content.getTranslationY());
-        layer.setPivotX(content.getPivotX());
-        layer.setPivotY(content.getPivotY());
-        layer.setScaleX(content.getScaleX());
-        layer.setScaleY(content.getScaleY());
-        layer.setRotation(content.getRotation());
-        layer.setRotationX(content.getRotationX());
-        layer.setRotationY(content.getRotationY());
-
-        int clipLeft = Math.max(0, content.getLeft() - state.materialBaseLeft);
-        int clipTop = Math.max(0, content.getTop() - state.materialBaseTop);
-        int clipRight = Math.min(
-                state.materialBaseWidth, content.getRight() - state.materialBaseLeft);
-        int clipBottom = Math.min(
-                state.materialBaseHeight, content.getBottom() - state.materialBaseTop);
-        if (clipRight <= clipLeft || clipBottom <= clipTop) {
-            layer.setClipBounds(new Rect(0, 0, 0, 0));
-        } else if (clipLeft == 0 && clipTop == 0
-                && clipRight == state.materialBaseWidth
-                && clipBottom == state.materialBaseHeight) {
-            layer.setClipBounds(null);
-        } else {
-            layer.setClipBounds(new Rect(clipLeft, clipTop, clipRight, clipBottom));
-        }
-    }
-
     private static void updateGeometry(State state) {
-        if (state == null || state.released || !state.materialBaseCaptured) return;
-        syncLayerToContent(state);
-        if (state.dismissFading) return;
-
+        if (state == null || state.released || state.dismissFading) return;
         View decor = state.popupDecorRef.get();
         View content = state.contentRef.get();
-        ShortcutPopupGlassLayer layer = state.layer;
         ShortcutPopupGlassSession session = state.session;
-        if (decor == null || content == null || layer == null || session == null
-                || decor.getWidth() <= 0 || decor.getHeight() <= 0
-                || !content.isAttachedToWindow()) {
-            return;
+        if (decor == null || content == null || session == null || decor.getWidth() <= 0
+                || decor.getHeight() <= 0 || !content.isAttachedToWindow()
+                || content.getWidth() <= 0 || content.getHeight() <= 0) return;
+
+        // Map the current material host, not an initial frame or its clipped visible Rect.
+        // PopupAnimHelper changes its top/bottom/left/right directly on every fraction update.
+        // Walk every ancestor matrix with floats so pivot scale and spring-back scale are
+        // applied exactly once. Keep the full shape even if framebuffer clipping hides an edge.
+        float[] corners = {0f, 0f, content.getWidth(), 0f,
+                0f, content.getHeight(), content.getWidth(), content.getHeight()};
+        View current = content;
+        while (current != decor) {
+            ViewParent parent = current.getParent();
+            if (!(parent instanceof View)) return;
+            View parentView = (View) parent;
+            current.getMatrix().mapPoints(corners);
+            float dx = current.getLeft() - parentView.getScrollX();
+            float dy = current.getTop() - parentView.getScrollY();
+            for (int i = 0; i < corners.length; i += 2) {
+                corners[i] += dx;
+                corners[i + 1] += dy;
+            }
+            current = parentView;
         }
-        ViewParent parent = layer.getParent();
-        if (!(parent instanceof View)) return;
-        View host = (View) parent;
-
-        int[] root = new int[2];
-        int[] hostScreen = new int[2];
-        decor.getLocationOnScreen(root);
-        host.getLocationOnScreen(hostScreen);
-
-        // Sample the exact final visual bounds of the immutable full material Surface. The TextureView
-        // expands the sampled visual rect into its base allocation and Android then applies the same
-        // scale/pivot matrix as content_view, yielding a 1:1 screen-to-source mapping.
-        RectF transformed = new RectF(
-                0f, 0f, state.materialBaseWidth, state.materialBaseHeight);
-        Matrix matrix = layer.getMatrix();
-        matrix.mapRect(transformed);
-        float screenLeft = hostScreen[0] - host.getScrollX() + layer.getLeft() + transformed.left;
-        float screenTop = hostScreen[1] - host.getScrollY() + layer.getTop() + transformed.top;
-        float screenRight = hostScreen[0] - host.getScrollX() + layer.getLeft() + transformed.right;
-        float screenBottom = hostScreen[1] - host.getScrollY() + layer.getTop() + transformed.bottom;
-
-        LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
-                root[0], root[1], screenLeft, screenTop, screenRight, screenBottom);
-        LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
-                decor.getWidth(), decor.getHeight(),
-                bounds.left, bounds.top, bounds.right, bounds.bottom,
-                resolveShortcutMenuCornerRadius(content));
-
-        Rect clip = layer.getClipBounds();
-        MainHook.log(TAG + " [YDIAG] geometry-visual"
-                + " hostScreen=" + hostScreen[0] + "," + hostScreen[1]
-                + " baseFrame=" + state.materialBaseLeft + "," + state.materialBaseTop
-                + "-" + (state.materialBaseLeft + state.materialBaseWidth)
-                + "," + (state.materialBaseTop + state.materialBaseHeight)
-                + " visual=" + screenLeft + "," + screenTop
-                + "-" + screenRight + "," + screenBottom
-                + " clip=" + (clip != null ? clip.toShortString() : "full")
-                + " scale=" + layer.getScaleX() + "," + layer.getScaleY()
-                + " pivot=" + layer.getPivotX() + "," + layer.getPivotY()
-                + (geometry != null
-                        ? " prismalCenter=" + geometry.centerX + "," + geometry.centerY
-                            + " prismalSize=" + geometry.width + "x" + geometry.height
-                        : " prismal=null"));
+        float left = corners[0], right = corners[0];
+        float top = corners[1], bottom = corners[1];
+        for (int i = 2; i < corners.length; i += 2) {
+            left = Math.min(left, corners[i]);
+            right = Math.max(right, corners[i]);
+            top = Math.min(top, corners[i + 1]);
+            bottom = Math.max(bottom, corners[i + 1]);
+        }
+        float radiusScale = Math.min((right - left) / content.getWidth(),
+                (bottom - top) / content.getHeight());
+        LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
+                decor.getWidth(), decor.getHeight(), left, top, right, bottom,
+                resolveShortcutMenuCornerRadius(content) * radiusScale);
         if (geometry != null) session.updateGeometry(geometry);
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (layer != null && state.materialClaimed) layer.setAlpha(content.getAlpha());
+        MainHook.log(TAG + " [YDIAG] geometry-host"
+                + " frame=" + content.getLeft() + "," + content.getTop()
+                + "-" + content.getRight() + "," + content.getBottom()
+                + " rootBounds=" + left + "," + top + "-" + right + "," + bottom
+                + " alpha=" + content.getAlpha());
     }
 
     private static void onPresented(State state) {
@@ -337,6 +271,7 @@ final class ShortcutPopupGlassCoordinator {
             content.setElevation(0f);
             state.materialClaimed = true;
             layer.reveal();
+            layer.setAlpha(content.getAlpha());
             MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released");
         }
     }
@@ -355,7 +290,6 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassLayer layer = state.layer;
         if (layer != null) {
             state.dismissFading = true;
-            layer.setClipBounds(null);
             layer.fadeOutFast();
             MainHook.log(TAG + " fast dismiss fade started; geometry frozen");
         }
@@ -466,11 +400,6 @@ final class ShortcutPopupGlassCoordinator {
         View.OnAttachStateChangeListener popupDetachListener;
         boolean requestStarted;
         boolean materialClaimed;
-        boolean materialBaseCaptured;
-        int materialBaseLeft;
-        int materialBaseTop;
-        int materialBaseWidth;
-        int materialBaseHeight;
         boolean dismissFading;
         boolean dismissCleanupPosted;
         boolean released;

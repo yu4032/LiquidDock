@@ -26,24 +26,17 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(coordinator.contains("ShortcutPopupSourceOverlay.attach"));
         assertTrue(coordinator.contains("ensurePopupOutput(state)"));
         assertTrue(coordinator.contains("private static boolean ensurePopupOutput(State state)"));
-        assertTrue(coordinator.contains("ViewParent parent = content.getParent()"));
-        assertTrue(coordinator.contains("host.addView(layer, contentIndex"));
-        assertTrue(coordinator.contains("syncLayerToContent(state)"));
-        assertTrue(coordinator.contains("state.materialBaseLeft = content.getLeft()"));
-        assertTrue(coordinator.contains("layer.setX(state.materialBaseLeft + content.getTranslationX())"));
-        assertTrue(coordinator.contains("layer.setY(state.materialBaseTop + content.getTranslationY())"));
-        assertTrue(coordinator.contains("layer.setScaleY(content.getScaleY())"));
-        assertFalse(coordinator.contains("layer.setLayoutParams(lp)"));
-        assertFalse(coordinator.contains("content.getGlobalVisibleRect"));
-        assertTrue(coordinator.contains("if (width <= 0 || height <= 0) return false;"));
-        assertTrue(coordinator.contains("layer.setClipBounds"));
-        assertTrue(coordinator.contains("matrix.mapRect(transformed)"));
-        assertTrue(coordinator.contains("geometry-visual"));
+        // PopupAnimHelper changes all four host edges during reveal. A cached first frame
+        // plus clipBounds cannot represent its moving top or spring overshoot.
+        assertFalse(coordinator.contains("materialBase"));
+        assertFalse(coordinator.contains("layer.setClipBounds"));
+        assertFalse(coordinator.contains("layer.setScaleY(content.getScaleY())"));
+        assertTrue(coordinator.contains("decorGroup.addView(layer, popupIndex"));
+        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("current.getMatrix().mapPoints(corners)"));
+        assertTrue(coordinator.contains("LauncherGlassGeometry.resolveStatic("));
+        assertTrue(coordinator.contains("layer.setAlpha(content.getAlpha())"));
         assertTrue(coordinator.contains("state.dismissFading = true"));
-        assertTrue(coordinator.contains("geometry frozen"));
-        assertTrue(coordinator.contains("layer.setPivotY(content.getPivotY())"));
-        assertFalse(coordinator.contains("contentGroup.addView(layer, 0"));
-        assertFalse(coordinator.contains("decorGroup.addView(layer, popupIndex"));
         assertTrue(coordinator.contains("private static void onPresented(State state)"));
         assertTrue(coordinator.contains("MiBlurBridge.clearContentBlur(content)"));
         assertFalse(coordinator.contains("if (!state.session.hasFrozenBackdrop())"));
@@ -51,10 +44,9 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(coordinator.contains("|| state.session == null || popupView == null"));
         assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
-        assertTrue(session.contains("presentCropped(prismalRenderer.outputTexture()"));
-        assertTrue(session.contains("geometry.cropLeft"));
-        assertTrue(session.contains("geometry.cropBottom"));
-        assertFalse(session.contains("presentFull(prismalRenderer.outputTexture()"));
+        assertTrue(session.contains("presentFull(prismalRenderer.outputTexture()"));
+        assertFalse(session.contains("geometry.cropLeft"));
+        assertFalse(session.contains("presentCropped("));
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
         assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
         assertFalse(hook.contains("attachToExternalMaterial"));
