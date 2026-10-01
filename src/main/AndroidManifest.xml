@@ -35,5 +35,8 @@
         <receiver
             android:name=".WidgetDiscoveryReceiver"
             android:exported="true" />
+        <receiver
+            android:name=".DockRecentAppReceiver"
+            android:exported="true" />
     </application>
 </manifest>
