@@ -13,6 +13,8 @@
     <string name="dock_recent_blacklist_header_summary">仅显示 Launcher 当前实际返回给 Dock 的最近程序推荐候选。加入黑名单后仍保留在此列表中，便于随时恢复。</string>
     <string name="dock_recent_blacklist_current_candidates">当前推荐候选</string>
     <string name="dock_recent_blacklist_empty">暂未观测到推荐候选。返回桌面让 Dock 刷新一次后，再进入此页面。</string>
+    <string name="dock_recent_blacklist_candidate_item">当前候选 · %1$s</string>
+    <string name="dock_recent_blacklist_blocked_inactive_item">已拉黑，当前不在候选 · %1$s</string>
     <string name="page_divider">Dock 分隔线</string>
     <string name="page_workstation">工作台 Dock</string>
     <string name="page_recents">多任务</string>
