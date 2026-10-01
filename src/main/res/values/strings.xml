@@ -14,6 +14,7 @@
     <string name="dock_recent_blacklist_load_title">Load current recommendation candidates</string>
     <string name="dock_recent_blacklist_load_summary">Restart Launcher once and capture the current Dock recommendation list</string>
     <string name="dock_recent_blacklist_load_failed">Xposed service is unavailable, so candidates cannot be loaded</string>
+    <string name="dock_recent_blacklist_apply_failed">Xposed service is unavailable, so the blacklist cannot be applied</string>
     <string name="dock_recent_blacklist_current_candidates">Current recommendation candidates</string>
     <string name="dock_recent_blacklist_blocked_apps">Blocked apps</string>
     <string name="dock_recent_blacklist_blocked_empty">No apps are currently blocked.</string>
