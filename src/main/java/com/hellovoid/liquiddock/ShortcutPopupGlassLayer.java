@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.SurfaceTexture;
+import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -55,6 +56,10 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
     }
 
     @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+        Log.e("LiquidDockBisect3", "SURFACE_AVAILABLE view="
+                + getWidth() + "x" + getHeight()
+                + " measured=" + getMeasuredWidth() + "x" + getMeasuredHeight()
+                + " callback=" + width + "x" + height);
         if (disposed || texture == null) return;
         Surface next = new Surface(texture);
         Surface old = outputSurface;
@@ -64,6 +69,10 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
     }
 
     @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
+        Log.e("LiquidDockBisect3", "SURFACE_SIZE_CHANGED view="
+                + getWidth() + "x" + getHeight()
+                + " measured=" + getMeasuredWidth() + "x" + getMeasuredHeight()
+                + " callback=" + width + "x" + height);
         if (!disposed) session.resizeOutput(Math.max(1, width), Math.max(1, height));
     }
 
