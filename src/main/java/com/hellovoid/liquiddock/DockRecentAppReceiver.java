@@ -39,6 +39,9 @@ public final class DockRecentAppReceiver extends BroadcastReceiver {
         context.getSharedPreferences(DockRecentAppStore.CANDIDATE_PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putStringSet(DockRecentAppStore.CANDIDATE_KEY, cleaned)
-                .apply();
+                .commit();
+
+        config.edit().remove(DockRecentAppStore.DISCOVERY_REQUEST_KEY).commit();
+        LiquidDockApp.syncToRemote(config);
     }
 }
