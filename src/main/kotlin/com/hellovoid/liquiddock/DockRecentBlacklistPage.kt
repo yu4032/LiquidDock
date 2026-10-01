@@ -49,18 +49,19 @@ internal fun DockRecentBlacklistPage(
         onDispose { candidatePrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    val packages = remember(candidateRevision) {
-        candidatePrefs.getStringSet(DockRecentAppStore.CANDIDATE_KEY, emptySet())
-            ?.filter { it.isNotBlank() }
-            ?.distinct()
-            ?.sortedBy { appLabel(context.packageManager, it).lowercase() }
-            .orEmpty()
-    }
     var blocked by remember {
         mutableStateOf(
             prefs.getStringSet(DockRecentAppStore.BLACKLIST_KEY, emptySet())?.toSet().orEmpty()
         )
     }
+    val currentCandidates = remember(candidateRevision) {
+        candidatePrefs.getStringSet(DockRecentAppStore.CANDIDATE_KEY, emptySet())
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            .orEmpty()
+    }
+    val packages = (currentCandidates + blocked)
+        .sortedBy { appLabel(context.packageManager, it).lowercase() }
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
@@ -91,7 +92,11 @@ internal fun DockRecentBlacklistPage(
                                 .apply()
                         },
                         title = label,
-                        summary = packageName,
+                        summary = if (currentCandidates.contains(packageName)) {
+                            context.getString(R.string.dock_recent_blacklist_candidate_item, packageName)
+                        } else {
+                            context.getString(R.string.dock_recent_blacklist_blocked_inactive_item, packageName)
+                        },
                         enabled = masterEnabled,
                     )
                 }
