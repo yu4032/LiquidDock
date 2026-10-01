@@ -54,13 +54,12 @@ final class DockRecentAppBlacklistHook {
                     "com.miui.home.launcher.hotseats.HotSeatsListContent",
                     "onFinishInflate",
                     chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object self = chain.getThisObject();
                         if (self instanceof android.view.View) {
                             launcherContext = ((android.view.View) self).getContext()
                                     .getApplicationContext();
                         }
-                        return result;
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
         } catch (Throwable error) {
             MainHook.log("[DC][DockRecentBlacklist] context capture unavailable: " + error);
