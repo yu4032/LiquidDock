@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,8 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import java.util.HashSet
+import java.util.UUID
 
 private fun appLabel(packageManager: PackageManager, packageName: String): String {
     return try {
@@ -33,6 +36,7 @@ private fun appLabel(packageManager: PackageManager, packageName: String): Strin
 @Composable
 internal fun DockRecentBlacklistPage(
     padding: PaddingValues,
+    activity: ComposeSettingsActivity,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
 ) {
@@ -80,6 +84,34 @@ internal fun DockRecentBlacklistPage(
                 stringResource(R.string.page_dock_recent_blacklist),
                 stringResource(R.string.dock_recent_blacklist_header_summary),
             )
+        }
+
+        item {
+            SettingsCard {
+                ArrowPreference(
+                    title = stringResource(R.string.dock_recent_blacklist_load_title),
+                    summary = stringResource(R.string.dock_recent_blacklist_load_summary),
+                    onClick = {
+                        val request = UUID.randomUUID().toString()
+                        val stored = prefs.edit()
+                            .putString(DockRecentAppStore.DISCOVERY_REQUEST_KEY, request)
+                            .commit()
+                        val synced = stored && LiquidDockApp.syncToRemote(prefs)
+                        if (!synced) {
+                            prefs.edit().remove(DockRecentAppStore.DISCOVERY_REQUEST_KEY).commit()
+                            Toast.makeText(
+                                activity,
+                                activity.getString(R.string.dock_recent_blacklist_load_failed),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            return@ArrowPreference
+                        }
+                        candidatePrefs.edit().remove(DockRecentAppStore.CANDIDATE_KEY).commit()
+                        candidateRevision++
+                        activity.restartLauncher()
+                    },
+                )
+            }
         }
 
         item { SmallTitle(stringResource(R.string.dock_recent_blacklist_current_candidates)) }
