@@ -11,11 +11,14 @@
     <string name="page_dock_recent_blacklist">Recent apps blacklist</string>
     <string name="dock_recent_blacklist_summary">Hide selected apps from the Dock recent-app recommendation area</string>
     <string name="dock_recent_blacklist_header_summary">Shows apps currently eligible for Dock recommendations. Blocked apps are kept in a separate list and skipped so the next eligible recent app can fill the slot.</string>
+    <string name="dock_recent_blacklist_load_title">Load current recommendation candidates</string>
+    <string name="dock_recent_blacklist_load_summary">Restart Launcher once and capture the current Dock recommendation list</string>
+    <string name="dock_recent_blacklist_load_failed">Xposed service is unavailable, so candidates cannot be loaded</string>
     <string name="dock_recent_blacklist_current_candidates">Current recommendation candidates</string>
     <string name="dock_recent_blacklist_blocked_apps">Blocked apps</string>
     <string name="dock_recent_blacklist_blocked_empty">No apps are currently blocked.</string>
     <string name="dock_recent_blacklist_blocked_active_item">Blocked, currently eligible · %1$s</string>
-    <string name="dock_recent_blacklist_empty">No current candidates have been observed yet. Return to the desktop and let the Dock refresh, then open this page again.</string>
+    <string name="dock_recent_blacklist_empty">No candidates are loaded. Tap “Load current recommendation candidates” above to capture the current Dock list.</string>
     <string name="dock_recent_blacklist_candidate_item">Current candidate · %1$s</string>
     <string name="dock_recent_blacklist_blocked_inactive_item">Blocked, not currently a candidate · %1$s</string>
     <string name="page_divider">Dock divider</string>
