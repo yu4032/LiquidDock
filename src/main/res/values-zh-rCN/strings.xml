@@ -8,6 +8,11 @@
     <string name="action_restart_system_ui">重启系统界面</string>
     <string name="page_grid">主屏幕布局</string>
     <string name="page_dock">Dock 尺寸与模糊</string>
+    <string name="page_dock_recent_blacklist">最近程序黑名单</string>
+    <string name="dock_recent_blacklist_summary">阻止指定程序出现在 Dock 最近程序推荐区</string>
+    <string name="dock_recent_blacklist_header_summary">仅显示 Launcher 当前实际返回给 Dock 的最近程序推荐候选。加入黑名单后仍保留在此列表中，便于随时恢复。</string>
+    <string name="dock_recent_blacklist_current_candidates">当前推荐候选</string>
+    <string name="dock_recent_blacklist_empty">暂未观测到推荐候选。返回桌面让 Dock 刷新一次后，再进入此页面。</string>
     <string name="page_divider">Dock 分隔线</string>
     <string name="page_workstation">工作台 Dock</string>
     <string name="page_recents">多任务</string>
