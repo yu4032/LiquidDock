@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.util.Log;
 
 import java.util.Collections;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Set;
  * final recommendation list.
  */
 final class DockRecentAppBlacklistHook {
+    private static final String LOG_TAG = "LiquidDockDockRecent";
     private static final String PROVIDER =
             "com.miui.home.launcher.hotseats.HotSeatsListRecentsAppProvider";
     private static final String TASK =
@@ -68,8 +70,11 @@ final class DockRecentAppBlacklistHook {
                         Set<String> blocked = DockRecentAppStore.readBlacklist();
                         if (blocked.isEmpty()) return original;
 
-                        for (String packageName : taskPackageNames(chain.getThisObject(), args[0])) {
+                        List<String> packages = taskPackageNames(chain.getThisObject(), args[0]);
+                        for (String packageName : packages) {
                             if (blocked.contains(packageName)) {
+                                Log.i(LOG_TAG, "[DC][DockRecentBlacklist] block task packages="
+                                        + packages + " blacklistSize=" + blocked.size());
                                 return false;
                             }
                         }
@@ -93,11 +98,17 @@ final class DockRecentAppBlacklistHook {
                 LauncherManualDiscoveryBridge.captureDockProvider(chain.getThisObject());
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Context context = launcherContext;
+                Log.i(LOG_TAG, "[DC][DockRecentBlacklist] updateFinalRecommendTasks complete"
+                        + " contextReady=" + (context != null));
                 if (context == null) return result;
 
                 HookUtil.InvocationResult<Object> recommend =
                         HookUtil.tryInvoke(chain.getThisObject(), "getRecommendApps");
                 Object value = recommend.succeeded() ? recommend.value() : null;
+                Log.i(LOG_TAG, "[DC][DockRecentBlacklist] getRecommendApps success="
+                        + recommend.succeeded()
+                        + " valueType=" + (value == null ? "null" : value.getClass().getName())
+                        + " size=" + (value instanceof List ? ((List<?>) value).size() : -1));
                 if (value instanceof List) {
                     DockRecentAppStore.publishCandidates(context, (List<?>) value);
                 }
