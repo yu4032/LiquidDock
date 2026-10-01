@@ -60,8 +60,19 @@ internal fun DockRecentBlacklistPage(
             ?.toSet()
             .orEmpty()
     }
-    val packages = (currentCandidates + blocked)
+    val availableCandidates = (currentCandidates - blocked)
         .sortedBy { appLabel(context.packageManager, it).lowercase() }
+    val blockedPackages = blocked
+        .sortedBy { appLabel(context.packageManager, it).lowercase() }
+
+    fun setBlocked(packageName: String, checked: Boolean) {
+        val next = HashSet(blocked)
+        if (checked) next.add(packageName) else next.remove(packageName)
+        blocked = next
+        prefs.edit()
+            .putStringSet(DockRecentAppStore.BLACKLIST_KEY, HashSet(next))
+            .apply()
+    }
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
@@ -70,32 +81,57 @@ internal fun DockRecentBlacklistPage(
                 stringResource(R.string.dock_recent_blacklist_header_summary),
             )
         }
+
         item { SmallTitle(stringResource(R.string.dock_recent_blacklist_current_candidates)) }
-        if (packages.isEmpty()) {
+        if (availableCandidates.isEmpty()) {
             item {
                 SettingsCard {
                     Text(stringResource(R.string.dock_recent_blacklist_empty))
                 }
             }
         } else {
-            items(packages, key = { it }) { packageName ->
+            items(availableCandidates, key = { "candidate:$it" }) { packageName ->
                 val label = remember(packageName) { appLabel(context.packageManager, packageName) }
                 SettingsCard {
                     SwitchPreference(
-                        checked = blocked.contains(packageName),
-                        onCheckedChange = { checked ->
-                            val next = HashSet(blocked)
-                            if (checked) next.add(packageName) else next.remove(packageName)
-                            blocked = next
-                            prefs.edit()
-                                .putStringSet(DockRecentAppStore.BLACKLIST_KEY, HashSet(next))
-                                .apply()
-                        },
+                        checked = false,
+                        onCheckedChange = { checked -> setBlocked(packageName, checked) },
+                        title = label,
+                        summary = context.getString(
+                            R.string.dock_recent_blacklist_candidate_item,
+                            packageName,
+                        ),
+                        enabled = masterEnabled,
+                    )
+                }
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.dock_recent_blacklist_blocked_apps)) }
+        if (blockedPackages.isEmpty()) {
+            item {
+                SettingsCard {
+                    Text(stringResource(R.string.dock_recent_blacklist_blocked_empty))
+                }
+            }
+        } else {
+            items(blockedPackages, key = { "blocked:$it" }) { packageName ->
+                val label = remember(packageName) { appLabel(context.packageManager, packageName) }
+                SettingsCard {
+                    SwitchPreference(
+                        checked = true,
+                        onCheckedChange = { checked -> setBlocked(packageName, checked) },
                         title = label,
                         summary = if (currentCandidates.contains(packageName)) {
-                            context.getString(R.string.dock_recent_blacklist_candidate_item, packageName)
+                            context.getString(
+                                R.string.dock_recent_blacklist_blocked_active_item,
+                                packageName,
+                            )
                         } else {
-                            context.getString(R.string.dock_recent_blacklist_blocked_inactive_item, packageName)
+                            context.getString(
+                                R.string.dock_recent_blacklist_blocked_inactive_item,
+                                packageName,
+                            )
                         },
                         enabled = masterEnabled,
                     )
