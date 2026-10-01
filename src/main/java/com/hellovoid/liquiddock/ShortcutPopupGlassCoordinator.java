@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
+import android.util.Log;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
@@ -91,7 +92,6 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner,
             String replaceReason) {
         releaseLocked(replaceReason);
-        ShortcutMenuPositionProbe.clear();
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
@@ -221,7 +221,13 @@ final class ShortcutPopupGlassCoordinator {
 
         if (BISECT_VENDOR_POSITION_AUTHORITY) {
             ShortcutMenuPositionProbe.Snapshot probe = ShortcutMenuPositionProbe.latest();
-            if (probe == null) return;
+            if (probe == null) {
+                Log.e("LiquidDockBisect2", "MISS no vendor position snapshot");
+                return;
+            }
+            Log.e("LiquidDockBisect2", "USE x=" + probe.x + " y=" + probe.y
+                    + " w=" + probe.width + " h=" + probe.height
+                    + " gravity=" + probe.gravity);
             LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
                     decor.getWidth(), decor.getHeight(),
                     probe.x, probe.y, probe.x + probe.width, probe.y + probe.height,
