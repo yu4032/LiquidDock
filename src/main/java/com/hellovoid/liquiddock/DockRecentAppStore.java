@@ -52,8 +52,7 @@ public final class DockRecentAppStore {
 
         LinkedHashSet<String> packages = new LinkedHashSet<>();
         for (Object item : items) {
-            String packageName = packageNameOf(item);
-            if (!packageName.isEmpty()) packages.add(packageName);
+            packages.addAll(packageNamesOf(item));
         }
 
         try {
@@ -69,15 +68,35 @@ public final class DockRecentAppStore {
     }
 
     static String packageNameOf(Object item) {
-        if (item == null) return "";
+        List<String> names = packageNamesOf(item);
+        return names.isEmpty() ? "" : names.get(0);
+    }
+
+    static List<String> packageNamesOf(Object item) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        collectPackageNames(item, result, 0);
+        return new ArrayList<>(result);
+    }
+
+    private static void collectPackageNames(
+            Object item, LinkedHashSet<String> result, int depth) {
+        if (item == null || depth > 2) return;
+
+        Object direct = invoke(item, "getPackageName");
+        if (direct instanceof String && !((String) direct).isEmpty()) {
+            result.add((String) direct);
+        }
+
         Object component = invoke(item, "getTargetComponent");
         if (!(component instanceof ComponentName)) {
             component = invoke(item, "getComponentName");
         }
         if (component instanceof ComponentName) {
-            return ((ComponentName) component).getPackageName();
+            result.add(((ComponentName) component).getPackageName());
         }
-        return "";
+
+        collectPackageNames(invoke(item, "getShortcutInfo1"), result, depth + 1);
+        collectPackageNames(invoke(item, "getShortcutInfo2"), result, depth + 1);
     }
 
     private static Object invoke(Object target, String method) {
