@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,13 +23,23 @@ final class DockRecentAppBlacklistHook {
 
                 @SuppressWarnings("unchecked")
                 List<Object> source = (List<Object>) result;
+                Object provider = chain.getThisObject();
+                List<Object> recentTasks = readList(provider, "getRecentTaskApps");
+
                 Context context = launcherContext;
-                if (context != null) DockRecentAppStore.publishCandidates(context, source);
+                if (context != null) {
+                    ArrayList<Object> candidates =
+                            new ArrayList<>(source.size() + recentTasks.size());
+                    candidates.addAll(source);
+                    candidates.addAll(recentTasks);
+                    DockRecentAppStore.publishCandidates(context, candidates);
+                }
 
                 Set<String> blocked = DockRecentAppStore.readBlacklist();
                 if (blocked.isEmpty() || source.isEmpty()) return result;
 
                 ArrayList<Object> filtered = new ArrayList<>(source.size());
+                LinkedHashSet<String> selectedPackages = new LinkedHashSet<>();
                 boolean changed = false;
                 for (Object item : source) {
                     String packageName = DockRecentAppStore.packageNameOf(item);
@@ -37,14 +48,42 @@ final class DockRecentAppBlacklistHook {
                         continue;
                     }
                     filtered.add(item);
+                    if (!packageName.isEmpty()) selectedPackages.add(packageName);
                 }
-                return changed ? filtered : result;
+                if (!changed) return result;
+
+                // getRecommendApps() is already a bounded list on current Launcher builds.
+                // Removing a blocked item here would otherwise consume one Dock slot. Fill
+                // the vacated slots from the provider's ordered recent-task candidate pool.
+                int targetSize = source.size();
+                for (Object item : recentTasks) {
+                    if (filtered.size() >= targetSize) break;
+                    String packageName = DockRecentAppStore.packageNameOf(item);
+                    if (!packageName.isEmpty()) {
+                        if (blocked.contains(packageName) || selectedPackages.contains(packageName)) {
+                            continue;
+                        }
+                        selectedPackages.add(packageName);
+                    }
+                    filtered.add(item);
+                }
+                return filtered;
             });
             installContextCapture(classLoader);
             MainHook.log("[DC][DockRecentBlacklist] installed");
         } catch (Throwable error) {
             MainHook.log("[DC][DockRecentBlacklist] unavailable: " + error);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> readList(Object target, String method) {
+        if (target == null) return java.util.Collections.emptyList();
+        HookUtil.InvocationResult<Object> invocation = HookUtil.tryInvoke(target, method);
+        Object value = invocation.succeeded() ? invocation.value() : null;
+        return value instanceof List
+                ? (List<Object>) value
+                : java.util.Collections.emptyList();
     }
 
     private static void installContextCapture(ClassLoader classLoader) {
