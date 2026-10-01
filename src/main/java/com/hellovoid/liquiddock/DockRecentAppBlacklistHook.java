@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
-import android.view.View;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +13,7 @@ import java.util.Set;
 final class DockRecentAppBlacklistHook {
     private static final String PROVIDER =
             "com.miui.home.launcher.hotseats.HotSeatsListRecentsAppProvider";
+    private static volatile Context launcherContext;
 
     private DockRecentAppBlacklistHook() {}
 
@@ -28,7 +28,7 @@ final class DockRecentAppBlacklistHook {
                 @SuppressWarnings("unchecked")
                 List<Object> candidates = (List<Object>) args[0];
 
-                Context context = findContext(chain.getThisObject());
+                Context context = launcherContext;
                 if (context != null) {
                     // Publish the unfiltered provider input. The settings page therefore
                     // reflects apps that can actually enter the vendor recommendation pool.
@@ -56,28 +56,30 @@ final class DockRecentAppBlacklistHook {
                 }
                 return chain.proceed(args);
             });
+            installContextCapture(classLoader);
             MainHook.log("[DC][DockRecentBlacklist] provider-input filter installed");
         } catch (Throwable error) {
             MainHook.log("[DC][DockRecentBlacklist] unavailable: " + error);
         }
     }
 
-    private static Context findContext(Object provider) {
-        // The provider itself is not a View. Prefer Application context already available
-        // in the Launcher process instead of introducing another lifecycle hook.
+    private static void installContextCapture(ClassLoader classLoader) {
         try {
-            Object application = HookUtil.tryInvokeStatic(
-                    "com.miui.home.launcher.Application",
-                    "getLauncher"
-            ).value();
-            if (application instanceof View) {
-                return ((View) application).getContext().getApplicationContext();
-            }
-            if (application instanceof Context) {
-                return ((Context) application).getApplicationContext();
-            }
-        } catch (Throwable ignored) {
+            HookUtil.hookMethod(
+                    classLoader,
+                    "com.miui.home.launcher.hotseats.HotSeatsListContent",
+                    "onFinishInflate",
+                    chain -> {
+                        Object self = chain.getThisObject();
+                        if (self instanceof android.view.View) {
+                            launcherContext = ((android.view.View) self)
+                                    .getContext()
+                                    .getApplicationContext();
+                        }
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    });
+        } catch (Throwable error) {
+            MainHook.log("[DC][DockRecentBlacklist] context capture unavailable: " + error);
         }
-        return null;
     }
 }
