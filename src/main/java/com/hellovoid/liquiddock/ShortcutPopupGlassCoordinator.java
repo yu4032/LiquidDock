@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
@@ -165,6 +166,7 @@ final class ShortcutPopupGlassCoordinator {
         if (state.preDrawListener == null) {
             ViewTreeObserver observer = decorView.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
+                ensurePopupOutput(state);
                 updateGeometry(state);
                 return true;
             };
@@ -194,36 +196,68 @@ final class ShortcutPopupGlassCoordinator {
         ViewGroup decorGroup = (ViewGroup) decor;
         int popupIndex = decorGroup.indexOfChild(popup);
         if (popupIndex < 0) return false;
-
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
                 decor.getContext(), state.session);
+        // Keep output outside PopupAnimHelper's animated/suppressed layout subtree.
+        // Only the shader shape follows the material host; the Surface never follows its frame.
         decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
         updateGeometry(state);
-        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
-                + " backdropReady=" + state.session.hasFrozenBackdrop());
+        MainHook.log(TAG + " stable root output inserted below PopupView index=" + popupIndex);
         return true;
     }
 
     private static void updateGeometry(State state) {
-        if (state == null || state.released) return;
+        if (state == null || state.released || state.dismissFading) return;
         View decor = state.popupDecorRef.get();
         View content = state.contentRef.get();
         ShortcutPopupGlassSession session = state.session;
         if (decor == null || content == null || session == null || decor.getWidth() <= 0
-                || decor.getHeight() <= 0 || !content.isAttachedToWindow()) return;
-        Rect rect = new Rect();
-        if (!content.getGlobalVisibleRect(rect) || rect.width() <= 0 || rect.height() <= 0) return;
-        int[] root = new int[2];
-        decor.getLocationOnScreen(root);
-        LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
-                root[0], root[1], rect.left, rect.top, rect.right, rect.bottom);
-        LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolve(
-                decor.getWidth(), decor.getHeight(),
-                bounds.left, bounds.top, bounds.right, bounds.bottom,
-                resolveShortcutMenuCornerRadius(content));
+                || decor.getHeight() <= 0 || !content.isAttachedToWindow()
+                || content.getWidth() <= 0 || content.getHeight() <= 0) return;
+
+        // Map the current material host, not an initial frame or its clipped visible Rect.
+        // PopupAnimHelper changes its top/bottom/left/right directly on every fraction update.
+        // Walk every ancestor matrix with floats so pivot scale and spring-back scale are
+        // applied exactly once. Keep the full shape even if framebuffer clipping hides an edge.
+        float[] corners = {0f, 0f, content.getWidth(), 0f,
+                0f, content.getHeight(), content.getWidth(), content.getHeight()};
+        View current = content;
+        while (current != decor) {
+            ViewParent parent = current.getParent();
+            if (!(parent instanceof View)) return;
+            View parentView = (View) parent;
+            current.getMatrix().mapPoints(corners);
+            float dx = current.getLeft() - parentView.getScrollX();
+            float dy = current.getTop() - parentView.getScrollY();
+            for (int i = 0; i < corners.length; i += 2) {
+                corners[i] += dx;
+                corners[i + 1] += dy;
+            }
+            current = parentView;
+        }
+        float left = corners[0], right = corners[0];
+        float top = corners[1], bottom = corners[1];
+        for (int i = 2; i < corners.length; i += 2) {
+            left = Math.min(left, corners[i]);
+            right = Math.max(right, corners[i]);
+            top = Math.min(top, corners[i + 1]);
+            bottom = Math.max(bottom, corners[i + 1]);
+        }
+        float radiusScale = Math.min((right - left) / content.getWidth(),
+                (bottom - top) / content.getHeight());
+        LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
+                decor.getWidth(), decor.getHeight(), left, top, right, bottom,
+                resolveShortcutMenuCornerRadius(content) * radiusScale);
         if (geometry != null) session.updateGeometry(geometry);
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (layer != null && state.materialClaimed) layer.setAlpha(content.getAlpha());
+        MainHook.log(TAG + " [YDIAG] geometry-host"
+                + " frame=" + content.getLeft() + "," + content.getTop()
+                + "-" + content.getRight() + "," + content.getBottom()
+                + " rootBounds=" + left + "," + top + "-" + right + "," + bottom
+                + " alpha=" + content.getAlpha());
     }
 
     private static void onPresented(State state) {
@@ -237,6 +271,7 @@ final class ShortcutPopupGlassCoordinator {
             content.setElevation(0f);
             state.materialClaimed = true;
             layer.reveal();
+            layer.setAlpha(content.getAlpha());
             MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released");
         }
     }
@@ -254,8 +289,9 @@ final class ShortcutPopupGlassCoordinator {
         }
         ShortcutPopupGlassLayer layer = state.layer;
         if (layer != null) {
+            state.dismissFading = true;
             layer.fadeOutFast();
-            MainHook.log(TAG + " fast dismiss fade started");
+            MainHook.log(TAG + " fast dismiss fade started; geometry frozen");
         }
     }
 
@@ -364,6 +400,7 @@ final class ShortcutPopupGlassCoordinator {
         View.OnAttachStateChangeListener popupDetachListener;
         boolean requestStarted;
         boolean materialClaimed;
+        boolean dismissFading;
         boolean dismissCleanupPosted;
         boolean released;
 
