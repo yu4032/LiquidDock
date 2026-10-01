@@ -53,7 +53,7 @@ public final class LauncherManualDiscoveryBridge {
                                 HookUtil.tryInvoke(provider, "requestUpdateRecommendTasks");
                         if (!update.succeeded()) {
                             MainHook.log("[DC][ManualDiscover] Dock refresh failed: "
-                                    + update.failureSummary());
+                                    + update.failure());
                         }
                     } else if (KIND_WIDGETS.equals(kind)) {
                         WidgetComponentStore.beginManualDiscoverySession();
