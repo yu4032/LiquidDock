@@ -3,7 +3,6 @@ package com.hellovoid.liquiddock;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,7 +10,6 @@ import java.util.Objects;
 
 /** Shared descriptor/selector codec plus the narrow Launcher -> module discovery channel. */
 public final class WidgetComponentStore {
-    private static final String LOG_TAG = "LiquidDockWidgetDiscover";
     public static final String MODULE_PACKAGE = "com.hellovoid.liquiddock";
     public static final String RECEIVER_CLASS = MODULE_PACKAGE + ".WidgetDiscoveryReceiver";
     public static final String ACTION_DISCOVER = MODULE_PACKAGE + ".WIDGET_COMPONENT_DISCOVERED";
@@ -70,9 +68,6 @@ public final class WidgetComponentStore {
             }
             discoveryAckSent = false;
             discoverySessionLoaded = true;
-            Log.i(LOG_TAG, "[DC][WidgetDiscover] beginManualDiscoverySession"
-                    + " active=" + discoveryActive
-                    + " tokenPresent=" + !blank(discoveryToken));
         }
     }
 
@@ -87,8 +82,6 @@ public final class WidgetComponentStore {
             Intent intent = baseIntent();
             intent.putExtra(EXTRA_REQUEST_ACK, true);
             context.sendBroadcast(intent);
-            Log.i(LOG_TAG, "[DC][WidgetDiscover] ack sent"
-                    + " tokenPresent=" + !blank(discoveryToken));
         } catch (Throwable error) {
             if (MainHook.debugLogging) MainHook.log("[DC][WidgetDiscover] ack failed: " + error);
         }
