@@ -35,6 +35,17 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(coordinator.contains("|| state.session == null || popupView == null"));
         assertTrue(session.contains("PassBlurBindRequest.shortcutPopup(sourceRoot)"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
+
+        // ShortcutMenu geometry stays in Launcher root space. MiuiX content Matrix (pivot/scale)
+        // is applied exactly once, and the root-wide Prismal texture is presented 1:1 instead of
+        // being stretched to a differently-sized TextureView/EGL buffer.
+        assertTrue(coordinator.contains("current.getMatrix().mapPoints(corners)"));
+        assertTrue(coordinator.contains("LauncherGlassGeometry.resolveStatic("));
+        assertFalse(coordinator.contains("content.getGlobalVisibleRect"));
+        assertTrue(session.contains("int viewportWidth = Math.max(1, logicalWidth)"));
+        assertTrue(session.contains("int viewportHeight = Math.max(1, logicalHeight)"));
+        assertTrue(session.contains("int viewportBottom = current.height - viewportHeight"));
+        assertTrue(session.contains("GLES20.glViewport(0, viewportBottom, viewportWidth, viewportHeight)"));
         assertTrue(request.contains("static PassBlurBindRequest shortcutPopup(View authoritativeRoot)"));
         assertFalse(hook.contains("LauncherGlassSinkView.attachToMaterial"));
         assertFalse(hook.contains("attachToExternalMaterial"));
