@@ -64,11 +64,10 @@ final class Miuix307MaterialPipeline {
         }
 
         try {
-            if (!LauncherVendorBlurWriteSuppressor.install()) {
-                MainHook.log("[DC] MiuiX 307 material disabled: vendor blur write boundary unavailable");
-                return false;
-            }
-            installCompatBackgroundBlurSuppression(classLoader);
+            // Diagnostic A/B: preserve HyperOS' native Dock blur exactly as stock while keeping
+            // LiquidDock PassBlur sampling and Prismal rendering active. This isolates whether
+            // disabling/intercepting the vendor blur is necessary for the wallpaper HWC flicker.
+            MainHook.log("[DC][COMP-AB] vendor Dock blur suppression BYPASSED; PassBlur sampling remains active");
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);

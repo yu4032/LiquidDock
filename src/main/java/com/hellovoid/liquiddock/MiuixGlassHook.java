@@ -359,10 +359,10 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     static void suppressVendorGpuBlur(View dockBg) {
         if (!GlassRuntimeState.isEnabled()) return;
         if (dockBg == null || !isNativeVisualOwner(dockBg)) return;
-        MiBlurBridge.clearPassWindowBlur(dockBg);
+        // Diagnostic A/B: intentionally do not mutate native pass-window blur state.
         if (vendorGpuBlurLoggedFor.get() != dockBg) {
             vendorGpuBlurLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " vendor parent GPU blur disabled class="
+            MainHook.log("[DC][COMP-AB] vendor Dock blur preserved class="
                     + dockBg.getClass().getSimpleName());
         }
     }
