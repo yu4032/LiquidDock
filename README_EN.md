@@ -175,6 +175,7 @@ When opening an issue, include:
 - [TODO.md](TODO.md) — active unfinished work
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [DIVIDER.md](DIVIDER.md) — Workstation divider behavior
+- [docs/release-signing.md](docs/release-signing.md) — isolated Release build/signing flow and security boundaries
 
 Files under `docs/superpowers/` are historical plans, specifications, and verification records. They do not describe the current implementation unless explicitly stated otherwise.
 
