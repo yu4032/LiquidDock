@@ -67,4 +67,37 @@ public class Miuix307MaterialHandoffContractTest {
                 hook.contains("suppressVendorGpuBlur(background);\n"
                         + "                suppressVendorMaterialBody(background"));
     }
+
+    @Test
+    public void minimumPositiveBlurRegionKeepsWallpaperOnClientCompositionPath() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String bridge = Files.readString(MAIN.resolve("MiBlurBridge.java"));
+        String suppressor = Files.readString(
+                MAIN.resolve("LauncherVendorBlurWriteSuppressor.java"));
+
+        assertTrue("material handoff must retain native composition eligibility",
+                hook.contains("MiBlurBridge.holdPassWindowBlurComposition(dockBg)"));
+        assertTrue("runtime teardown must release the composition hold",
+                hook.contains("MiBlurBridge.clearPassWindowBlur(background)"));
+
+        assertTrue(bridge.contains("SET_PASS_WINDOW_BLUR_ENABLED.invoke(view, true)"));
+        assertTrue(bridge.contains("SET_MI_VIEW_BLUR_MODE.invoke(view, 1)"));
+        assertTrue(bridge.contains("SET_MI_BACKGROUND_BLUR_MODE.invoke(view, 1)"));
+        assertTrue("force-client hold must use a real positive background-blur radius",
+                bridge.contains("SET_MI_BACKGROUND_BLUR_RADIUS.invoke(view, 1)"));
+        assertTrue(bridge.contains("CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view)"));
+
+        assertTrue("module-owned keepalive writes must bypass vendor suppression",
+                suppressor.contains("beginInternalWrite()"));
+        assertTrue("vendor disable writes must not be able to drop the keepalive",
+                suppressor.contains("shouldSuppressPassWindowWrite"));
+        assertTrue("vendor mode-zero writes must not be able to drop the keepalive",
+                suppressor.contains("shouldSuppressBlurModeWrite"));
+        assertTrue("vendor radius writes must not be able to remove or enlarge the hold",
+                suppressor.contains("shouldSuppressBlurRadiusWrite"));
+        assertTrue("compat BlurBackground2 must retain a real positive blur region",
+                hook.contains("stabilizeCompatBackgroundBlurRadius"));
+        assertTrue("compat force-client region must use the minimum radius",
+                hook.contains("requestedRadius + \" -> 1\""));
+    }
 }

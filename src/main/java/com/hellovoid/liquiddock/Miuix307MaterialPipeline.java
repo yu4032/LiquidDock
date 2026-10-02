@@ -248,9 +248,11 @@ final class Miuix307MaterialPipeline {
 
     /**
      * BlurBackground2.addBlur() delegates positive vendor blur through this exact utility before
-     * reflection reaches hidden View APIs. On 307 that becomes a post-composition region blur on
-     * the Floating Dock Surface, so the themed HotSeats radius must be zero while Prismal is the
-     * visual owner. Other BlurUtilities consumers, disable calls and vendor arrays pass through.
+     * reflection reaches hidden View APIs. On 307 this creates a real BackgroundBlurDrawable
+     * region on the Floating Dock Surface. Keep that region at the minimum positive radius while
+     * Prismal owns visuals: SurfaceFlinger then keeps the layers below it on CLIENT/GPU
+     * composition, avoiding Wallpaper CLIENT<->DEVICE oscillation. Other BlurUtilities consumers
+     * and vendor arrays pass through.
      */
     private static void installCompatBackgroundBlurSuppression(ClassLoader classLoader) {
         try {
@@ -260,12 +262,12 @@ final class Miuix307MaterialPipeline {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (args.length >= 2 && args[0] instanceof View
                                 && args[1] instanceof Integer) {
-                            args[1] = MiuixGlassHook.suppressCompatBackgroundBlurRadius(
+                            args[1] = MiuixGlassHook.stabilizeCompatBackgroundBlurRadius(
                                     (View) args[0], (Integer) args[1]);
                         }
                         return chain.proceed(args);
                     }, View.class, int.class, float[].class, int[][].class);
-            MainHook.log("[DC] MiuiX 307 compat background blur suppression installed");
+            MainHook.log("[DC] MiuiX 307 compat background blur composition hold installed");
         } catch (Throwable error) {
             MainHook.log("[DC] MiuiX 307 compat background blur suppression unavailable: "
                     + error);

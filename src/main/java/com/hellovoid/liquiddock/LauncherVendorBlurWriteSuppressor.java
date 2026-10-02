@@ -6,16 +6,33 @@ import java.lang.reflect.Method;
 
 /**
  * Stops HyperOS from re-enabling compositor blur on the HotSeats material after LiquidDock has
- * taken visual ownership. Positive vendor writes are acknowledged without invoking the hidden
- * View setter, so Launcher and LiquidDock never fight the same View state or invalidate it per
- * frame. Vendor disable writes and every unrelated View still pass through unchanged.
+ * taken visual ownership. LiquidDock keeps the native pass-window gate/modes enabled at radius
+ * zero so SurfaceFlinger keeps the wallpaper on the same GPU/client-composition path. Vendor
+ * writes cannot drop that compositor hold or make the native blur visible. Explicit LiquidDock
+ * writes use a thread-local bypass; unrelated Views always pass through unchanged.
  */
 final class LauncherVendorBlurWriteSuppressor {
     private static final String TAG = "[DC][MG]";
     private static boolean attempted;
     private static boolean installed;
+    private static final ThreadLocal<Integer> INTERNAL_WRITE_DEPTH =
+            ThreadLocal.withInitial(() -> Integer.valueOf(0));
 
     private LauncherVendorBlurWriteSuppressor() {}
+
+    static void beginInternalWrite() {
+        INTERNAL_WRITE_DEPTH.set(Integer.valueOf(INTERNAL_WRITE_DEPTH.get().intValue() + 1));
+    }
+
+    static void endInternalWrite() {
+        int depth = INTERNAL_WRITE_DEPTH.get().intValue() - 1;
+        if (depth <= 0) INTERNAL_WRITE_DEPTH.remove();
+        else INTERNAL_WRITE_DEPTH.set(Integer.valueOf(depth));
+    }
+
+    private static boolean isInternalWrite() {
+        return INTERNAL_WRITE_DEPTH.get().intValue() > 0;
+    }
 
     static synchronized boolean install() {
         if (attempted) return installed;
@@ -43,6 +60,7 @@ final class LauncherVendorBlurWriteSuppressor {
             HookUtil.hook(method, chain -> {
                 Object receiver = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (isInternalWrite()) return chain.proceed(args);
                 if (receiver instanceof View && args.length == 1 && args[0] instanceof Boolean) {
                     boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver);
                     if (LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(
@@ -67,12 +85,16 @@ final class LauncherVendorBlurWriteSuppressor {
             HookUtil.hook(method, chain -> {
                 Object receiver = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (isInternalWrite()) return chain.proceed(args);
                 if (receiver instanceof View && args.length == 1 && args[0] instanceof Number) {
                     boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver);
-                    if (LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(
-                            owned, ((Number) args[0]).intValue())) {
-                        return successfulSuppressionResult(method);
-                    }
+                    int requested = ((Number) args[0]).intValue();
+                    boolean suppress = "setMiBackgroundBlurRadius".equals(methodName)
+                            ? LauncherVendorBlurWritePolicy.shouldSuppressBlurRadiusWrite(
+                                    owned, requested)
+                            : LauncherVendorBlurWritePolicy.shouldSuppressBlurModeWrite(
+                                    owned, requested);
+                    if (suppress) return successfulSuppressionResult(method);
                 }
                 return chain.proceed(args);
             });

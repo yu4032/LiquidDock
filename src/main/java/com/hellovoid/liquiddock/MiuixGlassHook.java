@@ -13,9 +13,10 @@ import java.lang.reflect.Field;
 /**
  * MiuiX-specific zero-copy glass installer for HyperOS 3.0.307+ docks.
  *
- * The vendor background remains the authoritative Dock geometry shell. Parent compositor blur and
+ * The vendor background remains the authoritative Dock geometry shell. Visible vendor blur and
  * the vendor material body are suppressed for both supported HotSeats owners once the attached
- * Prismal host takes ownership. LiquidDock renders PassBlur -> OES -> Prismal in a child
+ * Prismal host takes ownership, while the zero-radius native pass-window gate stays enabled to
+ * keep wallpaper composition on the GPU/client path. LiquidDock renders PassBlur -> OES -> Prismal in a child
  * TextureView. There is deliberately no screen-capture fallback.
  */
 final class MiuixGlassHook {
@@ -69,6 +70,7 @@ final class MiuixGlassHook {
         DockLiquidGlassHostView host = currentHost();
         removeVendorMaterialBodyPreserver();
         Miuix307ZeroCopyRenderer.clear();
+        if (background != null) MiBlurBridge.clearPassWindowBlur(background);
         restoreVendorMaterialBody();
         clearTrackedViews();
         if (host != null && host.getParent() instanceof ViewGroup) {
@@ -96,6 +98,8 @@ final class MiuixGlassHook {
         }
         removeVendorMaterialBodyPreserver();
         Miuix307ZeroCopyRenderer.clear();
+        View background = currentBackground();
+        if (background != null) MiBlurBridge.clearPassWindowBlur(background);
         restoreVendorMaterialBody();
         clearTrackedViews();
     });
@@ -178,16 +182,21 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         return readRadius(dockBg);
     }
 
-    static int suppressCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
+    static int stabilizeCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
         if (!GlassRuntimeState.isEnabled()) return requestedRadius;
-        if (dockBg == null || requestedRadius <= 0) return requestedRadius;
+        if (dockBg == null) return requestedRadius;
         if (!COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName())) return requestedRadius;
+
+        // A zero radius removes BackgroundBlurDrawable from ViewRootImpl's blur-region
+        // aggregator. Keep the minimum positive radius so SurfaceFlinger sees a real
+        // background-blur region and keeps layers below Floating Dock (notably Wallpaper)
+        // in CLIENT/GPU composition. Prismal remains the visible renderer above this 1px hold.
         if (compatBackgroundBlurLoggedFor.get() != dockBg) {
             compatBackgroundBlurLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " compat BlurBackground2 parent GPU blur suppressed "
-                    + requestedRadius + " -> 0");
+            MainHook.log(TAG + " compat BlurBackground2 GPU composition hold "
+                    + requestedRadius + " -> 1");
         }
-        return 0;
+        return 1;
     }
 
     static boolean install(View dockBg, LiquidDockConfig config) {
@@ -217,6 +226,8 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (previousHost != null && previousHost.getParent() instanceof ViewGroup) {
             ((ViewGroup) previousHost.getParent()).removeView(previousHost);
         }
+        View previousBackground = currentBackground();
+        if (previousBackground != null) MiBlurBridge.clearPassWindowBlur(previousBackground);
         restoreVendorMaterialBody();
         clearTrackedViews();
 
@@ -359,17 +370,18 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     static void suppressVendorGpuBlur(View dockBg) {
         if (!GlassRuntimeState.isEnabled()) return;
         if (dockBg == null || !isNativeVisualOwner(dockBg)) return;
-        MiBlurBridge.clearPassWindowBlur(dockBg);
+        boolean compositionHeld = MiBlurBridge.holdPassWindowBlurComposition(dockBg);
         if (vendorGpuBlurLoggedFor.get() != dockBg) {
             vendorGpuBlurLoggedFor = new WeakReference<>(dockBg);
-            MainHook.log(TAG + " vendor parent GPU blur disabled class="
-                    + dockBg.getClass().getSimpleName());
+            MainHook.log(TAG + " vendor visible blur suppressed; GPU composition hold="
+                    + compositionHeld + " class=" + dockBg.getClass().getSimpleName());
         }
     }
 
     /**
-     * Preserve only the vendor material body at pre-draw. Compositor blur is suppressed at the
-     * hidden View setter boundary by LauncherVendorBlurWriteSuppressor; never mutate blur state
+     * Preserve only the vendor material body at pre-draw. Visible compositor blur is suppressed
+     * at the hidden View setter boundary while the zero-radius composition hold is retained; never
+     * mutate blur state
      * from the root-wide draw loop.
      */
     private static void installVendorMaterialBodyPreserver(View dockBg) {
