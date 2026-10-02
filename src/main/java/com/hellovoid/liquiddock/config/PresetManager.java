@@ -147,6 +147,8 @@ public final class PresetManager {
         source.put("animation_settings_page_ms", 300);
         source.put("home_grid_8x4", Boolean.FALSE);
         source.put("grid_profile", "8x4");
+        source.put("grid_columns", 8);
+        source.put("grid_rows", 4);
         source.put("grid_widget_adaptation", Boolean.FALSE);
         source.put("launcher450_icon_size_enabled", Boolean.TRUE);
         source.put("launcher450_icon_size_percent", 100);

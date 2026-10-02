@@ -52,6 +52,8 @@ final class LauncherGridInstallConfig {
 
         HomeGridInstallConfig home = new HomeGridInstallConfig(
                 grid.enabled,
+                grid.columns,
+                grid.rows,
                 Math.round(landLeft * gridScale),
                 Math.round(landRight * gridScale),
                 Math.round(landTop * gridScale),

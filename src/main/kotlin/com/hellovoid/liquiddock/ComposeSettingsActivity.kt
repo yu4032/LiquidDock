@@ -260,6 +260,11 @@ private val launcher450IconSizeSpec = IntSpec(
     summary = "Launcher 4.50：工作区、Dock、小文件夹共用；100% 为系统默认",
 )
 
+private val gridDimensionSpecs = listOf(
+    IntSpec(ConfigSchema.Grid.COLUMNS, "横屏列数", "列", summary = "2–10 列；竖屏自动交换为行数"),
+    IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–6 行；竖屏自动交换为列数"),
+)
+
 private val gridSpecs = listOf(
     IntSpec(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, "横屏水平距离偏移"),
     IntSpec(ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE, "横屏顶部距离偏移"),
@@ -592,9 +597,6 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
             ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
         ))
     }
-    val profileLabels = stringArrayResource(R.array.home_grid_profile_entries)
-    val profileValues = stringArrayResource(R.array.home_grid_profile_values)
-    val profileOptions = profileLabels.zip(profileValues)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
         item { SmallTitle("图标大小 · Launcher 4.50") }
@@ -617,15 +619,21 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
         item { SmallTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Grid.ENABLED, stringResource(R.string.enable_grid_8x4), stringResource(R.string.enable_grid_8x4_summary), masterEnabled) { customGrid = it }
-                StringDropdown(
-                    prefs = prefs,
-                    config = ConfigSchema.Grid.PROFILE,
-                    title = stringResource(R.string.grid_profile_title),
-                    options = profileOptions,
-                    enabled = masterEnabled && customGrid,
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ENABLED,
+                    "自由主界面网格",
+                    "允许 2×2 到 10×6 的工作区布局；始终在 Dock 上方原工作区内居中，重启桌面后生效",
+                    masterEnabled,
+                ) { customGrid = it }
+                gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.WIDGET_ADAPTATION,
+                    "自由小组件占格",
+                    "按当前网格允许任意合法 spanX×spanY，不再限制为 1×1、2×1、2×2、4×2",
+                    masterEnabled && customGrid,
                 )
-                BooleanSetting(prefs, ConfigSchema.Grid.WIDGET_ADAPTATION, stringResource(R.string.enable_widget_adaptation), stringResource(R.string.enable_widget_adaptation_summary), masterEnabled && customGrid)
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }

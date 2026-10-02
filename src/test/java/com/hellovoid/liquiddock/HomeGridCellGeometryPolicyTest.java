@@ -13,6 +13,7 @@ public class HomeGridCellGeometryPolicyTest {
     private static HomeGridInstallConfig config() {
         return new HomeGridInstallConfig(
                 true,
+                8, 4,
                 10, 14, 18, 22,
                 6, 8, 12, 16,
                 3, 5,
@@ -113,6 +114,7 @@ public class HomeGridCellGeometryPolicyTest {
     public void extremeMarginsClampCellComputationInsteadOfGoingNonPositive() {
         HomeGridInstallConfig extreme = new HomeGridInstallConfig(
                 true,
+                8, 4,
                 5000, 5000, 5000, 5000,
                 5000, 5000, 5000, 5000,
                 5000, 5000,

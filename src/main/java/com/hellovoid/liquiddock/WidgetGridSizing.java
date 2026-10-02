@@ -15,10 +15,9 @@ final class WidgetGridSizing {
     }
 
     static boolean isSupportedSpec(int spanX, int spanY) {
-        return (spanX == 1 && spanY == 1)
-                || (spanX == 2 && spanY == 1)
-                || (spanX == 2 && spanY == 2)
-                || (spanX == 4 && spanY == 2);
+        // The active CellLayout dimensions are the real upper bound. Do not encode a second
+        // launcher-specific whitelist here: any positive span that fits the current grid is valid.
+        return spanX > 0 && spanY > 0;
     }
 
     /**
