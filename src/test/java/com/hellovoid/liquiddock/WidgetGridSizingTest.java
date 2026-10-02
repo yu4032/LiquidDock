@@ -21,14 +21,16 @@ public class WidgetGridSizingTest {
     }
 
     @Test
-    public void supportedWidgetSpecsAreLimitedToLauncherSizes() {
+    public void supportedWidgetSpecsAllowAnyPositiveSpan() {
         assertTrue(WidgetGridSizing.isSupportedSpec(1, 1));
         assertTrue(WidgetGridSizing.isSupportedSpec(2, 1));
-        assertTrue(WidgetGridSizing.isSupportedSpec(2, 2));
-        assertTrue(WidgetGridSizing.isSupportedSpec(4, 2));
+        assertTrue(WidgetGridSizing.isSupportedSpec(3, 1));
+        assertTrue(WidgetGridSizing.isSupportedSpec(4, 3));
+        assertTrue(WidgetGridSizing.isSupportedSpec(10, 6));
 
-        assertFalse(WidgetGridSizing.isSupportedSpec(3, 1));
-        assertFalse(WidgetGridSizing.isSupportedSpec(4, 1));
+        assertFalse(WidgetGridSizing.isSupportedSpec(0, 1));
+        assertFalse(WidgetGridSizing.isSupportedSpec(1, 0));
+        assertFalse(WidgetGridSizing.isSupportedSpec(-1, 2));
     }
 
     @Test

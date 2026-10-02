@@ -21,12 +21,16 @@ final class HomeGridInstallConfig {
     }
 
     final boolean enabled;
+    final int columns;
+    final int rows;
     final Orientation landscape;
     final Orientation portrait;
     final float density;
 
     HomeGridInstallConfig(
             boolean enabled,
+            int columns,
+            int rows,
             int landscapeLeft,
             int landscapeRight,
             int landscapeTop,
@@ -41,6 +45,8 @@ final class HomeGridInstallConfig {
             int portraitIndicatorY,
             float density) {
         this.enabled = enabled;
+        this.columns = Math.max(2, Math.min(10, columns));
+        this.rows = Math.max(2, Math.min(6, rows));
         this.landscape = new Orientation(
                 landscapeLeft, landscapeRight, landscapeTop, landscapeBottom,
                 landscapeRowGap, landscapeIndicatorY);
@@ -52,5 +58,17 @@ final class HomeGridInstallConfig {
 
     Orientation orientation(boolean portraitMode) {
         return portraitMode ? portrait : landscape;
+    }
+
+    int countX(boolean portraitMode) {
+        return portraitMode ? rows : columns;
+    }
+
+    int countY(boolean portraitMode) {
+        return portraitMode ? columns : rows;
+    }
+
+    boolean matchesGrid(int x, int y) {
+        return (x == columns && y == rows) || (x == rows && y == columns);
     }
 }
