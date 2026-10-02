@@ -77,6 +77,20 @@ final class RootPassBlurBackend {
     private volatile Surface inputProducerSurface;
     private volatile int maxTextureSize;
 
+    // Diagnostic-only counters for Launcher Workspace producer cadence. These never schedule work.
+    private long workspaceTraceWindowStartNs;
+    private long workspaceTraceLastFrameNs;
+    private long workspaceTraceFrameCount;
+    private long workspaceTraceRenderedCount;
+    private long workspaceTraceDrainedCount;
+    private long workspaceTraceMaxGapNs;
+    private long workspaceTraceLastSampleTimestampNs = Long.MIN_VALUE;
+    private long workspaceTraceTimestampAdvanceCount;
+    private long workspaceTraceTimestampRepeatCount;
+    private final float[] workspaceTraceLastMatrix = new float[16];
+    private boolean workspaceTraceMatrixInitialized;
+    private String workspaceTraceLastGeometry;
+
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
     private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
@@ -147,6 +161,10 @@ final class RootPassBlurBackend {
         if (shuttingDown) return;
         Miuix307PassBlurBridge.Binding current = binding;
         if (current == null) return;
+        if (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+            LauncherWorkspacePassBlurDiagnostics.setDesiredUpdates(
+                    current.rootSurface, enabled, reason);
+        }
         if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
         else Miuix307PassBlurBridge.pauseUpdates(current);
         MainHook.log(TAG + " updates=" + enabled + " reason=" + reason
@@ -522,15 +540,77 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        long nowNs = System.nanoTime();
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
         boolean shouldRender = generation >= 0L && (gate == null || gate.shouldSchedule(
-                System.nanoTime(), renderedGeneration, generation));
+                nowNs, renderedGeneration, generation));
+        traceWorkspaceFrame(nowNs, generation, shouldRender);
         if (!shouldRender) {
             drainSourceFrameWithoutRender(input);
             return;
         }
         drainFreshFrame(input, generation);
+    }
+
+    private void traceWorkspaceFrame(long nowNs, long generation, boolean shouldRender) {
+        if (bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+        long previousNs = workspaceTraceLastFrameNs;
+        long gapNs = previousNs > 0L ? Math.max(0L, nowNs - previousNs) : 0L;
+        workspaceTraceLastFrameNs = nowNs;
+        workspaceTraceFrameCount++;
+        if (shouldRender) workspaceTraceRenderedCount++;
+        else workspaceTraceDrainedCount++;
+        if (gapNs > workspaceTraceMaxGapNs) workspaceTraceMaxGapNs = gapNs;
+
+        if (workspaceTraceWindowStartNs == 0L) {
+            workspaceTraceWindowStartNs = nowNs;
+            MainHook.log("[DC][WorkspacePBTrace] first-oes-frame generation=" + generation
+                    + " requestedGeneration=" + state.requestedGeneration()
+                    + " renderedGeneration=" + renderedGeneration
+                    + " shouldRender=" + shouldRender
+                    + " bindingUpdates="
+                    + (binding != null ? binding.updatesEnabled : null));
+            return;
+        }
+
+        if (gapNs >= 100_000_000L) {
+            MainHook.log("[DC][WorkspacePBTrace] oes-gap-ms=" + (gapNs / 1_000_000.0)
+                    + " generation=" + generation
+                    + " requestedGeneration=" + state.requestedGeneration()
+                    + " renderedGeneration=" + renderedGeneration
+                    + " shouldRender=" + shouldRender
+                    + " bindingUpdates="
+                    + (binding != null ? binding.updatesEnabled : null));
+        }
+
+        long elapsedNs = nowNs - workspaceTraceWindowStartNs;
+        if (elapsedNs >= 2_000_000_000L) {
+            double seconds = elapsedNs / 1_000_000_000.0;
+            MainHook.log("[DC][WorkspacePBTrace] oes-window"
+                    + " seconds=" + seconds
+                    + " fps=" + (workspaceTraceFrameCount / seconds)
+                    + " frames=" + workspaceTraceFrameCount
+                    + " rendered=" + workspaceTraceRenderedCount
+                    + " drained=" + workspaceTraceDrainedCount
+                    + " maxGapMs=" + (workspaceTraceMaxGapNs / 1_000_000.0)
+                    + " tsAdvanced=" + workspaceTraceTimestampAdvanceCount
+                    + " tsRepeated=" + workspaceTraceTimestampRepeatCount
+                    + " lastTimestamp=" + workspaceTraceLastSampleTimestampNs
+                    + " geometry=" + workspaceTraceLastGeometry
+                    + " generation=" + generation
+                    + " requestedGeneration=" + state.requestedGeneration()
+                    + " renderedGeneration=" + renderedGeneration
+                    + " bindingUpdates="
+                    + (binding != null ? binding.updatesEnabled : null));
+            workspaceTraceWindowStartNs = nowNs;
+            workspaceTraceFrameCount = 0L;
+            workspaceTraceRenderedCount = 0L;
+            workspaceTraceDrainedCount = 0L;
+            workspaceTraceMaxGapNs = 0L;
+            workspaceTraceTimestampAdvanceCount = 0L;
+            workspaceTraceTimestampRepeatCount = 0L;
+        }
     }
 
     private void drainSourceFrameWithoutRender(SurfaceTexture input) {
@@ -539,6 +619,7 @@ final class RootPassBlurBackend {
             makePbufferCurrentUnchecked();
             input.updateTexImage();
             input.getTransformMatrix(textureMatrix);
+            traceWorkspaceSampleState(input, false);
         } catch (Throwable error) {
             notifyTerminalFailure(error);
         }
@@ -550,6 +631,7 @@ final class RootPassBlurBackend {
             makePbufferCurrentUnchecked();
             input.updateTexImage();
             input.getTransformMatrix(textureMatrix);
+            traceWorkspaceSampleState(input, true);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
             RootPassBlurFrame frame = normalizeFrame(generation);
@@ -559,6 +641,48 @@ final class RootPassBlurBackend {
             }
         } catch (Throwable error) {
             notifyTerminalFailure(error);
+        }
+    }
+
+    private void traceWorkspaceSampleState(SurfaceTexture input, boolean renderedPath) {
+        if (bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE || input == null) return;
+        long timestamp = input.getTimestamp();
+        if (workspaceTraceLastSampleTimestampNs != Long.MIN_VALUE) {
+            if (timestamp == workspaceTraceLastSampleTimestampNs) workspaceTraceTimestampRepeatCount++;
+            else workspaceTraceTimestampAdvanceCount++;
+        }
+        workspaceTraceLastSampleTimestampNs = timestamp;
+
+        boolean matrixChanged = !workspaceTraceMatrixInitialized;
+        if (!matrixChanged) {
+            for (int i = 0; i < 16; i++) {
+                if (Math.abs(textureMatrix[i] - workspaceTraceLastMatrix[i]) > 0.000001f) {
+                    matrixChanged = true;
+                    break;
+                }
+            }
+        }
+        if (matrixChanged) {
+            System.arraycopy(textureMatrix, 0, workspaceTraceLastMatrix, 0, 16);
+            workspaceTraceMatrixInitialized = true;
+        }
+
+        RootPassBlurContentRect rect = contentRect;
+        String geometry = "logical=" + logicalWidth + "x" + logicalHeight
+                + " buffer=" + bufferWidth + "x" + bufferHeight
+                + " normalized=" + normalizedWidth + "x" + normalizedHeight
+                + " rotation=" + rotation
+                + " contentRect=[" + rect.left + "," + rect.bottom + ","
+                + rect.width + "," + rect.height + "]";
+        boolean geometryChanged = !geometry.equals(workspaceTraceLastGeometry);
+        if (geometryChanged) workspaceTraceLastGeometry = geometry;
+
+        if (matrixChanged || geometryChanged) {
+            MainHook.log("[DC][WorkspacePBTrace] sample-state"
+                    + " renderedPath=" + renderedPath
+                    + " timestamp=" + timestamp
+                    + " " + geometry
+                    + " matrix=" + java.util.Arrays.toString(textureMatrix));
         }
     }
 

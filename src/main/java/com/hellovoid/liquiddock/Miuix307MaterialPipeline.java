@@ -68,11 +68,19 @@ final class Miuix307MaterialPipeline {
                 MainHook.log("[DC] MiuiX 307 material disabled: vendor blur write boundary unavailable");
                 return false;
             }
-            installCompatBackgroundBlurSuppression(classLoader);
+            // Diagnostic A/B: leave BlurBackground2's vendor background-blur transaction
+            // untouched. Device traces show the periodic wallpaper blur only after LiquidDock is
+            // enabled, while no LAUNCHER_WORKSPACE producer is active; the only confirmed altered
+            // blur path is HotSeatsListContentBlurBackground2 -> BlurUtilities#setBackgroundBlur.
+            // Keep Prismal/PassBlur and all other material suppression unchanged.
+            MainHook.log("[DC][WorkspacePBTrace] compat HotSeats background blur suppression BYPASSED for A/B");
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);
             installVendorStaticDockSnapshotPowerHook(classLoader);
+            if (!LauncherWorkspacePassBlurDiagnostics.install(classLoader)) {
+                MainHook.log("[DC][WorkspacePBTrace] Workspace PassBlur diagnostics unavailable");
+            }
             LauncherWallpaperFreshnessHook.install(classLoader);
 
             HookUtil.hookMethod(classLoader,
@@ -260,8 +268,18 @@ final class Miuix307MaterialPipeline {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (args.length >= 2 && args[0] instanceof View
                                 && args[1] instanceof Integer) {
-                            args[1] = MiuixGlassHook.suppressCompatBackgroundBlurRadius(
-                                    (View) args[0], (Integer) args[1]);
+                            int requestedRadius = (Integer) args[1];
+                            int effectiveRadius = MiuixGlassHook.suppressCompatBackgroundBlurRadius(
+                                    (View) args[0], requestedRadius);
+                            if (requestedRadius != effectiveRadius) {
+                                LauncherWorkspacePassBlurDiagnostics.traceBlurInterception(
+                                        "BlurUtilities#setBackgroundBlur",
+                                        (View) args[0],
+                                        Integer.valueOf(requestedRadius),
+                                        Integer.valueOf(effectiveRadius),
+                                        true);
+                            }
+                            args[1] = effectiveRadius;
                         }
                         return chain.proceed(args);
                     }, View.class, int.class, float[].class, int[][].class);

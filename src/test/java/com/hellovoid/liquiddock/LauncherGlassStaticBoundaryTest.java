@@ -37,6 +37,15 @@ public class LauncherGlassStaticBoundaryTest {
     }
 
     @Test
+    public void workspacePassBlurExcludesTextureViewOutputsFromItsOwnSource() throws Exception {
+        String request = Files.readString(MAIN.resolve("PassBlurBindRequest.java"));
+        assertTrue(request.contains(
+                "LAUNCHER_WORKSPACE_EXTRA_EXCLUSIONS = {\"TextureView\"}"));
+        assertTrue(request.contains(
+                "PassBlurDomain.LAUNCHER_WORKSPACE,\n                requestedScale,\n                LAUNCHER_WORKSPACE_EXTRA_EXCLUSIONS"));
+    }
+
+    @Test
     public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));

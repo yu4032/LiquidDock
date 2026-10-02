@@ -74,6 +74,7 @@ final class Miuix307PassBlurBridge {
             return null;
         }
         SurfaceControl rootSurface = null;
+        boolean launcherWorkspaceClaimed = false;
         boolean securityCenterClaimed = false;
         boolean gboardClaimed = false;
         boolean searchboxClaimed = false;
@@ -115,6 +116,11 @@ final class Miuix307PassBlurBridge {
                     rootName, request.extraExclusions());
             float scale = request.nativeScale();
 
+            if (domain == PassBlurDomain.LAUNCHER_WORKSPACE) {
+                LauncherWorkspacePassBlurDiagnostics.claim(
+                        rootSurface, producerSurface, scale, materialHost);
+                launcherWorkspaceClaimed = true;
+            }
             if (domain == PassBlurDomain.SECURITY_CENTER) {
                 SecurityCenterPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 securityCenterClaimed = true;
@@ -161,6 +167,10 @@ final class Miuix307PassBlurBridge {
                     + " exclusions=" + Arrays.toString(exclusions));
             return binding;
         } catch (Throwable error) {
+            if (launcherWorkspaceClaimed && rootSurface != null) {
+                LauncherWorkspacePassBlurDiagnostics.release(
+                        rootSurface, producerSurface);
+            }
             if (securityCenterClaimed && rootSurface != null) {
                 SecurityCenterPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
@@ -223,6 +233,8 @@ final class Miuix307PassBlurBridge {
 
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
         if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
+        if (binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE) {
+        }
         if (!force && binding.updatesEnabled == enabled) return;
         if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
             MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
@@ -247,6 +259,10 @@ final class Miuix307PassBlurBridge {
 
     static void unbind(Binding binding) {
         if (binding == null || !binding.bound) return;
+        if (binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE) {
+            LauncherWorkspacePassBlurDiagnostics.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
         if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
             SecurityCenterPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);

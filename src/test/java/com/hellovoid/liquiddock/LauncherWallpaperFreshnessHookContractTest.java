@@ -138,8 +138,60 @@ public class LauncherWallpaperFreshnessHookContractTest {
         // that the vendor Binder bridge wires both generation-supersession participants.
     }
 
+    @Test public void compatHotSeatsBlurSuppressionIsBypassedForFlickerAbTest()
+            throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        assertTrue(pipeline.contains(
+                "compat HotSeats background blur suppression BYPASSED for A/B"));
+        assertFalse("A/B build must not install the compat BlurUtilities radius rewrite",
+                pipeline.contains("installCompatBackgroundBlurSuppression(classLoader);"));
+    }
+
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));
+    }
+
+    @Test public void workspacePassBlurDiagnosticsObserveWithoutRewritingVendorWrites()
+            throws Exception {
+        String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String diagnostics = Files.readString(
+                MAIN.resolve("LauncherWorkspacePassBlurDiagnostics.java"));
+        String backend = Files.readString(MAIN.resolve("RootPassBlurBackend.java"));
+
+        assertTrue(pipeline.contains("LauncherWorkspacePassBlurDiagnostics.install(classLoader)"));
+        assertTrue(bridge.contains("LauncherWorkspacePassBlurDiagnostics.claim("));
+        assertTrue(bridge.contains("LauncherWorkspacePassBlurDiagnostics.release("));
+        assertTrue(diagnostics.contains("\"setUpdateTextureFlag\""));
+        assertTrue(diagnostics.contains("\"SetPassBlurSurface\""));
+        assertTrue(diagnostics.contains("callerTrace()"));
+        assertTrue(diagnostics.contains("LauncherGlassSceneController.diagnosticState(host)"));
+        assertTrue(diagnostics.contains("traceBlurInterception("));
+        assertTrue(diagnostics.contains("\"com.miui.home.launcher.Workspace\""));
+        assertTrue(diagnostics.contains("\"scrollTo\""));
+        assertTrue(diagnostics.contains("\"com.miui.home.launcher.Launcher\""));
+        assertTrue(diagnostics.contains("\"onWorkspaceScroll\""));
+        assertTrue(diagnostics.contains("workspace-first-scroll BEFORE"));
+        assertTrue(diagnostics.contains("launcher-first-onWorkspaceScroll AFTER"));
+        assertTrue(backend.contains("sample-state"));
+        assertTrue(backend.contains("tsAdvanced="));
+        assertTrue(backend.contains("matrix="));
+        assertTrue(diagnostics.contains("[DC][WorkspacePBTrace]"));
+        assertFalse("diagnostic hook must not rewrite vendor update state",
+                diagnostics.contains("args[1] = Boolean.valueOf"));
+        assertFalse("diagnostic hook must not rewrite vendor scale",
+                diagnostics.contains("args[2] = Float.valueOf"));
+        assertFalse("diagnostic hook must not replace vendor PassBlur surfaces",
+                diagnostics.contains("args[1] = claim.surface"));
+
+        assertTrue(backend.contains("[DC][WorkspacePBTrace] oes-gap-ms="));
+        assertTrue(backend.contains("[DC][WorkspacePBTrace] oes-window"));
+
+        String suppressor = Files.readString(MAIN.resolve("LauncherVendorBlurWriteSuppressor.java"));
+        assertTrue(suppressor.contains(
+                "LauncherWorkspacePassBlurDiagnostics.traceBlurInterception("));
+        assertTrue(pipeline.contains(
+                "\"BlurUtilities#setBackgroundBlur\""));
     }
 }
