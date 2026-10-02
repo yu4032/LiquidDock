@@ -175,6 +175,7 @@ Gboard 支持悬浮键盘玻璃、相关工具栏玻璃，以及独立颜色和�
 - [TODO.md](TODO.md) — 当前仍未完成的工作
 - [CHANGELOG.md](CHANGELOG.md) — 版本变化
 - [DIVIDER.md](DIVIDER.md) — 工作台分隔线说明
+- [docs/release-signing.md](docs/release-signing.md) — Release 构建、隔离签名与安全边界
 
 `docs/superpowers/` 下的 plans/specs/verification 是历史开发记录，不代表当前实现。
 
