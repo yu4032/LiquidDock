@@ -1,14 +1,7 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application") version "9.3.0"
     id("com.android.library") version "9.3.0" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
-}
-
-val keystoreProps = Properties().apply {
-    val f = rootProject.file("keystore.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -24,16 +17,19 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = rootProject.file(keystoreProps.getProperty("storeFile", "liquiddock-release.keystore"))
-            storePassword = keystoreProps.getProperty("storePassword", "")
-            keyAlias = keystoreProps.getProperty("keyAlias", "liquiddock")
-            keyPassword = keystoreProps.getProperty("keyPassword", "")
+        create("hellovoidDebug") {
+            // Public, fixed debug key so CI/device-test APKs remain mutually upgradeable.
+            // Release signing is intentionally external and never happens in this repository.
+            storeFile = rootProject.file("signing/hellovoid-debug.keystore")
+            storePassword = "hellovoid-debug"
+            keyAlias = "hellovoid-debug"
+            keyPassword = "hellovoid-debug"
         }
     }
 
     buildTypes {
         debug {
+            signingConfig = signingConfigs.getByName("hellovoidDebug")
             // CI/device-test APKs go through the same R8 code + resource optimization
             // path as release, so shrinker regressions are caught before publishing.
             optimization {
@@ -41,7 +37,8 @@ android {
             }
         }
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // Keep release output unsigned. The isolated liquiddock-keys workflow
+            // performs zipalign + apksigner on a separate runner.
             optimization {
                 enable = true
             }
