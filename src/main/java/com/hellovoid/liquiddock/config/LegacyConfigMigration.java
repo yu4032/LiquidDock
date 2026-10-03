@@ -40,7 +40,7 @@ public final class LegacyConfigMigration {
             if (legacy == null || legacy.isEmpty()) return;
 
             migrateLegacyValues(remote, legacy);
-            Log.i("LiquidDock", "legacy config migrated to API101 Remote Preferences");
+            Api101Bridge.log("legacy config migrated to API101 Remote Preferences");
         } catch (Throwable error) {
             // Migration is compatibility-only. Failure must not prevent launcher hooks from
             // loading defaults or any already-available Remote Preferences snapshot.
@@ -86,7 +86,7 @@ public final class LegacyConfigMigration {
                 byte[] data = out.toByteArray();
                 if (data.length == 0) continue;
 
-                Log.i("LiquidDock", "legacy config found for API101 migration: " + path);
+                Api101Bridge.log("legacy config found for API101 migration: " + path);
                 JSONObject json = new JSONObject(new String(data, StandardCharsets.UTF_8));
                 Map<String, Object> values = new LinkedHashMap<>();
                 java.util.Iterator<String> keys = json.keys();
