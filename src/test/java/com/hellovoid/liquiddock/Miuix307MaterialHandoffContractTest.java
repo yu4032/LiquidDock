@@ -49,6 +49,21 @@ public class Miuix307MaterialHandoffContractTest {
     }
 
     @Test
+    public void compositionAb2KeepsOutputHierarchyButSkipsPassBlurProducerBinding()
+            throws Exception {
+        String textureView = Files.readString(
+                MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        assertTrue(textureView.contains(
+                "PassBlur producer binding BYPASSED; output hierarchy retained"));
+        assertFalse("A/B2 must not bind a PassBlur producer",
+                textureView.contains("post(() -> bindProducerWhenReady(0));"));
+        assertTrue("TextureView output/EGL path must remain installed",
+                textureView.contains("eglCreateWindowSurface"));
+        assertTrue("Prismal renderer must remain part of the output hierarchy",
+                textureView.contains("new PrismalRenderer()"));
+    }
+
+    @Test
     public void vendorBlurIsSuppressedAtWriteBoundaryNotRootPreDraw() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
         String suppressor = Files.readString(

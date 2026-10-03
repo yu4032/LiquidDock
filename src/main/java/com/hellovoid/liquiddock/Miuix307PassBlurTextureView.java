@@ -612,8 +612,10 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
 
-        createInputProducer();
-        post(() -> bindProducerWhenReady(0));
+        // Diagnostic A/B: retain the TextureView/EGL/Prismal output hierarchy but do not
+        // create or bind a PassBlur input producer. This isolates whether SetPassBlurSurface +
+        // setUpdateTextureFlag alone are sufficient to destabilize wallpaper composition.
+        MainHook.log("[DC][COMP-AB2] PassBlur producer binding BYPASSED; output hierarchy retained");
     }
 
     private void createInputProducer() {
