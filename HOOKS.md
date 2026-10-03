@@ -1,6 +1,6 @@
 # LiquidDock Hook / Listener Map
 
-本文档记录当前 `main` / **v2.5.1** 的主要 Hook、listener、reflection 和 runtime ownership 边界。
+本文档记录当前 `main`（更新于 2026-10-03，v2.6.1 发布后的主线）的主要 Hook、listener、reflection 和 runtime ownership 边界。
 
 当前 Xposed scope：
 
@@ -10,6 +10,7 @@ com.android.systemui
 com.miui.securitycenter
 com.google.android.inputmethod.latin
 com.android.quicksearchbox
+system
 ```
 
 ## 1. ModuleMain process routing
@@ -23,6 +24,7 @@ com.android.quicksearchbox
 | `com.miui.securitycenter:ui` | Security Center sidebar glass |
 | `com.google.android.inputmethod.latin` | Gboard floating/toolbar glass |
 | `com.android.quicksearchbox` | MIUI Search main-background glass |
+| `system` | 配置启用时安装 `WallpaperClientCompositionHook`，支持可选壁纸 GPU 渲染 |
 
 其他同包非目标进程不应误装 feature hooks。
 
@@ -95,6 +97,10 @@ Launcher package ready 后依次完成：
 ---
 
 ## 5. Home Grid hooks
+
+自由网格支持横屏 2–10 列、2–6 行，竖屏交换维度。`HomeGridSqueezePlannerHook` 仅绑定匹配的 HOME `land_grid` / `vertical_grid` 控制器，不修改 All Apps 控制器。当前 main 通过接口代理把 1×1 图标交给系统 Pad 规划器，多格项交给通用矩形规划器；后者注册循环与事务保护。
+
+Dock 最近应用过滤入口为 `DockRecentAppBlacklistHook`。进程日志门控由 `ModuleMain` 初始化，Launcher 调试状态同步到 `Api101Bridge`。
 
 当前 Grid 已拆为多个明确 owner：
 

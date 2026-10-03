@@ -1,6 +1,14 @@
 # LiquidDock Architecture
 
-本文档描述当前 `main` / **v2.5.1** 的生产架构。历史 `docs/superpowers/*` 记录的是阶段性设计与验证过程，不是当前 runtime contract。
+本文档描述当前 `main`（更新于 2026-10-03，v2.6.1 发布后的主线）的生产架构。历史 `docs/superpowers/*` 记录的是阶段性设计与验证过程，不是当前 runtime contract。
+
+当前新增边界：
+
+- 自由 HOME 网格由 `HomeGridInstallConfig` 约束为横屏 2–10 列、2–6 行，竖屏交换维度；布局位置按方向记忆。
+- `HomeGridSqueezePlannerHook` 在匹配的 HOME 控制器上路由规划器：1×1 图标保留系统 Pad 行为，多格项采用通用矩形规划器。`HomeGridSqueezeCycleGuard` 与 `HomeGridSqueezeTransactionGuard` 保护通用规划器。
+- `DockRecentAppBlacklistHook` 过滤 Dock 最近应用推荐；`WallpaperClientCompositionHook` 在 `system` 进程中按配置启用壁纸渲染适配。
+- `ModuleMain` 初始化进程调试日志开关并同步 `Api101Bridge`；诊断日志受配置门控。
+- Release 构建输出 unsigned APK，签名在独立步骤读取私有材料，详见 [release-signing.md](docs/release-signing.md)。
 
 当前工程基线：
 
