@@ -78,7 +78,15 @@ workflow 会在构建开始时立即把 ref 解析为不可变 commit SHA，之�
   - `apksigner verify` 成功；
   - APK signer 证书 SHA-256 与 keystore 证书一致。
 
-## Debug signing
+## 本地签名
+
+本地也应先运行测试与 `assembleRelease`，待 unsigned APK 构建完成后，再在独立签名步骤中执行 `zipalign` 和 `apksigner`。签名步骤只处理 APK 和签名材料，不运行项目构建脚本。私有 key 应存放在源码目录之外，目录权限设为 700，凭据文件权限设为 600，密码通过环境变量传入工具，避免写入命令行或日志。
+
+完成后核对 `apksigner verify --print-certs` 的证书 SHA-256 与 keystore、上一正式发布 APK 一致，并记录源码提交及 APK SHA-256。`main` 的版本号可能尚未递增，因此不能仅凭 versionName 判断 APK 是否与已发布版本相同。
+
+GitHub 正式发布继续采用上文的隔离 workflow。
+
+## Debug key
 
 Debug APK 使用仓库内的固定测试签名：
 

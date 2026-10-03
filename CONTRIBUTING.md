@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向当前 `main` / **v2.5.1**。生产源码、设置页、`ConfigSchema`、构建配置与当前根文档是开发事实来源；`docs/superpowers/*` 只保存历史方案与验证记录。
+本文档面向当前 `main`（更新于 2026-10-03，v2.6.1 发布后的主线）。生产源码、设置页、`ConfigSchema`、构建配置与当前根文档是开发事实来源；`docs/superpowers/*` 只保存历史方案与验证记录。
 
 ## 1. Build baseline
 
@@ -21,6 +21,8 @@
 ```
 
 Debug 与 Release 都启用 optimization/R8。不要假设 debug APK 保留原始类名；CI debug build 本身就是 shrinker regression gate。
+
+`assembleRelease` 生成 unsigned APK；正式 Release 签名与构建分开执行，详见 [签名说明](docs/release-signing.md)。Debug 使用公开测试 key，不能作为正式发布身份。私有 keystore 和密码不得放入公开源码目录、提交或日志。
 
 ## 2. Branch and PR rules
 
@@ -263,7 +265,7 @@ Component hiding：
 - 扫描失败不做部分写入；
 - import/export 不混入扫描目录。
 
-Grid adaptation 不接管 MIUI occupancy matrix。
+Grid adaptation 保留 MIUI occupancy matrix 的所有权，通过受限规划器路由适配自由网格：1×1 图标使用系统 Pad 规划器，多格项使用通用矩形规划器。变更必须覆盖横竖屏、图标与小组件挤压、循环与事务保护。
 
 ## 15. Workstation rules
 

@@ -43,7 +43,7 @@ LiquidDock 可以为以下界面加入统一的液态玻璃效果：
 
 ### 桌面布局
 
-支持 **8×4 / 4×8** 和 **10×6 / 6×10** 两套桌面网格，并可分别调整横屏与竖屏的：
+支持自由主界面网格：横屏可选 **2–10 列、2–6 行**，竖屏交换行列，保留横竖屏布局位置记忆。可分别调整横屏与竖屏的：
 
 - 水平距离；
 - 顶部和底部距离；
@@ -67,6 +67,10 @@ LiquidDock 可以为以下界面加入统一的液态玻璃效果：
 - 工作台分隔线。
 
 手机互联入口可以单独隐藏，不会关闭系统本身的互联功能。
+
+最近应用黑名单可以阻止指定应用出现在 Dock 最近应用推荐区。
+
+出现壁纸闪烁时，可尝试开启可选的壁纸 GPU 渲染开关；该选项需要 System Framework（`system`）作用域并重启设备。
 
 ### 小组件与文件夹
 
@@ -138,6 +142,8 @@ Gboard 支持悬浮键盘玻璃、相关工具栏玻璃，以及独立颜色和�
 
 ## 安装
 
+升级前请备份桌面布局。LiquidDock 的 JSON 配置备份不等同于系统桌面布局备份；更改网格前也应保留可恢复的布局。
+
 1. 从 [GitHub Releases](https://github.com/yu4032/LiquidDock/releases) 下载最新 APK。
 2. 安装后在 LSPosed 中启用 LiquidDock。
 3. 根据需要勾选作用域：
@@ -149,6 +155,7 @@ Gboard 支持悬浮键盘玻璃、相关工具栏玻璃，以及独立颜色和�
 | `com.miui.securitycenter` | 仅安全中心侧边栏玻璃需要 |
 | `com.google.android.inputmethod.latin` | 仅 Gboard 适配需要 |
 | `com.android.quicksearchbox` | 仅 MIUI 系统搜索玻璃需要 |
+| `system`（System Framework） | 仅可选的壁纸 GPU 渲染开关需要，启用后重启设备 |
 
 4. 重启对应进程，或直接重启设备。
 5. 打开 LiquidDock，根据需要开启和调整功能。
