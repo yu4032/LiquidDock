@@ -37,7 +37,6 @@ public class RestartBoundSettingsContractTest {
         String[] summaries = {
                 "enable_liquiddock_summary",
                 "enable_grid_8x4_summary",
-                "enable_widget_adaptation_summary",
                 "dock_resize_animation_summary",
                 "dock_smooth_resize_animation_summary",
                 "workstation_customization_summary"

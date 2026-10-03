@@ -11,16 +11,15 @@ import static org.junit.Assert.assertEquals;
 
 public class ConfigLoadPolicyTest {
     @After
-    public void restoreWidgetAdaptationState() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(false);
+    public void restoreWidgetGridState() {
+        WidgetGridSizing.setCustomGridEnabled(false);
     }
 
     @Test
-    public void loadingConfigDoesNotEnableWidgetAdaptation() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(false);
+    public void loadingConfigDoesNotMutateWidgetGridRuntimeState() {
+        WidgetGridSizing.setCustomGridEnabled(false);
         Map<String, Object> prefs = new HashMap<>();
         prefs.put("home_grid_8x4", true);
-        prefs.put("grid_widget_adaptation", true);
 
         LiquidDockConfig.from(new ConfigReader(prefs));
 

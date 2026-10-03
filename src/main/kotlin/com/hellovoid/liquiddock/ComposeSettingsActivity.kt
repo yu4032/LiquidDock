@@ -627,13 +627,6 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     masterEnabled,
                 ) { customGrid = it }
                 gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.WIDGET_ADAPTATION,
-                    "自由小组件占格",
-                    "按当前网格允许任意合法 spanX×spanY，不再限制为 1×1、2×1、2×2、4×2",
-                    masterEnabled && customGrid,
-                )
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }

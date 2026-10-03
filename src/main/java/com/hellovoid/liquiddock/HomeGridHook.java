@@ -12,12 +12,12 @@ import java.util.Map;
 final class HomeGridHook {
     private static final String PAD_CELL_COUNT =
             "com.miui.home.launcher.compat.LauncherCellCountCompatPadDevice";
+    private static final String DEVICE_CONFIG =
+            "com.miui.home.launcher.DeviceConfig";
 
     private HomeGridHook() {}
 
     static void setWorkstationMode(boolean enabled) {
-        // Workstation state is owned outside Grid. This callback only requests the same refresh
-        // that the former local boolean setter requested.
         HomeGridRotationRefreshHook.scheduleAllPageRefresh();
     }
 
@@ -39,6 +39,7 @@ final class HomeGridHook {
             hookAxis(compat, "getCellCountYDef", false, config);
 
             HomeGridAuthorityHook.install(classLoader, config);
+            HomeGridSqueezePlannerHook.install(classLoader, config);
             installRotationTransform(classLoader, config);
             HomeGridPageIndicatorHook.install(classLoader, config);
             HomeGridCellGeometryHook.install(classLoader, config);
@@ -68,10 +69,9 @@ final class HomeGridHook {
             if (!config.matchesGrid(h, v) || isVendorSixByFour(h, v)) {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             }
-            if (!reflowOccupiedMatrix(owner)) {
-                MainHook.log("[DC][HomeGridRotation] generic transform failed for "
-                        + h + "x" + v + "; preserving empty destination rather than invoking "
-                        + "the vendor 4x6-only transform");
+            if (!transformAtomic(owner)) {
+                MainHook.log("[DC][HomeGridRotation] atomic transform failed for "
+                        + h + "x" + v);
             }
             return owner;
         });
@@ -81,112 +81,365 @@ final class HomeGridHook {
         return (h == 6 && v == 4) || (h == 4 && v == 6);
     }
 
-    private static boolean reflowOccupiedMatrix(Object owner) {
+    /**
+     * Uses orientation-specific positions synchronously inside MIUI's transform.
+     *
+     * <p>The current orientation is captured before any move. If the target orientation has already
+     * been seen, its exact positions are restored directly into mDstOccupied. Only the first visit
+     * to an orientation is generated from MIUI's macroblock order. There is no delayed View restore
+     * after configuration change, so widgets cannot be snapped again after Launcher has laid out the
+     * target workspace.</p>
+     */
+    private static boolean transformAtomic(Object owner) {
         try {
             Object[][] src = (Object[][]) HookUtil.getField(owner, "mSrcOccupied");
             Object[][] dst = (Object[][]) HookUtil.getField(owner, "mDstOccupied");
-            if (src == null || dst == null || src.length == 0 || dst.length == 0
-                    || src[0] == null || dst[0] == null) {
-                return false;
-            }
+            if (!validMatrix(src) || !validMatrix(dst)) return false;
 
             int srcCols = src.length;
             int srcRows = src[0].length;
             int dstCols = dst.length;
             int dstRows = dst[0].length;
-            Map<Object, TransformItem> byData = new LinkedHashMap<>();
+            if (srcCols * srcRows != dstCols * dstRows) return false;
 
-            for (int x = 0; x < srcCols; x++) {
-                if (src[x] == null) continue;
-                for (int y = 0; y < Math.min(srcRows, src[x].length); y++) {
-                    Object info = src[x][y];
-                    if (info == null) continue;
-                    HookUtil.InvocationResult<Object> dataResult =
-                            HookUtil.tryInvoke(info, "getMData");
-                    if (!dataResult.succeeded() || dataResult.value() == null) continue;
-                    Object data = dataResult.value();
-                    TransformItem item = byData.get(data);
-                    if (item == null) {
-                        item = new TransformItem(info, x, y);
-                        byData.put(data, item);
-                    } else {
-                        item.include(x, y);
+            Map<Object, TransformItem> byData = collectItems(src, srcCols, srcRows);
+            if (byData.isEmpty()) return true;
+
+            Long sourceScreenId = commonScreenId(byData.values());
+            Map<Long, HomeGridRotationPositionMemory.Position> sourcePositions =
+                    positionsOf(byData.values());
+            if (sourceScreenId != null) {
+                HomeGridRotationPositionMemory.save(
+                        srcCols, srcRows, sourceScreenId, sourcePositions);
+            }
+
+            Object[][] staged = copyMatrix(dst, dstCols, dstRows);
+            boolean[][] occupied = new boolean[dstCols][dstRows];
+
+            if (sourceScreenId != null && restoreRemembered(
+                    byData.values(), staged, occupied,
+                    dstCols, dstRows, sourceScreenId)) {
+                copyInto(staged, dst, dstCols, dstRows);
+                return true;
+            }
+
+            clearOccupied(occupied);
+            staged = copyMatrix(dst, dstCols, dstRows);
+            Map<Long, HomeGridRotationPositionMemory.Position> targetPositions =
+                    new LinkedHashMap<>();
+
+            List<TransformItem> widgets = new ArrayList<>();
+            List<TransformItem> icons = new ArrayList<>();
+            for (TransformItem item : byData.values()) {
+                if (item.isWidget()) widgets.add(item);
+                else icons.add(item);
+            }
+
+            widgets.sort(Comparator
+                    .comparingInt(TransformItem::area).reversed()
+                    .thenComparingInt(item -> HomeGridRotationCellMap.rank(
+                            srcCols, srcRows, item.minX, item.minY)));
+
+            for (TransformItem widget : widgets) {
+                HomeGridRotationCellMap.Cell mapped = HomeGridRotationCellMap.map(
+                        srcCols, srcRows, dstCols, dstRows,
+                        widget.minX, widget.minY);
+                if (mapped == null) return false;
+
+                int preferredX = Math.max(
+                        0, Math.min(mapped.x, dstCols - widget.width()));
+                int preferredY = Math.max(
+                        0, Math.min(mapped.y, dstRows - widget.height()));
+                int[] target = findNearestWidgetCell(
+                        occupied, dstCols, dstRows,
+                        widget.width(), widget.height(),
+                        preferredX, preferredY);
+                if (target == null) return false;
+
+                occupy(staged, occupied, widget.info,
+                        target[0], target[1], widget.width(), widget.height());
+                remember(targetPositions, widget, target[0], target[1]);
+            }
+
+            boolean rtl = isLayoutRtl(owner);
+            icons.sort((left, right) -> {
+                int byRow = Integer.compare(left.minY, right.minY);
+                if (byRow != 0) return byRow;
+                return rtl
+                        ? Integer.compare(right.minX, left.minX)
+                        : Integer.compare(left.minX, right.minX);
+            });
+
+            int iconIndex = 0;
+            for (int y = 0; y < dstRows && iconIndex < icons.size(); y++) {
+                if (rtl) {
+                    for (int x = dstCols - 1; x >= 0 && iconIndex < icons.size(); x--) {
+                        if (occupied[x][y]) continue;
+                        TransformItem icon = icons.get(iconIndex++);
+                        occupy(staged, occupied, icon.info, x, y, 1, 1);
+                        remember(targetPositions, icon, x, y);
+                    }
+                } else {
+                    for (int x = 0; x < dstCols && iconIndex < icons.size(); x++) {
+                        if (occupied[x][y]) continue;
+                        TransformItem icon = icons.get(iconIndex++);
+                        occupy(staged, occupied, icon.info, x, y, 1, 1);
+                        remember(targetPositions, icon, x, y);
                     }
                 }
             }
+            if (iconIndex != icons.size()) return false;
 
-            List<TransformItem> items = new ArrayList<>(byData.values());
-            items.sort(Comparator
-                    .comparingInt((TransformItem item) -> item.area() == 1 ? 1 : 0)
-                    .thenComparingInt(item -> item.minY * srcCols + item.minX));
-
-            boolean[][] occupied = new boolean[dstCols][dstRows];
-            for (TransformItem item : items) {
-                int spanX = item.width();
-                int spanY = item.height();
-                if (spanX > dstCols || spanY > dstRows) {
-                    MainHook.log("[DC][HomeGridRotation] item span " + spanX + "x" + spanY
-                            + " cannot fit destination " + dstCols + "x" + dstRows);
-                    return false;
-                }
-                int preferred = Math.min(
-                        dstCols * dstRows - 1,
-                        item.minY * srcCols + item.minX);
-                int[] cell = findFreeCell(occupied, dstCols, dstRows, spanX, spanY, preferred);
-                if (cell == null) {
-                    MainHook.log("[DC][HomeGridRotation] no destination slot for span "
-                            + spanX + "x" + spanY);
-                    return false;
-                }
-                for (int x = cell[0]; x < cell[0] + spanX; x++) {
-                    for (int y = cell[1]; y < cell[1] + spanY; y++) {
-                        occupied[x][y] = true;
-                        dst[x][y] = item.info;
-                    }
-                }
-            }            return true;
+            if (sourceScreenId != null) {
+                HomeGridRotationPositionMemory.save(
+                        dstCols, dstRows, sourceScreenId, targetPositions);
+            }
+            copyInto(staged, dst, dstCols, dstRows);
+            return true;
         } catch (Throwable error) {
-            MainHook.log("[DC][HomeGridRotation] reflow error: " + error);
+            MainHook.log("[DC][HomeGridRotation] atomic transform error: " + error);
             return false;
         }
     }
 
-    private static int[] findFreeCell(
+    private static boolean restoreRemembered(
+            Iterable<TransformItem> items,
+            Object[][] staged,
+            boolean[][] occupied,
+            int cols,
+            int rows,
+            long screenId) {
+        ArrayList<Long> ids = new ArrayList<>();
+        ArrayList<TransformItem> ordered = new ArrayList<>();
+        for (TransformItem item : items) {
+            if (item.stableId == null) return false;
+            ids.add(item.stableId);
+            ordered.add(item);
+        }
+
+        Map<Long, HomeGridRotationPositionMemory.Position> remembered =
+                HomeGridRotationPositionMemory.load(cols, rows, screenId, ids);
+        if (remembered.size() != ordered.size()) return false;
+
+        ordered.sort(Comparator.comparingInt(TransformItem::area).reversed());
+        for (TransformItem item : ordered) {
+            HomeGridRotationPositionMemory.Position position =
+                    remembered.get(item.stableId);
+            if (position == null
+                    || position.spanX != item.width()
+                    || position.spanY != item.height()
+                    || !fitsFree(occupied, cols, rows,
+                            position.x, position.y,
+                            item.width(), item.height())) {
+                return false;
+            }
+            occupy(staged, occupied, item.info,
+                    position.x, position.y,
+                    item.width(), item.height());
+        }
+        return true;
+    }
+
+    private static Map<Long, HomeGridRotationPositionMemory.Position> positionsOf(
+            Iterable<TransformItem> items) {
+        LinkedHashMap<Long, HomeGridRotationPositionMemory.Position> positions =
+                new LinkedHashMap<>();
+        for (TransformItem item : items) {
+            if (item.stableId == null) continue;
+            positions.put(item.stableId,
+                    new HomeGridRotationPositionMemory.Position(
+                            item.minX, item.minY, item.width(), item.height()));
+        }
+        return positions;
+    }
+
+    private static void remember(
+            Map<Long, HomeGridRotationPositionMemory.Position> positions,
+            TransformItem item,
+            int x,
+            int y) {
+        if (item.stableId == null) return;
+        positions.put(item.stableId,
+                new HomeGridRotationPositionMemory.Position(
+                        x, y, item.width(), item.height()));
+    }
+
+    private static Map<Object, TransformItem> collectItems(
+            Object[][] src, int srcCols, int srcRows) {
+        Map<Object, TransformItem> byData = new LinkedHashMap<>();
+        for (int x = 0; x < srcCols; x++) {
+            for (int y = 0; y < srcRows; y++) {
+                Object info = src[x][y];
+                if (info == null) continue;
+                HookUtil.InvocationResult<Object> dataResult =
+                        HookUtil.tryInvoke(info, "getMData");
+                if (!dataResult.succeeded() || dataResult.value() == null) continue;
+                Object data = dataResult.value();
+                TransformItem item = byData.get(data);
+                if (item == null) {
+                    item = new TransformItem(
+                            info, data, x, y, isWidgetInfo(info));
+                    byData.put(data, item);
+                } else {
+                    item.include(x, y);
+                }
+            }
+        }
+        return byData;
+    }
+
+    private static Long commonScreenId(Iterable<TransformItem> items) {
+        Long screenId = null;
+        for (TransformItem item : items) {
+            if (item.stableId == null || item.screenId == null) return null;
+            if (screenId == null) {
+                screenId = item.screenId;
+            } else if (!screenId.equals(item.screenId)) {
+                return null;
+            }
+        }
+        return screenId;
+    }
+
+    private static boolean isWidgetInfo(Object info) {
+        HookUtil.InvocationResult<Object> typeResult = HookUtil.tryInvoke(info, "getMType");
+        if (!typeResult.succeeded() || typeResult.value() == null) return false;
+        return !"ICON".equals(String.valueOf(typeResult.value()));
+    }
+
+    private static int[] findNearestWidgetCell(
             boolean[][] occupied,
             int cols,
             int rows,
             int spanX,
             int spanY,
-            int preferredLinear) {
-        int total = cols * rows;
-        for (int offset = 0; offset < total; offset++) {
-            int index = (preferredLinear + offset) % total;
-            int x = index % cols;
-            int y = index / cols;
-            if (x + spanX > cols || y + spanY > rows) continue;
-            boolean free = true;
-            for (int px = x; px < x + spanX && free; px++) {
-                for (int py = y; py < y + spanY; py++) {
-                    if (occupied[px][py]) {
-                        free = false;
-                        break;
-                    }
+            int preferredX,
+            int preferredY) {
+        int bestX = -1;
+        int bestY = -1;
+        long bestDistance = Long.MAX_VALUE;
+        int bestRank = Integer.MAX_VALUE;
+
+        int maxX = cols - spanX;
+        int maxY = rows - spanY;
+        for (int y = 0; y <= maxY; y++) {
+            for (int x = 0; x <= maxX; x++) {
+                if (!fitsFree(occupied, cols, rows, x, y, spanX, spanY)) continue;
+                long dx = (long) x - preferredX;
+                long dy = (long) y - preferredY;
+                long distance = dx * dx + dy * dy;
+                int rank = HomeGridRotationCellMap.rank(cols, rows, x, y);
+                if (distance < bestDistance
+                        || (distance == bestDistance && rank < bestRank)) {
+                    bestDistance = distance;
+                    bestRank = rank;
+                    bestX = x;
+                    bestY = y;
                 }
             }
-            if (free) return new int[]{x, y};
         }
-        return null;
+        return bestX < 0 ? null : new int[]{bestX, bestY};
+    }
+
+    private static boolean fitsFree(
+            boolean[][] occupied,
+            int cols,
+            int rows,
+            int x,
+            int y,
+            int spanX,
+            int spanY) {
+        if (x < 0 || y < 0 || spanX <= 0 || spanY <= 0
+                || (long) x + spanX > cols || (long) y + spanY > rows) {
+            return false;
+        }
+        for (int px = x; px < x + spanX; px++) {
+            for (int py = y; py < y + spanY; py++) {
+                if (occupied[px][py]) return false;
+            }
+        }
+        return true;
+    }
+
+    private static void occupy(
+            Object[][] staged,
+            boolean[][] occupied,
+            Object info,
+            int x,
+            int y,
+            int spanX,
+            int spanY) {
+        for (int px = x; px < x + spanX; px++) {
+            for (int py = y; py < y + spanY; py++) {
+                staged[px][py] = info;
+                occupied[px][py] = true;
+            }
+        }
+    }
+
+    private static boolean validMatrix(Object[][] matrix) {
+        if (matrix == null || matrix.length == 0 || matrix[0] == null
+                || matrix[0].length == 0) {
+            return false;
+        }
+        int rows = matrix[0].length;
+        for (Object[] column : matrix) {
+            if (column == null || column.length != rows) return false;
+        }
+        return true;
+    }
+
+    private static Object[][] copyMatrix(Object[][] source, int cols, int rows) {
+        Object[][] copy = new Object[cols][rows];
+        for (int x = 0; x < cols; x++) {
+            System.arraycopy(source[x], 0, copy[x], 0, rows);
+        }
+        return copy;
+    }
+
+    private static void copyInto(
+            Object[][] source, Object[][] target, int cols, int rows) {
+        for (int x = 0; x < cols; x++) {
+            System.arraycopy(source[x], 0, target[x], 0, rows);
+        }
+    }
+
+    private static void clearOccupied(boolean[][] occupied) {
+        for (boolean[] column : occupied) {
+            java.util.Arrays.fill(column, false);
+        }
+    }
+
+    private static boolean isLayoutRtl(Object owner) {
+        try {
+            ClassLoader classLoader = owner.getClass().getClassLoader();
+            Class<?> deviceConfig = Class.forName(DEVICE_CONFIG, false, classLoader);
+            HookUtil.InvocationResult<Object> result =
+                    HookUtil.tryInvokeStatic(deviceConfig, "isLayoutRtl");
+            return result.succeeded() && Boolean.TRUE.equals(result.value());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static final class TransformItem {
         final Object info;
+        final boolean widgetType;
+        final Long stableId;
+        final Long screenId;
         int minX;
         int minY;
         int maxX;
         int maxY;
 
-        TransformItem(Object info, int x, int y) {
+        TransformItem(
+                Object info, Object data, int x, int y, boolean widgetType) {
             this.info = info;
+            this.widgetType = widgetType;
+            HomeGridRotationPositionMemory.Identity identity =
+                    HomeGridRotationPositionMemory.identity(data);
+            this.stableId = identity == null ? null : identity.itemId;
+            this.screenId = identity == null ? null : identity.screenId;
             this.minX = this.maxX = x;
             this.minY = this.maxY = y;
         }
@@ -208,6 +461,10 @@ final class HomeGridHook {
 
         int area() {
             return width() * height();
+        }
+
+        boolean isWidget() {
+            return widgetType || width() > 1 || height() > 1;
         }
     }
 

@@ -96,7 +96,7 @@ public class HomeGridOrientationRuntimeTest {
     }
 
     @Test
-    public void rememberedTargetRejectsOffMacroblockTwoByTwo() {
+    public void rememberedTargetAllowsOffMacroblockTwoByTwo() {
         MapStore store = new MapStore();
         HomeGridOrientationMemory memory = new HomeGridOrientationMemory(store);
         HomeGridOrientationRuntime runtime = new HomeGridOrientationRuntime(
@@ -106,7 +106,7 @@ public class HomeGridOrientationRuntimeTest {
                 HomeGridOrientation.PORTRAIT,
                 pos(1, 0, 1, 3, 2, 2)));
 
-        assertNull(runtime.rememberedTarget(
+        assertNotNull(runtime.rememberedTarget(
                 HomeGridOrientation.PORTRAIT,
                 Arrays.asList(pos(1, 0, 2, 0, 2, 2))));
     }

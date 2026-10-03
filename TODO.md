@@ -240,7 +240,7 @@ Dialog 生命周期短，因此优先级低于 Workspace/Dock。
 
 ---
 
-## P1 · WidgetGridSizing state and widget classification
+
 
 **状态：部分完成。**
 

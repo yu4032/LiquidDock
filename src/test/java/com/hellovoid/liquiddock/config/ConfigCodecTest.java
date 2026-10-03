@@ -13,11 +13,10 @@ import static org.junit.Assert.assertFalse;
 
 public class ConfigCodecTest {
     @Test
-    public void representativeExportPreservesLegacyFieldsAndAddsWidgetAdaptation() {
+    public void representativeExportPreservesCurrentFields() {
         Map<String, Object> prefs = new HashMap<>();
         prefs.put("liquiddock_enabled", false);
         prefs.put("home_grid_8x4", true);
-        prefs.put("grid_widget_adaptation", true);
         prefs.put("grid_landscape_horizontal_distance", -3);
         prefs.put("grid_landscape_horizontal_distance_tenths", -27);
         prefs.put("indicator_landscape_y", -8);
@@ -42,7 +41,6 @@ public class ConfigCodecTest {
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("liquiddock_enabled", false);
         expected.put("home_grid_8x4", true);
-        expected.put("grid_widget_adaptation", true);
         expected.put("grid_landscape_horizontal_distance", -2.7d);
         expected.put("indicator_landscape_y", -7.7d);
         expected.put("dock_customization", false);
@@ -88,7 +86,6 @@ public class ConfigCodecTest {
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("grid_margins_dp", true);
         expected.put("grid_margins_offset", true);
-        expected.put("grid_widget_adaptation", true);
         expected.put("liquid_capture_power_limit_fps", 60);
         expected.put("dock_shadow_alpha", 0);
         expected.put("dock_divider_width_dp", 160);
@@ -105,15 +102,14 @@ public class ConfigCodecTest {
     }
 
     @Test
-    public void widgetAdaptationRoundTrips() {
+    public void retiredWidgetAdaptationFieldIsIgnored() {
         Map<String, Object> prefs = new HashMap<>();
         prefs.put("grid_widget_adaptation", true);
+        assertFalse(ConfigCodec.exportValues(prefs).containsKey("grid_widget_adaptation"));
 
-        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
-        assertEquals(Boolean.TRUE, exported.get("grid_widget_adaptation"));
-
-        Map<String, Object> imported = ConfigCodec.importValues(exported);
-        assertEquals(Boolean.TRUE, imported.get("grid_widget_adaptation"));
+        Map<String, Object> json = new HashMap<>();
+        json.put("grid_widget_adaptation", true);
+        assertFalse(ConfigCodec.importValues(json).containsKey("grid_widget_adaptation"));
     }
 
     @Test
