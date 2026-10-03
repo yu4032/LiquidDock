@@ -455,24 +455,23 @@ Workstation 使用独立参数和 runtime state。
 
 ## 15. Home grid architecture
 
-`HomeGridHook` 现在是较薄的 composition root。
+`HomeGridHook` 是自由 HOME grid 的 composition root。旧的 `HomeGridProfile`、8×4/10×6 profile overlay、专用 count/centering/vertical-bounds 栈已经移除。
 
-已拆分的主要 owner：
+当前唯一尺寸来源是 `grid_columns/grid_rows`，规范化后进入 `HomeGridInstallConfig` / `HomeGridDimensions`。主要 owner：
 
-- `HomeGridProfileOverlayHook`；
-- `HomeGridOrientationMemoryHook`；
-- `HomeGridMutationCaptureHook`；
-- `HomeGridDeviceConfigCountHook`；
-- `HomeGridHorizontalCenteringHook`；
-- `HomeGridVerticalBoundsHook`；
-- `HomeGridCellGeometryHook`；
+- `HomeGridAuthorityHook`：绑定 Launcher 4.50 的真实 `GridController/GridConfig` authority；
+- `HomeGridCellGeometryHook`：统一处理所有尺寸的 cell geometry 与 widget frame；
+- `HomeGridOrientationMemoryHook` / `HomeGridMutationCaptureHook`：按动态尺寸和方向保存/恢复完整布局；
+- `HomeGridPlacementPlanner` / `HomeGridRotationPlacementPolicy`：所有 2×2～10×6 网格共用的确定性旋转规划；
 - `HomeGridFolderAlignmentHook`；
 - `HomeGridPageIndicatorHook`；
 - `HomeGridRotationRefreshHook`；
 - `WorkspaceDropRuleHook`；
 - `HomeGridDragBoundsHook`。
 
-原则仍是：MIUI 拥有 placement/occupancy；LiquidDock 调整 profile、geometry、bounds 与合法 drop，不建立自己的 occupancy matrix。
+旋转规则是“较大占格项先落到目标方向的最终合法位置，随后 1×1 图标优先填补同页空位”；只有当前页真实容量不足时才允许 Launcher 的页面策略介入。奇数尺寸、非标准 widget 起点和 8×4/10×6 都不走专用分支。
+
+MIUI 继续拥有持久 placement/occupancy、页面 reparent 与数据库生命周期。LiquidDock 的临时 occupancy 只存在于一次 transform/planner 调用中，不成为长期第二权威。
 
 ---
 

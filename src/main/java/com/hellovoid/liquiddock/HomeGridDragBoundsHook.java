@@ -6,25 +6,22 @@ import java.lang.reflect.Method;
 
 import io.github.libxposed.api.XposedInterface;
 
-/** Keeps DragController bounds aligned with the live Launcher workspace for the 10x6 profile. */
+/** Keeps DragController bounds aligned with the live Launcher workspace for any custom grid. */
 final class HomeGridDragBoundsHook {
     private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
     private static boolean installed;
 
     private HomeGridDragBoundsHook() {}
 
-    static void install(ClassLoader classLoader, boolean customGridEnabled,
-                        HomeGridProfile selectedProfile) {
-        if (installed || !customGridEnabled || selectedProfile != HomeGridProfile.GRID_10X6) {
-            return;
-        }
+    static void install(ClassLoader classLoader, boolean customGridEnabled) {
+        if (installed || !customGridEnabled) return;
         try {
             Class<?> launcher = Class.forName(LAUNCHER, false, classLoader);
             hookDimension(launcher, "getScreenWidthForDragController", false);
             hookDimension(launcher, "getScreenHeightForDragController", true);
             installed = true;
         } catch (Throwable error) {
-            MainHook.log("[DC] 10x6 DragController bounds unavailable: " + error);
+            MainHook.log("[DC] custom-grid DragController bounds unavailable: " + error);
         }
     }
 

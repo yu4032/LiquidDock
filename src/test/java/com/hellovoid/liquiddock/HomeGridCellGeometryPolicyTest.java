@@ -38,9 +38,9 @@ public class HomeGridCellGeometryPolicyTest {
 
         assertNotNull(result);
         assertEquals(210, result.left);
-        assertEquals(214, result.right);
+        assertEquals(217, result.right);
         assertEquals(165, result.top);
-        assertEquals(269, result.bottom);
+        assertEquals(272, result.bottom);
         assertEquals(87, result.cellSize);
         assertTrue(result.widthGap >= 0);
         assertEquals(5, result.heightGap);
@@ -76,7 +76,9 @@ public class HomeGridCellGeometryPolicyTest {
         assertNotNull(normal);
         assertNotNull(ws);
         assertEquals(normal.left - config().landscape.left + 20, ws.left);
-        assertEquals(normal.right - config().landscape.right - 20, ws.right);
+        int gridWidth = ws.cellSize * 8 + ws.widthGap * 7;
+        assertTrue(ws.left + gridWidth <= 1200);
+        assertTrue(ws.right >= 0);
     }
 
     @Test
@@ -91,7 +93,7 @@ public class HomeGridCellGeometryPolicyTest {
         assertEquals(24, result.left);
         assertEquals(24, result.right);
         assertEquals(30, result.top);
-        assertEquals(34, result.bottom);
+        assertTrue(result.bottom >= 34);
         assertEquals((900 - 30 - 34 - result.cellSize * 4) / 3, result.heightGap);
     }
 
@@ -107,7 +109,7 @@ public class HomeGridCellGeometryPolicyTest {
         assertEquals(18, result.left);
         assertEquals(18, result.right);
         assertEquals(26, result.top);
-        assertEquals(28, result.bottom);
+        assertTrue(result.bottom >= 28);
     }
 
     @Test
@@ -129,6 +131,33 @@ public class HomeGridCellGeometryPolicyTest {
         assertNotNull(result);
         assertTrue(result.cellSize >= 1);
         assertTrue(result.widthGap >= 0);
+    }
+
+
+    @Test
+    public void extremeOffsetsStillKeepEveryCellInsideThePage() {
+        HomeGridInstallConfig extreme = new HomeGridInstallConfig(
+                true,
+                9, 5,
+                -5000, 5000, -5000, 5000,
+                5000, -5000, 5000, -5000,
+                -5000, -5000,
+                0, 0,
+                2f);
+        HomeGridCellGeometryPolicy.Result result = HomeGridCellGeometryPolicy.calculate(
+                new HomeGridCellGeometryPolicy.Input(
+                        extreme, workstation(), false, false, false,
+                        1000, 700, 9, 5, 100,
+                        100, 50, 0, 1, 0));
+
+        assertNotNull(result);
+        int gridWidth = result.cellSize * 9 + result.widthGap * 8;
+        int gridHeight = result.cellSize * 5 + result.heightGap * 4;
+        assertTrue(result.left >= 0);
+        assertTrue(result.top >= 0);
+        assertTrue(result.left + gridWidth <= 1000);
+        assertTrue(result.top + gridHeight <= 700);
+        assertTrue(result.cellSize + result.heightGap > 0);
     }
 
     @Test

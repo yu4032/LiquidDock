@@ -47,6 +47,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "MiuiSearchboxGlassContractTest.java",
             "ThirdPartyAppRestartDescriptorTest.java",
             "HookUtilArchitectureContractTest.java",
+            "HomeGridRotationTransformContractTest.java",
             "Launcher450IconSizeContractTest.java",
             "LauncherGlassStaticBoundaryTest.java",
             "LauncherGlassVendorMaterialSuppressionContractTest.java",
@@ -80,8 +81,6 @@ public class RuntimeBehaviorTestPolicyContractTest {
      */
     private static final Set<String> LEGACY_SOURCE_DEBT = Set.of(
             "GlassConfigGenerationContractTest.java",
-            "HomeGridOrientationMemoryHookContractTest.java",
-            "HomeGridProfileOverlayContractTest.java",
             "Miuix307EdgeOverscanContractTest.java",
             "PrismalModuleBoundaryContractTest.java",
             "PrismalOfficialParityV3Test.java",

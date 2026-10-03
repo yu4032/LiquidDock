@@ -28,7 +28,7 @@ final class HomeGridOrientationMemoryHook {
     private static final long MID_DELAY_MS = 180L;
 
     private static final Object RUNTIME_LOCK = new Object();
-    private static volatile HomeGridProfile profile;
+    private static volatile HomeGridDimensions dimensions;
     private static volatile HomeGridOrientationRuntime runtime;
     private static volatile HomeGridOrientation lastOrientation;
     private static WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -36,15 +36,15 @@ final class HomeGridOrientationMemoryHook {
     private HomeGridOrientationMemoryHook() {}
 
     static void install(ClassLoader classLoader, boolean customGridEnabled,
-                        HomeGridProfile selectedProfile) {
-        if (!customGridEnabled || selectedProfile == null) return;
-        profile = selectedProfile;
+                        HomeGridDimensions gridDimensions) {
+        if (!customGridEnabled || gridDimensions == null) return;
+        dimensions = gridDimensions;
         try {
             Class<?> launcher = Class.forName(LAUNCHER, false, classLoader);
             installSetupViewsHook(launcher);
             installConfigurationHook(launcher);
-            MainHook.log("[DC] orientation layout memory installed profile="
-                    + selectedProfile.persistedValue());
+            MainHook.log("[DC] orientation layout memory installed grid="
+                    + gridDimensions.key());
         } catch (Throwable error) {
             MainHook.log("[DC] orientation layout memory unavailable: " + error);
         }
@@ -107,14 +107,14 @@ final class HomeGridOrientationMemoryHook {
     private static HomeGridOrientationRuntime runtimeFor(Object launcher) {
         HomeGridOrientationRuntime current = runtime;
         if (current != null) return current;
-        if (!(launcher instanceof Context) || profile == null) return null;
+        if (!(launcher instanceof Context) || dimensions == null) return null;
         synchronized (RUNTIME_LOCK) {
             if (runtime != null) return runtime;
             SharedPreferences preferences = ((Context) launcher).getSharedPreferences(
                     PREFS_NAME, Context.MODE_PRIVATE);
             HomeGridOrientationMemory memory = new HomeGridOrientationMemory(
                     new HomeGridSharedPreferencesMemoryStore(preferences));
-            runtime = new HomeGridOrientationRuntime(profile, memory);
+            runtime = new HomeGridOrientationRuntime(dimensions, memory);
             return runtime;
         }
     }
@@ -156,8 +156,13 @@ final class HomeGridOrientationMemoryHook {
         if (remembered != null) {
             if (applySnapshotAtomically(workspace, remembered)) {
                 HomeGridHook.scheduleAllPageRefresh();
+                return;
             }
-            return;
+            if (!finalAttempt) return;
+
+            active.invalidate(targetOrientation);
+            MainHook.log("[DC][HomeGridRestore] stale target invalidated orientation="
+                    + targetOrientation);
         }
         if (finalAttempt) {
             HomeGridLayoutSnapshot captured = active.captureCurrent(targetOrientation, current);
@@ -208,47 +213,165 @@ final class HomeGridOrientationMemoryHook {
     }
 
     /**
-     * Preflight every target id and screen before mutating any ItemInfo. Cross-screen moves are
-     * deliberately rejected because changing screenId alone cannot safely reparent the View.
+     * Restores a remembered orientation through the same CellLayout occupancy chain used by a
+     * normal Launcher drop. ItemInfo, GridOccupancyController and LayoutParams must never diverge.
      */
     private static boolean applySnapshotAtomically(View workspace,
                                                    HomeGridLayoutSnapshot snapshot) {
         if (workspace == null || snapshot == null) return false;
-        HashMap<Long, Object> tags = new HashMap<>();
-        if (!collectItemTags(workspace, tags) || tags.size() != snapshot.size()) return false;
+
+        HashMap<Long, ItemBinding> bindings = new HashMap<>();
+        if (!collectItemBindings(workspace, null, bindings)
+                || bindings.size() != snapshot.size()) {
+            MainHook.log("[DC][HomeGridRestore] defer: incomplete item/view binding");
+            return false;
+        }
+
+        int expectedColumns = snapshot.dimensions().columns(snapshot.orientation());
+        int expectedRows = snapshot.dimensions().rows(snapshot.orientation());
+        ArrayList<ItemBinding> ordered = new ArrayList<>();
+        ArrayList<HomeGridItemPosition> original = new ArrayList<>();
 
         for (HomeGridItemPosition target : snapshot.positions()) {
-            Object tag = tags.get(target.itemId());
-            if (tag == null) return false;
+            ItemBinding binding = bindings.get(target.itemId());
+            if (binding == null || binding.cellLayout == null) {
+                MainHook.log("[DC][HomeGridRestore] defer: missing CellLayout item="
+                        + target.itemId());
+                return false;
+            }
             try {
-                if (HookUtil.getLongField(tag, "screenId") != target.screenId()) return false;
+                long currentScreen = HookUtil.getLongField(binding.tag, "screenId");
+                if (currentScreen != target.screenId()) return false;
+
+                HookUtil.InvocationResult<Object> pageScreen =
+                        HookUtil.tryInvoke(binding.cellLayout, "getScreenId");
+                if (!pageScreen.succeeded()
+                        || !(pageScreen.value() instanceof Long)
+                        || ((Long) pageScreen.value()) != target.screenId()) {
+                    return false;
+                }
+
+                int liveColumns = HookUtil.getIntField(binding.cellLayout, "mHCells");
+                int liveRows = HookUtil.getIntField(binding.cellLayout, "mVCells");
+                int[] xs = (int[]) HookUtil.getField(binding.cellLayout, "mXs");
+                int[] ys = (int[]) HookUtil.getField(binding.cellLayout, "mYs");
+                int cellWidth = HookUtil.getIntField(binding.cellLayout, "mCellWidth");
+                int cellHeight = HookUtil.getIntField(binding.cellLayout, "mCellHeight");
+                if (!HomeGridRestorePolicy.matrixReady(
+                        expectedColumns, expectedRows,
+                        liveColumns, liveRows, xs, ys)) {
+                    MainHook.log("[DC][HomeGridRestore] defer: topology not ready expected="
+                            + expectedColumns + "x" + expectedRows
+                            + " live=" + liveColumns + "x" + liveRows);
+                    return false;
+                }
+                if (!HomeGridRestorePolicy.gridEnvelopeInside(
+                        binding.cellLayout.getWidth(),
+                        binding.cellLayout.getHeight(),
+                        cellWidth, cellHeight, xs, ys)) {
+                    MainHook.log("[DC][HomeGridRestore] defer: physical grid outside CellLayout");
+                    return false;
+                }
+                if (!HomeGridDropLegalityPolicy.isLegal(
+                        liveColumns, liveRows,
+                        target.cellX(), target.cellY(),
+                        target.spanX(), target.spanY())) {
+                    return false;
+                }
+
+                ordered.add(binding);
+                original.add(new HomeGridItemPosition(
+                        target.itemId(),
+                        currentScreen,
+                        HookUtil.getIntField(binding.tag, "cellX"),
+                        HookUtil.getIntField(binding.tag, "cellY"),
+                        HookUtil.getIntField(binding.tag, "spanX"),
+                        HookUtil.getIntField(binding.tag, "spanY")));
             } catch (Throwable error) {
+                MainHook.log("[DC][HomeGridRestore] preflight failed: " + error);
                 return false;
             }
         }
 
         try {
-            for (HomeGridItemPosition target : snapshot.positions()) {
-                Object tag = tags.get(target.itemId());
-                HookUtil.setLongField(tag, "screenId", target.screenId());
-                HookUtil.setIntField(tag, "cellX", target.cellX());
-                HookUtil.setIntField(tag, "cellY", target.cellY());
-                HookUtil.setIntField(tag, "spanX", target.spanX());
-                HookUtil.setIntField(tag, "spanY", target.spanY());
+            // Launcher frees a dragged item's old occupancy before assigning a new cell.
+            for (ItemBinding binding : ordered) {
+                HookUtil.requireInvoke(
+                        binding.cellLayout, "updateCellOccupiedMarks",
+                        binding.view, true, false);
             }
+
+            int index = 0;
+            for (HomeGridItemPosition target : snapshot.positions()) {
+                ItemBinding binding = ordered.get(index++);
+                HookUtil.setIntField(binding.tag, "cellX", target.cellX());
+                HookUtil.setIntField(binding.tag, "cellY", target.cellY());
+                HookUtil.setIntField(binding.tag, "spanX", target.spanX());
+                HookUtil.setIntField(binding.tag, "spanY", target.spanY());
+            }
+
+            // Launcher marks the new position occupied only after ItemInfo has the final target.
+            for (ItemBinding binding : ordered) {
+                HookUtil.requireInvoke(
+                        binding.cellLayout, "updateCellOccupiedMarks",
+                        binding.view, false, false);
+                binding.view.requestLayout();
+                binding.cellLayout.requestLayout();
+                binding.cellLayout.invalidate();
+            }
+
+            workspace.requestLayout();
+            workspace.invalidate();
+            MainHook.log("[DC][HomeGridRestore] restored target=" + snapshot.orientation()
+                    + " items=" + snapshot.size()
+                    + " topology=" + expectedColumns + "x" + expectedRows);
+            return true;
         } catch (Throwable error) {
-            MainHook.log("[DC] orientation snapshot apply failed: " + error);
+            rollbackBindings(ordered, original);
+            MainHook.log("[DC][HomeGridRestore] transaction failed; rolled back: " + error);
             return false;
         }
-
-        requestLayoutRecursively(workspace);
-        workspace.invalidate();
-        MainHook.log("[DC] orientation layout restored target=" + snapshot.orientation()
-                + " items=" + snapshot.size());
-        return true;
     }
 
-    private static boolean collectItemTags(View view, Map<Long, Object> out) {
+    private static void rollbackBindings(
+            List<ItemBinding> bindings,
+            List<HomeGridItemPosition> original) {
+        int count = Math.min(bindings.size(), original.size());
+        for (int i = 0; i < count; i++) {
+            ItemBinding binding = bindings.get(i);
+            try {
+                HookUtil.tryInvoke(
+                        binding.cellLayout, "updateCellOccupiedMarks",
+                        binding.view, true, false);
+            } catch (Throwable ignored) {}
+        }
+        for (int i = 0; i < count; i++) {
+            ItemBinding binding = bindings.get(i);
+            HomeGridItemPosition source = original.get(i);
+            try {
+                HookUtil.setIntField(binding.tag, "cellX", source.cellX());
+                HookUtil.setIntField(binding.tag, "cellY", source.cellY());
+                HookUtil.setIntField(binding.tag, "spanX", source.spanX());
+                HookUtil.setIntField(binding.tag, "spanY", source.spanY());
+                HookUtil.tryInvoke(
+                        binding.cellLayout, "updateCellOccupiedMarks",
+                        binding.view, false, false);
+                binding.view.requestLayout();
+                binding.cellLayout.requestLayout();
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static boolean collectItemBindings(
+            View view,
+            View currentCellLayout,
+            Map<Long, ItemBinding> out) {
+        if (view == null) return true;
+        View page = currentCellLayout;
+        if ("com.miui.home.launcher.CellLayout".equals(view.getClass().getName())) {
+            page = view;
+        }
+
         Object tag = view.getTag();
         if (tag != null) {
             try {
@@ -259,19 +382,34 @@ final class HomeGridOrientationMemoryHook {
                     HookUtil.getIntField(tag, "cellY");
                     HookUtil.getIntField(tag, "spanX");
                     HookUtil.getIntField(tag, "spanY");
-                    if (out.put(id, tag) != null) return false;
+                    if (page == null || out.put(id, new ItemBinding(view, tag, page)) != null) {
+                        return false;
+                    }
                 }
             } catch (Throwable ignored) {
                 // Structural/non-ItemInfo tag.
             }
         }
+
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
             for (int index = 0; index < group.getChildCount(); index++) {
-                if (!collectItemTags(group.getChildAt(index), out)) return false;
+                if (!collectItemBindings(group.getChildAt(index), page, out)) return false;
             }
         }
         return true;
+    }
+
+    private static final class ItemBinding {
+        final View view;
+        final Object tag;
+        final View cellLayout;
+
+        ItemBinding(View view, Object tag, View cellLayout) {
+            this.view = view;
+            this.tag = tag;
+            this.cellLayout = cellLayout;
+        }
     }
 
     private static void requestLayoutRecursively(View view) {

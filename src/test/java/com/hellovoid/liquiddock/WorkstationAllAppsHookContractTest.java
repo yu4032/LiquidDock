@@ -53,7 +53,7 @@ public class WorkstationAllAppsHookContractTest {
     public void normalWorkspaceOrientationGuardDoesNotDiscardAllAppsLayout() throws IOException {
         String source = source();
         assertTrue("All Apps must bypass the normal Workspace orientation-bounds guard",
-                source.contains("if (!workstationAllApps && !sizeMatchesOrientation(layout, width, height)) return;"));
+                source.contains("if (!workstationAllApps && !sizeMatchesOrientation(layout, width, height)) return false;"));
     }
 
     @Test

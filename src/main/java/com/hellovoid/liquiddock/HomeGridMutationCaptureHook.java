@@ -32,7 +32,7 @@ final class HomeGridMutationCaptureHook {
     private static final HomeGridMutationCapturePolicy CAPTURE_POLICY =
             new HomeGridMutationCapturePolicy();
 
-    private static volatile HomeGridProfile profile;
+    private static volatile HomeGridDimensions dimensions;
     private static volatile HomeGridOrientationRuntime runtime;
     private static volatile HomeGridOrientation lastOrientation;
     private static WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -43,9 +43,9 @@ final class HomeGridMutationCaptureHook {
     private HomeGridMutationCaptureHook() {}
 
     static void install(ClassLoader classLoader, boolean customGridEnabled,
-                        HomeGridProfile selectedProfile) {
-        if (installed || !customGridEnabled || selectedProfile == null) return;
-        profile = selectedProfile;
+                        HomeGridDimensions gridDimensions) {
+        if (installed || !customGridEnabled || gridDimensions == null) return;
+        dimensions = gridDimensions;
         try {
             Class<?> launcher = Class.forName(LAUNCHER, false, classLoader);
             Class<?> cellLayout = Class.forName(CELL_LAYOUT, false, classLoader);
@@ -53,8 +53,8 @@ final class HomeGridMutationCaptureHook {
             installConfigurationHook(launcher);
             installCellLayoutHook(cellLayout);
             installed = true;
-            MainHook.log("[DC] orientation mutation capture installed profile="
-                    + selectedProfile.persistedValue());
+            MainHook.log("[DC] orientation mutation capture installed grid="
+                    + gridDimensions.key());
         } catch (Throwable error) {
             MainHook.log("[DC] orientation mutation capture unavailable: " + error);
         }
@@ -148,14 +148,14 @@ final class HomeGridMutationCaptureHook {
     private static HomeGridOrientationRuntime runtimeFor(Object launcher) {
         HomeGridOrientationRuntime current = runtime;
         if (current != null) return current;
-        if (!(launcher instanceof Context) || profile == null) return null;
+        if (!(launcher instanceof Context) || dimensions == null) return null;
         synchronized (RUNTIME_LOCK) {
             if (runtime != null) return runtime;
             SharedPreferences preferences = ((Context) launcher).getSharedPreferences(
                     PREFS_NAME, Context.MODE_PRIVATE);
             HomeGridOrientationMemory memory = new HomeGridOrientationMemory(
                     new HomeGridSharedPreferencesMemoryStore(preferences));
-            runtime = new HomeGridOrientationRuntime(profile, memory);
+            runtime = new HomeGridOrientationRuntime(dimensions, memory);
             return runtime;
         }
     }
@@ -227,7 +227,7 @@ final class HomeGridMutationCaptureHook {
     private static void scheduleMutationCapture() {
         View workspace = workspaceRef.get();
         HomeGridOrientationRuntime active = runtime;
-        if (workspace == null || active == null || profile == null) return;
+        if (workspace == null || active == null || dimensions == null) return;
 
         final int generation;
         synchronized (STATE_LOCK) {

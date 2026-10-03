@@ -318,6 +318,37 @@ public class ConfigCodecTest {
     }
 
     @Test
+    public void legacyGridProfileImportsIntoFreeAxesOnlyWhenAxesAreAbsent() {
+        Map<String, Object> legacy = new HashMap<>();
+        legacy.put("grid_profile", "10x6");
+
+        Map<String, Object> imported = ConfigCodec.importValues(legacy);
+        assertEquals(10, imported.get("grid_columns"));
+        assertEquals(6, imported.get("grid_rows"));
+        assertFalse(imported.containsKey("grid_profile"));
+
+        legacy.put("grid_columns", 7);
+        legacy.put("grid_rows", 5);
+        imported = ConfigCodec.importValues(legacy);
+        assertEquals(7, imported.get("grid_columns"));
+        assertEquals(5, imported.get("grid_rows"));
+        assertFalse(imported.containsKey("grid_profile"));
+    }
+
+    @Test
+    public void currentExportsNeverContainRetiredGridProfile() {
+        Map<String, Object> prefs = new HashMap<>();
+        prefs.put("grid_profile", "10x6");
+        prefs.put("grid_columns", 9);
+        prefs.put("grid_rows", 5);
+
+        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
+        assertEquals(9, exported.get("grid_columns"));
+        assertEquals(5, exported.get("grid_rows"));
+        assertFalse(exported.containsKey("grid_profile"));
+    }
+
+    @Test
     public void absentOptionalDividerValuesAreNotSynthesized() {
         Map<String, Object> empty = new HashMap<>();
 

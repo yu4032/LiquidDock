@@ -36,10 +36,10 @@ final class WidgetGridSizing {
             return new int[]{0, 0, 0, 0};
         }
 
-        int left = axisBoundary(xs, cellX, cellWidth, widthGap);
-        int right = axisBoundary(xs, cellX + spanX, cellWidth, widthGap);
-        int top = axisBoundary(ys, cellY, cellHeight, heightGap);
-        int bottom = axisBoundary(ys, cellY + spanY, cellHeight, heightGap);
+        int left = xs[cellX];
+        int right = xs[cellX + spanX - 1] + cellWidth;
+        int top = ys[cellY];
+        int bottom = ys[cellY + spanY - 1] + cellHeight;
 
         return new int[]{
                 left,
@@ -47,20 +47,5 @@ final class WidgetGridSizing {
                 Math.max(0, right - left),
                 Math.max(0, bottom - top)
         };
-    }
-
-    private static int axisBoundary(int[] origins, int boundaryIndex,
-                                    int cellSize, int gap) {
-        if (boundaryIndex < origins.length) return origins[boundaryIndex];
-
-        int last = origins.length - 1;
-        int pitch;
-        if (origins.length >= 2) {
-            pitch = origins[last] - origins[last - 1];
-        } else {
-            pitch = cellSize + Math.max(0, gap);
-        }
-        if (pitch <= 0) pitch = Math.max(1, cellSize + Math.max(0, gap));
-        return origins[last] + pitch;
     }
 }

@@ -5,27 +5,27 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Complete validated placement set for one grid profile and orientation. */
+/** Complete validated placement set for one dynamic grid size and orientation. */
 final class HomeGridLayoutSnapshot {
-    private final HomeGridProfile profile;
+    private final HomeGridDimensions dimensions;
     private final HomeGridOrientation orientation;
     private final Map<Long, HomeGridItemPosition> positions;
 
-    private HomeGridLayoutSnapshot(HomeGridProfile profile,
+    private HomeGridLayoutSnapshot(HomeGridDimensions dimensions,
                                    HomeGridOrientation orientation,
                                    Map<Long, HomeGridItemPosition> positions) {
-        this.profile = profile;
+        this.dimensions = dimensions;
         this.orientation = orientation;
         this.positions = Collections.unmodifiableMap(positions);
     }
 
-    static HomeGridLayoutSnapshot create(HomeGridProfile profile,
+    static HomeGridLayoutSnapshot create(HomeGridDimensions dimensions,
                                          HomeGridOrientation orientation,
                                          Collection<HomeGridItemPosition> positions) {
-        if (profile == null || orientation == null || positions == null) return null;
+        if (dimensions == null || orientation == null || positions == null) return null;
 
-        int columns = profile.columns(orientation == HomeGridOrientation.PORTRAIT);
-        int rows = profile.rows(orientation == HomeGridOrientation.PORTRAIT);
+        int columns = dimensions.columns(orientation);
+        int rows = dimensions.rows(orientation);
         LinkedHashMap<Long, HomeGridItemPosition> accepted = new LinkedHashMap<>();
 
         for (HomeGridItemPosition candidate : positions) {
@@ -39,10 +39,10 @@ final class HomeGridLayoutSnapshot {
             accepted.put(candidate.itemId(), candidate);
         }
 
-        return new HomeGridLayoutSnapshot(profile, orientation, accepted);
+        return new HomeGridLayoutSnapshot(dimensions, orientation, accepted);
     }
 
-    HomeGridProfile profile() { return profile; }
+    HomeGridDimensions dimensions() { return dimensions; }
     HomeGridOrientation orientation() { return orientation; }
     int size() { return positions.size(); }
     HomeGridItemPosition get(long itemId) { return positions.get(itemId); }

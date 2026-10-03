@@ -96,24 +96,20 @@ Launcher package ready 后依次完成：
 
 ## 5. Home Grid hooks
 
-当前 Grid 已拆为多个明确 owner：
+当前 Grid 只有一套自由网格权威，运行时尺寸来自 `grid_columns/grid_rows`：
 
-- `HomeGridProfileOverlayHook`；
-- `HomeGridOrientationMemoryHook`；
-- `HomeGridMutationCaptureHook`；
-- `HomeGridDeviceConfigCountHook`；
-- `HomeGridHorizontalCenteringHook`；
-- `HomeGridVerticalBoundsHook`；
-- `HomeGridCellGeometryHook`；
+- `HomeGridAuthorityHook`：改写 HOME 的真实 `GridController/GridConfig`；
+- `HomeGridCellGeometryHook`：按当前真实行列重建 CellLayout 几何与 widget frame；
+- `HomeGridOrientationMemoryHook` / `HomeGridMutationCaptureHook`：以动态 `HomeGridDimensions` 保存每个方向的完整布局；
 - `HomeGridFolderAlignmentHook`；
 - `HomeGridPageIndicatorHook`；
 - `HomeGridRotationRefreshHook`；
-- `WorkspaceDropRuleHook`；
-- `HomeGridDragBoundsHook`。
+- `WorkspaceDropRuleHook`：只做实时边界合法性检查；
+- `HomeGridDragBoundsHook`：对所有自由网格同步 DragController 边界。
 
-`HomeGridHook` 主要负责组合和少量 profile transform。
+`HomeGridHook` 是 composition root，并在旋转时使用统一的 `HomeGridRotationPlacementPolicy`：大 span 先占最终目标格，1×1 图标再在同页剩余空位中回填。2×2～10×6 的所有配置走同一算法，没有 8×4/10×6/奇偶坐标特判。
 
-禁止把 MIUI occupancy matrix 替换成 LiquidDock 自己维护的 matrix。
+MIUI 仍拥有持久 occupancy 与页面/数据库生命周期；LiquidDock 只在一次旋转 transform 内使用临时 planning matrix，不维护第二套长期 occupancy authority。
 
 ---
 

@@ -18,11 +18,11 @@ public class WorkspaceDropRuleHookContractTest {
         String hook = read("WorkspaceDropRuleHook.java");
 
         assertTrue(entry.contains(
-                "WorkspaceDropRuleHook.install(classLoader, customGridEnabled, selectedProfile)"));
+                "WorkspaceDropRuleHook.install(classLoader, customGridEnabled)"));
         assertTrue(hook.contains("LayoutDropRuleForSwapPlaces"));
         assertTrue(hook.contains("\"isLegalXY\""));
         assertTrue(hook.contains("int.class, int.class, int.class, int.class"));
-        assertTrue(hook.contains("HomeGridProfile selectedProfile"));
+        assertFalse(hook.contains("HomeGridProfile selectedProfile"));
         assertTrue(hook.contains("HookUtil.tryInvokeStatic(deviceConfig, \"getCellCountX\")"));
         assertTrue(hook.contains("HookUtil.tryInvokeStatic(deviceConfig, \"getCellCountY\")"));
         assertTrue(hook.contains("columnsResult.succeeded()"));
@@ -32,6 +32,8 @@ public class WorkspaceDropRuleHookContractTest {
         assertTrue(hook.contains("chain.getArg(1)"));
         assertTrue(hook.contains("chain.getArg(2)"));
         assertTrue(hook.contains("chain.getArg(3)"));
-        assertFalse(hook.contains("This callback removes only the stock 6-column swap-placement pattern.\n                        return true;"));
+        assertTrue(hook.contains("return chain.proceed();"));
+        assertFalse(hook.contains("selectedProfile.matchesCounts"));
+        assertFalse(hook.contains("return true;"));
     }
 }

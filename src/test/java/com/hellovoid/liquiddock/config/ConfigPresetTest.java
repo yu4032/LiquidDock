@@ -19,7 +19,8 @@ public class ConfigPresetTest {
         assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Core.ENABLED.name()));
         assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Grid.ICON_SIZE_ENABLED.name()));
         assertEquals(Integer.valueOf(100), defaults.get(ConfigSchema.Grid.ICON_SIZE_PERCENT.name()));
-        assertEquals("8x4", defaults.get(ConfigSchema.Grid.PROFILE.name()));
+        assertEquals(Integer.valueOf(8), defaults.get(ConfigSchema.Grid.COLUMNS.name()));
+        assertEquals(Integer.valueOf(4), defaults.get(ConfigSchema.Grid.ROWS.name()));
 
         assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Dock.ENABLED.name()));
         assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Divider.ENABLED.name()));

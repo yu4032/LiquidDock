@@ -27,6 +27,7 @@ public final class ConfigCodec {
             importValue(key, jsonValues.get(key.name()), out);
         }
         ThirdPartyGlassConfigCodec.importInto(jsonValues, out);
+        importLegacyGridProfile(jsonValues, out);
         importLegacyHorizontalMargins(jsonValues, out);
         importPreAxisLegacyMargins(jsonValues, out);
         importLegacyWorkstationAllAppsOffsets(jsonValues, out);
@@ -34,11 +35,6 @@ public final class ConfigCodec {
     }
 
     private static Object exportValue(ConfigKey<?> key, Map<String, ?> preferences) {
-        if (key == ConfigSchema.Grid.PROFILE) {
-            Object value = preferences.get(key.name());
-            return GridProfileConfig.normalizeProfile(value == null
-                    ? String.valueOf(key.exportDefault()) : String.valueOf(value));
-        }
         if (key == ConfigSchema.Dock.DIMENSIONS_DP || key == ConfigSchema.Glass.DIMENSIONS_DP) {
             return Boolean.TRUE;
         }
@@ -71,10 +67,21 @@ public final class ConfigCodec {
             out.put(key.name(), booleanValue(value));
         } else if (key.type() == ConfigKey.Type.INT && value instanceof Number) {
             out.put(key.name(), clamp(((Number) value).intValue(), key.minInt(), key.maxInt()));
-        } else if (key == ConfigSchema.Grid.PROFILE && value != null) {
-            out.put(key.name(), GridProfileConfig.normalizeProfile(String.valueOf(value)));
         } else if (key.type() == ConfigKey.Type.STRING && value != null) {
             out.put(key.name(), String.valueOf(value));
+        }
+    }
+
+    private static void importLegacyGridProfile(Map<String, ?> jsonValues,
+                                                Map<String, Object> out) {
+        Object value = jsonValues.get("grid_profile");
+        if (value == null) return;
+        boolean tenBySix = "10x6".equalsIgnoreCase(String.valueOf(value));
+        if (!jsonValues.containsKey("grid_columns")) {
+            out.put("grid_columns", tenBySix ? 10 : 8);
+        }
+        if (!jsonValues.containsKey("grid_rows")) {
+            out.put("grid_rows", tenBySix ? 6 : 4);
         }
     }
 

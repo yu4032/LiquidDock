@@ -32,10 +32,10 @@ final class HomeGridCellGeometryHook {
 
         HookUtil.hookMethod(cellLayout, "calculateXsAndYs", new Class<?>[0], chain -> {
             Object owner = chain.getThisObject();
-            applyCellLayoutOffsets(owner);
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-            applyCellLayoutOffsets(owner);
-            rebuildCellCoordinates(owner);
+            if (applyCellLayoutOffsets(owner)) {
+                rebuildCellCoordinates(owner);
+            }
             return result;
         });
 
@@ -84,6 +84,24 @@ final class HomeGridCellGeometryHook {
         return HomeGridCellGeometryPolicy.sizeMatchesOrientation(portrait, width, height);
     }
 
+    static boolean topologyReady(View layout) {
+        if (layout == null) return false;
+        try {
+            Object gridConfig = HookUtil.getField(layout, "mGridConfig");
+            if (gridConfig == null) return false;
+            int countX = (Integer) HookUtil.requireInvoke(gridConfig, "getCountX");
+            int countY = (Integer) HookUtil.requireInvoke(gridConfig, "getCountY");
+            int liveCountX = HookUtil.getIntField(layout, "mHCells");
+            int liveCountY = HookUtil.getIntField(layout, "mVCells");
+            int[] xs = (int[]) HookUtil.getField(layout, "mXs");
+            int[] ys = (int[]) HookUtil.getField(layout, "mYs");
+            return HomeGridRestorePolicy.matrixReady(
+                    countX, countY, liveCountX, liveCountY, xs, ys);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static void prepareGeometryForLayout(View layout) {
         HomeGridInstallConfig current = installConfig;
         if (current == null || !current.enabled) return;
@@ -98,68 +116,57 @@ final class HomeGridCellGeometryHook {
         synchronized (PREPARED_GEOMETRY) {
             Long previous = PREPARED_GEOMETRY.get(layout);
             if (previous != null && previous == signature) return;
-            PREPARED_GEOMETRY.put(layout, signature);
         }
 
-        applyCellLayoutOffsets(layout);
+        if (!applyCellLayoutOffsets(layout)) return;
         rebuildCellCoordinates(layout);
+        synchronized (PREPARED_GEOMETRY) {
+            PREPARED_GEOMETRY.put(layout, signature);
+        }
         MainHook.log("[DC] CellLayout geometry prepared "
                 + width + "x" + height + " orientation=" + orientation);
     }
 
-    private static void applyCellLayoutOffsets(Object cellLayout) {
+    private static boolean applyCellLayoutOffsets(Object cellLayout) {
         try {
             HomeGridInstallConfig current = installConfig;
-            if (current == null) return;
+            if (current == null) return false;
             Object gridConfig = HookUtil.getField(cellLayout, "mGridConfig");
-            if (gridConfig == null || !(cellLayout instanceof View)) return;
+            if (gridConfig == null || !(cellLayout instanceof View)) return false;
             View layout = (View) cellLayout;
             boolean portrait = layout.getResources().getConfiguration().orientation
                     == Configuration.ORIENTATION_PORTRAIT;
 
             int countX = (Integer) HookUtil.requireInvoke(gridConfig, "getCountX");
             int countY = (Integer) HookUtil.requireInvoke(gridConfig, "getCountY");
-            if (countX <= 0 || countY <= 0) return;
+            if (countX <= 0 || countY <= 0) return false;
 
-            // Occupancy remains vendor-owned. We only mirror the dimensions of MIUI's real matrix
-            // when its GridConfig is transiently stale during a rotation/layout boundary.
-            Object gridCells = HookUtil.getField(cellLayout, "mGridCell");
-            if (gridCells != null) {
-                int matrixX = java.lang.reflect.Array.getLength(gridCells);
-                int matrixY = matrixX == 0 ? 0
-                        : java.lang.reflect.Array.getLength(java.lang.reflect.Array.get(gridCells, 0));
-                if (matrixX != countX || matrixY != countY) {
-                    MainHook.log("[DC] grid count/matrix mismatch: config="
-                            + countX + "x" + countY + " matrix=" + matrixX + "x" + matrixY);
-                    countX = matrixX;
-                    countY = matrixY;
-                }
-            }
-            if (countX <= 0 || countY <= 0) return;
-
+            // Topology is native-owned. GridConfig/loadGridConfig must finish before geometry
+            // is applied; never let stale mGridCell or local arrays rewrite mHCells/mVCells.
+            int liveCountX = HookUtil.getIntField(cellLayout, "mHCells");
+            int liveCountY = HookUtil.getIntField(cellLayout, "mVCells");
             int[] xs = (int[]) HookUtil.getField(cellLayout, "mXs");
             int[] ys = (int[]) HookUtil.getField(cellLayout, "mYs");
-            if (xs == null || xs.length != countX) {
-                HookUtil.setField(cellLayout, "mXs", new int[countX]);
+            if (!HomeGridRestorePolicy.matrixReady(
+                    countX, countY, liveCountX, liveCountY, xs, ys)) {
+                MainHook.log("[DC][HomeGridGeometry] defer topology config="
+                        + countX + "x" + countY
+                        + " live=" + liveCountX + "x" + liveCountY);
+                return false;
             }
-            if (ys == null || ys.length != countY) {
-                HookUtil.setField(cellLayout, "mYs", new int[countY]);
-            }
-            HookUtil.setIntField(cellLayout, "mHCells", countX);
-            HookUtil.setIntField(cellLayout, "mVCells", countY);
 
             int baseCell = (Integer) HookUtil.requireInvoke(gridConfig, "getCellSize");
-            if (baseCell <= 0) return;
+            if (baseCell <= 0) return false;
             int configLeft = (Integer) HookUtil.requireInvoke(gridConfig, "getLeft");
             int baseTop = (Integer) HookUtil.requireInvoke(gridConfig, "getTop");
             int baseWidthGap = HookUtil.getIntField(cellLayout, "mWidthGap");
             int baseHeightGap = Math.max(0, HookUtil.getIntField(cellLayout, "mHeightGap"));
             int width = layout.getWidth();
             int height = layout.getHeight();
-            if (width <= 0 || height <= 0) return;
+            if (width <= 0 || height <= 0) return false;
 
             boolean workstationAllApps = isLaptopAllApps(cellLayout);
-            if (!workstationAllApps && !sizeMatchesOrientation(layout, width, height)) return;
+            if (!workstationAllApps && !sizeMatchesOrientation(layout, width, height)) return false;
             boolean workstationActive = workstationAllApps || MainHook.isWorkstationMode();
 
             int dockBarHeight = 0;
@@ -188,7 +195,7 @@ final class HomeGridCellGeometryHook {
                             baseWidthGap,
                             baseHeightGap,
                             dockBarHeight));
-            if (geometry == null) return;
+            if (geometry == null) return false;
 
             HookUtil.setIntField(cellLayout, "mCellPaddingLeft", geometry.left);
             HookUtil.setIntField(cellLayout, "mCellPaddingTop", geometry.top);
@@ -196,8 +203,10 @@ final class HomeGridCellGeometryHook {
             HookUtil.setIntField(cellLayout, "mCellHeight", geometry.cellSize);
             HookUtil.setIntField(cellLayout, "mWidthGap", geometry.widthGap);
             HookUtil.setIntField(cellLayout, "mHeightGap", geometry.heightGap);
+            return true;
         } catch (Throwable error) {
             MainHook.log("[DC] CellLayout offset apply failed: " + error);
+            return false;
         }
     }
 

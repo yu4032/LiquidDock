@@ -65,7 +65,7 @@ final class HomeGridHook {
             Object owner = chain.getThisObject();
             int h = (Integer) HookUtil.requireInvoke(owner, "getMHCells");
             int v = (Integer) HookUtil.requireInvoke(owner, "getMVCells");
-            if (!config.matchesGrid(h, v) || isVendorSixByFour(h, v)) {
+            if (!config.matchesGrid(h, v)) {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             }
             if (!reflowOccupiedMatrix(owner)) {
@@ -77,28 +77,38 @@ final class HomeGridHook {
         });
     }
 
-    private static boolean isVendorSixByFour(int h, int v) {
-        return (h == 6 && v == 4) || (h == 4 && v == 6);
-    }
-
     private static boolean reflowOccupiedMatrix(Object owner) {
         try {
             Object[][] src = (Object[][]) HookUtil.getField(owner, "mSrcOccupied");
             Object[][] dst = (Object[][]) HookUtil.getField(owner, "mDstOccupied");
-            if (src == null || dst == null || src.length == 0 || dst.length == 0
-                    || src[0] == null || dst[0] == null) {
-                return false;
-            }
+            if (!rectangular(src) || !rectangular(dst)) return false;
 
             int srcCols = src.length;
             int srcRows = src[0].length;
             int dstCols = dst.length;
             int dstRows = dst[0].length;
-            Map<Object, TransformItem> byData = new LinkedHashMap<>();
 
+            /*
+             * LayoutTransformRuleGridChanged can be re-entered while Launcher is settling a
+             * physical rotation. Once source and destination already have the same topology,
+             * re-planning from that intermediate matrix would rotate/repack icons a second time.
+             * Preserve it verbatim instead.
+             */
+            HomeGridRotationTopologyPolicy.Action topology =
+                    HomeGridRotationTopologyPolicy.classify(
+                            srcCols, srcRows, dstCols, dstRows);
+            if (topology == HomeGridRotationTopologyPolicy.Action.PRESERVE) {
+                return commitDataMatrix(dst, extractDataMatrix(src, dstCols, dstRows));
+            }
+            if (topology != HomeGridRotationTopologyPolicy.Action.TRANSPOSE) {
+                MainHook.log("[DC][HomeGridRotation] defer topology src="
+                        + srcCols + "x" + srcRows + " dst=" + dstCols + "x" + dstRows);
+                return false;
+            }
+
+            Map<Object, TransformItem> byData = new LinkedHashMap<>();
             for (int x = 0; x < srcCols; x++) {
-                if (src[x] == null) continue;
-                for (int y = 0; y < Math.min(srcRows, src[x].length); y++) {
+                for (int y = 0; y < srcRows; y++) {
                     Object info = src[x][y];
                     if (info == null) continue;
                     HookUtil.InvocationResult<Object> dataResult =
@@ -107,7 +117,7 @@ final class HomeGridHook {
                     Object data = dataResult.value();
                     TransformItem item = byData.get(data);
                     if (item == null) {
-                        item = new TransformItem(info, x, y);
+                        item = new TransformItem(info, data, x, y);
                         byData.put(data, item);
                     } else {
                         item.include(x, y);
@@ -118,9 +128,12 @@ final class HomeGridHook {
             List<TransformItem> items = new ArrayList<>(byData.values());
             items.sort(Comparator
                     .comparingInt((TransformItem item) -> item.area() == 1 ? 1 : 0)
+                    .thenComparingLong(item -> item.stableKey)
                     .thenComparingInt(item -> item.minY * srcCols + item.minX));
 
             boolean[][] occupied = new boolean[dstCols][dstRows];
+            Object[][] plannedData = new Object[dstCols][dstRows];
+
             for (TransformItem item : items) {
                 int spanX = item.width();
                 int spanY = item.height();
@@ -129,64 +142,118 @@ final class HomeGridHook {
                             + " cannot fit destination " + dstCols + "x" + dstRows);
                     return false;
                 }
-                int preferred = Math.min(
-                        dstCols * dstRows - 1,
-                        item.minY * srcCols + item.minX);
-                int[] cell = findFreeCell(occupied, dstCols, dstRows, spanX, spanY, preferred);
-                if (cell == null) {
+
+                int[] cell = HomeGridRotationPlacementPolicy.findNearestFreeCell(
+                        occupied,
+                        dstCols, dstRows,
+                        spanX, spanY,
+                        srcCols, srcRows,
+                        item.minX, item.minY);
+                if (cell == null
+                        || !HomeGridRotationPlacementPolicy.reserve(
+                                occupied, dstCols, dstRows,
+                                cell[0], cell[1], spanX, spanY)) {
                     MainHook.log("[DC][HomeGridRotation] no destination slot for span "
                             + spanX + "x" + spanY);
                     return false;
                 }
+
                 for (int x = cell[0]; x < cell[0] + spanX; x++) {
                     for (int y = cell[1]; y < cell[1] + spanY; y++) {
-                        occupied[x][y] = true;
-                        dst[x][y] = item.info;
+                        plannedData[x][y] = item.data;
                     }
                 }
-            }            return true;
+            }
+
+            // mDstOccupied is a dense LayoutTransformInfo[][]: empty cells are wrappers whose
+            // mData is null. Never replace a wrapper with null; vendor transformToHVArray()
+            // dereferences every cell before checking its data.
+            return commitDataMatrix(dst, plannedData);
         } catch (Throwable error) {
             MainHook.log("[DC][HomeGridRotation] reflow error: " + error);
             return false;
         }
     }
 
-    private static int[] findFreeCell(
-            boolean[][] occupied,
-            int cols,
-            int rows,
-            int spanX,
-            int spanY,
-            int preferredLinear) {
-        int total = cols * rows;
-        for (int offset = 0; offset < total; offset++) {
-            int index = (preferredLinear + offset) % total;
-            int x = index % cols;
-            int y = index / cols;
-            if (x + spanX > cols || y + spanY > rows) continue;
-            boolean free = true;
-            for (int px = x; px < x + spanX && free; px++) {
-                for (int py = y; py < y + spanY; py++) {
-                    if (occupied[px][py]) {
-                        free = false;
-                        break;
-                    }
+    private static boolean rectangular(Object[][] matrix) {
+        if (matrix == null || matrix.length == 0 || matrix[0] == null
+                || matrix[0].length == 0) {
+            return false;
+        }
+        int rows = matrix[0].length;
+        for (Object[] column : matrix) {
+            if (column == null || column.length != rows) return false;
+        }
+        return true;
+    }
+
+    private static Object[][] extractDataMatrix(
+            Object[][] source, int columns, int rows) {
+        Object[][] data = new Object[columns][rows];
+        for (int x = 0; x < columns; x++) {
+            for (int y = 0; y < rows; y++) {
+                Object wrapper = source[x][y];
+                if (wrapper == null) return null;
+                HookUtil.InvocationResult<Object> result =
+                        HookUtil.tryInvoke(wrapper, "getMData");
+                if (!result.succeeded()) return null;
+                data[x][y] = result.value();
+            }
+        }
+        return data;
+    }
+
+    private static boolean commitDataMatrix(
+            Object[][] destination, Object[][] plannedData) {
+        if (!rectangular(destination) || plannedData == null
+                || destination.length != plannedData.length
+                || plannedData.length == 0) {
+            return false;
+        }
+        for (int x = 0; x < destination.length; x++) {
+            if (plannedData[x] == null
+                    || destination[x].length != plannedData[x].length) {
+                return false;
+            }
+            for (int y = 0; y < destination[x].length; y++) {
+                // Critical vendor contract: the LayoutTransformInfo wrapper itself is dense.
+                if (destination[x][y] == null) return false;
+            }
+        }
+
+        try {
+            for (int x = 0; x < destination.length; x++) {
+                for (int y = 0; y < destination[x].length; y++) {
+                    HookUtil.setField(destination[x][y], "mData", plannedData[x][y]);
                 }
             }
-            if (free) return new int[]{x, y};
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][HomeGridRotation] failed to commit transform data: " + error);
+            return false;
         }
-        return null;
+    }
+
+    private static long stableKey(Object data) {
+        try {
+            long id = HookUtil.getLongField(data, "id");
+            if (id >= 0) return id;
+        } catch (Throwable ignored) {}
+        return 0x8000000000000000L
+                | (System.identityHashCode(data) & 0xffffffffL);
     }
 
     private static final class TransformItem {
-        final Object info;
+        final Object data;
+        final long stableKey;
         int minX;
         int minY;
         int maxX;
         int maxY;
 
-        TransformItem(Object info, int x, int y) {
-            this.info = info;
+        TransformItem(Object info, Object data, int x, int y) {
+            this.data = data;
+            this.stableKey = stableKey(data);
             this.minX = this.maxX = x;
             this.minY = this.maxY = y;
         }

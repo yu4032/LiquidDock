@@ -170,6 +170,24 @@ final class HomeGridCellGeometryPolicy {
             heightGap = Math.max(0, allAppsInnerHeight - cellSize * in.countY)
                     / (in.countY - 1);
         }
+
+        // A legal logical cell must always map to a physical rectangle inside CellLayout.
+        // Keep pitch positive even with aggressive negative row-gap customization, then clamp the
+        // resolved origin so the last cell edge cannot leave the page.
+        heightGap = Math.max(1 - cellSize, heightGap);
+        long gridWidthLong = (long) cellSize * in.countX
+                + (long) widthGap * Math.max(0, in.countX - 1);
+        long gridHeightLong = (long) cellSize * in.countY
+                + (long) heightGap * Math.max(0, in.countY - 1);
+        int gridWidth = (int) Math.min(Integer.MAX_VALUE, Math.max(1L, gridWidthLong));
+        int gridHeight = (int) Math.min(Integer.MAX_VALUE, Math.max(1L, gridHeightLong));
+        int maxLeft = Math.max(0, in.width - gridWidth);
+        int maxTop = Math.max(0, in.height - gridHeight);
+        left = Math.max(0, Math.min(maxLeft, left));
+        top = Math.max(0, Math.min(maxTop, top));
+        right = Math.max(0, in.width - left - gridWidth);
+        bottom = Math.max(0, in.height - top - gridHeight);
+
         return new Result(left, right, top, bottom, cellSize, widthGap, heightGap);
     }
 

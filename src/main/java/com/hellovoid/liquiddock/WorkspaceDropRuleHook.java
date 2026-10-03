@@ -2,8 +2,8 @@ package com.hellovoid.liquiddock;
 
 /**
  * Replaces MIUI's stock swap-placement pattern rule only while LiquidDock's custom workspace grid
- * is enabled. Native occupancy still owns collision resolution; this hook keeps free placement for
- * ordinary spans while restoring the 2x2 macroblock invariant required by MIUI's grid transform.
+ * is enabled. Native occupancy remains authoritative for collision resolution; this hook only
+ * removes vendor profile-pattern restrictions while preserving strict live-grid bounds.
  */
 final class WorkspaceDropRuleHook {
     private static final String TAG = "[DC][GRID]";
@@ -12,9 +12,8 @@ final class WorkspaceDropRuleHook {
 
     private WorkspaceDropRuleHook() {}
 
-    static void install(ClassLoader classLoader, boolean customGridEnabled,
-                        HomeGridProfile selectedProfile) {
-        if (!customGridEnabled || selectedProfile == null || installed) return;
+    static void install(ClassLoader classLoader, boolean customGridEnabled) {
+        if (!customGridEnabled || installed) return;
         try {
             Class<?> rule = Class.forName(
                     "com.miui.home.launcher.compat.LayoutDropRuleForSwapPlaces",
@@ -35,37 +34,29 @@ final class WorkspaceDropRuleHook {
                             return chain.proceed();
                         }
 
-                        int cellX = (Integer) xValue;
-                        int cellY = (Integer) yValue;
-                        int spanX = (Integer) spanXValue;
-                        int spanY = (Integer) spanYValue;
                         HookUtil.InvocationResult<Object> columnsResult =
                                 HookUtil.tryInvokeStatic(deviceConfig, "getCellCountX");
                         HookUtil.InvocationResult<Object> rowsResult =
                                 HookUtil.tryInvokeStatic(deviceConfig, "getCellCountY");
                         Object columnsValue = columnsResult.succeeded() ? columnsResult.value() : null;
                         Object rowsValue = rowsResult.succeeded() ? rowsResult.value() : null;
-                        if (columnsValue instanceof Integer && rowsValue instanceof Integer) {
-                            int columns = (Integer) columnsValue;
-                            int rows = (Integer) rowsValue;
-                            if (selectedProfile.matchesCounts(columns, rows)) {
-                                return HomeGridDropLegalityPolicy.isLegal(
-                                        selectedProfile, columns, rows,
-                                        cellX, cellY, spanX, spanY);
-                            }
+                        if (!(columnsValue instanceof Integer) || !(rowsValue instanceof Integer)) {
+                            // Never guess while GridController/DeviceConfig is transitioning. The
+                            // old implementation returned true here and could feed an out-of-bounds
+                            // widget placement into MIUI's occupancy matrix.
+                            return chain.proceed();
                         }
 
-                        // During a transient count mismatch, preserve the only transform-critical
-                        // invariant locally. GridOccupancyController still owns the real bounds.
-                        if (spanX == 2 && spanY == 2) {
-                            return cellX >= 0 && cellY >= 0
-                                    && (cellX & 1) == 0 && (cellY & 1) == 0;
-                        }
-                        return true;
+                        return HomeGridDropLegalityPolicy.isLegal(
+                                (Integer) columnsValue,
+                                (Integer) rowsValue,
+                                (Integer) xValue,
+                                (Integer) yValue,
+                                (Integer) spanXValue,
+                                (Integer) spanYValue);
                     });
             installed = true;
-            MainHook.log(TAG + " selective custom-grid drop rule installed profile="
-                    + selectedProfile.persistedValue());
+            MainHook.log(TAG + " bounded free-grid drop rule installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " custom-grid swap placement rule unavailable: " + error);
         }

@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/** Versioned sidecar persistence for complete per-profile, per-orientation layouts. */
+/** Versioned sidecar persistence for complete per-size, per-orientation layouts. */
 final class HomeGridOrientationMemory {
-    private static final String KEY_PREFIX = "liquiddock_home_grid_memory_v1_";
-    private static final String PAYLOAD_VERSION = "v1";
+    private static final String KEY_PREFIX = "liquiddock_home_grid_memory_v2_";
+    private static final String PAYLOAD_VERSION = "v2";
 
     private final HomeGridOrientationMemoryStore store;
 
@@ -18,28 +18,28 @@ final class HomeGridOrientationMemory {
 
     void save(HomeGridLayoutSnapshot snapshot) {
         if (snapshot == null) return;
-        store.write(key(snapshot.profile(), snapshot.orientation()), encode(snapshot));
+        store.write(key(snapshot.dimensions(), snapshot.orientation()), encode(snapshot));
     }
 
-    HomeGridLayoutSnapshot load(HomeGridProfile profile, HomeGridOrientation orientation) {
-        if (profile == null || orientation == null) return null;
-        String payload = store.read(key(profile, orientation));
-        return decode(profile, orientation, payload);
+    HomeGridLayoutSnapshot load(HomeGridDimensions dimensions, HomeGridOrientation orientation) {
+        if (dimensions == null || orientation == null) return null;
+        String payload = store.read(key(dimensions, orientation));
+        return decode(dimensions, orientation, payload);
     }
 
-    void invalidate(HomeGridProfile profile, HomeGridOrientation orientation) {
-        if (profile == null || orientation == null) return;
-        store.remove(key(profile, orientation));
+    void invalidate(HomeGridDimensions dimensions, HomeGridOrientation orientation) {
+        if (dimensions == null || orientation == null) return;
+        store.remove(key(dimensions, orientation));
     }
 
-    private static String key(HomeGridProfile profile, HomeGridOrientation orientation) {
-        return KEY_PREFIX + profile.persistedValue() + "_" + orientation.name().toLowerCase();
+    private static String key(HomeGridDimensions dimensions, HomeGridOrientation orientation) {
+        return KEY_PREFIX + dimensions.key() + "_" + orientation.name().toLowerCase();
     }
 
     private static String encode(HomeGridLayoutSnapshot snapshot) {
         StringBuilder out = new StringBuilder();
         out.append(PAYLOAD_VERSION)
-                .append('|').append(snapshot.profile().persistedValue())
+                .append('|').append(snapshot.dimensions().key())
                 .append('|').append(snapshot.orientation().name());
 
         List<HomeGridItemPosition> positions = new ArrayList<>(snapshot.positions());
@@ -56,13 +56,13 @@ final class HomeGridOrientationMemory {
         return out.toString();
     }
 
-    private static HomeGridLayoutSnapshot decode(HomeGridProfile profile,
+    private static HomeGridLayoutSnapshot decode(HomeGridDimensions dimensions,
                                                   HomeGridOrientation orientation,
                                                   String payload) {
         if (payload == null || payload.isEmpty()) return null;
         try {
             String[] lines = payload.split("\\n", -1);
-            String expectedHeader = PAYLOAD_VERSION + "|" + profile.persistedValue()
+            String expectedHeader = PAYLOAD_VERSION + "|" + dimensions.key()
                     + "|" + orientation.name();
             if (lines.length == 0 || !expectedHeader.equals(lines[0])) return null;
 
@@ -79,7 +79,7 @@ final class HomeGridOrientationMemory {
                         Integer.parseInt(fields[4]),
                         Integer.parseInt(fields[5])));
             }
-            return HomeGridLayoutSnapshot.create(profile, orientation, positions);
+            return HomeGridLayoutSnapshot.create(dimensions, orientation, positions);
         } catch (RuntimeException error) {
             return null;
         }

@@ -50,6 +50,7 @@ public final class ConfigMigration {
         resetUnsupportedGlassConfigGeneration(preferences);
         migrateGlassComponentStyles(preferences);
         migrateMergedHorizontal(preferences);
+        migrateLegacyGridProfile(preferences);
         migrateLegacyGridKeys(preferences);
         migrateGridToDp(safeDensity, preferences);
         migrateGridToOffsets(preferences);
@@ -244,6 +245,20 @@ public final class ConfigMigration {
         if (!sp.contains(source) || sp.contains(destination)) return false;
         editor.putInt(destination, sp.getInt(source, 0));
         return true;
+    }
+
+    private static void migrateLegacyGridProfile(SharedPreferences sp) {
+        if (!sp.contains("grid_profile")) return;
+        String profile = sp.getString("grid_profile", "8x4");
+        SharedPreferences.Editor editor = sp.edit();
+        boolean tenBySix = "10x6".equalsIgnoreCase(profile);
+        if (!sp.contains("grid_columns")) {
+            editor.putInt("grid_columns", tenBySix ? 10 : 8);
+        }
+        if (!sp.contains("grid_rows")) {
+            editor.putInt("grid_rows", tenBySix ? 6 : 4);
+        }
+        editor.remove("grid_profile").commit();
     }
 
     private static void migrateLegacyGridKeys(SharedPreferences sp) {

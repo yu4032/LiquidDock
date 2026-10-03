@@ -436,11 +436,9 @@ liquid_shortcut_popup_dark_text
 
 `RuntimeBehaviorTestPolicyContractTest` 已建立 production-source-reader default deny。
 
-当前 `LEGACY_SOURCE_DEBT` 仍为 13 项：
+当前 `LEGACY_SOURCE_DEBT` 仍为 11 项：
 
 - `GlassConfigGenerationContractTest.java`
-- `HomeGridOrientationMemoryHookContractTest.java`
-- `HomeGridProfileOverlayContractTest.java`
 - `Miuix307EdgeOverscanContractTest.java`
 - `PrismalModuleBoundaryContractTest.java`
 - `PrismalOfficialParityV3Test.java`
@@ -505,7 +503,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## HomeGrid split
 
-Profile、orientation、mutation、count、centering、bounds、cell geometry、folder alignment、page indicator、rotation refresh、drop、drag bounds 已拆成独立 owner/policy。
+旧 profile/count/centering/vertical-bounds 栈已删除。当前 HomeGrid 由 GridController authority、动态 dimensions、统一 cell geometry、orientation memory/mutation、通用 rotation planner、drop/drag bounds 等 owner/policy 组成；所有 2×2～10×6 配置共用同一路径。
 
 ## Single default configuration
 

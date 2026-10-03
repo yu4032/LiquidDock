@@ -137,25 +137,31 @@ final class HomeGridRotationRefreshHook {
                 MainHook.log("[DC] rotation grid refresh: no CellLayout descendants");
                 return;
             }
+            int refreshed = 0;
             for (View page : pages) {
                 if (!HomeGridCellGeometryHook.sizeMatchesOrientation(
-                        page, page.getWidth(), page.getHeight())) {
+                        page, page.getWidth(), page.getHeight())
+                        || !HomeGridCellGeometryHook.topologyReady(page)) {
                     continue;
                 }
-                HookUtil.InvocationResult<Object> refreshResult =
-                        HookUtil.tryInvoke(page, "calculateXsAndYs");
-                if (!refreshResult.succeeded()) {
-                    MainHook.log("[DC] rotation grid page refresh unavailable: "
-                            + refreshResult.failure());
-                }
+
+                // GridController -> CellLayout.onGridChanged owns calculateXsAndYs(). Calling it
+                // from an asynchronous refresh can expose a 7x4 topology with 4-element arrays
+                // (or vice versa) to drawCellGrid. Only request a normal layout after the whole
+                // native topology is internally consistent.
                 page.forceLayout();
                 page.requestLayout();
                 page.invalidate();
+                refreshed++;
+            }
+            if (refreshed == 0) {
+                MainHook.log("[DC] rotation grid refresh deferred: topology not settled");
+                return;
             }
             workspace.forceLayout();
             workspace.requestLayout();
             workspace.invalidate();
-            MainHook.log("[DC] rotation grid refreshed pages=" + pages.size()
+            MainHook.log("[DC] rotation grid refreshed pages=" + refreshed
                     + " ws=" + workspace.getWidth() + "x" + workspace.getHeight());
         } catch (Throwable error) {
             MainHook.log("[DC] rotation grid refresh failed: " + error);
