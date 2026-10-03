@@ -7,6 +7,7 @@ import android.util.Log;
 import androidx.preference.PreferenceManager;
 
 import com.hellovoid.liquiddock.config.ConfigMigration;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.util.Map;
 import java.util.UUID;
@@ -100,7 +101,7 @@ public final class LiquidDockApp extends Application
                 }
                 metadata.commit();
                 ensureWidgetDiscoveryToken();
-                Log.i("LiquidDock", "seeded local UI prefs from API101 Remote Preferences");
+                debugLog("seeded local UI prefs from API101 Remote Preferences");
             } finally {
                 reconciling = false;
             }
@@ -108,8 +109,18 @@ public final class LiquidDockApp extends Application
             syncToRemote(localPreferences);
         } else if (localAll != null && !localAll.isEmpty()) {
             syncToRemote(localPreferences);
-            Log.i("LiquidDock", "seeded API101 Remote Preferences from local UI prefs");
+            debugLog("seeded API101 Remote Preferences from local UI prefs");
         }
+    }
+
+    private void debugLog(String message) {
+        if (localPreferences == null
+                || !localPreferences.getBoolean(
+                        ConfigSchema.Debug.LOGGING.name(),
+                        ConfigSchema.Debug.LOGGING.runtimeFallback())) {
+            return;
+        }
+        Log.i("LiquidDock", message);
     }
 
     public static XposedService service() { return service; }
