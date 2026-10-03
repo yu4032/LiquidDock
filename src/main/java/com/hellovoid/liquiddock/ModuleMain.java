@@ -19,6 +19,7 @@ public final class ModuleMain extends XposedModule {
     @Override
     public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
         Api101Bridge.init(this);
+        refreshDebugLogging();
         loadedProcessName = param.getProcessName();
         Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
@@ -45,6 +46,7 @@ public final class ModuleMain extends XposedModule {
 
     @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
+        refreshDebugLogging();
         String packageName = param.getPackageName();
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             try {
@@ -119,6 +121,8 @@ public final class ModuleMain extends XposedModule {
         try {
             LegacyConfigMigration.migrateAtProcessStart();
             ConfigMigration.migrateAtProcessStart();
+            // Legacy migration can introduce the debug preference during this same Launcher start.
+            refreshDebugLogging();
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
@@ -180,7 +184,19 @@ public final class ModuleMain extends XposedModule {
             HomeGridDragBoundsHook.install(classLoader,
                     customGridEnabled, selectedProfile);
         } catch (Throwable error) {
-            Api101Bridge.log("[DC] API101 package init failed", error);
+            Api101Bridge.errorAlways("[DC] API101 package init failed", error);
         }
+    }
+
+    private static void refreshDebugLogging() {
+        boolean enabled = ConfigSchema.Debug.LOGGING.runtimeFallback();
+        try {
+            enabled = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP).getBoolean(
+                    ConfigSchema.Debug.LOGGING.name(),
+                    ConfigSchema.Debug.LOGGING.runtimeFallback());
+        } catch (Throwable ignored) {
+            // Logging must fail closed. ConfigReader will retain its normal runtime fallback path.
+        }
+        Api101Bridge.setDebugLogging(enabled);
     }
 }
