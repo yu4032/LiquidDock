@@ -627,7 +627,7 @@ private fun AnimationPage(
         item {
             PageHeader(
                 stringResource(R.string.page_animation),
-                "这里只调整 LiquidDock 自己拥有的动画。系统 / OS4 原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
+                "这里只调整 LiquidDock 自己拥有的动画。系统原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
             )
         }
         item { SmallTitle("工作区玻璃") }

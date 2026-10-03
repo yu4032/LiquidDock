@@ -55,7 +55,7 @@
     <string name="home_liquid_summary">模糊、折射、色散、颜色、光照与高光控制</string>
     <string name="home_stroke_summary">底色、方圆曲线与线宽</string>
     <string name="home_shadow_summary">整个 Dock 阴影与描边阴影</string>
-    <string name="home_animation_summary">仅调整 LiquidDock 自有显隐、按压与退出渐隐；系统 / OS4 原生时序保持不变</string>
+    <string name="home_animation_summary">仅调整 LiquidDock 自有显隐、按压与退出渐隐；系统原生时序保持不变</string>
     <string name="home_data_title">预设、导入与导出</string>
     <string name="home_data_summary">默认预设、JSON 备份与重启桌面</string>
     <string name="home_about_title">引用、参考项目与开源许可</string>
