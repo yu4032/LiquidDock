@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
 
@@ -19,6 +20,9 @@ import io.github.libxposed.service.XposedServiceHelper;
 public final class LiquidDockApp extends Application
         implements XposedServiceHelper.OnServiceListener,
         SharedPreferences.OnSharedPreferenceChangeListener {
+    private static final String INTERNAL_PREFS = "liquiddock_internal";
+    private static final String PENDING_REMOTE_CONFIG_CLEAR = "pending_remote_config_clear";
+
     private static volatile XposedService service;
     private SharedPreferences localPreferences;
     private boolean reconciling;
@@ -71,6 +75,20 @@ public final class LiquidDockApp extends Application
     private void reconcileOnBind() {
         SharedPreferences remote = remotePreferences(ConfigReader.REMOTE_GROUP);
         if (remote == null || localPreferences == null) return;
+
+        SharedPreferences internal = getSharedPreferences(INTERNAL_PREFS, MODE_PRIVATE);
+        if (internal.getBoolean(PENDING_REMOTE_CONFIG_CLEAR, false)) {
+            reconciling = true;
+            try {
+                copyAll(localPreferences, remote);
+                internal.edit().remove(PENDING_REMOTE_CONFIG_CLEAR).commit();
+                Log.i("LiquidDock", "completed pending Remote Preferences clear");
+            } finally {
+                reconciling = false;
+            }
+            return;
+        }
+
         Map<String, ?> localAll = localPreferences.getAll();
         Map<String, ?> remoteAll = remote.getAll();
         boolean hasLocalConfig = false;
@@ -124,6 +142,30 @@ public final class LiquidDockApp extends Application
     }
 
     public static XposedService service() { return service; }
+
+    public static boolean clearUserConfiguration(Context context, SharedPreferences local) {
+        if (context == null || local == null) return false;
+
+        String token = local.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, null);
+        if (token == null || token.isEmpty()) token = UUID.randomUUID().toString();
+
+        SharedPreferences.Editor localEditor = local.edit();
+        localEditor.clear();
+        localEditor.putString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, token);
+        if (!localEditor.commit()) return false;
+
+        SharedPreferences internal =
+                context.getSharedPreferences(INTERNAL_PREFS, Context.MODE_PRIVATE);
+        SharedPreferences remote = remotePreferences(ConfigReader.REMOTE_GROUP);
+        if (remote == null) {
+            internal.edit().putBoolean(PENDING_REMOTE_CONFIG_CLEAR, true).commit();
+            return false;
+        }
+
+        copyAll(local, remote);
+        internal.edit().remove(PENDING_REMOTE_CONFIG_CLEAR).commit();
+        return true;
+    }
 
     public static SharedPreferences remotePreferences(String group) {
         XposedService value = service;

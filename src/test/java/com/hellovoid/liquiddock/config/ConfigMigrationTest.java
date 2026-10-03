@@ -1,12 +1,39 @@
 package com.hellovoid.liquiddock.config;
 
+import com.hellovoid.liquiddock.TestSharedPreferences;
+import com.hellovoid.liquiddock.WidgetComponentStore;
+
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class ConfigMigrationTest {
+    @Test
+    public void metadataOnlyPreferencesRemainEffectivelyEmpty() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "token");
+        values.put(WidgetComponentStore.DISCOVERY_REQUEST_KEY, "request");
+        values.put("liquid_glass_config_generation", 1);
+
+        assertTrue(ConfigMigration.isEffectivelyEmpty(
+                new TestSharedPreferences(values)));
+    }
+
+    @Test
+    public void realUserPreferenceMakesStoreNonEmpty() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(WidgetComponentStore.DISCOVERY_TOKEN_KEY, "token");
+        values.put("grid_landscape_top_distance", -8);
+
+        assertFalse(ConfigMigration.isEffectivelyEmpty(
+                new TestSharedPreferences(values)));
+    }
+
     @Test
     public void legacyGridMarginsPlace1601608080InBothOrientations() {
         Map<String, Integer> values = ConfigMigration.legacyGridPlacements(160, 160, 80, 80);

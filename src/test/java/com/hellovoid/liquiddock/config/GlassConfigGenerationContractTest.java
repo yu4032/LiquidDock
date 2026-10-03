@@ -17,9 +17,10 @@ public class GlassConfigGenerationContractTest {
         String source = Files.readString(SOURCE);
 
         assertTrue(source.contains("GLASS_CONFIG_GENERATION"));
+        assertTrue(source.contains("isEffectivelyEmpty(preferences)"));
         assertTrue(source.contains("resetUnsupportedGlassConfigGeneration(preferences)"));
-        assertTrue(source.contains("seedDefaultProfileIfEmpty(preferences)"));
-        assertTrue(source.contains("PresetManager.applyDefault(sp.edit())"));
+        assertFalse(source.contains("seedDefaultProfileIfEmpty(preferences)"));
+        assertFalse(source.contains("PresetManager.applyDefault(sp.edit())"));
         assertTrue(source.contains("hasPersistedGlassConfig"));
         assertTrue(source.contains("PresetManager.defaultValues()"));
         assertTrue(source.contains("key.startsWith(\"liquid_\")"));
