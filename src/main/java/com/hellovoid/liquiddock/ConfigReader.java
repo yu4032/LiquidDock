@@ -1,8 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.content.SharedPreferences;
-import android.util.Log;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,17 +33,15 @@ public class ConfigReader {
             Map<String, ?> all = remote.getAll();
             if (all != null && !all.isEmpty()) {
                 Map<String, ?> loaded = new HashMap<>(all);
-                if (MainHook.debugLogging) {
-                    Log.i("LiquidDock", "config loaded from API101 Remote Preferences: "
-                            + loaded.size() + " keys");
-                }
+                Api101Bridge.log("config loaded from API101 Remote Preferences: "
+                        + loaded.size() + " keys");
                 return loaded;
             }
-            Log.w("LiquidDock", "API101 Remote Preferences are empty; using defaults");
+            Api101Bridge.log("API101 Remote Preferences are empty; using defaults");
         } catch (Throwable error) {
             // Runtime config loading is deliberately read-only. One-time pre-API101
             // migration runs explicitly at the package-ready compatibility boundary.
-            Log.w("LiquidDock", "API101 Remote Preferences unavailable; using defaults", error);
+            Api101Bridge.log("API101 Remote Preferences unavailable; using defaults", error);
         }
         return Collections.emptyMap();
     }
