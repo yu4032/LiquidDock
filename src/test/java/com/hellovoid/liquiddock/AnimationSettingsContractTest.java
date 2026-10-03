@@ -32,7 +32,7 @@ public class AnimationSettingsContractTest {
         assertTrue(animationPage.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
         assertFalse("Dock resize timing belongs with the gated Dock feature, not the generic page",
                 animationPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
-        assertTrue(animationPage.contains("系统 / OS4 原生动画继续跟随原实现"));
+        assertTrue(animationPage.contains("系统原生动画继续跟随原实现"));
     }
 
     @Test
