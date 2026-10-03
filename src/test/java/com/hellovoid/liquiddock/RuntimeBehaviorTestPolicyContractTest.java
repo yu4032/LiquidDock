@@ -80,7 +80,6 @@ public class RuntimeBehaviorTestPolicyContractTest {
      */
     private static final Set<String> LEGACY_SOURCE_DEBT = Set.of(
             "GlassConfigGenerationContractTest.java",
-            "HomeGridOrientationMemoryHookContractTest.java",
             "HomeGridProfileOverlayContractTest.java",
             "Miuix307EdgeOverscanContractTest.java",
             "PrismalModuleBoundaryContractTest.java",
@@ -90,7 +89,6 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "WidgetComponentDiscoveryContractTest.java",
             "WidgetComponentSelectionContractTest.java",
             "WidgetMamlRenderTreeDiscoveryContractTest.java",
-            "WorkspaceDropRuleHookContractTest.java",
             "WorkstationAllAppsHookContractTest.java");
 
     @Test

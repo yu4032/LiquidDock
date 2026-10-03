@@ -19,9 +19,8 @@ public class MainHook {
 
         LiquidDockConfig config = LiquidDockConfig.load();
         order.advance(LauncherInstallSequence.Stage.CONFIG_LOADED);
-        WidgetGridSizing.setWidgetAdaptationEnabled(
-                WidgetGridSizing.shouldAdaptWidgets(
-                        config.grid.enabled, config.grid.widgetAdaptation));
+        WidgetGridSizing.setCustomGridEnabled(
+                config.enabled && config.grid.enabled);
         debugLogging = config.debugLog;
         log("[DC] LiquidDock " + (debugLogging ? "debug logging ON" : "loaded"));
         if (!config.enabled) {

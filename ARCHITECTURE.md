@@ -495,7 +495,6 @@ Widget 功能分成三条独立链：
 
 RemoteViews/MAML 更新后需要重新 reconcile，隐藏操作必须可恢复。
 
-`WidgetGridSizing` 目前仍有 process-static adaptation gate，是当前 TODO 之一。
 
 ---
 

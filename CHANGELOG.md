@@ -247,7 +247,6 @@
 
 - 新增类型化 `ConfigKey` / `ConfigSchema`，集中登记 persisted key、类型、UI default、runtime fallback、export default、范围、存储模式和导出策略
 - 新增纯 `ConfigCodec`，接管 JSON 导入/导出与 legacy alias 转换，移除 `SettingsActivity` 中的大量手写 key 列表
-- `grid_widget_adaptation` 现已正确参与配置导入/导出
 - 新增 `ConfigMigration`，把设置进程历史 SharedPreferences 升级逻辑从 Activity 中分离
 - 新增 `PresetManager`，统一默认预设与动态 iPad 风格预设写入
 - Compose 设置页开始绑定 schema key/default/range，减少 UI 与运行时配置漂移

@@ -1,14 +1,19 @@
 package com.hellovoid.liquiddock;
 
-/** Pure drop legality policy for custom home-grid placement. */
+/** Pure bounds policy for free-form custom home-grid placement. */
 final class HomeGridDropLegalityPolicy {
     private HomeGridDropLegalityPolicy() {}
 
-    static boolean isLegal(HomeGridProfile profile,
+    static boolean isLegal(HomeGridProfile ignoredProfile,
                            int columns, int rows,
                            int cellX, int cellY,
                            int spanX, int spanY) {
-        if (profile == null || !profile.matchesCounts(columns, rows)) return false;
+        return isLegal(columns, rows, cellX, cellY, spanX, spanY);
+    }
+
+    static boolean isLegal(int columns, int rows,
+                           int cellX, int cellY,
+                           int spanX, int spanY) {
         if (columns <= 0 || rows <= 0 || spanX <= 0 || spanY <= 0
                 || cellX < 0 || cellY < 0) {
             return false;
@@ -17,15 +22,8 @@ final class HomeGridDropLegalityPolicy {
         long bottom = (long) cellY + spanY;
         if (right > columns || bottom > rows) return false;
 
-        if (spanX != 2 || spanY != 2) return true;
-
-        boolean portrait = rows > columns;
-        for (int[] origin : profile.blockOrigins(portrait)) {
-            if (origin != null && origin.length >= 2
-                    && origin[0] == cellX && origin[1] == cellY) {
-                return true;
-            }
-        }
-        return false;
+        // Rotation swaps rows/columns but keeps widget spanX/spanY unchanged.
+        // Refuse placements that could never fit after a physical rotation.
+        return spanX <= rows && spanY <= columns;
     }
 }

@@ -11,13 +11,13 @@ import static org.junit.Assert.assertTrue;
 
 public class WidgetGridSizingTest {
     @Before
-    public void enableAdaptationForGeometryTests() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(true);
+    public void enableCustomGridForGeometryTests() {
+        WidgetGridSizing.setCustomGridEnabled(true);
     }
 
     @After
-    public void restoreDefaultAdaptationState() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(false);
+    public void restoreDefaultGridState() {
+        WidgetGridSizing.setCustomGridEnabled(false);
     }
 
     @Test
@@ -34,16 +34,8 @@ public class WidgetGridSizingTest {
     }
 
     @Test
-    public void widgetAdaptationRequiresGridAndExplicitSwitch() {
-        assertFalse(WidgetGridSizing.shouldAdaptWidgets(false, false));
-        assertFalse(WidgetGridSizing.shouldAdaptWidgets(false, true));
-        assertFalse(WidgetGridSizing.shouldAdaptWidgets(true, false));
-        assertTrue(WidgetGridSizing.shouldAdaptWidgets(true, true));
-    }
-
-    @Test
-    public void disabledAdaptationLeavesWidgetGeometryUntouched() {
-        WidgetGridSizing.setWidgetAdaptationEnabled(false);
+    public void disabledCustomGridLeavesWidgetGeometryUntouched() {
+        WidgetGridSizing.setCustomGridEnabled(false);
         assertArrayEquals(new int[]{0, 0, 0, 0},
                 WidgetGridSizing.gridRect(
                         0, 0, 2, 2,
