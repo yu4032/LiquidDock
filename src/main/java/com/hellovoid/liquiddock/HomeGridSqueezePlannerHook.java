@@ -33,6 +33,7 @@ final class HomeGridSqueezePlannerHook {
             Class<?> genericSqueeze = Class.forName(GENERIC_SQUEEZE, false, classLoader);
             Class<?> genericDrop = Class.forName(GENERIC_DROP, false, classLoader);
             HomeGridSqueezeCycleGuard.install(classLoader);
+            HomeGridSqueezeTransactionGuard.install(classLoader);
 
             HookUtil.hookMethod(
                     controller,
@@ -52,6 +53,7 @@ final class HomeGridSqueezePlannerHook {
                         Object dropPlanner =
                                 genericDrop.getDeclaredConstructor().newInstance();
                         HomeGridSqueezeCycleGuard.register(squeezePlanner);
+                        HomeGridSqueezeTransactionGuard.register(squeezePlanner);
 
                         HookUtil.requireInvoke(
                                 transform, "setLayoutSqueezeRule", squeezePlanner);
