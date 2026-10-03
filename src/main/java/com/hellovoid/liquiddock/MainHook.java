@@ -22,6 +22,7 @@ public class MainHook {
         WidgetGridSizing.setCustomGridEnabled(
                 config.enabled && config.grid.enabled);
         debugLogging = config.debugLog;
+        Api101Bridge.setDebugLogging(debugLogging);
         log("[DC] LiquidDock " + (debugLogging ? "debug logging ON" : "loaded"));
         if (!config.enabled) {
             log("[DC] LiquidDock master switch disabled");
