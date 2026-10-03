@@ -53,6 +53,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "LauncherHomeSpringLifecycleContractTest.java",
             "LauncherMamlBackgroundRuleExecutorContractTest.java",
             "LauncherRecentsCapsuleGlassContractTest.java",
+            "LoggingGateContractTest.java",
             "LauncherWallpaperFreshnessHookContractTest.java",
             "LauncherWidgetBackgroundControllerContractTest.java",
             "LauncherWidgetTransitionWiringContractTest.java",
