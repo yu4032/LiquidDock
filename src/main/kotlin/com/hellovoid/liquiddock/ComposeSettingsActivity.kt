@@ -446,6 +446,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                             text = stringResource(R.string.action_restart_security_center_and_launcher),
                             onClick = { activity.restartSecurityCenterAndLauncher() },
                         )
+                    } else if (page == Page.Animation) {
+                        TextButton(
+                            text = stringResource(R.string.action_restart_security_center_and_launcher),
+                            onClick = { activity.restartSecurityCenterAndLauncher() },
+                        )
                     } else if (descriptor != null) {
                         TextButton(
                             text = stringResource(descriptor.restartLabelRes),
@@ -575,16 +580,76 @@ private fun HomePage(
 private fun AnimationPage(
     padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
 ) {
-    val specs = listOf(
-        IntSpec(ConfigSchema.Animation.WORKSPACE_VISIBILITY, "工作区玻璃显隐", "ms", summary = "图标、文件夹、小部件及工作区整体；文件夹打开的安全隐藏仍立即执行"),
-        IntSpec(ConfigSchema.Animation.DOCK_ICON_REVEAL, "Dock 图标玻璃恢复", "ms", summary = "应用退出动画末尾的 Dock 图标玻璃淡入"),
-        IntSpec(ConfigSchema.Animation.PRESS_IN, "按压进入", "ms", summary = "玻璃按下时的反馈速度"),
-        IntSpec(ConfigSchema.Animation.PRESS_OUT, "按压释放", "ms", summary = "松手后的回弹恢复速度"),
-        IntSpec(ConfigSchema.Animation.DOCK_RESIZE, "Dock 尺寸变化", "ms", summary = "宽度、高度和圆角的平滑调整"),
-        IntSpec(ConfigSchema.Animation.SETTINGS_PAGE, "GUI 页面切换", "ms", summary = "设置页面滑动与淡入淡出；下次切换立即生效"),
+    val workspaceVisibility = IntSpec(
+        ConfigSchema.Animation.WORKSPACE_VISIBILITY,
+        "工作区玻璃显隐",
+        "ms",
+        summary = "仅控制 LiquidDock 自己管理的工作区玻璃淡入淡出；HOME / Recents 原生过渡保持系统时序；重启桌面后生效",
     )
-    SettingsList(padding, stringResource(R.string.page_animation), "0 ms 表示立即完成；桌面内动画需重启桌面生效") {
-        specs.forEach { IntSetting(prefs, it, masterEnabled) }
+    val dockIconReveal = IntSpec(
+        ConfigSchema.Animation.DOCK_ICON_REVEAL,
+        "Dock 图标玻璃恢复",
+        "ms",
+        summary = "应用退出动画末尾的 Dock 图标玻璃恢复；重启桌面后生效",
+    )
+    val pressIn = IntSpec(
+        ConfigSchema.Animation.PRESS_IN,
+        "按压进入",
+        "ms",
+        summary = "LiquidDock 玻璃按下反馈速度；重启桌面后生效",
+    )
+    val pressOut = IntSpec(
+        ConfigSchema.Animation.PRESS_OUT,
+        "按压释放",
+        "ms",
+        summary = "LiquidDock 玻璃松手恢复速度；重启桌面后生效",
+    )
+    val shortcutDismiss = IntSpec(
+        ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE,
+        "快捷菜单退出渐隐",
+        "ms",
+        summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；重启桌面后生效",
+    )
+    val securityCenterExit = IntSpec(
+        ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE,
+        "安全中心退出渐隐",
+        "ms",
+        summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；重启安全中心后生效",
+    )
+    val settingsPage = IntSpec(
+        ConfigSchema.Animation.SETTINGS_PAGE,
+        "GUI 页面切换",
+        "ms",
+        summary = "设置页面滑动与淡入淡出；下一次页面切换立即生效，无需重启",
+    )
+
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_animation),
+                "这里只调整 LiquidDock 自己拥有的动画。系统 / OS4 原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
+            )
+        }
+        item { SmallTitle("工作区玻璃") }
+        item { SettingsCard { IntSetting(prefs, workspaceVisibility, masterEnabled) } }
+        item { SmallTitle("Dock") }
+        item { SettingsCard { IntSetting(prefs, dockIconReveal, masterEnabled) } }
+        item { SmallTitle("玻璃交互") }
+        item {
+            SettingsCard {
+                IntSetting(prefs, pressIn, masterEnabled)
+                IntSetting(prefs, pressOut, masterEnabled)
+            }
+        }
+        item { SmallTitle("弹出界面") }
+        item {
+            SettingsCard {
+                IntSetting(prefs, shortcutDismiss, masterEnabled)
+                IntSetting(prefs, securityCenterExit, masterEnabled)
+            }
+        }
+        item { SmallTitle("GUI") }
+        item { SettingsCard { IntSetting(prefs, settingsPage, masterEnabled) } }
     }
 }
 
@@ -656,6 +721,16 @@ private fun DockPage(
         )
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
+        IntSetting(
+            prefs,
+            IntSpec(
+                ConfigSchema.Animation.DOCK_RESIZE,
+                "LiquidDock 顺滑尺寸时长",
+                "ms",
+                summary = "只在关闭系统 Dock 尺寸过渡、开启 LiquidDock 顺滑尺寸动画时使用；重启桌面后生效",
+            ),
+            masterEnabled && dockEnabled && !resizeAnimation && smoothResize,
+        )
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
 }

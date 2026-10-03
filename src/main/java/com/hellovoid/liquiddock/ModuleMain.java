@@ -76,6 +76,7 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                AnimationRuntimeState.configure(runtimeConfig.animation);
                 boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
                 if (runtimeConfig.enabled && sideSlideEnabled) {
                     SecurityCenterSidebarCommandBridge.install(classLoader);

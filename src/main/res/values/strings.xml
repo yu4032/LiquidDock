@@ -38,7 +38,7 @@
     <string name="widget_components_entry_summary">Load desktop widgets manually, then choose internal components to hide</string>
     <string name="page_stroke">Stroke</string>
     <string name="page_shadow">Shadow</string>
-    <string name="page_animation">Animation</string>
+    <string name="page_animation">Animations &amp; transitions</string>
     <string name="page_data">Presets and data</string>
     <string name="page_about">Credits and licenses</string>
     <string name="category_master">Master switch</string>
@@ -55,7 +55,7 @@
     <string name="home_liquid_summary">Blur, refraction, dispersion, color, lighting, and highlights</string>
     <string name="home_stroke_summary">Base color, squircle shape, and stroke width</string>
     <string name="home_shadow_summary">Whole-Dock and stroke shadows</string>
-    <string name="home_animation_summary">Independent visibility, press, Dock, and settings-page timing</string>
+    <string name="home_animation_summary">LiquidDock-owned visibility, press and exit fades; native system / OS4 timing stays unchanged</string>
     <string name="home_data_title">Presets, import, and export</string>
     <string name="home_data_summary">Default preset, JSON backup, and launcher restart</string>
     <string name="home_about_title">Credits, references, and open-source licenses</string>

@@ -10,7 +10,6 @@ import android.view.animation.DecelerateInterpolator;
 
 /** Stable full-screen popup glass output. Its Surface never follows MiuiX popup bounds animation. */
 final class ShortcutPopupGlassLayer extends TextureView implements TextureView.SurfaceTextureListener {
-    private static final long FAST_DISMISS_FADE_MS = 90L;
 
     private final ShortcutPopupGlassSession session;
     private Surface outputSurface;
@@ -39,7 +38,7 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
         animate().cancel();
         animate()
                 .alpha(0f)
-                .setDuration(FAST_DISMISS_FADE_MS)
+                .setDuration(AnimationRuntimeState.shortcutPopupDismissFadeDurationMs())
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
     }

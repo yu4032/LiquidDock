@@ -20,7 +20,6 @@ final class SecurityCenterGlassSinkView extends TextureView
     // Prismal's outer edge shell reaches roughly 2.2 logical pixels beyond the SDF boundary.
     // Three pixels preserves that AA/highlight work area without changing the actual glass shape.
     private static final float OPTICAL_OUTSET_PX = 3f;
-    private static final long EXIT_FADE_MS = 80L;
 
     private static final class OverlayHost {
         final ViewGroup parent;
@@ -358,7 +357,7 @@ final class SecurityCenterGlassSinkView extends TextureView
         exitFadeMultiplier = 1f;
         ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f);
         exitFadeAnimator = animator;
-        animator.setDuration(EXIT_FADE_MS);
+        animator.setDuration(AnimationRuntimeState.securityCenterExitFadeDurationMs());
         animator.addUpdateListener(animation -> {
             if (disposed || session.isShutdown() || exitFadeAnimator != animation) return;
             Object value = animation.getAnimatedValue();

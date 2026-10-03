@@ -227,6 +227,8 @@ public class ConfigCodecTest {
         assertEquals(Boolean.FALSE,
                 exported.get(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name()));
         assertEquals(450, exported.get(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name()));
+        assertEquals(90, exported.get(ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name()));
+        assertEquals(80, exported.get(ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE.name()));
         assertEquals(300, exported.get(ConfigSchema.Animation.SETTINGS_PAGE.name()));
     }
 

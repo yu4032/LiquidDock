@@ -39,6 +39,10 @@ public class ConfigPresetTest {
                 defaults.get(ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name()));
         assertEquals(Integer.valueOf(0),
                 defaults.get(ConfigSchema.Glass.PASSBLUR_RENDER_FPS.name()));
+        assertEquals(Integer.valueOf(90),
+                defaults.get(ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name()));
+        assertEquals(Integer.valueOf(80),
+                defaults.get(ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE.name()));
         assertEquals(Boolean.TRUE,
                 defaults.get(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name()));
         assertEquals(Boolean.TRUE,
