@@ -1,6 +1,6 @@
 # LiquidDock Third-Party Notices
 
-本文档对应当前 `main` / **v2.5.1** 的依赖与实现参考。
+本文档对应当前 `main` 的依赖与实现参考（文档核对于 2026-10-03）。
 
 ## Bundled / build dependencies
 

@@ -43,7 +43,7 @@ Blur, refraction, dispersion, tint, brightness, shadow, highlights, corner radiu
 
 ### Home screen layout
 
-Choose between **8×4 / 4×8** and **10×6 / 6×10** workspace profiles. Portrait and landscape can be adjusted independently for:
+Choose a free workspace grid with **2–10 columns and 2–6 rows** in landscape. Portrait swaps the dimensions, with separate orientation layout memory. Portrait and landscape can be adjusted independently for:
 
 - horizontal spacing;
 - top and bottom spacing;
@@ -67,6 +67,10 @@ Available Dock controls include:
 - Workstation divider.
 
 The phone-interconnect shortcut can be hidden without disabling the underlying system feature.
+
+A recent-app blacklist prevents selected apps from appearing in Dock recent-app recommendations.
+
+If wallpaper flickers, try the optional wallpaper GPU rendering switch. It requires the System Framework (`system`) scope and a device reboot.
 
 ### Widgets and folders
 
@@ -138,6 +142,8 @@ Updates to Launcher, System UI, Security Center, Gboard, or MIUI Search may temp
 
 ## Installation
 
+Back up your launcher layout before upgrading or changing the grid. LiquidDock JSON configuration backups are separate from launcher layout backups.
+
 1. Download the latest APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
 2. Install it and enable LiquidDock in LSPosed.
 3. Enable the scopes you need:
@@ -149,6 +155,7 @@ Updates to Launcher, System UI, Security Center, Gboard, or MIUI Search may temp
 | `com.miui.securitycenter` | Only required for Security Center glass |
 | `com.google.android.inputmethod.latin` | Only required for Gboard integration |
 | `com.android.quicksearchbox` | Only required for MIUI Search glass |
+| `system` (System Framework) | Only required for the optional wallpaper GPU rendering switch; reboot after enabling |
 
 4. Restart the affected processes or reboot the device.
 5. Open LiquidDock and configure the features you want.

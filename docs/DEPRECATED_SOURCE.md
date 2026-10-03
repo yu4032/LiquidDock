@@ -1,6 +1,6 @@
 # Deprecated Source / Historical Architecture
 
-本文档对应当前 `main` / **v2.5.1**，说明哪些旧架构已经退出主线。
+本文档对应当前 `main`（文档核对于 2026-10-03），说明哪些旧架构已经退出主线。
 
 ## 1. 已退役的 1.x backdrop 架构
 
