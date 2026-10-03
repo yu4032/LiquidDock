@@ -37,6 +37,21 @@ public class SecurityCenterSettingsRestartContractTest {
     }
 
     @Test
+    public void animationPageAlsoUsesCombinedRestartAction() throws Exception {
+        String compose = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        int animationGuard = compose.indexOf("else if (page == Page.Animation)");
+        assertTrue("Animation page must expose the combined restart for its Security Center fade",
+                animationGuard >= 0);
+        int combined = compose.indexOf(
+                "R.string.action_restart_security_center_and_launcher", animationGuard);
+        assertTrue("Animation page must render the combined restart action",
+                combined > animationGuard);
+        assertTrue("Animation page combined button must call the serialized action",
+                compose.indexOf("activity.restartSecurityCenterAndLauncher()", combined) > combined);
+    }
+
+    @Test
     public void combinedRestartSerializesLauncherBeforeSecurityCenter() throws Exception {
         String activity = Files.readString(
                 MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));

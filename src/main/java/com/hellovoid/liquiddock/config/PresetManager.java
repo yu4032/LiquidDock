@@ -144,6 +144,8 @@ public final class PresetManager {
         source.put("animation_press_in_ms", 90);
         source.put("animation_press_out_ms", 160);
         source.put("animation_dock_resize_ms", 180);
+        source.put("animation_shortcut_popup_dismiss_fade_ms", 90);
+        source.put("animation_security_center_exit_fade_ms", 80);
         source.put("animation_settings_page_ms", 300);
         source.put("home_grid_8x4", Boolean.FALSE);
         source.put("grid_profile", "8x4");

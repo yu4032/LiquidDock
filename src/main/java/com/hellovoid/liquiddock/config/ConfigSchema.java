@@ -41,6 +41,12 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOCK_RESIZE = integer(
                 "animation_dock_resize_ms", 180, 180, 180, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SHORTCUT_POPUP_DISMISS_FADE = integer(
+                "animation_shortcut_popup_dismiss_fade_ms", 90, 90, 90, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SECURITY_CENTER_EXIT_FADE = integer(
+                "animation_security_center_exit_fade_ms", 80, 80, 80, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SETTINGS_PAGE = integer(
                 "animation_settings_page_ms", 300, 300, 300, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
@@ -621,6 +627,7 @@ public final class ConfigSchema {
         add(keys, Core.ENABLED);
         add(keys, Animation.WORKSPACE_VISIBILITY, Animation.DOCK_ICON_REVEAL,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
+                Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
                 Animation.SETTINGS_PAGE);
         add(keys, Grid.ENABLED, Grid.PROFILE, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,

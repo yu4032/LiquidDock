@@ -36,7 +36,7 @@ final class LiquidDockConfig {
 
     static final class Animation {
         final int workspaceVisibilityMs, dockIconRevealMs, pressInMs, pressOutMs,
-                dockResizeMs, settingsPageMs;
+                dockResizeMs, shortcutPopupDismissFadeMs, securityCenterExitFadeMs;
 
         Animation(ConfigReader c) {
             workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
@@ -44,7 +44,10 @@ final class LiquidDockConfig {
             pressInMs = duration(c, ConfigSchema.Animation.PRESS_IN);
             pressOutMs = duration(c, ConfigSchema.Animation.PRESS_OUT);
             dockResizeMs = duration(c, ConfigSchema.Animation.DOCK_RESIZE);
-            settingsPageMs = duration(c, ConfigSchema.Animation.SETTINGS_PAGE);
+            shortcutPopupDismissFadeMs =
+                    duration(c, ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE);
+            securityCenterExitFadeMs =
+                    duration(c, ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE);
         }
 
         private static int duration(ConfigReader c,

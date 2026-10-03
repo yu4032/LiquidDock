@@ -97,7 +97,7 @@ public class ShortcutSecondaryGlassContractTest {
 
         assertTrue(session.contains("void requestInitialCapture()"));
         assertTrue(session.contains("setUpdatesEnabled(false, \"shortcut-popup-frozen\")"));
-        assertTrue(layer.contains("FAST_DISMISS_FADE_MS = 90L"));
+        assertTrue(layer.contains("AnimationRuntimeState.shortcutPopupDismissFadeDurationMs()"));
         assertFalse(session.contains("beginPrewarm()"));
         assertFalse(session.contains("latchPreDragBackdrop()"));
         assertFalse(hook.contains("HotSeatsListContent"));
@@ -123,17 +123,9 @@ public class ShortcutSecondaryGlassContractTest {
                         + "                    Object result = chain.proceed"));
         assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
         assertTrue(coordinator.contains("layer.fadeOutFast()"));
-        assertTrue(layer.contains("private static final long FAST_DISMISS_FADE_MS = 90L"));
+        assertFalse(layer.contains("FAST_DISMISS_FADE_MS"));
         assertTrue(layer.contains(
-                "void fadeOutFast() {\n"
-                        + "        if (disposed) return;\n"
-                        + "        animate().cancel();\n"
-                        + "        animate()\n"
-                        + "                .alpha(0f)\n"
-                        + "                .setDuration(FAST_DISMISS_FADE_MS)\n"
-                        + "                .setInterpolator(new DecelerateInterpolator())\n"
-                        + "                .start();\n"
-                        + "    }"));
+                ".setDuration(AnimationRuntimeState.shortcutPopupDismissFadeDurationMs())"));
         assertFalse(layer.contains("fadeOutFast();\n        dispose()"));
         assertFalse(layer.contains("fadeOutFast();\n        session.shutdown()"));
     }

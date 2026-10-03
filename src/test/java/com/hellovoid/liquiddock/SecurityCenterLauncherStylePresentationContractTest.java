@@ -206,9 +206,11 @@ public class SecurityCenterLauncherStylePresentationContractTest {
         String coordinator = Files.readString(MAIN.resolve("SecurityCenterGlassCoordinator.java"));
         String sink = Files.readString(MAIN.resolve("SecurityCenterGlassSinkView.java"));
         assertTrue("exit fade must live in every sink instead of one assistant type",
-                sink.contains("EXIT_FADE_MS = 80L")
+                sink.contains("AnimationRuntimeState.securityCenterExitFadeDurationMs()")
                         && sink.contains("ValueAnimator.ofFloat(1f, 0f)")
                         && sink.contains("desiredAlpha *= exitFadeMultiplier"));
+        assertFalse("Security Center exit fade must not keep a hard-coded duration",
+                sink.contains("EXIT_FADE_MS"));
         assertTrue("panel exits must start on the first native Dock contraction, not terminal cleanup",
                 sink.contains("consumeExitContractionStart()")
                         && coordinator.contains("sink == dockSink && sink.consumeExitContractionStart()")
