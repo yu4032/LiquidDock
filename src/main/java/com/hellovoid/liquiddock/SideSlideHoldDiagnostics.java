@@ -9,6 +9,7 @@ final class SideSlideHoldDiagnostics {
     private SideSlideHoldDiagnostics() {}
 
     static void log(String message) {
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
         Log.i(LOGCAT_TAG, message);
         try {
             Api101Bridge.log("[DC][SideSlideHold450] " + message);
@@ -17,6 +18,7 @@ final class SideSlideHoldDiagnostics {
     }
 
     static void log(String message, Throwable error) {
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
         Log.e(LOGCAT_TAG, message, error);
         try {
             Api101Bridge.log("[DC][SideSlideHold450] " + message, error);
