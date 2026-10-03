@@ -23,13 +23,14 @@ public class LoggingGateContractTest {
         assertTrue(source.contains("public static void errorAlways(String message, Throwable error)"));
     }
 
-    @Test public void moduleRefreshesProcessGateBeforeDiagnostics() throws Exception {
+    @Test public void moduleOwnsProcessDebugGateInitialization() throws Exception {
         String source = Files.readString(MAIN.resolve("ModuleMain.java"));
-        int init = source.indexOf("Api101Bridge.init(this);");
-        int refresh = source.indexOf("refreshDebugLogging();", init);
-        int firstLog = source.indexOf("Api101Bridge.log(", refresh);
-        assertTrue("debug gate must initialize before the first process diagnostic",
-                init >= 0 && refresh > init && firstLog > refresh);
+        assertTrue("module load must initialize the process debug gate",
+                source.contains("Api101Bridge.init(this);\n"
+                        + "        refreshDebugLogging();"));
+        assertTrue("package readiness must refresh the process debug gate",
+                source.contains("public void onPackageReady(@NonNull PackageReadyParam param) {\n"
+                        + "        refreshDebugLogging();"));
         assertTrue("Launcher must refresh the gate after legacy/config migration",
                 source.contains("ConfigMigration.migrateAtProcessStart();\n"
                         + "            // Legacy migration can introduce the debug preference"));
