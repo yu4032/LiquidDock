@@ -51,11 +51,11 @@ Enable the free workspace grid to choose **2–10 columns and 2–6 rows** in la
 - page-indicator position;
 - widget sizing adaptation.
 
-Custom icon size has its own switch and does not require the free grid. One shared scale applies to workspace, Dock, small-folder, folder-content and Workstation app-page icons. Ordinary All Apps and search do not follow this scaling.
+Custom icon size has its own switch and does not require the free grid. One shared scale applies to workspace, Dock, small-folder, folder-content and Workstation app-page icons. The sidebar app page and search page do not follow this scaling.
 
 ### Dock
 
-Dock customization enables dimension, position and icon-spacing adjustments. Additional appearance controls have their own switches, including Liquid Glass, stroke and the divider:
+Dock customization enables dimension, position and icon-spacing adjustments. Dock settings also include stroke, shadows and the divider; stroke and the divider have their own switches:
 
 - width and height;
 - bottom position;
