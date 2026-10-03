@@ -308,9 +308,8 @@ final class HomeGridSqueezeCycleGuard {
 
     private static boolean fits(
             int columns, int rows, int x, int y, int spanX, int spanY) {
-        return x >= 0 && y >= 0 && spanX > 0 && spanY > 0
-                && (long) x + spanX <= columns
-                && (long) y + spanY <= rows;
+        return HomeGridSqueezeBoundsPolicy.fits(
+                columns, rows, x, y, spanX, spanY);
     }
 
     private static Object[][] snapshot(Object[] matrix, int columns, int rows) {
