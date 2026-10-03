@@ -7,6 +7,21 @@ import org.junit.Test;
 
 public class HomeGridSqueezePlannerPolicyTest {
     @Test
+    public void oneByOneIconsKeepStockPadPlanners() {
+        assertFalse(HomeGridSqueezePlannerPolicy.useGenericForSpan(1, 1));
+        assertFalse(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(false, 1, 1));
+    }
+
+    @Test
+    public void multiCellItemsUseGenericRectangularPlanners() {
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(2, 1));
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(1, 2));
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(2, 2));
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(true, 1, 1));
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(false, 2, 1));
+    }
+
+    @Test
     public void allFortyFiveConfiguredLayoutsMatchBothHomeOrientations() {
         for (int columns = 2; columns <= 10; columns++) {
             for (int rows = 2; rows <= 6; rows++) {

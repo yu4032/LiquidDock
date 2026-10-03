@@ -1,14 +1,16 @@
 package com.hellovoid.liquiddock;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+
 /**
- * Selects MIUI's generic occupancy planners for free HOME grids.
+ * Routes free HOME-grid occupancy operations between MIUI's stock Pad planners and its generic
+ * rectangular planners.
  *
- * <p>Pad's stock LayoutSwapPlaces / LayoutDropRuleForSwapPlaces are designed around six complete
- * 2x2 macroblocks. Free grids allow arbitrary dimensions and non-macroblock widget positions, so
- * those rules can address partial blocks outside the matrix or overwrite cells owned by another
- * rectangle. MIUI already ships bounds-checked rectangular planners for the alternate squeeze
- * mode. Keep CellLayout/StayConfirm/animation untouched and replace only the two planner objects
- * for active HOME land_grid / vertical_grid controllers matching the configured free grid.</p>
+ * <p>Stock Pad planners preserve the original 1x1 icon squeeze/reorder behavior. Multi-cell
+ * widgets use the generic planners because LayoutSwapPlaces assumes fixed 2x2 macroblocks and is
+ * unsafe for arbitrary free-grid widget positions.</p>
  */
 final class HomeGridSqueezePlannerHook {
     private static final String TAG = "[DC][GRID]";
@@ -16,6 +18,10 @@ final class HomeGridSqueezePlannerHook {
     private static final String GRID_CONFIG = "com.miui.home.launcher.grid.GridConfig";
     private static final String SAVE_LISTENER =
             "com.miui.home.GridOccupancyController$OnSaveLayoutListener";
+    private static final String SQUEEZE_RULE =
+            "com.miui.home.launcher.compat.LayoutSqueezeRule";
+    private static final String DROP_RULE =
+            "com.miui.home.launcher.compat.LayoutDropRule";
     private static final String GENERIC_SQUEEZE =
             "com.miui.home.launcher.compat.LayoutSqueezePlaces";
     private static final String GENERIC_DROP =
@@ -30,6 +36,8 @@ final class HomeGridSqueezePlannerHook {
             Class<?> controller = Class.forName(CONTROLLER, false, classLoader);
             Class<?> gridConfig = Class.forName(GRID_CONFIG, false, classLoader);
             Class<?> saveListener = Class.forName(SAVE_LISTENER, false, classLoader);
+            Class<?> squeezeRule = Class.forName(SQUEEZE_RULE, false, classLoader);
+            Class<?> dropRule = Class.forName(DROP_RULE, false, classLoader);
             Class<?> genericSqueeze = Class.forName(GENERIC_SQUEEZE, false, classLoader);
             Class<?> genericDrop = Class.forName(GENERIC_DROP, false, classLoader);
             HomeGridSqueezeCycleGuard.install(classLoader);
@@ -48,17 +56,75 @@ final class HomeGridSqueezePlannerHook {
                         Object transform = HookUtil.getField(owner, "mLayoutSqueezeDataTransform");
                         if (transform == null) return result;
 
-                        Object squeezePlanner =
+                        Object stockSqueeze = HookUtil.getField(transform, "mLayoutSqueezeRule");
+                        Object stockDrop = HookUtil.getField(owner, "mLayoutDropRule");
+                        if (stockSqueeze == null || stockDrop == null) return result;
+
+                        Object genericSqueezePlanner =
                                 genericSqueeze.getDeclaredConstructor().newInstance();
-                        Object dropPlanner =
+                        Object genericDropPlanner =
                                 genericDrop.getDeclaredConstructor().newInstance();
-                        HomeGridSqueezeCycleGuard.register(squeezePlanner);
-                        HomeGridSqueezeTransactionGuard.register(squeezePlanner);
+                        HomeGridSqueezeCycleGuard.register(genericSqueezePlanner);
+                        HomeGridSqueezeTransactionGuard.register(genericSqueezePlanner);
+
+                        Object squeezeRouter = Proxy.newProxyInstance(
+                                classLoader,
+                                new Class<?>[]{squeezeRule},
+                                (proxy, method, args) -> {
+                                    if (method.getDeclaringClass() == Object.class) {
+                                        return objectMethod(proxy, method, args, "HybridSqueezeRule");
+                                    }
+                                    Object parameter = args != null && args.length > 0
+                                            ? args[0] : null;
+                                    boolean useGeneric = false;
+                                    if (parameter != null) {
+                                        int spanX = HookUtil.getIntField(parameter, "spanX");
+                                        int spanY = HookUtil.getIntField(parameter, "spanY");
+                                        boolean isSpanMove =
+                                                HookUtil.getBooleanField(parameter, "isSpanMove");
+                                        useGeneric =
+                                                HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
+                                                        isSpanMove, spanX, spanY);
+                                    }
+                                    return invoke(
+                                            useGeneric
+                                                    ? genericSqueezePlanner
+                                                    : stockSqueeze,
+                                            method,
+                                            args);
+                                });
+
+                        Object dropRouter = Proxy.newProxyInstance(
+                                classLoader,
+                                new Class<?>[]{dropRule},
+                                (proxy, method, args) -> {
+                                    if (method.getDeclaringClass() == Object.class) {
+                                        return objectMethod(proxy, method, args, "HybridDropRule");
+                                    }
+                                    int spanX = 1;
+                                    int spanY = 1;
+                                    if ("isLegalXY".equals(method.getName())
+                                            && args != null && args.length >= 4) {
+                                        spanX = (Integer) args[2];
+                                        spanY = (Integer) args[3];
+                                    } else if ("findNearestLinearVacantArea".equals(
+                                            method.getName())
+                                            && args != null && args.length >= 6) {
+                                        spanX = (Integer) args[4];
+                                        spanY = (Integer) args[5];
+                                    }
+                                    return invoke(
+                                            HomeGridSqueezePlannerPolicy.useGenericForSpan(
+                                                    spanX, spanY)
+                                                    ? genericDropPlanner
+                                                    : stockDrop,
+                                            method,
+                                            args);
+                                });
 
                         HookUtil.requireInvoke(
-                                transform, "setLayoutSqueezeRule", squeezePlanner);
-                        HookUtil.setField(owner, "mLayoutDropRule", dropPlanner);
-
+                                transform, "setLayoutSqueezeRule", squeezeRouter);
+                        HookUtil.setField(owner, "mLayoutDropRule", dropRouter);
                         return result;
                     });
 
@@ -66,6 +132,27 @@ final class HomeGridSqueezePlannerHook {
         } catch (Throwable error) {
             MainHook.log(TAG + " free-grid planners unavailable: " + error);
         }
+    }
+
+    private static Object invoke(Object target, Method method, Object[] args) throws Throwable {
+        try {
+            method.setAccessible(true);
+            return method.invoke(target, args);
+        } catch (InvocationTargetException error) {
+            Throwable cause = error.getCause();
+            throw cause != null ? cause : error;
+        }
+    }
+
+    private static Object objectMethod(
+            Object proxy, Method method, Object[] args, String label) {
+        String name = method.getName();
+        if ("hashCode".equals(name)) return System.identityHashCode(proxy);
+        if ("equals".equals(name)) {
+            return args != null && args.length == 1 && proxy == args[0];
+        }
+        if ("toString".equals(name)) return label;
+        throw new UnsupportedOperationException(name);
     }
 
     private static boolean isFreeHomeGrid(

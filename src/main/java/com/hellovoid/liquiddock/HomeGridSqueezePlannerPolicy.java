@@ -4,6 +4,14 @@ package com.hellovoid.liquiddock;
 final class HomeGridSqueezePlannerPolicy {
     private HomeGridSqueezePlannerPolicy() {}
 
+    static boolean useGenericForSpan(int spanX, int spanY) {
+        return spanX > 1 || spanY > 1;
+    }
+
+    static boolean useGenericForSqueeze(boolean isSpanMove, int spanX, int spanY) {
+        return isSpanMove || useGenericForSpan(spanX, spanY);
+    }
+
     static boolean matches(
             String gridName,
             int countX,
