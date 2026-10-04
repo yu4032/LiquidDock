@@ -15,6 +15,14 @@ public class HomeGridWidgetAdmissionPolicyTest {
     }
 
     @Test
+    public void fourByTwoMayFitCurrentLandscapeButIsRejectedAtCommitForRotationSafety() {
+        assertTrue(HomeGridDropLegalityPolicy.isLegal(
+                8, 3, 0, 0, 4, 2));
+        assertTrue(HomeGridWidgetAdmissionPolicy.shouldReject(
+                "land_grid", 8, 3, 8, 3, 4, 2));
+    }
+
+    @Test
     public void twoByTwoRemainsAdmissibleOnEightByThree() {
         assertFalse(HomeGridWidgetAdmissionPolicy.shouldReject(
                 "land_grid", 8, 3, 8, 3, 2, 2));
