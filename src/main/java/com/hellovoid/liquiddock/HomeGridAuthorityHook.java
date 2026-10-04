@@ -7,9 +7,8 @@ import java.util.List;
 /**
  * Rewrites the actual GridController full-screen configs before they become active.
  *
- * <p>HyperOS Launcher 4.50 no longer derives the live workspace count from
- * LauncherCellCountCompatPadDevice. GridController constructs 6x4 GridConfig instances directly,
- * then DeviceConfig and CellLayout read those instances. This hook targets that authority.</p>
+ * <p>Split-screen geometry remains vendor-owned and is handled at the GridCalculator input
+ * boundary by HomeGridSplitGridFactoryHook so MIUI keeps its native pane coordinate system.</p>
  */
 final class HomeGridAuthorityHook {
     private HomeGridAuthorityHook() {}
@@ -18,13 +17,14 @@ final class HomeGridAuthorityHook {
         try {
             Class<?> controller = Class.forName(
                     "com.miui.home.launcher.grid.GridController", false, classLoader);
-            hookFullScreenFactory(controller, "calculateFullScreenGridConfigs", config);
+            hookGridFactory(controller, "calculateFullScreenGridConfigs", config);
+            HomeGridSplitGridFactoryHook.install(classLoader, controller, config);
         } catch (Throwable error) {
             throw new RuntimeException("GridController authority unavailable", error);
         }
     }
 
-    private static void hookFullScreenFactory(
+    private static void hookGridFactory(
             Class<?> controller, String method, HomeGridInstallConfig config) {
         HookUtil.hookMethod(controller, method, new Class<?>[]{Context.class}, chain -> {
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -44,15 +44,11 @@ final class HomeGridAuthorityHook {
             String name = nameValue == null ? "" : String.valueOf(nameValue);
             final int countX;
             final int countY;
-            if ("land_grid".equals(name)) {
-                countX = config.columns;
-                countY = config.rows;
-            } else if ("vertical_grid".equals(name)) {
-                countX = config.rows;
-                countY = config.columns;
-            } else {
-                return;
-            }
+            int[] counts = HomeGridWorkspaceGridPolicy.fullScreenCounts(
+                    name, config.columns, config.rows);
+            if (counts == null) return;
+            countX = counts[0];
+            countY = counts[1];
 
             int width = (Integer) HookUtil.requireInvoke(grid, "getWidth");
             int height = (Integer) HookUtil.requireInvoke(grid, "getHeight");

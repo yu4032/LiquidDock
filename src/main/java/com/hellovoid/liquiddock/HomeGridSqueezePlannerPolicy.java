@@ -4,12 +4,18 @@ package com.hellovoid.liquiddock;
 final class HomeGridSqueezePlannerPolicy {
     private HomeGridSqueezePlannerPolicy() {}
 
-    static boolean useGenericForSpan(int spanX, int spanY) {
-        return spanX > 1 || spanY > 1;
+    static boolean isVendorPadGrid(int countX, int countY) {
+        return (countX == 6 && countY == 4) || (countX == 4 && countY == 6);
     }
 
-    static boolean useGenericForSqueeze(boolean isSpanMove, int spanX, int spanY) {
-        return isSpanMove || useGenericForSpan(spanX, spanY);
+    static boolean useGenericForSpan(
+            boolean vendorPadGrid, int spanX, int spanY) {
+        return !vendorPadGrid || spanX > 1 || spanY > 1;
+    }
+
+    static boolean useGenericForSqueeze(
+            boolean vendorPadGrid, boolean isSpanMove, int spanX, int spanY) {
+        return !vendorPadGrid || isSpanMove || spanX > 1 || spanY > 1;
     }
 
     static boolean matches(
@@ -18,10 +24,12 @@ final class HomeGridSqueezePlannerPolicy {
             int countY,
             int configuredColumns,
             int configuredRows) {
-        if (!"land_grid".equals(gridName) && !"vertical_grid".equals(gridName)) {
-            return false;
+        if ("land_grid".equals(gridName)) {
+            return countX == configuredColumns && countY == configuredRows;
         }
-        return (countX == configuredColumns && countY == configuredRows)
-                || (countX == configuredRows && countY == configuredColumns);
+        if ("vertical_grid".equals(gridName) || "land_split_grid".equals(gridName)) {
+            return countX == configuredRows && countY == configuredColumns;
+        }
+        return false;
     }
 }

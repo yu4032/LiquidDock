@@ -66,6 +66,7 @@ final class LauncherGridInstallConfig {
                 Math.round(portGap * gridScale),
                 Math.round(grid.landscapeIndicatorY * gridScale),
                 Math.round(grid.portraitIndicatorY * gridScale),
+                Math.round(grid.splitHorizontalOffset * gridScale),
                 density);
 
         HomeGridWorkstationGeometryConfig workstation =

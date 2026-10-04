@@ -120,24 +120,22 @@ final class HomeGridHook {
                         srcCols, srcRows, sourceScreenId, sourcePositions);
             }
 
-            if (adoptCompleteExistingTarget(
-                    byData.values(), dst, dstCols, dstRows, sourceScreenId)) {
-                return true;
-            }
-
-            Object[][] staged = new Object[dstCols][dstRows];
+            // LayoutTransformRule.init() creates mDstOccupied as a fresh SPACE_INFO matrix.
+            // Preserve those sentinels: LayoutTransformHelperGridChanged.transformToHVArray()
+            // dereferences every target cell unconditionally, including empty cells.
+            Object[][] staged = HomeGridTransformMatrixPolicy.copyTemplate(
+                    dst, dstCols, dstRows);
             boolean[][] occupied = new boolean[dstCols][dstRows];
 
             if (sourceScreenId != null && restoreRemembered(
                     byData.values(), staged, occupied,
                     dstCols, dstRows, sourceScreenId)) {
                 copyInto(staged, dst, dstCols, dstRows);
-                MainHook.log("[DC][HomeGridRotation] restored sidecar target "
-                        + dstCols + "x" + dstRows + " screen=" + sourceScreenId);
                 return true;
             }
 
-            staged = new Object[dstCols][dstRows];
+            staged = HomeGridTransformMatrixPolicy.copyTemplate(
+                    dst, dstCols, dstRows);
             occupied = new boolean[dstCols][dstRows];
             Map<Long, HomeGridRotationPositionMemory.Position> targetPositions =
                     new LinkedHashMap<>();
@@ -209,60 +207,11 @@ final class HomeGridHook {
                         dstCols, dstRows, sourceScreenId, targetPositions);
             }
             copyInto(staged, dst, dstCols, dstRows);
-            MainHook.log("[DC][HomeGridRotation] generated target "
-                    + dstCols + "x" + dstRows
-                    + (sourceScreenId == null ? "" : " screen=" + sourceScreenId));
             return true;
         } catch (Throwable error) {
             MainHook.log("[DC][HomeGridRotation] atomic transform error: " + error);
             return false;
         }
-    }
-
-    private static boolean adoptCompleteExistingTarget(
-            Iterable<TransformItem> sourceItems,
-            Object[][] dst,
-            int cols,
-            int rows,
-            Long sourceScreenId) {
-        Map<Object, TransformItem> targetByData = collectItems(dst, cols, rows);
-        ArrayList<TransformItem> source = new ArrayList<>();
-        for (TransformItem item : sourceItems) source.add(item);
-        if (targetByData.size() != source.size() || !allRectangular(targetByData.values())) {
-            return false;
-        }
-
-        Map<Long, TransformItem> targetById = new LinkedHashMap<>();
-        for (TransformItem item : targetByData.values()) {
-            if (item.stableId == null || targetById.put(item.stableId, item) != null) {
-                return false;
-            }
-        }
-
-        Map<Long, HomeGridRotationPositionMemory.Position> positions =
-                new LinkedHashMap<>();
-        for (TransformItem item : source) {
-            if (item.stableId == null) return false;
-            TransformItem target = targetById.get(item.stableId);
-            if (target == null
-                    || target.width() != item.width()
-                    || target.height() != item.height()
-                    || (sourceScreenId != null
-                    && target.screenId != null
-                    && !sourceScreenId.equals(target.screenId))) {
-                return false;
-            }
-            positions.put(item.stableId,
-                    new HomeGridRotationPositionMemory.Position(
-                            target.minX, target.minY, target.width(), target.height()));
-        }
-
-        if (sourceScreenId != null) {
-            HomeGridRotationPositionMemory.save(cols, rows, sourceScreenId, positions);
-        }
-        MainHook.log("[DC][HomeGridRotation] kept complete vendor target "
-                + cols + "x" + rows + " items=" + source.size());
-        return true;
     }
 
     private static boolean allRectangular(Iterable<TransformItem> items) {

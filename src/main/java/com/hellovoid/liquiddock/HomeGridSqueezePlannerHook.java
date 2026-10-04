@@ -5,12 +5,12 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
 /**
- * Routes free HOME-grid occupancy operations between MIUI's stock Pad planners and its generic
+ * Routes custom HOME-grid occupancy operations between MIUI's stock Pad planners and its generic
  * rectangular planners.
  *
- * <p>Stock Pad planners preserve the original 1x1 icon squeeze/reorder behavior. Multi-cell
- * widgets use the generic planners because LayoutSwapPlaces assumes fixed 2x2 macroblocks and is
- * unsafe for arbitrary free-grid widget positions.</p>
+ * <p>LayoutSwapPlaces is only safe on the vendor 6x4/4x6 matrix because its 1x1 path also assumes
+ * fixed 2x2 macroblocks. Every non-vendor full-screen or split HOME grid therefore uses the generic
+ * dimension-aware planners for icons and widgets alike.</p>
  */
 final class HomeGridSqueezePlannerHook {
     private static final String TAG = "[DC][GRID]";
@@ -53,6 +53,10 @@ final class HomeGridSqueezePlannerHook {
                         if (!isFreeHomeGrid(activeGrid, config)) return result;
 
                         Object owner = chain.getThisObject();
+                        int countX = (Integer) HookUtil.requireInvoke(activeGrid, "getCountX");
+                        int countY = (Integer) HookUtil.requireInvoke(activeGrid, "getCountY");
+                        boolean vendorPadGrid =
+                                HomeGridSqueezePlannerPolicy.isVendorPadGrid(countX, countY);
                         Object transform = HookUtil.getField(owner, "mLayoutSqueezeDataTransform");
                         if (transform == null) return result;
 
@@ -84,7 +88,7 @@ final class HomeGridSqueezePlannerHook {
                                                 HookUtil.getBooleanField(parameter, "isSpanMove");
                                         useGeneric =
                                                 HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
-                                                        isSpanMove, spanX, spanY);
+                                                        vendorPadGrid, isSpanMove, spanX, spanY);
                                     }
                                     return invoke(
                                             useGeneric
@@ -115,7 +119,7 @@ final class HomeGridSqueezePlannerHook {
                                     }
                                     return invoke(
                                             HomeGridSqueezePlannerPolicy.useGenericForSpan(
-                                                    spanX, spanY)
+                                                    vendorPadGrid, spanX, spanY)
                                                     ? genericDropPlanner
                                                     : stockDrop,
                                             method,
@@ -160,9 +164,6 @@ final class HomeGridSqueezePlannerHook {
         if (gridConfig == null) return false;
         try {
             String name = String.valueOf(HookUtil.requireInvoke(gridConfig, "getName"));
-            if (!"land_grid".equals(name) && !"vertical_grid".equals(name)) {
-                return false;
-            }
             Object xValue = HookUtil.requireInvoke(gridConfig, "getCountX");
             Object yValue = HookUtil.requireInvoke(gridConfig, "getCountY");
             return xValue instanceof Integer
