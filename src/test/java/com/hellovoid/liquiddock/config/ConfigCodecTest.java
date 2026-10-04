@@ -250,6 +250,23 @@ public class ConfigCodecTest {
     }
 
     @Test
+    public void widgetPlacementGuardDefaultsOnAndRoundTripsOff() {
+        Map<String, Object> emptyExport = ConfigCodec.exportValues(new HashMap<>());
+        assertEquals(Boolean.TRUE,
+                emptyExport.get(ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD.name()));
+
+        Map<String, Object> prefs = new HashMap<>();
+        prefs.put(ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD.name(), false);
+        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
+        assertEquals(Boolean.FALSE,
+                exported.get(ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD.name()));
+
+        Map<String, Object> imported = ConfigCodec.importValues(exported);
+        assertEquals(Boolean.FALSE,
+                imported.get(ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD.name()));
+    }
+
+    @Test
     public void recentsWallpaperDimmingSwitchRoundTrips() {
         Map<String, Object> prefs = new HashMap<>();
         prefs.put(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name(), true);
