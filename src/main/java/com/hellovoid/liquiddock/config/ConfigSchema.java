@@ -77,6 +77,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> WIDGET_HORIZONTAL_STRETCH = bool(
                 "grid_widget_horizontal_stretch", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> WIDGET_PLACEMENT_GUARD = bool(
+                "grid_widget_placement_guard", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
 
         public static final ConfigKey<Integer> LANDSCAPE_HORIZONTAL_DISTANCE = dp(
                 "grid_landscape_horizontal_distance", 0, 0, 0, -600, 600,
@@ -638,6 +641,7 @@ public final class ConfigSchema {
         add(keys, Grid.ENABLED, Grid.PROFILE, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
                 Grid.MARGINS_DP, Grid.MARGINS_OFFSET, Grid.WIDGET_HORIZONTAL_STRETCH,
+                Grid.WIDGET_PLACEMENT_GUARD,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,
