@@ -736,6 +736,13 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
                     masterEnabled && customGrid,
                 )
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD,
+                    "阻止不兼容小组件加入桌面",
+                    "阻止无法同时适配横竖屏网格的小组件通过按钮或拖拽加入桌面；关闭后交由桌面自身处理；已有组件下调网格尺寸的安全检查不受影响；重启桌面后生效",
+                    masterEnabled && customGrid,
+                )
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }
