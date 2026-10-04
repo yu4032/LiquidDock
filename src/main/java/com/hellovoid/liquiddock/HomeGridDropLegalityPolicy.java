@@ -22,8 +22,16 @@ final class HomeGridDropLegalityPolicy {
         long bottom = (long) cellY + spanY;
         if (right > columns || bottom > rows) return false;
 
-        // Rotation swaps rows/columns but keeps widget spanX/spanY unchanged.
-        // Refuse placements that could never fit after a physical rotation.
-        return spanX <= rows && spanY <= columns;
+        return fitsBothOrientations(columns, rows, spanX, spanY);
+    }
+
+    static boolean fitsBothOrientations(
+            int columns, int rows, int spanX, int spanY) {
+        if (columns <= 0 || rows <= 0 || spanX <= 0 || spanY <= 0) return false;
+        // Rotation swaps rows/columns while custom transform keeps item span unchanged.
+        return spanX <= columns
+                && spanY <= rows
+                && spanX <= rows
+                && spanY <= columns;
     }
 }

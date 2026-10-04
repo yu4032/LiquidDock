@@ -41,6 +41,8 @@ final class HomeGridHook {
             HomeGridAuthorityHook.install(classLoader, config);
             HomeGridCommittedLayoutCaptureHook.install(classLoader, config);
             HomeGridSqueezePlannerHook.install(classLoader, config);
+            HomeGridWidgetAdmissionGuard.install(classLoader, config);
+            installGridChangePreflight(classLoader, config);
             installRotationTransform(classLoader, config);
             HomeGridPageIndicatorHook.install(classLoader, config);
             HomeGridCellGeometryHook.install(classLoader, config);
@@ -49,6 +51,62 @@ final class HomeGridHook {
         } catch (Throwable error) {
             MainHook.log("[DC] home grid hook unavailable: " + error);
         }
+    }
+
+    private static void installGridChangePreflight(
+            ClassLoader classLoader, HomeGridInstallConfig config) {
+        final Class<?> cellLayout;
+        final Class<?> gridConfig;
+        try {
+            cellLayout = Class.forName(
+                    "com.miui.home.launcher.CellLayout", false, classLoader);
+            gridConfig = Class.forName(
+                    "com.miui.home.launcher.grid.GridConfig", false, classLoader);
+        } catch (ClassNotFoundException error) {
+            throw new RuntimeException(error);
+        }
+
+        HookUtil.hookMethod(cellLayout, "setGrid", new Class<?>[]{gridConfig}, chain -> {
+            Object target = chain.getArg(0);
+            Object owner = chain.getThisObject();
+            if (target == null || !(owner instanceof android.view.View)) {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
+
+            Object current = HookUtil.tryInvoke(owner, "getGridConfig").value();
+            if (current == null) {
+                // First load has no safe previous GridConfig to retain.
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
+
+            try {
+                String name = String.valueOf(HookUtil.requireInvoke(target, "getName"));
+                int[] expected = HomeGridWorkspaceGridPolicy.fullScreenCounts(
+                        name, config.columns, config.rows);
+                if (expected == null) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+
+                int columns = (Integer) HookUtil.requireInvoke(target, "getCountX");
+                int rows = (Integer) HookUtil.requireInvoke(target, "getCountY");
+                if (columns != expected[0] || rows != expected[1]) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+
+                HomeGridWorkspaceSpanPreflight.Result preflight =
+                        HomeGridWorkspaceSpanRuntime.scan(columns, rows);
+                if (preflight.available && !preflight.compatible) {
+                    MainHook.log("[DC][HomeGridRotation] blocked incompatible grid switch "
+                            + name + " " + columns + "x" + rows
+                            + " blockingSpan=" + preflight.blockingSpanX
+                            + "x" + preflight.blockingSpanY);
+                    return null;
+                }
+            } catch (Throwable error) {
+                MainHook.log("[DC][HomeGridRotation] grid preflight unavailable: " + error);
+            }
+            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+        });
     }
 
     private static void installRotationTransform(
@@ -115,10 +173,6 @@ final class HomeGridHook {
             Long sourceScreenId = commonScreenId(byData.values());
             Map<Long, HomeGridRotationPositionMemory.Position> sourcePositions =
                     positionsOf(byData.values());
-            if (sourceScreenId != null) {
-                HomeGridRotationPositionMemory.save(
-                        srcCols, srcRows, sourceScreenId, sourcePositions);
-            }
 
             // LayoutTransformRule.init() creates mDstOccupied as a fresh SPACE_INFO matrix.
             // Preserve those sentinels: LayoutTransformHelperGridChanged.transformToHVArray()
@@ -131,6 +185,8 @@ final class HomeGridHook {
                     byData.values(), staged, occupied,
                     dstCols, dstRows, sourceScreenId)) {
                 copyInto(staged, dst, dstCols, dstRows);
+                HomeGridRotationPositionMemory.save(
+                        srcCols, srcRows, sourceScreenId, sourcePositions);
                 return true;
             }
 
@@ -202,11 +258,13 @@ final class HomeGridHook {
             }
             if (iconIndex != icons.size()) return false;
 
+            copyInto(staged, dst, dstCols, dstRows);
             if (sourceScreenId != null) {
+                HomeGridRotationPositionMemory.save(
+                        srcCols, srcRows, sourceScreenId, sourcePositions);
                 HomeGridRotationPositionMemory.save(
                         dstCols, dstRows, sourceScreenId, targetPositions);
             }
-            copyInto(staged, dst, dstCols, dstRows);
             return true;
         } catch (Throwable error) {
             MainHook.log("[DC][HomeGridRotation] atomic transform error: " + error);

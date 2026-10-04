@@ -125,6 +125,14 @@ public final class ModuleMain extends XposedModule {
             // Legacy migration can introduce the debug preference during this same Launcher start.
             refreshDebugLogging();
             ClassLoader classLoader = param.getClassLoader();
+            HookUtil.InvocationResult<Object> applicationResult =
+                    HookUtil.tryInvokeActivityThreadCurrentApplication();
+            if (applicationResult.succeeded()
+                    && applicationResult.value() instanceof android.content.Context) {
+                LauncherManualDiscoveryBridge.ensureRegistered(
+                        (android.content.Context) applicationResult.value());
+            }
+            HomeGridWorkspaceSpanRuntime.install(classLoader);
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             AnimationRuntimeState.configure(runtimeConfig.animation);

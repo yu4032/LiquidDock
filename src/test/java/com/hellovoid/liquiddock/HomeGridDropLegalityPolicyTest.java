@@ -30,6 +30,16 @@ public class HomeGridDropLegalityPolicyTest {
     }
 
     @Test
+    public void fourByTwoIsRejectedWhenTheOtherOrientationHasOnlyThreeColumns() {
+        assertFalse(HomeGridDropLegalityPolicy.fitsBothOrientations(
+                7, 3, 4, 2));
+        assertFalse(HomeGridDropLegalityPolicy.fitsBothOrientations(
+                3, 7, 4, 2));
+        assertTrue(HomeGridDropLegalityPolicy.fitsBothOrientations(
+                7, 4, 4, 2));
+    }
+
+    @Test
     public void invalidCoordinatesAndSpansAreRejected() {
         assertFalse(legal(8, 4, -1, 0, 2, 2));
         assertFalse(legal(8, 4, 0, -1, 1, 1));

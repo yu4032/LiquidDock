@@ -74,7 +74,8 @@ final class HomeGridSqueezeTransactionGuard {
 
                     try {
                         Object result = chain.proceed();
-                        if (!(result instanceof Boolean) || !((Boolean) result)) {
+                        if (!succeeded(result)) {
+                            snapshot.restore(src, dst);
                             return result;
                         }
                         if (isConsistent(dst)) {
@@ -88,6 +89,10 @@ final class HomeGridSqueezeTransactionGuard {
                         return false;
                     }
                 });
+    }
+
+    static boolean succeeded(Object result) {
+        return result instanceof Boolean && ((Boolean) result);
     }
 
     private static Object[] asMatrix(Object value) {

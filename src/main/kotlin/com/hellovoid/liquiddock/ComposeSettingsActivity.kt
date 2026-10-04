@@ -726,7 +726,9 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     "允许 2×2 到 10×6 的工作区布局；全屏保持原工作区居中，分屏跟随系统 pane 对齐，重启桌面后生效",
                     masterEnabled,
                 ) { customGrid = it }
-                gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+                gridDimensionSpecs.forEach {
+                    GridDimensionSetting(prefs, it, masterEnabled && customGrid)
+                }
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
@@ -1147,6 +1149,132 @@ internal fun BooleanSetting(
         title = title,
         summary = summary,
         enabled = enabled,
+    )
+}
+
+@Composable
+private fun GridDimensionSetting(
+    prefs: SharedPreferences,
+    spec: IntSpec,
+    enabled: Boolean,
+) {
+    val resetValue = spec.resetValue().roundToInt()
+    var value by remember(spec.key) {
+        mutableStateOf(prefs.getInt(spec.key, resetValue))
+    }
+    var requestGeneration by remember(spec.key) { mutableStateOf(0) }
+    val context = LocalContext.current
+
+    fun commit(next: Int) {
+        val clamped = next.coerceIn(spec.min, spec.max)
+        value = clamped
+        prefs.edit().putInt(spec.key, clamped).apply()
+    }
+
+    fun showUnavailable() {
+        android.app.AlertDialog.Builder(context)
+            .setTitle("无法验证桌面布局")
+            .setMessage("未能读取当前桌面的小组件尺寸。请确认桌面正在运行后重试；本次网格尺寸不会保存。")
+            .setPositiveButton("确定", null)
+            .show()
+    }
+
+    fun requestSave(raw: Float) {
+        val next = raw.roundToInt().coerceIn(spec.min, spec.max)
+        if (next == value) return
+
+        val columns = if (spec.key == ConfigSchema.Grid.COLUMNS.name()) {
+            next
+        } else {
+            prefs.getInt(
+                ConfigSchema.Grid.COLUMNS.name(),
+                ConfigSchema.Grid.COLUMNS.uiDefault(),
+            )
+        }
+        val rows = if (spec.key == ConfigSchema.Grid.ROWS.name()) {
+            next
+        } else {
+            prefs.getInt(
+                ConfigSchema.Grid.ROWS.name(),
+                ConfigSchema.Grid.ROWS.uiDefault(),
+            )
+        }
+        val token = prefs.getString(
+            WidgetComponentStore.DISCOVERY_TOKEN_KEY,
+            "",
+        ).orEmpty()
+        if (token.isEmpty()) {
+            showUnavailable()
+            return
+        }
+
+        val generation = ++requestGeneration
+        LauncherManualDiscoveryBridge.requestGridPreflight(
+            context,
+            token,
+            columns,
+            rows,
+        ) { result ->
+            if (generation == requestGeneration) {
+                when {
+                    !result.available -> showUnavailable()
+                    !result.compatible -> {
+                        android.app.AlertDialog.Builder(context)
+                            .setTitle("无法设置此网格尺寸")
+                            .setMessage(
+                                "当前桌面存在 ${result.blockingSpanX}×${result.blockingSpanY} 多格项目，" +
+                                        "设置为 ${columns}×${rows} 后在横竖屏切换时无法放入。\n\n" +
+                                        "请先移除或缩小该小组件，再修改网格尺寸。",
+                            )
+                            .setPositiveButton("确定", null)
+                            .show()
+                    }
+                    else -> commit(next)
+                }
+            }
+        }
+    }
+
+    SliderPreference(
+        value = value.toFloat(),
+        onValueChange = ::requestSave,
+        title = spec.title,
+        summary = spec.summary,
+        valueText = "",
+        enabled = enabled,
+        valueRange = spec.min.toFloat()..spec.max.toFloat(),
+        steps = (spec.max - spec.min - 1).coerceAtLeast(0),
+        endActions = {
+            Button(
+                onClick = {
+                    val input = EditText(context).apply {
+                        setText(value.toString())
+                        selectAll()
+                        inputType = InputType.TYPE_CLASS_NUMBER
+                    }
+                    android.app.AlertDialog.Builder(context)
+                        .setTitle(spec.title)
+                        .setView(input)
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("确定") { _, _ ->
+                            input.text.toString().toFloatOrNull()?.let(::requestSave)
+                        }
+                        .show()
+                },
+                enabled = enabled,
+                minWidth = 72.dp,
+                minHeight = 32.dp,
+                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) { Text("${value}${if (spec.unit.isBlank()) "" else " ${spec.unit}"}") }
+            Button(
+                onClick = { requestSave(resetValue.toFloat()) },
+                enabled = enabled && value != resetValue,
+                minWidth = 56.dp,
+                minHeight = 32.dp,
+                insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            ) { Text("重置") }
+        },
+        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
     )
 }
 
