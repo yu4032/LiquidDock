@@ -156,6 +156,7 @@ public final class PresetManager {
         source.put("grid_margins_dp", Boolean.TRUE);
         source.put("grid_margins_offset", Boolean.TRUE);
         source.put("grid_widget_horizontal_stretch", Boolean.FALSE);
+        source.put("grid_widget_placement_guard", Boolean.TRUE);
         source.put("grid_landscape_horizontal_distance", 0);
         source.put("grid_landscape_top_distance", -8);
         source.put("grid_landscape_bottom_distance", 8);
