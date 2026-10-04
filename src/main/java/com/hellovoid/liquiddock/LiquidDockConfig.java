@@ -75,6 +75,7 @@ final class LiquidDockConfig {
         final int columns, rows, iconSizePercent;
         final float landscapeHorizontal, landscapeTop, landscapeBottom, landscapeRowGap;
         final float portraitHorizontal, portraitTop, portraitBottom, portraitRowGap;
+        final float splitHorizontalOffset;
         final float landscapeIndicatorY, portraitIndicatorY;
 
         Grid(ConfigReader c) {
@@ -122,6 +123,8 @@ final class LiquidDockConfig {
             portraitBottom = c.f(ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE.name(),
                     c.f(ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM.name(),
                             ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM.runtimeFallback()));
+            splitHorizontalOffset = c.f(ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET.name(),
+                    ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET.runtimeFallback());
             landscapeRowGap = c.f("grid_landscape_row_gap", offsets ? 0 : (dp ? 1 : 3));
             portraitRowGap = c.f("grid_portrait_row_gap", offsets ? 0 : (dp ? 1 : 3));
             landscapeIndicatorY = c.f(ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name(),

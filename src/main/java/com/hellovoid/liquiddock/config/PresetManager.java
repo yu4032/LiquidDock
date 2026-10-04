@@ -161,6 +161,7 @@ public final class PresetManager {
         source.put("grid_portrait_horizontal_distance", 0);
         source.put("grid_portrait_top_distance", 30);
         source.put("grid_portrait_bottom_distance", 0);
+        source.put("grid_split_horizontal_offset", 0);
         source.put("grid_landscape_margin_left", 30);
         source.put("grid_landscape_margin_right", 30);
         source.put("grid_landscape_margin_top", -35);

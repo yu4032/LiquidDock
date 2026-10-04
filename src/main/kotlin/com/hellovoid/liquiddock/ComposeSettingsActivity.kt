@@ -277,6 +277,13 @@ private val gridSpecs = listOf(
     IntSpec(ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y, "横屏指示器 Y"),
     IntSpec(ConfigSchema.Grid.PORTRAIT_INDICATOR_Y, "竖屏指示器 Y"),
 )
+private val splitGridSpecs = listOf(
+    IntSpec(
+        ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET,
+        "分屏水平偏移",
+        summary = "0 保留系统分屏对齐；正值向右、负值向左；重启桌面后生效",
+    ),
+)
 private val dockSpecs = listOf(
     IntSpec(ConfigSchema.Dock.BLUR_RADIUS, "模糊强度", ""),
     IntSpec(ConfigSchema.Dock.HEIGHT_OFFSET, "高度偏移"),
@@ -716,7 +723,7 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     prefs,
                     ConfigSchema.Grid.ENABLED,
                     "自由主界面网格",
-                    "允许 2×2 到 10×6 的工作区布局；始终在 Dock 上方原工作区内居中，重启桌面后生效",
+                    "允许 2×2 到 10×6 的工作区布局；全屏保持原工作区居中，分屏跟随系统 pane 对齐，重启桌面后生效",
                     masterEnabled,
                 ) { customGrid = it }
                 gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
@@ -726,6 +733,8 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
         item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
         item { SmallTitle(stringResource(R.string.category_portrait)) }
         item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
+        item { SmallTitle(stringResource(R.string.category_split_screen)) }
+        item { SettingsCard { splitGridSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
     }
 }
 

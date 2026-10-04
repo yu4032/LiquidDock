@@ -54,7 +54,7 @@ final class HomeGridVerticalBoundsHook {
 
             int countX = HookUtil.getIntField(target, "mHCells");
             int countY = HookUtil.getIntField(target, "mVCells");
-            if (!profile.matchesCounts(countX, countY)) return;
+            if (!profile.matchesCounts(countX, countY) || isSplitGrid(target)) return;
             int rows = profile.rows(portrait);
             if (countY != rows) return;
 
@@ -111,6 +111,17 @@ final class HomeGridVerticalBoundsHook {
             rebuildYs(target, rows, geometry.top, geometry.cellSize, geometry.gap);
         } catch (Throwable error) {
             MainHook.log("[DC] custom-grid vertical geometry failed: " + error);
+        }
+    }
+
+    private static boolean isSplitGrid(Object target) {
+        try {
+            Object gridConfig = HookUtil.getField(target, "mGridConfig");
+            Object name = HookUtil.requireInvoke(gridConfig, "getName");
+            return HomeGridWorkspaceGridPolicy.isSplitGridName(
+                    name == null ? "" : String.valueOf(name));
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 

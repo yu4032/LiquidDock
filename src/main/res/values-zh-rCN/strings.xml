@@ -47,7 +47,7 @@
     <string name="category_about">关于</string>
     <string name="enable_liquiddock">启用 LiquidDock</string>
     <string name="enable_liquiddock_summary">关闭后立即释放可热切换的视觉效果；完整应用结构性 Hook 变更需重启桌面生效</string>
-    <string name="home_grid_summary">8×4 / 4×8、横竖屏边距与指示器</string>
+    <string name="home_grid_summary">自由主界面网格、横竖屏边距、分屏对齐与指示器</string>
     <string name="home_dock_summary">尺寸、圆角、图标间距、位置与模糊</string>
     <string name="home_divider_summary">独立控制分隔线宽度、高度、位置、颜色与透明度</string>
     <string name="home_workstation_summary">独立长度与间距；不继承普通 Dock 参数</string>
@@ -64,6 +64,7 @@
     <string name="category_grid">网格</string>
     <string name="category_landscape">横屏</string>
     <string name="category_portrait">竖屏</string>
+    <string name="category_split_screen">分屏</string>
     <string name="enable_grid_8x4">启用自定义布局</string>
     <string name="enable_grid_8x4_summary">关闭时完全使用 MIUI 原生布局；下方全部参数仅在开启后生效；重启桌面生效</string>
     <string name="dock_customization">自定义 Dock 几何与外观</string>

@@ -103,8 +103,6 @@ final class HomeGridCellGeometryHook {
 
         applyCellLayoutOffsets(layout);
         rebuildCellCoordinates(layout);
-        MainHook.log("[DC] CellLayout geometry prepared "
-                + width + "x" + height + " orientation=" + orientation);
     }
 
     private static void applyCellLayoutOffsets(Object cellLayout) {
@@ -121,21 +119,22 @@ final class HomeGridCellGeometryHook {
             int countY = (Integer) HookUtil.requireInvoke(gridConfig, "getCountY");
             if (countX <= 0 || countY <= 0) return;
 
-            // Occupancy remains vendor-owned. We only mirror the dimensions of MIUI's real matrix
-            // when its GridConfig is transiently stale during a rotation/layout boundary.
+            // GridController publishes the new GridConfig before every CellLayout has necessarily
+            // completed loadGridConfig(). During that boundary mGridCell can still describe the
+            // previous orientation. Never mirror that stale matrix back into mHCells/mVCells:
+            // doing so mixes the new occupancy/config with old UI backing dimensions and can make
+            // vendor code index one matrix with another matrix's bounds. Defer our geometry until
+            // the CellLayout backing matrix has caught up.
             Object gridCells = HookUtil.getField(cellLayout, "mGridCell");
             if (gridCells != null) {
                 int matrixX = java.lang.reflect.Array.getLength(gridCells);
                 int matrixY = matrixX == 0 ? 0
                         : java.lang.reflect.Array.getLength(java.lang.reflect.Array.get(gridCells, 0));
-                if (matrixX != countX || matrixY != countY) {
-                    MainHook.log("[DC] grid count/matrix mismatch: config="
-                            + countX + "x" + countY + " matrix=" + matrixX + "x" + matrixY);
-                    countX = matrixX;
-                    countY = matrixY;
+                if (!HomeGridBackingStatePolicy.canApplyGeometry(
+                        countX, countY, matrixX, matrixY)) {
+                    return;
                 }
             }
-            if (countX <= 0 || countY <= 0) return;
 
             int[] xs = (int[]) HookUtil.getField(cellLayout, "mXs");
             int[] ys = (int[]) HookUtil.getField(cellLayout, "mYs");
@@ -152,6 +151,21 @@ final class HomeGridCellGeometryHook {
             if (baseCell <= 0) return;
             int configLeft = (Integer) HookUtil.requireInvoke(gridConfig, "getLeft");
             int baseTop = (Integer) HookUtil.requireInvoke(gridConfig, "getTop");
+            Object gridNameValue = HookUtil.requireInvoke(gridConfig, "getName");
+            String gridName = gridNameValue == null ? "" : String.valueOf(gridNameValue);
+            if (HomeGridWorkspaceGridPolicy.isSplitGridName(gridName)) {
+                // MIUI's land_split_grid coordinates are local to the SOSC pane. The CellLayout
+                // can still report full-screen bounds, so running the normal HOME centering policy
+                // here would move the pane grid back toward the physical screen center.
+                HookUtil.setIntField(
+                        cellLayout,
+                        "mCellPaddingLeft",
+                        configLeft + current.splitHorizontalOffset);
+                HookUtil.setIntField(cellLayout, "mCellPaddingTop", baseTop);
+                HookUtil.setIntField(cellLayout, "mCellWidth", baseCell);
+                HookUtil.setIntField(cellLayout, "mCellHeight", baseCell);
+                return;
+            }
             int baseWidthGap = HookUtil.getIntField(cellLayout, "mWidthGap");
             int baseHeightGap = Math.max(0, HookUtil.getIntField(cellLayout, "mHeightGap"));
             int width = layout.getWidth();

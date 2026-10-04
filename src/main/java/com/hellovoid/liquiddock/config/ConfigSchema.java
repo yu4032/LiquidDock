@@ -93,6 +93,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> PORTRAIT_BOTTOM_DISTANCE = dp(
                 "grid_portrait_bottom_distance", 0, 0, 0, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> SPLIT_HORIZONTAL_OFFSET = dp(
+                "grid_split_horizontal_offset", 0, 0, 0, -600, 600,
+                ConfigKey.ExportMode.ALWAYS);
 
         // Migrated legacy per-edge grid settings remain exported and runtime-readable.
         public static final ConfigKey<Integer> LANDSCAPE_MARGIN_LEFT = dp(
@@ -635,6 +638,7 @@ public final class ConfigSchema {
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,
+                Grid.SPLIT_HORIZONTAL_OFFSET,
                 Grid.LANDSCAPE_MARGIN_LEFT, Grid.LANDSCAPE_MARGIN_RIGHT,
                 Grid.LANDSCAPE_MARGIN_TOP, Grid.LANDSCAPE_MARGIN_BOTTOM,
                 Grid.PORTRAIT_MARGIN_LEFT, Grid.PORTRAIT_MARGIN_RIGHT,

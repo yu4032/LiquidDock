@@ -47,7 +47,7 @@ final class HomeGridHorizontalCenteringHook {
 
             int countX = HookUtil.getIntField(target, "mHCells");
             int countY = HookUtil.getIntField(target, "mVCells");
-            if (!profile.matchesCounts(countX, countY)) return;
+            if (!profile.matchesCounts(countX, countY) || isSplitGrid(target)) return;
 
             int requestedLeft = HookUtil.getIntField(target, "mCellPaddingLeft");
             int sourceCell = HookUtil.getIntField(target, "mCellWidth");
@@ -77,6 +77,17 @@ final class HomeGridHorizontalCenteringHook {
             rebuildXs(target, countX, geometry.left, geometry.cellSize, geometry.gap);
         } catch (Throwable error) {
             MainHook.log("[DC] 10x6 horizontal centering failed: " + error);
+        }
+    }
+
+    private static boolean isSplitGrid(Object target) {
+        try {
+            Object gridConfig = HookUtil.getField(target, "mGridConfig");
+            Object name = HookUtil.requireInvoke(gridConfig, "getName");
+            return HomeGridWorkspaceGridPolicy.isSplitGridName(
+                    name == null ? "" : String.valueOf(name));
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 

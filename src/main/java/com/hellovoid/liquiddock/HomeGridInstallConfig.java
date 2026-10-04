@@ -25,6 +25,7 @@ final class HomeGridInstallConfig {
     final int rows;
     final Orientation landscape;
     final Orientation portrait;
+    final int splitHorizontalOffset;
     final float density;
 
     HomeGridInstallConfig(
@@ -44,6 +45,32 @@ final class HomeGridInstallConfig {
             int landscapeIndicatorY,
             int portraitIndicatorY,
             float density) {
+        this(enabled, columns, rows,
+                landscapeLeft, landscapeRight, landscapeTop, landscapeBottom,
+                portraitLeft, portraitRight, portraitTop, portraitBottom,
+                landscapeRowGap, portraitRowGap,
+                landscapeIndicatorY, portraitIndicatorY,
+                0, density);
+    }
+
+    HomeGridInstallConfig(
+            boolean enabled,
+            int columns,
+            int rows,
+            int landscapeLeft,
+            int landscapeRight,
+            int landscapeTop,
+            int landscapeBottom,
+            int portraitLeft,
+            int portraitRight,
+            int portraitTop,
+            int portraitBottom,
+            int landscapeRowGap,
+            int portraitRowGap,
+            int landscapeIndicatorY,
+            int portraitIndicatorY,
+            int splitHorizontalOffset,
+            float density) {
         this.enabled = enabled;
         this.columns = Math.max(2, Math.min(10, columns));
         this.rows = Math.max(2, Math.min(6, rows));
@@ -53,6 +80,7 @@ final class HomeGridInstallConfig {
         this.portrait = new Orientation(
                 portraitLeft, portraitRight, portraitTop, portraitBottom,
                 portraitRowGap, portraitIndicatorY);
+        this.splitHorizontalOffset = splitHorizontalOffset;
         this.density = density;
     }
 
