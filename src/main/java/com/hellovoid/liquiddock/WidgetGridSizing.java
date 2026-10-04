@@ -32,11 +32,16 @@ final class WidgetGridSizing {
             return new int[]{0, 0, 0, 0};
         }
 
-        int left = axisBoundary(xs, cellX, cellWidth, widthGap);
-        int right = axisBoundary(xs, cellX + spanX, cellWidth, widthGap);
-        int top = axisBoundary(ys, cellY, cellHeight, heightGap);
-        int bottom = axisBoundary(ys, cellY + spanY, cellHeight, heightGap);
+        int left = xs[cellX];
+        int top = ys[cellY];
+        int right = xs[cellX + spanX - 1] + cellWidth;
+        int bottom = ys[cellY + spanY - 1] + cellHeight;
 
+        // Derive a multi-cell widget from the actual occupied cell origins, not from mWidthGap /
+        // mHeightGap. Other Launcher geometry hooks can legitimately rebuild mXs/mYs with a pitch
+        // that is not identical to the stored gap field. Using the last occupied cell's far edge
+        // guarantees that a 2x1 widget has exactly the same outer span as two adjacent 1x1 cells,
+        // while still excluding the trailing gap after the final occupied cell.
         return new int[]{
                 left,
                 top,
@@ -45,18 +50,25 @@ final class WidgetGridSizing {
         };
     }
 
-    private static int axisBoundary(int[] origins, int boundaryIndex,
-                                    int cellSize, int gap) {
-        if (boundaryIndex < origins.length) return origins[boundaryIndex];
-
-        int last = origins.length - 1;
-        int pitch;
-        if (origins.length >= 2) {
-            pitch = origins[last] - origins[last - 1];
-        } else {
-            pitch = cellSize + Math.max(0, gap);
+    static int[] centeredFrame(int[] allocation,
+                               int leftMargin, int topMargin,
+                               int rightMargin, int bottomMargin) {
+        if (allocation == null || allocation.length < 4
+                || allocation[2] <= 0 || allocation[3] <= 0) {
+            return new int[]{0, 0, 0, 0};
         }
-        if (pitch <= 0) pitch = Math.max(1, cellSize + Math.max(0, gap));
-        return origins[last] + pitch;
+
+        int horizontalInset = Math.max(0, leftMargin) + Math.max(0, rightMargin);
+        int verticalInset = Math.max(0, topMargin) + Math.max(0, bottomMargin);
+        int width = Math.max(1, allocation[2] - horizontalInset);
+        int height = Math.max(1, allocation[3] - verticalInset);
+
+        // CellLayout.onLayout() does not apply MarginLayoutParams to x/y. Preserve the amount of
+        // space MIUI reserved for the widget, but center that reduced frame inside the occupied
+        // grid footprint instead of letting the removed margin area accumulate on the right/bottom.
+        int left = allocation[0] + (allocation[2] - width) / 2;
+        int top = allocation[1] + (allocation[3] - height) / 2;
+        return new int[]{left, top, width, height};
     }
+
 }

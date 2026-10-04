@@ -727,6 +727,13 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                     masterEnabled,
                 ) { customGrid = it }
                 gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
+                    "小组件随水平边距拉伸",
+                    "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
+                    masterEnabled && customGrid,
+                )
             }
         }
         item { SmallTitle(stringResource(R.string.category_landscape)) }
