@@ -10,15 +10,14 @@ import java.util.Map;
  * Routes incompatible multi-cell items into Launcher 4.50's native no-space paths.
  *
  * <p>The picker path is blocked before Launcher.addAppWidget() can allocate/place the item and uses
- * Launcher.showError(R.string.out_of_space). Drag/drop paths are blocked through CellLayout's own
- * vacancy/space checks, where Launcher already calls DragObject.showNoSpaceToast(true). The
- * drop/squeeze planners remain the hard commit barrier.</p>
+ * Launcher.showError(R.string.out_of_space). Direct drag keeps Launcher preview/vacancy queries
+ * untouched: isSpaceEnough() drives the native no-space hint and allowDrop() is the hard commit
+ * barrier used by Workspace.onDrop(), which already owns the native no-space toast.</p>
  */
 final class HomeGridWidgetAdmissionGuard {
     private static final String TAG = "[DC][HomeGridAdmission]";
     private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
-    private static final String DRAG_OBJECT =
-            "com.miui.home.launcher.DragController$DragObject";
+    private static final String DRAG_OBJECT = "com.miui.home.launcher.DragObject";
     private static final String LAUNCHER = "com.miui.home.launcher.Launcher";
     private static final String WIDGET_INFO = "com.miui.home.launcher.LauncherAppWidgetInfo";
     private static final String CELL_SCREEN = "com.miui.home.launcher.CellScreen";
@@ -31,19 +30,6 @@ final class HomeGridWidgetAdmissionGuard {
         if (installed || config == null || !config.enabled) return;
         try {
             Class<?> cellLayout = Class.forName(CELL_LAYOUT, false, classLoader);
-
-            HookUtil.hookMethod(
-                    cellLayout,
-                    "findNearestVacantAreaByCellPos",
-                    new Class<?>[]{int.class, int.class, int.class, int.class},
-                    chain -> {
-                        int spanX = (Integer) chain.getArg(2);
-                        int spanY = (Integer) chain.getArg(3);
-                        if (shouldRejectSpan(chain.getThisObject(), spanX, spanY, config)) {
-                            return null;
-                        }
-                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    });
 
             installPickerGuard(classLoader, config);
             installDragGuard(classLoader, cellLayout, config);
@@ -111,17 +97,15 @@ final class HomeGridWidgetAdmissionGuard {
 
             HookUtil.hookMethod(
                     cellLayout,
-                    "findDropTargetPosition",
+                    "allowDrop",
                     new Class<?>[]{dragObject},
                     chain -> {
                         Object drag = chain.getArg(0);
                         boolean reject = shouldRejectDrag(
                                 chain.getThisObject(), drag, config);
-                        traceDrag(
-                                "findDropTargetPosition",
-                                chain.getThisObject(), drag, config, reject);
+                        traceDrag("allowDrop", chain.getThisObject(), drag, config, reject);
                         if (reject) {
-                            return null;
+                            return false;
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
