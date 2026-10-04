@@ -592,6 +592,24 @@ private fun AnimationPage(
         "ms",
         summary = "应用退出动画末尾的 Dock 图标玻璃恢复；重启桌面后生效",
     )
+    val dockResize = IntSpec(
+        ConfigSchema.Animation.DOCK_RESIZE,
+        "Dock 尺寸变化",
+        "ms",
+        summary = "LiquidDock 顺滑尺寸动画的时长；需在 Dock 页面关闭 Dock 尺寸过渡动画并开启 LiquidDock 顺滑尺寸动画；重启桌面后生效",
+    )
+    val dockCustomizationEnabled = prefs.getBoolean(
+        ConfigSchema.Dock.ENABLED.name(),
+        ConfigSchema.Dock.ENABLED.uiDefault(),
+    )
+    val systemResizeEnabled = prefs.getBoolean(
+        ConfigSchema.Dock.RESIZE_ANIMATION.name(),
+        ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault(),
+    )
+    val smoothResizeEnabled = prefs.getBoolean(
+        ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
+        ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault(),
+    )
     val pressIn = IntSpec(
         ConfigSchema.Animation.PRESS_IN,
         "按压进入",
@@ -633,7 +651,17 @@ private fun AnimationPage(
         item { SmallTitle("工作区玻璃") }
         item { SettingsCard { IntSetting(prefs, workspaceVisibility, masterEnabled) } }
         item { SmallTitle("Dock") }
-        item { SettingsCard { IntSetting(prefs, dockIconReveal, masterEnabled) } }
+        item {
+            SettingsCard {
+                IntSetting(prefs, dockIconReveal, masterEnabled)
+                IntSetting(
+                    prefs,
+                    dockResize,
+                    masterEnabled && dockCustomizationEnabled
+                            && !systemResizeEnabled && smoothResizeEnabled,
+                )
+            }
+        }
         item { SmallTitle("玻璃交互") }
         item {
             SettingsCard {
@@ -721,16 +749,6 @@ private fun DockPage(
         )
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
-        IntSetting(
-            prefs,
-            IntSpec(
-                ConfigSchema.Animation.DOCK_RESIZE,
-                "LiquidDock 顺滑尺寸时长",
-                "ms",
-                summary = "只在关闭系统 Dock 尺寸过渡、开启 LiquidDock 顺滑尺寸动画时使用；重启桌面后生效",
-            ),
-            masterEnabled && dockEnabled && !resizeAnimation && smoothResize,
-        )
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
 }

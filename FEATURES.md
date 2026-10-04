@@ -379,12 +379,13 @@ Gboard 玻璃默认关闭，需要手动启用。
 
 - 工作区玻璃显隐；
 - Dock 图标玻璃恢复；
+- Dock 尺寸变化；
 - 玻璃按压进入与释放；
 - 快捷菜单退出渐隐；
 - 安全中心侧边栏/工具箱玻璃退出渐隐；
 - 设置页面切换。
 
-Dock 的 LiquidDock 顺滑尺寸动画时长已经移回 Dock 页面，并且只有在关闭系统 Dock 尺寸过渡、开启 LiquidDock 顺滑尺寸动画时才生效。
+Dock 页面保留“Dock 尺寸过渡动画”和“LiquidDock 顺滑尺寸动画”两个开关；“动画与过渡”页中的 Dock 尺寸变化时长只有在关闭前者、开启后者时才生效。
 
 设置页面动画会立即影响下一次页面切换。Launcher 内的玻璃动画需要重启桌面后重新读取，安全中心退出渐隐需要重启安全中心。HOME / Recents 的 Launcher 原生 spring、SystemUI 顶部菜单 Surface 动画以及严格移植的 OS4 Sidebar spring 参数继续以系统/原实现为 authority，不提供没有真实 ownership 的调节项。
 

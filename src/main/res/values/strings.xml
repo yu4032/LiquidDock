@@ -23,7 +23,7 @@
     <string name="dock_recent_blacklist_candidate_item">Current candidate · %1$s</string>
     <string name="dock_recent_blacklist_blocked_inactive_item">Blocked, not currently a candidate · %1$s</string>
     <string name="page_divider">Dock divider</string>
-    <string name="page_workstation">Workstation Dock</string>
+    <string name="page_workstation">Custom workstation</string>
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
@@ -55,7 +55,7 @@
     <string name="home_liquid_summary">Blur, refraction, dispersion, color, lighting, and highlights</string>
     <string name="home_stroke_summary">Base color, squircle shape, and stroke width</string>
     <string name="home_shadow_summary">Whole-Dock and stroke shadows</string>
-    <string name="home_animation_summary">LiquidDock-owned visibility, press and exit fades; native system timing stays unchanged</string>
+    <string name="home_animation_summary">LiquidDock-owned visibility, press, Dock and exit fades; native system timing stays unchanged</string>
     <string name="home_data_title">Presets, import, and export</string>
     <string name="home_data_summary">Default preset, JSON backup, and launcher restart</string>
     <string name="home_about_title">Credits, references, and open-source licenses</string>
@@ -73,7 +73,7 @@
     <string name="dock_smooth_resize_animation">Smooth LiquidDock size transition</string>
     <string name="dock_smooth_resize_animation_summary">Uses a continuous 180 ms ease-out transition without the system expansion-and-shrink behavior; requires a launcher restart</string>
     <string name="option_off">Off</string>
-    <string name="workstation_customization">Customize Workstation Dock</string>
+    <string name="workstation_customization">Custom workstation</string>
     <string name="workstation_customization_summary">Uses independent Dock length and 8-column horizontal spacing; requires a launcher restart</string>
     <string name="recents_header_summary">Adjust the system wallpaper blur shown behind task cards; restart the launcher to apply.</string>
     <string name="liquid_enable">Enable liquid glass</string>
