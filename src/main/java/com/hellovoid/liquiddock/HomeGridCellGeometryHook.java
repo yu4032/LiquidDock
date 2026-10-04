@@ -77,6 +77,99 @@ final class HomeGridCellGeometryHook {
                 ? HomeGridWorkstationGeometryConfig.NONE : config;
     }
 
+    static int widgetHorizontalSpanDeltaPx(View spanOwner, int spanX) {
+        HomeGridInstallConfig current = installConfig;
+        if (spanOwner == null || current == null || !current.enabled
+                || !current.widgetHorizontalStretch || spanX <= 1
+                || MainHook.isWorkstationMode()) {
+            return 0;
+        }
+
+        View cellLayoutView = spanOwner;
+        for (int depth = 0; cellLayoutView != null && depth < 4; depth++) {
+            if ("com.miui.home.launcher.CellLayout".equals(
+                    cellLayoutView.getClass().getName())) {
+                break;
+            }
+            android.view.ViewParent parent = cellLayoutView.getParent();
+            cellLayoutView = parent instanceof View ? (View) parent : null;
+        }
+        if (cellLayoutView == null
+                || !"com.miui.home.launcher.CellLayout".equals(
+                        cellLayoutView.getClass().getName())
+                || isLaptopAllApps(cellLayoutView)) {
+            return 0;
+        }
+
+        try {
+            Object gridConfig = HookUtil.getField(cellLayoutView, "mGridConfig");
+            if (gridConfig == null) return 0;
+            Object gridNameValue = HookUtil.requireInvoke(gridConfig, "getName");
+            String gridName = gridNameValue == null ? "" : String.valueOf(gridNameValue);
+            if (HomeGridWorkspaceGridPolicy.isSplitGridName(gridName)) return 0;
+
+            boolean portrait = spanOwner.getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_PORTRAIT;
+            int countX = (Integer) HookUtil.requireInvoke(gridConfig, "getCountX");
+            int countY = (Integer) HookUtil.requireInvoke(gridConfig, "getCountY");
+            int baseCell = (Integer) HookUtil.requireInvoke(gridConfig, "getCellSize");
+            int configLeft = (Integer) HookUtil.requireInvoke(gridConfig, "getLeft");
+            int baseTop = (Integer) HookUtil.requireInvoke(gridConfig, "getTop");
+            int width = cellLayoutView.getWidth();
+            int height = cellLayoutView.getHeight();
+            if (countX <= 0 || countY <= 0 || baseCell <= 0 || width <= 0 || height <= 0) {
+                return 0;
+            }
+
+            int dockBarHeight = 0;
+            HookUtil.InvocationResult<Object> dockResult =
+                    HookUtil.tryInvoke(gridConfig, "getDockBarHeight");
+            if (dockResult.succeeded() && dockResult.value() instanceof Integer) {
+                dockBarHeight = Math.max(0, (Integer) dockResult.value());
+            }
+
+            int baseWidthGap = Math.max(
+                    0, HookUtil.getIntField(cellLayoutView, "mWidthGap"));
+            int baseHeightGap = Math.max(
+                    0, HookUtil.getIntField(cellLayoutView, "mHeightGap"));
+            HomeGridCellGeometryPolicy.Result zeroOffset =
+                    HomeGridCellGeometryPolicy.calculate(
+                            new HomeGridCellGeometryPolicy.Input(
+                                    current.withZeroHorizontalOffsets(),
+                                    workstationConfig,
+                                    portrait,
+                                    false,
+                                    false,
+                                    width,
+                                    height,
+                                    countX,
+                                    countY,
+                                    baseCell,
+                                    configLeft,
+                                    baseTop,
+                                    baseWidthGap,
+                                    baseHeightGap,
+                                    dockBarHeight));
+            if (zeroOffset == null) return 0;
+
+            long baselineAllocation = (long) zeroOffset.cellSize * spanX
+                    + (long) Math.max(0, spanX - 1) * zeroOffset.widthGap;
+            int horizontalInset = 0;
+            ViewGroup.LayoutParams lp = spanOwner.getLayoutParams();
+            if (lp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) lp;
+                horizontalInset = Math.max(0, margins.leftMargin)
+                        + Math.max(0, margins.rightMargin);
+            }
+            int baselineFrameWidth = (int) Math.max(
+                    1L, Math.min(Integer.MAX_VALUE, baselineAllocation - horizontalInset));
+            return LauncherWidgetGlassGeometryPolicy.horizontalWidthDelta(
+                    spanX, spanOwner.getWidth(), baselineFrameWidth);
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
     static boolean sizeMatchesOrientation(View view, int width, int height) {
         if (view == null) return false;
         boolean portrait = view.getResources().getConfiguration().orientation
@@ -293,12 +386,18 @@ final class HomeGridCellGeometryHook {
             int[] ys = (int[]) HookUtil.getField(cellLayout, "mYs");
             if (cellWidth <= 0 || cellHeight <= 0 || xs == null || ys == null) return;
 
-            int[] rect = WidgetGridSizing.gridRect(
+            int[] allocation = WidgetGridSizing.gridRect(
                     cellX, cellY, spanX, spanY, xs, ys,
                     cellWidth, cellHeight, widthGap, heightGap);
-            if (rect[2] <= 0 || rect[3] <= 0) return;
+            if (allocation[2] <= 0 || allocation[3] <= 0) return;
 
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) layoutParams;
+            int[] rect = WidgetGridSizing.centeredFrame(
+                    allocation,
+                    params.leftMargin, params.topMargin,
+                    params.rightMargin, params.bottomMargin);
+            if (rect[2] <= 0 || rect[3] <= 0) return;
+
             params.width = rect[2];
             params.height = rect[3];
             HookUtil.setIntField(layoutParams, "x", rect[0]);
@@ -346,9 +445,18 @@ final class HomeGridCellGeometryHook {
                 }
                 if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)) continue;
 
-                int[] rect = WidgetGridSizing.gridRect(
+                int[] allocation = WidgetGridSizing.gridRect(
                         cellX, cellY, spanX, spanY, xs, ys,
                         cellWidth, cellHeight, widthGap, heightGap);
+                int[] rect = allocation;
+                if (paramsObject instanceof ViewGroup.MarginLayoutParams) {
+                    ViewGroup.MarginLayoutParams params =
+                            (ViewGroup.MarginLayoutParams) paramsObject;
+                    rect = WidgetGridSizing.centeredFrame(
+                            allocation,
+                            params.leftMargin, params.topMargin,
+                            params.rightMargin, params.bottomMargin);
+                }
                 int targetWidth = rect[2];
                 int targetHeight = rect[3];
                 if (targetWidth <= 0 || targetHeight <= 0) continue;

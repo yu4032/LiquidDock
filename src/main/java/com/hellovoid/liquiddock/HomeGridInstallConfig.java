@@ -27,6 +27,7 @@ final class HomeGridInstallConfig {
     final Orientation portrait;
     final int splitHorizontalOffset;
     final float density;
+    final boolean widgetHorizontalStretch;
 
     HomeGridInstallConfig(
             boolean enabled,
@@ -71,6 +72,33 @@ final class HomeGridInstallConfig {
             int portraitIndicatorY,
             int splitHorizontalOffset,
             float density) {
+        this(enabled, columns, rows,
+                landscapeLeft, landscapeRight, landscapeTop, landscapeBottom,
+                portraitLeft, portraitRight, portraitTop, portraitBottom,
+                landscapeRowGap, portraitRowGap,
+                landscapeIndicatorY, portraitIndicatorY,
+                splitHorizontalOffset, density, false);
+    }
+
+    HomeGridInstallConfig(
+            boolean enabled,
+            int columns,
+            int rows,
+            int landscapeLeft,
+            int landscapeRight,
+            int landscapeTop,
+            int landscapeBottom,
+            int portraitLeft,
+            int portraitRight,
+            int portraitTop,
+            int portraitBottom,
+            int landscapeRowGap,
+            int portraitRowGap,
+            int landscapeIndicatorY,
+            int portraitIndicatorY,
+            int splitHorizontalOffset,
+            float density,
+            boolean widgetHorizontalStretch) {
         this.enabled = enabled;
         this.columns = Math.max(2, Math.min(10, columns));
         this.rows = Math.max(2, Math.min(6, rows));
@@ -82,6 +110,7 @@ final class HomeGridInstallConfig {
                 portraitRowGap, portraitIndicatorY);
         this.splitHorizontalOffset = splitHorizontalOffset;
         this.density = density;
+        this.widgetHorizontalStretch = widgetHorizontalStretch;
     }
 
     Orientation orientation(boolean portraitMode) {
@@ -94,6 +123,28 @@ final class HomeGridInstallConfig {
 
     int countY(boolean portraitMode) {
         return portraitMode ? columns : rows;
+    }
+
+    HomeGridInstallConfig withZeroHorizontalOffsets() {
+        return new HomeGridInstallConfig(
+                enabled,
+                columns,
+                rows,
+                0,
+                0,
+                landscape.top,
+                landscape.bottom,
+                0,
+                0,
+                portrait.top,
+                portrait.bottom,
+                landscape.rowGap,
+                portrait.rowGap,
+                landscape.indicatorY,
+                portrait.indicatorY,
+                splitHorizontalOffset,
+                density,
+                widgetHorizontalStretch);
     }
 
     boolean matchesGrid(int x, int y) {

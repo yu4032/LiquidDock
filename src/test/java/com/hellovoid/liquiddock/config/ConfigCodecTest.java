@@ -233,6 +233,23 @@ public class ConfigCodecTest {
     }
 
     @Test
+    public void widgetHorizontalStretchDefaultsOffAndRoundTrips() {
+        Map<String, Object> emptyExport = ConfigCodec.exportValues(new HashMap<>());
+        assertEquals(Boolean.FALSE,
+                emptyExport.get(ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name()));
+
+        Map<String, Object> prefs = new HashMap<>();
+        prefs.put(ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(), true);
+        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
+        assertEquals(Boolean.TRUE,
+                exported.get(ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name()));
+
+        Map<String, Object> imported = ConfigCodec.importValues(exported);
+        assertEquals(Boolean.TRUE,
+                imported.get(ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name()));
+    }
+
+    @Test
     public void recentsWallpaperDimmingSwitchRoundTrips() {
         Map<String, Object> prefs = new HashMap<>();
         prefs.put(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name(), true);

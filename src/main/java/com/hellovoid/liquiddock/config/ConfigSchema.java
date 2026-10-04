@@ -74,6 +74,9 @@ public final class ConfigSchema {
                 "grid_margins_dp", true, false, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> MARGINS_OFFSET = bool(
                 "grid_margins_offset", true, false, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> WIDGET_HORIZONTAL_STRETCH = bool(
+                "grid_widget_horizontal_stretch", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
 
         public static final ConfigKey<Integer> LANDSCAPE_HORIZONTAL_DISTANCE = dp(
                 "grid_landscape_horizontal_distance", 0, 0, 0, -600, 600,
@@ -634,7 +637,7 @@ public final class ConfigSchema {
                 Animation.SETTINGS_PAGE);
         add(keys, Grid.ENABLED, Grid.PROFILE, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
-                Grid.MARGINS_DP, Grid.MARGINS_OFFSET,
+                Grid.MARGINS_DP, Grid.MARGINS_OFFSET, Grid.WIDGET_HORIZONTAL_STRETCH,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,

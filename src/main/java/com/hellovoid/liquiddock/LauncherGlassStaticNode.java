@@ -378,6 +378,18 @@ final class LauncherGlassStaticNode {
             localRight = icon.right;
             localBottom = icon.bottom;
         }
+        if (kind == LauncherGlassDragState.Kind.WIDGET) {
+            View spanOwner = findWidgetSpanOwner(material);
+            int spanX = resolveWidgetSpanX(spanOwner);
+            int widthDelta = HomeGridCellGeometryHook.widgetHorizontalSpanDeltaPx(
+                    spanOwner, spanX);
+            if (widthDelta != 0) {
+                float center = (localLeft + localRight) * 0.5f;
+                float targetWidth = Math.max(1f, (localRight - localLeft) + widthDelta);
+                localLeft = center - targetWidth * 0.5f;
+                localRight = center + targetWidth * 0.5f;
+            }
+        }
         float[] styledBounds = LauncherGlassBoundsPolicy.apply(
                 localLeft, localTop, localRight, localBottom, style.sizeOffsetDp * density);
         localLeft = styledBounds[0];
@@ -411,6 +423,9 @@ final class LauncherGlassStaticNode {
                 Math.max(geometryPoints[4], geometryPoints[6]));
         float bottom = Math.max(Math.max(geometryPoints[1], geometryPoints[3]),
                 Math.max(geometryPoints[5], geometryPoints[7]));
+
+        // Widget width offset is already applied symmetrically in material-local space above.
+
         float scaleX = distance(geometryPoints[0], geometryPoints[1],
                 geometryPoints[2], geometryPoints[3]) / localWidth;
         float scaleY = distance(geometryPoints[0], geometryPoints[1],
@@ -420,6 +435,32 @@ final class LauncherGlassStaticNode {
                 root.getWidth(), root.getHeight(), left, top, right, bottom,
                 LauncherGlassBoundsPolicy.capRadius(
                         requestedRadius * radiusScale, right - left, bottom - top));
+    }
+
+    private static int resolveWidgetSpanX(View spanOwner) {
+        if (spanOwner == null) return 1;
+        Object info = spanOwner.getTag();
+        if (info == null) return 1;
+        try {
+            return Math.max(1, HookUtil.getIntField(info, "spanX"));
+        } catch (Throwable ignored) {
+            return 1;
+        }
+    }
+
+    private static View findWidgetSpanOwner(View material) {
+        View current = material;
+        for (int depth = 0; current != null && depth < 6; depth++) {
+            android.view.ViewParent parent = current.getParent();
+            if (!(parent instanceof View)) return null;
+            View parentView = (View) parent;
+            String name = parentView.getClass().getName();
+            if (LauncherWidgetGlassGeometryPolicy.isHorizontalSpanOwnerClassName(name)) {
+                return parentView;
+            }
+            current = parentView;
+        }
+        return null;
     }
 
     void dispose() {

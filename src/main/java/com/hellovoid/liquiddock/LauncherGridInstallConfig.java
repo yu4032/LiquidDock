@@ -67,7 +67,8 @@ final class LauncherGridInstallConfig {
                 Math.round(grid.landscapeIndicatorY * gridScale),
                 Math.round(grid.portraitIndicatorY * gridScale),
                 Math.round(grid.splitHorizontalOffset * gridScale),
-                density);
+                density,
+                grid.widgetHorizontalStretch);
 
         HomeGridWorkstationGeometryConfig workstation =
                 new HomeGridWorkstationGeometryConfig(
