@@ -71,7 +71,8 @@ final class LiquidDockConfig {
     }
 
     static final class Grid {
-        final boolean enabled, iconSizeEnabled, dp, offsets, widgetHorizontalStretch;
+        final boolean enabled, iconSizeEnabled, dp, offsets;
+        final boolean widgetHorizontalStretch, widgetPlacementGuard;
         final int columns, rows, iconSizePercent;
         final float landscapeHorizontal, landscapeTop, landscapeBottom, landscapeRowGap;
         final float portraitHorizontal, portraitTop, portraitBottom, portraitRowGap;
@@ -100,6 +101,9 @@ final class LiquidDockConfig {
             widgetHorizontalStretch = c.b(
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(),
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.runtimeFallback());
+            widgetPlacementGuard = c.b(
+                    ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD.name(),
+                    ConfigSchema.Grid.WIDGET_PLACEMENT_GUARD.runtimeFallback());
             landscapeHorizontal = c.has(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.name())
                     ? c.f(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.name(),
                             ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.runtimeFallback())
