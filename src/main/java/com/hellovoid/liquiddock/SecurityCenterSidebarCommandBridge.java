@@ -42,6 +42,8 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile boolean turboTouchReleaseHookInstalled;
     private static volatile boolean sidebarRootClickReleaseHookInstalled;
     private static volatile boolean windowLayoutPassDownGuardHookInstalled;
+    private static volatile boolean sidebarHandleSuppressionHookInstalled;
+    private static volatile Class<?> sidebarHandleClass;
     private static volatile View releasedSidebarWindowRoot;
     private static final int MIUI_FLAG_CLICK_PASS_DOWN = 0x20;
     private static final String TURBO_LAYOUT_CLASS =
@@ -77,6 +79,7 @@ final class SecurityCenterSidebarCommandBridge {
                 showMethod = show;
                 availabilityMethods = states;
                 registerVendorAnimationCallback(service);
+                suppressCurrentSidebarHandles();
                 SideSlideHoldDiagnostics.log(TAG + " ready descriptor=" + descriptor);
             } catch (Throwable error) {
                 clearBinder("bind validation failed: " + error);
@@ -109,6 +112,7 @@ final class SecurityCenterSidebarCommandBridge {
             if (intent == null) return;
             String action = intent.getAction();
             if (SidebarCommandContract.ACTION_PREPARE.equals(action)) {
+                suppressCurrentSidebarHandles();
                 boolean ready = vendorShowEndpointReady();
                 if (ready) logVendorBooleanDiagnostics();
                 setResultCode(ready
@@ -184,6 +188,7 @@ final class SecurityCenterSidebarCommandBridge {
             filter.addAction(SidebarCommandContract.ACTION_CONFIRM_END);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             appContext = context;
+            installSidebarHandleSuppressionHook(source.getClassLoader());
             bindVendorService(context);
             installTurboTouchReleaseHook(source.getClassLoader());
             installSidebarRootClickReleaseHook(source.getClassLoader());
@@ -207,6 +212,84 @@ final class SecurityCenterSidebarCommandBridge {
             if (!bound) clearBinder("bindService returned false");
         } catch (Throwable error) {
             clearBinder("bindService failed: " + error);
+        }
+    }
+
+    /**
+     * Keeps the vendor Sidebar wrapper alive while LiquidDock owns the gesture affordance.
+     *
+     * <p>Game/video modes show a RegionSamplingImageView as the stock edge handle before any
+     * second-stage gesture starts. Removing that view or its window would also remove vendor
+     * sampling/touch/lifecycle authority, so only its visual alpha is suppressed. The guard is
+     * installed only when the side-slide hold feature itself is enabled.</p>
+     */
+    private static void installSidebarHandleSuppressionHook(ClassLoader classLoader) {
+        if (sidebarHandleSuppressionHookInstalled || classLoader == null) return;
+        try {
+            Class<?> lineClass = Class.forName(
+                    REGION_SAMPLING_IMAGE_VIEW_CLASS, false, classLoader);
+            Method setAlpha = HookUtil.findMethodExact(
+                    View.class, "setAlpha", new Class<?>[]{float.class});
+            HookUtil.hook(setAlpha, chain -> {
+                Object owner = chain.getThisObject();
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (lineClass.isInstance(owner)
+                        && args.length == 1
+                        && args[0] instanceof Number) {
+                    args[0] = 0.0f;
+                }
+                return chain.proceed(args);
+            });
+
+            Method onAttached = HookUtil.findMethodExact(
+                    View.class, "onAttachedToWindow", new Class<?>[0]);
+            HookUtil.hook(onAttached, chain -> {
+                Object owner = chain.getThisObject();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (lineClass.isInstance(owner) && owner instanceof View) {
+                    ((View) owner).setAlpha(0.0f);
+                }
+                return result;
+            });
+
+            sidebarHandleClass = lineClass;
+            sidebarHandleSuppressionHookInstalled = true;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " native Sidebar handle alpha suppression installed");
+        } catch (Throwable error) {
+            sidebarHandleClass = null;
+            sidebarHandleSuppressionHookInstalled = false;
+            SideSlideHoldDiagnostics.log(TAG
+                    + " native Sidebar handle suppression install failed", error);
+        }
+    }
+
+    private static void suppressCurrentSidebarHandles() {
+        Object service = serviceOwner;
+        Class<?> lineClass = sidebarHandleClass;
+        if (service == null || lineClass == null) return;
+        try {
+            Object manager = resolveDockWindowManager(service);
+            if (manager == null) return;
+
+            int suppressed = 0;
+            for (Field field : manager.getClass().getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                field.setAccessible(true);
+                Object candidate = field.get(manager);
+                if (candidate == null || !isSidebarWrapperType(candidate.getClass())) continue;
+                View line = resolveSidebarLineView(candidate);
+                if (line == null || !lineClass.isInstance(line)) continue;
+                line.setAlpha(0.0f);
+                suppressed++;
+            }
+            if (suppressed > 0) {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " suppressed native Sidebar handles count=" + suppressed);
+            }
+        } catch (Throwable error) {
+            SideSlideHoldDiagnostics.log(TAG
+                    + " suppress native Sidebar handles failed", error);
         }
     }
 
