@@ -84,13 +84,6 @@ final class HomeGridSqueezePlannerHook {
                                     if (parameter != null) {
                                         int spanX = HookUtil.getIntField(parameter, "spanX");
                                         int spanY = HookUtil.getIntField(parameter, "spanY");
-                                        if (!vendorPadGrid
-                                                && !HomeGridDropLegalityPolicy.fitsBothOrientations(
-                                                        countX, countY, spanX, spanY)
-                                                && (method.getReturnType() == boolean.class
-                                                        || method.getReturnType() == Boolean.class)) {
-                                            return false;
-                                        }
                                         boolean isSpanMove =
                                                 HookUtil.getBooleanField(parameter, "isSpanMove");
                                         useGeneric =
@@ -131,11 +124,6 @@ final class HomeGridSqueezePlannerHook {
                                             && args != null && args.length >= 6) {
                                         spanX = (Integer) args[4];
                                         spanY = (Integer) args[5];
-                                        if (!vendorPadGrid
-                                                && !HomeGridDropLegalityPolicy.fitsBothOrientations(
-                                                        countX, countY, spanX, spanY)) {
-                                            return null;
-                                        }
                                     }
                                     return invoke(
                                             HomeGridSqueezePlannerPolicy.useGenericForSpan(
