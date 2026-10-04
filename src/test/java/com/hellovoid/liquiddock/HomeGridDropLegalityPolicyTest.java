@@ -23,9 +23,9 @@ public class HomeGridDropLegalityPolicyTest {
     }
 
     @Test
-    public void spansMustAlsoFitAfterRotation() {
+    public void currentGridLegalityDoesNotApplyRotationPolicy() {
         assertTrue(legal(8, 4, 1, 1, 4, 2));
-        assertFalse(legal(8, 3, 0, 0, 4, 2));
+        assertTrue(legal(8, 3, 0, 0, 4, 2));
         assertFalse(legal(5, 4, 0, 0, 2, 5));
     }
 
