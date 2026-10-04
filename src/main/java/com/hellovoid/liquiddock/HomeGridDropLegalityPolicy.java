@@ -20,9 +20,7 @@ final class HomeGridDropLegalityPolicy {
         }
         long right = (long) cellX + spanX;
         long bottom = (long) cellY + spanY;
-        if (right > columns || bottom > rows) return false;
-
-        return fitsBothOrientations(columns, rows, spanX, spanY);
+        return right <= columns && bottom <= rows;
     }
 
     static boolean fitsBothOrientations(
