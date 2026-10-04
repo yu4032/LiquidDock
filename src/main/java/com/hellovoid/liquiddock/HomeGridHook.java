@@ -39,6 +39,7 @@ final class HomeGridHook {
             hookAxis(compat, "getCellCountYDef", false, config);
 
             HomeGridAuthorityHook.install(classLoader, config);
+            HomeGridCommittedLayoutCaptureHook.install(classLoader, config);
             HomeGridSqueezePlannerHook.install(classLoader, config);
             installRotationTransform(classLoader, config);
             HomeGridPageIndicatorHook.install(classLoader, config);
@@ -113,7 +114,14 @@ final class HomeGridHook {
                         srcCols, srcRows, sourceScreenId, sourcePositions);
             }
 
-            Object[][] staged = copyMatrix(dst, dstCols, dstRows);
+            if (!allRectangular(byData.values())) return false;
+
+            if (adoptCompleteExistingTarget(
+                    byData.values(), dst, dstCols, dstRows, sourceScreenId)) {
+                return true;
+            }
+
+            Object[][] staged = new Object[dstCols][dstRows];
             boolean[][] occupied = new boolean[dstCols][dstRows];
 
             if (sourceScreenId != null && restoreRemembered(
@@ -123,8 +131,8 @@ final class HomeGridHook {
                 return true;
             }
 
-            clearOccupied(occupied);
-            staged = copyMatrix(dst, dstCols, dstRows);
+            staged = new Object[dstCols][dstRows];
+            occupied = new boolean[dstCols][dstRows];
             Map<Long, HomeGridRotationPositionMemory.Position> targetPositions =
                     new LinkedHashMap<>();
 
@@ -200,6 +208,59 @@ final class HomeGridHook {
             MainHook.log("[DC][HomeGridRotation] atomic transform error: " + error);
             return false;
         }
+    }
+
+    private static boolean adoptCompleteExistingTarget(
+            Iterable<TransformItem> sourceItems,
+            Object[][] dst,
+            int cols,
+            int rows,
+            Long sourceScreenId) {
+        Map<Object, TransformItem> targetByData = collectItems(dst, cols, rows);
+        ArrayList<TransformItem> source = new ArrayList<>();
+        for (TransformItem item : sourceItems) source.add(item);
+        if (targetByData.size() != source.size() || !allRectangular(targetByData.values())) {
+            return false;
+        }
+
+        Map<Long, TransformItem> targetById = new LinkedHashMap<>();
+        for (TransformItem item : targetByData.values()) {
+            if (item.stableId == null || targetById.put(item.stableId, item) != null) {
+                return false;
+            }
+        }
+
+        Map<Long, HomeGridRotationPositionMemory.Position> positions =
+                new LinkedHashMap<>();
+        for (TransformItem item : source) {
+            if (item.stableId == null) return false;
+            TransformItem target = targetById.get(item.stableId);
+            if (target == null
+                    || target.width() != item.width()
+                    || target.height() != item.height()
+                    || (sourceScreenId != null
+                    && target.screenId != null
+                    && !sourceScreenId.equals(target.screenId))) {
+                return false;
+            }
+            positions.put(item.stableId,
+                    new HomeGridRotationPositionMemory.Position(
+                            target.minX, target.minY, target.width(), target.height()));
+        }
+
+        if (sourceScreenId != null) {
+            HomeGridRotationPositionMemory.save(cols, rows, sourceScreenId, positions);
+        }
+        MainHook.log("[DC][HomeGridRotation] kept complete vendor target "
+                + cols + "x" + rows + " items=" + source.size());
+        return true;
+    }
+
+    private static boolean allRectangular(Iterable<TransformItem> items) {
+        for (TransformItem item : items) {
+            if (item == null || !item.isRectangular()) return false;
+        }
+        return true;
     }
 
     private static boolean restoreRemembered(
@@ -389,24 +450,10 @@ final class HomeGridHook {
         return true;
     }
 
-    private static Object[][] copyMatrix(Object[][] source, int cols, int rows) {
-        Object[][] copy = new Object[cols][rows];
-        for (int x = 0; x < cols; x++) {
-            System.arraycopy(source[x], 0, copy[x], 0, rows);
-        }
-        return copy;
-    }
-
     private static void copyInto(
             Object[][] source, Object[][] target, int cols, int rows) {
         for (int x = 0; x < cols; x++) {
             System.arraycopy(source[x], 0, target[x], 0, rows);
-        }
-    }
-
-    private static void clearOccupied(boolean[][] occupied) {
-        for (boolean[] column : occupied) {
-            java.util.Arrays.fill(column, false);
         }
     }
 
@@ -431,6 +478,7 @@ final class HomeGridHook {
         int minY;
         int maxX;
         int maxY;
+        int cells = 1;
 
         TransformItem(
                 Object info, Object data, int x, int y, boolean widgetType) {
@@ -445,6 +493,7 @@ final class HomeGridHook {
         }
 
         void include(int x, int y) {
+            cells++;
             minX = Math.min(minX, x);
             minY = Math.min(minY, y);
             maxX = Math.max(maxX, x);
@@ -461,6 +510,10 @@ final class HomeGridHook {
 
         int area() {
             return width() * height();
+        }
+
+        boolean isRectangular() {
+            return cells == area();
         }
 
         boolean isWidget() {
