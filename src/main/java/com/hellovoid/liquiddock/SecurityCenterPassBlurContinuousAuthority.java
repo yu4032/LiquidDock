@@ -56,9 +56,10 @@ final class SecurityCenterPassBlurContinuousAuthority {
                         Surface requested = args.length > 1 && args[1] instanceof Surface
                                 ? (Surface) args[1] : null;
                         if (requested != claim.surface) {
-                            args[1] = claim.surface;
-                            log("preserved LiquidDock PassBlur surface against vendor rebind layerId="
+                            log("suppressed vendor PassBlur surface rebind while LiquidDock owns root layerId="
                                     + Miuix307PassBlurBridge.surfaceLayerId(root));
+                            return successfulSuppressionResult(
+                                    setPassBlurSurface, chain.getThisObject());
                         }
                     }
                     return chain.proceed(args);
@@ -125,6 +126,13 @@ final class SecurityCenterPassBlurContinuousAuthority {
         synchronized (LOCK) {
             return ACTIVE_ROOTS.get(root);
         }
+    }
+
+    private static Object successfulSuppressionResult(Method method, Object receiver) {
+        Class<?> result = method.getReturnType();
+        if (result == void.class) return null;
+        if (receiver != null && result.isInstance(receiver)) return receiver;
+        return null;
     }
 
     private static void log(String message) {
