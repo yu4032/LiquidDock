@@ -3,6 +3,9 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.content.res.Resources;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Routes incompatible multi-cell items into Launcher 4.50's native no-space paths.
  *
@@ -20,6 +23,7 @@ final class HomeGridWidgetAdmissionGuard {
     private static final String WIDGET_INFO = "com.miui.home.launcher.LauncherAppWidgetInfo";
     private static final String CELL_SCREEN = "com.miui.home.launcher.CellScreen";
     private static boolean installed;
+    private static final Map<String, String> LAST_TRACE = new HashMap<>();
 
     private HomeGridWidgetAdmissionGuard() {}
 
@@ -44,6 +48,7 @@ final class HomeGridWidgetAdmissionGuard {
             installPickerGuard(classLoader, config);
             installDragGuard(classLoader, cellLayout, config);
             installed = true;
+            MainHook.log(TAG + " installed cellLayout=" + cellLayout.getName());
         } catch (Throwable error) {
             MainHook.log(TAG + " admission guard unavailable: " + error);
         }
@@ -88,13 +93,17 @@ final class HomeGridWidgetAdmissionGuard {
             HomeGridInstallConfig config) {
         try {
             Class<?> dragObject = Class.forName(DRAG_OBJECT, false, classLoader);
+            MainHook.log(TAG + " drag hook class=" + dragObject.getName());
             HookUtil.hookMethod(
                     cellLayout,
                     "isSpaceEnough",
                     new Class<?>[]{dragObject},
                     chain -> {
                         Object drag = chain.getArg(0);
-                        if (shouldRejectDrag(chain.getThisObject(), drag, config)) {
+                        boolean reject = shouldRejectDrag(
+                                chain.getThisObject(), drag, config);
+                        traceDrag("isSpaceEnough", chain.getThisObject(), drag, config, reject);
+                        if (reject) {
                             return false;
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -106,7 +115,12 @@ final class HomeGridWidgetAdmissionGuard {
                     new Class<?>[]{dragObject},
                     chain -> {
                         Object drag = chain.getArg(0);
-                        if (shouldRejectDrag(chain.getThisObject(), drag, config)) {
+                        boolean reject = shouldRejectDrag(
+                                chain.getThisObject(), drag, config);
+                        traceDrag(
+                                "findDropTargetPosition",
+                                chain.getThisObject(), drag, config, reject);
+                        if (reject) {
                             return null;
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -115,6 +129,53 @@ final class HomeGridWidgetAdmissionGuard {
             // Picker + vacancy guards still protect commit paths on Launcher variants where the
             // package-private DragObject class is not exposed by the decompiler/class loader.
             MainHook.log(TAG + " drag no-space hook unavailable: " + error);
+        }
+    }
+
+    private static void traceDrag(
+            String stage,
+            Object cellLayout,
+            Object dragObject,
+            HomeGridInstallConfig config,
+            boolean reject) {
+        if (!MainHook.debugLogging) return;
+        try {
+            Object dragInfo = dragObject == null
+                    ? null : HookUtil.tryInvoke(dragObject, "getDragInfo").value();
+            int spanX = dragInfo == null ? -1 : HookUtil.getIntField(dragInfo, "spanX");
+            int spanY = dragInfo == null ? -1 : HookUtil.getIntField(dragInfo, "spanY");
+
+            String gridName = "?";
+            int countX = -1;
+            int countY = -1;
+            if (cellLayout != null) {
+                Object grid = HookUtil.tryInvoke(cellLayout, "getGridConfig").value();
+                if (grid == null) grid = HookUtil.getField(cellLayout, "mGridConfig");
+                if (grid != null) {
+                    Object name = HookUtil.tryInvoke(grid, "getName").value();
+                    Object x = HookUtil.tryInvoke(grid, "getCountX").value();
+                    Object y = HookUtil.tryInvoke(grid, "getCountY").value();
+                    if (name != null) gridName = String.valueOf(name);
+                    if (x instanceof Integer) countX = (Integer) x;
+                    if (y instanceof Integer) countY = (Integer) y;
+                }
+            }
+
+            String snapshot = "drag="
+                    + (dragObject == null ? "null" : dragObject.getClass().getName())
+                    + " info="
+                    + (dragInfo == null ? "null" : dragInfo.getClass().getName())
+                    + " span=" + spanX + "x" + spanY
+                    + " grid=" + gridName + " " + countX + "x" + countY
+                    + " configured=" + config.columns + "x" + config.rows
+                    + " reject=" + reject;
+            synchronized (LAST_TRACE) {
+                if (snapshot.equals(LAST_TRACE.get(stage))) return;
+                LAST_TRACE.put(stage, snapshot);
+            }
+            MainHook.log(TAG + " " + stage + " " + snapshot);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " " + stage + " trace unavailable: " + error);
         }
     }
 
