@@ -46,9 +46,12 @@ public class SecurityCenterPassBlurOwnershipContractTest {
 
         assertTrue("Security Center startup must install continuous PassBlur authority",
                 moduleMain.contains("SecurityCenterPassBlurContinuousAuthority.install()"));
-        assertTrue("vendor SetPassBlurSurface writes must be intercepted while our root is claimed",
+        assertTrue("vendor SetPassBlurSurface writes must be suppressed while our root is claimed",
                 authority.contains("SetPassBlurSurface")
-                        && authority.contains("args[1] = claim.surface"));
+                        && authority.contains("requested != claim.surface")
+                        && authority.contains("successfulSuppressionResult("));
+        assertFalse("a previously parceled producer Surface must never be substituted into a later vendor transaction",
+                authority.contains("args[1] = claim.surface"));
         assertTrue("vendor update flag/scale writes must preserve live LiquidDock updates",
                 authority.contains("setUpdateTextureFlag")
                         && authority.contains("args[1] = Boolean.TRUE")
