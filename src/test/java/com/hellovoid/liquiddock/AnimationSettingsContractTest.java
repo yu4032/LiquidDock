@@ -30,22 +30,31 @@ public class AnimationSettingsContractTest {
         assertTrue(animationPage.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
         assertTrue(animationPage.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
         assertTrue(animationPage.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
-        assertFalse("Dock resize timing belongs with the gated Dock feature, not the generic page",
+        assertTrue("Dock resize timing remains visible on the animation page",
                 animationPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
         assertTrue(animationPage.contains("系统原生动画继续跟随原实现"));
     }
 
     @Test
-    public void dockResizeTimingIsGatedByTheActualReplacementAnimation() throws Exception {
+    public void dockResizeTimingStaysOnAnimationPageAndUsesDockFeatureGate() throws Exception {
         String ui = Files.readString(UI);
-        int start = ui.indexOf("private fun DockPage(");
-        int end = ui.indexOf("private fun DividerPage(", start);
-        assertTrue(start >= 0 && end > start);
-        String dockPage = ui.substring(start, end);
+        int animationStart = ui.indexOf("private fun AnimationPage(");
+        int animationEnd = ui.indexOf("private fun GridPage(", animationStart);
+        assertTrue(animationStart >= 0 && animationEnd > animationStart);
+        String animationPage = ui.substring(animationStart, animationEnd);
+        assertTrue(animationPage.contains(
+                "masterEnabled && dockCustomizationEnabled"));
+        assertTrue(animationPage.contains(
+                "&& !systemResizeEnabled && smoothResizeEnabled"));
 
-        assertTrue(dockPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
-        assertTrue(dockPage.contains(
-                "masterEnabled && dockEnabled && !resizeAnimation && smoothResize"));
+        int dockStart = ui.indexOf("private fun DockPage(");
+        int dockEnd = ui.indexOf("private fun DividerPage(", dockStart);
+        assertTrue(dockStart >= 0 && dockEnd > dockStart);
+        String dockPage = ui.substring(dockStart, dockEnd);
+        assertTrue(dockPage.contains("ConfigSchema.Dock.RESIZE_ANIMATION"));
+        assertTrue(dockPage.contains("ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION"));
+        assertFalse("Dock page keeps switches but must not duplicate the duration slider",
+                dockPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
     }
 
     @Test
