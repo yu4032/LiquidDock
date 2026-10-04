@@ -27,7 +27,8 @@ final class HomeGridWidgetAdmissionGuard {
     private HomeGridWidgetAdmissionGuard() {}
 
     static void install(ClassLoader classLoader, HomeGridInstallConfig config) {
-        if (installed || config == null || !config.enabled) return;
+        if (installed || config == null || !config.enabled
+                || !config.widgetPlacementGuard) return;
         try {
             Class<?> cellLayout = Class.forName(CELL_LAYOUT, false, classLoader);
 
