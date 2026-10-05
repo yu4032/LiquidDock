@@ -2,6 +2,7 @@
 
 - 日期：2026-10-05　分支：`fix/dock-frame-sync`（基线 main @ ff3e7d35 = v2.6.2 prep）
 - 状态：静态阶段完成；根因候选已锁定到具体类/方法/写入点；待真机判别实验（Phase 5–7）确认后实施最小修复。
+- P8 补（2026-10-05）：÷2 半率闸已在 turner 实机库定位（见 §8）。
 - 设备侧事实来源：`/mnt/extra/outputs/liquiddock_recent10min.log`（2026-10-04 10:42–10:50 logcat）。
 
 ## 0. 判别问题（任务书特别提醒）
@@ -110,3 +111,18 @@ Dock 静止显示、图标拖动后尺寸动画、图标玻璃随尺寸、Worksp
 
 - 已存回反编译库：`/mnt/extra/outputs/hyperos-analysis-passblur-publish/docs/passblur/notes-2026-10-05-dock-floating-window.md`（Floating Dock 窗口拓扑 + VRI passblur 全语义 + 行号索引）。
 - 关键材料位置：framework ViewRootImpl 全量 `decompile-keep/o_android_view_ViewRootImpl/sources/android/view/ViewRootImpl.java`；厂商 launcher 全量 `hyperos-analysis-full/full-jadx/pad-launcher-4.50.0.1204/launcher/sources/`；绵狗 V13 全量 `android-dev/mingou_v10_jadx/sources/`。
+
+## 8. Phase 8：÷2 半率闸定位（turner 实机库反汇编）
+
+- 基准：K Pad（turner）实机库 `/system_ext/lib64/libsurfaceflinger.so`（sha256 `407be876…`），单函数反汇编 + PLT 交叉核对。
+- 定位：`MiOutputManager::drawPassBlurIfNeed`（0x54d2d0）内的重绘时间门（0x54deb0–0x54df50）：
+  - 每 PassBlur 对象持有重绘间隔 P=[pb+0xf8]：构造器（0x4216a4 读属性、0x4216b8 乘 1e6）取 `persist.sys.sf.draw.texture`（默认 30）×1e6 ns；本机该属性 = 14 ⇒ **P = 14 ms**。
+  - 放行顺序：`now < [pb+0x70]`（force-refresh 期限）⇒ 直接放行；否则按 scale=[pb+0x6c] 判时间：
+    - **scale == 1.0**（本 dock 绑定值）⇒ 放行条件 `now > [pb+0xa8] + P/2`（**7 ms**）；
+    - scale != 1.0 ⇒ 基准阈值 P，另按标志位附条件放行 P/2、P/4。
+  - [pb+0xa8] = 上次重绘时刻（提交点 0x54e0b8 写入）。
+- **÷2 推导**：165Hz 帧距 6.06 ms < 7 ms ⇒ 重绘只能隔帧落位 ⇒ 源产帧 ≈82.5 fps = 165/2（与实测 82.5–83.6/s、比率 0.5 吻合）；内容无变化时不放行（与静止段近乎零产帧一致）。
+- 候选裁决：2×VSYNC 硬节拍（否）、帧号隔帧推进（否）——**÷2 = 间隔时间门 P/2**。
+- 旁路（Phase 9 抓手）：`PassBlur::setForceRefresh(ms)`（0x422380）写 [pb+0x70] = now + ms×1e6；窗口内时间门直接放行 ⇒ **活跃期续发 force-refresh 即恢复满率**（框架 VRI `sendAuxiliaryIfNeed` 同语义）。事务侧同字段：setClientState（0x421cf0，layer_state +0x5e4）。
+- Bg 路径：`releaseCurRes`（0x54e4b0）每帧收割绘制 futures，未完成 → `"next Frame, will drawPassBlur again."`（下帧重试）；入口 `BackgroundExecutor::bgDrawPassBlur`（0x348b70），渲染 `drawPassBlurInternal`（0x54eba0）。
+- 产物：`/mnt/extra/outputs/passblur-turner-20261005/disasm/`（单函数反汇编、PLT 解析）；`/mnt/extra/outputs/dock-frame-sync-decompile/`（blk-timegate.txt 等切片）。
