@@ -381,6 +381,39 @@ v2.5.1 已经出现并修复两个真实的跨 ClassLoader R8 问题：
 
 ---
 
+## P1 · Rename custom-grid enable key across two releases
+
+当前自定义主屏网格总开关仍使用历史键名 `home_grid_8x4`，但其语义早已不再表示 8×4；当前尺寸唯一真值已经是 `grid_columns / grid_rows`。
+
+按两个连续版本完成迁移，不做一步到位删除：
+
+### 第一次更新：引入 `grid_enabled`，双键过渡
+
+- `ConfigSchema.Grid.ENABLED` 改用新键 `grid_enabled`；
+- Launcher/设置进程启动迁移时，如果 `grid_enabled` 尚不存在，则把现有 `home_grid_8x4` 的布尔值原样复制到 `grid_enabled`；
+- 过渡版本内同时维护两个键：GUI、preset、import/export 与任何直接写入路径更新开关时同时写 `grid_enabled` 和 `home_grid_8x4`，保证一个完整版本周期内二者一致；
+- 运行时以完成迁移后的 `grid_enabled` 为主值，不再从键名推断任何 8×4 语义；
+- 增加测试覆盖首次复制、双写一致性和已有 `grid_enabled` 不被旧键覆盖。
+
+### 再下一次更新：彻底删除 `home_grid_8x4`
+
+- 只读取和写入 `grid_enabled`；
+- 从 `ConfigSchema`、preset、GUI、import/export、测试和文档中删除 `home_grid_8x4`；
+- 删除第一阶段的旧键复制/双写兼容代码；
+- 更新时从 SharedPreferences 中移除残留的 `home_grid_8x4`；
+- 全仓搜索确认 `home_grid_8x4` 生产代码引用归零。
+
+最终配置契约：
+
+```json
+{
+  "grid_enabled": false,
+  "grid_columns": 8,
+  "grid_rows": 4
+}
+```
+
+---
 ## P2 · Third-party profile configuration ownership
 
 Gboard 已有 `ConfigSchema.Gboard` 与 shared profile bridge；MIUI Search 仍由 `MiuiSearchboxGlassPreferences` 管理公开设置。
