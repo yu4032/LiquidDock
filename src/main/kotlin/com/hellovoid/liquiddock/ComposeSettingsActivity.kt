@@ -647,10 +647,6 @@ private fun AnimationPage(
         "ms",
         summary = "桌面与多任务界面隐藏系统手势小白条时的渐隐时长；恢复显示继续使用系统原生时序；0 ms 表示立即隐藏，下一次渐隐立即生效",
     )
-    val gestureHandleFadeEnabled = prefs.getBoolean(
-        ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
-        ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.uiDefault(),
-    )
     val settingsPage = IntSpec(
         ConfigSchema.Animation.SETTINGS_PAGE,
         "GUI 页面切换",
@@ -699,7 +695,7 @@ private fun AnimationPage(
                 IntSetting(
                     prefs,
                     gestureHandleFadeOut,
-                    masterEnabled && gestureHandleFadeEnabled,
+                    masterEnabled,
                 )
             }
         }
