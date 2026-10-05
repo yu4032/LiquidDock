@@ -57,7 +57,7 @@ public final class ModuleMain extends XposedModule {
             try {
                 GestureHandleRuntimeState.initialize(
                         Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP));
-                SystemUiGestureHandleVisibilityHook.install(classLoader);
+                SystemUiGestureHandleFadeHook.install(classLoader);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][GestureHandle] SystemUI bootstrap failed", error);
             }

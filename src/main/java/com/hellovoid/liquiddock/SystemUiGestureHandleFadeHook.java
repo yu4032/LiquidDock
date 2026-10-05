@@ -7,39 +7,41 @@ import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * SystemUI-only owner for hiding the native gesture handle on HOME and RECENTS.
+ * SystemUI-only owner for fading the native gesture handle on HOME and RECENTS.
  *
  * <p>No Launcher classes are hooked and no Launcher broadcast/IPC is added. HOME comes from
  * NavigationBar's own TaskStackChangeListener. RECENTS comes from NavigationBar's native recents
- * animation callback plus its existing LauncherProxyListener.onOverviewShown callback. Hiding is
- * immediate; once the hide condition clears, LiquidDock stops overriding alpha and SystemUI owns
- * all subsequent visibility updates.</p>
+ * animation callback plus its existing LauncherProxyListener.onOverviewShown callback. The actual
+ * SystemUI home-handle object remains the visual owner and performs the alpha animation.</p>
  */
-final class SystemUiGestureHandleVisibilityHook {
+final class SystemUiGestureHandleFadeHook {
     private static final String TAG = "[DC][GestureHandle]";
     private static final String NAVIGATION_BAR =
             "com.android.systemui.navigationbar.views.NavigationBar";
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
 
     private static final Object LOCK = new Object();
-    private static final WeakHashMap<Object, Boolean> HOME_HANDLES = new WeakHashMap<>();
+    private static final WeakHashMap<Object, Float> HOME_HANDLES = new WeakHashMap<>();
     private static final Set<Class<?>> HOOKED_HANDLE_CLASSES = ConcurrentHashMap.newKeySet();
     private static final Set<Class<?>> HOOKED_TASK_LISTENER_CLASSES =
             ConcurrentHashMap.newKeySet();
     private static final Set<Class<?>> HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES =
             ConcurrentHashMap.newKeySet();
+    private static final ThreadLocal<Boolean> OWN_ALPHA_WRITE = new ThreadLocal<>();
+
     private static final GestureHandleSystemUiSceneState SCENE =
             new GestureHandleSystemUiSceneState();
 
     private static boolean installed;
     private static boolean hiddenRequested;
 
-    private SystemUiGestureHandleVisibilityHook() {}
+    private SystemUiGestureHandleFadeHook() {}
 
     static synchronized void install(ClassLoader classLoader) {
         if (installed || classLoader == null) return;
@@ -103,7 +105,9 @@ final class SystemUiGestureHandleVisibilityHook {
             Object handle = handleResult.value();
             ensureHandleAlphaHook(handle.getClass());
             synchronized (LOCK) {
-                HOME_HANDLES.put(handle, Boolean.TRUE);
+                if (!HOME_HANDLES.containsKey(handle)) {
+                    HOME_HANDLES.put(handle, readAlpha(handle));
+                }
             }
 
             Object taskListener = HookUtil.getField(navigationBar, "mTaskStackListener");
@@ -190,11 +194,14 @@ final class SystemUiGestureHandleVisibilityHook {
             HookUtil.hook(setAlpha, chain -> {
                 Object owner = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (args.length >= 2 && args[0] instanceof Number) {
+                if (!Boolean.TRUE.equals(OWN_ALPHA_WRITE.get())
+                        && args.length >= 2
+                        && args[0] instanceof Number) {
                     synchronized (LOCK) {
-                        if (hiddenRequested && HOME_HANDLES.containsKey(owner)) {
-                            args[0] = 0.0f;
-                            if (args[1] instanceof Boolean) args[1] = Boolean.FALSE;
+                        if (HOME_HANDLES.containsKey(owner)) {
+                            float vendorTarget = ((Number) args[0]).floatValue();
+                            HOME_HANDLES.put(owner, vendorTarget);
+                            if (hiddenRequested) args[0] = 0.0f;
                         }
                     }
                 }
@@ -232,6 +239,13 @@ final class SystemUiGestureHandleVisibilityHook {
         return base != null && LAUNCHER_PACKAGE.equals(base.getPackageName());
     }
 
+    private static float readAlpha(Object handle) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(handle, "getAlpha");
+        Object value = result.succeeded() ? result.value() : null;
+        if (value instanceof Number) return ((Number) value).floatValue();
+        return 1.0f;
+    }
+
     private static void reconcileHiddenState() {
         reconcileHiddenState(SCENE.shouldHide());
     }
@@ -244,20 +258,26 @@ final class SystemUiGestureHandleVisibilityHook {
         synchronized (LOCK) {
             if (hiddenRequested == hidden) return;
             hiddenRequested = hidden;
-            if (!hidden) return;
-
-            for (Object handle : HOME_HANDLES.keySet()) {
+            for (Map.Entry<Object, Float> entry : HOME_HANDLES.entrySet()) {
+                Object handle = entry.getKey();
                 if (handle == null) continue;
-                writeHiddenAlpha(handle);
+                float target = hidden ? 0.0f : entry.getValue();
+                writeAlpha(handle, target, true);
             }
         }
     }
 
-    private static void writeHiddenAlpha(Object handle) {
-        HookUtil.InvocationResult<Object> result =
-                HookUtil.tryInvoke(handle, "setAlpha", 0.0f, false);
-        if (!result.succeeded()) {
-            Api101Bridge.log(TAG + " native hide alpha write failed: " + result.failure());
+    private static void writeAlpha(Object handle, float alpha, boolean animate) {
+        if (handle == null) return;
+        OWN_ALPHA_WRITE.set(Boolean.TRUE);
+        try {
+            HookUtil.InvocationResult<Object> result =
+                    HookUtil.tryInvoke(handle, "setAlpha", alpha, animate);
+            if (!result.succeeded()) {
+                Api101Bridge.log(TAG + " native alpha write failed: " + result.failure());
+            }
+        } finally {
+            OWN_ALPHA_WRITE.remove();
         }
     }
 }

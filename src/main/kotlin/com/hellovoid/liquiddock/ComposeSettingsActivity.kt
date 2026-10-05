@@ -690,7 +690,7 @@ private fun AnimationPage(
                     prefs,
                     ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
                     "桌面/多任务隐藏手势小白条",
-                    "桌面与多任务界面立即隐藏系统手势手柄；离开后由系统自行恢复显示。开关即时生效，首次安装此版本需重启系统界面",
+                    "桌面与多任务界面将系统手势手柄平滑渐隐至透明，离开后按系统原透明度渐显恢复；开关即时生效，首次安装此版本需重启系统界面",
                     masterEnabled,
                 )
             }

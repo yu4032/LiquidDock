@@ -29,7 +29,7 @@ public class ConfigSchemaTest {
     }
 
     @Test
-    public void gestureHandleHomeRecentsHideIsOptInAndExported() {
+    public void gestureHandleHomeRecentsFadeIsOptInAndExported() {
         ConfigKey<Boolean> key = ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS;
         assertEquals("animation_hide_gesture_handle_home_recents", key.name());
         assertEquals(Boolean.FALSE, key.uiDefault());
