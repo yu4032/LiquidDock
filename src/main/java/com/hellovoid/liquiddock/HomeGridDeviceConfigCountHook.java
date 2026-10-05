@@ -38,6 +38,10 @@ final class HomeGridDeviceConfigCountHook {
                             || isExcludedCall()) {
                         return result;
                     }
+                    if ("getCellCountX".equals(methodName)
+                            && HomeGridDbOrientationHook.isOrientationPredicateScope()) {
+                        return result;
+                    }
                     return HomeGridCountPolicy.profileRewrite(profile, (Integer) result);
                 });
     }
