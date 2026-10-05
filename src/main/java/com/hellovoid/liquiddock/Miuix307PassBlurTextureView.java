@@ -643,6 +643,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             producerFrameCount++;
             frameAvailable.set(true);
             DockFrameSyncTrace.producerFrame(producerFrameCount, texture);
+            Miuix307PassBlurBridge.renewForceRefresh(binding);
             drawLatestFrame(true);
         }, renderHandler);
     }
