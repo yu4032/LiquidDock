@@ -1,9 +1,13 @@
 package com.hellovoid.liquiddock;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -18,7 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>No Launcher classes are hooked and no Launcher broadcast/IPC is added. HOME comes from
  * NavigationBar's own TaskStackChangeListener. RECENTS comes from NavigationBar's native recents
  * animation callback plus its existing LauncherProxyListener.onOverviewShown callback. The actual
- * SystemUI home-handle object remains the visual owner and performs the alpha animation.</p>
+ * SystemUI home-handle object remains the visual owner. HyperOS 3's ButtonDispatcher alpha setter
+ * is immediate, so LiquidDock replays Launcher 4.50's decelerated gesture-line curve over time and
+ * writes each frame through that native dispatcher.</p>
  */
 final class SystemUiGestureHandleFadeHook {
     private static final String TAG = "[DC][GestureHandle]";
@@ -27,7 +33,11 @@ final class SystemUiGestureHandleFadeHook {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
 
     private static final Object LOCK = new Object();
+    private static final DecelerateInterpolator FADE_INTERPOLATOR =
+            new DecelerateInterpolator();
     private static final WeakHashMap<Object, Float> HOME_HANDLES = new WeakHashMap<>();
+    private static final WeakHashMap<Object, ValueAnimator> HANDLE_ANIMATORS =
+            new WeakHashMap<>();
     private static final Set<Class<?>> HOOKED_HANDLE_CLASSES = ConcurrentHashMap.newKeySet();
     private static final Set<Class<?>> HOOKED_TASK_LISTENER_CLASSES =
             ConcurrentHashMap.newKeySet();
@@ -266,28 +276,70 @@ final class SystemUiGestureHandleFadeHook {
             for (Map.Entry<Object, Float> entry : HOME_HANDLES.entrySet()) {
                 Object handle = entry.getKey();
                 if (handle == null) continue;
+                cancelAlphaAnimatorLocked(handle);
                 float target = hidden ? 0.0f : entry.getValue();
-                writeAlpha(
-                        handle,
-                        target,
-                        true,
-                        hidden ? GestureHandleRuntimeState.fadeOutDurationMs() : -1);
+                if (hidden) {
+                    animateAlphaToZeroLocked(
+                            handle, GestureHandleRuntimeState.fadeOutDurationMs());
+                } else {
+                    writeAlpha(handle, target);
+                }
             }
         }
     }
 
-    private static void writeAlpha(
-            Object handle, float alpha, boolean animate, int durationOverrideMs) {
+    private static void animateAlphaToZeroLocked(Object handle, int durationMs) {
+        if (handle == null) return;
+        float startAlpha = readAlpha(handle);
+        if (durationMs <= 0 || startAlpha <= (1.0f / 255.0f)) {
+            writeAlpha(handle, 0.0f);
+            return;
+        }
+
+        ValueAnimator animator = ValueAnimator.ofFloat(startAlpha, 0.0f);
+        animator.setDuration(durationMs);
+        animator.setInterpolator(FADE_INTERPOLATOR);
+        animator.addUpdateListener(valueAnimator -> {
+            Object value = valueAnimator.getAnimatedValue();
+            if (value instanceof Number) {
+                writeAlpha(handle, ((Number) value).floatValue());
+            }
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            private boolean cancelled;
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                cancelled = true;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                synchronized (LOCK) {
+                    if (HANDLE_ANIMATORS.get(handle) == animation) {
+                        HANDLE_ANIMATORS.remove(handle);
+                    }
+                    if (!cancelled && hiddenRequested) {
+                        writeAlpha(handle, 0.0f);
+                    }
+                }
+            }
+        });
+        HANDLE_ANIMATORS.put(handle, animator);
+        animator.start();
+    }
+
+    private static void cancelAlphaAnimatorLocked(Object handle) {
+        ValueAnimator animator = HANDLE_ANIMATORS.remove(handle);
+        if (animator != null) animator.cancel();
+    }
+
+    private static void writeAlpha(Object handle, float alpha) {
         if (handle == null) return;
         OWN_ALPHA_WRITE.set(Boolean.TRUE);
         try {
-            HookUtil.InvocationResult<Object> result = durationOverrideMs >= 0
-                    ? HookUtil.tryInvoke(
-                            handle, "setAlpha", alpha, animate, (long) durationOverrideMs)
-                    : HookUtil.tryInvoke(handle, "setAlpha", alpha, animate);
-            if (!result.succeeded() && durationOverrideMs >= 0) {
-                result = HookUtil.tryInvoke(handle, "setAlpha", alpha, animate);
-            }
+            HookUtil.InvocationResult<Object> result =
+                    HookUtil.tryInvoke(handle, "setAlpha", alpha, false);
             if (!result.succeeded()) {
                 Api101Bridge.log(TAG + " native alpha write failed: " + result.failure());
             }

@@ -75,7 +75,11 @@ public class AnimationSettingsContractTest {
         String runtime = Files.readString(
                 JAVA.resolve("GestureHandleRuntimeState.java"));
         assertTrue(systemUiHook.contains("GestureHandleRuntimeState.fadeOutDurationMs()"));
-        assertTrue(systemUiHook.contains("(long) durationOverrideMs"));
+        assertTrue(systemUiHook.contains("ValueAnimator.ofFloat"));
+        assertTrue(systemUiHook.contains("DecelerateInterpolator"));
+        assertTrue(systemUiHook.contains("animator.setDuration(durationMs)"));
+        assertFalse("HyperOS 3 ButtonDispatcher has no duration overload",
+                systemUiHook.contains("(long) durationOverrideMs"));
         assertTrue(runtime.contains("ConfigSchema.Animation.GESTURE_HANDLE_FADE_OUT"));
     }
 
