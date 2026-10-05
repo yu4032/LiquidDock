@@ -962,6 +962,13 @@ private fun LiquidPage(
         IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
         BooleanSetting(
             prefs,
+            ConfigSchema.Dock.FRAME_SYNC,
+            stringResource(R.string.dock_frame_sync),
+            stringResource(R.string.dock_frame_sync_summary),
+            masterEnabled && liquidGlass,
+        )
+        BooleanSetting(
+            prefs,
             ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
             "显示表面法线（调试）",
             "用颜色显示表面法线方向，便于调试折射与光照",

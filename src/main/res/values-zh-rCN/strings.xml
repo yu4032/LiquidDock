@@ -73,6 +73,8 @@
     <string name="dock_resize_animation_summary">宽度、高度和圆角变化时播放 200 ms 动画；关闭后立即应用最终尺寸；重启桌面生效</string>
     <string name="dock_smooth_resize_animation">LiquidDock 顺滑尺寸动画</string>
     <string name="dock_smooth_resize_animation_summary">使用连续的 180 ms 缓出过渡，不会出现系统动画先扩张再缩回的行为；重启桌面生效</string>
+    <string name="dock_frame_sync">Dock帧同步</string>
+    <string name="dock_frame_sync_summary">使Dock玻璃背景与屏幕刷新同步，改善高刷新率下背景更新不跟手的问题；开关即时生效</string>
     <string name="option_off">关闭</string>
     <string name="workstation_customization">自定义工作台</string>
     <string name="workstation_customization_summary">工作台使用独立的 Dock 长度和 8 列水平距离；重启桌面生效</string>

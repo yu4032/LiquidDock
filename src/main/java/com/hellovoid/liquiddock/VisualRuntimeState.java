@@ -15,6 +15,7 @@ final class VisualRuntimeState {
     private static volatile boolean strokeShadowEnabled;
     private static volatile boolean dividerEnabled;
     private static volatile boolean hideMirrorShortcut;
+    private static volatile boolean dockFrameSyncEnabled;
 
     private static SharedPreferences prefs;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
@@ -43,6 +44,10 @@ final class VisualRuntimeState {
         hideMirrorShortcut = nextPrefs != null
                 && nextPrefs.getBoolean(ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name(),
                         ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.runtimeFallback());
+        dockFrameSyncEnabled = nextPrefs == null
+                ? ConfigSchema.Dock.FRAME_SYNC.runtimeFallback()
+                : nextPrefs.getBoolean(ConfigSchema.Dock.FRAME_SYNC.name(),
+                        ConfigSchema.Dock.FRAME_SYNC.runtimeFallback());
         if (nextPrefs == null) return;
 
         listener = (sharedPreferences, key) -> {
@@ -62,6 +67,7 @@ final class VisualRuntimeState {
                     && !ConfigSchema.Dock.STROKE_SHADOW.name().equals(key)
                     && !ConfigSchema.Divider.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name().equals(key)
+                    && !ConfigSchema.Dock.FRAME_SYNC.name().equals(key)
                     && !strokeStyleChanged
                     && !dockShadowStyleChanged
                     && !strokeShadowStyleChanged) return;
@@ -83,9 +89,12 @@ final class VisualRuntimeState {
                     ConfigSchema.Divider.ENABLED.name(), dividerEnabled);
             boolean nextHideMirrorShortcut = sharedPreferences.getBoolean(
                     ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT.name(), hideMirrorShortcut);
+            boolean nextDockFrameSyncEnabled = sharedPreferences.getBoolean(
+                    ConfigSchema.Dock.FRAME_SYNC.name(),
+                    ConfigSchema.Dock.FRAME_SYNC.runtimeFallback());
             apply(nextCoreEnabled, nextDockCustomizationEnabled, nextDockStrokeEnabled,
                     nextDockShadowEnabled, nextStrokeShadowEnabled, nextDividerEnabled,
-                    nextHideMirrorShortcut);
+                    nextHideMirrorShortcut, nextDockFrameSyncEnabled);
 
             if (strokeStyleChanged || strokeShadowStyleChanged) {
                 runOnMain(() -> DockStrokeRenderer.refreshInstalledFromCurrentConfig());
@@ -125,6 +134,10 @@ final class VisualRuntimeState {
         return coreEnabled && hideMirrorShortcut;
     }
 
+    static boolean isDockFrameSyncEnabled() {
+        return coreEnabled && dockFrameSyncEnabled;
+    }
+
     private static VisualRuntimeTransitionPolicy.Snapshot snapshot() {
         return new VisualRuntimeTransitionPolicy.Snapshot(
                 isDockCustomizationEnabled(),
@@ -142,14 +155,16 @@ final class VisualRuntimeState {
             boolean nextDockShadowEnabled,
             boolean nextStrokeShadowEnabled,
             boolean nextDividerEnabled,
-            boolean nextHideMirrorShortcut) {
+            boolean nextHideMirrorShortcut,
+            boolean nextDockFrameSyncEnabled) {
         if (coreEnabled == nextCoreEnabled
                 && dockCustomizationEnabled == nextDockCustomizationEnabled
                 && dockStrokeEnabled == nextDockStrokeEnabled
                 && dockShadowEnabled == nextDockShadowEnabled
                 && strokeShadowEnabled == nextStrokeShadowEnabled
                 && dividerEnabled == nextDividerEnabled
-                && hideMirrorShortcut == nextHideMirrorShortcut) return;
+                && hideMirrorShortcut == nextHideMirrorShortcut
+                && dockFrameSyncEnabled == nextDockFrameSyncEnabled) return;
 
         VisualRuntimeTransitionPolicy.Snapshot before = snapshot();
 
@@ -162,6 +177,7 @@ final class VisualRuntimeState {
         strokeShadowEnabled = nextStrokeShadowEnabled;
         dividerEnabled = nextDividerEnabled;
         hideMirrorShortcut = nextHideMirrorShortcut;
+        dockFrameSyncEnabled = nextDockFrameSyncEnabled;
 
         VisualRuntimeTransitionPolicy.Transition transition =
                 VisualRuntimeTransitionPolicy.plan(before, snapshot());
