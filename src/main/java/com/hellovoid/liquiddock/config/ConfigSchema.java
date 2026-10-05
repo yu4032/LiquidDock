@@ -654,7 +654,7 @@ public final class ConfigSchema {
                 Grid.LEGACY_PORTRAIT_HORIZONTAL_MARGIN, Grid.LEGACY_MARGIN_LEFT,
                 Grid.LEGACY_MARGIN_RIGHT, Grid.LEGACY_MARGIN_TOP,
                 Grid.LEGACY_MARGIN_BOTTOM);
-        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT,
+        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT, Dock.FRAME_SYNC,
                 Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
                 Dock.DIMENSIONS_DP, Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
                 Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS, Dock.CORNERS_DP, Dock.CORNER_OFFSET,
