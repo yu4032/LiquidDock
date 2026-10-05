@@ -134,7 +134,7 @@ Dock 静止显示、图标拖动后尺寸动画、图标玻璃随尺寸、Worksp
 
 - 方案（由 §8 结论定）：活跃期保持 SF force-refresh 窗口（[pb+0x70]）不熄灭 ⇒ 绕开 ÷2 重绘时间门（P/2 = 7 ms）；实现为事件驱动续期（producer 帧到达即续）——无定时器、无轮询、空闲自动过期。
 - 实现（`fix/dock-frame-sync`）：
-  - `Miuix307PassBlurBridge`：bind 时解析 `SurfaceControl$Transaction#setForceRefresh(SurfaceControl, int)`（设备 framework.jar classes4.dex 已核对存在）；新增 `renewForceRefresh(Binding)` —— 仅 DOCK 域、需 `bound && updatesEnabled`；lease 250 ms、发送节流 ≥50 ms（活跃期 ≤20 tx/s）；失败降级 = 停止续期 + 限频日志（5 s）。
+  - `Miuix307PassBlurBridge`：bind 时解析 `SurfaceControl$Transaction#setForceRefresh(SurfaceControl, int)`（设备 framework.jar classes4.dex 已核对存在）；新增 `renewForceRefresh(Binding)` —— 仅 DOCK 域、需 `bound && updatesEnabled`；lease 250 ms、发送节流 ≥50 ms（活跃期 ≤20 tx/s）；失败降级 = 捕获异常、仅限频日志（≥5 s 一条），不影响其它路径。
   - `Miuix307PassBlurTextureView`：`onFrameAvailable`（render 线程）调用 `renewForceRefresh(binding)`。
   - 语义依据：native `PassBlur::setForceRefresh`（0x422380）写 [pb+0x70] = now + ms×1e6，窗口内时间门直接放行；框架 VRI `sendAuxiliaryIfNeed`（L28043+）为同款通道（`tr.setForceRefresh(mSurfaceControl, mMimeoutMs)`）。
 - Continuous Authority 候选（修定）：**本轮不实施**——依据：演示段零 SC 契约写入（未见翻转）、÷2 已完整解释症状、最小化约束；保留 `DockScContractTrace` 观察钩子作哨兵，若 Phase 10 复现契约翻转再按 SecurityCenter 模板启用。
