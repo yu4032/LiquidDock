@@ -641,6 +641,16 @@ private fun AnimationPage(
         "ms",
         summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；重启安全中心后生效",
     )
+    val gestureHandleFadeOut = IntSpec(
+        ConfigSchema.Animation.GESTURE_HANDLE_FADE_OUT,
+        "小白条渐隐",
+        "ms",
+        summary = "桌面与多任务界面隐藏系统手势小白条时的渐隐时长；恢复显示继续使用系统原生时序；0 ms 表示立即隐藏，下一次渐隐立即生效",
+    )
+    val gestureHandleFadeEnabled = prefs.getBoolean(
+        ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
+        ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.uiDefault(),
+    )
     val settingsPage = IntSpec(
         ConfigSchema.Animation.SETTINGS_PAGE,
         "GUI 页面切换",
@@ -652,7 +662,7 @@ private fun AnimationPage(
         item {
             PageHeader(
                 stringResource(R.string.page_animation),
-                "这里只调整 LiquidDock 自己拥有的动画。系统原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
+                "这里只调整 LiquidDock 自己拥有或接管的动画。未被接管的系统原生动画继续跟随原实现；0 ms 表示立即完成。",
             )
         }
         item { SmallTitle("工作区玻璃") }
@@ -686,12 +696,10 @@ private fun AnimationPage(
         item { SmallTitle("系统界面") }
         item {
             SettingsCard {
-                BooleanSetting(
+                IntSetting(
                     prefs,
-                    ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
-                    "桌面/多任务隐藏手势小白条",
-                    "桌面与多任务界面将系统手势手柄平滑渐隐至透明，离开后按系统原透明度渐显恢复；开关即时生效，首次安装此版本需重启系统界面",
-                    masterEnabled,
+                    gestureHandleFadeOut,
+                    masterEnabled && gestureHandleFadeEnabled,
                 )
             }
         }
@@ -711,6 +719,18 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
     }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
+        item { SmallTitle("系统手势") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+                    "桌面/多任务隐藏手势小白条",
+                    "桌面与多任务界面将系统手势手柄渐隐至透明，离开后按系统原透明度恢复；开关即时生效，首次安装此版本需重启系统界面",
+                    masterEnabled,
+                )
+            }
+        }
         item { SmallTitle("图标大小 · Launcher 4.50") }
         item {
             SettingsCard {

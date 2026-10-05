@@ -40,6 +40,19 @@ public class ConfigSchemaTest {
     }
 
     @Test
+    public void gestureHandleFadeOutDurationMatchesNativeDefaultRange() {
+        ConfigKey<Integer> key = ConfigSchema.Animation.GESTURE_HANDLE_FADE_OUT;
+        assertEquals("animation_gesture_handle_fade_out_ms", key.name());
+        assertEquals(Integer.valueOf(250), key.uiDefault());
+        assertEquals(Integer.valueOf(250), key.runtimeFallback());
+        assertEquals(Integer.valueOf(250), key.exportDefault());
+        assertEquals(Integer.valueOf(0), key.minInt());
+        assertEquals(Integer.valueOf(2000), key.maxInt());
+        assertEquals(ConfigKey.ExportMode.ALWAYS, key.exportMode());
+        assertTrue(ConfigSchema.all().contains(key));
+    }
+
+    @Test
     public void recentsWallpaperDimmingSwitchPreservesVendorBehaviorByDefault() {
         assertEquals("recents_disable_wallpaper_dimming",
                 ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name());

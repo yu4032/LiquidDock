@@ -53,6 +53,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_GESTURE_HANDLE_HOME_RECENTS = bool(
                 "animation_hide_gesture_handle_home_recents",
                 false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GESTURE_HANDLE_FADE_OUT = integer(
+                "animation_gesture_handle_fade_out_ms",
+                250, 250, 250, 0, 2000, ConfigKey.ExportMode.ALWAYS);
 
         private Animation() {}
     }
@@ -639,7 +642,8 @@ public final class ConfigSchema {
         add(keys, Animation.WORKSPACE_VISIBILITY, Animation.DOCK_ICON_REVEAL,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
-                Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS);
+                Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+                Animation.GESTURE_HANDLE_FADE_OUT);
         add(keys, Grid.ENABLED, Grid.PROFILE, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
                 Grid.MARGINS_DP, Grid.MARGINS_OFFSET, Grid.WIDGET_HORIZONTAL_STRETCH,

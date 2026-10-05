@@ -29,7 +29,10 @@ public class AnimationSettingsContractTest {
         assertTrue(animationPage.contains("ConfigSchema.Animation.PRESS_OUT"));
         assertTrue(animationPage.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
         assertTrue(animationPage.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
+        assertTrue(animationPage.contains("ConfigSchema.Animation.GESTURE_HANDLE_FADE_OUT"));
         assertTrue(animationPage.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
+        assertFalse("Gesture-handle enable switch belongs to the Home Screen Layout page",
+                animationPage.contains("ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS"));
         assertTrue("Dock resize timing remains visible on the animation page",
                 animationPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
         assertTrue(animationPage.contains("系统原生动画继续跟随原实现"));
@@ -55,6 +58,25 @@ public class AnimationSettingsContractTest {
         assertTrue(dockPage.contains("ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION"));
         assertFalse("Dock page keeps switches but must not duplicate the duration slider",
                 dockPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
+    }
+
+    @Test
+    public void gestureHandleSwitchLivesOnHomeScreenLayoutAndTimingLivesOnAnimationPage()
+            throws Exception {
+        String ui = Files.readString(UI);
+        int gridStart = ui.indexOf("private fun GridPage(");
+        int gridEnd = ui.indexOf("private fun DockPage(", gridStart);
+        assertTrue(gridStart >= 0 && gridEnd > gridStart);
+        String gridPage = ui.substring(gridStart, gridEnd);
+        assertTrue(gridPage.contains("ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS"));
+
+        String systemUiHook = Files.readString(
+                JAVA.resolve("SystemUiGestureHandleFadeHook.java"));
+        String runtime = Files.readString(
+                JAVA.resolve("GestureHandleRuntimeState.java"));
+        assertTrue(systemUiHook.contains("GestureHandleRuntimeState.fadeOutDurationMs()"));
+        assertTrue(systemUiHook.contains("(long) durationOverrideMs"));
+        assertTrue(runtime.contains("ConfigSchema.Animation.GESTURE_HANDLE_FADE_OUT"));
     }
 
     @Test

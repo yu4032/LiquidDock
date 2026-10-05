@@ -262,17 +262,27 @@ final class SystemUiGestureHandleFadeHook {
                 Object handle = entry.getKey();
                 if (handle == null) continue;
                 float target = hidden ? 0.0f : entry.getValue();
-                writeAlpha(handle, target, true);
+                writeAlpha(
+                        handle,
+                        target,
+                        true,
+                        hidden ? GestureHandleRuntimeState.fadeOutDurationMs() : -1);
             }
         }
     }
 
-    private static void writeAlpha(Object handle, float alpha, boolean animate) {
+    private static void writeAlpha(
+            Object handle, float alpha, boolean animate, int durationOverrideMs) {
         if (handle == null) return;
         OWN_ALPHA_WRITE.set(Boolean.TRUE);
         try {
-            HookUtil.InvocationResult<Object> result =
-                    HookUtil.tryInvoke(handle, "setAlpha", alpha, animate);
+            HookUtil.InvocationResult<Object> result = durationOverrideMs >= 0
+                    ? HookUtil.tryInvoke(
+                            handle, "setAlpha", alpha, animate, (long) durationOverrideMs)
+                    : HookUtil.tryInvoke(handle, "setAlpha", alpha, animate);
+            if (!result.succeeded() && durationOverrideMs >= 0) {
+                result = HookUtil.tryInvoke(handle, "setAlpha", alpha, animate);
+            }
             if (!result.succeeded()) {
                 Api101Bridge.log(TAG + " native alpha write failed: " + result.failure());
             }
