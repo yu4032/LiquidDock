@@ -49,9 +49,20 @@ public final class ModuleMain extends XposedModule {
         refreshDebugLogging();
         String packageName = param.getPackageName();
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
+            ClassLoader classLoader = param.getClassLoader();
+            if (classLoader == null) return;
+
+            // Gesture-handle ownership is independent from keyguard/glass integrations. Keep its
+            // bootstrap isolated so an unrelated SystemUI compatibility failure cannot suppress it.
             try {
-                ClassLoader classLoader = param.getClassLoader();
-                if (classLoader == null) return;
+                GestureHandleRuntimeState.initialize(
+                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP));
+                SystemUiGestureHandleFadeHook.install(classLoader);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][GestureHandle] SystemUI bootstrap failed", error);
+            }
+
+            try {
                 SystemUiKeyguardGoneSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
