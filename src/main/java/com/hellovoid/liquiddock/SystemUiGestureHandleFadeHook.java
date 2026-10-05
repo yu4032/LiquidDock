@@ -201,7 +201,12 @@ final class SystemUiGestureHandleFadeHook {
                         if (HOME_HANDLES.containsKey(owner)) {
                             float vendorTarget = ((Number) args[0]).floatValue();
                             HOME_HANDLES.put(owner, vendorTarget);
-                            if (hiddenRequested) args[0] = 0.0f;
+                            if (hiddenRequested) {
+                                // Preserve the configured fade already running toward zero.
+                                // Letting the vendor write continue would cancel it and restart
+                                // ButtonDispatcher's default-duration animation.
+                                return null;
+                            }
                         }
                     }
                 }
