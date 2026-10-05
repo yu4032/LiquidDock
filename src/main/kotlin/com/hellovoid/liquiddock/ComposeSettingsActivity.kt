@@ -765,13 +765,6 @@ private fun DockPage(
         )
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.FRAME_SYNC,
-            stringResource(R.string.dock_frame_sync),
-            stringResource(R.string.dock_frame_sync_summary),
-            masterEnabled,
-        )
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
 }
@@ -967,6 +960,13 @@ private fun LiquidPage(
         SmallTitle("工作区实时捕获性能")
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
         IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Dock.FRAME_SYNC,
+            stringResource(R.string.dock_frame_sync),
+            stringResource(R.string.dock_frame_sync_summary),
+            masterEnabled && liquidGlass,
+        )
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
