@@ -683,6 +683,18 @@ private fun AnimationPage(
                 IntSetting(prefs, securityCenterExit, masterEnabled)
             }
         }
+        item { SmallTitle("系统界面") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+                    "桌面/多任务隐藏手势小白条",
+                    "桌面与多任务界面将系统手势手柄平滑渐隐至透明，离开后按系统原透明度渐显恢复；开关即时生效，首次安装此版本需重启系统界面",
+                    masterEnabled,
+                )
+            }
+        }
         item { SmallTitle("GUI") }
         item { SettingsCard { IntSetting(prefs, settingsPage, masterEnabled) } }
     }

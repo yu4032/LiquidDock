@@ -29,6 +29,17 @@ public class ConfigSchemaTest {
     }
 
     @Test
+    public void gestureHandleHomeRecentsFadeIsOptInAndExported() {
+        ConfigKey<Boolean> key = ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS;
+        assertEquals("animation_hide_gesture_handle_home_recents", key.name());
+        assertEquals(Boolean.FALSE, key.uiDefault());
+        assertEquals(Boolean.FALSE, key.runtimeFallback());
+        assertEquals(Boolean.FALSE, key.exportDefault());
+        assertEquals(ConfigKey.ExportMode.ALWAYS, key.exportMode());
+        assertTrue(ConfigSchema.all().contains(key));
+    }
+
+    @Test
     public void recentsWallpaperDimmingSwitchPreservesVendorBehaviorByDefault() {
         assertEquals("recents_disable_wallpaper_dimming",
                 ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name());
