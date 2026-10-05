@@ -73,6 +73,8 @@
     <string name="dock_resize_animation_summary">Animates width, height, and corner changes for 200 ms; disable to apply the final size immediately; requires a launcher restart</string>
     <string name="dock_smooth_resize_animation">Smooth LiquidDock size transition</string>
     <string name="dock_smooth_resize_animation_summary">Uses a continuous 180 ms ease-out transition without the system expansion-and-shrink behavior; requires a launcher restart</string>
+    <string name="dock_frame_sync">Dock frame sync</string>
+    <string name="dock_frame_sync_summary">Keep the Dock glass background synchronized with the display refresh rate for smoother high-refresh-rate background updates; changes apply immediately</string>
     <string name="option_off">Off</string>
     <string name="workstation_customization">Custom workstation</string>
     <string name="workstation_customization_summary">Uses independent Dock length and 8-column horizontal spacing; requires a launcher restart</string>

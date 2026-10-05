@@ -166,6 +166,8 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_MIRROR_SHORTCUT = bool(
                 "dock_hide_mirror_shortcut", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> FRAME_SYNC = bool(
+                "dock_frame_sync", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> RESIZE_ANIMATION = bool(
                 "dock_resize_animation", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SMOOTH_RESIZE_ANIMATION = bool(
@@ -652,7 +654,7 @@ public final class ConfigSchema {
                 Grid.LEGACY_PORTRAIT_HORIZONTAL_MARGIN, Grid.LEGACY_MARGIN_LEFT,
                 Grid.LEGACY_MARGIN_RIGHT, Grid.LEGACY_MARGIN_TOP,
                 Grid.LEGACY_MARGIN_BOTTOM);
-        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT,
+        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT, Dock.FRAME_SYNC,
                 Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
                 Dock.DIMENSIONS_DP, Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
                 Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS, Dock.CORNERS_DP, Dock.CORNER_OFFSET,
