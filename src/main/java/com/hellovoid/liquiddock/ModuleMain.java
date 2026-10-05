@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 
 import com.hellovoid.liquiddock.config.ConfigMigration;
 import com.hellovoid.liquiddock.config.ConfigSchema;
-import com.hellovoid.liquiddock.config.GridProfileConfig;
 import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
 import io.github.libxposed.api.XposedModule;
@@ -166,12 +165,6 @@ public final class ModuleMain extends XposedModule {
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
 
-            HomeGridProfile selectedProfile = HomeGridProfile.fromPersisted(
-                    GridProfileConfig.normalizeProfile(configReader.s(
-                            ConfigSchema.Grid.PROFILE.name(),
-                            ConfigSchema.Grid.PROFILE.runtimeFallback())));
-            boolean customGridEnabled = runtimeConfig.enabled && runtimeConfig.grid.enabled;
-
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
             MiuixShortcutMenuGlassHook.install(classLoader, runtimeConfig);
@@ -185,16 +178,6 @@ public final class ModuleMain extends XposedModule {
             DockGlassDropRefreshHook.install(classLoader);
             RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
             DockBottomGeometryHook.install(classLoader);
-            HomeGridProfileOverlayHook.install(classLoader,
-                    customGridEnabled, selectedProfile);
-            HomeGridDeviceConfigCountHook.install(classLoader,
-                    customGridEnabled, selectedProfile);
-            HomeGridHorizontalCenteringHook.install(classLoader,
-                    customGridEnabled, selectedProfile);
-            HomeGridVerticalBoundsHook.install(classLoader,
-                    customGridEnabled, selectedProfile, runtimeConfig.grid);
-            HomeGridDragBoundsHook.install(classLoader,
-                    customGridEnabled, selectedProfile);
         } catch (Throwable error) {
             Api101Bridge.errorAlways("[DC] API101 package init failed", error);
         }

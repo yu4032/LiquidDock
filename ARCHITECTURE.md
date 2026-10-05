@@ -467,20 +467,13 @@ Workstation 使用独立参数和 runtime state。
 
 已拆分的主要 owner：
 
-- `HomeGridProfileOverlayHook`；
-- `HomeGridOrientationMemoryHook`；
-- `HomeGridMutationCaptureHook`；
-- `HomeGridDeviceConfigCountHook`；
-- `HomeGridHorizontalCenteringHook`；
-- `HomeGridVerticalBoundsHook`；
 - `HomeGridCellGeometryHook`；
 - `HomeGridFolderAlignmentHook`；
 - `HomeGridPageIndicatorHook`；
 - `HomeGridRotationRefreshHook`；
 - `WorkspaceDropRuleHook`；
-- `HomeGridDragBoundsHook`。
 
-原则仍是：MIUI 拥有 placement/occupancy；LiquidDock 调整 profile、geometry、bounds 与合法 drop，不建立自己的 occupancy matrix。
+原则仍是：MIUI 拥有 placement/occupancy；LiquidDock 调整 geometry、bounds 与合法 drop，不建立自己的 occupancy matrix。
 
 ---
 

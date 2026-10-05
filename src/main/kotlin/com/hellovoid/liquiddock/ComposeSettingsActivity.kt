@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
-import com.hellovoid.liquiddock.config.GridProfileConfig
 import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Button
