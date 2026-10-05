@@ -3,6 +3,7 @@
 - 日期：2026-10-05　分支：`fix/dock-frame-sync`（基线 main @ ff3e7d35 = v2.6.2 prep）
 - 状态：静态阶段完成；根因候选已锁定到具体类/方法/写入点；待真机判别实验（Phase 5–7）确认后实施最小修复。
 - P8 补（2026-10-05）：÷2 半率闸已在 turner 实机库定位（见 §8）。
+- P9 补（2026-10-05）：最小修复已实现并构建通过（force-refresh 续期，见 §9）；待真机复验（Phase 10）。
 - 设备侧事实来源：`/mnt/extra/outputs/liquiddock_recent10min.log`（2026-10-04 10:42–10:50 logcat）。
 
 ## 0. 判别问题（任务书特别提醒）
@@ -90,6 +91,8 @@ Next discriminating test:
 
 ## 4. 修复候选（Phase 9 预备，最小实现）
 
+> P9 修定（2026-10-05）：最小修复改用 §8 的 force-refresh 抓手（续期，见 §9）；本节 Authority 方案 A/B 暂缓不实施（哨兵：DockScContractTrace 观察钩子；若复验现翻转再启用）。
+
 **方案 A（首选）— Dock 域 Continuous Authority**：新增 `DockPassBlurContinuousAuthority`（结构复制 `SecurityCenterPassBlurContinuousAuthority`）：
 - dock bind 时 `claim(rootSurface, producerSurface, scale)`；unbind / 玻璃关闭时 `release`；
 - hook 框架 `setUpdateTextureFlag`：对已认领 root 强制 `(true, claim.scale)`（记录被改写值）；
@@ -126,3 +129,13 @@ Dock 静止显示、图标拖动后尺寸动画、图标玻璃随尺寸、Worksp
 - 旁路（Phase 9 抓手）：`PassBlur::setForceRefresh(ms)`（0x422380）写 [pb+0x70] = now + ms×1e6；窗口内时间门直接放行 ⇒ **活跃期续发 force-refresh 即恢复满率**（框架 VRI `sendAuxiliaryIfNeed` 同语义）。事务侧同字段：setClientState（0x421cf0，layer_state +0x5e4）。
 - Bg 路径：`releaseCurRes`（0x54e4b0）每帧收割绘制 futures，未完成 → `"next Frame, will drawPassBlur again."`（下帧重试）；入口 `BackgroundExecutor::bgDrawPassBlur`（0x348b70），渲染 `drawPassBlurInternal`（0x54eba0）。
 - 产物：`/mnt/extra/outputs/passblur-turner-20261005/disasm/`（单函数反汇编、PLT 解析）；`/mnt/extra/outputs/dock-frame-sync-decompile/`（blk-timegate.txt 等切片）。
+
+## 9. Phase 9：最小修复实施（force-refresh 续期）
+
+- 方案（由 §8 结论定）：活跃期保持 SF force-refresh 窗口（[pb+0x70]）不熄灭 ⇒ 绕开 ÷2 重绘时间门（P/2 = 7 ms）；实现为事件驱动续期（producer 帧到达即续）——无定时器、无轮询、空闲自动过期。
+- 实现（`fix/dock-frame-sync`）：
+  - `Miuix307PassBlurBridge`：bind 时解析 `SurfaceControl$Transaction#setForceRefresh(SurfaceControl, int)`（设备 framework.jar classes4.dex 已核对存在）；新增 `renewForceRefresh(Binding)` —— 仅 DOCK 域、需 `bound && updatesEnabled`；lease 250 ms、发送节流 ≥50 ms（活跃期 ≤20 tx/s）；失败降级 = 停止续期 + 限频日志（5 s）。
+  - `Miuix307PassBlurTextureView`：`onFrameAvailable`（render 线程）调用 `renewForceRefresh(binding)`。
+  - 语义依据：native `PassBlur::setForceRefresh`（0x422380）写 [pb+0x70] = now + ms×1e6，窗口内时间门直接放行；框架 VRI `sendAuxiliaryIfNeed`（L28043+）为同款通道（`tr.setForceRefresh(mSurfaceControl, mMimeoutMs)`）。
+- Continuous Authority 候选（修定）：**本轮不实施**——依据：演示段零 SC 契约写入（未见翻转）、÷2 已完整解释症状、最小化约束；保留 `DockScContractTrace` 观察钩子作哨兵，若 Phase 10 复现契约翻转再按 SecurityCenter 模板启用。
+- 待办（Phase 10）：真机复验——Dock 静止+背景移动期 pFps 应接近满率（原 82.5/s）；静止段仍近零产帧；延迟/功耗对照；回归清单（§6）。
