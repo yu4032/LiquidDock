@@ -52,6 +52,8 @@ final class GestureHandleSystemUiSceneState {
     }
 
     private boolean shouldHideLocked() {
-        return home || recentsAnimation || overview;
+        // During swipe-up / recents transition, SystemUI still owns the moving gesture handle.
+        // Hide only after Overview is actually shown, or after a HOME transition has settled.
+        return overview || (home && !recentsAnimation);
     }
 }
