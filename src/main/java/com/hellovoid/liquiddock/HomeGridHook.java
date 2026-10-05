@@ -32,6 +32,8 @@ final class HomeGridHook {
     static void install(ClassLoader classLoader, HomeGridInstallConfig config) {
         if (config == null || !config.enabled) return;
         try {
+            HomeGridDbOrientationHook.install(classLoader, config);
+
             Class<?> compat = Class.forName(PAD_CELL_COUNT, false, classLoader);
             hookAxis(compat, "getCellCountXMin", true, config);
             hookAxis(compat, "getCellCountXDef", true, config);
