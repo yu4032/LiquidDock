@@ -206,6 +206,7 @@ final class Miuix307ZeroCopyRenderer {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
         dockAnimationFrameScheduled = true;
+        DockFrameSyncTrace.dockAnimation(true);
         DockAnimationTrace.rendererEvent("anim-frame-request");
         gpuBackdrop.requestDockSceneRefresh();
         gpuBackdrop.postOnAnimation(() -> {
@@ -214,6 +215,8 @@ final class Miuix307ZeroCopyRenderer {
             dockAnimationFrameScheduled = false;
             if (DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
+            } else {
+                DockFrameSyncTrace.dockAnimation(false);
             }
         });
     }

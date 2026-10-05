@@ -77,6 +77,7 @@ final class Miuix307PassBlurBridge {
         boolean securityCenterClaimed = false;
         boolean gboardClaimed = false;
         boolean searchboxClaimed = false;
+        boolean dockTraceClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
             getViewRootImpl.setAccessible(true);
@@ -127,6 +128,10 @@ final class Miuix307PassBlurBridge {
                 MiuiSearchboxPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 searchboxClaimed = true;
             }
+            if (domain == PassBlurDomain.DOCK) {
+                DockScContractTrace.claim(rootSurface, producerSurface, scale);
+                dockTraceClaimed = true;
+            }
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
@@ -169,6 +174,9 @@ final class Miuix307PassBlurBridge {
             }
             if (searchboxClaimed && rootSurface != null) {
                 MiuiSearchboxPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
+            if (dockTraceClaimed && rootSurface != null) {
+                DockScContractTrace.release(rootSurface);
             }
             MainHook.log(TAG + " PassBlur bind unavailable: " + error);
             return null;
@@ -258,6 +266,9 @@ final class Miuix307PassBlurBridge {
         if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
             MiuiSearchboxPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.DOCK) {
+            DockScContractTrace.release(binding.rootSurface);
         }
         try {
             if (!binding.rootSurface.isValid()) {

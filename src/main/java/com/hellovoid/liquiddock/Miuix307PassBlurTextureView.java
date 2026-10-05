@@ -335,6 +335,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setProducerUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         producerUpdatesEnabled = enabled;
+        DockFrameSyncTrace.updatesEnabled(enabled, reason);
         renderHandler.post(() -> {
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
@@ -424,6 +425,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        DockFrameSyncTrace.session("attach");
         installGeometryObserver();
         updateBackdropMapping();
         if (isAvailable() && getSurfaceTexture() != null && outputWindowSurface == null) {
@@ -433,6 +435,7 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     @Override
     protected void onDetachedFromWindow() {
+        DockFrameSyncTrace.session("detach");
         shutdown();
         super.onDetachedFromWindow();
     }
@@ -639,6 +642,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
             frameAvailable.set(true);
+            DockFrameSyncTrace.producerFrame(producerFrameCount, texture);
             drawLatestFrame(true);
         }, renderHandler);
     }
@@ -692,6 +696,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
+                DockFrameSyncTrace.consumedFrame(input);
             }
             if (!producerRecovery.hasFreshFrame()) return;
 
@@ -748,6 +753,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             }
             hasPresentedFrame = true;
             renderedFrameCount++;
+            DockFrameSyncTrace.presentedFrame();
             maybeLogPowerStats();
 
             Miuix307PassBlurBridge.Binding currentBinding = binding;
