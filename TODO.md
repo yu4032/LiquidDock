@@ -438,11 +438,9 @@ liquid_shortcut_popup_dark_text
 
 `RuntimeBehaviorTestPolicyContractTest` 已建立 production-source-reader default deny。
 
-当前 `LEGACY_SOURCE_DEBT` 仍为 13 项：
+当前 `LEGACY_SOURCE_DEBT` 仍为 10 项：
 
 - `GlassConfigGenerationContractTest.java`
-- `HomeGridOrientationMemoryHookContractTest.java`
-- `HomeGridProfileOverlayContractTest.java`
 - `Miuix307EdgeOverscanContractTest.java`
 - `PrismalModuleBoundaryContractTest.java`
 - `PrismalOfficialParityV3Test.java`

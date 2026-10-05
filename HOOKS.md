@@ -104,20 +104,13 @@ Dock 最近应用过滤入口为 `DockRecentAppBlacklistHook`。进程日志门�
 
 当前 Grid 已拆为多个明确 owner：
 
-- `HomeGridProfileOverlayHook`；
-- `HomeGridOrientationMemoryHook`；
-- `HomeGridMutationCaptureHook`；
-- `HomeGridDeviceConfigCountHook`；
-- `HomeGridHorizontalCenteringHook`；
-- `HomeGridVerticalBoundsHook`；
 - `HomeGridCellGeometryHook`；
 - `HomeGridFolderAlignmentHook`；
 - `HomeGridPageIndicatorHook`；
 - `HomeGridRotationRefreshHook`；
 - `WorkspaceDropRuleHook`；
-- `HomeGridDragBoundsHook`。
 
-`HomeGridHook` 主要负责组合和少量 profile transform。
+`HomeGridHook` 负责自由网格组合与旋转 transform。
 
 禁止把 MIUI occupancy matrix 替换成 LiquidDock 自己维护的 matrix。
 

@@ -60,10 +60,6 @@ public final class ConfigSchema {
     public static final class Grid {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "home_grid_8x4", false, false, false, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<String> PROFILE = string(
-                "grid_profile", GridProfileConfig.DEFAULT_PROFILE,
-                GridProfileConfig.DEFAULT_PROFILE, GridProfileConfig.DEFAULT_PROFILE,
-                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> COLUMNS = integer(
                 "grid_columns", 8, 8, 8, 2, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ROWS = integer(
@@ -640,7 +636,7 @@ public final class ConfigSchema {
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
                 Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS);
-        add(keys, Grid.ENABLED, Grid.PROFILE, Grid.COLUMNS, Grid.ROWS,
+        add(keys, Grid.ENABLED, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
                 Grid.MARGINS_DP, Grid.MARGINS_OFFSET, Grid.WIDGET_HORIZONTAL_STRETCH,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
