@@ -639,6 +639,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
             frameAvailable.set(true);
+            Miuix307PassBlurBridge.renewForceRefresh(binding);
             drawLatestFrame(true);
         }, renderHandler);
     }

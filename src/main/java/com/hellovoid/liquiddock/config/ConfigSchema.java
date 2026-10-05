@@ -166,6 +166,8 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_MIRROR_SHORTCUT = bool(
                 "dock_hide_mirror_shortcut", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> FRAME_SYNC = bool(
+                "dock_frame_sync", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> RESIZE_ANIMATION = bool(
                 "dock_resize_animation", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SMOOTH_RESIZE_ANIMATION = bool(

@@ -765,6 +765,13 @@ private fun DockPage(
         )
         BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Dock.FRAME_SYNC,
+            stringResource(R.string.dock_frame_sync),
+            stringResource(R.string.dock_frame_sync_summary),
+            masterEnabled,
+        )
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
 }

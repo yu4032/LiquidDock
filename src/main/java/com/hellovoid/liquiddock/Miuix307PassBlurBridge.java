@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -18,7 +19,12 @@ import java.util.Arrays;
  */
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
+    private static final String FRAME_SYNC_TAG = "[DC][DockFrameSync]";
     private static final int INITIAL_UPDATE_FRAMES = 4;
+    private static final int FORCE_REFRESH_LEASE_MS = 250;
+    private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
+    private static final long FORCE_REFRESH_ERROR_LOG_MIN_MS = 5000L;
+    private static long lastForceRefreshErrorLogMs;
 
     static final class Binding {
         final SurfaceControl rootSurface;
@@ -26,6 +32,7 @@ final class Miuix307PassBlurBridge {
         final Method setPassBlurSurface;
         final Method setUpdateTextureFlag;
         final Method setMiBlurWinExc;
+        final Method setForceRefresh;
         final float scale;
         final String rootName;
         final int viewRootIdentity;
@@ -34,6 +41,7 @@ final class Miuix307PassBlurBridge {
         final PassBlurDomain domain;
         boolean bound = true;
         boolean updatesEnabled = true;
+        long lastForceRefreshMs;
 
         Binding(
                 SurfaceControl rootSurface,
@@ -41,6 +49,7 @@ final class Miuix307PassBlurBridge {
                 Method setPassBlurSurface,
                 Method setUpdateTextureFlag,
                 Method setMiBlurWinExc,
+                Method setForceRefresh,
                 float scale,
                 String rootName,
                 int viewRootIdentity,
@@ -52,6 +61,7 @@ final class Miuix307PassBlurBridge {
             this.setPassBlurSurface = setPassBlurSurface;
             this.setUpdateTextureFlag = setUpdateTextureFlag;
             this.setMiBlurWinExc = setMiBlurWinExc;
+            this.setForceRefresh = setForceRefresh;
             this.scale = scale;
             this.rootName = rootName;
             this.viewRootIdentity = viewRootIdentity;
@@ -106,6 +116,13 @@ final class Miuix307PassBlurBridge {
                     "setUpdateTextureFlag", SurfaceControl.class, Boolean.TYPE, Float.TYPE);
             Method setMiBlurWinExc = transactionClass.getMethod(
                     "setMiBlurWinExc", SurfaceControl.class, String[].class);
+            Method setForceRefresh = null;
+            try {
+                setForceRefresh = transactionClass.getMethod(
+                        "setForceRefresh", SurfaceControl.class, Integer.TYPE);
+            } catch (Throwable error) {
+                MainHook.log(FRAME_SYNC_TAG + " force refresh lease unavailable: " + error);
+            }
 
             String rootName = surfaceName(rootSurface);
             int viewRootIdentity = System.identityHashCode(viewRoot);
@@ -142,6 +159,7 @@ final class Miuix307PassBlurBridge {
                     setPassBlurSurface,
                     setUpdateTextureFlag,
                     setMiBlurWinExc,
+                    setForceRefresh,
                     scale,
                     rootName,
                     viewRootIdentity,
@@ -242,6 +260,34 @@ final class Miuix307PassBlurBridge {
                     + " root=" + binding.rootName);
         } catch (Throwable error) {
             MainHook.log(TAG + " PassBlur update toggle failed: " + error);
+        }
+    }
+
+    /**
+     * Dock-only force-refresh lease. Renewal is driven exclusively by producer frame arrivals;
+     * once arrivals stop, no more transactions are sent and the vendor pacing resumes when the
+     * existing lease expires.
+     */
+    static void renewForceRefresh(Binding binding) {
+        if (!VisualRuntimeState.isDockFrameSyncEnabled()) return;
+        if (binding == null || !binding.bound || !binding.updatesEnabled) return;
+        if (binding.domain != PassBlurDomain.DOCK) return;
+        if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
+        long now = SystemClock.uptimeMillis();
+        if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
+        binding.lastForceRefreshMs = now;
+        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+            binding.setForceRefresh.invoke(
+                    transaction,
+                    binding.rootSurface,
+                    Integer.valueOf(FORCE_REFRESH_LEASE_MS));
+            transaction.apply();
+        } catch (Throwable error) {
+            long errorNow = SystemClock.uptimeMillis();
+            if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
+                lastForceRefreshErrorLogMs = errorNow;
+                MainHook.log(FRAME_SYNC_TAG + " force refresh renew failed: " + error);
+            }
         }
     }
 
