@@ -18,10 +18,12 @@ public class GestureHandleSystemUiSceneStateTest {
     }
 
     @Test
-    public void recentsStaysHiddenAfterAnimationSettlesWhenOverviewWasShown() {
+    public void swipeUpKeepsHandleVisibleUntilOverviewIsActuallyShown() {
         GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
 
-        assertTrue(state.onRecentsAnimationChanged(true));
+        assertFalse(state.onRecentsAnimationChanged(true));
+        assertFalse(state.shouldHide());
+
         assertTrue(state.onOverviewShown());
         assertTrue(state.onRecentsAnimationChanged(false));
         assertTrue(state.snapshot().overview);
@@ -31,15 +33,27 @@ public class GestureHandleSystemUiSceneStateTest {
     }
 
     @Test
-    public void homeRemainsHiddenAcrossOverviewExitToHome() {
+    public void homeHidesOnlyAfterRecentsAnimationSettles() {
         GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
 
-        assertTrue(state.onTaskMovedToFront(true));
-        assertTrue(state.onOverviewShown());
-        assertTrue(state.onTaskMovedToFront(true));
-        assertTrue(state.shouldHide());
-        assertFalse(state.snapshot().overview);
+        assertFalse(state.onRecentsAnimationChanged(true));
+        assertFalse(state.onTaskMovedToFront(true));
         assertTrue(state.snapshot().home);
+        assertTrue(state.snapshot().recentsAnimation);
+
+        assertTrue(state.onRecentsAnimationChanged(false));
+        assertTrue(state.shouldHide());
+        assertTrue(state.snapshot().home);
+        assertFalse(state.snapshot().recentsAnimation);
+    }
+
+    @Test
+    public void cancelledSwipeNeverHidesTheHandle() {
+        GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
+
+        assertFalse(state.onRecentsAnimationChanged(true));
+        assertFalse(state.onRecentsAnimationChanged(false));
+        assertFalse(state.shouldHide());
     }
 
     @Test
