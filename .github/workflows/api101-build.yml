@@ -6,7 +6,6 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
-      - feat/gboard-non-key-final
   pull_request:
     branches: [ main ]
   workflow_dispatch:
