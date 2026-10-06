@@ -186,15 +186,47 @@ public final class PrismalRenderer implements AutoCloseable {
 
     /** Clear the transparent scene output once before appending glass nodes. */
     public void beginGlassFrame() {
+        beginGlassFrameRegion(0f, 0f, width, height);
+    }
+
+    /**
+     * Clear only one dirty logical region of the transparent scene output.
+     *
+     * <p>The output FBO remains full-root so screen-space Prismal coordinates and backdrop
+     * sampling are unchanged. Callers that only move one glass object can clear the union of the
+     * previous and current bounds instead of invalidating the whole root-sized texture.</p>
+     */
+    public void beginGlassFrameRegion(
+            float logicalLeft,
+            float logicalTop,
+            float logicalRight,
+            float logicalBottom) {
         if (!backdropPrepared) {
             throw new IllegalStateException("prepareBackdrop must be called before beginGlassFrame");
         }
+        float left = Math.max(0f, Math.min(width, logicalLeft));
+        float top = Math.max(0f, Math.min(height, logicalTop));
+        float right = Math.max(left, Math.min(width, logicalRight));
+        float bottom = Math.max(top, Math.min(height, logicalBottom));
+
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
         GLES20.glViewport(0, 0, outputWidth, outputHeight);
         GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+        float scaleX = outputWidth / (float) Math.max(1, width);
+        float scaleY = outputHeight / (float) Math.max(1, height);
+        int scissorLeft = Math.max(0, (int) Math.floor(left * scaleX));
+        int scissorRight = Math.min(outputWidth, (int) Math.ceil(right * scaleX));
+        int scissorBottom = Math.max(
+                0, (int) Math.floor((height - bottom) * scaleY));
+        int scissorTop = Math.min(
+                outputHeight, (int) Math.ceil((height - top) * scaleY));
+        int scissorWidth = Math.max(1, scissorRight - scissorLeft);
+        int scissorHeight = Math.max(1, scissorTop - scissorBottom);
+        GLES20.glScissor(scissorLeft, scissorBottom, scissorWidth, scissorHeight);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         glassFrameBegun = true;
         glassDrawCount = 0;
     }

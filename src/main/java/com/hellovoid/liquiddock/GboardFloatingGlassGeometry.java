@@ -95,25 +95,37 @@ final class GboardFloatingGlassGeometry {
             Matrix globalToRoot = new Matrix();
             if (!rootToGlobal.invert(globalToRoot)) return null;
 
-            Matrix hostToGlobal = new Matrix();
-            sinkHost.transformMatrixToGlobal(hostToGlobal);
-            Matrix globalToHost = new Matrix();
-            if (!hostToGlobal.invert(globalToHost)) return null;
+            Matrix globalToHost = globalToRoot;
+            boolean sharedRootHost = sinkHost == root;
+            if (!sharedRootHost) {
+                Matrix hostToGlobal = new Matrix();
+                sinkHost.transformMatrixToGlobal(hostToGlobal);
+                globalToHost = new Matrix();
+                if (!hostToGlobal.invert(globalToHost)) return null;
+            }
 
             Bounds rootShell = mapBounds(structure.stockBackground, globalToRoot);
-            Bounds hostShell = mapBounds(structure.stockBackground, globalToHost);
+            Bounds hostShell = sharedRootHost
+                    ? rootShell
+                    : mapBounds(structure.stockBackground, globalToHost);
             if (rootShell == null || hostShell == null) return null;
 
             Bounds rootVertical = new Bounds();
-            Bounds hostVertical = new Bounds();
+            Bounds hostVertical = sharedRootHost ? rootVertical : new Bounds();
             addVerticalAuthority(rootVertical, structure.topEdge, globalToRoot);
-            addVerticalAuthority(hostVertical, structure.topEdge, globalToHost);
+            if (!sharedRootHost) {
+                addVerticalAuthority(hostVertical, structure.topEdge, globalToHost);
+            }
             for (View holder : structure.keyboardViewHolders) {
                 addVerticalAuthority(rootVertical, holder, globalToRoot);
-                addVerticalAuthority(hostVertical, holder, globalToHost);
+                if (!sharedRootHost) {
+                    addVerticalAuthority(hostVertical, holder, globalToHost);
+                }
             }
             addVerticalAuthority(rootVertical, structure.bottomFrame, globalToRoot);
-            addVerticalAuthority(hostVertical, structure.bottomFrame, globalToHost);
+            if (!sharedRootHost) {
+                addVerticalAuthority(hostVertical, structure.bottomFrame, globalToHost);
+            }
             if (!rootVertical.valid || !hostVertical.valid) return null;
 
             float left = clamp(rootShell.left, 0f, root.getWidth());
