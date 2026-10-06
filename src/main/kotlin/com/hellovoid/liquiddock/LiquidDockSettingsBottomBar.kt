@@ -1,23 +1,26 @@
 package com.hellovoid.liquiddock
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -26,11 +29,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.blur
+import top.yukonga.miuix.kmp.blur.colorControls
+import top.yukonga.miuix.kmp.blur.drawBackdrop
+import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
 import top.yukonga.miuix.kmp.blur.highlight.Highlight
-import top.yukonga.miuix.kmp.blur.textureBlur
+import top.yukonga.miuix.kmp.blur.highlight.LightPosition
+import top.yukonga.miuix.kmp.blur.highlight.LightSource
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private data class SettingsBottomItem(
@@ -45,50 +51,99 @@ private val settingsBottomItems = listOf(
     SettingsBottomItem(R.string.tab_more, R.drawable.ic_settings_more),
 )
 
+private val BottomBarHighlight = Highlight(
+    width = 1.dp,
+    alpha = 0.78f,
+    style = BloomStroke(
+        color = Color.White.copy(alpha = 0.16f),
+        innerBlurRadius = 2.dp,
+        primaryLight = LightSource(
+            position = LightPosition(0.2f, -0.25f, -0.1f),
+            color = Color.White,
+            intensity = 1f,
+        ),
+        secondaryLight = LightSource(
+            position = LightPosition(0.85f, 1.05f, -0.35f),
+            color = Color.White,
+            intensity = 0.42f,
+        ),
+        dualPeak = true,
+    ),
+)
+
+private val SelectionHighlight = Highlight(
+    width = 1.dp,
+    alpha = 0.92f,
+    style = BloomStroke(
+        color = Color.White.copy(alpha = 0.22f),
+        innerBlurRadius = 1.5.dp,
+        primaryLight = LightSource(
+            position = LightPosition(0.15f, -0.35f, -0.1f),
+            color = Color.White,
+            intensity = 1f,
+        ),
+        secondaryLight = LightSource(
+            position = LightPosition(0.9f, 0.9f, -0.25f),
+            color = Color.White,
+            intensity = 0.5f,
+        ),
+        dualPeak = true,
+    ),
+)
+
 @Composable
 internal fun LiquidDockSettingsBottomBar(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
     backdrop: LayerBackdrop,
 ) {
-    val shape = RoundedCornerShape(34.dp)
+    val shape = RoundedCornerShape(32.dp)
     val surface = MiuixTheme.colorScheme.surfaceContainer
-    val isLight = MiuixTheme.colorScheme.surface.luminance() > 0.5f
-    val highlight = remember(isLight) {
-        if (isLight) Highlight.GlassStrokeMiddleLight else Highlight.GlassStrokeMiddleDark
+    val dark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+    val glassTint = if (dark) {
+        surface.copy(alpha = 0.34f)
+    } else {
+        surface.copy(alpha = 0.46f)
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 18.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
-                .textureBlur(
+                .drawBackdrop(
                     backdrop = backdrop,
-                    shape = shape,
-                    blurRadius = 25f,
-                    colors = BlurDefaults.blurColors(
-                        blendColors = listOf(
-                            BlendColorEntry(color = surface.copy(alpha = 0.58f)),
-                        ),
-                    ),
-                    highlight = highlight,
+                    shape = { shape },
+                    effects = {
+                        padding = maxOf(padding, 28.dp.toPx())
+                        colorControls(
+                            brightness = if (dark) 0.015f else 0f,
+                            contrast = 1.035f,
+                            saturation = 1.32f,
+                        )
+                        blur(5.dp.toPx(), 5.dp.toPx())
+                    },
+                    highlight = { BottomBarHighlight },
+                    onDrawSurface = {
+                        drawRect(glassTint)
+                        drawRect(Color.White.copy(alpha = if (dark) 0.025f else 0.045f))
+                    },
                 )
-                .background(surface.copy(alpha = 0.16f), shape)
                 .selectableGroup()
-                .padding(horizontal = 8.dp, vertical = 7.dp),
+                .padding(horizontal = 5.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             settingsBottomItems.forEachIndexed { index, item ->
                 SettingsBottomBarItem(
                     item = item,
                     selected = selectedIndex == index,
+                    backdrop = backdrop,
                     onClick = { onSelected(index) },
                 )
             }
@@ -100,43 +155,72 @@ internal fun LiquidDockSettingsBottomBar(
 private fun RowScope.SettingsBottomBarItem(
     item: SettingsBottomItem,
     selected: Boolean,
+    backdrop: LayerBackdrop,
     onClick: () -> Unit,
 ) {
+    val dark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
     val contentColor = if (selected) {
         MiuixTheme.colorScheme.primary
     } else {
         MiuixTheme.colorScheme.onSurfaceVariantActions
     }
-    val indicatorColor = if (selected) {
-        MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.96f,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+        label = "bottom-tab-scale",
+    )
+    val selectionShape = RoundedCornerShape(24.dp)
+    val selectedModifier = if (selected) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { selectionShape },
+            effects = {
+                padding = maxOf(padding, 16.dp.toPx())
+                colorControls(
+                    brightness = if (dark) 0.02f else 0f,
+                    contrast = 1.06f,
+                    saturation = 1.48f,
+                )
+                blur(2.5.dp.toPx(), 2.5.dp.toPx())
+            },
+            highlight = { SelectionHighlight },
+            onDrawSurface = {
+                drawRect(
+                    MiuixTheme.colorScheme.primary.copy(
+                        alpha = if (dark) 0.12f else 0.09f,
+                    ),
+                )
+                drawRect(Color.White.copy(alpha = if (dark) 0.035f else 0.055f))
+            },
+        )
     } else {
-        MiuixTheme.colorScheme.surface.copy(alpha = 0f)
+        Modifier
     }
 
     Column(
         modifier = Modifier
             .weight(1f)
+            .padding(horizontal = 2.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(selectedModifier)
             .selectable(
                 selected = selected,
                 onClick = onClick,
                 role = Role.Tab,
             )
-            .padding(vertical = 3.dp),
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .background(indicatorColor, CircleShape)
-                .padding(horizontal = 15.dp, vertical = 5.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(item.iconRes),
-                contentDescription = stringResource(item.labelRes),
-                tint = contentColor,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+        Icon(
+            painter = painterResource(item.iconRes),
+            contentDescription = stringResource(item.labelRes),
+            tint = contentColor,
+            modifier = Modifier.size(if (selected) 23.dp else 21.dp),
+        )
         Text(
             text = stringResource(item.labelRes),
             color = contentColor,
