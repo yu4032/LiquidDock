@@ -26,7 +26,6 @@ final class GboardFloatingGlassCoordinator {
         final GboardFrozenBackdropMotionState frozenMotionState =
                 new GboardFrozenBackdropMotionState();
         ViewGroup sinkHost;
-        View backgroundFrame;
         View root;
         float cornerRadiusPx;
         GboardFloatingGlassSession session;
@@ -56,7 +55,6 @@ final class GboardFloatingGlassCoordinator {
             this.structure = structure;
             this.glassConfig = glassConfig;
             this.keyboardArea = structure.keyboardArea;
-            this.backgroundFrame = structure.stockBackground;
             this.softKeyGlassEnabled = softKeyGlassEnabled;
             this.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
             this.realtimeBackgroundSampling = realtimeBackgroundSampling;
@@ -80,10 +78,9 @@ final class GboardFloatingGlassCoordinator {
                 release(existing);
             } else {
                 if (Math.abs(existing.softKeyCornerRadiusDp - softKeyCornerRadiusDp) > 0.01f) {
+                    existing.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
                     existing.keyLayoutDirty = true;
                 }
-                existing.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
-                existing.keyLayoutDirty = true;
                 if (existing.session == null && popup.isAttachedToWindow()) scheduleAttach(existing);
                 return;
             }
@@ -344,7 +341,7 @@ final class GboardFloatingGlassCoordinator {
 
     private static synchronized void onPresented(State state) {
         if (state == null || state.released || state.stockHidden) return;
-        View backgroundFrame = state.backgroundFrame;
+        View backgroundFrame = state.structure.stockBackground;
         if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()) return;
         if (!GboardStockVisualAuthority.claim(
                 state.structure, state.softKeyGlassEnabled)) {
