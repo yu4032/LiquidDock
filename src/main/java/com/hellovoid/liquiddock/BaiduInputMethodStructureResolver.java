@@ -16,6 +16,13 @@ import android.view.ViewOutlineProvider;
  * the shell, a shell-sized child, or a shell-sized sibling.</p>
  */
 final class BaiduInputMethodStructureResolver {
+    private static final String KEYBOARD_REGION_CLASS =
+            "com.content.simeji.inputview.KeyboardRegion";
+    private static final String KEYBOARD_CONTAINER_CLASS =
+            "com.content.simeji.inputview.KeyboardContainer";
+    private static final String INPUT_VIEW_CLASS =
+            "com.content.simeji.inputview.InputView";
+
     static final class Structure {
         final View authoritativeFloatView;
         final ViewGroup sinkHost;
@@ -57,6 +64,45 @@ final class BaiduInputMethodStructureResolver {
                 stockBackground);
     }
 
+    /**
+     * Stable structural fallback used only when Baidu's semantic floating callback was not seen.
+     *
+     * <p>This intentionally relies only on decompiled stable keyboard view classes plus runtime
+     * geometry. Obfuscated implementation names and resource IDs remain excluded.</p>
+     */
+    static Structure resolveFromInputView(View authoritativeInputView, ClassLoader classLoader) {
+        if (authoritativeInputView == null || classLoader == null) return null;
+        try {
+            Class<?> keyboardRegionClass =
+                    Class.forName(KEYBOARD_REGION_CLASS, false, classLoader);
+            Class<?> keyboardContainerClass =
+                    Class.forName(KEYBOARD_CONTAINER_CLASS, false, classLoader);
+            Class<?> inputViewClass =
+                    Class.forName(INPUT_VIEW_CLASS, false, classLoader);
+
+            View content = chooseStableKeyboardContent(
+                    findDescendant(authoritativeInputView, keyboardRegionClass),
+                    findDescendant(authoritativeInputView, keyboardContainerClass),
+                    findDescendant(authoritativeInputView, inputViewClass));
+            if (content == null || !(content.getParent() instanceof ViewGroup)) return null;
+
+            ViewGroup host = (ViewGroup) content.getParent();
+            View backgroundOwner = findStockBackgroundOwner(content, host);
+            Drawable stockBackground =
+                    backgroundOwner != null ? backgroundOwner.getBackground() : null;
+            if (stockBackground == null || !roughlySameBounds(backgroundOwner, content)) return null;
+
+            return new Structure(
+                    authoritativeInputView,
+                    host,
+                    content,
+                    backgroundOwner,
+                    stockBackground);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     static boolean isFloatingGeometry(Structure structure) {
         return structure != null && isCompactFloatingCandidate(structure.glassTarget);
     }
@@ -95,6 +141,26 @@ final class BaiduInputMethodStructureResolver {
                 + " host=" + shortName(structure.sinkHost)
                 + " stockOwner=" + shortName(structure.stockBackgroundOwner)
                 + " stock=" + structure.stockBackgroundDrawable.getClass().getName();
+    }
+
+    private static View chooseStableKeyboardContent(
+            View region, View container, View inputView) {
+        if (region != null && region.getParent() instanceof ViewGroup) return region;
+        if (container != null && container.getParent() instanceof ViewGroup) return container;
+        if (inputView != null && inputView.getParent() instanceof ViewGroup) return inputView;
+        return null;
+    }
+
+    private static View findDescendant(View root, Class<?> type) {
+        if (root == null || type == null) return null;
+        if (type.isInstance(root)) return root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View match = findDescendant(group.getChildAt(i), type);
+            if (match != null) return match;
+        }
+        return null;
     }
 
     private static View chooseFloatingShell(View seed) {
