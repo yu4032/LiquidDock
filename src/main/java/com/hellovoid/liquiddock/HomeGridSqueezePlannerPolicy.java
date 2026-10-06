@@ -4,18 +4,12 @@ package com.hellovoid.liquiddock;
 final class HomeGridSqueezePlannerPolicy {
     private HomeGridSqueezePlannerPolicy() {}
 
-    static boolean isVendorPadGrid(int countX, int countY) {
-        return (countX == 6 && countY == 4) || (countX == 4 && countY == 6);
+    static boolean useGenericForSpan(int spanX, int spanY) {
+        return spanX > 1 || spanY > 1;
     }
 
-    static boolean useGenericForSpan(
-            boolean vendorPadGrid, int spanX, int spanY) {
-        return !vendorPadGrid || spanX > 1 || spanY > 1;
-    }
-
-    static boolean useGenericForSqueeze(
-            boolean vendorPadGrid, boolean isSpanMove, int spanX, int spanY) {
-        return !vendorPadGrid || isSpanMove || spanX > 1 || spanY > 1;
+    static boolean useGenericForSqueeze(boolean isSpanMove, int spanX, int spanY) {
+        return isSpanMove || useGenericForSpan(spanX, spanY);
     }
 
     static boolean matches(
