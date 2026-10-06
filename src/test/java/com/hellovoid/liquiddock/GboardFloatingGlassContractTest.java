@@ -67,6 +67,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(resolver.contains("indexOfChild"));
         assertTrue(resolver.contains("stockBackground"));
         assertTrue(resolver.contains("bottomFrame"));
+        assertTrue(resolver.contains("inputKeyboardViewHolder"));
+        assertTrue(resolver.contains("resolveInputKeyboardViewHolder"));
         assertTrue(resolver.contains("isFloatingGeometry"));
         assertTrue(resolver.contains("getLocationInWindow"));
         assertTrue(resolver.contains("getRootView()"));
@@ -180,7 +182,7 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains("getSuperclass()"));
         assertTrue(scene.contains("GboardFloatingGlassGeometry.captureTargetRect"));
         assertTrue(scene.contains("findBestDescendantBackground"));
-        assertTrue(scene.contains("preparedBackgroundTarget"));
+        assertTrue(scene.contains("preparedBackgroundTargets"));
         assertTrue(scene.contains("outline.getRect(rect)"));
         assertTrue(scene.contains("fallbackBounds(key)"));
         assertTrue(scene.contains("ShapeTemplate"));
@@ -193,7 +195,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains("switch_to_symbol"));
         assertTrue(scene.contains("ime_action"));
         assertTrue(coordinator.contains("GboardSoftKeyGlassScene.capture"));
-        assertTrue(coordinator.contains("translateAndRefreshInteraction"));
+        assertTrue(coordinator.contains("GboardSoftKeyGlassScene.refreshInteraction"));
+        assertTrue(coordinator.contains("state.session.updateMotion(dx, dy)"));
         assertTrue(coordinator.contains("sameShellSize"));
         assertTrue(coordinator.contains("GboardFloatingGlassGeometry.beginCapture"));
         assertTrue(coordinator.contains("GboardStockVisualAuthority.refreshPreparedSoftKeys"));
@@ -201,7 +204,7 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("prismalRenderer.drawGlass("));
         assertTrue(authority.contains("claimPreparedKeyboardSoftKeys"));
         assertTrue(authority.contains("claimPreparedSoftKeysInsideKeyboard"));
-        assertTrue(authority.contains("GboardSoftKeyGlassScene.preparedBackgroundTarget"));
+        assertTrue(authority.contains("GboardSoftKeyGlassScene.preparedBackgroundTargets"));
         assertTrue(authority.contains("captureSuppressedDrawable"));
         assertTrue(authority.contains("ensureSuppressedDrawableHidden"));
         assertFalse(authority.contains("new ColorDrawable(Color.TRANSPARENT)"));
@@ -209,6 +212,42 @@ public class GboardFloatingGlassContractTest {
         assertFalse(scene.contains("0x7f0b"));
         assertFalse(scene.contains("TextureView"));
         assertFalse(scene.contains("RootPassBlurBackend"));
+    }
+
+    @Test public void keyReplacementIsLimitedToTheInputHolderAndNativeShapesStayStable()
+            throws Exception {
+        String resolver = read(MAIN.resolve("GboardFloatingStructureResolver.java"));
+        String scene = read(MAIN.resolve("GboardSoftKeyGlassScene.java"));
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(resolver.contains("final ViewGroup inputKeyboardViewHolder"));
+        assertTrue(scene.contains("structure.inputKeyboardViewHolder"));
+        assertFalse(scene.contains("for (ViewGroup holder : structure.keyboardViewHolders)"));
+        assertTrue(authority.contains("structure.inputKeyboardViewHolder"));
+        assertFalse(authority.contains("claim.structure.keyboardViewHolders)"));
+        assertTrue(scene.contains("SHAPE_BY_BACKGROUND_VIEW.containsKey(view)"));
+        assertTrue(scene.contains("preparedBackgroundTargets"));
+        assertTrue(scene.contains("collectBackgroundLayers"));
+    }
+
+    @Test public void movementUsesLatestRenderTimeProjectionWithoutQueueingOldFrames()
+            throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
+
+        assertTrue(coordinator.contains("state.sceneGeometry"));
+        assertTrue(coordinator.contains("state.session.updateMotion(dx, dy)"));
+        assertTrue(session.contains("renderQueueLock"));
+        assertTrue(session.contains("renderDirty"));
+        assertTrue(session.contains("renderQueued"));
+        assertTrue(session.contains("scheduleRender()"));
+        assertTrue(session.contains("drainScheduledRender"));
+        assertTrue(session.contains("currentMotionDx"));
+        assertTrue(session.contains("currentMotionDy"));
+        assertTrue(geometry.contains("toPrismalGeometry(float dx, float dy)"));
+        assertTrue(geometry.contains("toCropUvRect(float dx, float dy)"));
+        assertFalse(coordinator.contains("translateAndRefreshInteraction"));
     }
 
     @Test public void gboardKeyGeometryIsBatchedAndHierarchyMutationIsDeferred() throws Exception {
