@@ -522,6 +522,7 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
         boolean shouldRender = generation >= 0L && (gate == null || gate.shouldSchedule(
