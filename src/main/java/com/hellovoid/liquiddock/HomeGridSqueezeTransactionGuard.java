@@ -75,6 +75,7 @@ final class HomeGridSqueezeTransactionGuard {
                     try {
                         Object result = chain.proceed();
                         if (!(result instanceof Boolean) || !((Boolean) result)) {
+                            snapshot.restore(src, dst);
                             return result;
                         }
                         if (isConsistent(dst)) {
