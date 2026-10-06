@@ -22,6 +22,9 @@ final class GboardFloatingGlassCoordinator {
         final ViewGroup keyboardArea;
         boolean softKeyGlassEnabled;
         float softKeyCornerRadiusDp;
+        final boolean realtimeBackgroundSampling;
+        final GboardFrozenBackdropMotionState frozenMotionState =
+                new GboardFrozenBackdropMotionState();
         ViewGroup sinkHost;
         View backgroundFrame;
         View root;
@@ -46,7 +49,8 @@ final class GboardFloatingGlassCoordinator {
                 GboardFloatingStructureResolver.Structure structure,
                 LiquidDockConfig.Glass glassConfig,
                 boolean softKeyGlassEnabled,
-                float softKeyCornerRadiusDp) {
+                float softKeyCornerRadiusDp,
+                boolean realtimeBackgroundSampling) {
             this.popup = popup;
             this.structure = structure;
             this.glassConfig = glassConfig;
@@ -54,6 +58,7 @@ final class GboardFloatingGlassCoordinator {
             this.backgroundFrame = structure.stockBackground;
             this.softKeyGlassEnabled = softKeyGlassEnabled;
             this.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
+            this.realtimeBackgroundSampling = realtimeBackgroundSampling;
         }
     }
 
@@ -64,11 +69,13 @@ final class GboardFloatingGlassCoordinator {
             GboardFloatingStructureResolver.Structure structure,
             LiquidDockConfig.Glass glassConfig,
             boolean softKeyGlassEnabled,
-            float softKeyCornerRadiusDp) {
+            float softKeyCornerRadiusDp,
+            boolean realtimeBackgroundSampling) {
         if (popup == null || structure == null || glassConfig == null) return;
         State existing = STATES.get(popup);
         if (existing != null && !existing.released) {
-            if (existing.softKeyGlassEnabled != softKeyGlassEnabled) {
+            if (existing.softKeyGlassEnabled != softKeyGlassEnabled
+                    || existing.realtimeBackgroundSampling != realtimeBackgroundSampling) {
                 release(existing);
             } else {
                 if (Math.abs(existing.softKeyCornerRadiusDp - softKeyCornerRadiusDp) > 0.01f) {
@@ -85,7 +92,8 @@ final class GboardFloatingGlassCoordinator {
                 structure,
                 glassConfig,
                 softKeyGlassEnabled,
-                softKeyCornerRadiusDp);
+                softKeyCornerRadiusDp,
+                realtimeBackgroundSampling);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 scheduleAttach(state);
@@ -149,6 +157,7 @@ final class GboardFloatingGlassCoordinator {
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
                 root,
                 state.glassConfig,
+                state.realtimeBackgroundSampling,
                 new GboardFloatingGlassSession.Listener() {
                     @Override public void onPresented() {
                         state.popup.post(() -> GboardFloatingGlassCoordinator.onPresented(state));
@@ -247,9 +256,16 @@ final class GboardFloatingGlassCoordinator {
         GboardSoftKeyGlassScene.Node[] softKeyNodes;
         boolean rebuiltKeyScene = false;
         GboardFloatingGlassGeometry previous = state.lastGeometry;
-        boolean translationOnly = previous != null
-                && sameShellSize(previous, next)
-                && !state.keyLayoutDirty;
+        boolean shellSizeStable = previous != null && sameShellSize(previous, next);
+        boolean translated = shellSizeStable
+                && (Math.abs(next.left - previous.left) >= 0.25f
+                || Math.abs(next.top - previous.top) >= 0.25f);
+        if (!state.realtimeBackgroundSampling
+                && state.captureRequested
+                && state.frozenMotionState.onFrame(translated)) {
+            state.session.requestFrozenMotionCapture();
+        }
+        boolean translationOnly = shellSizeStable && !state.keyLayoutDirty;
         if (!state.softKeyGlassEnabled) {
             softKeyNodes = GboardSoftKeyGlassScene.EMPTY;
         } else if (translationOnly) {
