@@ -1,7 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
@@ -81,7 +79,7 @@ final class GboardStockVisualAuthority {
         }
         if (claim == null || !claim.softKeyGlassEnabled) return;
         for (ViewGroup holder : structure.keyboardViewHolders) {
-            if (holder != null) claimPreparedSoftKeyDescendants(holder, holder, claim);
+            if (holder != null) claimPreparedKeyboardSoftKeys(holder, holder, claim);
         }
     }
 
@@ -234,15 +232,30 @@ final class GboardStockVisualAuthority {
             View content = holder.getChildAt(i);
             if (isEligibleContent(holder, content)) claimBackground(claim, content, holder);
             if (content instanceof ViewGroup) {
-                claimPreparedSoftKeyDescendants((ViewGroup) content, holder, claim);
+                claimPreparedKeyboardSoftKeys((ViewGroup) content, holder, claim);
             }
         }
     }
 
-    private static void claimPreparedSoftKeyDescendants(
+    private static void claimPreparedKeyboardSoftKeys(
             ViewGroup parent, ViewGroup dynamicHolder, Claim claim) {
         if (parent == null || dynamicHolder == null || claim == null
                 || !claim.softKeyGlassEnabled) return;
+        if (GboardSoftKeyGlassScene.isSoftKeyboardView(parent)) {
+            claimPreparedSoftKeysInsideKeyboard(parent, dynamicHolder, claim);
+            return;
+        }
+        int count = parent.getChildCount();
+        for (int i = 0; i < count; i++) {
+            View child = parent.getChildAt(i);
+            if (child instanceof ViewGroup) {
+                claimPreparedKeyboardSoftKeys((ViewGroup) child, dynamicHolder, claim);
+            }
+        }
+    }
+
+    private static void claimPreparedSoftKeysInsideKeyboard(
+            ViewGroup parent, ViewGroup dynamicHolder, Claim claim) {
         int count = parent.getChildCount();
         for (int i = 0; i < count; i++) {
             View child = parent.getChildAt(i);
@@ -254,7 +267,7 @@ final class GboardStockVisualAuthority {
                 continue;
             }
             if (child instanceof ViewGroup) {
-                claimPreparedSoftKeyDescendants((ViewGroup) child, dynamicHolder, claim);
+                claimPreparedSoftKeysInsideKeyboard((ViewGroup) child, dynamicHolder, claim);
             }
         }
     }
@@ -274,26 +287,28 @@ final class GboardStockVisualAuthority {
         if (claim == null || target == null) return;
         boolean shouldApply;
         final boolean softKey = GboardSoftKeyGlassScene.isSoftKeyView(target);
+        final Snapshot snapshot;
         synchronized (LOCK) {
             Claim existing = OWNER_BY_VIEW.get(target);
             if (existing != null && existing != claim) return;
-            Snapshot snapshot = claim.snapshotLocked(target);
+            snapshot = claim.snapshotLocked(target);
             OWNER_BY_VIEW.put(target, claim);
             if (dynamicHolder != null) snapshot.dynamicHolder = dynamicHolder;
             shouldApply = !snapshot.background.isClaimed();
             if (shouldApply) {
                 Drawable current = target.getBackground();
-                if (softKey) GboardSoftKeyGlassScene.rememberBackground(target, current);
+                if (softKey) {
+                    GboardSoftKeyGlassScene.rememberBackground(target, current);
+                    snapshot.captureSuppressedDrawable(current);
+                }
                 snapshot.background.claim(current);
             }
         }
-        if (shouldApply) {
+        if (softKey) {
+            snapshot.ensureSuppressedDrawableHidden();
+        } else if (shouldApply) {
             runModuleMutation(() -> {
-                if (softKey) {
-                    target.setBackground(new ColorDrawable(Color.TRANSPARENT));
-                } else if (target.getBackground() != null) {
-                    target.setBackground(null);
-                }
+                if (target.getBackground() != null) target.setBackground(null);
             });
         }
     }
@@ -470,12 +485,37 @@ final class GboardStockVisualAuthority {
         ViewGroup dynamicHolder;
         final GboardVendorIntentState<Float> alpha = new GboardVendorIntentState<>();
         final GboardVendorIntentState<Float> elevation = new GboardVendorIntentState<>();
+        Drawable suppressedDrawable;
+        int suppressedDrawableAlpha = 255;
+
+        void captureSuppressedDrawable(Drawable drawable) {
+            if (suppressedDrawable != null || drawable == null) return;
+            suppressedDrawable = drawable;
+            try { suppressedDrawableAlpha = drawable.getAlpha(); }
+            catch (Throwable ignored) { suppressedDrawableAlpha = 255; }
+        }
+
+        void ensureSuppressedDrawableHidden() {
+            Drawable drawable = suppressedDrawable;
+            if (drawable == null) return;
+            try {
+                if (drawable.getAlpha() != 0) {
+                    drawable.setAlpha(0);
+                    drawable.invalidateSelf();
+                }
+            } catch (Throwable ignored) {}
+        }
 
         RestoreSnapshot releaseLocked() {
+            Drawable hidden = suppressedDrawable;
+            int hiddenAlpha = suppressedDrawableAlpha;
+            suppressedDrawable = null;
             return new RestoreSnapshot(
                     background.release(),
                     alpha.release(),
-                    elevation.release());
+                    elevation.release(),
+                    hidden,
+                    hiddenAlpha);
         }
     }
 
@@ -483,14 +523,20 @@ final class GboardStockVisualAuthority {
         final GboardVendorIntentState.RestoreDecision<Drawable> background;
         final GboardVendorIntentState.RestoreDecision<Float> alpha;
         final GboardVendorIntentState.RestoreDecision<Float> elevation;
+        final Drawable suppressedDrawable;
+        final int suppressedDrawableAlpha;
 
         RestoreSnapshot(
                 GboardVendorIntentState.RestoreDecision<Drawable> background,
                 GboardVendorIntentState.RestoreDecision<Float> alpha,
-                GboardVendorIntentState.RestoreDecision<Float> elevation) {
+                GboardVendorIntentState.RestoreDecision<Float> elevation,
+                Drawable suppressedDrawable,
+                int suppressedDrawableAlpha) {
             this.background = background;
             this.alpha = alpha;
             this.elevation = elevation;
+            this.suppressedDrawable = suppressedDrawable;
+            this.suppressedDrawableAlpha = suppressedDrawableAlpha;
         }
     }
 
@@ -504,6 +550,12 @@ final class GboardStockVisualAuthority {
         }
 
         void restore() {
+            if (snapshot.suppressedDrawable != null) {
+                try {
+                    snapshot.suppressedDrawable.setAlpha(snapshot.suppressedDrawableAlpha);
+                    snapshot.suppressedDrawable.invalidateSelf();
+                } catch (Throwable ignored) {}
+            }
             if (snapshot.background.restore) target.setBackground(snapshot.background.value);
             if (snapshot.elevation.restore && snapshot.elevation.value != null) {
                 target.setElevation(snapshot.elevation.value);
