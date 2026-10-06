@@ -117,13 +117,11 @@ private fun WidgetComponentDetailScreen(
                 title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
                 largeTitle = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
                 navigationIcon = {
-                    TextButton(
-                        text = "返回",
-                        onClick = {
-                            if (selectedType != null) selectedType = null else activity.finish()
-                        },
-                    )
+                    SettingsBackButton {
+                        if (selectedType != null) selectedType = null else activity.finish()
+                    }
                 },
+                titlePadding = 20.dp,
                 actions = {
                     TextButton(text = "重启桌面", onClick = { activity.restartLauncher() })
                 },
@@ -194,7 +192,7 @@ private fun WidgetComponentTypePage(
 
         if (isMaml) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     SwitchPreference(
                         checked = showAllMaml,
                         onCheckedChange = onShowAllMaml,
@@ -205,7 +203,7 @@ private fun WidgetComponentTypePage(
             }
         } else {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     SwitchPreference(
                         checked = showAdvancedRemote,
                         onCheckedChange = onShowAdvancedRemote,
@@ -219,7 +217,7 @@ private fun WidgetComponentTypePage(
         if (likelyBackgrounds.isNotEmpty()) {
             item { SmallTitle("疑似底层背景") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Column {
                         likelyBackgrounds.forEach { descriptor ->
                             ArrowPreference(
@@ -238,7 +236,7 @@ private fun WidgetComponentTypePage(
 
         if (components.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("该小组件已不在当前载入目录中")
                         Text("返回上一页并重新载入当前小组件。", fontSize = 13.sp)
@@ -247,7 +245,7 @@ private fun WidgetComponentTypePage(
             }
         } else if (typeGroups.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("当前没有可安全直接操作的背景或图像层")
                         if (!isMaml) {
@@ -259,7 +257,7 @@ private fun WidgetComponentTypePage(
         } else {
             item { SmallTitle("组件类型") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Column {
                         componentTypeOrder.forEach { type ->
                             val group = WidgetComponentRanking.sorted(typeGroups[type].orEmpty())
@@ -313,7 +311,7 @@ private fun WidgetExactNodePage(
         }
         items(rankedComponents, key = { it.selectorKey() }) { descriptor ->
             val key = descriptor.selectorKey()
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 SwitchPreference(
                     checked = key in selected,
                     onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
