@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -13,6 +14,7 @@ import java.util.WeakHashMap;
 final class GboardFloatingGlassCoordinator {
     private static final String TAG = "[DC][GboardFloatingGlass]";
     private static final int MAX_GEOMETRY_FRAME_RETRIES = 24;
+    private static final long FROZEN_STARTUP_MIN_LIVE_MS = 360L;
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
 
     private static final class State {
@@ -33,6 +35,8 @@ final class GboardFloatingGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean stockHidden;
         boolean captureRequested;
+        boolean outputPresented;
+        long presentedAtMs;
         boolean attachPosted;
         GboardFloatingGlassGeometry lastGeometry;
         boolean geometryRetryPosted;
@@ -247,14 +251,20 @@ final class GboardFloatingGlassCoordinator {
         }
         state.geometryRetryCount = 0;
         GboardFloatingGlassGeometry previous = state.lastGeometry;
-        boolean translated = previous != null
-                && sameSize(previous, next)
-                && (Math.abs(next.left - previous.left) >= 0.25f
-                || Math.abs(next.top - previous.top) >= 0.25f);
-        if (!state.realtimeBackgroundSampling
-                && state.captureRequested
-                && state.frozenMotionState.onFrame(translated)) {
-            state.session.requestFrozenMotionCapture();
+        boolean geometryChanged = geometryChanged(previous, next);
+        if (!state.realtimeBackgroundSampling && state.captureRequested) {
+            boolean startupFreezeAllowed = state.outputPresented
+                    && state.presentedAtMs > 0L
+                    && SystemClock.uptimeMillis() - state.presentedAtMs
+                    >= FROZEN_STARTUP_MIN_LIVE_MS;
+            GboardFrozenBackdropMotionState.Decision decision =
+                    state.frozenMotionState.onFrame(startupFreezeAllowed, geometryChanged);
+            if (decision == GboardFrozenBackdropMotionState.Decision.FREEZE_AFTER_SETTLE) {
+                state.session.freezeBackdropAfterSettle();
+            } else if (decision
+                    == GboardFrozenBackdropMotionState.Decision.REFRESH_AT_MOTION_START) {
+                state.session.requestFrozenMotionCapture();
+            }
         }
         state.lastGeometry = next;
         state.session.updateGeometry(next);
@@ -264,14 +274,16 @@ final class GboardFloatingGlassCoordinator {
         }
     }
 
-    private static boolean sameSize(
+    private static boolean geometryChanged(
             GboardFloatingGlassGeometry first,
             GboardFloatingGlassGeometry second) {
-        return first != null && second != null
-                && first.rootWidth == second.rootWidth
-                && first.rootHeight == second.rootHeight
-                && Math.abs(first.width - second.width) < 0.25f
-                && Math.abs(first.height - second.height) < 0.25f;
+        if (first == null || second == null) return false;
+        return first.rootWidth != second.rootWidth
+                || first.rootHeight != second.rootHeight
+                || Math.abs(first.left - second.left) >= 0.25f
+                || Math.abs(first.top - second.top) >= 0.25f
+                || Math.abs(first.width - second.width) >= 0.25f
+                || Math.abs(first.height - second.height) >= 0.25f;
     }
 
     private static synchronized void onPresented(State state) {
@@ -283,6 +295,8 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         state.stockHidden = true;
+        state.outputPresented = true;
+        state.presentedAtMs = SystemClock.uptimeMillis();
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {
