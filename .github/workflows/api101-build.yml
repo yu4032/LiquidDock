@@ -6,7 +6,6 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
-      - feat/hyperisland-ui-port
   pull_request:
     branches: [ main ]
   workflow_dispatch:
