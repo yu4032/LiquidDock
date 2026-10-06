@@ -73,7 +73,7 @@ internal fun WidgetComponentsPage(
             }
         }
         item {
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                 ArrowPreference(
                     title = "载入当前小组件",
                     summary = "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描",
@@ -110,7 +110,7 @@ internal fun WidgetComponentsPage(
 
         item { SmallTitle("隐藏规则备份") }
         item {
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                 Column {
                     ArrowPreference(
                         title = "导出隐藏规则",
@@ -128,7 +128,7 @@ internal fun WidgetComponentsPage(
 
         if (groups.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("尚未载入小组件")
                         Text(
@@ -142,7 +142,7 @@ internal fun WidgetComponentsPage(
         } else {
             item { SmallTitle("已载入小组件") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                     Column {
                         groups.forEach { (key, components) ->
                             val first = components.first()
