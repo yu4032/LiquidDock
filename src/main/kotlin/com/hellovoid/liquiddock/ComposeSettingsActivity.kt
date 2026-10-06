@@ -490,7 +490,12 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 titlePadding = 20.dp,
                 actions = {
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
-                    if (page == Page.SecurityCenterSidebar || page == Page.Animation) {
+                    if (page == Page.SecurityCenterSidebar) {
+                        TextButton(
+                            text = stringResource(R.string.action_restart_security_center_and_launcher),
+                            onClick = { activity.restartSecurityCenterAndLauncher() },
+                        )
+                    } else if (page == Page.Animation) {
                         TextButton(
                             text = stringResource(R.string.action_restart_security_center_and_launcher),
                             onClick = { activity.restartSecurityCenterAndLauncher() },
@@ -1254,13 +1259,13 @@ private fun LiquidPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
-                    "桌面快捷菜单玻璃背景",
-                    "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
-                    masterEnabled && liquidGlass,
-                )
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
+            "桌面快捷菜单玻璃背景",
+            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
+            masterEnabled && liquidGlass,
+        )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
                     "快捷菜单深色模式适配",
                     "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
                     masterEnabled && liquidGlass,
