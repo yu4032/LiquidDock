@@ -263,11 +263,13 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("currentMotionDx"));
         assertTrue(session.contains("currentMotionDy"));
         assertTrue(geometry.contains("toPrismalGeometry(float dx, float dy)"));
+        assertTrue(session.contains("OutputMode.FULLSCREEN_REGION"));
+        assertTrue(session.contains("OutputMode.CROPPED"));
         assertTrue(session.contains("presentRegion("));
         assertTrue(session.contains("GLES20.glScissor("));
+        assertTrue(session.contains("presentCropped("));
         assertTrue(session.contains("0f, 0f, 1f, 1f"));
         assertFalse(session.contains("presentFull("));
-        assertFalse(session.contains("presentCropped("));
         assertFalse(coordinator.contains("syncSinkBounds"));
         assertFalse(coordinator.contains("translateAndRefreshInteraction"));
     }
