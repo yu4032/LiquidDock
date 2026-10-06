@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -262,10 +264,9 @@ final class BaiduInputMethodGlassCoordinator {
         BaiduInputMethodGlassView sink = state.sink;
         state.sink = null;
         if (sink != null) {
+            try { sink.setVisibility(View.INVISIBLE); } catch (Throwable ignored) {}
             try { sink.dispose(); } catch (Throwable ignored) {}
-            try {
-                if (sink.getParent() == state.sinkHost) state.sinkHost.removeView(sink);
-            } catch (Throwable ignored) {}
+            removeSinkDeferred(state.sinkHost, sink);
         }
         BaiduInputMethodGlassSession session = state.session;
         state.session = null;
@@ -273,6 +274,30 @@ final class BaiduInputMethodGlassCoordinator {
             try { session.shutdown(); } catch (Throwable ignored) {}
         }
         log("glass session released", null);
+    }
+
+    /**
+     * Never mutate the host's child list synchronously from an attach-state callback.
+     *
+     * <p>ViewGroup dispatches detach by iterating its current children. Removing the injected
+     * TextureView from onViewDetachedFromWindow() can shift that array mid-dispatch and crash the
+     * host with ViewGroup.dispatchDetachedFromWindow() dereferencing a null child. Hide/dispose
+     * immediately, then remove on the next main-loop turn after the framework traversal completes.
+     */
+    private static void removeSinkDeferred(ViewGroup host, BaiduInputMethodGlassView sink) {
+        if (host == null || sink == null) return;
+        try {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    if (sink.getParent() == host) host.removeView(sink);
+                } catch (Throwable error) {
+                    log("deferred glass removal failed", error);
+                }
+            });
+        } catch (Throwable error) {
+            // Fail closed without falling back to a synchronous remove during detach dispatch.
+            log("unable to schedule deferred glass removal", error);
+        }
     }
 
     private static void restoreStockBackground(State state) {
