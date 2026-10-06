@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.view.View;
 
 import com.hellovoid.prismal.PrismalGeometry;
@@ -158,11 +159,41 @@ final class GboardFloatingGlassGeometry {
             View target,
             float cornerRadiusPx,
             float outputPaddingPx) {
-        if (root == null || sinkHost == null || target == null
+        if (target == null) return null;
+        return captureTargetRectPadded(
+                root,
+                sinkHost,
+                target,
+                new RectF(0f, 0f, target.getWidth(), target.getHeight()),
+                cornerRadiusPx,
+                outputPaddingPx);
+    }
+
+    static GboardFloatingGlassGeometry captureTargetRect(
+            View root,
+            View sinkHost,
+            View target,
+            RectF localRect,
+            float cornerRadiusPx) {
+        return captureTargetRectPadded(
+                root, sinkHost, target, localRect, cornerRadiusPx, 0f);
+    }
+
+    private static GboardFloatingGlassGeometry captureTargetRectPadded(
+            View root,
+            View sinkHost,
+            View target,
+            RectF localRect,
+            float cornerRadiusPx,
+            float outputPaddingPx) {
+        if (root == null || sinkHost == null || target == null || localRect == null
                 || !root.isAttachedToWindow() || !sinkHost.isAttachedToWindow()
                 || !target.isAttachedToWindow()
                 || root.getWidth() <= 0 || root.getHeight() <= 0
                 || target.getWidth() <= 0 || target.getHeight() <= 0
+                || !finite(localRect.left) || !finite(localRect.top)
+                || !finite(localRect.right) || !finite(localRect.bottom)
+                || localRect.width() <= 0f || localRect.height() <= 0f
                 || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f
                 || !finite(outputPaddingPx) || outputPaddingPx < 0f) return null;
         try {
@@ -176,8 +207,8 @@ final class GboardFloatingGlassGeometry {
             Matrix globalToHost = new Matrix();
             if (!hostToGlobal.invert(globalToHost)) return null;
 
-            Bounds rootBounds = mapBounds(target, globalToRoot);
-            Bounds hostBounds = mapBounds(target, globalToHost);
+            Bounds rootBounds = mapBounds(target, globalToRoot, localRect);
+            Bounds hostBounds = mapBounds(target, globalToHost, localRect);
             if (rootBounds == null || hostBounds == null) return null;
 
             float left = clamp(rootBounds.left, 0f, root.getWidth());
@@ -187,9 +218,9 @@ final class GboardFloatingGlassGeometry {
             if (right <= left || bottom <= top) return null;
 
             float rootWidthScale = (rootBounds.right - rootBounds.left)
-                    / Math.max(1f, target.getWidth());
+                    / Math.max(1f, localRect.width());
             float rootHeightScale = (rootBounds.bottom - rootBounds.top)
-                    / Math.max(1f, target.getHeight());
+                    / Math.max(1f, localRect.height());
             float targetScale = Math.min(rootWidthScale, rootHeightScale);
             if (!finite(targetScale) || targetScale <= 0f) return null;
 
@@ -281,15 +312,26 @@ final class GboardFloatingGlassGeometry {
     }
 
     private static Bounds mapBounds(View view, Matrix globalToTarget) {
-        if (view == null || globalToTarget == null || !view.isAttachedToWindow()
-                || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
+        if (view == null) return null;
+        return mapBounds(
+                view,
+                globalToTarget,
+                new RectF(0f, 0f, view.getWidth(), view.getHeight()));
+    }
+
+    private static Bounds mapBounds(
+            View view, Matrix globalToTarget, RectF localRect) {
+        if (view == null || globalToTarget == null || localRect == null
+                || !view.isAttachedToWindow()
+                || view.getWidth() <= 0 || view.getHeight() <= 0
+                || localRect.width() <= 0f || localRect.height() <= 0f) return null;
         Matrix viewToGlobal = new Matrix();
         view.transformMatrixToGlobal(viewToGlobal);
         float[] points = new float[]{
-                0f, 0f,
-                view.getWidth(), 0f,
-                view.getWidth(), view.getHeight(),
-                0f, view.getHeight()
+                localRect.left, localRect.top,
+                localRect.right, localRect.top,
+                localRect.right, localRect.bottom,
+                localRect.left, localRect.bottom
         };
         viewToGlobal.mapPoints(points);
         globalToTarget.mapPoints(points);
