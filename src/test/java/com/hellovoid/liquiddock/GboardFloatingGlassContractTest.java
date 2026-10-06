@@ -109,20 +109,19 @@ public class GboardFloatingGlassContractTest {
         assertFalse(authority.contains("0x7f0b"));
     }
 
-    @Test public void sinkUsesStructuralWidthAndVisualContentHeight() throws Exception {
+    @Test public void sinkIsFixedFullscreenWhileSceneUsesStructuralKeyboardGeometry()
+            throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
-        assertTrue(coordinator.contains("structure.contentColumn"));
-        assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
-        assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
-        assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("ViewGroup host = (ViewGroup) state.root"));
+        assertTrue(coordinator.contains("directChildUnder(state.keyboardArea, host)"));
+        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertFalse(coordinator.contains("syncSinkBounds"));
         assertTrue(coordinator.contains("GboardFloatingGlassGeometry.beginCapture"));
         assertTrue(coordinator.contains("GboardFrozenBackdropMotionState"));
         assertTrue(coordinator.contains("requestFrozenMotionCapture"));
         assertTrue(coordinator.contains(
                 "captureContext, state.structure, state.cornerRadiusPx"));
-        assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
-        assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
         assertTrue(geometry.contains("structure.stockBackground"));
         assertTrue(geometry.contains("structure.keyboardViewHolders"));
         assertTrue(geometry.contains("structure.bottomFrame"));
@@ -183,6 +182,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains("GboardFloatingGlassGeometry.captureTargetRect"));
         assertTrue(scene.contains("findBestDescendantBackground"));
         assertTrue(scene.contains("preparedBackgroundTargets"));
+        assertTrue(scene.contains("preparedAlphaTargets"));
+        assertTrue(scene.contains("background-icon"));
         assertTrue(scene.contains("outline.getRect(rect)"));
         assertTrue(scene.contains("fallbackBounds(key)"));
         assertTrue(scene.contains("ShapeTemplate"));
@@ -205,6 +206,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("claimPreparedKeyboardSoftKeys"));
         assertTrue(authority.contains("claimPreparedSoftKeysInsideKeyboard"));
         assertTrue(authority.contains("GboardSoftKeyGlassScene.preparedBackgroundTargets"));
+        assertTrue(authority.contains("GboardSoftKeyGlassScene.preparedAlphaTargets"));
+        assertTrue(authority.contains("claimAlpha(claim, alphaTarget)"));
         assertTrue(authority.contains("captureSuppressedDrawable"));
         assertTrue(authority.contains("ensureSuppressedDrawableHidden"));
         assertFalse(authority.contains("new ColorDrawable(Color.TRANSPARENT)"));
@@ -227,7 +230,10 @@ public class GboardFloatingGlassContractTest {
         assertFalse(authority.contains("claim.structure.keyboardViewHolders)"));
         assertTrue(scene.contains("SHAPE_BY_BACKGROUND_VIEW.containsKey(view)"));
         assertTrue(scene.contains("preparedBackgroundTargets"));
+        assertTrue(scene.contains("preparedAlphaTargets"));
         assertTrue(scene.contains("collectBackgroundLayers"));
+        assertTrue(scene.contains("collectDedicatedBackgroundImageLayers"));
+        assertTrue(scene.contains("background-icon"));
     }
 
     @Test public void movementUsesLatestRenderTimeProjectionWithoutQueueingOldFrames()
@@ -246,7 +252,10 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("currentMotionDx"));
         assertTrue(session.contains("currentMotionDy"));
         assertTrue(geometry.contains("toPrismalGeometry(float dx, float dy)"));
-        assertTrue(geometry.contains("toCropUvRect(float dx, float dy)"));
+        assertTrue(session.contains("presentFull("));
+        assertTrue(session.contains("0f, 0f, 1f, 1f"));
+        assertFalse(session.contains("presentCropped("));
+        assertFalse(coordinator.contains("syncSinkBounds"));
         assertFalse(coordinator.contains("translateAndRefreshInteraction"));
     }
 
