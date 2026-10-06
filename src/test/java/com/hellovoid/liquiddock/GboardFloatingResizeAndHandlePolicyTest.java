@@ -36,10 +36,12 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         assertTrue(coordinator.contains("ViewGroup host = (ViewGroup) state.root"));
         assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
         assertFalse(coordinator.contains("syncSinkBounds"));
+        assertTrue(session.contains("OutputMode.FULLSCREEN_REGION"));
         assertTrue(session.contains("presentRegion("));
         assertTrue(session.contains("GLES20.glScissor("));
+        assertTrue(session.contains("OutputMode.CROPPED"));
+        assertTrue(session.contains("presentCropped("));
         assertFalse(session.contains("presentFull("));
-        assertFalse(session.contains("presentCropped("));
         assertFalse(coordinator.contains("int height = state.backgroundFrame.getHeight()"));
         assertFalse(coordinator.contains("int height = state.keyboardArea.getHeight()"));
     }
