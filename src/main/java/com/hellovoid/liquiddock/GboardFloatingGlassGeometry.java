@@ -194,7 +194,7 @@ final class GboardFloatingGlassGeometry {
                 || !finite(localRect.left) || !finite(localRect.top)
                 || !finite(localRect.right) || !finite(localRect.bottom)
                 || localRect.width() <= 0f || localRect.height() <= 0f
-                || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f
+                || !finite(cornerRadiusPx) || cornerRadiusPx < 0f
                 || !finite(outputPaddingPx) || outputPaddingPx < 0f) return null;
         try {
             Matrix rootToGlobal = new Matrix();
