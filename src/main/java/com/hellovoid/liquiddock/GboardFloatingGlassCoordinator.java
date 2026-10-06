@@ -24,7 +24,6 @@ final class GboardFloatingGlassCoordinator {
         final GboardFrozenBackdropMotionState frozenMotionState =
                 new GboardFrozenBackdropMotionState();
         ViewGroup sinkHost;
-        View backgroundFrame;
         View root;
         float cornerRadiusPx;
         GboardFloatingGlassSession session;
@@ -34,6 +33,7 @@ final class GboardFloatingGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean stockHidden;
         boolean captureRequested;
+        boolean attachPosted;
         GboardFloatingGlassGeometry lastGeometry;
         boolean geometryRetryPosted;
         int geometryRetryCount;
@@ -48,7 +48,6 @@ final class GboardFloatingGlassCoordinator {
             this.structure = structure;
             this.glassConfig = glassConfig;
             this.keyboardArea = structure.keyboardArea;
-            this.backgroundFrame = structure.stockBackground;
             this.realtimeBackgroundSampling = realtimeBackgroundSampling;
         }
     }
@@ -66,7 +65,7 @@ final class GboardFloatingGlassCoordinator {
             if (existing.realtimeBackgroundSampling != realtimeBackgroundSampling) {
                 release(existing);
             } else {
-                if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
+                if (existing.session == null && popup.isAttachedToWindow()) scheduleAttach(existing);
                 else syncGeometry(existing);
                 return;
             }
@@ -75,7 +74,7 @@ final class GboardFloatingGlassCoordinator {
                 popup, structure, glassConfig, realtimeBackgroundSampling);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
-                attachNow(state);
+                scheduleAttach(state);
             }
 
             @Override public void onViewDetachedFromWindow(View view) {
@@ -84,7 +83,21 @@ final class GboardFloatingGlassCoordinator {
         };
         STATES.put(popup, state);
         popup.addOnAttachStateChangeListener(state.attachListener);
-        if (popup.isAttachedToWindow()) attachNow(state);
+        if (popup.isAttachedToWindow()) scheduleAttach(state);
+    }
+
+    private static synchronized void scheduleAttach(State state) {
+        if (state == null || state.released || state.attachPosted || state.session != null
+                || !state.popup.isAttachedToWindow()) return;
+        state.attachPosted = true;
+        state.popup.post(() -> {
+            synchronized (GboardFloatingGlassCoordinator.class) {
+                state.attachPosted = false;
+                if (state.released || state.session != null
+                        || !state.popup.isAttachedToWindow()) return;
+            }
+            attachNow(state);
+        });
     }
 
     static synchronized void onHidden(View popup) {
@@ -143,19 +156,39 @@ final class GboardFloatingGlassCoordinator {
         syncGeometry(state);
     }
 
-    private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
-        if (state == null || sink == null) return false;
-        ViewGroup host = state.keyboardArea;
-        int contentIndex = host.indexOfChild(state.structure.contentColumn);
-        if (contentIndex < 0) return false;
+    private static boolean insertSinkBelowKeyboardContent(
+            State state, GboardFloatingGlassView sink) {
+        if (state == null || sink == null || !(state.root instanceof ViewGroup)) return false;
+        ViewGroup host = (ViewGroup) state.root;
+        View anchor = directChildUnder(state.keyboardArea, host);
+        if (anchor == null && state.keyboardArea != host) return false;
+        int index = anchor != null ? host.indexOfChild(anchor) : 0;
+        if (index < 0) return false;
         try {
-            host.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
+            host.addView(
+                    sink,
+                    index,
+                    new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
             state.sinkHost = host;
             return true;
         } catch (Throwable error) {
-            log("glass insertion failed", error);
+            log("fullscreen glass insertion failed", error);
             return false;
         }
+    }
+
+    private static View directChildUnder(View descendant, ViewGroup ancestor) {
+        if (descendant == null || ancestor == null || descendant == ancestor) return null;
+        View current = descendant;
+        android.view.ViewParent parent = current.getParent();
+        while (parent instanceof View) {
+            if (parent == ancestor) return current;
+            current = (View) parent;
+            parent = current.getParent();
+        }
+        return null;
     }
 
     private static float resolveCornerRadiusPx(
@@ -224,7 +257,6 @@ final class GboardFloatingGlassCoordinator {
             state.session.requestFrozenMotionCapture();
         }
         state.lastGeometry = next;
-        syncSinkBounds(state, next);
         state.session.updateGeometry(next);
         if (!state.captureRequested) {
             state.captureRequested = true;
@@ -242,27 +274,9 @@ final class GboardFloatingGlassCoordinator {
                 && Math.abs(first.height - second.height) < 0.25f;
     }
 
-    private static void syncSinkBounds(
-            State state, GboardFloatingGlassGeometry geometry) {
-        if (state == null || geometry == null || state.sinkHost == null
-                || state.sink == null) return;
-        int width = geometry.sinkWidthPx();
-        int height = geometry.sinkHeightPx();
-        if (width <= 0 || height <= 0) return;
-        ViewGroup.LayoutParams params = state.sink.getLayoutParams();
-        if (params == null) return;
-        if (params.width != width || params.height != height) {
-            params.width = width;
-            params.height = height;
-            state.sink.setLayoutParams(params);
-        }
-        if (state.sink.getX() != geometry.sinkLeft) state.sink.setX(geometry.sinkLeft);
-        if (state.sink.getY() != geometry.sinkTop) state.sink.setY(geometry.sinkTop);
-    }
-
     private static synchronized void onPresented(State state) {
         if (state == null || state.released || state.stockHidden) return;
-        View backgroundFrame = state.backgroundFrame;
+        View backgroundFrame = state.structure.stockBackground;
         if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()) return;
         if (!GboardStockVisualAuthority.claim(state.structure)) {
             failClosed(state, "unable to claim floating stock visuals", null);
@@ -281,7 +295,9 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
-        GboardStockVisualAuthority.release(state.structure);
+        if (state.stockHidden) {
+            state.popup.post(() -> GboardStockVisualAuthority.release(state.structure));
+        }
         state.stockHidden = false;
         if (state.attachListener != null) {
             try { state.popup.removeOnAttachStateChangeListener(state.attachListener); }
@@ -305,11 +321,15 @@ final class GboardFloatingGlassCoordinator {
         state.sink = null;
         state.sinkHost = null;
         if (sink != null) {
-            try { sink.dispose(); } catch (Throwable ignored) {}
             if (sinkHost != null) {
-                try {
-                    if (sink.getParent() == sinkHost) sinkHost.removeView(sink);
-                } catch (Throwable ignored) {}
+                sinkHost.post(() -> {
+                    try { sink.dispose(); } catch (Throwable ignored) {}
+                    try {
+                        if (sink.getParent() == sinkHost) sinkHost.removeView(sink);
+                    } catch (Throwable ignored) {}
+                });
+            } else {
+                try { sink.dispose(); } catch (Throwable ignored) {}
             }
         }
         GboardFloatingGlassSession session = state.session;

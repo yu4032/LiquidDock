@@ -20,25 +20,22 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         return Files.exists(path) ? Files.readString(path) : "";
     }
 
-    @Test public void sinkWidthUsesStockShellButHeightUsesVisualContentUnion() throws Exception {
+    @Test public void fullscreenSinkDecouplesOutputSurfaceFromKeyboardMotion() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
 
         assertTrue(geometry.contains("structure.stockBackground"));
         assertTrue(geometry.contains("structure.topEdge"));
         assertTrue(geometry.contains("structure.keyboardViewHolders"));
         assertTrue(geometry.contains("structure.bottomFrame"));
         assertTrue(geometry.contains("addVerticalAuthority"));
-        assertTrue(geometry.contains("sinkHost.transformMatrixToGlobal"));
-        assertTrue(geometry.contains("sinkWidthPx()"));
-        assertTrue(geometry.contains("sinkHeightPx()"));
         assertTrue(coordinator.contains("state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
-        assertTrue(coordinator.contains("syncSinkBounds(state, next)"));
-        assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
-        assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
-        assertTrue(coordinator.contains("geometry.sinkLeft"));
-        assertTrue(coordinator.contains("geometry.sinkTop"));
-        assertFalse(coordinator.contains("int height = state.backgroundFrame.getHeight()"));
+        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertFalse(coordinator.contains("syncSinkBounds"));
+        assertTrue(session.contains("OutputMode.FULLSCREEN_REGION"));
+        assertTrue(session.contains("presentRegion("));
+        assertTrue(session.contains("GLES20.glScissor("));
         assertFalse(coordinator.contains("int height = state.keyboardArea.getHeight()"));
     }
 

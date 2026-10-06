@@ -19,6 +19,11 @@ import java.nio.FloatBuffer;
 
 /** Zero-copy PassBlur -> Prismal pipeline with realtime or frozen one-frame sampling. */
 final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
+    private enum OutputMode {
+        FULLSCREEN_REGION,
+        CROPPED
+    }
+
     interface Listener {
         void onPresented();
         void onFailure(Throwable error);
@@ -54,6 +59,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
     private final boolean realtimeBackgroundSampling;
+    private final OutputMode outputMode;
     private final Object renderQueueLock = new Object();
 
     private volatile GboardFloatingGlassGeometry geometry;
@@ -74,7 +80,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     GboardFloatingGlassSession(
             View root, LiquidDockConfig.Glass glassConfig, Listener listener) {
-        this(root, glassConfig, true, listener);
+        this(root, glassConfig, true, OutputMode.CROPPED, listener);
     }
 
     GboardFloatingGlassSession(
@@ -82,10 +88,20 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             LiquidDockConfig.Glass glassConfig,
             boolean realtimeBackgroundSampling,
             Listener listener) {
+        this(root, glassConfig, realtimeBackgroundSampling, OutputMode.FULLSCREEN_REGION, listener);
+    }
+
+    private GboardFloatingGlassSession(
+            View root,
+            LiquidDockConfig.Glass glassConfig,
+            boolean realtimeBackgroundSampling,
+            OutputMode outputMode,
+            Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
         rootRef = new WeakReference<>(root);
         this.listener = listener;
         this.realtimeBackgroundSampling = realtimeBackgroundSampling;
+        this.outputMode = outputMode;
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -293,10 +309,15 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
-            presentCropped(
-                    prismalRenderer.outputTexture(),
-                    currentGeometry.toCropUvRect(),
-                    currentOutput);
+            int sceneTexture = prismalRenderer.outputTexture();
+            if (outputMode == OutputMode.FULLSCREEN_REGION) {
+                presentRegion(sceneTexture, currentGeometry, currentOutput);
+            } else {
+                presentCropped(
+                        sceneTexture,
+                        currentGeometry.toCropUvRect(),
+                        currentOutput);
+            }
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -311,6 +332,55 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
         }
+    }
+
+    private void presentRegion(
+            int sceneTexture,
+            GboardFloatingGlassGeometry geometry,
+            OutputState current) {
+        if (geometry == null || current == null
+                || current.eglSurface == EGL14.EGL_NO_SURFACE
+                || current.width <= 0 || current.height <= 0
+                || logicalWidth <= 0 || logicalHeight <= 0) return;
+
+        float scaleX = current.width / (float) logicalWidth;
+        float scaleY = current.height / (float) logicalHeight;
+        float margin = 6f;
+        float left = Math.max(0f, geometry.left - margin);
+        float top = Math.max(0f, geometry.top - margin);
+        float right = Math.min(logicalWidth, geometry.left + geometry.width + margin);
+        float bottom = Math.min(logicalHeight, geometry.top + geometry.height + margin);
+        if (right <= left || bottom <= top) return;
+
+        int scissorLeft = Math.max(0, (int) Math.floor(left * scaleX));
+        int scissorRight = Math.min(current.width, (int) Math.ceil(right * scaleX));
+        int scissorBottom = Math.max(
+                0, (int) Math.floor((logicalHeight - bottom) * scaleY));
+        int scissorTop = Math.min(
+                current.height, (int) Math.ceil((logicalHeight - top) * scaleY));
+        int scissorWidth = Math.max(1, scissorRight - scissorLeft);
+        int scissorHeight = Math.max(1, scissorTop - scissorBottom);
+
+        sourceBackend.makeCurrent(current.eglSurface);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glViewport(0, 0, current.width, current.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glScissor(scissorLeft, scissorBottom, scissorWidth, scissorHeight);
+        GLES20.glUseProgram(compositeProgram);
+        bindQuad(compositeProgram);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
+        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
+        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                0f, 0f, 1f, 1f);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindQuad(compositeProgram);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        sourceBackend.swapBuffers(current.eglSurface);
     }
 
     private void presentCropped(int sceneTexture, float[] crop, OutputState current) {

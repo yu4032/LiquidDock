@@ -107,21 +107,23 @@ public class GboardFloatingGlassContractTest {
         assertFalse(authority.contains("0x7f0b"));
     }
 
-    @Test public void sinkUsesStructuralWidthAndVisualContentHeight() throws Exception {
+    @Test public void sinkIsFixedFullscreenWhileSceneUsesKeyboardGeometry() throws Exception {
         String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
         String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
-        assertTrue(coordinator.contains("structure.contentColumn"));
-        assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
-        assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
-        assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        assertTrue(coordinator.contains("ViewGroup host = (ViewGroup) state.root"));
+        assertTrue(coordinator.contains("directChildUnder(state.keyboardArea, host)"));
+        assertTrue(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertFalse(coordinator.contains("syncSinkBounds"));
         assertTrue(coordinator.contains(
                 "state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
-        assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
-        assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
         assertTrue(geometry.contains("structure.stockBackground"));
         assertTrue(geometry.contains("structure.keyboardViewHolders"));
         assertTrue(geometry.contains("structure.bottomFrame"));
         assertTrue(geometry.contains("addVerticalAuthority"));
+        assertTrue(session.contains("OutputMode.FULLSCREEN_REGION"));
+        assertTrue(session.contains("presentRegion("));
+        assertTrue(session.contains("GLES20.glScissor("));
         assertTrue(coordinator.contains("resolveCornerRadiusPx"));
         assertTrue(coordinator.contains("Outline"));
     }
@@ -147,6 +149,10 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("updatesEnabled"));
         assertTrue(authority.contains("Boolean.valueOf(claim.updatesEnabled)"));
         assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.setUpdatesEnabled"));
+        assertTrue(bridge.contains("domain == PassBlurDomain.GBOARD_FLOATING"));
+        assertTrue(bridge.contains("setForceRefresh = transactionClass.getMethod"));
+        String backend = read(MAIN.resolve("RootPassBlurBackend.java"));
+        assertTrue(backend.contains("Miuix307PassBlurBridge.renewForceRefresh(binding);"));
         assertFalse(session.contains("ScreenCapture"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap.createBitmap"));
@@ -164,6 +170,15 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("scheduleRender()"));
         assertTrue(session.contains("drainScheduledRender"));
         assertFalse(session.contains("postToRenderThread(this::renderCurrent)"));
+    }
+
+    @Test public void hierarchyMutationIsDeferredOutsideKeyboardLayout() throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        assertTrue(coordinator.contains("scheduleAttach(state)"));
+        assertTrue(coordinator.contains("state.popup.post(() ->"));
+        assertTrue(coordinator.contains("sinkHost.post(() ->"));
+        assertTrue(coordinator.contains(
+                "state.popup.post(() -> GboardStockVisualAuthority.release(state.structure))"));
     }
 
     @Test public void stockHidesOnlyAfterTextureViewConsumesFirstSwap() throws Exception {
