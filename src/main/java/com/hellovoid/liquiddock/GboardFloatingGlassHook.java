@@ -70,7 +70,8 @@ final class GboardFloatingGlassHook {
         GboardFloatingGlassCoordinator.onShown(
                 structure.keyboardArea,
                 structure,
-                liveConfig.glass);
+                liveConfig.glass,
+                GboardGlassPreferences.realtimeBackgroundSampling(liveReader));
     }
 
     private static String failureSummary(Throwable error) {
