@@ -261,8 +261,10 @@ final class GboardStockVisualAuthority {
             View child = parent.getChildAt(i);
             if (child == null) continue;
             if (GboardSoftKeyGlassScene.isSoftKeyView(child)) {
-                if (GboardSoftKeyGlassScene.isPrepared(child)) {
-                    claimBackground(claim, child, dynamicHolder);
+                View backgroundTarget =
+                        GboardSoftKeyGlassScene.preparedBackgroundTarget(child);
+                if (backgroundTarget != null) {
+                    claimSoftKeyBackground(claim, backgroundTarget, dynamicHolder);
                 }
                 continue;
             }
@@ -282,11 +284,23 @@ final class GboardStockVisualAuthority {
                 && content.getHeight() >= Math.max(1, holderHeight / 2);
     }
 
+    private static void claimSoftKeyBackground(
+            Claim claim, View target, ViewGroup dynamicHolder) {
+        claimBackground(claim, target, dynamicHolder, true);
+    }
+
     private static void claimBackground(
             Claim claim, View target, ViewGroup dynamicHolder) {
+        claimBackground(claim, target, dynamicHolder, false);
+    }
+
+    private static void claimBackground(
+            Claim claim,
+            View target,
+            ViewGroup dynamicHolder,
+            boolean softKeyVisual) {
         if (claim == null || target == null) return;
         boolean shouldApply;
-        final boolean softKey = GboardSoftKeyGlassScene.isSoftKeyView(target);
         final Snapshot snapshot;
         synchronized (LOCK) {
             Claim existing = OWNER_BY_VIEW.get(target);
@@ -297,14 +311,15 @@ final class GboardStockVisualAuthority {
             shouldApply = !snapshot.background.isClaimed();
             if (shouldApply) {
                 Drawable current = target.getBackground();
-                if (softKey) {
+                if (softKeyVisual) {
+                    snapshot.softKeyVisual = true;
                     GboardSoftKeyGlassScene.rememberBackground(target, current);
                     snapshot.captureSuppressedDrawable(current);
                 }
                 snapshot.background.claim(current);
             }
         }
-        if (softKey) {
+        if (softKeyVisual) {
             snapshot.ensureSuppressedDrawableHidden();
         } else if (shouldApply) {
             runModuleMutation(() -> {
@@ -456,7 +471,8 @@ final class GboardStockVisualAuthority {
             if (snapshot == null) return false;
             switch (property) {
                 case BACKGROUND:
-                    if (rawValue == null || rawValue instanceof Drawable) {
+                    if (snapshot.softKeyVisual
+                            && (rawValue == null || rawValue instanceof Drawable)) {
                         GboardSoftKeyGlassScene.rememberBackground(
                                 target, (Drawable) rawValue);
                     }
@@ -487,6 +503,7 @@ final class GboardStockVisualAuthority {
         final GboardVendorIntentState<Float> elevation = new GboardVendorIntentState<>();
         Drawable suppressedDrawable;
         int suppressedDrawableAlpha = 255;
+        boolean softKeyVisual;
 
         void captureSuppressedDrawable(Drawable drawable) {
             if (suppressedDrawable != null || drawable == null) return;
