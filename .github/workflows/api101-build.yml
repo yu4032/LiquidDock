@@ -6,6 +6,7 @@ on:
       - main
       - api101-migration
       - refactor/modular-architecture
+      - feat/gboard-inline-freeze-only
   pull_request:
     branches: [ main ]
   workflow_dispatch:
