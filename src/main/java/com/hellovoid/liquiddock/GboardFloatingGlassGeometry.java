@@ -329,16 +329,26 @@ final class GboardFloatingGlassGeometry {
     }
 
     PrismalGeometry toPrismalGeometry() {
+        return toPrismalGeometry(0f, 0f);
+    }
+
+    PrismalGeometry toPrismalGeometry(float dx, float dy) {
         return new PrismalGeometry(
                 rootWidth, rootHeight,
-                centerX, centerY,
+                centerX + dx, centerY + dy,
                 width, height,
                 cornerRadius);
     }
 
     float[] toCropUvRect() {
-        float cropUvLeft = cropLeft / rootWidth;
-        float cropBottom = (rootHeight - (cropTop + cropHeight)) / rootHeight;
+        return toCropUvRect(0f, 0f);
+    }
+
+    float[] toCropUvRect(float dx, float dy) {
+        float projectedCropLeft = cropLeft + dx;
+        float projectedCropTop = cropTop + dy;
+        float cropUvLeft = projectedCropLeft / rootWidth;
+        float cropBottom = (rootHeight - (projectedCropTop + cropHeight)) / rootHeight;
         return new float[]{
                 clamp(cropUvLeft, 0f, 1f),
                 clamp(cropBottom, 0f, 1f),
