@@ -2,6 +2,8 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.SurfaceTexture;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -28,11 +30,21 @@ final class MiuiSearchboxGlassView extends TextureView
     void dispose() {
         if (disposed) return;
         disposed = true;
+        setVisibility(View.INVISIBLE);
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachOutput(current);
         if (getParent() instanceof ViewGroup) {
-            ((ViewGroup) getParent()).removeView(this);
+            ViewGroup host = (ViewGroup) getParent();
+            try {
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    try {
+                        if (getParent() == host) host.removeView(this);
+                    } catch (Throwable ignored) {}
+                });
+            } catch (Throwable ignored) {
+                // Never fall back to synchronous removal while detach dispatch may be active.
+            }
         }
     }
 
