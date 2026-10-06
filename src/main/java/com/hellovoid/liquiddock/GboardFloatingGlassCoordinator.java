@@ -245,6 +245,7 @@ final class GboardFloatingGlassCoordinator {
         syncSinkBounds(state, next);
 
         GboardSoftKeyGlassScene.Node[] softKeyNodes;
+        boolean rebuiltKeyScene = false;
         GboardFloatingGlassGeometry previous = state.lastGeometry;
         boolean translationOnly = previous != null
                 && sameShellSize(previous, next)
@@ -263,11 +264,12 @@ final class GboardFloatingGlassCoordinator {
                     true,
                     state.softKeyCornerRadiusDp);
             state.keyLayoutDirty = false;
+            rebuiltKeyScene = true;
         }
         state.lastGeometry = next;
         state.softKeyNodes = softKeyNodes;
         state.session.updateGeometry(next, softKeyNodes);
-        if (state.stockHidden && state.softKeyGlassEnabled) {
+        if (rebuiltKeyScene && state.stockHidden) {
             GboardStockVisualAuthority.refreshPreparedSoftKeys(state.structure);
         }
         if (!state.captureRequested) {
