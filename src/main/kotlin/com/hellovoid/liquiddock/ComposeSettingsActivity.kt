@@ -628,8 +628,14 @@ private fun HomeOverviewCard(
     masterEnabled: Boolean,
     onMasterChanged: (Boolean) -> Unit,
 ) {
+    val gridEnabled = prefs.getBoolean(ConfigSchema.Grid.ENABLED.name(), ConfigSchema.Grid.ENABLED.uiDefault())
     val gridColumns = prefs.getInt(ConfigSchema.Grid.COLUMNS.name(), ConfigSchema.Grid.COLUMNS.uiDefault())
     val gridRows = prefs.getInt(ConfigSchema.Grid.ROWS.name(), ConfigSchema.Grid.ROWS.uiDefault())
+    val gridLabel = if (gridEnabled) {
+        "$gridColumns × $gridRows"
+    } else {
+        stringResource(R.string.home_profile_system_grid)
+    }
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
     val glassEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
 
@@ -660,8 +666,7 @@ private fun HomeOverviewCard(
             Text(
                 text = stringResource(
                     R.string.home_profile_summary,
-                    gridColumns,
-                    gridRows,
+                    gridLabel,
                     stringResource(if (dockEnabled) R.string.state_on else R.string.state_off),
                     stringResource(if (glassEnabled) R.string.state_on else R.string.state_off),
                 ),
@@ -694,6 +699,7 @@ private fun HomeFeatureGrid(
                     rowFeatures.forEach { feature ->
                         HomeFeatureCard(
                             feature = feature,
+                            compact = columns == 1,
                             onClick = { open(feature.page) },
                             modifier = Modifier.weight(1f),
                         )
@@ -712,11 +718,12 @@ private fun HomeFeatureGrid(
 @Composable
 private fun HomeFeatureCard(
     feature: HomeFeature,
+    compact: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = modifier.heightIn(min = 126.dp),
+        modifier = modifier.heightIn(min = if (compact) 92.dp else 126.dp),
         onClick = onClick,
     ) {
         Column(
@@ -740,7 +747,7 @@ private fun HomeFeatureCard(
                 text = stringResource(feature.summaryRes),
                 fontSize = 13.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                maxLines = 3,
+                maxLines = if (compact) 2 else 3,
                 overflow = TextOverflow.Ellipsis,
             )
         }

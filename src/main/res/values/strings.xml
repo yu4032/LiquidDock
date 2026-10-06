@@ -51,7 +51,8 @@
     <string name="category_more">More</string>
     <string name="state_on">On</string>
     <string name="state_off">Off</string>
-    <string name="home_profile_summary">%1$d × %2$d grid · Dock %3$s · Glass %4$s</string>
+    <string name="home_profile_system_grid">System layout</string>
+    <string name="home_profile_summary">%1$s · Dock %2$s · Glass %3$s</string>
     <string name="enable_liquiddock">Enable LiquidDock</string>
     <string name="home_status_enabled">LiquidDock is active</string>
     <string name="home_status_disabled">LiquidDock is paused</string>

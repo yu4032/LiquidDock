@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
@@ -180,12 +179,11 @@ private fun WidgetComponentTypePage(
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(owner, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
-                    "组件类型 · ${components.size} 个可发现操作",
+                    text = "组件类型 · ${components.size} 个可发现操作",
                     fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 5.dp),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
@@ -292,10 +290,9 @@ private fun WidgetExactNodePage(
     val rankedComponents = WidgetComponentRanking.sorted(components)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(componentTypeTitle(type), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
-                    when {
+                    text = when {
                         isMaml -> "MAML 元素按名称或精确渲染路径隐藏；路径或类型变化时不会回退误命中。"
                         type == WidgetComponentStore.TYPE_BACKGROUND ->
                             "仅移除 View.background，不隐藏 View 与子内容。"
@@ -305,7 +302,7 @@ private fun WidgetExactNodePage(
                             "高级整节点隐藏：只命中当前精确路径；容器节点会同时隐藏其子内容。"
                     },
                     fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 5.dp),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }

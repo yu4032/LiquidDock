@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
 import top.yukonga.miuix.kmp.basic.Scaffold

@@ -51,7 +51,8 @@
     <string name="category_more">更多</string>
     <string name="state_on">开</string>
     <string name="state_off">关</string>
-    <string name="home_profile_summary">%1$d × %2$d 网格 · Dock %3$s · 玻璃 %4$s</string>
+    <string name="home_profile_system_grid">系统布局</string>
+    <string name="home_profile_summary">%1$s · Dock %2$s · 玻璃 %3$s</string>
     <string name="enable_liquiddock">启用 LiquidDock</string>
     <string name="home_status_enabled">LiquidDock 已启用</string>
     <string name="home_status_disabled">LiquidDock 已暂停</string>

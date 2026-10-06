@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.UUID
@@ -24,6 +23,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun WidgetComponentsPage(
@@ -63,12 +63,11 @@ internal fun WidgetComponentsPage(
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text("小组件组件隐藏", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
-                    "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
+                    text = "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
                     fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 5.dp),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
