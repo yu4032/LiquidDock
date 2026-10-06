@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,9 +39,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
@@ -50,6 +53,8 @@ import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -450,8 +455,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 title = stringResource(page.titleRes),
                 largeTitle = stringResource(page.titleRes),
                 navigationIcon = {
-                    if (page != Page.Home) TextButton(text = stringResource(R.string.action_back), onClick = { page = parentPage(page) })
+                    if (page != Page.Home) {
+                        SettingsBackButton { page = parentPage(page) }
+                    }
                 },
+                titlePadding = 20.dp,
                 actions = {
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
                     if (page == Page.SecurityCenterSidebar) {
@@ -708,7 +716,7 @@ private fun HomeFeatureCard(
     modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 126.dp),
         onClick = onClick,
     ) {
         Column(
@@ -732,6 +740,8 @@ private fun HomeFeatureCard(
                 text = stringResource(feature.summaryRes),
                 fontSize = 13.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -1291,6 +1301,16 @@ private fun SettingsList(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader(title, summary) }
         item { SettingsCard(content) }
+    }
+}
+
+@Composable
+internal fun SettingsBackButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painter = painterResource(R.drawable.ic_liquiddock_back),
+            contentDescription = stringResource(R.string.action_back),
+        )
     }
 }
 
