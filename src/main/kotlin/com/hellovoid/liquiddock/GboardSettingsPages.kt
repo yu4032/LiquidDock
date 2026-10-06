@@ -396,7 +396,7 @@ internal fun GboardSettingsPage(
                     summary = if (realtimeBackgroundSampling)
                         "持续采样悬浮键盘后方背景"
                     else
-                        "冻结模式：首次显示采样一帧；每次开始移动时刷新一帧，移动过程中不再采样",
+                        "冻结模式：弹出动画期间保持实时，动画稳定后冻结；每次开始移动时刷新一帧，移动过程中不再采样",
                     enabled = controlsEnabled,
                 )
             }
