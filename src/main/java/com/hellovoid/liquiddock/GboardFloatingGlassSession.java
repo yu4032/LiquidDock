@@ -54,6 +54,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
     private final boolean realtimeBackgroundSampling;
+    private final Object renderQueueLock = new Object();
 
     private volatile GboardFloatingGlassGeometry geometry;
     private volatile GboardSoftKeyGlassScene.Node[] softKeyNodes =
@@ -62,10 +63,14 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
     private volatile boolean frozenCapturePending;
+    private volatile float motionDx;
+    private volatile float motionDy;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
     private boolean failureSignaled;
+    private boolean renderQueued;
+    private boolean renderDirty;
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
@@ -148,7 +153,15 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         geometry = next;
         softKeyNodes = stableNodes;
         sourceBackend.reconcileRoot();
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        scheduleRender();
+    }
+
+    void updateMotion(float dx, float dy) {
+        if (shuttingDown || !Float.isFinite(dx) || !Float.isFinite(dy)) return;
+        if (Math.abs(motionDx - dx) < 0.25f && Math.abs(motionDy - dy) < 0.25f) return;
+        motionDx = dx;
+        motionDy = dy;
+        scheduleRender();
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -259,9 +272,45 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (!queued) sourceBackend.shutdown();
     }
 
+    private void scheduleRender() {
+        if (shuttingDown) return;
+        synchronized (renderQueueLock) {
+            renderDirty = true;
+            if (renderQueued) return;
+            renderQueued = true;
+        }
+        if (!sourceBackend.postToRenderThread(this::drainScheduledRender)) {
+            synchronized (renderQueueLock) {
+                renderQueued = false;
+                renderDirty = false;
+            }
+        }
+    }
+
+    private void drainScheduledRender() {
+        synchronized (renderQueueLock) {
+            renderDirty = false;
+        }
+        renderCurrent();
+
+        boolean repost;
+        synchronized (renderQueueLock) {
+            repost = renderDirty && !shuttingDown;
+            if (!repost) renderQueued = false;
+        }
+        if (repost && !sourceBackend.postToRenderThread(this::drainScheduledRender)) {
+            synchronized (renderQueueLock) {
+                renderQueued = false;
+                renderDirty = false;
+            }
+        }
+    }
+
     private void renderCurrent() {
         GboardFloatingGlassGeometry currentGeometry = geometry;
         GboardSoftKeyGlassScene.Node[] currentSoftKeyNodes = softKeyNodes;
+        float currentMotionDx = motionDx;
+        float currentMotionDy = motionDy;
         OutputState currentOutput = output;
         View root = rootRef.get();
         if (shuttingDown || !backdropPrepared || currentGeometry == null
@@ -275,7 +324,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.makePbufferCurrent();
             prismalRenderer.beginGlassFrame();
             prismalRenderer.drawGlass(
-                    currentGeometry.toPrismalGeometry(),
+                    currentGeometry.toPrismalGeometry(currentMotionDx, currentMotionDy),
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
@@ -286,14 +335,14 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     continue;
                 }
                 prismalRenderer.drawGlass(
-                        node.geometry.toPrismalGeometry(),
+                        node.geometry.toPrismalGeometry(currentMotionDx, currentMotionDy),
                         prismalParams,
                         highlightProfile,
                         node.interaction);
             }
             presentCropped(
                     prismalRenderer.outputTexture(),
-                    currentGeometry.toCropUvRect(),
+                    currentGeometry.toCropUvRect(currentMotionDx, currentMotionDy),
                     currentOutput);
             swapSucceeded = true;
         } catch (Throwable error) {
