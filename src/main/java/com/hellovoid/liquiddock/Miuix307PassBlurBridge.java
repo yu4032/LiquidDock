@@ -124,7 +124,9 @@ final class Miuix307PassBlurBridge {
                     setForceRefresh = transactionClass.getMethod(
                             "setForceRefresh", SurfaceControl.class, Integer.TYPE);
                 } catch (Throwable error) {
-                    MainHook.log(FRAME_SYNC_TAG + " force refresh lease unavailable: " + error);
+                    MainHook.log((domain == PassBlurDomain.GBOARD_FLOATING
+                            ? GBOARD_FRAME_SYNC_TAG : FRAME_SYNC_TAG)
+                            + " force refresh lease unavailable: " + error);
                 }
             }
 
@@ -272,8 +274,9 @@ final class Miuix307PassBlurBridge {
     }
 
     /**
-     * Dock-only force-refresh lease. Renewal is driven exclusively by producer frame arrivals;
-     * once arrivals stop, no more transactions are sent and the vendor pacing resumes when the
+     * Producer-driven force-refresh lease for high-refresh domains. Dock honors its GUI switch;
+     * floating Gboard uses the lease only while its PassBlur producer updates remain enabled.
+     * Once arrivals stop, no more transactions are sent and vendor pacing resumes when the
      * existing lease expires.
      */
     static void renewForceRefresh(Binding binding) {
