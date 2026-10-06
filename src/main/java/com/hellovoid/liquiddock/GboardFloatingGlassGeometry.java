@@ -153,34 +153,21 @@ final class GboardFloatingGlassGeometry {
                 || !finite(cornerRadiusPx) || cornerRadiusPx <= 0f) return null;
         try {
             Bounds rootShell = mapBounds(structure.stockBackground, context.globalToRoot);
-            Bounds hostShell = mapBounds(structure.stockBackground, context.globalToHost);
-            if (rootShell == null || hostShell == null) return null;
+            if (rootShell == null) return null;
 
             Bounds rootVertical = new Bounds();
-            Bounds hostVertical = new Bounds();
             addVerticalAuthority(rootVertical, structure.topEdge, context.globalToRoot);
-            addVerticalAuthority(hostVertical, structure.topEdge, context.globalToHost);
             for (View holder : structure.keyboardViewHolders) {
                 addVerticalAuthority(rootVertical, holder, context.globalToRoot);
-                addVerticalAuthority(hostVertical, holder, context.globalToHost);
             }
             addVerticalAuthority(rootVertical, structure.bottomFrame, context.globalToRoot);
-            addVerticalAuthority(hostVertical, structure.bottomFrame, context.globalToHost);
-            if (!rootVertical.valid || !hostVertical.valid) return null;
+            if (!rootVertical.valid) return null;
 
             float left = clamp(rootShell.left, 0f, context.rootWidth);
             float right = clamp(rootShell.right, 0f, context.rootWidth);
             float top = clamp(rootVertical.top, 0f, context.rootHeight);
             float bottom = clamp(rootVertical.bottom, 0f, context.rootHeight);
             if (right <= left || bottom <= top) return null;
-
-            float sinkLeft = hostShell.left;
-            float sinkRight = hostShell.right;
-            float sinkTop = hostVertical.top;
-            float sinkBottom = hostVertical.bottom;
-            if (!finite(sinkLeft) || !finite(sinkRight)
-                    || !finite(sinkTop) || !finite(sinkBottom)
-                    || sinkRight <= sinkLeft || sinkBottom <= sinkTop) return null;
 
             float horizontalScale = (rootShell.right - rootShell.left)
                     / Math.max(1f, structure.stockBackground.getWidth());
@@ -190,7 +177,7 @@ final class GboardFloatingGlassGeometry {
                     context.rootWidth, context.rootHeight,
                     left, top, right - left, bottom - top,
                     cornerRadiusPx * horizontalScale,
-                    sinkLeft, sinkTop, sinkRight - sinkLeft, sinkBottom - sinkTop);
+                    left, top, right - left, bottom - top);
         } catch (Throwable ignored) {
             return null;
         }
