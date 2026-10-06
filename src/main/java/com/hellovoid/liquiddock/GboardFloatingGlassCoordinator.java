@@ -182,18 +182,37 @@ final class GboardFloatingGlassCoordinator {
     }
 
     private static boolean insertSinkBelowKeyboardContent(State state, GboardFloatingGlassView sink) {
-        if (state == null || sink == null) return false;
-        ViewGroup host = state.keyboardArea;
-        int contentIndex = host.indexOfChild(state.structure.contentColumn);
-        if (contentIndex < 0) return false;
+        if (state == null || sink == null || !(state.root instanceof ViewGroup)) return false;
+        ViewGroup host = (ViewGroup) state.root;
+        View anchor = directChildUnder(state.keyboardArea, host);
+        if (anchor == null && state.keyboardArea != host) return false;
+        int index = anchor != null ? host.indexOfChild(anchor) : 0;
+        if (index < 0) return false;
         try {
-            host.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
+            host.addView(
+                    sink,
+                    index,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
             state.sinkHost = host;
             return true;
         } catch (Throwable error) {
-            log("glass insertion failed", error);
+            log("fullscreen glass insertion failed", error);
             return false;
         }
+    }
+
+    private static View directChildUnder(View descendant, ViewGroup ancestor) {
+        if (descendant == null || ancestor == null) return null;
+        if (descendant == ancestor) return descendant;
+        View current = descendant;
+        android.view.ViewParent parent = current.getParent();
+        while (parent instanceof View) {
+            if (parent == ancestor) return current;
+            current = (View) parent;
+            parent = current.getParent();
+        }
+        return null;
     }
 
     private static float resolveCornerRadiusPx(
@@ -287,7 +306,6 @@ final class GboardFloatingGlassCoordinator {
             state.keyLayoutDirty = false;
             state.sceneGeometry = next;
             state.softKeyNodes = softKeyNodes;
-            syncSinkBounds(state, next);
             state.session.updateMotion(0f, 0f);
             state.session.updateGeometry(next, softKeyNodes);
         } else {
@@ -322,24 +340,6 @@ final class GboardFloatingGlassCoordinator {
                 && Math.abs(first.width - second.width) < 0.25f
                 && Math.abs(first.height - second.height) < 0.25f
                 && Math.abs(first.cornerRadius - second.cornerRadius) < 0.25f;
-    }
-
-    private static void syncSinkBounds(
-            State state, GboardFloatingGlassGeometry geometry) {
-        if (state == null || geometry == null || state.sinkHost == null
-                || state.sink == null) return;
-        int width = geometry.sinkWidthPx();
-        int height = geometry.sinkHeightPx();
-        if (width <= 0 || height <= 0) return;
-        ViewGroup.LayoutParams params = state.sink.getLayoutParams();
-        if (params == null) return;
-        if (params.width != width || params.height != height) {
-            params.width = width;
-            params.height = height;
-            state.sink.setLayoutParams(params);
-        }
-        if (state.sink.getX() != geometry.sinkLeft) state.sink.setX(geometry.sinkLeft);
-        if (state.sink.getY() != geometry.sinkTop) state.sink.setY(geometry.sinkTop);
     }
 
     private static synchronized void onPresented(State state) {
