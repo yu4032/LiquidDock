@@ -169,7 +169,9 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains("outline.getRect(rect)"));
         assertTrue(scene.contains("fallbackBounds(key)"));
         assertTrue(scene.contains("ShapeTemplate"));
-        assertTrue(scene.contains("isTransparentPlaceholder"));
+        assertTrue(scene.contains("SOFT_KEYBOARD_VIEW_CLASS"));
+        assertTrue(scene.contains("collectKeyboardSoftKeys"));
+        assertTrue(scene.contains("drawable.getPadding(padding)"));
         assertTrue(scene.contains("PrismalInteractionState"));
         assertTrue(scene.contains("isPressed()"));
         assertTrue(scene.contains("isCustomRadiusExempt"));
@@ -179,9 +181,12 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("GboardStockVisualAuthority.refreshPreparedSoftKeys"));
         assertTrue(session.contains("for (GboardSoftKeyGlassScene.Node node"));
         assertTrue(session.contains("prismalRenderer.drawGlass("));
-        assertTrue(authority.contains("claimPreparedSoftKeyDescendants"));
+        assertTrue(authority.contains("claimPreparedKeyboardSoftKeys"));
+        assertTrue(authority.contains("claimPreparedSoftKeysInsideKeyboard"));
         assertTrue(authority.contains("GboardSoftKeyGlassScene.isPrepared"));
-        assertTrue(authority.contains("new ColorDrawable(Color.TRANSPARENT)"));
+        assertTrue(authority.contains("captureSuppressedDrawable"));
+        assertTrue(authority.contains("ensureSuppressedDrawableHidden"));
+        assertFalse(authority.contains("new ColorDrawable(Color.TRANSPARENT)"));
         assertFalse(scene.contains("findViewById"));
         assertFalse(scene.contains("0x7f0b"));
         assertFalse(scene.contains("TextureView"));
