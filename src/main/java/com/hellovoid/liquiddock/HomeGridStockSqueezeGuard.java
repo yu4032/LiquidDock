@@ -201,6 +201,12 @@ final class HomeGridStockSqueezeGuard {
         return at >= 0 ? name.substring(at + 1) : name;
     }
 
+    private static Object logicalKey(Object item) {
+        if (item == null) return null;
+        HookUtil.InvocationResult<Object> data = HookUtil.tryInvoke(item, "getMData");
+        return data.succeeded() && data.value() != null ? data.value() : item;
+    }
+
     private static IdentityHashMap<Object, List<String>> collectCells(Object[] matrix) {
         IdentityHashMap<Object, List<String>> cells = new IdentityHashMap<>();
         if (matrix == null) return cells;
@@ -210,10 +216,12 @@ final class HomeGridStockSqueezeGuard {
             for (int y = 0; y < col.length; y++) {
                 Object item = col[y];
                 if (ItemState.tryRead(item) == null) continue;
-                List<String> positions = cells.get(item);
+                Object key = logicalKey(item);
+                if (key == null) continue;
+                List<String> positions = cells.get(key);
                 if (positions == null) {
                     positions = new ArrayList<>();
-                    cells.put(item, positions);
+                    cells.put(key, positions);
                 }
                 positions.add(x + "," + y);
             }
@@ -251,30 +259,35 @@ final class HomeGridStockSqueezeGuard {
         final IdentityHashMap<Object, ItemState> items;
         final IdentityHashMap<Object, List<String>> srcCells;
         final IdentityHashMap<Object, List<String>> dstCells;
+        final IdentityHashMap<Object, ItemState> logicalStates;
 
         Snapshot(
                 Object[][] src,
                 Object[][] dst,
                 IdentityHashMap<Object, ItemState> items,
                 IdentityHashMap<Object, List<String>> srcCells,
-                IdentityHashMap<Object, List<String>> dstCells) {
+                IdentityHashMap<Object, List<String>> dstCells,
+                IdentityHashMap<Object, ItemState> logicalStates) {
             this.src = src;
             this.dst = dst;
             this.items = items;
             this.srcCells = srcCells;
             this.dstCells = dstCells;
+            this.logicalStates = logicalStates;
         }
 
         static Snapshot capture(Object[] src, Object[] dst) {
             IdentityHashMap<Object, ItemState> items = new IdentityHashMap<>();
             Object[][] srcCopy = copy(src, items);
             Object[][] dstCopy = copy(dst, items);
+            IdentityHashMap<Object, ItemState> logicalStates = collectLogicalStates(src, dst);
             return new Snapshot(
                     srcCopy,
                     dstCopy,
                     items,
                     collectCells(src),
-                    collectCells(dst));
+                    collectCells(dst),
+                    logicalStates);
         }
 
         String describeBeforeSrc() {
@@ -289,62 +302,118 @@ final class HomeGridStockSqueezeGuard {
             IdentityHashMap<Object, List<String>> srcAfter = collectCells(srcNow);
             IdentityHashMap<Object, List<String>> dstAfter = collectCells(dstNow);
 
-            for (Map.Entry<Object, ItemState> entry : items.entrySet()) {
-                Object item = entry.getKey();
+            String invalid = validateMatrix("src", srcNow);
+            if (invalid != null) return invalid;
+            invalid = validateMatrix("dst", dstNow);
+            if (invalid != null) return invalid;
+
+            for (Map.Entry<Object, ItemState> entry : logicalStates.entrySet()) {
+                Object key = entry.getKey();
                 ItemState before = entry.getValue();
                 if (before.spanX <= 1 && before.spanY <= 1) continue;
 
-                ItemState after = ItemState.tryRead(item);
-                if (after != null && movedMultiCell(
-                        before.spanX, before.spanY,
-                        before.cellX, before.cellY,
-                        after.cellX, after.cellY)) {
-                    return describeMove("field", item, before, after);
-                }
-
-                if (!sameCells(srcCells.get(item), srcAfter.get(item))
-                        || !sameCells(dstCells.get(item), dstAfter.get(item))) {
-                    return "matrix item="
-                            + shortName(item.getClass().getName())
-                            + '@' + Integer.toHexString(System.identityHashCode(item))
+                if (!sameCells(srcCells.get(key), srcAfter.get(key))
+                        || !sameCells(dstCells.get(key), dstAfter.get(key))) {
+                    return "logical-move data="
+                            + shortName(key.getClass().getName())
+                            + '@' + Integer.toHexString(System.identityHashCode(key))
                             + " span=" + before.spanX + 'x' + before.spanY
-                            + " src " + srcCells.get(item) + "->" + srcAfter.get(item)
-                            + " dst " + dstCells.get(item) + "->" + dstAfter.get(item);
+                            + " src " + srcCells.get(key) + "->" + srcAfter.get(key)
+                            + " dst " + dstCells.get(key) + "->" + dstAfter.get(key);
                 }
             }
 
-            // Also catch a planner that replaces a multi-cell SqueezeInfo with a new instance.
-            String replacement = findNewMultiCell(dstCells, dstAfter);
+            String replacement = findNewMultiCell(dstCells, dstAfter, dstNow);
             if (replacement != null) return replacement;
-            return findNewMultiCell(srcCells, srcAfter);
+            return findNewMultiCell(srcCells, srcAfter, srcNow);
         }
 
         private static String findNewMultiCell(
                 IdentityHashMap<Object, List<String>> before,
-                IdentityHashMap<Object, List<String>> after) {
+                IdentityHashMap<Object, List<String>> after,
+                Object[] matrix) {
+            IdentityHashMap<Object, ItemState> states = collectLogicalStates(matrix, null);
             for (Map.Entry<Object, List<String>> entry : after.entrySet()) {
-                Object item = entry.getKey();
-                if (before.containsKey(item)) continue;
-                ItemState state = ItemState.tryRead(item);
+                Object key = entry.getKey();
+                if (before.containsKey(key)) continue;
+                ItemState state = states.get(key);
                 if (state == null || (state.spanX <= 1 && state.spanY <= 1)) continue;
-                return "replacement item="
-                        + shortName(item.getClass().getName())
-                        + '@' + Integer.toHexString(System.identityHashCode(item))
-                        + " cell=" + state.cellX + ',' + state.cellY
+                return "replacement data="
+                        + shortName(key.getClass().getName())
+                        + '@' + Integer.toHexString(System.identityHashCode(key))
                         + " span=" + state.spanX + 'x' + state.spanY
                         + " occ=" + entry.getValue();
             }
             return null;
         }
 
-        private static String describeMove(
-                String source, Object item, ItemState before, ItemState after) {
-            return source
-                    + " item=" + shortName(item.getClass().getName())
-                    + '@' + Integer.toHexString(System.identityHashCode(item))
-                    + " span=" + before.spanX + 'x' + before.spanY
-                    + " cell=" + before.cellX + ',' + before.cellY
-                    + "->" + after.cellX + ',' + after.cellY;
+        private static String validateMatrix(String label, Object[] matrix) {
+            if (matrix == null || matrix.length == 0) return label + " matrix=null";
+            Object[] first = column(matrix, 0);
+            if (first == null || first.length == 0) return label + " matrix=empty";
+            int cols = matrix.length;
+            int rows = first.length;
+            IdentityHashMap<Object, List<String>> cells = collectCells(matrix);
+            IdentityHashMap<Object, ItemState> states = collectLogicalStates(matrix, null);
+
+            for (Map.Entry<Object, List<String>> entry : cells.entrySet()) {
+                Object key = entry.getKey();
+                ItemState state = states.get(key);
+                if (state == null) return label + " missing-state";
+                if (state.cellX < 0 || state.cellY < 0
+                        || state.spanX <= 0 || state.spanY <= 0
+                        || state.cellX + state.spanX > cols
+                        || state.cellY + state.spanY > rows) {
+                    return label + " out-of-bounds data="
+                            + shortName(key.getClass().getName())
+                            + " cell=" + state.cellX + ',' + state.cellY
+                            + " span=" + state.spanX + 'x' + state.spanY
+                            + " grid=" + cols + 'x' + rows;
+                }
+                int expected = state.spanX * state.spanY;
+                if (entry.getValue().size() != expected) {
+                    return label + " footprint-count data="
+                            + shortName(key.getClass().getName())
+                            + " span=" + state.spanX + 'x' + state.spanY
+                            + " occ=" + entry.getValue();
+                }
+                for (int x = state.cellX; x < state.cellX + state.spanX; x++) {
+                    for (int y = state.cellY; y < state.cellY + state.spanY; y++) {
+                        if (!entry.getValue().contains(x + "," + y)) {
+                            return label + " non-rect data="
+                                    + shortName(key.getClass().getName())
+                                    + " cell=" + state.cellX + ',' + state.cellY
+                                    + " span=" + state.spanX + 'x' + state.spanY
+                                    + " occ=" + entry.getValue();
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static IdentityHashMap<Object, ItemState> collectLogicalStates(
+                Object[] firstMatrix, Object[] secondMatrix) {
+            IdentityHashMap<Object, ItemState> states = new IdentityHashMap<>();
+            collectLogicalStatesFrom(firstMatrix, states);
+            collectLogicalStatesFrom(secondMatrix, states);
+            return states;
+        }
+
+        private static void collectLogicalStatesFrom(
+                Object[] matrix,
+                IdentityHashMap<Object, ItemState> states) {
+            if (matrix == null) return;
+            for (int x = 0; x < matrix.length; x++) {
+                Object[] col = column(matrix, x);
+                if (col == null) continue;
+                for (Object item : col) {
+                    ItemState state = ItemState.tryRead(item);
+                    if (state == null) continue;
+                    Object key = logicalKey(item);
+                    if (key != null && !states.containsKey(key)) states.put(key, state);
+                }
+            }
         }
 
         private static boolean sameCells(List<String> a, List<String> b) {
