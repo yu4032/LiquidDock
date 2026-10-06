@@ -145,14 +145,12 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 nextSoftKeyNodes != null ? nextSoftKeyNodes : GboardSoftKeyGlassScene.EMPTY;
         GboardFloatingGlassGeometry old = geometry;
         GboardSoftKeyGlassScene.Node[] oldNodes = softKeyNodes;
-        if (old != null
-                && old.sameAs(next)
-                && GboardSoftKeyGlassScene.sameAs(oldNodes, stableNodes)) {
-            return;
-        }
+        boolean geometryChanged = old == null || !old.sameAs(next);
+        boolean nodesChanged = !GboardSoftKeyGlassScene.sameAs(oldNodes, stableNodes);
+        if (!geometryChanged && !nodesChanged) return;
         geometry = next;
         softKeyNodes = stableNodes;
-        sourceBackend.reconcileRoot();
+        if (geometryChanged) sourceBackend.reconcileRoot();
         scheduleRender();
     }
 
