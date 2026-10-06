@@ -5,7 +5,6 @@ import android.graphics.SurfaceTexture;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
-import android.view.ViewGroup;
 
 /** TextureView output placed below supported Baidu keyboard content. */
 final class BaiduInputMethodGlassView extends TextureView
@@ -31,9 +30,8 @@ final class BaiduInputMethodGlassView extends TextureView
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachOutput(current);
-        if (getParent() instanceof ViewGroup) {
-            ((ViewGroup) getParent()).removeView(this);
-        }
+        // Parent removal is owned by BaiduInputMethodGlassCoordinator and is deliberately
+        // deferred outside ViewGroup's detach traversal.
     }
 
     @Override
