@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
@@ -41,7 +43,9 @@ final class GboardStockVisualAuthority {
 
     private GboardStockVisualAuthority() {}
 
-    static boolean claim(GboardFloatingStructureResolver.Structure structure) {
+    static boolean claim(
+            GboardFloatingStructureResolver.Structure structure,
+            boolean softKeyGlassEnabled) {
         if (structure == null || structure.keyboardArea == null
                 || structure.stockBackground == null || structure.bottomFrame == null) {
             return false;
@@ -52,7 +56,7 @@ final class GboardStockVisualAuthority {
         synchronized (LOCK) {
             Claim existing = BY_BASE.get(structure.keyboardArea);
             if (existing != null) return true;
-            claim = new Claim(structure);
+            claim = new Claim(structure, softKeyGlassEnabled);
             if (!reserveStructureLocked(claim)) return false;
             BY_BASE.put(structure.keyboardArea, claim);
             hasActiveClaims = true;
@@ -65,6 +69,19 @@ final class GboardStockVisualAuthority {
             releaseClaim(claim, true);
             log("initial stock visual claim failed", error);
             return false;
+        }
+    }
+
+    static void refreshPreparedSoftKeys(
+            GboardFloatingStructureResolver.Structure structure) {
+        if (structure == null || structure.keyboardArea == null) return;
+        Claim claim;
+        synchronized (LOCK) {
+            claim = BY_BASE.get(structure.keyboardArea);
+        }
+        if (claim == null || !claim.softKeyGlassEnabled) return;
+        for (ViewGroup holder : structure.keyboardViewHolders) {
+            if (holder != null) claimPreparedSoftKeyDescendants(holder, holder, claim);
         }
     }
 
@@ -224,7 +241,8 @@ final class GboardStockVisualAuthority {
 
     private static void claimPreparedSoftKeyDescendants(
             ViewGroup parent, ViewGroup dynamicHolder, Claim claim) {
-        if (parent == null || dynamicHolder == null || claim == null) return;
+        if (parent == null || dynamicHolder == null || claim == null
+                || !claim.softKeyGlassEnabled) return;
         int count = parent.getChildCount();
         for (int i = 0; i < count; i++) {
             View child = parent.getChildAt(i);
@@ -255,6 +273,7 @@ final class GboardStockVisualAuthority {
             Claim claim, View target, ViewGroup dynamicHolder) {
         if (claim == null || target == null) return;
         boolean shouldApply;
+        final boolean softKey = GboardSoftKeyGlassScene.isSoftKeyView(target);
         synchronized (LOCK) {
             Claim existing = OWNER_BY_VIEW.get(target);
             if (existing != null && existing != claim) return;
@@ -262,11 +281,19 @@ final class GboardStockVisualAuthority {
             OWNER_BY_VIEW.put(target, claim);
             if (dynamicHolder != null) snapshot.dynamicHolder = dynamicHolder;
             shouldApply = !snapshot.background.isClaimed();
-            if (shouldApply) snapshot.background.claim(target.getBackground());
+            if (shouldApply) {
+                Drawable current = target.getBackground();
+                if (softKey) GboardSoftKeyGlassScene.rememberBackground(target, current);
+                snapshot.background.claim(current);
+            }
         }
         if (shouldApply) {
             runModuleMutation(() -> {
-                if (target.getBackground() != null) target.setBackground(null);
+                if (softKey) {
+                    target.setBackground(new ColorDrawable(Color.TRANSPARENT));
+                } else if (target.getBackground() != null) {
+                    target.setBackground(null);
+                }
             });
         }
     }
@@ -375,12 +402,16 @@ final class GboardStockVisualAuthority {
 
     private static final class Claim {
         final GboardFloatingStructureResolver.Structure structure;
+        final boolean softKeyGlassEnabled;
         final Map<View, Snapshot> snapshots = new WeakHashMap<>();
         final Map<ViewGroup, View.OnLayoutChangeListener> holderLayoutListeners =
                 new WeakHashMap<>();
 
-        Claim(GboardFloatingStructureResolver.Structure structure) {
+        Claim(
+                GboardFloatingStructureResolver.Structure structure,
+                boolean softKeyGlassEnabled) {
             this.structure = structure;
+            this.softKeyGlassEnabled = softKeyGlassEnabled;
         }
 
         List<View> staticTargets() {
