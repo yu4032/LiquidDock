@@ -32,7 +32,8 @@ public class GboardFloatingResizeAndHandlePolicyTest {
         assertTrue(geometry.contains("sinkHost.transformMatrixToGlobal"));
         assertTrue(geometry.contains("sinkWidthPx()"));
         assertTrue(geometry.contains("sinkHeightPx()"));
-        assertTrue(coordinator.contains("state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
+        assertTrue(coordinator.contains("GboardFloatingGlassGeometry.beginCapture"));
+        assertTrue(coordinator.contains("captureContext, state.structure, state.cornerRadiusPx"));
         assertTrue(coordinator.contains("syncSinkBounds(state, next)"));
         assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
         assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
