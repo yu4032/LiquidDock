@@ -164,7 +164,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains(
                 "com.google.android.libraries.inputmethod.widgets.SoftKeyView"));
         assertTrue(scene.contains("getSuperclass()"));
-        assertTrue(scene.contains("GboardFloatingGlassGeometry.captureTarget"));
+        assertTrue(scene.contains("GboardFloatingGlassGeometry.captureTargetRect"));
+        assertTrue(scene.contains("outline.getRect(rect)"));
         assertTrue(scene.contains("PrismalInteractionState"));
         assertTrue(scene.contains("isPressed()"));
         assertTrue(coordinator.contains("GboardSoftKeyGlassScene.capture"));
