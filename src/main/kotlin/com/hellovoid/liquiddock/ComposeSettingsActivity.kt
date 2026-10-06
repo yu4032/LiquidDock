@@ -8,6 +8,7 @@ import android.net.Uri
 import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,7 +49,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -61,6 +63,7 @@ class ComposeSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
             MiuixTheme(controller = controller) { LiquidDockSettings(this) }
@@ -440,8 +443,9 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     BackHandler(enabled = page != Page.Home) { page = parentPage(page) }
     Scaffold(
         topBar = {
-            SmallTopAppBar(
+            TopAppBar(
                 title = stringResource(page.titleRes),
+                largeTitle = stringResource(page.titleRes),
                 navigationIcon = {
                     if (page != Page.Home) TextButton(text = stringResource(R.string.action_back), onClick = { page = parentPage(page) })
                 },
@@ -544,7 +548,8 @@ private fun HomePage(
     onMasterChanged: (Boolean) -> Unit, open: (Page) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader(stringResource(R.string.app_name)) }
+        item { HomeOverviewCard(masterEnabled) }
+
         item { SmallTitle(stringResource(R.string.category_master)) }
         item {
             SettingsCard {
@@ -556,7 +561,8 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
-        item { SmallTitle(stringResource(R.string.category_customization)) }
+
+        item { SmallTitle(stringResource(R.string.category_layout)) }
         item {
             SettingsCard {
                 ArrowPreference(stringResource(R.string.page_grid), summary = stringResource(R.string.home_grid_summary), onClick = { open(Page.Grid) })
@@ -564,21 +570,73 @@ private fun HomePage(
                 ArrowPreference(stringResource(R.string.page_divider), summary = stringResource(R.string.home_divider_summary), onClick = { open(Page.Divider) })
                 ArrowPreference(stringResource(R.string.page_workstation), summary = stringResource(R.string.home_workstation_summary), onClick = { open(Page.Workstation) })
                 ArrowPreference(stringResource(R.string.page_recents), summary = stringResource(R.string.home_recents_summary), onClick = { open(Page.Recents) })
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.category_glass_appearance)) }
+        item {
+            SettingsCard {
+                ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
+                ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
+                ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.category_system_interaction)) }
+        item {
+            SettingsCard {
                 ArrowPreference(
                     stringResource(R.string.page_security_center_sidebar),
                     summary = stringResource(R.string.home_security_center_sidebar_summary),
                     onClick = { open(Page.SecurityCenterSidebar) },
                 )
-                ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
-                ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
-                ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
                 ArrowPreference(stringResource(R.string.page_animation), summary = stringResource(R.string.home_animation_summary), onClick = { open(Page.Animation) })
             }
         }
+
         item { SmallTitle(stringResource(R.string.category_configuration)) }
         item { SettingsCard { ArrowPreference(stringResource(R.string.home_data_title), summary = stringResource(R.string.home_data_summary), onClick = { open(Page.Data) }) } }
         item { SmallTitle(stringResource(R.string.category_about)) }
         item { SettingsCard { ArrowPreference(stringResource(R.string.home_about_title), summary = stringResource(R.string.home_about_summary), onClick = { open(Page.About) }) } }
+    }
+}
+
+@Composable
+private fun HomeOverviewCard(masterEnabled: Boolean) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 20.dp),
+        ) {
+            Text(
+                text = stringResource(
+                    if (masterEnabled) R.string.home_status_enabled else R.string.home_status_disabled,
+                ),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(
+                    if (masterEnabled) {
+                        R.string.home_status_enabled_summary
+                    } else {
+                        R.string.home_status_disabled_summary
+                    },
+                ),
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 5.dp),
+            )
+            Text(
+                text = stringResource(R.string.home_status_version, BuildConfig.VERSION_NAME),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 14.dp),
+            )
+        }
     }
 }
 
@@ -1141,15 +1199,22 @@ private fun SettingsList(
 
 @Composable
 internal fun PageHeader(title: String, summary: String? = null) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-        if (!summary.isNullOrBlank()) Text(summary, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
+    if (!summary.isNullOrBlank()) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+            Text(summary, fontSize = 13.sp)
+        }
     }
 }
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { Column(content = content) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Column(content = content)
+    }
 }
 
 @Composable
