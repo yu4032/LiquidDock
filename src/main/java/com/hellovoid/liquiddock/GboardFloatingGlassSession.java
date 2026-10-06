@@ -242,7 +242,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             if (!realtimeBackgroundSampling) {
                 sourceBackend.setUpdatesEnabled(false, "gboard-frozen-frame-consumed");
             }
-            renderCurrent();
+            // Backdrop and UI geometry can change in the same vsync. Funnel both through the
+            // coalescing queue so one fresh source frame cannot force a second full output swap
+            // immediately before/after the matching pre-draw motion update.
+            scheduleRender();
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
@@ -338,8 +341,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                         highlightProfile,
                         node.interaction);
             }
-            presentFull(
+            presentRegion(
                     prismalRenderer.outputTexture(),
+                    currentGeometry,
+                    currentMotionDx,
+                    currentMotionDy,
                     currentOutput);
             swapSucceeded = true;
         } catch (Throwable error) {
@@ -357,16 +363,48 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState current) {
-        if (current == null || current.eglSurface == EGL14.EGL_NO_SURFACE
-                || current.width <= 0 || current.height <= 0) return;
+    private void presentRegion(
+            int sceneTexture,
+            GboardFloatingGlassGeometry geometry,
+            float dx,
+            float dy,
+            OutputState current) {
+        if (geometry == null || current == null
+                || current.eglSurface == EGL14.EGL_NO_SURFACE
+                || current.width <= 0 || current.height <= 0
+                || logicalWidth <= 0 || logicalHeight <= 0) return;
+
+        float scaleX = current.width / (float) logicalWidth;
+        float scaleY = current.height / (float) logicalHeight;
+        // Prismal expands the raster guard by two logical pixels around the SDF. Keep a small
+        // safety margin so AA/highlight fragments at the shell edge are never clipped.
+        float margin = 6f;
+        float left = Math.max(0f, geometry.left + dx - margin);
+        float top = Math.max(0f, geometry.top + dy - margin);
+        float right = Math.min(logicalWidth, geometry.left + dx + geometry.width + margin);
+        float bottom = Math.min(logicalHeight, geometry.top + dy + geometry.height + margin);
+        if (right <= left || bottom <= top) return;
+
+        int scissorLeft = Math.max(0, (int) Math.floor(left * scaleX));
+        int scissorRight = Math.min(current.width, (int) Math.ceil(right * scaleX));
+        int scissorBottom = Math.max(
+                0, (int) Math.floor((logicalHeight - bottom) * scaleY));
+        int scissorTop = Math.min(
+                current.height, (int) Math.ceil((logicalHeight - top) * scaleY));
+        int scissorWidth = Math.max(1, scissorRight - scissorLeft);
+        int scissorHeight = Math.max(1, scissorTop - scissorBottom);
+
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        // Keep the fixed fullscreen TextureView transparent outside the keyboard. The clear is
+        // tile-friendly; the expensive composite fragment work is restricted to the keyboard.
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glScissor(scissorLeft, scissorBottom, scissorWidth, scissorHeight);
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositeProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
@@ -376,6 +414,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         sourceBackend.swapBuffers(current.eglSurface);
     }
 
