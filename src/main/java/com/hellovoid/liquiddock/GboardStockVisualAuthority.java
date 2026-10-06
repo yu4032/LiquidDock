@@ -216,6 +216,28 @@ final class GboardStockVisualAuthority {
         for (int i = 0; i < count; i++) {
             View content = holder.getChildAt(i);
             if (isEligibleContent(holder, content)) claimBackground(claim, content, holder);
+            if (content instanceof ViewGroup) {
+                claimPreparedSoftKeyDescendants((ViewGroup) content, holder, claim);
+            }
+        }
+    }
+
+    private static void claimPreparedSoftKeyDescendants(
+            ViewGroup parent, ViewGroup dynamicHolder, Claim claim) {
+        if (parent == null || dynamicHolder == null || claim == null) return;
+        int count = parent.getChildCount();
+        for (int i = 0; i < count; i++) {
+            View child = parent.getChildAt(i);
+            if (child == null) continue;
+            if (GboardSoftKeyGlassScene.isSoftKeyView(child)) {
+                if (GboardSoftKeyGlassScene.isPrepared(child)) {
+                    claimBackground(claim, child, dynamicHolder);
+                }
+                continue;
+            }
+            if (child instanceof ViewGroup) {
+                claimPreparedSoftKeyDescendants((ViewGroup) child, dynamicHolder, claim);
+            }
         }
     }
 
@@ -314,6 +336,16 @@ final class GboardStockVisualAuthority {
         });
     }
 
+    private static boolean isDescendantOf(View target, ViewGroup ancestor) {
+        if (target == null || ancestor == null) return false;
+        android.view.ViewParent parent = target.getParent();
+        while (parent instanceof View) {
+            if (parent == ancestor) return true;
+            parent = parent.getParent();
+        }
+        return false;
+    }
+
     private static void runModuleMutation(Runnable action) {
         if (action == null) return;
         int depth = MODULE_MUTATION_DEPTH.get();
@@ -378,8 +410,12 @@ final class GboardStockVisualAuthority {
             if (snapshot == null) return false;
             switch (property) {
                 case BACKGROUND:
+                    if (rawValue == null || rawValue instanceof Drawable) {
+                        GboardSoftKeyGlassScene.rememberBackground(
+                                target, (Drawable) rawValue);
+                    }
                     if (snapshot.dynamicHolder != null
-                            && target.getParent() != snapshot.dynamicHolder) {
+                            && !isDescendantOf(target, snapshot.dynamicHolder)) {
                         snapshot.background.release();
                         snapshots.remove(target);
                         if (OWNER_BY_VIEW.get(target) == this) OWNER_BY_VIEW.remove(target);
