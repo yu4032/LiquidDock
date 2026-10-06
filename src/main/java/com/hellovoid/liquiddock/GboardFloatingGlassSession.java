@@ -338,9 +338,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                         highlightProfile,
                         node.interaction);
             }
-            presentCropped(
+            presentFull(
                     prismalRenderer.outputTexture(),
-                    currentGeometry.toCropUvRect(currentMotionDx, currentMotionDy),
                     currentOutput);
             swapSucceeded = true;
         } catch (Throwable error) {
@@ -358,8 +357,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentCropped(int sceneTexture, float[] crop, OutputState current) {
-        if (crop == null || crop.length != 4) return;
+    private void presentFull(int sceneTexture, OutputState current) {
+        if (current == null || current.eglSurface == EGL14.EGL_NO_SURFACE
+                || current.width <= 0 || current.height <= 0) return;
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -373,7 +373,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
         GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
-                crop[0], crop[1], crop[2], crop[3]);
+                0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositeProgram);
         sourceBackend.swapBuffers(current.eglSurface);
