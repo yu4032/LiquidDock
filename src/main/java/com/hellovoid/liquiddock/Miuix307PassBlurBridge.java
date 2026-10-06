@@ -262,6 +262,15 @@ final class Miuix307PassBlurBridge {
                     binding.rootSurface,
                     Boolean.valueOf(enabled),
                     Float.valueOf(binding.scale));
+            if (!enabled
+                    && binding.domain == PassBlurDomain.GBOARD_FLOATING
+                    && binding.setForceRefresh != null) {
+                binding.setForceRefresh.invoke(
+                        transaction,
+                        binding.rootSurface,
+                        Integer.valueOf(0));
+                binding.lastForceRefreshMs = 0L;
+            }
             transaction.apply();
             binding.updatesEnabled = enabled;
             MainHook.log(TAG + " PassBlur producer updates=" + enabled

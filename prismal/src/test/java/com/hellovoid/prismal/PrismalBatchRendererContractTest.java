@@ -39,6 +39,16 @@ public class PrismalBatchRendererContractTest {
     }
 
     @Test
+    public void rendererCanClearOnlyOneDirtyGlassRegion() throws Exception {
+        String source = source();
+        assertTrue(source.contains("public void beginGlassFrameRegion("));
+        assertTrue(source.contains("GLES20.glScissor("));
+        assertTrue(source.contains("Math.floor(left * scaleX)"));
+        assertTrue(source.contains("Math.ceil(right * scaleX)"));
+        assertTrue(source.contains("beginGlassFrameRegion(0f, 0f, width, height)"));
+    }
+
+    @Test
     public void batchApiDoesNotReintroduceLauncherSpecificOptics() throws Exception {
         String source = source();
         assertTrue(source.contains(
