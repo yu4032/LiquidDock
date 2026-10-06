@@ -54,6 +54,10 @@ final class HomeGridSqueezePlannerHook {
                         if (!isFreeHomeGrid(activeGrid, config)) return result;
 
                         Object owner = chain.getThisObject();
+                        String gridName = String.valueOf(
+                                HookUtil.requireInvoke(activeGrid, "getName"));
+                        int gridCountX = (Integer) HookUtil.requireInvoke(activeGrid, "getCountX");
+                        int gridCountY = (Integer) HookUtil.requireInvoke(activeGrid, "getCountY");
                         Object transform = HookUtil.getField(owner, "mLayoutSqueezeDataTransform");
                         if (transform == null) return result;
 
@@ -86,6 +90,19 @@ final class HomeGridSqueezePlannerHook {
                                         useGeneric =
                                                 HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
                                                         isSpanMove, spanX, spanY);
+                                    }
+                                    if (parameter != null) {
+                                        int spanX = HookUtil.getIntField(parameter, "spanX");
+                                        int spanY = HookUtil.getIntField(parameter, "spanY");
+                                        boolean isSpanMove =
+                                                HookUtil.getBooleanField(parameter, "isSpanMove");
+                                        MainHook.log(TAG
+                                                + " squeeze route grid=" + gridName
+                                                + " size=" + gridCountX + "x" + gridCountY
+                                                + " method=" + method.getName()
+                                                + " drag=" + spanX + "x" + spanY
+                                                + " spanMove=" + isSpanMove
+                                                + " planner=" + (useGeneric ? "generic" : "stock"));
                                     }
                                     if (useGeneric) {
                                         return invoke(genericSqueezePlanner, method, args);
