@@ -275,6 +275,15 @@ internal fun GboardSettingsPage(
         )
     }
 
+    var realtimeBackgroundSampling by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY,
+                GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_DEFAULT,
+            ),
+        )
+    }
+
     var softKeyGlassEnabled by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -392,6 +401,21 @@ internal fun GboardSettingsPage(
                     title = "拖动后自动进入大小调整",
                     summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
                     enabled = masterEnabled,
+                )
+                SwitchPreference(
+                    checked = realtimeBackgroundSampling,
+                    onCheckedChange = {
+                        realtimeBackgroundSampling = it
+                        prefs.edit()
+                            .putBoolean(GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY, it)
+                            .apply()
+                    },
+                    title = "实时背景采样",
+                    summary = if (realtimeBackgroundSampling)
+                        "持续采样键盘后方背景，动态内容保持实时"
+                    else
+                        "冻结模式：首次显示采样一帧；每次键盘开始移动时只刷新一帧，移动过程中不再采样，性能最高",
+                    enabled = controlsEnabled,
                 )
                 SwitchPreference(
                     checked = softKeyGlassEnabled,
