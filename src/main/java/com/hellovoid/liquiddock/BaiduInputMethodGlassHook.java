@@ -40,6 +40,10 @@ final class BaiduInputMethodGlassHook {
                 View inputView = viewArg(args);
                 put(INPUT_VIEWS, service, inputView);
                 log("setInputView " + BaiduInputMethodStructureResolver.describe(inputView), null);
+                if (inputView != null) {
+                    inputView.post(
+                            () -> handleInputViewFallback(service, inputView, classLoader));
+                }
                 return result;
             });
 
@@ -52,11 +56,18 @@ final class BaiduInputMethodGlassHook {
                 if (previous != null && previous != floatView) {
                     BaiduInputMethodGlassCoordinator.onHidden(previous);
                 }
+                View inputView = current(INPUT_VIEWS, service);
+                if (inputView != null && inputView != floatView) {
+                    BaiduInputMethodGlassCoordinator.onHidden(inputView);
+                }
                 put(FLOAT_VIEWS, service, floatView);
                 log("showFloatKeyboardView " + BaiduInputMethodStructureResolver.describe(floatView),
                         null);
                 if (floatView != null) {
                     floatView.post(() -> handleFloatingView(floatView));
+                } else if (inputView != null) {
+                    inputView.post(
+                            () -> handleInputViewFallback(service, inputView, classLoader));
                 }
                 return result;
             });
@@ -71,8 +82,12 @@ final class BaiduInputMethodGlassHook {
                     floatView.post(() -> handleFloatingView(floatView));
                 } else {
                     View inputView = current(INPUT_VIEWS, service);
-                    log("onWindowShown waiting for showFloatKeyboardView input="
+                    log("onWindowShown no semantic float view; probing stable input structure input="
                             + BaiduInputMethodStructureResolver.describe(inputView), null);
+                    if (inputView != null) {
+                        inputView.post(
+                                () -> handleInputViewFallback(service, inputView, classLoader));
+                    }
                 }
                 return result;
             });
@@ -82,6 +97,10 @@ final class BaiduInputMethodGlassHook {
                 Object service = chain.getThisObject();
                 View floatView = current(FLOAT_VIEWS, service);
                 if (floatView != null) BaiduInputMethodGlassCoordinator.onHidden(floatView);
+                View inputView = current(INPUT_VIEWS, service);
+                if (inputView != null && inputView != floatView) {
+                    BaiduInputMethodGlassCoordinator.onHidden(inputView);
+                }
                 put(FLOAT_VIEWS, service, null);
                 Object result = chain.proceed(args);
                 log("onWindowHidden released semantic float view", null);
@@ -100,35 +119,53 @@ final class BaiduInputMethodGlassHook {
 
     private static void handleFloatingView(View floatView) {
         if (floatView == null) return;
+        BaiduInputMethodStructureResolver.Structure structure =
+                BaiduInputMethodStructureResolver.resolveFromFloatView(floatView);
+        handleResolved(floatView, structure, "semantic float view");
+    }
+
+    private static void handleInputViewFallback(
+            Object service, View inputView, ClassLoader classLoader) {
+        if (service == null || inputView == null || classLoader == null) return;
+        if (current(FLOAT_VIEWS, service) != null) return;
+
+        BaiduInputMethodStructureResolver.Structure structure =
+                BaiduInputMethodStructureResolver.resolveFromInputView(inputView, classLoader);
+        handleResolved(inputView, structure, "stable input-view fallback");
+    }
+
+    private static void handleResolved(
+            View authority,
+            BaiduInputMethodStructureResolver.Structure structure,
+            String source) {
+        if (authority == null) return;
 
         ConfigReader reader = ConfigReader.load();
         LiquidDockConfig config = LiquidDockConfig.from(reader);
         ThirdPartyGlassAppearance appearance =
                 BaiduInputMethodGlassPreferences.resolve(reader, config.glass);
         if (!config.enabled || !config.glass.enabled || !appearance.enabled) {
-            BaiduInputMethodGlassCoordinator.onHidden(floatView);
-            log("floating glass disabled by config", null);
+            BaiduInputMethodGlassCoordinator.onHidden(authority);
+            log(source + " glass disabled by config", null);
             return;
         }
 
-        BaiduInputMethodStructureResolver.Structure structure =
-                BaiduInputMethodStructureResolver.resolveFromFloatView(floatView);
         if (structure == null) {
-            BaiduInputMethodGlassCoordinator.onHidden(floatView);
-            log("semantic float view unresolved: "
-                    + BaiduInputMethodStructureResolver.describe(floatView), null);
+            BaiduInputMethodGlassCoordinator.onHidden(authority);
+            log(source + " unresolved: "
+                    + BaiduInputMethodStructureResolver.describe(authority), null);
             return;
         }
         if (!BaiduInputMethodStructureResolver.isFloatingGeometry(structure)) {
-            BaiduInputMethodGlassCoordinator.onHidden(floatView);
-            log("semantic float view rejected by compact geometry: "
+            BaiduInputMethodGlassCoordinator.onHidden(authority);
+            log(source + " rejected by compact geometry: "
                     + BaiduInputMethodStructureResolver.describe(structure), null);
             return;
         }
 
-        log("semantic float structure accepted: "
+        log(source + " accepted: "
                 + BaiduInputMethodStructureResolver.describe(structure), null);
-        BaiduInputMethodGlassCoordinator.onShown(floatView, structure, config.glass);
+        BaiduInputMethodGlassCoordinator.onShown(authority, structure, config.glass);
     }
 
     private static View viewArg(Object[] args) {
