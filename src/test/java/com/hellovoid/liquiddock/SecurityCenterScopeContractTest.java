@@ -34,7 +34,8 @@ public class SecurityCenterScopeContractTest {
                 "com.android.systemui",
                 "com.miui.securitycenter",
                 "com.google.android.inputmethod.latin",
-                "com.android.quicksearchbox"), lines);
+                "com.android.quicksearchbox",
+                "com.baidu.input_mi"), lines);
     }
 
     @Test

@@ -86,6 +86,7 @@ final class Miuix307PassBlurBridge {
         SurfaceControl rootSurface = null;
         boolean securityCenterClaimed = false;
         boolean gboardClaimed = false;
+        boolean baiduInputMethodClaimed = false;
         boolean searchboxClaimed = false;
         try {
             Method getViewRootImpl = View.class.getDeclaredMethod("getViewRootImpl");
@@ -142,6 +143,11 @@ final class Miuix307PassBlurBridge {
                 GboardPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 gboardClaimed = true;
             }
+            if (domain == PassBlurDomain.BAIDU_INPUTMETHOD) {
+                BaiduInputMethodPassBlurContinuousAuthority.claim(
+                        rootSurface, producerSurface, scale);
+                baiduInputMethodClaimed = true;
+            }
             if (domain == PassBlurDomain.MIUI_SEARCHBOX) {
                 MiuiSearchboxPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 searchboxClaimed = true;
@@ -187,6 +193,9 @@ final class Miuix307PassBlurBridge {
             if (gboardClaimed && rootSurface != null) {
                 GboardPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
+            if (baiduInputMethodClaimed && rootSurface != null) {
+                BaiduInputMethodPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
             if (searchboxClaimed && rootSurface != null) {
                 MiuiSearchboxPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
@@ -218,6 +227,7 @@ final class Miuix307PassBlurBridge {
         }
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
                 || binding.domain == PassBlurDomain.GBOARD_FLOATING
+                || binding.domain == PassBlurDomain.BAIDU_INPUTMETHOD
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
                 || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
         setUpdatesEnabled(binding, true, force);
@@ -301,6 +311,10 @@ final class Miuix307PassBlurBridge {
         }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.BAIDU_INPUTMETHOD) {
+            BaiduInputMethodPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {

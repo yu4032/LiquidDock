@@ -38,6 +38,14 @@ internal fun ThirdPartyAppsPage(
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
     val context = LocalContext.current
+    var baiduFloatingEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                BaiduInputMethodGlassPreferences.ENABLED_KEY,
+                BaiduInputMethodGlassPreferences.ENABLED_DEFAULT,
+            ),
+        )
+    }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             GboardPageHeader(
@@ -66,6 +74,18 @@ internal fun ThirdPartyAppsPage(
                     summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = openGboard,
+                )
+                SwitchPreference(
+                    checked = baiduFloatingEnabled,
+                    onCheckedChange = {
+                        baiduFloatingEnabled = it
+                        prefs.edit()
+                            .putBoolean(BaiduInputMethodGlassPreferences.ENABLED_KEY, it)
+                            .apply()
+                    },
+                    title = "百度输入法悬浮键盘",
+                    summary = "以液态玻璃替换悬浮键盘主体背景；外观继承全局液态玻璃",
+                    enabled = masterEnabled && liquidEnabled,
                 )
             }
         }

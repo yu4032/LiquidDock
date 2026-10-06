@@ -34,6 +34,10 @@ final class ThirdPartyGlassAdapterRegistry {
                             "com.google.android.inputmethod.latin",
                             ThirdPartyGlassAdapterRegistry::installGboard),
                     new Registration(
+                            "baidu.floating",
+                            "com.baidu.input_mi",
+                            ThirdPartyGlassAdapterRegistry::installBaiduInputMethod),
+                    new Registration(
                             "miui.searchbox",
                             "com.android.quicksearchbox",
                             ThirdPartyGlassAdapterRegistry::installSearchbox)));
@@ -70,6 +74,15 @@ final class ThirdPartyGlassAdapterRegistry {
         GboardFloatingGlassHook.install(classLoader);
         GboardHandwritingCapsuleGlassHook.install(classLoader);
         return true;
+    }
+
+    private static boolean installBaiduInputMethod(ClassLoader classLoader) {
+        if (!BaiduInputMethodPassBlurContinuousAuthority.install()) {
+            Api101Bridge.log(
+                    "[DC][BaiduInputMethodGlass] continuous PassBlur authority unavailable; fail closed");
+            return false;
+        }
+        return BaiduInputMethodGlassHook.install(classLoader);
     }
 
     private static boolean installSearchbox(ClassLoader classLoader) {
