@@ -33,6 +33,7 @@ public class GboardFloatingGlassContractTest {
         assertTrue(registry.contains("GboardFloatingGlassHook.install(classLoader)"));
         assertTrue(hook.contains("ConfigReader liveReader = ConfigReader.load()"));
         assertTrue(hook.contains("GboardGlassPreferences.resolve(liveReader"));
+        assertTrue(hook.contains("GboardGlassPreferences.realtimeBackgroundSampling(liveReader)"));
         assertFalse(module.contains("GboardGlassPreferences.resolve"));
     }
 
@@ -125,19 +126,44 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("Outline"));
     }
 
-    @Test public void floatingGlassStaysZeroCopyContinuousAndFeedbackSafe() throws Exception {
+    @Test public void floatingGlassStaysZeroCopyAndSupportsFrozenSampling() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
         String request = read(MAIN.resolve("PassBlurBindRequest.java"));
         String domain = read(MAIN.resolve("PassBlurDomain.java"));
+        String authority = read(MAIN.resolve("GboardPassBlurContinuousAuthority.java"));
+        String bridge = read(MAIN.resolve("Miuix307PassBlurBridge.java"));
         assertTrue(domain.contains("GBOARD_FLOATING"));
         assertTrue(request.contains("static PassBlurBindRequest gboardFloating(View authoritativeRoot)"));
         assertTrue(session.contains("RootPassBlurBackend"));
         assertTrue(session.contains("PassBlurBindRequest.gboardFloating(root)"));
         assertTrue(session.contains("PrismalRenderer"));
         assertTrue(session.contains("prepareBackdrop"));
+        assertTrue(session.contains("realtimeBackgroundSampling"));
+        assertTrue(session.contains("requestFrozenMotionCapture"));
+        assertTrue(session.contains("sourceBackend.setUpdatesEnabled(false"));
+        assertTrue(session.contains("renderQueueLock"));
+        assertTrue(session.contains("scheduleRender()"));
+        assertTrue(session.contains("drainScheduledRender"));
+        assertTrue(authority.contains("updatesEnabled"));
+        assertTrue(authority.contains("Boolean.valueOf(claim.updatesEnabled)"));
+        assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.setUpdatesEnabled"));
         assertFalse(session.contains("ScreenCapture"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap.createBitmap"));
+    }
+
+    @Test public void movementUsesLatestGeometryWithoutQueueingHistoricalFrames()
+            throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+
+        assertTrue(coordinator.contains("GboardFrozenBackdropMotionState"));
+        assertTrue(coordinator.contains("requestFrozenMotionCapture"));
+        assertTrue(session.contains("renderDirty"));
+        assertTrue(session.contains("renderQueued"));
+        assertTrue(session.contains("scheduleRender()"));
+        assertTrue(session.contains("drainScheduledRender"));
+        assertFalse(session.contains("postToRenderThread(this::renderCurrent)"));
     }
 
     @Test public void stockHidesOnlyAfterTextureViewConsumesFirstSwap() throws Exception {
@@ -165,6 +191,11 @@ public class GboardFloatingGlassContractTest {
         assertTrue(settings.contains("第三方应用适配"));
         assertTrue(gboardSettings.contains("Gboard"));
         assertTrue(gboardSettings.contains("启用悬浮键盘液态玻璃"));
+        assertTrue(gboardSettings.contains("GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY"));
+        assertTrue(gboardSettings.contains("实时背景采样"));
+        assertTrue(gboardSettings.contains("首次显示采样一帧"));
+        assertTrue(gboardSettings.contains("每次开始移动时刷新一帧"));
+        assertTrue(preferences.contains("REALTIME_BACKGROUND_SAMPLING_DEFAULT = true"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.BLUR_KEY"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_RED_KEY"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_GREEN_KEY"));

@@ -20,6 +20,9 @@ final class GboardFloatingGlassCoordinator {
         final GboardFloatingStructureResolver.Structure structure;
         final LiquidDockConfig.Glass glassConfig;
         final ViewGroup keyboardArea;
+        final boolean realtimeBackgroundSampling;
+        final GboardFrozenBackdropMotionState frozenMotionState =
+                new GboardFrozenBackdropMotionState();
         ViewGroup sinkHost;
         View backgroundFrame;
         View root;
@@ -31,6 +34,7 @@ final class GboardFloatingGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean stockHidden;
         boolean captureRequested;
+        GboardFloatingGlassGeometry lastGeometry;
         boolean geometryRetryPosted;
         int geometryRetryCount;
         boolean released;
@@ -38,12 +42,14 @@ final class GboardFloatingGlassCoordinator {
         State(
                 View popup,
                 GboardFloatingStructureResolver.Structure structure,
-                LiquidDockConfig.Glass glassConfig) {
+                LiquidDockConfig.Glass glassConfig,
+                boolean realtimeBackgroundSampling) {
             this.popup = popup;
             this.structure = structure;
             this.glassConfig = glassConfig;
             this.keyboardArea = structure.keyboardArea;
             this.backgroundFrame = structure.stockBackground;
+            this.realtimeBackgroundSampling = realtimeBackgroundSampling;
         }
     }
 
@@ -52,15 +58,21 @@ final class GboardFloatingGlassCoordinator {
     static synchronized void onShown(
             View popup,
             GboardFloatingStructureResolver.Structure structure,
-            LiquidDockConfig.Glass glassConfig) {
+            LiquidDockConfig.Glass glassConfig,
+            boolean realtimeBackgroundSampling) {
         if (popup == null || structure == null || glassConfig == null) return;
         State existing = STATES.get(popup);
         if (existing != null && !existing.released) {
-            if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
-            else syncGeometry(existing);
-            return;
+            if (existing.realtimeBackgroundSampling != realtimeBackgroundSampling) {
+                release(existing);
+            } else {
+                if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
+                else syncGeometry(existing);
+                return;
+            }
         }
-        State state = new State(popup, structure, glassConfig);
+        State state = new State(
+                popup, structure, glassConfig, realtimeBackgroundSampling);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attachNow(state);
@@ -110,6 +122,7 @@ final class GboardFloatingGlassCoordinator {
         GboardFloatingGlassSession session = new GboardFloatingGlassSession(
                 root,
                 state.glassConfig,
+                state.realtimeBackgroundSampling,
                 new GboardFloatingGlassSession.Listener() {
                     @Override public void onPresented() {
                         state.popup.post(() -> GboardFloatingGlassCoordinator.onPresented(state));
@@ -200,12 +213,33 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         state.geometryRetryCount = 0;
+        GboardFloatingGlassGeometry previous = state.lastGeometry;
+        boolean translated = previous != null
+                && sameSize(previous, next)
+                && (Math.abs(next.left - previous.left) >= 0.25f
+                || Math.abs(next.top - previous.top) >= 0.25f);
+        if (!state.realtimeBackgroundSampling
+                && state.captureRequested
+                && state.frozenMotionState.onFrame(translated)) {
+            state.session.requestFrozenMotionCapture();
+        }
+        state.lastGeometry = next;
         syncSinkBounds(state, next);
         state.session.updateGeometry(next);
         if (!state.captureRequested) {
             state.captureRequested = true;
             state.session.requestInitialCapture();
         }
+    }
+
+    private static boolean sameSize(
+            GboardFloatingGlassGeometry first,
+            GboardFloatingGlassGeometry second) {
+        return first != null && second != null
+                && first.rootWidth == second.rootWidth
+                && first.rootHeight == second.rootHeight
+                && Math.abs(first.width - second.width) < 0.25f
+                && Math.abs(first.height - second.height) < 0.25f;
     }
 
     private static void syncSinkBounds(

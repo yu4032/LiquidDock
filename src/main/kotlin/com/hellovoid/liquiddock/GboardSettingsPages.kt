@@ -275,6 +275,15 @@ internal fun GboardSettingsPage(
         )
     }
 
+    var realtimeBackgroundSampling by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY,
+                GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_DEFAULT,
+            ),
+        )
+    }
+
     fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
         prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
     } else {
@@ -374,6 +383,21 @@ internal fun GboardSettingsPage(
                     title = "拖动后自动进入大小调整",
                     summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
                     enabled = masterEnabled,
+                )
+                SwitchPreference(
+                    checked = realtimeBackgroundSampling,
+                    onCheckedChange = {
+                        realtimeBackgroundSampling = it
+                        prefs.edit()
+                            .putBoolean(GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY, it)
+                            .apply()
+                    },
+                    title = "实时背景采样",
+                    summary = if (realtimeBackgroundSampling)
+                        "持续采样悬浮键盘后方背景"
+                    else
+                        "冻结模式：首次显示采样一帧；每次开始移动时刷新一帧，移动过程中不再采样",
+                    enabled = controlsEnabled,
                 )
             }
         }

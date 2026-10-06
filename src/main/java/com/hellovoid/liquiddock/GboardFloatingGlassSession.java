@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Continuous zero-copy PassBlur -> Prismal pipeline for one Gboard floating popup root. */
+/** Zero-copy PassBlur -> Prismal pipeline with realtime or frozen one-frame sampling. */
 final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -53,15 +53,20 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final boolean realtimeBackgroundSampling;
+    private final Object renderQueueLock = new Object();
 
     private volatile GboardFloatingGlassGeometry geometry;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
+    private volatile boolean frozenCapturePending;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
     private boolean failureSignaled;
+    private boolean renderQueued;
+    private boolean renderDirty;
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
@@ -69,9 +74,18 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     GboardFloatingGlassSession(
             View root, LiquidDockConfig.Glass glassConfig, Listener listener) {
+        this(root, glassConfig, true, listener);
+    }
+
+    GboardFloatingGlassSession(
+            View root,
+            LiquidDockConfig.Glass glassConfig,
+            boolean realtimeBackgroundSampling,
+            Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
         rootRef = new WeakReference<>(root);
         this.listener = listener;
+        this.realtimeBackgroundSampling = realtimeBackgroundSampling;
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -96,7 +110,18 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        requestBackdropCapture();
+    }
+
+    void requestFrozenMotionCapture() {
+        if (!realtimeBackgroundSampling) requestBackdropCapture();
+    }
+
+    private void requestBackdropCapture() {
+        if (shuttingDown) return;
+        if (!realtimeBackgroundSampling && frozenCapturePending) return;
+        if (!realtimeBackgroundSampling) frozenCapturePending = true;
+        sourceBackend.requestFresh(GENERATION);
     }
 
     void updateGeometry(GboardFloatingGlassGeometry next) {
@@ -105,7 +130,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (old != null && old.sameAs(next)) return;
         geometry = next;
         sourceBackend.reconcileRoot();
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        scheduleRender();
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -167,6 +192,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
+        if (!realtimeBackgroundSampling && !frozenCapturePending) {
+            sourceBackend.setUpdatesEnabled(false, "gboard-frozen-extra-frame");
+            return;
+        }
+        if (!realtimeBackgroundSampling) frozenCapturePending = false;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -180,7 +210,10 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            renderCurrent();
+            if (!realtimeBackgroundSampling) {
+                sourceBackend.setUpdatesEnabled(false, "gboard-frozen-frame-consumed");
+            }
+            scheduleRender();
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
@@ -206,6 +239,39 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.shutdown();
         });
         if (!queued) sourceBackend.shutdown();
+    }
+
+    private void scheduleRender() {
+        if (shuttingDown) return;
+        synchronized (renderQueueLock) {
+            renderDirty = true;
+            if (renderQueued) return;
+            renderQueued = true;
+        }
+        if (!sourceBackend.postToRenderThread(this::drainScheduledRender)) {
+            synchronized (renderQueueLock) {
+                renderQueued = false;
+                renderDirty = false;
+            }
+        }
+    }
+
+    private void drainScheduledRender() {
+        synchronized (renderQueueLock) {
+            renderDirty = false;
+        }
+        renderCurrent();
+        boolean repost;
+        synchronized (renderQueueLock) {
+            repost = renderDirty && !shuttingDown;
+            if (!repost) renderQueued = false;
+        }
+        if (repost && !sourceBackend.postToRenderThread(this::drainScheduledRender)) {
+            synchronized (renderQueueLock) {
+                renderQueued = false;
+                renderDirty = false;
+            }
+        }
     }
 
     private void renderCurrent() {

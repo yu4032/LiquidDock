@@ -9,6 +9,8 @@ final class GboardGlassPreferences {
     static final String ENABLED_KEY = ConfigSchema.Gboard.ENABLED.name();
     static final String AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY =
             "liquid_gboard_auto_resize_after_handle_drag";
+    static final String REALTIME_BACKGROUND_SAMPLING_KEY =
+            "liquid_gboard_realtime_background_sampling";
     static final String BLUR_KEY = ConfigSchema.Gboard.BLUR.name();
     static final String TINT_RED_KEY = ConfigSchema.Gboard.TINT_RED.name();
     static final String TINT_GREEN_KEY = ConfigSchema.Gboard.TINT_GREEN.name();
@@ -16,6 +18,7 @@ final class GboardGlassPreferences {
     static final String TINT_ALPHA_KEY = ConfigSchema.Gboard.TINT_ALPHA.name();
     static final boolean ENABLED_DEFAULT = ConfigSchema.Gboard.ENABLED.uiDefault();
     static final boolean AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT = true;
+    static final boolean REALTIME_BACKGROUND_SAMPLING_DEFAULT = true;
 
     /** Compatibility view retained for existing Gboard hooks/tests. */
     static final class Appearance {
@@ -61,6 +64,13 @@ final class GboardGlassPreferences {
     }
 
     private GboardGlassPreferences() {}
+
+    static boolean realtimeBackgroundSampling(ConfigReader reader) {
+        if (reader == null) reader = ConfigReader.load();
+        return reader.b(
+                REALTIME_BACKGROUND_SAMPLING_KEY,
+                REALTIME_BACKGROUND_SAMPLING_DEFAULT);
+    }
 
     static Appearance resolve(ConfigReader reader, LiquidDockConfig.Glass base) {
         ThirdPartyGlassAppearance shared = resolveShared(reader, base);

@@ -9,8 +9,8 @@ import java.util.WeakHashMap;
 
 /**
  * Keeps the LiquidDock-owned PassBlur producer authoritative while a Gboard floating popup is
- * active. The claimed producer remains bound to the popup root and native texture updates stay
- * enabled until the real popup/session teardown releases the claim.
+ * active. The claimed producer remains bound to the popup root while LiquidDock may pause native
+ * texture updates for frozen sampling without allowing vendor writes to steal the producer.
  */
 final class GboardPassBlurContinuousAuthority {
     private static final String TAG = "[DC][GboardFloatingGlass]";
@@ -19,6 +19,7 @@ final class GboardPassBlurContinuousAuthority {
     private static final class Claim {
         final Surface surface;
         final float scale;
+        boolean updatesEnabled = true;
 
         Claim(Surface surface, float scale) {
             this.surface = surface;
@@ -60,7 +61,7 @@ final class GboardPassBlurContinuousAuthority {
                             ? (SurfaceControl) args[0] : null;
                     Claim claim = root != null ? claimFor(root) : null;
                     if (claim != null) {
-                        args[1] = Boolean.TRUE;
+                        args[1] = Boolean.valueOf(claim.updatesEnabled);
                         args[2] = Float.valueOf(claim.scale);
                     }
                     return chain.proceed(args);
@@ -80,6 +81,14 @@ final class GboardPassBlurContinuousAuthority {
         if (root == null || surface == null || !Float.isFinite(scale) || scale <= 0f) return;
         synchronized (LOCK) {
             ACTIVE_ROOTS.put(root, new Claim(surface, scale));
+        }
+    }
+
+    static void setUpdatesEnabled(SurfaceControl root, boolean enabled) {
+        if (root == null) return;
+        synchronized (LOCK) {
+            Claim current = ACTIVE_ROOTS.get(root);
+            if (current != null) current.updatesEnabled = enabled;
         }
     }
 
