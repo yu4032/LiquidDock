@@ -53,7 +53,6 @@
     <string name="home_status_disabled">LiquidDock 已暂停</string>
     <string name="home_status_enabled_summary">桌面自定义当前生效，可从下方各功能域继续调整。</string>
     <string name="home_status_disabled_summary">总开关已关闭，现有配置会保留，可在重新启用前继续编辑。</string>
-    <string name="home_status_version">版本 %1$s</string>
     <string name="enable_liquiddock_summary">关闭后立即释放可热切换的视觉效果；完整应用结构性 Hook 变更需重启桌面生效</string>
     <string name="home_grid_summary">自由主界面网格、横竖屏边距、分屏对齐与指示器</string>
     <string name="home_dock_summary">尺寸、圆角、图标间距、位置与模糊</string>
