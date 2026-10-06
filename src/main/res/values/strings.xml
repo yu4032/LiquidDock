@@ -53,7 +53,6 @@
     <string name="home_status_disabled">LiquidDock is paused</string>
     <string name="home_status_enabled_summary">Launcher customizations are currently enabled. Open a section below to tune its behavior.</string>
     <string name="home_status_disabled_summary">The master switch is off. Existing configuration is preserved and can be edited before enabling it again.</string>
-    <string name="home_status_version">Version %1$s</string>
     <string name="enable_liquiddock_summary">Turning off releases runtime-safe visual ownership immediately; restart the launcher to fully apply structural hook changes</string>
     <string name="home_grid_summary">Custom HOME grid, landscape/portrait spacing, split-screen alignment, and page indicator</string>
     <string name="home_dock_summary">Size, corners, icon spacing, position, and blur</string>
