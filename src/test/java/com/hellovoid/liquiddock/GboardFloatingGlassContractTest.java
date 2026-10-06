@@ -153,11 +153,10 @@ public class GboardFloatingGlassContractTest {
         assertTrue(bridge.contains("setForceRefresh = transactionClass.getMethod"));
         String backend = read(MAIN.resolve("RootPassBlurBackend.java"));
         assertTrue(backend.contains("Miuix307PassBlurBridge.renewForceRefresh(binding);"));
-        int freshStart = session.indexOf("public void onFreshFrame");
-        int freshEnd = session.indexOf("public void onTerminalFailure", freshStart);
-        String freshBody = session.substring(freshStart, freshEnd);
-        assertTrue(freshBody.contains("scheduleRender();"));
-        assertFalse(freshBody.contains("renderCurrent();"));
+        assertTrue(session.contains("scheduleRender();"));
+        assertTrue(session.contains("coalescing queue"));
+        assertFalse(session.contains(
+                "gboard-frozen-frame-consumed\");\n            }\n            renderCurrent();"));
         assertFalse(session.contains("ScreenCapture"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap.createBitmap"));
