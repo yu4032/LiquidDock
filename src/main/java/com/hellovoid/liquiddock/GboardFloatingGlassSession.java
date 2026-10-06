@@ -161,7 +161,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        sourceBackend.reconcileRoot();
+        if (old == null
+                || old.rootWidth != next.rootWidth
+                || old.rootHeight != next.rootHeight) {
+            sourceBackend.reconcileRoot();
+        }
         scheduleRender(true);
     }
 
