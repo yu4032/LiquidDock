@@ -114,10 +114,15 @@ final class GboardFloatingGlassGeometry {
             Matrix globalToRoot = new Matrix();
             if (!rootToGlobal.invert(globalToRoot)) return null;
 
-            Matrix hostToGlobal = new Matrix();
-            sinkHost.transformMatrixToGlobal(hostToGlobal);
-            Matrix globalToHost = new Matrix();
-            if (!hostToGlobal.invert(globalToHost)) return null;
+            Matrix globalToHost;
+            if (sinkHost == root) {
+                globalToHost = new Matrix(globalToRoot);
+            } else {
+                Matrix hostToGlobal = new Matrix();
+                sinkHost.transformMatrixToGlobal(hostToGlobal);
+                globalToHost = new Matrix();
+                if (!hostToGlobal.invert(globalToHost)) return null;
+            }
 
             return new CaptureContext(
                     root,
@@ -249,7 +254,9 @@ final class GboardFloatingGlassGeometry {
                 || !finite(outputPaddingPx) || outputPaddingPx < 0f) return null;
         try {
             Bounds rootBounds = mapBounds(target, context.globalToRoot, localRect);
-            Bounds hostBounds = mapBounds(target, context.globalToHost, localRect);
+            Bounds hostBounds = context.sinkHost == context.root
+                    ? rootBounds
+                    : mapBounds(target, context.globalToHost, localRect);
             if (rootBounds == null || hostBounds == null) return null;
 
             float left = clamp(rootBounds.left, 0f, context.rootWidth);
@@ -300,26 +307,6 @@ final class GboardFloatingGlassGeometry {
         }
     }
 
-    GboardFloatingGlassGeometry translated(float dx, float dy) {
-        if (!finite(dx) || !finite(dy) || (close(dx, 0f) && close(dy, 0f))) return this;
-        return new GboardFloatingGlassGeometry(
-                rootWidth,
-                rootHeight,
-                left + dx,
-                top + dy,
-                width,
-                height,
-                cornerRadius,
-                sinkLeft,
-                sinkTop,
-                sinkWidth,
-                sinkHeight,
-                cropLeft + dx,
-                cropTop + dy,
-                cropWidth,
-                cropHeight);
-    }
-
     int sinkWidthPx() {
         return Math.max(1, (int) Math.ceil(sinkWidth));
     }
@@ -341,14 +328,8 @@ final class GboardFloatingGlassGeometry {
     }
 
     float[] toCropUvRect() {
-        return toCropUvRect(0f, 0f);
-    }
-
-    float[] toCropUvRect(float dx, float dy) {
-        float projectedCropLeft = cropLeft + dx;
-        float projectedCropTop = cropTop + dy;
-        float cropUvLeft = projectedCropLeft / rootWidth;
-        float cropBottom = (rootHeight - (projectedCropTop + cropHeight)) / rootHeight;
+        float cropUvLeft = cropLeft / rootWidth;
+        float cropBottom = (rootHeight - (cropTop + cropHeight)) / rootHeight;
         return new float[]{
                 clamp(cropUvLeft, 0f, 1f),
                 clamp(cropBottom, 0f, 1f),
