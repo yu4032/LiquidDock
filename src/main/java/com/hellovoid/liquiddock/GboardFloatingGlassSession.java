@@ -55,6 +55,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final PrismalHighlightProfile highlightProfile;
 
     private volatile GboardFloatingGlassGeometry geometry;
+    private volatile GboardSoftKeyGlassScene.Node[] softKeyNodes =
+            GboardSoftKeyGlassScene.EMPTY;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
@@ -100,10 +102,24 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void updateGeometry(GboardFloatingGlassGeometry next) {
+        updateGeometry(next, GboardSoftKeyGlassScene.EMPTY);
+    }
+
+    void updateGeometry(
+            GboardFloatingGlassGeometry next,
+            GboardSoftKeyGlassScene.Node[] nextSoftKeyNodes) {
         if (shuttingDown || next == null) return;
+        GboardSoftKeyGlassScene.Node[] stableNodes =
+                nextSoftKeyNodes != null ? nextSoftKeyNodes : GboardSoftKeyGlassScene.EMPTY;
         GboardFloatingGlassGeometry old = geometry;
-        if (old != null && old.sameAs(next)) return;
+        GboardSoftKeyGlassScene.Node[] oldNodes = softKeyNodes;
+        if (old != null
+                && old.sameAs(next)
+                && GboardSoftKeyGlassScene.sameAs(oldNodes, stableNodes)) {
+            return;
+        }
         geometry = next;
+        softKeyNodes = stableNodes;
         sourceBackend.reconcileRoot();
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
@@ -210,6 +226,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     private void renderCurrent() {
         GboardFloatingGlassGeometry currentGeometry = geometry;
+        GboardSoftKeyGlassScene.Node[] currentSoftKeyNodes = softKeyNodes;
         OutputState currentOutput = output;
         View root = rootRef.get();
         if (shuttingDown || !backdropPrepared || currentGeometry == null
@@ -227,6 +244,18 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
+            for (GboardSoftKeyGlassScene.Node node : currentSoftKeyNodes) {
+                if (node == null || node.geometry == null
+                        || node.geometry.rootWidth != logicalWidth
+                        || node.geometry.rootHeight != logicalHeight) {
+                    continue;
+                }
+                prismalRenderer.drawGlass(
+                        node.geometry.toPrismalGeometry(),
+                        prismalParams,
+                        highlightProfile,
+                        node.interaction);
+            }
             presentCropped(
                     prismalRenderer.outputTexture(),
                     currentGeometry.toCropUvRect(),
