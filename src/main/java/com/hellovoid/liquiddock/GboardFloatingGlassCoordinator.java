@@ -203,8 +203,7 @@ final class GboardFloatingGlassCoordinator {
     }
 
     private static View directChildUnder(View descendant, ViewGroup ancestor) {
-        if (descendant == null || ancestor == null) return null;
-        if (descendant == ancestor) return descendant;
+        if (descendant == null || ancestor == null || descendant == ancestor) return null;
         View current = descendant;
         android.view.ViewParent parent = current.getParent();
         while (parent instanceof View) {
