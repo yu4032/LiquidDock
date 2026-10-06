@@ -204,7 +204,12 @@ final class HomeGridStockSqueezeGuard {
     private static Object logicalKey(Object item) {
         if (item == null) return null;
         HookUtil.InvocationResult<Object> data = HookUtil.tryInvoke(item, "getMData");
-        return data.succeeded() && data.value() != null ? data.value() : item;
+        if (data.succeeded() && data.value() != null) return data.value();
+        try {
+            Object field = findField(item.getClass(), "mData").get(item);
+            if (field != null) return field;
+        } catch (Throwable ignored) {}
+        return item;
     }
 
     private static IdentityHashMap<Object, List<String>> collectCells(Object[] matrix) {
@@ -307,18 +312,31 @@ final class HomeGridStockSqueezeGuard {
                 ItemState before = entry.getValue();
                 if (before.spanX <= 1 && before.spanY <= 1) continue;
 
-                if (!sameCells(srcCells.get(key), srcAfter.get(key))
-                        || !sameCells(dstCells.get(key), dstAfter.get(key))) {
-                    return "logical-move data="
+                List<String> baseline = srcCells.get(key);
+                List<String> srcCurrent = srcAfter.get(key);
+                List<String> dstCurrent = dstAfter.get(key);
+
+                // Stock LayoutSwapPlaces uses dst as a staging matrix. It is normally empty before
+                // squeeze and populated from src during a successful calculation, so dst-before is
+                // not a meaningful movement baseline. Multi-cell items are safe only when their
+                // final dst footprint exactly matches their original src footprint.
+                if (!sameCells(baseline, srcCurrent)) {
+                    return "src-mutated data="
                             + shortName(key.getClass().getName())
                             + '@' + Integer.toHexString(System.identityHashCode(key))
                             + " span=" + before.spanX + 'x' + before.spanY
-                            + " src " + srcCells.get(key) + "->" + srcAfter.get(key)
-                            + " dst " + dstCells.get(key) + "->" + dstAfter.get(key);
+                            + " occ " + baseline + "->" + srcCurrent;
+                }
+                if (!sameCells(baseline, dstCurrent)) {
+                    return "dst-moved data="
+                            + shortName(key.getClass().getName())
+                            + '@' + Integer.toHexString(System.identityHashCode(key))
+                            + " span=" + before.spanX + 'x' + before.spanY
+                            + " occ " + baseline + "->" + dstCurrent;
                 }
             }
 
-            String replacement = findNewMultiCell(dstCells, dstAfter, dstNow);
+            String replacement = findNewMultiCell(srcCells, dstAfter, dstNow);
             if (replacement != null) return replacement;
             return findNewMultiCell(srcCells, srcAfter, srcNow);
         }
