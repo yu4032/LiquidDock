@@ -174,6 +174,13 @@ final class GboardSoftKeyGlassScene {
                 geometryView = target.backgroundView;
                 bounds = target.shape.bounds;
                 nativeRadius = target.shape.radius;
+                if (target.backgroundView == key
+                        && standardTemplate != null
+                        && !keepsNativeWideGeometry(key)
+                        && (bounds.width() > standardTemplate.widthPx * 1.30f
+                        || bounds.height() > standardTemplate.heightPx * 1.30f)) {
+                    bounds = standardTemplate.centeredIn(key);
+                }
             } else if (standardTemplate != null) {
                 bounds = standardTemplate.centeredIn(key);
             }
@@ -276,6 +283,21 @@ final class GboardSoftKeyGlassScene {
             }
         }
         return true;
+    }
+
+    private static boolean keepsNativeWideGeometry(View view) {
+        String name = resourceEntryName(view);
+        if (name == null) return false;
+        return name.contains("shift")
+                || name.contains("del")
+                || name.contains("delete")
+                || name.contains("space")
+                || name.contains("enter")
+                || name.contains("ime_action")
+                || name.contains("switch_to_symbol")
+                || name.contains("switch_to_non_prime")
+                || name.contains("language")
+                || name.contains("emoji");
     }
 
     static boolean isCustomRadiusExempt(View view) {
