@@ -20,6 +20,7 @@ import java.util.Arrays;
 final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
     private static final String FRAME_SYNC_TAG = "[DC][DockFrameSync]";
+    private static final String GBOARD_FRAME_SYNC_TAG = "[DC][GboardFrameSync]";
     private static final int INITIAL_UPDATE_FRAMES = 4;
     private static final int FORCE_REFRESH_LEASE_MS = 250;
     private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
@@ -117,7 +118,8 @@ final class Miuix307PassBlurBridge {
             Method setMiBlurWinExc = transactionClass.getMethod(
                     "setMiBlurWinExc", SurfaceControl.class, String[].class);
             Method setForceRefresh = null;
-            if (domain == PassBlurDomain.DOCK) {
+            if (domain == PassBlurDomain.DOCK
+                    || domain == PassBlurDomain.GBOARD_FLOATING) {
                 try {
                     setForceRefresh = transactionClass.getMethod(
                             "setForceRefresh", SurfaceControl.class, Integer.TYPE);
@@ -275,9 +277,11 @@ final class Miuix307PassBlurBridge {
      * existing lease expires.
      */
     static void renewForceRefresh(Binding binding) {
-        if (!VisualRuntimeState.isDockFrameSyncEnabled()) return;
         if (binding == null || !binding.bound || !binding.updatesEnabled) return;
-        if (binding.domain != PassBlurDomain.DOCK) return;
+        boolean dock = binding.domain == PassBlurDomain.DOCK;
+        boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
+        if (!dock && !gboard) return;
+        if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
         if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
         long now = SystemClock.uptimeMillis();
         if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
@@ -292,7 +296,8 @@ final class Miuix307PassBlurBridge {
             long errorNow = SystemClock.uptimeMillis();
             if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
                 lastForceRefreshErrorLogMs = errorNow;
-                MainHook.log(FRAME_SYNC_TAG + " force refresh renew failed: " + error);
+                MainHook.log((gboard ? GBOARD_FRAME_SYNC_TAG : FRAME_SYNC_TAG)
+                        + " force refresh renew failed: " + error);
             }
         }
     }
