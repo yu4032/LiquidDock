@@ -29,6 +29,7 @@ final class GboardFloatingStructureResolver {
         final View bottomFrame;
         final View topEdge;
         final List<ViewGroup> keyboardViewHolders;
+        final ViewGroup inputKeyboardViewHolder;
 
         Structure(
                 ViewGroup keyboardArea,
@@ -37,7 +38,8 @@ final class GboardFloatingStructureResolver {
                 ViewGroup keyboardHolder,
                 View bottomFrame,
                 View topEdge,
-                List<ViewGroup> keyboardViewHolders) {
+                List<ViewGroup> keyboardViewHolders,
+                ViewGroup inputKeyboardViewHolder) {
             this.keyboardArea = keyboardArea;
             this.stockBackground = stockBackground;
             this.contentColumn = contentColumn;
@@ -46,6 +48,7 @@ final class GboardFloatingStructureResolver {
             this.topEdge = topEdge;
             this.keyboardViewHolders = Collections.unmodifiableList(
                     new ArrayList<>(keyboardViewHolders));
+            this.inputKeyboardViewHolder = inputKeyboardViewHolder;
         }
     }
 
@@ -93,6 +96,9 @@ final class GboardFloatingStructureResolver {
             }
             if (topEdge == null) return null;
 
+            ViewGroup inputKeyboardViewHolder = resolveInputKeyboardViewHolder(holders);
+            if (inputKeyboardViewHolder == null) return null;
+
             return new Structure(
                     keyboardArea,
                     stockBackground,
@@ -100,10 +106,29 @@ final class GboardFloatingStructureResolver {
                     keyboardHolder,
                     bottomFrame,
                     topEdge,
-                    holders);
+                    holders,
+                    inputKeyboardViewHolder);
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static ViewGroup resolveInputKeyboardViewHolder(List<ViewGroup> holders) {
+        if (holders == null || holders.isEmpty()) return null;
+        ViewGroup best = null;
+        long bestArea = -1L;
+        float bestBottom = Float.NEGATIVE_INFINITY;
+        for (ViewGroup holder : holders) {
+            if (holder == null) continue;
+            long area = Math.max(0, holder.getWidth()) * (long) Math.max(0, holder.getHeight());
+            float bottom = holder.getY() + holder.getHeight();
+            if (area > bestArea || (area == bestArea && bottom > bestBottom)) {
+                best = holder;
+                bestArea = area;
+                bestBottom = bottom;
+            }
+        }
+        return best != null ? best : holders.get(holders.size() - 1);
     }
 
     static boolean isFloatingGeometry(Structure structure) {
