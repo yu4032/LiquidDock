@@ -201,7 +201,10 @@ final class GboardFloatingGlassCoordinator {
         }
         state.geometryRetryCount = 0;
         syncSinkBounds(state, next);
-        state.session.updateGeometry(next);
+        GboardSoftKeyGlassScene.Node[] softKeyNodes =
+                GboardSoftKeyGlassScene.capture(
+                        state.root, state.sinkHost, state.structure);
+        state.session.updateGeometry(next, softKeyNodes);
         if (!state.captureRequested) {
             state.captureRequested = true;
             state.session.requestInitialCapture();
