@@ -33,6 +33,10 @@ final class GboardFloatingGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         boolean stockHidden;
         boolean captureRequested;
+        boolean attachPosted;
+        boolean keyLayoutDirty = true;
+        GboardFloatingGlassGeometry lastGeometry;
+        GboardSoftKeyGlassScene.Node[] softKeyNodes = GboardSoftKeyGlassScene.EMPTY;
         boolean geometryRetryPosted;
         int geometryRetryCount;
         boolean released;
@@ -67,8 +71,12 @@ final class GboardFloatingGlassCoordinator {
             if (existing.softKeyGlassEnabled != softKeyGlassEnabled) {
                 release(existing);
             } else {
+                if (Math.abs(existing.softKeyCornerRadiusDp - softKeyCornerRadiusDp) > 0.01f) {
+                    existing.keyLayoutDirty = true;
+                }
                 existing.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
-                if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
+                existing.keyLayoutDirty = true;
+                if (existing.session == null && popup.isAttachedToWindow()) scheduleAttach(existing);
                 else syncGeometry(existing);
                 return;
             }
@@ -81,7 +89,7 @@ final class GboardFloatingGlassCoordinator {
                 softKeyCornerRadiusDp);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
-                attachNow(state);
+                scheduleAttach(state);
             }
 
             @Override public void onViewDetachedFromWindow(View view) {
@@ -90,7 +98,21 @@ final class GboardFloatingGlassCoordinator {
         };
         STATES.put(popup, state);
         popup.addOnAttachStateChangeListener(state.attachListener);
-        if (popup.isAttachedToWindow()) attachNow(state);
+        if (popup.isAttachedToWindow()) scheduleAttach(state);
+    }
+
+    private static synchronized void scheduleAttach(State state) {
+        if (state == null || state.released || state.attachPosted || state.session != null
+                || !state.popup.isAttachedToWindow()) return;
+        state.attachPosted = true;
+        state.popup.post(() -> {
+            synchronized (GboardFloatingGlassCoordinator.class) {
+                state.attachPosted = false;
+                if (state.released || state.session != null
+                        || !state.popup.isAttachedToWindow()) return;
+            }
+            attachNow(state);
+        });
     }
 
     static synchronized void onHidden(View popup) {
@@ -116,7 +138,10 @@ final class GboardFloatingGlassCoordinator {
         state.root = root;
         state.cornerRadiusPx = cornerRadiusPx;
         state.layoutListener = (view, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            state.keyLayoutDirty = true;
+            syncGeometry(state);
+        };
         state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
         state.preDrawListener = () -> {
             syncGeometry(state);
@@ -197,8 +222,11 @@ final class GboardFloatingGlassCoordinator {
     private static synchronized void syncGeometry(State state) {
         if (state == null || state.released || state.session == null
                 || state.sinkHost == null || state.root == null) return;
+        GboardFloatingGlassGeometry.CaptureContext captureContext =
+                GboardFloatingGlassGeometry.beginCapture(state.root, state.sinkHost);
+        if (captureContext == null) return;
         GboardFloatingGlassGeometry next = GboardFloatingGlassGeometry.capture(
-                state.root, state.sinkHost, state.structure, state.cornerRadiusPx);
+                captureContext, state.structure, state.cornerRadiusPx);
         if (next == null) {
             if (state.geometryRetryCount >= MAX_GEOMETRY_FRAME_RETRIES) {
                 failClosed(state, "floating geometry never became valid", null);
@@ -219,13 +247,29 @@ final class GboardFloatingGlassCoordinator {
         }
         state.geometryRetryCount = 0;
         syncSinkBounds(state, next);
-        GboardSoftKeyGlassScene.Node[] softKeyNodes =
-                GboardSoftKeyGlassScene.capture(
-                        state.root,
-                        state.sinkHost,
-                        state.structure,
-                        state.softKeyGlassEnabled,
-                        state.softKeyCornerRadiusDp);
+
+        GboardSoftKeyGlassScene.Node[] softKeyNodes;
+        GboardFloatingGlassGeometry previous = state.lastGeometry;
+        boolean translationOnly = previous != null
+                && sameShellSize(previous, next)
+                && !state.keyLayoutDirty;
+        if (!state.softKeyGlassEnabled) {
+            softKeyNodes = GboardSoftKeyGlassScene.EMPTY;
+        } else if (translationOnly) {
+            softKeyNodes = GboardSoftKeyGlassScene.translateAndRefreshInteraction(
+                    state.softKeyNodes,
+                    next.left - previous.left,
+                    next.top - previous.top);
+        } else {
+            softKeyNodes = GboardSoftKeyGlassScene.capture(
+                    captureContext,
+                    state.structure,
+                    true,
+                    state.softKeyCornerRadiusDp);
+            state.keyLayoutDirty = false;
+        }
+        state.lastGeometry = next;
+        state.softKeyNodes = softKeyNodes;
         state.session.updateGeometry(next, softKeyNodes);
         if (state.stockHidden && state.softKeyGlassEnabled) {
             GboardStockVisualAuthority.refreshPreparedSoftKeys(state.structure);
@@ -234,6 +278,17 @@ final class GboardFloatingGlassCoordinator {
             state.captureRequested = true;
             state.session.requestInitialCapture();
         }
+    }
+
+    private static boolean sameShellSize(
+            GboardFloatingGlassGeometry first,
+            GboardFloatingGlassGeometry second) {
+        return first != null && second != null
+                && first.rootWidth == second.rootWidth
+                && first.rootHeight == second.rootHeight
+                && Math.abs(first.width - second.width) < 0.25f
+                && Math.abs(first.height - second.height) < 0.25f
+                && Math.abs(first.cornerRadius - second.cornerRadius) < 0.25f;
     }
 
     private static void syncSinkBounds(
@@ -276,7 +331,9 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         if (STATES.get(state.popup) == state) STATES.remove(state.popup);
-        GboardStockVisualAuthority.release(state.structure);
+        if (state.stockHidden) {
+            state.popup.post(() -> GboardStockVisualAuthority.release(state.structure));
+        }
         state.stockHidden = false;
         if (state.attachListener != null) {
             try { state.popup.removeOnAttachStateChangeListener(state.attachListener); }
@@ -300,11 +357,15 @@ final class GboardFloatingGlassCoordinator {
         state.sink = null;
         state.sinkHost = null;
         if (sink != null) {
-            try { sink.dispose(); } catch (Throwable ignored) {}
             if (sinkHost != null) {
-                try {
-                    if (sink.getParent() == sinkHost) sinkHost.removeView(sink);
-                } catch (Throwable ignored) {}
+                sinkHost.post(() -> {
+                    try { sink.dispose(); } catch (Throwable ignored) {}
+                    try {
+                        if (sink.getParent() == sinkHost) sinkHost.removeView(sink);
+                    } catch (Throwable ignored) {}
+                });
+            } else {
+                try { sink.dispose(); } catch (Throwable ignored) {}
             }
         }
         GboardFloatingGlassSession session = state.session;
