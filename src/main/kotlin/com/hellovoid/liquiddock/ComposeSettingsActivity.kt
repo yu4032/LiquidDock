@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -63,6 +64,8 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -80,24 +83,42 @@ class ComposeSettingsActivity : SettingsActivity() {
 }
 
 private enum class Page(val titleRes: Int) {
-    Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
+    Home(R.string.app_name),
+    LayoutHub(R.string.tab_layout),
+    GlassHub(R.string.tab_glass),
+    MoreHub(R.string.tab_more),
+    Grid(R.string.page_grid),
+    Dock(R.string.page_dock),
     DockRecentBlacklist(R.string.page_dock_recent_blacklist),
-    Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
+    Divider(R.string.page_divider),
+    Workstation(R.string.page_workstation),
+    Recents(R.string.page_recents),
     SecurityCenterSidebar(R.string.page_security_center_sidebar),
-    Liquid(R.string.page_liquid), DialogCustomization(R.string.page_dialog_customization),
-    ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
+    Liquid(R.string.page_liquid),
+    DialogCustomization(R.string.page_dialog_customization),
+    ThirdPartyApps(R.string.page_third_party_apps),
+    Gboard(R.string.page_gboard),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
-    Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
+    Stroke(R.string.page_stroke),
+    Shadow(R.string.page_shadow),
+    Animation(R.string.page_animation),
     Data(R.string.page_data),
-    About(R.string.page_about)
+    About(R.string.page_about),
 }
+
+private val ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub)
+
+private fun isRootPage(page: Page): Boolean = page in ROOT_PAGES
 
 private fun parentPage(page: Page): Page = when (page) {
     Page.DockRecentBlacklist -> Page.Dock
     Page.Gboard -> Page.ThirdPartyApps
+    Page.Grid, Page.Dock, Page.Divider, Page.Workstation, Page.Recents -> Page.LayoutHub
     Page.DialogCustomization, Page.ThirdPartyApps,
-    Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
+    Page.WidgetComponents, Page.LauncherHighlights,
+    Page.Liquid, Page.Stroke, Page.Shadow -> Page.GlassHub
+    Page.SecurityCenterSidebar, Page.Animation, Page.Data, Page.About -> Page.MoreHub
     else -> Page.Home
 }
 
@@ -448,26 +469,28 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         mutableStateOf(prefs.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()))
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
+    val surfaceColor = MiuixTheme.colorScheme.surface
+    val backdrop = rememberLayerBackdrop {
+        drawRect(surfaceColor)
+        drawContent()
+    }
+
     BackHandler(enabled = page != Page.Home) { page = parentPage(page) }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = stringResource(page.titleRes),
                 largeTitle = stringResource(page.titleRes),
                 navigationIcon = {
-                    if (page != Page.Home) {
+                    if (!isRootPage(page)) {
                         SettingsBackButton { page = parentPage(page) }
                     }
                 },
                 titlePadding = 20.dp,
                 actions = {
                     val descriptor = THIRD_PARTY_APP_PAGES[page]
-                    if (page == Page.SecurityCenterSidebar) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
-                        )
-                    } else if (page == Page.Animation) {
+                    if (page == Page.SecurityCenterSidebar || page == Page.Animation) {
                         TextButton(
                             text = stringResource(R.string.action_restart_security_center_and_launcher),
                             onClick = { activity.restartSecurityCenterAndLauncher() },
@@ -483,71 +506,116 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                             },
                         )
                     } else {
-                        TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                        TextButton(
+                            text = stringResource(R.string.action_restart_launcher),
+                            onClick = { activity.restartLauncher() },
+                        )
                     }
                     if (page == Page.Home) {
-                        TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
+                        TextButton(
+                            text = stringResource(R.string.action_restart_system_ui),
+                            onClick = { activity.restartSystemUi() },
+                        )
                     }
                 },
             )
         },
+        bottomBar = {
+            if (isRootPage(page)) {
+                LiquidDockSettingsBottomBar(
+                    selectedIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0),
+                    onSelected = { index -> ROOT_PAGES.getOrNull(index)?.let { page = it } },
+                    backdrop = backdrop,
+                )
+            }
+        },
     ) { padding ->
-        AnimatedContent(
-            targetState = page,
-            transitionSpec = {
-                val duration = prefs.getInt(
-                    ConfigSchema.Animation.SETTINGS_PAGE.name(),
-                    ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
-                ).coerceIn(0, 2000)
-                if (targetState.ordinal > initialState.ordinal) {
-                    (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
-                            (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
-                } else {
-                    (slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration))) togetherWith
-                            (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop),
+        ) {
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = {
+                    val duration = prefs.getInt(
+                        ConfigSchema.Animation.SETTINGS_PAGE.name(),
+                        ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
+                    ).coerceIn(0, 2000)
+                    if (targetState.ordinal > initialState.ordinal) {
+                        (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
+                                (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
+                    } else {
+                        (slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration))) togetherWith
+                                (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
+                    }
+                },
+                label = "page",
+            ) { target ->
+                when (target) {
+                    Page.Home -> HomePage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                        onMasterChanged = { masterEnabled = it },
+                        open = { page = it },
+                    )
+                    Page.LayoutHub -> SettingsHubPage(
+                        padding = padding,
+                        summary = stringResource(R.string.tab_layout_summary),
+                        features = layoutHomeFeatures,
+                        open = { page = it },
+                    )
+                    Page.GlassHub -> SettingsHubPage(
+                        padding = padding,
+                        summary = stringResource(R.string.tab_glass_summary),
+                        features = glassHomeFeatures,
+                        open = { page = it },
+                    )
+                    Page.MoreHub -> SettingsHubPage(
+                        padding = padding,
+                        summary = stringResource(R.string.tab_more_summary),
+                        features = moreHomeFeatures,
+                        open = { page = it },
+                    )
+                    Page.Grid -> GridPage(padding, prefs, masterEnabled)
+                    Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
+                    Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
+                    Page.Divider -> DividerPage(padding, prefs, masterEnabled)
+                    Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
+                    Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
+                    Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                    )
+                    Page.Liquid -> LiquidPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                        openLauncherHighlights = { page = Page.LauncherHighlights },
+                        openWidgetComponents = { page = Page.WidgetComponents },
+                        openThirdPartyApps = { page = Page.ThirdPartyApps },
+                        openDialogCustomization = { page = Page.DialogCustomization },
+                    )
+                    Page.DialogCustomization -> DialogGlassSettingsPage(
+                        padding, prefs, masterEnabled,
+                    )
+                    Page.ThirdPartyApps -> ThirdPartyAppsPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                        openGboard = { page = Page.Gboard },
+                    )
+                    Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                    Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
+                    Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
+                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
+                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
+                    Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
+                    Page.Data -> DataPage(padding, activity)
+                    Page.About -> AboutPage(padding, activity, prefs)
                 }
-            },
-            label = "page",
-        ) { target ->
-            when (target) {
-                Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }) { page = it }
-                Page.Grid -> GridPage(padding, prefs, masterEnabled)
-                Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
-                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
-                Page.Divider -> DividerPage(padding, prefs, masterEnabled)
-                Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
-                Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
-                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                )
-                Page.Liquid -> LiquidPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                    openLauncherHighlights = { page = Page.LauncherHighlights },
-                    openWidgetComponents = { page = Page.WidgetComponents },
-                    openThirdPartyApps = { page = Page.ThirdPartyApps },
-                    openDialogCustomization = { page = Page.DialogCustomization },
-                )
-                Page.DialogCustomization -> DialogGlassSettingsPage(
-                    padding, prefs, masterEnabled,
-                )
-                Page.ThirdPartyApps -> ThirdPartyAppsPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                    openGboard = { page = Page.Gboard },
-                )
-                Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
-                Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
-                Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
-                Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
-                Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
-                Page.Data -> DataPage(padding, activity)
-                Page.About -> AboutPage(padding, activity, prefs)
             }
         }
     }
@@ -560,6 +628,13 @@ private data class HomeFeature(
     val index: String,
 )
 
+private val overviewQuickFeatures = listOf(
+    HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, "01"),
+    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, "02"),
+    HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, "03"),
+    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, "04"),
+)
+
 private val layoutHomeFeatures = listOf(
     HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, "01"),
     HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, "02"),
@@ -568,31 +643,35 @@ private val layoutHomeFeatures = listOf(
     HomeFeature(Page.Recents, R.string.page_recents, R.string.home_recents_summary, "05"),
 )
 
-private val appearanceHomeFeatures = listOf(
-    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, "06"),
-    HomeFeature(Page.Stroke, R.string.page_stroke, R.string.home_stroke_summary, "07"),
-    HomeFeature(Page.Shadow, R.string.page_shadow, R.string.home_shadow_summary, "08"),
+private val glassHomeFeatures = listOf(
+    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, "01"),
+    HomeFeature(Page.Stroke, R.string.page_stroke, R.string.home_stroke_summary, "02"),
+    HomeFeature(Page.Shadow, R.string.page_shadow, R.string.home_shadow_summary, "03"),
+    HomeFeature(Page.DialogCustomization, R.string.page_dialog_customization, R.string.home_dialog_summary, "04"),
+    HomeFeature(Page.LauncherHighlights, R.string.page_launcher_highlights, R.string.launcher_highlights_entry_summary, "05"),
+    HomeFeature(Page.WidgetComponents, R.string.widget_components_entry, R.string.widget_components_entry_summary, "06"),
+    HomeFeature(Page.ThirdPartyApps, R.string.page_third_party_apps, R.string.home_third_party_summary, "07"),
 )
 
-private val interactionHomeFeatures = listOf(
+private val moreHomeFeatures = listOf(
     HomeFeature(
         Page.SecurityCenterSidebar,
         R.string.page_security_center_sidebar,
         R.string.home_security_center_sidebar_summary,
-        "09",
+        "01",
     ),
-    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, "10"),
-)
-
-private val utilityHomeFeatures = listOf(
-    HomeFeature(Page.Data, R.string.home_data_title, R.string.home_data_summary, "11"),
-    HomeFeature(Page.About, R.string.home_about_title, R.string.home_about_summary, "12"),
+    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, "02"),
+    HomeFeature(Page.Data, R.string.home_data_title, R.string.home_data_summary, "03"),
+    HomeFeature(Page.About, R.string.home_about_title, R.string.home_about_summary, "04"),
 )
 
 @Composable
 private fun HomePage(
-    padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
-    onMasterChanged: (Boolean) -> Unit, open: (Page) -> Unit,
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onMasterChanged: (Boolean) -> Unit,
+    open: (Page) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -606,18 +685,32 @@ private fun HomePage(
                 onMasterChanged = onMasterChanged,
             )
         }
+        item {
+            PageHeader(
+                stringResource(R.string.app_name),
+                stringResource(R.string.tab_overview_summary),
+            )
+        }
+        item { SmallTitle(stringResource(R.string.category_quick_access)) }
+        item { HomeFeatureGrid(overviewQuickFeatures, open) }
+        item { Spacer(modifier = Modifier.padding(bottom = 8.dp)) }
+    }
+}
 
-        item { SmallTitle(stringResource(R.string.category_layout)) }
-        item { HomeFeatureGrid(layoutHomeFeatures, open) }
-
-        item { SmallTitle(stringResource(R.string.category_glass_appearance)) }
-        item { HomeFeatureGrid(appearanceHomeFeatures, open) }
-
-        item { SmallTitle(stringResource(R.string.category_system_interaction)) }
-        item { HomeFeatureGrid(interactionHomeFeatures, open) }
-
-        item { SmallTitle(stringResource(R.string.category_more)) }
-        item { HomeFeatureGrid(utilityHomeFeatures, open) }
+@Composable
+private fun SettingsHubPage(
+    padding: PaddingValues,
+    summary: String,
+    features: List<HomeFeature>,
+    open: (Page) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        item { PageHeader("", summary) }
+        item { HomeFeatureGrid(features, open) }
         item { Spacer(modifier = Modifier.padding(bottom = 8.dp)) }
     }
 }
@@ -935,20 +1028,70 @@ private fun DockPage(
     masterEnabled: Boolean,
     openRecentBlacklist: () -> Unit,
 ) {
-    var dockEnabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())) }
-    var resizeAnimation by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.RESIZE_ANIMATION.name(), ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault())) }
-    var smoothResize by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault())) }
-    SettingsList(padding, stringResource(R.string.page_dock)) {
-        BooleanSetting(prefs, ConfigSchema.Dock.ENABLED, stringResource(R.string.dock_customization), stringResource(R.string.dock_customization_summary), masterEnabled) { dockEnabled = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
-        ArrowPreference(
-            title = stringResource(R.string.page_dock_recent_blacklist),
-            summary = stringResource(R.string.dock_recent_blacklist_summary),
-            onClick = openRecentBlacklist,
-        )
-        BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
-        dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
+    var dockEnabled by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault()))
+    }
+    var resizeAnimation by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.RESIZE_ANIMATION.name(), ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault()))
+    }
+    var smoothResize by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault()))
+    }
+
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item { PageHeader(stringResource(R.string.page_dock), stringResource(R.string.home_dock_summary)) }
+
+        item { SmallTitle(stringResource(R.string.dock_section_behavior)) }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Dock.ENABLED,
+                    stringResource(R.string.dock_customization),
+                    stringResource(R.string.dock_customization_summary),
+                    masterEnabled,
+                ) { dockEnabled = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT,
+                    "隐藏手机互联图标",
+                    "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态",
+                    masterEnabled,
+                )
+                ArrowPreference(
+                    title = stringResource(R.string.page_dock_recent_blacklist),
+                    summary = stringResource(R.string.dock_recent_blacklist_summary),
+                    onClick = openRecentBlacklist,
+                )
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.dock_section_motion)) }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Dock.RESIZE_ANIMATION,
+                    stringResource(R.string.dock_resize_animation),
+                    stringResource(R.string.dock_resize_animation_summary),
+                    masterEnabled && dockEnabled,
+                ) { resizeAnimation = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION,
+                    stringResource(R.string.dock_smooth_resize_animation),
+                    stringResource(R.string.dock_smooth_resize_animation_summary),
+                    masterEnabled && dockEnabled && !resizeAnimation,
+                ) { smoothResize = it }
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.dock_section_geometry)) }
+        item {
+            SettingsCard {
+                dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
+            }
+        }
     }
 }
 
@@ -1040,124 +1183,212 @@ private fun LiquidPage(
     openThirdPartyApps: () -> Unit,
     openDialogCustomization: () -> Unit,
 ) {
-    var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
-    var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
-    var functionalDockIconGlass by remember { mutableStateOf(prefs.getBoolean(
-        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
-        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.uiDefault(),
-    )) }
-    var widgetGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())) }
-    var smallFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault())) }
-    var largeFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault())) }
-    SettingsList(
-        padding,
-        stringResource(R.string.page_liquid),
-        stringResource(R.string.liquid_header_summary),
-    ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.ENABLED,
-            stringResource(R.string.liquid_enable),
-            stringResource(R.string.liquid_enable_summary),
-            masterEnabled,
-        ) { liquidGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
-            "壁纸闪烁修复",
-            "仅在壁纸闪烁时开启；需要在 LSPosed 中为 LiquidDock 启用 System Framework（system）作用域，并重启设备后生效",
-            masterEnabled && liquidGlass,
+    var liquidGlass by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault()))
+    }
+    var iconGlass by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault()))
+    }
+    var functionalDockIconGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
+                ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.uiDefault(),
+            ),
         )
-        ArrowPreference(
-            title = "第三方应用适配",
-            summary = "Gboard 等第三方应用的独立液态玻璃适配",
-            enabled = masterEnabled && liquidGlass,
-            onClick = openThirdPartyApps,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
-            "应用顶部菜单液态玻璃",
-            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；重启系统界面后生效",
-            masterEnabled && liquidGlass,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
-            "桌面快捷菜单玻璃背景",
-            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
-            masterEnabled && liquidGlass,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
-            "快捷菜单深色模式适配",
-            "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
-            masterEnabled && liquidGlass,
-        )
-        ArrowPreference(
-            title = stringResource(R.string.page_dialog_customization),
-            summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
-            enabled = masterEnabled && liquidGlass,
-            onClick = openDialogCustomization,
-        )
-        BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-            "仅 Dock 功能图标玻璃",
-            "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-            masterEnabled && liquidGlass,
-        ) { functionalDockIconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
-            "多任务操作按钮玻璃",
-            "将多任务界面的清除全部和设备互联胶囊背景替换为完整 Prismal 液态玻璃",
-            masterEnabled && liquidGlass,
-        )
-        IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
-        IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
-        BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃", "只替换材质背景，保留 RemoteViews / MAML 内容", masterEnabled && liquidGlass) { widgetGlass = it }
-        BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配", "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容", masterEnabled && liquidGlass && widgetGlass)
-        IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)
-        IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidGlass && widgetGlass)
-        ArrowPreference(
-            stringResource(R.string.widget_components_entry),
-            summary = stringResource(R.string.widget_components_entry_summary),
-            enabled = masterEnabled && liquidGlass && widgetGlass,
-            onClick = openWidgetComponents,
-        )
-        BooleanSetting(prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS, "小文件夹玻璃", "保留 1x1 文件夹缩略预览", masterEnabled && liquidGlass) { smallFolderGlass = it }
-        IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidGlass && smallFolderGlass)
-        IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidGlass && smallFolderGlass)
-        BooleanSetting(prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS, "大文件夹玻璃", "独立控制大文件夹材质", masterEnabled && liquidGlass) { largeFolderGlass = it }
-        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
-        IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
-        ArrowPreference(
-            stringResource(R.string.launcher_highlights_entry),
-            summary = stringResource(R.string.launcher_highlights_entry_summary),
-            enabled = masterEnabled && liquidGlass,
-            onClick = openLauncherHighlights,
-        )
-        SmallTitle("工作区实时捕获性能")
-        IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
-        IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.FRAME_SYNC,
-            stringResource(R.string.dock_frame_sync),
-            stringResource(R.string.dock_frame_sync_summary),
-            masterEnabled && liquidGlass,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-            "显示表面法线（调试）",
-            "用颜色显示表面法线方向，便于调试折射与光照",
-            masterEnabled && liquidGlass,
-        )
-        liquidSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidGlass) }
+    }
+    var widgetGlass by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault()))
+    }
+    var smallFolderGlass by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault()))
+    }
+    var largeFolderGlass by remember {
+        mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault()))
+    }
+
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_liquid),
+                stringResource(R.string.liquid_header_summary),
+            )
+        }
+
+        item { SmallTitle(stringResource(R.string.liquid_section_core)) }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ENABLED,
+                    stringResource(R.string.liquid_enable),
+                    stringResource(R.string.liquid_enable_summary),
+                    masterEnabled,
+                ) { liquidGlass = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
+                    "壁纸闪烁修复",
+                    "仅在壁纸闪烁时开启；需要在 LSPosed 中为 LiquidDock 启用 System Framework（system）作用域，并重启设备后生效",
+                    masterEnabled && liquidGlass,
+                )
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.liquid_section_surfaces)) }
+        item {
+            SettingsCard {
+                ArrowPreference(
+                    title = "第三方应用适配",
+                    summary = "Gboard 等第三方应用的独立液态玻璃适配",
+                    enabled = masterEnabled && liquidGlass,
+                    onClick = openThirdPartyApps,
+                )
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
+                    "应用顶部菜单液态玻璃",
+                    "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；重启系统界面后生效",
+                    masterEnabled && liquidGlass,
+                )
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
+                    "桌面快捷菜单玻璃背景",
+                    "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
+                    masterEnabled && liquidGlass,
+                )
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
+                    "快捷菜单深色模式适配",
+                    "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
+                    masterEnabled && liquidGlass,
+                )
+                ArrowPreference(
+                    title = stringResource(R.string.page_dialog_customization),
+                    summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
+                    enabled = masterEnabled && liquidGlass,
+                    onClick = openDialogCustomization,
+                )
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.liquid_section_components)) }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ICON_GLASS,
+                    "图标玻璃",
+                    "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
+                    masterEnabled && liquidGlass,
+                ) { iconGlass = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+                    "仅 Dock 功能图标玻璃",
+                    "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
+                    masterEnabled && liquidGlass,
+                ) { functionalDockIconGlass = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
+                    "多任务操作按钮玻璃",
+                    "将多任务界面的清除全部和设备互联胶囊背景替换为完整 Prismal 液态玻璃",
+                    masterEnabled && liquidGlass,
+                )
+                IntSetting(
+                    prefs,
+                    iconSizeOffsetSpec,
+                    masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass),
+                )
+                IntSetting(
+                    prefs,
+                    iconCornerRadiusSpec,
+                    masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass),
+                )
+
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.WIDGET_GLASS,
+                    "小部件玻璃",
+                    "只替换材质背景，保留 RemoteViews / MAML 内容",
+                    masterEnabled && liquidGlass,
+                ) { widgetGlass = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.WIDGET_DARK_CONTENT,
+                    "小组件深色内容适配",
+                    "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
+                    masterEnabled && liquidGlass && widgetGlass,
+                )
+                IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)
+                IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidGlass && widgetGlass)
+                ArrowPreference(
+                    stringResource(R.string.widget_components_entry),
+                    summary = stringResource(R.string.widget_components_entry_summary),
+                    enabled = masterEnabled && liquidGlass && widgetGlass,
+                    onClick = openWidgetComponents,
+                )
+
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.SMALL_FOLDER_GLASS,
+                    "小文件夹玻璃",
+                    "保留 1x1 文件夹缩略预览",
+                    masterEnabled && liquidGlass,
+                ) { smallFolderGlass = it }
+                IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidGlass && smallFolderGlass)
+                IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidGlass && smallFolderGlass)
+
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.LARGE_FOLDER_GLASS,
+                    "大文件夹玻璃",
+                    "独立控制大文件夹材质",
+                    masterEnabled && liquidGlass,
+                ) { largeFolderGlass = it }
+                IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
+                IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
+
+                ArrowPreference(
+                    stringResource(R.string.launcher_highlights_entry),
+                    summary = stringResource(R.string.launcher_highlights_entry_summary),
+                    enabled = masterEnabled && liquidGlass,
+                    onClick = openLauncherHighlights,
+                )
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.liquid_section_performance)) }
+        item {
+            SettingsCard {
+                IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
+                IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Dock.FRAME_SYNC,
+                    stringResource(R.string.dock_frame_sync),
+                    stringResource(R.string.dock_frame_sync_summary),
+                    masterEnabled && liquidGlass,
+                )
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
+                    "显示表面法线（调试）",
+                    "用颜色显示表面法线方向，便于调试折射与光照",
+                    masterEnabled && liquidGlass,
+                )
+            }
+        }
+
+        item { SmallTitle(stringResource(R.string.liquid_section_optics)) }
+        item {
+            SettingsCard {
+                liquidSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidGlass) }
+            }
+        }
     }
 }
 
