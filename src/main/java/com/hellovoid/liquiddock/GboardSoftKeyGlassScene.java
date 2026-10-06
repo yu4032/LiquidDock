@@ -314,6 +314,9 @@ final class GboardSoftKeyGlassScene {
     private static VisualTarget resolveVisualTarget(View key) {
         if (key == null) return null;
 
+        VisualTarget actionBackground = findDedicatedActionBackgroundImage(key);
+        if (actionBackground != null) return actionBackground;
+
         VisualTarget descendant = findBestDescendantBackground(key);
         Shape directShape = resolveNativeShape(key);
         if (descendant != null && descendant.shape != null) {
@@ -327,6 +330,64 @@ final class GboardSoftKeyGlassScene {
         }
         if (directShape != null) return new VisualTarget(key, directShape);
         return descendant;
+    }
+
+    private static VisualTarget findDedicatedActionBackgroundImage(View key) {
+        if (!(key instanceof ViewGroup)) return null;
+        ArrayList<View> stack = new ArrayList<>();
+        stack.add(key);
+        while (!stack.isEmpty()) {
+            View candidate = stack.remove(stack.size() - 1);
+            if (candidate instanceof ImageView && tagContainsBackgroundIcon(candidate)) {
+                Shape shape = resolveImageDrawableShape((ImageView) candidate);
+                if (shape != null) return new VisualTarget(candidate, shape);
+            }
+            if (candidate instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) candidate;
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    View child = group.getChildAt(i);
+                    if (child != null) stack.add(child);
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Shape resolveImageDrawableShape(ImageView imageView) {
+        if (imageView == null || imageView.getDrawable() == null
+                || imageView.getWidth() <= 0 || imageView.getHeight() <= 0) return null;
+        synchronized (GboardSoftKeyGlassScene.class) {
+            Shape cached = SHAPE_BY_BACKGROUND_VIEW.get(imageView);
+            if (cached != null) return cached;
+        }
+        try {
+            Drawable drawable = imageView.getDrawable();
+            Rect drawableBounds = drawable.getBounds();
+            RectF bounds;
+            if (drawableBounds.width() > 0 && drawableBounds.height() > 0) {
+                bounds = new RectF(drawableBounds);
+                imageView.getImageMatrix().mapRect(bounds);
+                bounds.offset(imageView.getPaddingLeft(), imageView.getPaddingTop());
+            } else {
+                bounds = new RectF(
+                        imageView.getPaddingLeft(),
+                        imageView.getPaddingTop(),
+                        imageView.getWidth() - imageView.getPaddingRight(),
+                        imageView.getHeight() - imageView.getPaddingBottom());
+            }
+            if (bounds.width() <= 0f || bounds.height() <= 0f) return null;
+            Outline outline = new Outline();
+            drawable.getOutline(outline);
+            Shape shape = new Shape(bounds, Math.max(0f, outline.getRadius()));
+            synchronized (GboardSoftKeyGlassScene.class) {
+                if (!SHAPE_BY_BACKGROUND_VIEW.containsKey(imageView)) {
+                    SHAPE_BY_BACKGROUND_VIEW.put(imageView, shape);
+                }
+                return SHAPE_BY_BACKGROUND_VIEW.get(imageView);
+            }
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private static VisualTarget findBestDescendantBackground(View key) {
