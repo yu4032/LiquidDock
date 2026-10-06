@@ -48,6 +48,10 @@
     <string name="category_system_interaction">系统交互</string>
     <string name="category_configuration">配置</string>
     <string name="category_about">关于</string>
+    <string name="category_more">更多</string>
+    <string name="state_on">开</string>
+    <string name="state_off">关</string>
+    <string name="home_profile_summary">%1$d × %2$d 网格 · Dock %3$s · 玻璃 %4$s</string>
     <string name="enable_liquiddock">启用 LiquidDock</string>
     <string name="home_status_enabled">LiquidDock 已启用</string>
     <string name="home_status_disabled">LiquidDock 已暂停</string>
