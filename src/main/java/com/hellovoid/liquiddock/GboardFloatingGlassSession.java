@@ -72,6 +72,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private OutputState output;
 
     GboardFloatingGlassSession(
+            View root, LiquidDockConfig.Glass glassConfig, Listener listener) {
+        this(root, glassConfig, true, listener);
+    }
+
+    GboardFloatingGlassSession(
             View root,
             LiquidDockConfig.Glass glassConfig,
             boolean realtimeBackgroundSampling,
