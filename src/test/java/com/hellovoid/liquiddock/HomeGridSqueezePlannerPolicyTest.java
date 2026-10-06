@@ -7,34 +7,21 @@ import org.junit.Test;
 
 public class HomeGridSqueezePlannerPolicyTest {
     @Test
-    public void stockSixByFourKeepsNativeOneByOnePlanner() {
-        assertTrue(HomeGridSqueezePlannerPolicy.isVendorPadGrid(6, 4));
-        assertTrue(HomeGridSqueezePlannerPolicy.isVendorPadGrid(4, 6));
-        assertFalse(HomeGridSqueezePlannerPolicy.useGenericForSpan(true, 1, 1));
+    public void oneByOneIconsKeepStockPadPlannersOnCustomGrids() {
+        assertFalse(HomeGridSqueezePlannerPolicy.useGenericForSpan(1, 1));
         assertFalse(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
-                true, false, 1, 1));
+                false, 1, 1));
     }
 
     @Test
-    public void everyNonVendorGridUsesGenericPlannerEvenForOneByOneIcons() {
-        assertFalse(HomeGridSqueezePlannerPolicy.isVendorPadGrid(8, 4));
-        assertFalse(HomeGridSqueezePlannerPolicy.isVendorPadGrid(4, 8));
-        assertFalse(HomeGridSqueezePlannerPolicy.isVendorPadGrid(10, 6));
-        assertFalse(HomeGridSqueezePlannerPolicy.isVendorPadGrid(6, 10));
-        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(false, 1, 1));
+    public void multiCellItemsAndSpanMovesUseGenericRectangularPlanners() {
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(2, 1));
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(1, 2));
+        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(2, 2));
         assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
-                false, false, 1, 1));
-    }
-
-    @Test
-    public void multiCellItemsUseGenericPlannerOnVendorGridToo() {
-        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(true, 2, 1));
-        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(true, 1, 2));
-        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSpan(true, 2, 2));
+                true, 1, 1));
         assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
-                true, true, 1, 1));
-        assertTrue(HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
-                true, false, 2, 1));
+                false, 2, 1));
     }
 
     @Test
