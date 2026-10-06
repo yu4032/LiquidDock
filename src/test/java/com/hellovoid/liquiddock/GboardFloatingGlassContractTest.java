@@ -155,6 +155,29 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("swapSucceeded = true"));
     }
 
+    @Test public void floatingSoftKeysShareTheExistingPrismalFrame() throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String scene = read(MAIN.resolve("GboardSoftKeyGlassScene.java"));
+        String authority = read(MAIN.resolve("GboardStockVisualAuthority.java"));
+
+        assertTrue(scene.contains(
+                "com.google.android.libraries.inputmethod.widgets.SoftKeyView"));
+        assertTrue(scene.contains("getSuperclass()"));
+        assertTrue(scene.contains("GboardFloatingGlassGeometry.captureTarget"));
+        assertTrue(scene.contains("PrismalInteractionState"));
+        assertTrue(scene.contains("isPressed()"));
+        assertTrue(coordinator.contains("GboardSoftKeyGlassScene.capture"));
+        assertTrue(session.contains("for (GboardSoftKeyGlassScene.Node node"));
+        assertTrue(session.contains("prismalRenderer.drawGlass("));
+        assertTrue(authority.contains("claimPreparedSoftKeyDescendants"));
+        assertTrue(authority.contains("GboardSoftKeyGlassScene.isPrepared"));
+        assertFalse(scene.contains("findViewById"));
+        assertFalse(scene.contains("0x7f0b"));
+        assertFalse(scene.contains("TextureView"));
+        assertFalse(scene.contains("RootPassBlurBackend"));
+    }
+
     @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
         String settings = read(SETTINGS);
         String gboardSettings = read(GBOARD_SETTINGS);
