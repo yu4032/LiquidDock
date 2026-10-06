@@ -151,6 +151,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("updatesEnabled"));
         assertTrue(authority.contains("Boolean.valueOf(claim.updatesEnabled)"));
         assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.setUpdatesEnabled"));
+        assertTrue(bridge.contains("Integer.valueOf(0)"));
+        assertTrue(bridge.contains("binding.domain == PassBlurDomain.GBOARD_FLOATING"));
         assertTrue(bridge.contains("domain == PassBlurDomain.GBOARD_FLOATING"));
         assertTrue(bridge.contains("setForceRefresh = transactionClass.getMethod"));
         String backend = read(MAIN.resolve("RootPassBlurBackend.java"));
@@ -178,6 +180,30 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("scheduleRender(true)"));
         assertTrue(session.contains("scheduleRender(false)"));
         assertFalse(session.contains("postToRenderThread(this::renderCurrent)"));
+    }
+
+    @Test public void keyboardMotionUsesDirtyRegionInsteadOfFullRootSceneClear()
+            throws Exception {
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
+
+        assertTrue(session.contains("beginKeyboardDirtyFrame"));
+        assertTrue(session.contains("beginGlassFrameRegion"));
+        assertTrue(session.contains("lastRenderedGeometry"));
+        assertTrue(session.contains("Math.min(previous.left, current.left)"));
+        assertTrue(session.contains("Math.max("));
+        assertTrue(geometry.contains("boolean sharedRootHost = sinkHost == root"));
+    }
+
+    @Test public void pureKeyboardMotionDoesNotReconcileRootSurface() throws Exception {
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+
+        int updateStart = session.indexOf("void updateGeometry(");
+        int attachStart = session.indexOf("void attachOutput(", updateStart);
+        String updateBody = session.substring(updateStart, attachStart);
+        assertTrue(updateBody.contains("old.rootWidth != next.rootWidth"));
+        assertTrue(updateBody.contains("old.rootHeight != next.rootHeight"));
+        assertTrue(updateBody.contains("sourceBackend.reconcileRoot();"));
     }
 
     @Test public void geometryRenderCanPreemptBackdropWorkUnderLoad() throws Exception {
