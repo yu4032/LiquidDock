@@ -25,6 +25,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun ThirdPartyAppsPage(
@@ -509,7 +510,11 @@ private fun GboardValueSlider(
 @Composable
 private fun GboardPageHeader(title: String, summary: String) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Text(summary, fontSize = 13.sp)
+        Text(
+            text = summary,
+            fontSize = 13.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
     }
 }
 
