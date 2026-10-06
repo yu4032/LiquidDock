@@ -159,8 +159,9 @@ private fun RowScope.SettingsBottomBarItem(
     onClick: () -> Unit,
 ) {
     val dark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+    val accentColor = MiuixTheme.colorScheme.primary
     val contentColor = if (selected) {
-        MiuixTheme.colorScheme.primary
+        accentColor
     } else {
         MiuixTheme.colorScheme.onSurfaceVariantActions
     }
@@ -186,7 +187,7 @@ private fun RowScope.SettingsBottomBarItem(
             highlight = { SelectionHighlight },
             onDrawSurface = {
                 drawRect(
-                    MiuixTheme.colorScheme.primary.copy(
+                    accentColor.copy(
                         alpha = if (dark) 0.12f else 0.09f,
                     ),
                 )
