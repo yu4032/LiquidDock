@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Continuous zero-copy PassBlur -> Prismal pipeline for one Gboard floating popup root. */
+/** Zero-copy PassBlur -> Prismal pipeline with realtime or one-frame frozen sampling. */
 final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
@@ -53,6 +53,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final boolean realtimeBackgroundSampling;
 
     private volatile GboardFloatingGlassGeometry geometry;
     private volatile GboardSoftKeyGlassScene.Node[] softKeyNodes =
@@ -60,6 +61,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
+    private volatile boolean frozenCapturePending;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -70,10 +72,14 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private OutputState output;
 
     GboardFloatingGlassSession(
-            View root, LiquidDockConfig.Glass glassConfig, Listener listener) {
+            View root,
+            LiquidDockConfig.Glass glassConfig,
+            boolean realtimeBackgroundSampling,
+            Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
         rootRef = new WeakReference<>(root);
         this.listener = listener;
+        this.realtimeBackgroundSampling = realtimeBackgroundSampling;
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -98,7 +104,22 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        requestBackdropCapture("initial");
+    }
+
+    void requestFrozenMotionCapture() {
+        if (!realtimeBackgroundSampling) requestBackdropCapture("motion-start");
+    }
+
+    private void requestBackdropCapture(String reason) {
+        if (shuttingDown) return;
+        if (!realtimeBackgroundSampling) frozenCapturePending = true;
+        sourceBackend.requestFresh(GENERATION);
+        if (!realtimeBackgroundSampling) {
+            try {
+                Api101Bridge.log(TAG + " frozen capture requested reason=" + reason);
+            } catch (Throwable ignored) {}
+        }
     }
 
     void updateGeometry(GboardFloatingGlassGeometry next) {
@@ -183,6 +204,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
+        if (!realtimeBackgroundSampling && !frozenCapturePending) {
+            sourceBackend.setUpdatesEnabled(false, "gboard-frozen-extra-frame");
+            return;
+        }
+        if (!realtimeBackgroundSampling) frozenCapturePending = false;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -196,6 +222,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
+            if (!realtimeBackgroundSampling) {
+                sourceBackend.setUpdatesEnabled(false, "gboard-frozen-frame-consumed");
+            }
             renderCurrent();
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
