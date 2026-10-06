@@ -70,7 +70,9 @@ final class GboardFloatingGlassHook {
         GboardFloatingGlassCoordinator.onShown(
                 structure.keyboardArea,
                 structure,
-                liveConfig.glass);
+                liveConfig.glass,
+                GboardGlassPreferences.softKeyGlassEnabled(liveReader),
+                GboardGlassPreferences.softKeyCornerRadiusDp(liveReader));
     }
 
     private static String failureSummary(Throwable error) {
