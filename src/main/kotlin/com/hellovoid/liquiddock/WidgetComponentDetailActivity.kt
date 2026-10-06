@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,7 @@ import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -44,6 +45,7 @@ class WidgetComponentDetailActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val widgetKey = intent.getStringExtra(EXTRA_WIDGET_KEY)
         if (widgetKey.isNullOrEmpty()) {
             finish()
@@ -111,8 +113,9 @@ private fun WidgetComponentDetailScreen(
 
     Scaffold(
         topBar = {
-            SmallTopAppBar(
+            TopAppBar(
                 title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
+                largeTitle = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
                 navigationIcon = {
                     TextButton(
                         text = "返回",
