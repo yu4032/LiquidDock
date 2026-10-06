@@ -20,6 +20,8 @@ final class GboardFloatingGlassCoordinator {
         final GboardFloatingStructureResolver.Structure structure;
         final LiquidDockConfig.Glass glassConfig;
         final ViewGroup keyboardArea;
+        boolean softKeyGlassEnabled;
+        float softKeyCornerRadiusDp;
         ViewGroup sinkHost;
         View backgroundFrame;
         View root;
@@ -38,12 +40,16 @@ final class GboardFloatingGlassCoordinator {
         State(
                 View popup,
                 GboardFloatingStructureResolver.Structure structure,
-                LiquidDockConfig.Glass glassConfig) {
+                LiquidDockConfig.Glass glassConfig,
+                boolean softKeyGlassEnabled,
+                float softKeyCornerRadiusDp) {
             this.popup = popup;
             this.structure = structure;
             this.glassConfig = glassConfig;
             this.keyboardArea = structure.keyboardArea;
             this.backgroundFrame = structure.stockBackground;
+            this.softKeyGlassEnabled = softKeyGlassEnabled;
+            this.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
         }
     }
 
@@ -52,15 +58,27 @@ final class GboardFloatingGlassCoordinator {
     static synchronized void onShown(
             View popup,
             GboardFloatingStructureResolver.Structure structure,
-            LiquidDockConfig.Glass glassConfig) {
+            LiquidDockConfig.Glass glassConfig,
+            boolean softKeyGlassEnabled,
+            float softKeyCornerRadiusDp) {
         if (popup == null || structure == null || glassConfig == null) return;
         State existing = STATES.get(popup);
         if (existing != null && !existing.released) {
-            if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
-            else syncGeometry(existing);
-            return;
+            if (existing.softKeyGlassEnabled != softKeyGlassEnabled) {
+                release(existing);
+            } else {
+                existing.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
+                if (existing.session == null && popup.isAttachedToWindow()) attachNow(existing);
+                else syncGeometry(existing);
+                return;
+            }
         }
-        State state = new State(popup, structure, glassConfig);
+        State state = new State(
+                popup,
+                structure,
+                glassConfig,
+                softKeyGlassEnabled,
+                softKeyCornerRadiusDp);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attachNow(state);
@@ -203,8 +221,15 @@ final class GboardFloatingGlassCoordinator {
         syncSinkBounds(state, next);
         GboardSoftKeyGlassScene.Node[] softKeyNodes =
                 GboardSoftKeyGlassScene.capture(
-                        state.root, state.sinkHost, state.structure);
+                        state.root,
+                        state.sinkHost,
+                        state.structure,
+                        state.softKeyGlassEnabled,
+                        state.softKeyCornerRadiusDp);
         state.session.updateGeometry(next, softKeyNodes);
+        if (state.stockHidden && state.softKeyGlassEnabled) {
+            GboardStockVisualAuthority.refreshPreparedSoftKeys(state.structure);
+        }
         if (!state.captureRequested) {
             state.captureRequested = true;
             state.session.requestInitialCapture();
@@ -233,7 +258,8 @@ final class GboardFloatingGlassCoordinator {
         if (state == null || state.released || state.stockHidden) return;
         View backgroundFrame = state.backgroundFrame;
         if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()) return;
-        if (!GboardStockVisualAuthority.claim(state.structure)) {
+        if (!GboardStockVisualAuthority.claim(
+                state.structure, state.softKeyGlassEnabled)) {
             failClosed(state, "unable to claim floating stock visuals", null);
             return;
         }
