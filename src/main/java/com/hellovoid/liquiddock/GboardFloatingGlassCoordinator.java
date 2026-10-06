@@ -192,8 +192,9 @@ final class GboardFloatingGlassCoordinator {
             host.addView(
                     sink,
                     index,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT);
+                    new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
             state.sinkHost = host;
             return true;
         } catch (Throwable error) {
