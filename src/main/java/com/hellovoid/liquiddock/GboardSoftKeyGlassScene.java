@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Outline;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,8 +25,18 @@ final class GboardSoftKeyGlassScene {
             new PrismalInteractionState(1f, 0.5f, 0.5f);
     static final Node[] EMPTY = new Node[0];
 
-    private static final WeakHashMap<View, Float> RADIUS_BY_VIEW = new WeakHashMap<>();
+    private static final WeakHashMap<View, Shape> SHAPE_BY_VIEW = new WeakHashMap<>();
     private static final WeakHashMap<View, Boolean> PREPARED_BY_VIEW = new WeakHashMap<>();
+
+    private static final class Shape {
+        final RectF bounds;
+        final float radius;
+
+        Shape(RectF bounds, float radius) {
+            this.bounds = new RectF(bounds);
+            this.radius = radius;
+        }
+    }
 
     static final class Node {
         final GboardFloatingGlassGeometry geometry;
@@ -62,10 +74,11 @@ final class GboardSoftKeyGlassScene {
             }
             if (!isDrawableTarget(key)) continue;
 
-            float radius = resolveRadiusPx(key);
-            if (radius <= 0f) continue;
+            Shape shape = resolveShape(key);
+            if (shape == null || shape.radius <= 0f) continue;
             GboardFloatingGlassGeometry geometry =
-                    GboardFloatingGlassGeometry.captureTarget(root, sinkHost, key, radius);
+                    GboardFloatingGlassGeometry.captureTargetRect(
+                            root, sinkHost, key, shape.bounds, shape.radius);
             if (geometry == null) continue;
 
             boolean pressed = key.isPressed();
@@ -96,8 +109,8 @@ final class GboardSoftKeyGlassScene {
 
     static synchronized void rememberBackground(View view, Drawable background) {
         if (!isSoftKeyView(view) || background == null) return;
-        float radius = outlineRadius(background);
-        if (radius > 0f) RADIUS_BY_VIEW.put(view, radius);
+        Shape shape = outlineShape(background, view);
+        if (shape != null) SHAPE_BY_VIEW.put(view, shape);
     }
 
     static boolean sameAs(Node[] first, Node[] second) {
@@ -141,41 +154,53 @@ final class GboardSoftKeyGlassScene {
                 && view.getHeight() > 0;
     }
 
-    private static float resolveRadiusPx(View view) {
-        if (view == null) return 0f;
-        float radius = outlineRadius(view.getBackground());
-        if (radius <= 0f) radius = outlineRadius(view);
+    private static Shape resolveShape(View view) {
+        if (view == null) return null;
+        Shape shape = outlineShape(view.getBackground(), view);
+        if (shape == null) shape = outlineShape(view);
         synchronized (GboardSoftKeyGlassScene.class) {
-            if (radius > 0f) {
-                RADIUS_BY_VIEW.put(view, radius);
-                return radius;
+            if (shape != null) {
+                SHAPE_BY_VIEW.put(view, shape);
+                return shape;
             }
-            Float cached = RADIUS_BY_VIEW.get(view);
-            return cached != null ? cached : 0f;
+            return SHAPE_BY_VIEW.get(view);
         }
     }
 
-    private static float outlineRadius(View view) {
-        if (view == null) return 0f;
+    private static Shape outlineShape(View view) {
+        if (view == null) return null;
         try {
             ViewOutlineProvider provider = view.getOutlineProvider();
-            if (provider != null) {
-                Outline outline = new Outline();
-                provider.getOutline(view, outline);
-                if (outline.getRadius() > 0f) return outline.getRadius();
-            }
-        } catch (Throwable ignored) {}
-        return 0f;
+            if (provider == null) return null;
+            Outline outline = new Outline();
+            provider.getOutline(view, outline);
+            return shapeFromOutline(outline, view);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
-    private static float outlineRadius(Drawable drawable) {
-        if (drawable == null) return 0f;
+    private static Shape outlineShape(Drawable drawable, View view) {
+        if (drawable == null || view == null) return null;
         try {
             Outline outline = new Outline();
             drawable.getOutline(outline);
-            return Math.max(0f, outline.getRadius());
+            return shapeFromOutline(outline, view);
         } catch (Throwable ignored) {
-            return 0f;
+            return null;
         }
     }
+
+    private static Shape shapeFromOutline(Outline outline, View view) {
+        if (outline == null || view == null || outline.getRadius() <= 0f) return null;
+        Rect rect = new Rect();
+        if (outline.getRect(rect) && rect.width() > 0 && rect.height() > 0) {
+            return new Shape(new RectF(rect), outline.getRadius());
+        }
+        if (view.getWidth() <= 0 || view.getHeight() <= 0) return null;
+        return new Shape(
+                new RectF(0f, 0f, view.getWidth(), view.getHeight()),
+                outline.getRadius());
+    }
+
 }
