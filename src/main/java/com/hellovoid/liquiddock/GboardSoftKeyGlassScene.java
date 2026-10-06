@@ -69,10 +69,12 @@ final class GboardSoftKeyGlassScene {
     private static final class ShapeTemplate {
         final float widthPx;
         final float heightPx;
+        final float radiusPx;
 
         ShapeTemplate(Shape shape) {
             widthPx = Math.max(1f, shape.bounds.width());
             heightPx = Math.max(1f, shape.bounds.height());
+            radiusPx = Math.max(0f, shape.radius);
         }
 
         RectF centeredIn(View target) {
@@ -179,7 +181,11 @@ final class GboardSoftKeyGlassScene {
 
             boolean exempt = isCustomRadiusExempt(key);
             float radiusPx = exempt
-                    ? (nativeRadius > 0f ? nativeRadius : dp(key, SPECIAL_KEY_FALLBACK_RADIUS_DP))
+                    ? (nativeRadius > 0f
+                    ? nativeRadius
+                    : standardTemplate != null && standardTemplate.radiusPx > 0f
+                    ? standardTemplate.radiusPx
+                    : dp(key, SPECIAL_KEY_FALLBACK_RADIUS_DP))
                     : dp(key, Math.max(0f, Math.min(24f, customCornerRadiusDp)));
 
             GboardFloatingGlassGeometry geometry =
@@ -367,7 +373,7 @@ final class GboardSoftKeyGlassScene {
         Drawable background = view.getBackground();
         if (background != null && view.getWidth() > 0 && view.getHeight() > 0) {
             float area = view.getWidth() * (float) view.getHeight();
-            if (view == null || area >= keyArea * 0.15f || tagContainsBackground(view)) {
+            if (area >= keyArea * 0.15f || tagContainsBackground(view)) {
                 rememberBackground(view, background);
                 out.add(view);
             }
