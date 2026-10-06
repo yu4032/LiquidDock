@@ -631,11 +631,6 @@ private fun HomeOverviewCard(masterEnabled: Boolean) {
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 5.dp),
             )
-            Text(
-                text = stringResource(R.string.home_status_version, BuildConfig.VERSION_NAME),
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 14.dp),
-            )
         }
     }
 }
