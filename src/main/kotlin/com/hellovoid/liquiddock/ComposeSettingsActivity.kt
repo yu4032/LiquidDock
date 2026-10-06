@@ -19,12 +19,16 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -542,94 +546,193 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     }
 }
 
+private data class HomeFeature(
+    val page: Page,
+    val titleRes: Int,
+    val summaryRes: Int,
+    val index: String,
+)
+
+private val layoutHomeFeatures = listOf(
+    HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, "01"),
+    HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, "02"),
+    HomeFeature(Page.Divider, R.string.page_divider, R.string.home_divider_summary, "03"),
+    HomeFeature(Page.Workstation, R.string.page_workstation, R.string.home_workstation_summary, "04"),
+    HomeFeature(Page.Recents, R.string.page_recents, R.string.home_recents_summary, "05"),
+)
+
+private val appearanceHomeFeatures = listOf(
+    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, "06"),
+    HomeFeature(Page.Stroke, R.string.page_stroke, R.string.home_stroke_summary, "07"),
+    HomeFeature(Page.Shadow, R.string.page_shadow, R.string.home_shadow_summary, "08"),
+)
+
+private val interactionHomeFeatures = listOf(
+    HomeFeature(
+        Page.SecurityCenterSidebar,
+        R.string.page_security_center_sidebar,
+        R.string.home_security_center_sidebar_summary,
+        "09",
+    ),
+    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, "10"),
+)
+
+private val utilityHomeFeatures = listOf(
+    HomeFeature(Page.Data, R.string.home_data_title, R.string.home_data_summary, "11"),
+    HomeFeature(Page.About, R.string.home_about_title, R.string.home_about_summary, "12"),
+)
+
 @Composable
 private fun HomePage(
     padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
     onMasterChanged: (Boolean) -> Unit, open: (Page) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { HomeOverviewCard(masterEnabled) }
-
-        item { SmallTitle(stringResource(R.string.category_master)) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Core.ENABLED,
-                    stringResource(R.string.enable_liquiddock),
-                    stringResource(R.string.enable_liquiddock_summary),
-                ) { onMasterChanged(it) }
-            }
+            HomeOverviewCard(
+                prefs = prefs,
+                masterEnabled = masterEnabled,
+                onMasterChanged = onMasterChanged,
+            )
         }
 
         item { SmallTitle(stringResource(R.string.category_layout)) }
-        item {
-            SettingsCard {
-                ArrowPreference(stringResource(R.string.page_grid), summary = stringResource(R.string.home_grid_summary), onClick = { open(Page.Grid) })
-                ArrowPreference(stringResource(R.string.page_dock), summary = stringResource(R.string.home_dock_summary), onClick = { open(Page.Dock) })
-                ArrowPreference(stringResource(R.string.page_divider), summary = stringResource(R.string.home_divider_summary), onClick = { open(Page.Divider) })
-                ArrowPreference(stringResource(R.string.page_workstation), summary = stringResource(R.string.home_workstation_summary), onClick = { open(Page.Workstation) })
-                ArrowPreference(stringResource(R.string.page_recents), summary = stringResource(R.string.home_recents_summary), onClick = { open(Page.Recents) })
-            }
-        }
+        item { HomeFeatureGrid(layoutHomeFeatures, open) }
 
         item { SmallTitle(stringResource(R.string.category_glass_appearance)) }
-        item {
-            SettingsCard {
-                ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
-                ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
-                ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
-            }
-        }
+        item { HomeFeatureGrid(appearanceHomeFeatures, open) }
 
         item { SmallTitle(stringResource(R.string.category_system_interaction)) }
-        item {
-            SettingsCard {
-                ArrowPreference(
-                    stringResource(R.string.page_security_center_sidebar),
-                    summary = stringResource(R.string.home_security_center_sidebar_summary),
-                    onClick = { open(Page.SecurityCenterSidebar) },
-                )
-                ArrowPreference(stringResource(R.string.page_animation), summary = stringResource(R.string.home_animation_summary), onClick = { open(Page.Animation) })
-            }
-        }
+        item { HomeFeatureGrid(interactionHomeFeatures, open) }
 
-        item { SmallTitle(stringResource(R.string.category_configuration)) }
-        item { SettingsCard { ArrowPreference(stringResource(R.string.home_data_title), summary = stringResource(R.string.home_data_summary), onClick = { open(Page.Data) }) } }
-        item { SmallTitle(stringResource(R.string.category_about)) }
-        item { SettingsCard { ArrowPreference(stringResource(R.string.home_about_title), summary = stringResource(R.string.home_about_summary), onClick = { open(Page.About) }) } }
+        item { SmallTitle(stringResource(R.string.category_more)) }
+        item { HomeFeatureGrid(utilityHomeFeatures, open) }
+        item { Spacer(modifier = Modifier.padding(bottom = 8.dp)) }
     }
 }
 
 @Composable
-private fun HomeOverviewCard(masterEnabled: Boolean) {
+private fun HomeOverviewCard(
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onMasterChanged: (Boolean) -> Unit,
+) {
+    val gridColumns = prefs.getInt(ConfigSchema.Grid.COLUMNS.name(), ConfigSchema.Grid.COLUMNS.uiDefault())
+    val gridRows = prefs.getInt(ConfigSchema.Grid.ROWS.name(), ConfigSchema.Grid.ROWS.uiDefault())
+    val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
+    val glassEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 20.dp),
-        ) {
-            Text(
-                text = stringResource(
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SwitchPreference(
+                checked = masterEnabled,
+                onCheckedChange = {
+                    prefs.edit().putBoolean(ConfigSchema.Core.ENABLED.name(), it).apply()
+                    onMasterChanged(it)
+                },
+                title = stringResource(
                     if (masterEnabled) R.string.home_status_enabled else R.string.home_status_disabled,
                 ),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = stringResource(
+                summary = stringResource(
                     if (masterEnabled) {
                         R.string.home_status_enabled_summary
                     } else {
                         R.string.home_status_disabled_summary
                     },
                 ),
-                fontSize = 14.sp,
-                modifier = Modifier.padding(top = 5.dp),
+                insideMargin = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+            )
+            Text(
+                text = stringResource(
+                    R.string.home_profile_summary,
+                    gridColumns,
+                    gridRows,
+                    stringResource(if (dockEnabled) R.string.state_on else R.string.state_off),
+                    stringResource(if (glassEnabled) R.string.state_on else R.string.state_off),
+                ),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 16.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeFeatureGrid(
+    features: List<HomeFeature>,
+    open: (Page) -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+    ) {
+        val columns = if (maxWidth >= 560.dp) 2 else 1
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            features.chunked(columns).forEach { rowFeatures ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    rowFeatures.forEach { feature ->
+                        HomeFeatureCard(
+                            feature = feature,
+                            onClick = { open(feature.page) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (rowFeatures.size < columns) {
+                        repeat(columns - rowFeatures.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeFeatureCard(
+    feature: HomeFeature,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        onClick = onClick,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 17.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                text = feature.index,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.primary,
+            )
+            Text(
+                text = stringResource(feature.titleRes),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(feature.summaryRes),
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
     }
@@ -1196,7 +1299,11 @@ private fun SettingsList(
 internal fun PageHeader(title: String, summary: String? = null) {
     if (!summary.isNullOrBlank()) {
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-            Text(summary, fontSize = 13.sp)
+            Text(
+                text = summary,
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
         }
     }
 }
