@@ -234,6 +234,9 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains("collectBackgroundLayers"));
         assertTrue(scene.contains("collectDedicatedBackgroundImageLayers"));
         assertTrue(scene.contains("background-icon"));
+        assertTrue(scene.contains("findDedicatedActionBackgroundImage"));
+        assertTrue(scene.contains("resolveImageDrawableShape"));
+        assertTrue(scene.contains("getImageMatrix().mapRect(bounds)"));
     }
 
     @Test public void movementUsesLatestRenderTimeProjectionWithoutQueueingOldFrames()
