@@ -1,25 +1,28 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
 import java.util.WeakHashMap;
 
-/** Owns glass sessions for structurally supported Baidu Input Method keyboard layouts. */
+/** Owns one glass session for a semantically identified Baidu floating-keyboard View. */
 final class BaiduInputMethodGlassCoordinator {
     private static final String TAG = "[DC][BaiduInputMethodGlass]";
     private static final int MAX_GEOMETRY_FRAME_RETRIES = 24;
     private static final WeakHashMap<View, State> STATES = new WeakHashMap<>();
 
     private static final class State {
-        final View authoritativeInputView;
+        final View authoritativeFloatView;
         final BaiduInputMethodStructureResolver.Structure structure;
         final LiquidDockConfig.Glass glassConfig;
         final ViewGroup sinkHost;
-        final View backgroundFrame;
+        final View glassTarget;
+        final View stockBackgroundOwner;
+        final Drawable stockBackgroundDrawable;
         View root;
-        float stockBackgroundAlpha = 1f;
+        int stockBackgroundAlpha = 255;
         float cornerRadiusPx;
         BaiduInputMethodGlassSession session;
         BaiduInputMethodGlassView sink;
@@ -33,35 +36,43 @@ final class BaiduInputMethodGlassCoordinator {
         boolean released;
 
         State(
-                View authoritativeInputView,
+                View authoritativeFloatView,
                 BaiduInputMethodStructureResolver.Structure structure,
                 LiquidDockConfig.Glass glassConfig) {
-            this.authoritativeInputView = authoritativeInputView;
+            this.authoritativeFloatView = authoritativeFloatView;
             this.structure = structure;
             this.glassConfig = glassConfig;
             this.sinkHost = structure.sinkHost;
-            this.backgroundFrame = structure.backgroundFrame;
+            this.glassTarget = structure.glassTarget;
+            this.stockBackgroundOwner = structure.stockBackgroundOwner;
+            Drawable stock = structure.stockBackgroundDrawable;
+            this.stockBackgroundDrawable = stock != null ? stock.mutate() : null;
         }
     }
 
     private BaiduInputMethodGlassCoordinator() {}
 
     static synchronized void onShown(
-            View authoritativeInputView,
+            View authoritativeFloatView,
             BaiduInputMethodStructureResolver.Structure structure,
             LiquidDockConfig.Glass glassConfig) {
-        if (authoritativeInputView == null || structure == null || glassConfig == null) return;
-        State existing = STATES.get(authoritativeInputView);
+        if (authoritativeFloatView == null || structure == null || glassConfig == null) return;
+        State existing = STATES.get(authoritativeFloatView);
         if (existing != null && !existing.released) {
-            if (existing.session == null && authoritativeInputView.isAttachedToWindow()) {
-                attachNow(existing);
+            if (existing.glassTarget != structure.glassTarget
+                    || existing.stockBackgroundOwner != structure.stockBackgroundOwner) {
+                release(existing);
             } else {
-                syncGeometry(existing);
+                if (existing.session == null && authoritativeFloatView.isAttachedToWindow()) {
+                    attachNow(existing);
+                } else {
+                    syncGeometry(existing);
+                }
+                return;
             }
-            return;
         }
 
-        State state = new State(authoritativeInputView, structure, glassConfig);
+        State state = new State(authoritativeFloatView, structure, glassConfig);
         state.attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 attachNow(state);
@@ -71,42 +82,48 @@ final class BaiduInputMethodGlassCoordinator {
                 release(state);
             }
         };
-        STATES.put(authoritativeInputView, state);
-        authoritativeInputView.addOnAttachStateChangeListener(state.attachListener);
-        if (authoritativeInputView.isAttachedToWindow()) attachNow(state);
+        STATES.put(authoritativeFloatView, state);
+        authoritativeFloatView.addOnAttachStateChangeListener(state.attachListener);
+        if (authoritativeFloatView.isAttachedToWindow()) attachNow(state);
     }
 
-    static synchronized void onHidden(View authoritativeInputView) {
-        if (authoritativeInputView == null) return;
-        State state = STATES.remove(authoritativeInputView);
+    static synchronized void onHidden(View authoritativeFloatView) {
+        if (authoritativeFloatView == null) return;
+        State state = STATES.remove(authoritativeFloatView);
         if (state != null) release(state);
     }
 
     private static synchronized void attachNow(State state) {
         if (state == null || state.released || state.session != null
-                || !state.authoritativeInputView.isAttachedToWindow()) return;
-        View root = state.authoritativeInputView.getRootView();
+                || !state.authoritativeFloatView.isAttachedToWindow()) return;
+        View root = state.authoritativeFloatView.getRootView();
         if (root == null || !root.isAttachedToWindow()) {
             failClosed(state, "IME root unavailable", null);
             return;
         }
+        if (state.stockBackgroundDrawable == null) {
+            failClosed(state, "stock background drawable unavailable", null);
+            return;
+        }
+
         float radius = BaiduInputMethodStructureResolver.resolveCornerRadiusPx(state.structure);
         if (radius <= 0f) {
-            failClosed(state, "keyboard radius unavailable from runtime outline", null);
-            return;
+            float density = state.glassTarget.getResources().getDisplayMetrics().density;
+            radius = 24f * Math.max(1f, density);
+            log("runtime outline has no radius; using 24dp fallback", null);
         }
 
         state.root = root;
         state.cornerRadiusPx = radius;
-        state.stockBackgroundAlpha = state.backgroundFrame.getAlpha();
+        state.stockBackgroundAlpha = state.stockBackgroundDrawable.getAlpha();
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> syncGeometry(state);
-        state.sinkHost.addOnLayoutChangeListener(state.layoutListener);
+        state.glassTarget.addOnLayoutChangeListener(state.layoutListener);
         state.preDrawListener = () -> {
             syncGeometry(state);
             return true;
         };
-        ViewTreeObserver observer = state.sinkHost.getViewTreeObserver();
+        ViewTreeObserver observer = state.glassTarget.getViewTreeObserver();
         if (observer.isAlive()) observer.addOnPreDrawListener(state.preDrawListener);
 
         BaiduInputMethodGlassSession session = new BaiduInputMethodGlassSession(
@@ -114,12 +131,12 @@ final class BaiduInputMethodGlassCoordinator {
                 state.glassConfig,
                 new BaiduInputMethodGlassSession.Listener() {
                     @Override public void onPresented() {
-                        state.authoritativeInputView.post(
+                        state.authoritativeFloatView.post(
                                 () -> BaiduInputMethodGlassCoordinator.onPresented(state));
                     }
 
                     @Override public void onFailure(Throwable error) {
-                        state.authoritativeInputView.post(
+                        state.authoritativeFloatView.post(
                                 () -> failClosed(state, "session failure", error));
                     }
                 });
@@ -127,18 +144,20 @@ final class BaiduInputMethodGlassCoordinator {
         BaiduInputMethodGlassView sink = new BaiduInputMethodGlassView(
                 state.sinkHost.getContext(), session);
         state.sink = sink;
-        if (!insertSinkBelowContent(state, sink)) {
-            failClosed(state, "unable to insert glass below keyboard content", null);
+        if (!insertSinkBelowTarget(state, sink)) {
+            failClosed(state, "unable to insert glass below floating keyboard shell", null);
             return;
         }
+        log("glass session attached " + BaiduInputMethodStructureResolver.describe(state.structure),
+                null);
         syncGeometry(state);
     }
 
-    private static boolean insertSinkBelowContent(State state, BaiduInputMethodGlassView sink) {
-        int contentIndex = state.sinkHost.indexOfChild(state.structure.contentView);
-        if (contentIndex < 0) return false;
+    private static boolean insertSinkBelowTarget(State state, BaiduInputMethodGlassView sink) {
+        int targetIndex = state.sinkHost.indexOfChild(state.glassTarget);
+        if (targetIndex < 0) return false;
         try {
-            state.sinkHost.addView(sink, contentIndex, new ViewGroup.LayoutParams(1, 1));
+            state.sinkHost.addView(sink, targetIndex, new ViewGroup.LayoutParams(1, 1));
             return true;
         } catch (Throwable error) {
             log("glass insertion failed", error);
@@ -151,17 +170,17 @@ final class BaiduInputMethodGlassCoordinator {
         BaiduInputMethodGlassGeometry next = BaiduInputMethodGlassGeometry.capture(
                 state.root,
                 state.sinkHost,
-                state.backgroundFrame,
+                state.glassTarget,
                 state.cornerRadiusPx);
         if (next == null) {
             if (state.geometryRetryCount >= MAX_GEOMETRY_FRAME_RETRIES) {
-                failClosed(state, "keyboard geometry never became valid", null);
+                failClosed(state, "floating keyboard geometry never became valid", null);
                 return;
             }
             if (!state.geometryRetryPosted) {
                 state.geometryRetryPosted = true;
                 state.geometryRetryCount++;
-                state.sinkHost.postOnAnimation(() -> {
+                state.glassTarget.postOnAnimation(() -> {
                     synchronized (BaiduInputMethodGlassCoordinator.class) {
                         state.geometryRetryPosted = false;
                         if (state.released) return;
@@ -197,10 +216,16 @@ final class BaiduInputMethodGlassCoordinator {
 
     private static synchronized void onPresented(State state) {
         if (state == null || state.released || state.stockHidden) return;
-        View backgroundFrame = state.backgroundFrame;
-        if (backgroundFrame == null || !backgroundFrame.isAttachedToWindow()) return;
-        backgroundFrame.setAlpha(0f);
-        state.stockHidden = true;
+        if (state.stockBackgroundOwner == null || state.stockBackgroundDrawable == null
+                || !state.stockBackgroundOwner.isAttachedToWindow()) return;
+        try {
+            state.stockBackgroundDrawable.setAlpha(0);
+            state.stockBackgroundOwner.invalidate();
+            state.stockHidden = true;
+            log("first TextureView frame presented; stock background drawable hidden", null);
+        } catch (Throwable error) {
+            failClosed(state, "unable to hide stock background drawable", error);
+        }
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {
@@ -212,24 +237,24 @@ final class BaiduInputMethodGlassCoordinator {
     private static synchronized void release(State state) {
         if (state == null || state.released) return;
         state.released = true;
-        if (STATES.get(state.authoritativeInputView) == state) {
-            STATES.remove(state.authoritativeInputView);
+        if (STATES.get(state.authoritativeFloatView) == state) {
+            STATES.remove(state.authoritativeFloatView);
         }
         restoreStockBackground(state);
         if (state.attachListener != null) {
             try {
-                state.authoritativeInputView.removeOnAttachStateChangeListener(state.attachListener);
+                state.authoritativeFloatView.removeOnAttachStateChangeListener(state.attachListener);
             } catch (Throwable ignored) {}
             state.attachListener = null;
         }
         if (state.layoutListener != null) {
-            try { state.sinkHost.removeOnLayoutChangeListener(state.layoutListener); }
+            try { state.glassTarget.removeOnLayoutChangeListener(state.layoutListener); }
             catch (Throwable ignored) {}
             state.layoutListener = null;
         }
         if (state.preDrawListener != null) {
             try {
-                ViewTreeObserver observer = state.sinkHost.getViewTreeObserver();
+                ViewTreeObserver observer = state.glassTarget.getViewTreeObserver();
                 if (observer.isAlive()) observer.removeOnPreDrawListener(state.preDrawListener);
             } catch (Throwable ignored) {}
             state.preDrawListener = null;
@@ -247,12 +272,15 @@ final class BaiduInputMethodGlassCoordinator {
         if (session != null) {
             try { session.shutdown(); } catch (Throwable ignored) {}
         }
+        log("glass session released", null);
     }
 
     private static void restoreStockBackground(State state) {
-        if (state == null || state.backgroundFrame == null) return;
-        try { state.backgroundFrame.setAlpha(state.stockBackgroundAlpha); }
-        catch (Throwable ignored) {}
+        if (state == null || state.stockBackgroundDrawable == null) return;
+        try {
+            state.stockBackgroundDrawable.setAlpha(state.stockBackgroundAlpha);
+            if (state.stockBackgroundOwner != null) state.stockBackgroundOwner.invalidate();
+        } catch (Throwable ignored) {}
         state.stockHidden = false;
     }
 

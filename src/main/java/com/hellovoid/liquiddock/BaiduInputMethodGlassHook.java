@@ -6,11 +6,18 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
-/** Hooks only stable Baidu InputMethodService lifecycle and delegates runtime structure discovery. */
+/**
+ * Hooks Baidu Input Method Xiaomi edition's semantic floating-keyboard lifecycle.
+ *
+ * <p>The primary authority is ImeService.showFloatKeyboardView(View), confirmed by the canonical
+ * decompile. setInputView/onWindowShown are retained only for diagnostics and lifecycle recovery;
+ * they no longer guess a floating keyboard from the entire IME tree.</p>
+ */
 final class BaiduInputMethodGlassHook {
     private static final String TAG = "[DC][BaiduInputMethodGlass]";
     private static final String IME_SERVICE_CLASS = "com.content.input_mi.ImeService";
     private static final WeakHashMap<Object, WeakReference<View>> INPUT_VIEWS = new WeakHashMap<>();
+    private static final WeakHashMap<Object, WeakReference<View>> FLOAT_VIEWS = new WeakHashMap<>();
     private static boolean installed;
 
     private BaiduInputMethodGlassHook() {}
@@ -22,17 +29,35 @@ final class BaiduInputMethodGlassHook {
             Class<?> serviceClass = Class.forName(IME_SERVICE_CLASS, false, classLoader);
             Method setInputView = serviceClass.getDeclaredMethod("setInputView", View.class);
             Method onWindowShown = serviceClass.getDeclaredMethod("onWindowShown");
+            Method onWindowHidden = serviceClass.getDeclaredMethod("onWindowHidden");
+            Method showFloatKeyboardView =
+                    serviceClass.getDeclaredMethod("showFloatKeyboardView", View.class);
 
             HookUtil.hook(setInputView, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 Object service = chain.getThisObject();
-                View inputView = args.length > 0 && args[0] instanceof View ? (View) args[0] : null;
-                synchronized (INPUT_VIEWS) {
-                    if (inputView != null) INPUT_VIEWS.put(service, new WeakReference<>(inputView));
-                    else INPUT_VIEWS.remove(service);
+                View inputView = viewArg(args);
+                put(INPUT_VIEWS, service, inputView);
+                log("setInputView " + BaiduInputMethodStructureResolver.describe(inputView), null);
+                return result;
+            });
+
+            HookUtil.hook(showFloatKeyboardView, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                Object service = chain.getThisObject();
+                View floatView = viewArg(args);
+                View previous = current(FLOAT_VIEWS, service);
+                if (previous != null && previous != floatView) {
+                    BaiduInputMethodGlassCoordinator.onHidden(previous);
                 }
-                if (inputView != null) inputView.post(() -> handle(service, inputView, classLoader));
+                put(FLOAT_VIEWS, service, floatView);
+                log("showFloatKeyboardView " + BaiduInputMethodStructureResolver.describe(floatView),
+                        null);
+                if (floatView != null) {
+                    floatView.post(() -> handleFloatingView(floatView));
+                }
                 return result;
             });
 
@@ -40,12 +65,32 @@ final class BaiduInputMethodGlassHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 Object service = chain.getThisObject();
-                View inputView = currentInputView(service);
-                if (inputView != null) inputView.post(() -> handle(service, inputView, classLoader));
+                View floatView = current(FLOAT_VIEWS, service);
+                if (floatView != null) {
+                    log("onWindowShown resume semantic float view", null);
+                    floatView.post(() -> handleFloatingView(floatView));
+                } else {
+                    View inputView = current(INPUT_VIEWS, service);
+                    log("onWindowShown waiting for showFloatKeyboardView input="
+                            + BaiduInputMethodStructureResolver.describe(inputView), null);
+                }
+                return result;
+            });
+
+            HookUtil.hook(onWindowHidden, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object service = chain.getThisObject();
+                View floatView = current(FLOAT_VIEWS, service);
+                if (floatView != null) BaiduInputMethodGlassCoordinator.onHidden(floatView);
+                put(FLOAT_VIEWS, service, null);
+                Object result = chain.proceed(args);
+                log("onWindowHidden released semantic float view", null);
                 return result;
             });
 
             installed = true;
+            log("installed semantic hooks: setInputView/onWindowShown/onWindowHidden/"
+                    + "showFloatKeyboardView", null);
             return true;
         } catch (Throwable error) {
             log("stable IME hook unavailable cause=" + failureSummary(error), error);
@@ -53,29 +98,58 @@ final class BaiduInputMethodGlassHook {
         }
     }
 
-    private static void handle(Object service, View inputView, ClassLoader classLoader) {
-        if (service == null || inputView == null) return;
-        BaiduInputMethodStructureResolver.Structure structure =
-                BaiduInputMethodStructureResolver.resolve(inputView, classLoader);
-        if (structure == null || !BaiduInputMethodStructureResolver.isFloatingGeometry(structure)) {
-            BaiduInputMethodGlassCoordinator.onHidden(inputView);
-            return;
-        }
+    private static void handleFloatingView(View floatView) {
+        if (floatView == null) return;
 
         ConfigReader reader = ConfigReader.load();
         LiquidDockConfig config = LiquidDockConfig.from(reader);
         ThirdPartyGlassAppearance appearance =
                 BaiduInputMethodGlassPreferences.resolve(reader, config.glass);
         if (!config.enabled || !config.glass.enabled || !appearance.enabled) {
-            BaiduInputMethodGlassCoordinator.onHidden(inputView);
+            BaiduInputMethodGlassCoordinator.onHidden(floatView);
+            log("floating glass disabled by config", null);
             return;
         }
-        BaiduInputMethodGlassCoordinator.onShown(inputView, structure, config.glass);
+
+        BaiduInputMethodStructureResolver.Structure structure =
+                BaiduInputMethodStructureResolver.resolveFromFloatView(floatView);
+        if (structure == null) {
+            BaiduInputMethodGlassCoordinator.onHidden(floatView);
+            log("semantic float view unresolved: "
+                    + BaiduInputMethodStructureResolver.describe(floatView), null);
+            return;
+        }
+        if (!BaiduInputMethodStructureResolver.isFloatingGeometry(structure)) {
+            BaiduInputMethodGlassCoordinator.onHidden(floatView);
+            log("semantic float view rejected by compact geometry: "
+                    + BaiduInputMethodStructureResolver.describe(structure), null);
+            return;
+        }
+
+        log("semantic float structure accepted: "
+                + BaiduInputMethodStructureResolver.describe(structure), null);
+        BaiduInputMethodGlassCoordinator.onShown(floatView, structure, config.glass);
     }
 
-    private static View currentInputView(Object service) {
-        synchronized (INPUT_VIEWS) {
-            WeakReference<View> reference = INPUT_VIEWS.get(service);
+    private static View viewArg(Object[] args) {
+        return args != null && args.length > 0 && args[0] instanceof View
+                ? (View) args[0] : null;
+    }
+
+    private static void put(
+            WeakHashMap<Object, WeakReference<View>> map, Object service, View view) {
+        if (service == null) return;
+        synchronized (map) {
+            if (view == null) map.remove(service);
+            else map.put(service, new WeakReference<>(view));
+        }
+    }
+
+    private static View current(
+            WeakHashMap<Object, WeakReference<View>> map, Object service) {
+        if (service == null) return null;
+        synchronized (map) {
+            WeakReference<View> reference = map.get(service);
             return reference != null ? reference.get() : null;
         }
     }
