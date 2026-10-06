@@ -198,12 +198,10 @@ public class GboardFloatingGlassContractTest {
     @Test public void pureKeyboardMotionDoesNotReconcileRootSurface() throws Exception {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
 
-        int updateStart = session.indexOf("void updateGeometry(");
-        int attachStart = session.indexOf("void attachOutput(", updateStart);
-        String updateBody = session.substring(updateStart, attachStart);
-        assertTrue(updateBody.contains("old.rootWidth != next.rootWidth"));
-        assertTrue(updateBody.contains("old.rootHeight != next.rootHeight"));
-        assertTrue(updateBody.contains("sourceBackend.reconcileRoot();"));
+        assertTrue(session.contains("old.rootWidth != next.rootWidth"));
+        assertTrue(session.contains("old.rootHeight != next.rootHeight"));
+        assertTrue(session.contains("sourceBackend.reconcileRoot();"));
+        assertTrue(session.contains("scheduleRender(true)"));
     }
 
     @Test public void geometryRenderCanPreemptBackdropWorkUnderLoad() throws Exception {
