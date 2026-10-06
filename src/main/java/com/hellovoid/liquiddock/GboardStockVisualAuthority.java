@@ -265,6 +265,11 @@ final class GboardStockVisualAuthority {
                         claimSoftKeyBackground(claim, backgroundTarget, dynamicHolder);
                     }
                 }
+                View[] alphaTargets =
+                        GboardSoftKeyGlassScene.preparedAlphaTargets(child);
+                for (View alphaTarget : alphaTargets) {
+                    if (alphaTarget != null) claimAlpha(claim, alphaTarget);
+                }
                 continue;
             }
             if (child instanceof ViewGroup) {
