@@ -78,9 +78,8 @@ final class GboardStockVisualAuthority {
             claim = BY_BASE.get(structure.keyboardArea);
         }
         if (claim == null || !claim.softKeyGlassEnabled) return;
-        for (ViewGroup holder : structure.keyboardViewHolders) {
-            if (holder != null) claimPreparedKeyboardSoftKeys(holder, holder, claim);
-        }
+        ViewGroup holder = structure.inputKeyboardViewHolder;
+        if (holder != null) claimPreparedKeyboardSoftKeys(holder, holder, claim);
     }
 
     static void release(GboardFloatingStructureResolver.Structure structure) {
@@ -178,17 +177,15 @@ final class GboardStockVisualAuthority {
             Claim existing = OWNER_BY_VIEW.get(target);
             if (existing != null && existing != claim) return false;
         }
-        for (ViewGroup holder : claim.structure.keyboardViewHolders) {
-            if (holder == null) continue;
-            Claim existing = CLAIM_BY_HOLDER.get(holder);
+        ViewGroup inputHolder = claim.structure.inputKeyboardViewHolder;
+        if (inputHolder != null) {
+            Claim existing = CLAIM_BY_HOLDER.get(inputHolder);
             if (existing != null && existing != claim) return false;
         }
         for (View target : staticTargets) {
             if (target != null) OWNER_BY_VIEW.put(target, claim);
         }
-        for (ViewGroup holder : claim.structure.keyboardViewHolders) {
-            if (holder != null) CLAIM_BY_HOLDER.put(holder, claim);
-        }
+        if (inputHolder != null) CLAIM_BY_HOLDER.put(inputHolder, claim);
         return true;
     }
 
@@ -201,8 +198,8 @@ final class GboardStockVisualAuthority {
         claimBackground(claim, claim.structure.bottomFrame, null);
         claimBackground(claim, claim.structure.topEdge, null);
 
-        for (ViewGroup holder : claim.structure.keyboardViewHolders) {
-            if (holder == null) continue;
+        ViewGroup holder = claim.structure.inputKeyboardViewHolder;
+        if (holder != null) {
             claimBackground(claim, holder, null);
             View.OnLayoutChangeListener listener =
                     (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
@@ -261,10 +258,12 @@ final class GboardStockVisualAuthority {
             View child = parent.getChildAt(i);
             if (child == null) continue;
             if (GboardSoftKeyGlassScene.isSoftKeyView(child)) {
-                View backgroundTarget =
-                        GboardSoftKeyGlassScene.preparedBackgroundTarget(child);
-                if (backgroundTarget != null) {
-                    claimSoftKeyBackground(claim, backgroundTarget, dynamicHolder);
+                View[] backgroundTargets =
+                        GboardSoftKeyGlassScene.preparedBackgroundTargets(child);
+                for (View backgroundTarget : backgroundTargets) {
+                    if (backgroundTarget != null) {
+                        claimSoftKeyBackground(claim, backgroundTarget, dynamicHolder);
+                    }
                 }
                 continue;
             }
@@ -368,10 +367,9 @@ final class GboardStockVisualAuthority {
             }
             claim.holderLayoutListeners.clear();
 
-            for (ViewGroup holder : claim.structure.keyboardViewHolders) {
-                if (holder != null && CLAIM_BY_HOLDER.get(holder) == claim) {
-                    CLAIM_BY_HOLDER.remove(holder);
-                }
+            ViewGroup inputHolder = claim.structure.inputKeyboardViewHolder;
+            if (inputHolder != null && CLAIM_BY_HOLDER.get(inputHolder) == claim) {
+                CLAIM_BY_HOLDER.remove(inputHolder);
             }
             for (Map.Entry<View, Snapshot> entry : claim.snapshots.entrySet()) {
                 View target = entry.getKey();
@@ -452,7 +450,9 @@ final class GboardStockVisualAuthority {
             targets.add(structure.keyboardHolder);
             targets.add(structure.bottomFrame);
             targets.add(structure.topEdge);
-            targets.addAll(structure.keyboardViewHolders);
+            if (structure.inputKeyboardViewHolder != null) {
+                targets.add(structure.inputKeyboardViewHolder);
+            }
             return targets;
         }
 
