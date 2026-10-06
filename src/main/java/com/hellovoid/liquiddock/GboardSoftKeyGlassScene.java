@@ -26,6 +26,8 @@ import java.util.WeakHashMap;
 final class GboardSoftKeyGlassScene {
     private static final String SOFT_KEY_VIEW_CLASS =
             "com.google.android.libraries.inputmethod.widgets.SoftKeyView";
+    private static final String SOFT_KEYBOARD_VIEW_CLASS =
+            "com.google.android.libraries.inputmethod.widgets.SoftKeyboardView";
     private static final float FALLBACK_INSET_X_FRACTION = 0.06f;
     private static final float FALLBACK_INSET_Y_FRACTION = 0.08f;
     private static final float SPECIAL_KEY_FALLBACK_RADIUS_DP = 8f;
@@ -100,7 +102,7 @@ final class GboardSoftKeyGlassScene {
 
         ArrayList<View> keys = new ArrayList<>();
         for (ViewGroup holder : structure.keyboardViewHolders) {
-            collectSoftKeys(holder, keys);
+            collectKeyboardSoftKeys(holder, keys);
         }
         if (keys.isEmpty()) return EMPTY;
 
@@ -177,7 +179,7 @@ final class GboardSoftKeyGlassScene {
 
     static synchronized void rememberBackground(View view, Drawable background) {
         if (!isSoftKeyView(view) || background == null) return;
-        Shape shape = outlineShape(background, view);
+        Shape shape = backgroundShape(background, view);
         if (shape != null) SHAPE_BY_VIEW.put(view, shape);
     }
 
@@ -208,7 +210,21 @@ final class GboardSoftKeyGlassScene {
                 || name.equals("key_pos_enter");
     }
 
-    private static void collectSoftKeys(View view, List<View> out) {
+    private static void collectKeyboardSoftKeys(View view, List<View> out) {
+        if (view == null || out == null) return;
+        if (isSoftKeyboardView(view)) {
+            collectSoftKeysInsideKeyboard(view, out);
+            return;
+        }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        int count = group.getChildCount();
+        for (int i = 0; i < count; i++) {
+            collectKeyboardSoftKeys(group.getChildAt(i), out);
+        }
+    }
+
+    private static void collectSoftKeysInsideKeyboard(View view, List<View> out) {
         if (view == null || out == null) return;
         if (isSoftKeyView(view)) {
             out.add(view);
@@ -218,8 +234,18 @@ final class GboardSoftKeyGlassScene {
         ViewGroup group = (ViewGroup) view;
         int count = group.getChildCount();
         for (int i = 0; i < count; i++) {
-            collectSoftKeys(group.getChildAt(i), out);
+            collectSoftKeysInsideKeyboard(group.getChildAt(i), out);
         }
+    }
+
+    private static boolean isSoftKeyboardView(View view) {
+        if (view == null) return false;
+        Class<?> type = view.getClass();
+        while (type != null) {
+            if (SOFT_KEYBOARD_VIEW_CLASS.equals(type.getName())) return true;
+            type = type.getSuperclass();
+        }
+        return false;
     }
 
     private static boolean isDrawableTarget(View view) {
@@ -233,7 +259,7 @@ final class GboardSoftKeyGlassScene {
 
     private static Shape resolveNativeShape(View view) {
         if (view == null) return null;
-        Shape shape = outlineShape(view.getBackground(), view);
+        Shape shape = backgroundShape(view.getBackground(), view);
         if (shape == null) shape = outlineShape(view);
         synchronized (GboardSoftKeyGlassScene.class) {
             if (shape != null) {
@@ -257,8 +283,25 @@ final class GboardSoftKeyGlassScene {
         }
     }
 
-    private static Shape outlineShape(Drawable drawable, View view) {
-        if (drawable == null || view == null || isTransparentPlaceholder(drawable)) return null;
+    private static Shape backgroundShape(Drawable drawable, View view) {
+        if (drawable == null || view == null
+                || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
+        try {
+            Rect padding = new Rect();
+            drawable.getPadding(padding);
+            float left = Math.max(0, padding.left);
+            float top = Math.max(0, padding.top);
+            float right = Math.min(view.getWidth(), view.getWidth() - Math.max(0, padding.right));
+            float bottom = Math.min(view.getHeight(), view.getHeight() - Math.max(0, padding.bottom));
+            if (right > left && bottom > top
+                    && (padding.left > 0 || padding.top > 0
+                    || padding.right > 0 || padding.bottom > 0)) {
+                Outline outline = new Outline();
+                drawable.getOutline(outline);
+                float radius = Math.max(0f, outline.getRadius());
+                return new Shape(new RectF(left, top, right, bottom), radius);
+            }
+        } catch (Throwable ignored) {}
         try {
             Outline outline = new Outline();
             drawable.getOutline(outline);
@@ -279,11 +322,6 @@ final class GboardSoftKeyGlassScene {
         return new Shape(
                 new RectF(0f, 0f, view.getWidth(), view.getHeight()),
                 radius);
-    }
-
-    private static boolean isTransparentPlaceholder(Drawable drawable) {
-        return drawable instanceof ColorDrawable
-                && Color.alpha(((ColorDrawable) drawable).getColor()) == 0;
     }
 
     private static RectF fallbackBounds(View view) {
