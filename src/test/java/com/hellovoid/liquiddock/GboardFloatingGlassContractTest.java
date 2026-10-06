@@ -149,6 +149,15 @@ public class GboardFloatingGlassContractTest {
         assertTrue(authority.contains("updatesEnabled"));
         assertTrue(authority.contains("Boolean.valueOf(claim.updatesEnabled)"));
         assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.setUpdatesEnabled"));
+        assertTrue(bridge.contains("domain == PassBlurDomain.GBOARD_FLOATING"));
+        assertTrue(bridge.contains("setForceRefresh = transactionClass.getMethod"));
+        String backend = read(MAIN.resolve("RootPassBlurBackend.java"));
+        assertTrue(backend.contains("Miuix307PassBlurBridge.renewForceRefresh(binding);"));
+        int freshStart = session.indexOf("public void onFreshFrame");
+        int freshEnd = session.indexOf("public void onTerminalFailure", freshStart);
+        String freshBody = session.substring(freshStart, freshEnd);
+        assertTrue(freshBody.contains("scheduleRender();"));
+        assertFalse(freshBody.contains("renderCurrent();"));
         assertFalse(session.contains("ScreenCapture"));
         assertFalse(session.contains("PixelCopy"));
         assertFalse(session.contains("Bitmap.createBitmap"));
@@ -255,8 +264,10 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("currentMotionDx"));
         assertTrue(session.contains("currentMotionDy"));
         assertTrue(geometry.contains("toPrismalGeometry(float dx, float dy)"));
-        assertTrue(session.contains("presentFull("));
+        assertTrue(session.contains("presentRegion("));
+        assertTrue(session.contains("GLES20.glScissor("));
         assertTrue(session.contains("0f, 0f, 1f, 1f"));
+        assertFalse(session.contains("presentFull("));
         assertFalse(session.contains("presentCropped("));
         assertFalse(coordinator.contains("syncSinkBounds"));
         assertFalse(coordinator.contains("translateAndRefreshInteraction"));
