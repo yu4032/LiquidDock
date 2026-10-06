@@ -41,6 +41,8 @@ final class GboardSoftKeyGlassScene {
             new WeakHashMap<>();
     private static final WeakHashMap<View, View[]> PREPARED_BACKGROUNDS_BY_KEY =
             new WeakHashMap<>();
+    private static final WeakHashMap<View, View[]> PREPARED_ALPHA_LAYERS_BY_KEY =
+            new WeakHashMap<>();
 
     private static final class Shape {
         final RectF bounds;
@@ -130,7 +132,11 @@ final class GboardSoftKeyGlassScene {
 
         if (!enabled) {
             synchronized (GboardSoftKeyGlassScene.class) {
-                for (View key : keys) PREPARED_BACKGROUNDS_BY_KEY.remove(key);
+                for (View key : keys) {
+                    PREPARED_BACKGROUNDS_BY_KEY.remove(key);
+                PREPARED_ALPHA_LAYERS_BY_KEY.remove(key);
+                    PREPARED_ALPHA_LAYERS_BY_KEY.remove(key);
+                }
             }
             return EMPTY;
         }
@@ -201,8 +207,10 @@ final class GboardSoftKeyGlassScene {
                     pressed));
 
             View[] backgrounds = collectBackgroundLayers(key);
+            View[] alphaLayers = collectDedicatedBackgroundImageLayers(key);
             synchronized (GboardSoftKeyGlassScene.class) {
                 PREPARED_BACKGROUNDS_BY_KEY.put(key, backgrounds);
+                PREPARED_ALPHA_LAYERS_BY_KEY.put(key, alphaLayers);
             }
         }
         return nodes.isEmpty() ? EMPTY : nodes.toArray(new Node[0]);
@@ -226,6 +234,11 @@ final class GboardSoftKeyGlassScene {
 
     static synchronized View[] preparedBackgroundTargets(View key) {
         View[] targets = key != null ? PREPARED_BACKGROUNDS_BY_KEY.get(key) : null;
+        return targets != null ? targets.clone() : new View[0];
+    }
+
+    static synchronized View[] preparedAlphaTargets(View key) {
+        View[] targets = key != null ? PREPARED_ALPHA_LAYERS_BY_KEY.get(key) : null;
         return targets != null ? targets.clone() : new View[0];
     }
 
@@ -356,6 +369,36 @@ final class GboardSoftKeyGlassScene {
             }
         }
         return best;
+    }
+
+    private static View[] collectDedicatedBackgroundImageLayers(View key) {
+        if (!(key instanceof ViewGroup)) return new View[0];
+        ArrayList<View> out = new ArrayList<>();
+        collectDedicatedBackgroundImageLayersRecursive(key, out);
+        return out.toArray(new View[0]);
+    }
+
+    private static void collectDedicatedBackgroundImageLayersRecursive(
+            View view, List<View> out) {
+        if (view == null) return;
+        if (view instanceof ImageView && tagContainsBackgroundIcon(view)) {
+            out.add(view);
+        }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            collectDedicatedBackgroundImageLayersRecursive(group.getChildAt(i), out);
+        }
+    }
+
+    private static boolean tagContainsBackgroundIcon(View view) {
+        if (view == null) return false;
+        try {
+            Object tag = view.getTag();
+            return tag != null && String.valueOf(tag).contains("background-icon");
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static View[] collectBackgroundLayers(View key) {
