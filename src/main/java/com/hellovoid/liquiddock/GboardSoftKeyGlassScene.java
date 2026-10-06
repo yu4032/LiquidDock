@@ -19,11 +19,11 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Resolves only actual keyboard SoftKeyView keycaps into Prismal nodes.
+ * Resolves only the real typing surface inside Gboard's largest KeyboardViewHolder.
  *
- * <p>Some Gboard keys use an oversized SoftKeyView as a layout/touch container and put the
- * visible keycap background on a smaller descendant. This resolver separates the logical key from
- * the actual background owner so glass follows the visual keycap rather than the touch cell.</p>
+ * <p>The toolbar/function strip is intentionally outside this scene. A logical SoftKeyView may be
+ * a larger touch/layout cell than its visible keycap, so geometry is resolved from the best visual
+ * background descendant while all meaningful background layers for that key are suppressed.</p>
  */
 final class GboardSoftKeyGlassScene {
     private static final String SOFT_KEY_VIEW_CLASS =
@@ -39,7 +39,7 @@ final class GboardSoftKeyGlassScene {
 
     private static final WeakHashMap<View, Shape> SHAPE_BY_BACKGROUND_VIEW =
             new WeakHashMap<>();
-    private static final WeakHashMap<View, View> PREPARED_BACKGROUND_BY_KEY =
+    private static final WeakHashMap<View, View[]> PREPARED_BACKGROUNDS_BY_KEY =
             new WeakHashMap<>();
 
     private static final class Shape {
@@ -57,12 +57,10 @@ final class GboardSoftKeyGlassScene {
     }
 
     private static final class VisualTarget {
-        final View key;
         final View backgroundView;
         final Shape shape;
 
-        VisualTarget(View key, View backgroundView, Shape shape) {
-            this.key = key;
+        VisualTarget(View backgroundView, Shape shape) {
             this.backgroundView = backgroundView;
             this.shape = shape;
         }
@@ -89,32 +87,24 @@ final class GboardSoftKeyGlassScene {
 
     static final class Node {
         final View keyView;
-        final View backgroundView;
         final GboardFloatingGlassGeometry geometry;
         final PrismalInteractionState interaction;
         final boolean pressed;
 
         Node(
                 View keyView,
-                View backgroundView,
                 GboardFloatingGlassGeometry geometry,
                 PrismalInteractionState interaction,
                 boolean pressed) {
             this.keyView = keyView;
-            this.backgroundView = backgroundView;
             this.geometry = geometry;
             this.interaction = interaction;
             this.pressed = pressed;
         }
 
-        Node withGeometry(GboardFloatingGlassGeometry nextGeometry) {
-            return new Node(keyView, backgroundView, nextGeometry, interaction, pressed);
-        }
-
         Node withPressed(boolean nextPressed) {
             return new Node(
                     keyView,
-                    backgroundView,
                     geometry,
                     nextPressed ? PRESSED : PrismalInteractionState.IDLE,
                     nextPressed);
@@ -128,17 +118,17 @@ final class GboardSoftKeyGlassScene {
             GboardFloatingStructureResolver.Structure structure,
             boolean enabled,
             float customCornerRadiusDp) {
-        if (context == null || structure == null) return EMPTY;
+        if (context == null || structure == null || structure.inputKeyboardViewHolder == null) {
+            return EMPTY;
+        }
 
         ArrayList<View> keys = new ArrayList<>();
-        for (ViewGroup holder : structure.keyboardViewHolders) {
-            collectKeyboardSoftKeys(holder, keys);
-        }
+        collectKeyboardSoftKeys(structure.inputKeyboardViewHolder, keys);
         if (keys.isEmpty()) return EMPTY;
 
         if (!enabled) {
             synchronized (GboardSoftKeyGlassScene.class) {
-                for (View key : keys) PREPARED_BACKGROUND_BY_KEY.remove(key);
+                for (View key : keys) PREPARED_BACKGROUNDS_BY_KEY.remove(key);
             }
             return EMPTY;
         }
@@ -152,7 +142,7 @@ final class GboardSoftKeyGlassScene {
             targets.put(key, target);
             if (standardTemplate == null
                     && target.backgroundView == key
-                    && !isCustomRadiusExempt(key)
+                    && !keepsNativeWideGeometry(key)
                     && target.shape != null) {
                 standardTemplate = new ShapeTemplate(target.shape);
             }
@@ -161,7 +151,7 @@ final class GboardSoftKeyGlassScene {
         ArrayList<Node> nodes = new ArrayList<>(keys.size());
         for (View key : keys) {
             synchronized (GboardSoftKeyGlassScene.class) {
-                PREPARED_BACKGROUND_BY_KEY.remove(key);
+                PREPARED_BACKGROUNDS_BY_KEY.remove(key);
             }
             if (!isDrawableTarget(key)) continue;
 
@@ -172,7 +162,7 @@ final class GboardSoftKeyGlassScene {
 
             if (target != null && target.shape != null) {
                 geometryView = target.backgroundView;
-                bounds = target.shape.bounds;
+                bounds = new RectF(target.shape.bounds);
                 nativeRadius = target.shape.radius;
                 if (target.backgroundView == key
                         && standardTemplate != null
@@ -181,7 +171,7 @@ final class GboardSoftKeyGlassScene {
                         || bounds.height() > standardTemplate.heightPx * 1.30f)) {
                     bounds = standardTemplate.centeredIn(key);
                 }
-            } else if (standardTemplate != null) {
+            } else if (standardTemplate != null && !keepsNativeWideGeometry(key)) {
                 bounds = standardTemplate.centeredIn(key);
             }
             if (bounds == null) bounds = fallbackBounds(key);
@@ -197,25 +187,22 @@ final class GboardSoftKeyGlassScene {
                             context, geometryView, bounds, radiusPx);
             if (geometry == null) continue;
 
-            View backgroundView = target != null ? target.backgroundView : key;
             boolean pressed = key.isPressed();
             nodes.add(new Node(
                     key,
-                    backgroundView,
                     geometry,
                     pressed ? PRESSED : PrismalInteractionState.IDLE,
                     pressed));
+
+            View[] backgrounds = collectBackgroundLayers(key);
             synchronized (GboardSoftKeyGlassScene.class) {
-                PREPARED_BACKGROUND_BY_KEY.put(key, backgroundView);
+                PREPARED_BACKGROUNDS_BY_KEY.put(key, backgrounds);
             }
         }
         return nodes.isEmpty() ? EMPTY : nodes.toArray(new Node[0]);
     }
 
-    static Node[] translateAndRefreshInteraction(
-            Node[] source,
-            float dx,
-            float dy) {
+    static Node[] refreshInteraction(Node[] source) {
         Node[] input = source != null ? source : EMPTY;
         if (input.length == 0) return EMPTY;
         Node[] out = null;
@@ -223,20 +210,17 @@ final class GboardSoftKeyGlassScene {
             Node node = input[i];
             if (node == null || node.geometry == null) continue;
             boolean pressed = node.keyView != null && node.keyView.isPressed();
-            GboardFloatingGlassGeometry geometry = node.geometry.translated(dx, dy);
-            if (pressed != node.pressed || geometry != node.geometry) {
+            if (pressed != node.pressed) {
                 if (out == null) out = input.clone();
-                Node next = node;
-                if (geometry != node.geometry) next = next.withGeometry(geometry);
-                if (pressed != next.pressed) next = next.withPressed(pressed);
-                out[i] = next;
+                out[i] = node.withPressed(pressed);
             }
         }
         return out != null ? out : input;
     }
 
-    static synchronized View preparedBackgroundTarget(View key) {
-        return key != null ? PREPARED_BACKGROUND_BY_KEY.get(key) : null;
+    static synchronized View[] preparedBackgroundTargets(View key) {
+        View[] targets = key != null ? PREPARED_BACKGROUNDS_BY_KEY.get(key) : null;
+        return targets != null ? targets.clone() : new View[0];
     }
 
     static boolean isSoftKeyView(View view) {
@@ -260,7 +244,7 @@ final class GboardSoftKeyGlassScene {
     }
 
     static synchronized void rememberBackground(View view, Drawable background) {
-        if (view == null || background == null) return;
+        if (view == null || background == null || SHAPE_BY_BACKGROUND_VIEW.containsKey(view)) return;
         Shape shape = backgroundShape(background, view);
         if (shape != null) SHAPE_BY_BACKGROUND_VIEW.put(view, shape);
     }
@@ -275,7 +259,6 @@ final class GboardSoftKeyGlassScene {
             if (left == right) continue;
             if (left == null || right == null
                     || left.keyView != right.keyView
-                    || left.backgroundView != right.backgroundView
                     || left.pressed != right.pressed
                     || left.geometry == null
                     || !left.geometry.sameAs(right.geometry)) {
@@ -323,7 +306,7 @@ final class GboardSoftKeyGlassScene {
                 return descendant;
             }
         }
-        if (directShape != null) return new VisualTarget(key, key, directShape);
+        if (directShape != null) return new VisualTarget(key, directShape);
         return descendant;
     }
 
@@ -363,10 +346,37 @@ final class GboardSoftKeyGlassScene {
             if (area < keyArea * 0.35f) score -= 250_000_000L;
             if (score > bestScore) {
                 bestScore = score;
-                best = new VisualTarget(key, candidate, shape);
+                best = new VisualTarget(candidate, shape);
             }
         }
         return best;
+    }
+
+    private static View[] collectBackgroundLayers(View key) {
+        if (key == null) return new View[0];
+        ArrayList<View> out = new ArrayList<>();
+        float keyArea = Math.max(1f, key.getWidth() * (float) key.getHeight());
+        collectBackgroundLayersRecursive(key, keyArea, out);
+        if (out.isEmpty() && key.getBackground() != null) out.add(key);
+        return out.toArray(new View[0]);
+    }
+
+    private static void collectBackgroundLayersRecursive(
+            View view, float keyArea, List<View> out) {
+        if (view == null) return;
+        Drawable background = view.getBackground();
+        if (background != null && view.getWidth() > 0 && view.getHeight() > 0) {
+            float area = view.getWidth() * (float) view.getHeight();
+            if (view == null || area >= keyArea * 0.15f || tagContainsBackground(view)) {
+                rememberBackground(view, background);
+                out.add(view);
+            }
+        }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            collectBackgroundLayersRecursive(group.getChildAt(i), keyArea, out);
+        }
     }
 
     private static boolean tagContainsBackground(View view) {
@@ -387,8 +397,7 @@ final class GboardSoftKeyGlassScene {
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
-        int count = group.getChildCount();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < group.getChildCount(); i++) {
             collectKeyboardSoftKeys(group.getChildAt(i), out);
         }
     }
@@ -401,8 +410,7 @@ final class GboardSoftKeyGlassScene {
         }
         if (!(view instanceof ViewGroup)) return;
         ViewGroup group = (ViewGroup) view;
-        int count = group.getChildCount();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < group.getChildCount(); i++) {
             collectSoftKeysInsideKeyboard(group.getChildAt(i), out);
         }
     }
@@ -425,9 +433,11 @@ final class GboardSoftKeyGlassScene {
         Shape shape = backgroundShape(view.getBackground(), view);
         if (shape == null) shape = outlineShape(view);
         synchronized (GboardSoftKeyGlassScene.class) {
-            if (shape != null) SHAPE_BY_BACKGROUND_VIEW.put(view, shape);
+            if (shape != null && !SHAPE_BY_BACKGROUND_VIEW.containsKey(view)) {
+                SHAPE_BY_BACKGROUND_VIEW.put(view, shape);
+            }
+            return SHAPE_BY_BACKGROUND_VIEW.get(view);
         }
-        return shape;
     }
 
     private static Shape outlineShape(View view) {
