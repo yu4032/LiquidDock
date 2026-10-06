@@ -268,23 +268,34 @@ final class RootPassBlurBackend {
     }
 
     boolean postToRenderThread(Runnable runnable) {
+        return postRenderTask(runnable, false);
+    }
+
+    boolean postUrgentToRenderThread(Runnable runnable) {
+        return postRenderTask(runnable, true);
+    }
+
+    private boolean postRenderTask(Runnable runnable, boolean urgent) {
         if (runnable == null || shuttingDown || !renderThread.isAlive()) return false;
+        Runnable guarded = () -> {
+            if (shuttingDown) return;
+            try {
+                ensureEglAndSource();
+                makePbufferCurrentUnchecked();
+            } catch (Throwable sourceError) {
+                notifyTerminalFailure(sourceError);
+                return;
+            }
+            try {
+                runnable.run();
+            } catch (Throwable callerError) {
+                MainHook.log(TAG + " render-thread consumer task failed: " + callerError);
+            }
+        };
         try {
-            return renderHandler.post(() -> {
-                if (shuttingDown) return;
-                try {
-                    ensureEglAndSource();
-                    makePbufferCurrentUnchecked();
-                } catch (Throwable sourceError) {
-                    notifyTerminalFailure(sourceError);
-                    return;
-                }
-                try {
-                    runnable.run();
-                } catch (Throwable callerError) {
-                    MainHook.log(TAG + " render-thread consumer task failed: " + callerError);
-                }
-            });
+            return urgent
+                    ? renderHandler.postAtFrontOfQueue(guarded)
+                    : renderHandler.post(guarded);
         } catch (Throwable ignored) {
             return false;
         }

@@ -67,12 +67,16 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
     private volatile boolean frozenCapturePending;
+    private volatile boolean freezeAfterNextFrame;
+    private volatile boolean frozenSamplingActive;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
     private boolean failureSignaled;
     private boolean renderQueued;
+    private boolean renderQueuedUrgent;
     private boolean renderDirty;
+    private long renderTicket;
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
@@ -126,17 +130,28 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestInitialCapture() {
-        requestBackdropCapture();
+        if (shuttingDown) return;
+        if (!realtimeBackgroundSampling) {
+            frozenCapturePending = false;
+            freezeAfterNextFrame = false;
+            frozenSamplingActive = false;
+        }
+        sourceBackend.requestFresh(GENERATION);
+    }
+
+    void freezeBackdropAfterSettle() {
+        if (realtimeBackgroundSampling || shuttingDown
+                || frozenSamplingActive || frozenCapturePending) return;
+        freezeAfterNextFrame = true;
+        frozenCapturePending = true;
+        sourceBackend.requestFresh(GENERATION);
     }
 
     void requestFrozenMotionCapture() {
-        if (!realtimeBackgroundSampling) requestBackdropCapture();
-    }
-
-    private void requestBackdropCapture() {
-        if (shuttingDown) return;
-        if (!realtimeBackgroundSampling && frozenCapturePending) return;
-        if (!realtimeBackgroundSampling) frozenCapturePending = true;
+        if (realtimeBackgroundSampling || shuttingDown || frozenCapturePending) return;
+        frozenSamplingActive = false;
+        freezeAfterNextFrame = true;
+        frozenCapturePending = true;
         sourceBackend.requestFresh(GENERATION);
     }
 
@@ -146,7 +161,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (old != null && old.sameAs(next)) return;
         geometry = next;
         sourceBackend.reconcileRoot();
-        scheduleRender();
+        scheduleRender(true);
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -208,11 +223,12 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
-        if (!realtimeBackgroundSampling && !frozenCapturePending) {
+        if (!realtimeBackgroundSampling
+                && frozenSamplingActive
+                && !frozenCapturePending) {
             sourceBackend.setUpdatesEnabled(false, "gboard-frozen-extra-frame");
             return;
         }
-        if (!realtimeBackgroundSampling) frozenCapturePending = false;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -226,10 +242,13 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalHeight,
                     prismalParams);
             backdropPrepared = true;
-            if (!realtimeBackgroundSampling) {
+            if (!realtimeBackgroundSampling && freezeAfterNextFrame) {
+                freezeAfterNextFrame = false;
+                frozenCapturePending = false;
+                frozenSamplingActive = true;
                 sourceBackend.setUpdatesEnabled(false, "gboard-frozen-frame-consumed");
             }
-            scheduleRender();
+            scheduleRender(false);
         } catch (Throwable error) {
             notifyFailure("fresh-frame", error);
         }
@@ -257,35 +276,66 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         if (!queued) sourceBackend.shutdown();
     }
 
-    private void scheduleRender() {
+    private void scheduleRender(boolean urgent) {
         if (shuttingDown) return;
+        long ticket;
         synchronized (renderQueueLock) {
             renderDirty = true;
-            if (renderQueued) return;
-            renderQueued = true;
+            if (renderQueued) {
+                if (!urgent || renderQueuedUrgent) return;
+                renderQueuedUrgent = true;
+                ticket = ++renderTicket;
+            } else {
+                renderQueued = true;
+                renderQueuedUrgent = urgent;
+                ticket = ++renderTicket;
+            }
         }
-        if (!sourceBackend.postToRenderThread(this::drainScheduledRender)) {
+        if (!postScheduledRender(ticket, urgent)) {
             synchronized (renderQueueLock) {
-                renderQueued = false;
-                renderDirty = false;
+                if (ticket == renderTicket) {
+                    renderQueued = false;
+                    renderQueuedUrgent = false;
+                    renderDirty = false;
+                }
             }
         }
     }
 
-    private void drainScheduledRender() {
+    private boolean postScheduledRender(long ticket, boolean urgent) {
+        Runnable task = () -> drainScheduledRender(ticket);
+        return urgent
+                ? sourceBackend.postUrgentToRenderThread(task)
+                : sourceBackend.postToRenderThread(task);
+    }
+
+    private void drainScheduledRender(long ticket) {
         synchronized (renderQueueLock) {
+            if (ticket != renderTicket || shuttingDown) return;
             renderDirty = false;
+            renderQueuedUrgent = false;
         }
+
         renderCurrent();
-        boolean repost;
+
+        long nextTicket;
         synchronized (renderQueueLock) {
-            repost = renderDirty && !shuttingDown;
-            if (!repost) renderQueued = false;
-        }
-        if (repost && !sourceBackend.postToRenderThread(this::drainScheduledRender)) {
-            synchronized (renderQueueLock) {
+            if (ticket != renderTicket || shuttingDown) return;
+            if (!renderDirty) {
                 renderQueued = false;
-                renderDirty = false;
+                renderQueuedUrgent = false;
+                return;
+            }
+            nextTicket = ++renderTicket;
+            renderQueuedUrgent = false;
+        }
+        if (!postScheduledRender(nextTicket, false)) {
+            synchronized (renderQueueLock) {
+                if (nextTicket == renderTicket) {
+                    renderQueued = false;
+                    renderQueuedUrgent = false;
+                    renderDirty = false;
+                }
             }
         }
     }
