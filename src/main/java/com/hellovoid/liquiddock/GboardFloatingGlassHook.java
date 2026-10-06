@@ -72,7 +72,8 @@ final class GboardFloatingGlassHook {
                 structure,
                 liveConfig.glass,
                 GboardGlassPreferences.softKeyGlassEnabled(liveReader),
-                GboardGlassPreferences.softKeyCornerRadiusDp(liveReader));
+                GboardGlassPreferences.softKeyCornerRadiusDp(liveReader),
+                GboardGlassPreferences.realtimeBackgroundSampling(liveReader));
     }
 
     private static String failureSummary(Throwable error) {
