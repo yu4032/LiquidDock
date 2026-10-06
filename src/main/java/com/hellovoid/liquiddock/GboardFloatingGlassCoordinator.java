@@ -77,7 +77,6 @@ final class GboardFloatingGlassCoordinator {
                 existing.softKeyCornerRadiusDp = softKeyCornerRadiusDp;
                 existing.keyLayoutDirty = true;
                 if (existing.session == null && popup.isAttachedToWindow()) scheduleAttach(existing);
-                else syncGeometry(existing);
                 return;
             }
         }
@@ -138,10 +137,7 @@ final class GboardFloatingGlassCoordinator {
         state.root = root;
         state.cornerRadiusPx = cornerRadiusPx;
         state.layoutListener = (view, left, top, right, bottom,
-                oldLeft, oldTop, oldRight, oldBottom) -> {
-            state.keyLayoutDirty = true;
-            syncGeometry(state);
-        };
+                oldLeft, oldTop, oldRight, oldBottom) -> state.keyLayoutDirty = true;
         state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
         state.preDrawListener = () -> {
             syncGeometry(state);
