@@ -116,6 +116,9 @@ public class GboardHandwritingCapsuleGlassContractTest {
         assertTrue(coordinator.contains("GboardFloatingGlassView"));
         assertTrue(coordinator.contains("GboardFloatingGlassSession"));
         assertTrue(coordinator.contains("GboardFloatingGlassGeometry.captureTargetPadded"));
+        String session = read("GboardFloatingGlassSession.java");
+        assertTrue(session.contains("OutputMode.CROPPED"));
+        assertTrue(session.contains("presentCropped("));
         assertFalse(coordinator.contains("removeAllViews"));
         assertFalse(coordinator.contains("findViewById"));
     }
