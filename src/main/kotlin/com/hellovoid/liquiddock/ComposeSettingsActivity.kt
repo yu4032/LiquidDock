@@ -680,7 +680,7 @@ private fun HomePage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = padding,
+        contentPadding = PaddingValues(top = padding.calculateTopPadding()),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         item {
@@ -698,7 +698,7 @@ private fun HomePage(
         }
         item { SmallTitle(stringResource(R.string.category_quick_access)) }
         item { HomeFeatureGrid(overviewQuickFeatures, open) }
-        item { Spacer(modifier = Modifier.padding(bottom = 8.dp)) }
+        item { Spacer(modifier = Modifier.padding(bottom = 104.dp)) }
     }
 }
 
@@ -711,12 +711,12 @@ private fun SettingsHubPage(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = padding,
+        contentPadding = PaddingValues(top = padding.calculateTopPadding()),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         item { PageHeader("", summary) }
         item { HomeFeatureGrid(features, open) }
-        item { Spacer(modifier = Modifier.padding(bottom = 8.dp)) }
+        item { Spacer(modifier = Modifier.padding(bottom = 104.dp)) }
     }
 }
 
