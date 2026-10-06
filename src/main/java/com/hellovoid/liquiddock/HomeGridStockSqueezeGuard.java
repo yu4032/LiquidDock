@@ -302,11 +302,6 @@ final class HomeGridStockSqueezeGuard {
             IdentityHashMap<Object, List<String>> srcAfter = collectCells(srcNow);
             IdentityHashMap<Object, List<String>> dstAfter = collectCells(dstNow);
 
-            String invalid = validateMatrix("src", srcNow);
-            if (invalid != null) return invalid;
-            invalid = validateMatrix("dst", dstNow);
-            if (invalid != null) return invalid;
-
             for (Map.Entry<Object, ItemState> entry : logicalStates.entrySet()) {
                 Object key = entry.getKey();
                 ItemState before = entry.getValue();
