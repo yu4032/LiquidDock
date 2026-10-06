@@ -118,6 +118,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     private void requestBackdropCapture(String reason) {
         if (shuttingDown) return;
+        if (!realtimeBackgroundSampling && frozenCapturePending) return;
         if (!realtimeBackgroundSampling) frozenCapturePending = true;
         sourceBackend.requestFresh(GENERATION);
         if (!realtimeBackgroundSampling) {
