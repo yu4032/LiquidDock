@@ -38,11 +38,9 @@ class SearchboxSettingsActivity : SettingsActivity() {
                             title = getString(R.string.page_searchbox),
                             largeTitle = getString(R.string.page_searchbox),
                             navigationIcon = {
-                                TextButton(
-                                    text = getString(R.string.action_back),
-                                    onClick = { finish() },
-                                )
+                                SettingsBackButton { finish() }
                             },
+                            titlePadding = 20.dp,
                             actions = {
                                 TextButton(
                                     text = getString(R.string.action_restart_searchbox),
