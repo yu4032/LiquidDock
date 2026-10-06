@@ -275,6 +275,23 @@ internal fun GboardSettingsPage(
         )
     }
 
+    var softKeyGlassEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                GboardGlassPreferences.SOFT_KEY_GLASS_ENABLED_KEY,
+                GboardGlassPreferences.SOFT_KEY_GLASS_ENABLED_DEFAULT,
+            ),
+        )
+    }
+    var softKeyCornerRadiusDp by remember {
+        mutableStateOf(
+            prefs.getInt(
+                GboardGlassPreferences.SOFT_KEY_CORNER_RADIUS_DP_KEY,
+                GboardGlassPreferences.SOFT_KEY_CORNER_RADIUS_DP_DEFAULT,
+            ).toFloat(),
+        )
+    }
+
     fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
         prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
     } else {
@@ -319,6 +336,7 @@ internal fun GboardSettingsPage(
     }
     var appearanceGeneration by remember { mutableStateOf(0) }
     val controlsEnabled = masterEnabled && liquidEnabled && gboardEnabled
+    val softKeyControlsEnabled = controlsEnabled && softKeyGlassEnabled
     val hasAppearanceOverride = appearanceGeneration.let {
         prefs.contains(GboardGlassPreferences.BLUR_KEY) ||
             prefs.contains(GboardGlassPreferences.TINT_RED_KEY) ||
@@ -374,6 +392,34 @@ internal fun GboardSettingsPage(
                     title = "拖动后自动进入大小调整",
                     summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
                     enabled = masterEnabled,
+                )
+                SwitchPreference(
+                    checked = softKeyGlassEnabled,
+                    onCheckedChange = {
+                        softKeyGlassEnabled = it
+                        prefs.edit()
+                            .putBoolean(GboardGlassPreferences.SOFT_KEY_GLASS_ENABLED_KEY, it)
+                            .apply()
+                    },
+                    title = "按键背景液态玻璃",
+                    summary = "替换 SoftKeyView 的原生按键底板；关闭后仅保留悬浮键盘整体液态玻璃",
+                    enabled = controlsEnabled,
+                )
+            }
+        }
+        item { SmallTitle("按键背景") }
+        item {
+            GboardSettingsCard {
+                GboardValueSlider(
+                    key = GboardGlassPreferences.SOFT_KEY_CORNER_RADIUS_DP_KEY,
+                    title = "按键圆角",
+                    value = softKeyCornerRadiusDp,
+                    onValueChange = { softKeyCornerRadiusDp = it },
+                    prefs = prefs,
+                    enabled = softKeyControlsEnabled,
+                    max = 24,
+                    unit = "dp",
+                    summary = "?123 与回车键保留 Gboard 原生圆角；其他按键使用此值",
                 )
             }
         }
@@ -452,6 +498,7 @@ private fun GboardValueSlider(
     enabled: Boolean,
     max: Int,
     unit: String = "",
+    summary: String = "未单独设置时继承全局液态玻璃",
 ) {
     val rounded = value.roundToInt().coerceIn(0, max)
     SliderPreference(
@@ -462,7 +509,7 @@ private fun GboardValueSlider(
             prefs.edit().putInt(key, next).apply()
         },
         title = title,
-        summary = "未单独设置时继承全局液态玻璃",
+        summary = summary,
         valueText = "",
         enabled = enabled,
         valueRange = 0f..max.toFloat(),
