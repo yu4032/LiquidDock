@@ -13,6 +13,8 @@ final class GboardGlassPreferences {
             "liquid_gboard_soft_key_glass_enabled";
     static final String SOFT_KEY_CORNER_RADIUS_DP_KEY =
             "liquid_gboard_soft_key_corner_radius_dp";
+    static final String REALTIME_BACKGROUND_SAMPLING_KEY =
+            "liquid_gboard_realtime_background_sampling";
     static final String BLUR_KEY = ConfigSchema.Gboard.BLUR.name();
     static final String TINT_RED_KEY = ConfigSchema.Gboard.TINT_RED.name();
     static final String TINT_GREEN_KEY = ConfigSchema.Gboard.TINT_GREEN.name();
@@ -22,6 +24,7 @@ final class GboardGlassPreferences {
     static final boolean AUTO_RESIZE_AFTER_HANDLE_DRAG_DEFAULT = true;
     static final boolean SOFT_KEY_GLASS_ENABLED_DEFAULT = true;
     static final int SOFT_KEY_CORNER_RADIUS_DP_DEFAULT = 8;
+    static final boolean REALTIME_BACKGROUND_SAMPLING_DEFAULT = true;
 
     /** Compatibility view retained for existing Gboard hooks/tests. */
     static final class Appearance {
@@ -77,6 +80,13 @@ final class GboardGlassPreferences {
         if (reader == null) reader = ConfigReader.load();
         return Math.max(0f, Math.min(24f,
                 reader.i(SOFT_KEY_CORNER_RADIUS_DP_KEY, SOFT_KEY_CORNER_RADIUS_DP_DEFAULT)));
+    }
+
+    static boolean realtimeBackgroundSampling(ConfigReader reader) {
+        if (reader == null) reader = ConfigReader.load();
+        return reader.b(
+                REALTIME_BACKGROUND_SAMPLING_KEY,
+                REALTIME_BACKGROUND_SAMPLING_DEFAULT);
     }
 
     static Appearance resolve(ConfigReader reader, LiquidDockConfig.Glass base) {
