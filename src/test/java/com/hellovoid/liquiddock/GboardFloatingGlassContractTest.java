@@ -113,8 +113,9 @@ public class GboardFloatingGlassContractTest {
         assertTrue(coordinator.contains("indexOfChild(state.structure.contentColumn)"));
         assertTrue(coordinator.contains("new ViewGroup.LayoutParams(1, 1)"));
         assertFalse(coordinator.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue(coordinator.contains("GboardFloatingGlassGeometry.beginCapture"));
         assertTrue(coordinator.contains(
-                "state.root, state.sinkHost, state.structure, state.cornerRadiusPx"));
+                "captureContext, state.structure, state.cornerRadiusPx"));
         assertTrue(coordinator.contains("geometry.sinkWidthPx()"));
         assertTrue(coordinator.contains("geometry.sinkHeightPx()"));
         assertTrue(geometry.contains("structure.stockBackground"));
@@ -166,6 +167,8 @@ public class GboardFloatingGlassContractTest {
                 "com.google.android.libraries.inputmethod.widgets.SoftKeyView"));
         assertTrue(scene.contains("getSuperclass()"));
         assertTrue(scene.contains("GboardFloatingGlassGeometry.captureTargetRect"));
+        assertTrue(scene.contains("findBestDescendantBackground"));
+        assertTrue(scene.contains("preparedBackgroundTarget"));
         assertTrue(scene.contains("outline.getRect(rect)"));
         assertTrue(scene.contains("fallbackBounds(key)"));
         assertTrue(scene.contains("ShapeTemplate"));
@@ -178,12 +181,15 @@ public class GboardFloatingGlassContractTest {
         assertTrue(scene.contains("switch_to_symbol"));
         assertTrue(scene.contains("ime_action"));
         assertTrue(coordinator.contains("GboardSoftKeyGlassScene.capture"));
+        assertTrue(coordinator.contains("translateAndRefreshInteraction"));
+        assertTrue(coordinator.contains("sameShellSize"));
+        assertTrue(coordinator.contains("GboardFloatingGlassGeometry.beginCapture"));
         assertTrue(coordinator.contains("GboardStockVisualAuthority.refreshPreparedSoftKeys"));
         assertTrue(session.contains("for (GboardSoftKeyGlassScene.Node node"));
         assertTrue(session.contains("prismalRenderer.drawGlass("));
         assertTrue(authority.contains("claimPreparedKeyboardSoftKeys"));
         assertTrue(authority.contains("claimPreparedSoftKeysInsideKeyboard"));
-        assertTrue(authority.contains("GboardSoftKeyGlassScene.isPrepared"));
+        assertTrue(authority.contains("GboardSoftKeyGlassScene.preparedBackgroundTarget"));
         assertTrue(authority.contains("captureSuppressedDrawable"));
         assertTrue(authority.contains("ensureSuppressedDrawableHidden"));
         assertFalse(authority.contains("new ColorDrawable(Color.TRANSPARENT)"));
@@ -191,6 +197,22 @@ public class GboardFloatingGlassContractTest {
         assertFalse(scene.contains("0x7f0b"));
         assertFalse(scene.contains("TextureView"));
         assertFalse(scene.contains("RootPassBlurBackend"));
+    }
+
+    @Test public void gboardKeyGeometryIsBatchedAndHierarchyMutationIsDeferred() throws Exception {
+        String coordinator = read(MAIN.resolve("GboardFloatingGlassCoordinator.java"));
+        String geometry = read(MAIN.resolve("GboardFloatingGlassGeometry.java"));
+        String scene = read(MAIN.resolve("GboardSoftKeyGlassScene.java"));
+
+        assertTrue(geometry.contains("static final class CaptureContext"));
+        assertTrue(geometry.contains("beginCapture(View root, View sinkHost)"));
+        assertTrue(scene.contains("capture(\n            GboardFloatingGlassGeometry.CaptureContext context"));
+        assertTrue(scene.contains("captureTargetRect(\n                            context"));
+        assertTrue(coordinator.contains("scheduleAttach(state)"));
+        assertTrue(coordinator.contains("state.popup.post(() ->"));
+        assertTrue(coordinator.contains("sinkHost.post(() ->"));
+        assertTrue(coordinator.contains("state.popup.post(() -> GboardStockVisualAuthority.release"));
+        assertFalse(scene.contains("beginCapture(root, sinkHost)"));
     }
 
     @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
