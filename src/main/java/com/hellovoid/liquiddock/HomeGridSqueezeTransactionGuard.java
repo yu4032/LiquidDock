@@ -75,12 +75,19 @@ final class HomeGridSqueezeTransactionGuard {
                     try {
                         Object result = chain.proceed();
                         if (!(result instanceof Boolean) || !((Boolean) result)) {
+                            MainHook.log(TAG + " generic " + method
+                                    + " result=" + result + " -> rollback");
                             snapshot.restore(src, dst);
                             return result;
                         }
                         if (isConsistent(dst)) {
+                            MainHook.log(TAG + " generic " + method
+                                    + " accepted dst=" + matrixSize(dst));
                             return result;
                         }
+                        MainHook.log(TAG + " generic " + method
+                                + " inconsistent dst=" + matrixSize(dst)
+                                + " -> rollback");
                         snapshot.restore(src, dst);
                         return false;
                     } catch (Throwable error) {
@@ -93,6 +100,12 @@ final class HomeGridSqueezeTransactionGuard {
 
     private static Object[] asMatrix(Object value) {
         return value instanceof Object[] ? (Object[]) value : null;
+    }
+
+    private static String matrixSize(Object[] matrix) {
+        if (matrix == null) return "null";
+        Object[] first = matrix.length > 0 ? column(matrix, 0) : null;
+        return matrix.length + "x" + (first == null ? 0 : first.length);
     }
 
     private static boolean isConsistent(Object[] matrix) {
