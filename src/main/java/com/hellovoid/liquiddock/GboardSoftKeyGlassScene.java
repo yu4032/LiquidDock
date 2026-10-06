@@ -238,7 +238,7 @@ final class GboardSoftKeyGlassScene {
         }
     }
 
-    private static boolean isSoftKeyboardView(View view) {
+    static boolean isSoftKeyboardView(View view) {
         if (view == null) return false;
         Class<?> type = view.getClass();
         while (type != null) {
