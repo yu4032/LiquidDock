@@ -142,10 +142,12 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("prepareBackdrop"));
         assertTrue(session.contains("realtimeBackgroundSampling"));
         assertTrue(session.contains("requestFrozenMotionCapture"));
+        assertTrue(session.contains("freezeBackdropAfterSettle"));
         assertTrue(session.contains("sourceBackend.setUpdatesEnabled(false"));
         assertTrue(session.contains("renderQueueLock"));
-        assertTrue(session.contains("scheduleRender()"));
-        assertTrue(session.contains("drainScheduledRender"));
+        assertTrue(session.contains("scheduleRender(true)"));
+        assertTrue(session.contains("scheduleRender(false)"));
+        assertTrue(session.contains("drainScheduledRender(long ticket)"));
         assertTrue(authority.contains("updatesEnabled"));
         assertTrue(authority.contains("Boolean.valueOf(claim.updatesEnabled)"));
         assertTrue(bridge.contains("GboardPassBlurContinuousAuthority.setUpdatesEnabled"));
@@ -164,12 +166,30 @@ public class GboardFloatingGlassContractTest {
         String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
 
         assertTrue(coordinator.contains("GboardFrozenBackdropMotionState"));
+        assertTrue(coordinator.contains("FROZEN_STARTUP_MIN_LIVE_MS = 360L"));
+        assertTrue(coordinator.contains("FREEZE_AFTER_SETTLE"));
+        assertTrue(coordinator.contains("freezeBackdropAfterSettle"));
+        assertTrue(coordinator.contains("REFRESH_AT_MOTION_START"));
         assertTrue(coordinator.contains("requestFrozenMotionCapture"));
         assertTrue(session.contains("renderDirty"));
         assertTrue(session.contains("renderQueued"));
-        assertTrue(session.contains("scheduleRender()"));
-        assertTrue(session.contains("drainScheduledRender"));
+        assertTrue(session.contains("renderTicket"));
+        assertTrue(session.contains("postUrgentToRenderThread"));
+        assertTrue(session.contains("scheduleRender(true)"));
+        assertTrue(session.contains("scheduleRender(false)"));
         assertFalse(session.contains("postToRenderThread(this::renderCurrent)"));
+    }
+
+    @Test public void geometryRenderCanPreemptBackdropWorkUnderLoad() throws Exception {
+        String session = read(MAIN.resolve("GboardFloatingGlassSession.java"));
+        String backend = read(MAIN.resolve("RootPassBlurBackend.java"));
+
+        assertTrue(session.contains("scheduleRender(true)"));
+        assertTrue(session.contains("scheduleRender(false)"));
+        assertTrue(session.contains("postUrgentToRenderThread"));
+        assertTrue(session.contains("renderTicket"));
+        assertTrue(backend.contains("postUrgentToRenderThread"));
+        assertTrue(backend.contains("postAtFrontOfQueue"));
     }
 
     @Test public void hierarchyMutationIsDeferredOutsideKeyboardLayout() throws Exception {
@@ -208,7 +228,8 @@ public class GboardFloatingGlassContractTest {
         assertTrue(gboardSettings.contains("启用悬浮键盘液态玻璃"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY"));
         assertTrue(gboardSettings.contains("实时背景采样"));
-        assertTrue(gboardSettings.contains("首次显示采样一帧"));
+        assertTrue(gboardSettings.contains("弹出动画期间保持实时"));
+        assertTrue(gboardSettings.contains("动画稳定后冻结"));
         assertTrue(gboardSettings.contains("每次开始移动时刷新一帧"));
         assertTrue(preferences.contains("REALTIME_BACKGROUND_SAMPLING_DEFAULT = true"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.BLUR_KEY"));
