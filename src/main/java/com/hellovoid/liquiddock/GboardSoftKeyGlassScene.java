@@ -3,6 +3,8 @@ package com.hellovoid.liquiddock;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
@@ -256,7 +258,7 @@ final class GboardSoftKeyGlassScene {
     }
 
     private static Shape outlineShape(Drawable drawable, View view) {
-        if (drawable == null || view == null) return null;
+        if (drawable == null || view == null || isTransparentPlaceholder(drawable)) return null;
         try {
             Outline outline = new Outline();
             drawable.getOutline(outline);
@@ -277,6 +279,11 @@ final class GboardSoftKeyGlassScene {
         return new Shape(
                 new RectF(0f, 0f, view.getWidth(), view.getHeight()),
                 radius);
+    }
+
+    private static boolean isTransparentPlaceholder(Drawable drawable) {
+        return drawable instanceof ColorDrawable
+                && Color.alpha(((ColorDrawable) drawable).getColor()) == 0;
     }
 
     private static RectF fallbackBounds(View view) {
