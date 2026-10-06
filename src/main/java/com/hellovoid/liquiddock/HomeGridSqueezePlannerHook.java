@@ -87,12 +87,11 @@ final class HomeGridSqueezePlannerHook {
                                                 HomeGridSqueezePlannerPolicy.useGenericForSqueeze(
                                                         isSpanMove, spanX, spanY);
                                     }
-                                    return invoke(
-                                            useGeneric
-                                                    ? genericSqueezePlanner
-                                                    : stockSqueeze,
-                                            method,
-                                            args);
+                                    if (useGeneric) {
+                                        return invoke(genericSqueezePlanner, method, args);
+                                    }
+                                    return HomeGridStockSqueezeGuard.invoke(
+                                            stockSqueeze, method, args);
                                 });
 
                         Object dropRouter = Proxy.newProxyInstance(
