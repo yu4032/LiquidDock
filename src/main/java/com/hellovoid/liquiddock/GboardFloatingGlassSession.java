@@ -63,6 +63,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final Object renderQueueLock = new Object();
 
     private volatile GboardFloatingGlassGeometry geometry;
+    private GboardFloatingGlassGeometry lastRenderedGeometry;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
@@ -353,7 +354,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrame();
+            if (outputMode == OutputMode.FULLSCREEN_REGION) {
+                beginKeyboardDirtyFrame(currentGeometry);
+            } else {
+                prismalRenderer.beginGlassFrame();
+            }
             prismalRenderer.drawGlass(
                     currentGeometry.toPrismalGeometry(),
                     prismalParams,
@@ -368,6 +373,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                         currentGeometry.toCropUvRect(),
                         currentOutput);
             }
+            lastRenderedGeometry = currentGeometry;
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -382,6 +388,26 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
         }
+    }
+
+    private void beginKeyboardDirtyFrame(GboardFloatingGlassGeometry current) {
+        GboardFloatingGlassGeometry previous = lastRenderedGeometry;
+        if (previous == null
+                || previous.rootWidth != current.rootWidth
+                || previous.rootHeight != current.rootHeight) {
+            prismalRenderer.beginGlassFrame();
+            return;
+        }
+        float margin = 8f;
+        float left = Math.min(previous.left, current.left) - margin;
+        float top = Math.min(previous.top, current.top) - margin;
+        float right = Math.max(
+                previous.left + previous.width,
+                current.left + current.width) + margin;
+        float bottom = Math.max(
+                previous.top + previous.height,
+                current.top + current.height) + margin;
+        prismalRenderer.beginGlassFrameRegion(left, top, right, bottom);
     }
 
     private void presentRegion(
@@ -455,6 +481,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void releaseOutput(OutputState current) {
+        lastRenderedGeometry = null;
         if (current == null) return;
         if (current.eglSurface != EGL14.EGL_NO_SURFACE) {
             try { sourceBackend.destroyWindowSurface(current.eglSurface); }
