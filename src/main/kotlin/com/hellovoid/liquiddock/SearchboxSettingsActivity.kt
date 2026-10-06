@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,7 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -18,6 +19,7 @@ class SearchboxSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
@@ -32,8 +34,9 @@ class SearchboxSettingsActivity : SettingsActivity() {
             MiuixTheme(controller = controller) {
                 Scaffold(
                     topBar = {
-                        SmallTopAppBar(
+                        TopAppBar(
                             title = getString(R.string.page_searchbox),
+                            largeTitle = getString(R.string.page_searchbox),
                             navigationIcon = {
                                 TextButton(
                                     text = getString(R.string.action_back),
