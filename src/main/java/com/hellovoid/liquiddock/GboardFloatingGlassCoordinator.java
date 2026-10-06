@@ -39,6 +39,7 @@ final class GboardFloatingGlassCoordinator {
         boolean attachPosted;
         boolean keyLayoutDirty = true;
         GboardFloatingGlassGeometry lastGeometry;
+        GboardFloatingGlassGeometry sceneGeometry;
         GboardSoftKeyGlassScene.Node[] softKeyNodes = GboardSoftKeyGlassScene.EMPTY;
         boolean geometryRetryPosted;
         int geometryRetryCount;
@@ -146,7 +147,9 @@ final class GboardFloatingGlassCoordinator {
         state.cornerRadiusPx = cornerRadiusPx;
         state.layoutListener = (view, left, top, right, bottom,
                 oldLeft, oldTop, oldRight, oldBottom) -> state.keyLayoutDirty = true;
-        state.keyboardArea.addOnLayoutChangeListener(state.layoutListener);
+        if (state.structure.inputKeyboardViewHolder != null) {
+            state.structure.inputKeyboardViewHolder.addOnLayoutChangeListener(state.layoutListener);
+        }
         state.preDrawListener = () -> {
             syncGeometry(state);
             return true;
@@ -251,40 +254,56 @@ final class GboardFloatingGlassCoordinator {
             return;
         }
         state.geometryRetryCount = 0;
-        syncSinkBounds(state, next);
 
-        GboardSoftKeyGlassScene.Node[] softKeyNodes;
-        boolean rebuiltKeyScene = false;
-        GboardFloatingGlassGeometry previous = state.lastGeometry;
-        boolean shellSizeStable = previous != null && sameShellSize(previous, next);
-        boolean translated = shellSizeStable
-                && (Math.abs(next.left - previous.left) >= 0.25f
-                || Math.abs(next.top - previous.top) >= 0.25f);
+        GboardFloatingGlassGeometry previousObserved = state.lastGeometry;
+        boolean observedSizeStable = previousObserved != null
+                && sameShellSize(previousObserved, next);
+        boolean translatedThisFrame = observedSizeStable
+                && (Math.abs(next.left - previousObserved.left) >= 0.25f
+                || Math.abs(next.top - previousObserved.top) >= 0.25f);
         if (!state.realtimeBackgroundSampling
                 && state.captureRequested
-                && state.frozenMotionState.onFrame(translated)) {
+                && state.frozenMotionState.onFrame(translatedThisFrame)) {
             state.session.requestFrozenMotionCapture();
         }
-        boolean translationOnly = shellSizeStable && !state.keyLayoutDirty;
-        if (!state.softKeyGlassEnabled) {
-            softKeyNodes = GboardSoftKeyGlassScene.EMPTY;
-        } else if (translationOnly) {
-            softKeyNodes = GboardSoftKeyGlassScene.translateAndRefreshInteraction(
-                    state.softKeyNodes,
-                    next.left - previous.left,
-                    next.top - previous.top);
-        } else {
-            softKeyNodes = GboardSoftKeyGlassScene.capture(
-                    captureContext,
-                    state.structure,
-                    true,
-                    state.softKeyCornerRadiusDp);
+
+        boolean rebuildScene = state.sceneGeometry == null
+                || !sameShellSize(state.sceneGeometry, next)
+                || state.keyLayoutDirty;
+        GboardSoftKeyGlassScene.Node[] softKeyNodes = state.softKeyNodes;
+        boolean rebuiltKeyScene = false;
+
+        if (rebuildScene) {
+            if (state.softKeyGlassEnabled) {
+                softKeyNodes = GboardSoftKeyGlassScene.capture(
+                        captureContext,
+                        state.structure,
+                        true,
+                        state.softKeyCornerRadiusDp);
+                rebuiltKeyScene = true;
+            } else {
+                softKeyNodes = GboardSoftKeyGlassScene.EMPTY;
+            }
             state.keyLayoutDirty = false;
-            rebuiltKeyScene = true;
+            state.sceneGeometry = next;
+            state.softKeyNodes = softKeyNodes;
+            syncSinkBounds(state, next);
+            state.session.updateMotion(0f, 0f);
+            state.session.updateGeometry(next, softKeyNodes);
+        } else {
+            GboardSoftKeyGlassScene.Node[] refreshed =
+                    GboardSoftKeyGlassScene.refreshInteraction(softKeyNodes);
+            if (refreshed != softKeyNodes) {
+                softKeyNodes = refreshed;
+                state.softKeyNodes = refreshed;
+                state.session.updateGeometry(state.sceneGeometry, refreshed);
+            }
+            float dx = next.left - state.sceneGeometry.left;
+            float dy = next.top - state.sceneGeometry.top;
+            state.session.updateMotion(dx, dy);
         }
+
         state.lastGeometry = next;
-        state.softKeyNodes = softKeyNodes;
-        state.session.updateGeometry(next, softKeyNodes);
         if (rebuiltKeyScene && state.stockHidden) {
             GboardStockVisualAuthority.refreshPreparedSoftKeys(state.structure);
         }
@@ -354,9 +373,11 @@ final class GboardFloatingGlassCoordinator {
             catch (Throwable ignored) {}
             state.attachListener = null;
         }
-        if (state.keyboardArea != null && state.layoutListener != null) {
-            try { state.keyboardArea.removeOnLayoutChangeListener(state.layoutListener); }
-            catch (Throwable ignored) {}
+        if (state.structure.inputKeyboardViewHolder != null && state.layoutListener != null) {
+            try {
+                state.structure.inputKeyboardViewHolder.removeOnLayoutChangeListener(
+                        state.layoutListener);
+            } catch (Throwable ignored) {}
             state.layoutListener = null;
         }
         if (state.keyboardArea != null && state.preDrawListener != null) {
