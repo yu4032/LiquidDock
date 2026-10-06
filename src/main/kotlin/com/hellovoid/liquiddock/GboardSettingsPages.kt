@@ -426,7 +426,7 @@ internal fun GboardSettingsPage(
                             .apply()
                     },
                     title = "按键背景液态玻璃",
-                    summary = "替换 SoftKeyView 的原生按键底板；关闭后仅保留悬浮键盘整体液态玻璃",
+                    summary = "仅替换主键盘输入区的按键底板；上方工具栏与功能键保持 Gboard 原生外观",
                     enabled = controlsEnabled,
                 )
             }
