@@ -39,14 +39,14 @@ internal fun ThirdPartyAppsPage(
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
     val context = LocalContext.current
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             GboardPageHeader(
                 "第三方应用适配",
                 "为第三方应用提供独立的液态玻璃适配与参数。",
             )
         }
-        item { SmallTitle("系统搜索") }
+        item { ModernSectionTitle("系统搜索") }
         item {
             GboardSettingsCard {
                 ArrowPreference(
@@ -59,7 +59,7 @@ internal fun ThirdPartyAppsPage(
                 )
             }
         }
-        item { SmallTitle("输入法") }
+        item { ModernSectionTitle("输入法") }
         item {
             GboardSettingsCard {
                 ArrowPreference(
@@ -160,14 +160,14 @@ internal fun SearchboxSettingsPage(
         appearanceGeneration++
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             GboardPageHeader(
                 "系统搜索",
                 "仅替换 MIUI 搜索主界面的原生 blur 背景；搜索框自身背景保持原样。颜色与模糊度未单独设置时继承全局液态玻璃。",
             )
         }
-        item { SmallTitle("功能") }
+        item { ModernSectionTitle("功能") }
         item {
             GboardSettingsCard {
                 SwitchPreference(
@@ -184,7 +184,7 @@ internal fun SearchboxSettingsPage(
                 )
             }
         }
-        item { SmallTitle("玻璃颜色") }
+        item { ModernSectionTitle("玻璃颜色") }
         item {
             GboardSettingsCard {
                 GboardValueSlider(
@@ -225,7 +225,7 @@ internal fun SearchboxSettingsPage(
                 )
             }
         }
-        item { SmallTitle("模糊") }
+        item { ModernSectionTitle("模糊") }
         item {
             GboardSettingsCard {
                 GboardValueSlider(
@@ -353,14 +353,14 @@ internal fun GboardSettingsPage(
         appearanceGeneration++
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             GboardPageHeader(
                 "Gboard",
                 "仅作用于 Gboard 悬浮键盘；颜色与模糊度未单独设置时继承全局液态玻璃。",
             )
         }
-        item { SmallTitle("功能") }
+        item { ModernSectionTitle("功能") }
         item {
             GboardSettingsCard {
                 SwitchPreference(
@@ -402,7 +402,7 @@ internal fun GboardSettingsPage(
                 )
             }
         }
-        item { SmallTitle("玻璃颜色") }
+        item { ModernSectionTitle("玻璃颜色") }
         item {
             GboardSettingsCard {
                 GboardValueSlider(
@@ -443,7 +443,7 @@ internal fun GboardSettingsPage(
                 )
             }
         }
-        item { SmallTitle("模糊") }
+        item { ModernSectionTitle("模糊") }
         item {
             GboardSettingsCard {
                 GboardValueSlider(
@@ -509,18 +509,10 @@ private fun GboardValueSlider(
 
 @Composable
 private fun GboardPageHeader(title: String, summary: String) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Text(
-            text = summary,
-            fontSize = 13.sp,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
-    }
+    ModernPageIntro(summary)
 }
 
 @Composable
 private fun GboardSettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-        Column(content = content)
-    }
+    ModernSectionCard(content)
 }
