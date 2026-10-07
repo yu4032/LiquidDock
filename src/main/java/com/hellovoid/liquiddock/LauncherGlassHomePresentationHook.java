@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.app.Activity;
+import android.view.View;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -60,6 +62,7 @@ final class LauncherGlassHomePresentationHook {
         if (installed) return;
         hookHomeSpringLifecycle(classLoader);
         hookUnlockState(classLoader);
+        hookNativeUnlockFade(classLoader);
         LauncherWidgetTransitionHook.install(classLoader);
         installed = true;
     }
@@ -347,6 +350,54 @@ final class LauncherGlassHomePresentationHook {
      * Launcher PREPARE is the early freeze signal. SystemUI FINISHED normally starts endpoint
      * rollover; a bounded fail-open only releases a barrier whose exact serial is still current.
      */
+    private static final WeakHashMap<Object, View> FADE_ROOT_BY_ANIMATION = new WeakHashMap<>();
+
+    private static void hookNativeUnlockFade(ClassLoader classLoader) {
+        try {
+            Class<?> complex = Class.forName(
+                    "com.miui.home.launcher.compat.UserPresentAnimationCompatComplex", false, classLoader);
+            Class<?> spring = Class.forName(
+                    "com.miui.home.launcher.compat.UserPresentAnimationCompatV12Spring", false, classLoader);
+            Method response = spring.getDeclaredMethod("getDampingResponse");
+            response.setAccessible(true);
+            Method show = HookUtil.findMethodExact(complex, "showAnimation", new Class<?>[0]);
+            Method reset = HookUtil.findMethodExact(complex, "resetAnimationViewNum", new Class<?>[0]);
+            HookUtil.hook(show, chain -> {
+                Object animation = chain.getThisObject();
+                Object preparedScreen = readField(animation, "mPreparedScreenId");
+                boolean prepared = preparedScreen instanceof Number
+                        && ((Number) preparedScreen).longValue() != -1L;
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object launcher = readField(animation, "mLauncher");
+                Object count = readField(animation, "mAllAnimationViewNum");
+                if (prepared && spring.isInstance(animation) && launcher instanceof Activity
+                        && count instanceof Number && ((Number) count).intValue() > 0) {
+                    try {
+                        float[] parameters = (float[]) response.invoke(animation);
+                        long duration = LauncherGlassUnlockFadeTiming.springDurationMs(
+                                parameters[0], parameters[1], 0.0001);
+                        View root = ((Activity) launcher).getWindow().getDecorView().getRootView();
+                        FADE_ROOT_BY_ANIMATION.put(animation, root);
+                        LauncherGlassStaticLayer.onNativeUnlockStarted(root, duration);
+                    } catch (Throwable error) {
+                        MainHook.log("[DC][WorkspaceFade] native timing unavailable: " + error);
+                    }
+                }
+                return result;
+            });
+            HookUtil.hook(reset, chain -> {
+                Object animation = chain.getThisObject();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                View root = FADE_ROOT_BY_ANIMATION.remove(animation);
+                if (root != null) LauncherGlassStaticLayer.onNativeUnlockEnded(root);
+                return result;
+            });
+            MainHook.log("[DC][WorkspaceFade] native unlock lifecycle installed");
+        } catch (Throwable error) {
+            MainHook.log("[DC][WorkspaceFade] native unlock lifecycle unavailable: " + error);
+        }
+    }
+
     private static void hookUnlockState(ClassLoader classLoader) {
         try {
             HookUtil.hookMethod(classLoader, UNLOCK_STATE, "setState", chain -> {
