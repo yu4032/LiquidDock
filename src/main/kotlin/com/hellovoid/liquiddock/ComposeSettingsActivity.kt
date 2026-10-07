@@ -542,6 +542,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var selectedRootIndex by rememberSaveable { mutableStateOf(0) }
+    var requestedRootIndex by remember { mutableStateOf<Int?>(null) }
     var showRestartScopesDialog by rememberSaveable { mutableStateOf(false) }
     var selectedRestartScopes by remember { mutableStateOf(emptySet<RestartScope>()) }
     val pagerState = rememberPagerState(pageCount = { ROOT_PAGES.size })
@@ -570,9 +571,20 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
             page = ROOT_PAGES[pagerState.settledPage]
         }
     }
-    LaunchedEffect(selectedRootIndex, root) {
-        if (root && !pagerState.isScrollInProgress && pagerState.currentPage != selectedRootIndex) {
-            pagerState.animateScrollToPage(selectedRootIndex)
+    LaunchedEffect(requestedRootIndex, root) {
+        val target = requestedRootIndex
+        if (!root || target == null || target !in ROOT_PAGES.indices) return@LaunchedEffect
+        try {
+            if (
+                pagerState.settledPage != target ||
+                kotlin.math.abs(pagerState.currentPageOffsetFraction) > 0.0001f
+            ) {
+                pagerState.animateScrollToPage(target)
+            }
+        } finally {
+            if (requestedRootIndex == target) {
+                requestedRootIndex = null
+            }
         }
     }
     LaunchedEffect(page) {
@@ -645,6 +657,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                             if (selectedRootIndex != index) {
                                 selectedRootIndex = index
                             }
+                            requestedRootIndex = index
                         },
                         labels = ROOT_DESTINATIONS.map { stringResource(it.labelRes) },
                         icons = ROOT_DESTINATIONS.map { it.icon },
