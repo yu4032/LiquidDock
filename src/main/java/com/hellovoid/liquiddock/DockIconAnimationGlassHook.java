@@ -33,7 +33,6 @@ final class DockIconAnimationGlassHook {
             return false;
         }
         boolean shortcut = installShortcutVisibilityHook(classLoader);
-        boolean iconTrace = installIconVisibilityTraceHook(classLoader);
         boolean backStop = installBackAnimStopHandoffGuard(classLoader);
         boolean finish = installFloatingViewFinishHandoffHook(classLoader);
         boolean view2 = installFloatingProxyHook(classLoader,
@@ -44,7 +43,6 @@ final class DockIconAnimationGlassHook {
         if (installed) {
             MainHook.log(TAG + " hooks installed frameCommitHandoff=true"
                     + " fallbackMs=" + FRAME_COMMIT_FALLBACK_MS
-                    + " directIconTrace=" + iconTrace
                     + " layer2Observed=" + layer2);
         }
         return installed;
@@ -60,57 +58,19 @@ final class DockIconAnimationGlassHook {
                         View host = owner instanceof View ? (View) owner : null;
                         Integer visibility = args.length > 0 && args[0] instanceof Number
                                 ? ((Number) args[0]).intValue() : null;
-                        if (host != null && visibility != null
-                                && LauncherGlassHierarchy.isDock(host)) {
-                            DockAnimationTrace.sourceEvent(
-                                    "setAnimTargetVisibility-pre", host, visibility);
-                        }
-
                         Object result = chain.proceed(args);
 
                         if (host != null && visibility != null
-                                && LauncherGlassHierarchy.isDock(host)) {
-                            DockAnimationTrace.sourceEvent(
-                                    "setAnimTargetVisibility-post", host, visibility);
-                            if (visibility == View.VISIBLE && GlassRuntimeState.isAnyIconEnabled()) {
-                                DockGlassItemRegistry.endLaunchAnimation(host);
-                            }
+                                && LauncherGlassHierarchy.isDock(host)
+                                && visibility == View.VISIBLE
+                                && GlassRuntimeState.isAnyIconEnabled()) {
+                            DockGlassItemRegistry.endLaunchAnimation(host);
                         }
                         return result;
                     }, int.class);
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " visibility hook unavailable: " + error);
-            return false;
-        }
-    }
-
-    private static boolean installIconVisibilityTraceHook(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.ShortcutIcon",
-                    "setIconVisibility",
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object owner = chain.getThisObject();
-                        View host = owner instanceof View ? (View) owner : null;
-                        Integer visibility = args.length > 0 && args[0] instanceof Number
-                                ? ((Number) args[0]).intValue() : null;
-                        if (host != null && visibility != null
-                                && LauncherGlassHierarchy.isDock(host)) {
-                            DockAnimationTrace.sourceEvent(
-                                    "setIconVisibility-pre", host, visibility);
-                        }
-                        Object result = chain.proceed(args);
-                        if (host != null && visibility != null
-                                && LauncherGlassHierarchy.isDock(host)) {
-                            DockAnimationTrace.sourceEvent(
-                                    "setIconVisibility-post", host, visibility);
-                        }
-                        return result;
-                    }, int.class);
-            return true;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " direct icon visibility trace unavailable: " + error);
             return false;
         }
     }
@@ -123,8 +83,6 @@ final class DockIconAnimationGlassHook {
                         Object owner = chain.getThisObject();
                         View host = owner instanceof View ? (View) owner : null;
                         if (host != null && pendingForSource(host) != null) {
-                            DockAnimationTrace.sourceEvent(
-                                    "onBackAnimStop-suppressed-pending-commit", host, null);
                             return null;
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -191,16 +149,6 @@ final class DockIconAnimationGlassHook {
                         float progress = validFrame
                                 ? ((Number) args[3]).floatValue() : Float.NaN;
 
-                        HookUtil.InvocationResult<Object> targetBeforeResult = validFrame
-                                ? HookUtil.tryInvoke(chain.getThisObject(), "getAnimTarget") : null;
-                        Object targetBefore = targetBeforeResult != null && targetBeforeResult.succeeded()
-                                ? targetBeforeResult.value() : null;
-                        if (targetBefore instanceof View
-                                && LauncherGlassHierarchy.isDock((View) targetBefore)) {
-                            DockAnimationTrace.proxyFrame(
-                                    "proxy-pre", proxy, (View) targetBefore, proxyAlpha, progress);
-                        }
-
                         Object result = chain.proceed(args);
 
                         if (validFrame) {
@@ -210,8 +158,6 @@ final class DockIconAnimationGlassHook {
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
                                 View dockTarget = (View) target;
-                                DockAnimationTrace.proxyFrame(
-                                        "proxy-post", proxy, dockTarget, proxyAlpha, progress);
                                 if (proxy != null) {
                                     rememberProxyTarget(proxy, dockTarget, closeToHome);
                                 }
@@ -251,9 +197,6 @@ final class DockIconAnimationGlassHook {
                                 if (closeToHome && proxy != null
                                         && proxyAlpha <= 0.1f && proxy.getAlpha() < 1.0f) {
                                     proxy.setAlpha(1.0f);
-                                    DockAnimationTrace.proxyFrame(
-                                            "proxy-tail-held", proxy, dockTarget,
-                                            proxyAlpha, progress);
                                 }
                                 if (closeToHome && GlassRuntimeState.isAnyIconEnabled()) {
                                     DockGlassItemRegistry.observeLaunchAnimationFrame(
@@ -289,7 +232,6 @@ final class DockIconAnimationGlassHook {
         rememberPending(pending);
         proxy.setVisibility(View.VISIBLE);
         proxy.setAlpha(1.0f);
-        DockAnimationTrace.sourceEvent("frame-commit-arm", source, View.VISIBLE);
 
         try {
             observer.registerFrameCommitCallback(
@@ -304,7 +246,6 @@ final class DockIconAnimationGlassHook {
             proxy.postDelayed(
                     () -> completeFrameCommitHandoff(pending, "fallback-timeout"),
                     FRAME_COMMIT_FALLBACK_MS);
-            DockAnimationTrace.sourceEvent("source-shown-awaiting-commit", source, View.VISIBLE);
             return true;
         } catch (Throwable error) {
             forgetPending(pending);
@@ -321,7 +262,6 @@ final class DockIconAnimationGlassHook {
         forgetPending(pending);
         DockGlassItemRegistry.endProxyGeometry(pending.source);
         forgetProxyTarget(pending.proxy);
-        DockAnimationTrace.sourceEvent("handoff-complete-" + reason, pending.source, View.VISIBLE);
 
         try {
             Method recycleView = HookUtil.findMethodExact(

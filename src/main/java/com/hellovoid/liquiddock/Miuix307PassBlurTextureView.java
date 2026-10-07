@@ -174,6 +174,13 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final HandlerThread renderThread;
     private final Handler renderHandler;
     private final Handler mainHandler;
+    /**
+     * UI/pre-draw geometry may advance faster than the full Prismal pass. Keep at most one
+     * scene-only render pending so obsolete animation frames cannot starve real producer callbacks.
+     */
+    private final Object sceneRenderQueueLock = new Object();
+    private boolean sceneRenderQueued;
+    private boolean sceneRenderDirty;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
@@ -306,7 +313,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         passBlurCaptureScalePercent = glassConfig.passBlurCaptureScalePercent;
         updateBackdropMapping();
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
     private float workstationDockIconCornerRadiusDp;
@@ -314,7 +321,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
         dockCompositor.setWorkstationIconCornerRadiusDp(workstationDockIconCornerRadiusDp);
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
     void requestDockSceneRefresh() {
@@ -323,7 +330,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown) return;
             dockCompositor.invalidateUiScene();
             updateBackdropMapping();
-            if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+            if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
             postInvalidateOnAnimation();
         });
     }
@@ -335,7 +342,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setProducerUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         producerUpdatesEnabled = enabled;
-        renderHandler.post(() -> {
+        renderHandler.postAtFrontOfQueue(() -> {
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
             if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
@@ -676,6 +683,56 @@ final class Miuix307PassBlurTextureView extends TextureView
         rawFramebuffer = createFramebuffer(rawTexture);
         fboWidth = nextWidth;
         fboHeight = nextHeight;
+    }
+
+    private void scheduleSceneRender() {
+        if (shuttingDown) return;
+        synchronized (sceneRenderQueueLock) {
+            sceneRenderDirty = true;
+            if (sceneRenderQueued) return;
+            sceneRenderQueued = true;
+        }
+        if (!renderHandler.post(this::drainSceneRender)) {
+            synchronized (sceneRenderQueueLock) {
+                sceneRenderQueued = false;
+                sceneRenderDirty = false;
+            }
+        }
+    }
+
+    /**
+     * Render the newest UI generation, then yield to the Handler queue before any follow-up.
+     * SurfaceTexture producer callbacks that arrived during this draw therefore run before another
+     * scene-only redraw instead of waiting behind an animation-length backlog.
+     */
+    private void drainSceneRender() {
+        synchronized (sceneRenderQueueLock) {
+            if (shuttingDown) {
+                sceneRenderQueued = false;
+                sceneRenderDirty = false;
+                return;
+            }
+            sceneRenderDirty = false;
+        }
+
+        drawLatestFrame(false);
+
+        boolean renderAgain;
+        synchronized (sceneRenderQueueLock) {
+            if (shuttingDown) {
+                sceneRenderQueued = false;
+                sceneRenderDirty = false;
+                return;
+            }
+            renderAgain = sceneRenderDirty;
+            if (!renderAgain) sceneRenderQueued = false;
+        }
+        if (renderAgain && !renderHandler.post(this::drainSceneRender)) {
+            synchronized (sceneRenderQueueLock) {
+                sceneRenderQueued = false;
+                sceneRenderDirty = false;
+            }
+        }
     }
 
     private void drawLatestFrame(boolean fromFrameCallback) {
@@ -1275,7 +1332,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 dock.coverage);
         stageBDiagnosticsLogged = false;
         prismalMappingLogged = false;
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
