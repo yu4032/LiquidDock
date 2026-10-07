@@ -1529,12 +1529,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             Object viewRoot = getViewRootImplCached(materialHost);
             if (viewRoot == null) return null;
 
-            Field sizeField = cachedSurfaceSizeField;
-            if (sizeField == null) {
-                sizeField = findField(viewRoot.getClass(), "mSurfaceSize");
-                sizeField.setAccessible(true);
-                cachedSurfaceSizeField = sizeField;
-            }
+            Field sizeField = surfaceSizeField(viewRoot);
             Object value = sizeField.get(viewRoot);
             if (!(value instanceof Point)) return null;
             Point surfaceSize = (Point) value;
@@ -1550,12 +1545,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 bufferHeight = surfaceWidth;
             }
 
-            Method getSurfaceControl = cachedGetSurfaceControlMethod;
-            if (getSurfaceControl == null) {
-                getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-                getSurfaceControl.setAccessible(true);
-                cachedGetSurfaceControlMethod = getSurfaceControl;
-            }
+            Method getSurfaceControl = surfaceControlMethod(viewRoot);
             Object surface = getSurfaceControl.invoke(viewRoot);
             SurfaceControl rootSurface = surface instanceof SurfaceControl
                     ? (SurfaceControl) surface : null;
@@ -1567,6 +1557,24 @@ final class Miuix307PassBlurTextureView extends TextureView
             MainHook.log(TAG + " producer geometry unavailable: " + error);
             return null;
         }
+    }
+
+    private Field surfaceSizeField(Object viewRoot) throws Exception {
+        Field field = cachedSurfaceSizeField;
+        if (field != null) return field;
+        field = findField(viewRoot.getClass(), "mSurfaceSize");
+        field.setAccessible(true);
+        cachedSurfaceSizeField = field;
+        return field;
+    }
+
+    private Method surfaceControlMethod(Object viewRoot) throws Exception {
+        Method method = cachedGetSurfaceControlMethod;
+        if (method != null) return method;
+        method = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
+        method.setAccessible(true);
+        cachedGetSurfaceControlMethod = method;
+        return method;
     }
 
     private void logStageBDiagnostics(
