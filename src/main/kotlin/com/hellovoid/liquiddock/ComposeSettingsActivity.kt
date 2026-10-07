@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -34,6 +35,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -812,17 +815,26 @@ private fun RestartScopesDialog(
         summary = stringResource(R.string.restart_scopes_summary),
         onDismissRequest = onDismiss,
     ) {
-        Column {
-            RESTART_SCOPES.forEach { scope ->
-                CheckboxPreference(
-                    title = stringResource(scope.titleRes),
-                    summary = scope.processName,
-                    checked = scope in selected,
-                    onCheckedChange = { onToggle(scope) },
-                    checkboxLocation = CheckboxLocation.End,
-                    insideMargin = LiquidDockPreferenceMargin,
-                )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val scopeListScroll = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(scopeListScroll),
+            ) {
+                RESTART_SCOPES.forEach { scope ->
+                    CheckboxPreference(
+                        title = stringResource(scope.titleRes),
+                        summary = scope.processName,
+                        checked = scope in selected,
+                        onCheckedChange = { onToggle(scope) },
+                        checkboxLocation = CheckboxLocation.End,
+                        insideMargin = LiquidDockPreferenceMargin,
+                    )
+                }
             }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
