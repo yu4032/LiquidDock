@@ -36,8 +36,12 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
@@ -60,13 +64,15 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
+import com.styropyr0.prismal.drawPlainPrismalGlass
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
 import com.styropyr0.prismal.components.PrismalGlassStepper
-import com.styropyr0.prismal.components.PrismalGradientGlassPanel
 import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.components.PrismalGlassSlider
+import com.styropyr0.prismal.effects.colorControls
+import com.styropyr0.prismal.effects.prismalBlur
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -122,6 +128,7 @@ internal fun LiquidDockSettingsScaffold(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
+                val density = LocalDensity.current
                 val topBarSurfaceColor = MiuixTheme.colorScheme.surface
                 val collapsed by remember(scrollBehavior) {
                     derivedStateOf { scrollBehavior.state.collapsedFraction >= (1f / 3f) }
@@ -129,23 +136,38 @@ internal fun LiquidDockSettingsScaffold(
                 val customRootHeader = !showBack
                 CompositionLocalProvider(LocalPrismalOverlayBackdrop provides overlayBackdrop) {
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        // Use Prismal's native progressive glass: the lower edge is already blurred,
-                        // then blur/refraction grow stronger upward into the top bar instead of ending
-                        // in a clear strip at the bottom.
-                        PrismalGradientGlassPanel(
-                            backdrop = overlayBackdrop,
-                            modifier = Modifier.matchParentSize(),
-                            height = 220.dp,
-                            blurRadiusDp = 18.dp,
-                            refractionHeightDp = 12.dp,
-                            refractionAmountDp = 16.dp,
-                            refractionTopWeight = 0.15f,
-                            refractionMiddleWeight = 0.45f,
-                            refractionBottomWeight = 1f,
-                            blurFadeStart = 0.18f,
-                            blurFadeEnd = 0.92f,
-                            chromaticAberration = 0.15f,
-                            tint = topBarSurfaceColor.copy(alpha = 0.26f),
+                        // Restore the previously validated top-bar glass implementation.
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .graphicsLayer {
+                                    compositingStrategy = CompositingStrategy.Offscreen
+                                }
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRect(
+                                        brush = Brush.verticalGradient(
+                                            colorStops = arrayOf(
+                                                0f to Color.Black,
+                                                0.58f to Color.Black,
+                                                0.82f to Color.Black.copy(alpha = 0.42f),
+                                                1f to Color.Transparent,
+                                            ),
+                                        ),
+                                        blendMode = BlendMode.DstIn,
+                                    )
+                                }
+                                .drawPlainPrismalGlass(
+                                    backdrop = overlayBackdrop,
+                                    shape = { PrismalRoundedRectangle(0.dp) },
+                                    effects = {
+                                        prismalBlur(with(density) { 14.dp.toPx() })
+                                        colorControls(saturation = 1.18f)
+                                    },
+                                    onDrawSurface = {
+                                        drawRect(topBarSurfaceColor.copy(alpha = 0.30f))
+                                    },
+                                ),
                         )
 
                         TopAppBar(
