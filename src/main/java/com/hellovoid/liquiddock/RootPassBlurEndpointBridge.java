@@ -14,6 +14,57 @@ import java.lang.reflect.Method;
  * Project-owned runtime code consumes only the typed {@link Endpoint} snapshot below.
  */
 final class RootPassBlurEndpointBridge {
+    private static final Object ACCESS_LOCK = new Object();
+    private static final Method VIEW_GET_VIEW_ROOT_IMPL =
+            optionalDeclaredMethod(View.class, "getViewRootImpl");
+    private static final Method DISPLAY_GET_INSTALL_ORIENTATION =
+            optionalPublicMethod(Display.class, "getInstallOrientation");
+    private static final Method SURFACE_IS_SAME =
+            optionalPublicMethod(SurfaceControl.class, "isSameSurface", SurfaceControl.class);
+    private static volatile ViewRootAccess cachedViewRootAccess;
+
+    private static final class ViewRootAccess {
+        final Class<?> type;
+        final Field surfaceSize;
+        final Field windowAttributes;
+        final Method getSurfaceControl;
+        private Class<?> attrsType;
+        private Field surfaceInsets;
+
+        ViewRootAccess(Class<?> type) throws ReflectiveOperationException {
+            this.type = type;
+            surfaceSize = accessible(findField(type, "mSurfaceSize"));
+            windowAttributes = accessible(findField(type, "mWindowAttributes"));
+            getSurfaceControl = accessible(findMethod(type, "getSurfaceControl"));
+        }
+
+        Rect surfaceInsets(Object attrs) {
+            if (attrs == null) return null;
+            Class<?> nextType = attrs.getClass();
+            Field field = surfaceInsets;
+            if (field == null || attrsType != nextType) {
+                synchronized (this) {
+                    field = surfaceInsets;
+                    if (field == null || attrsType != nextType) {
+                        try {
+                            field = accessible(findField(nextType, "surfaceInsets"));
+                            attrsType = nextType;
+                            surfaceInsets = field;
+                        } catch (Throwable ignored) {
+                            return null;
+                        }
+                    }
+                }
+            }
+            try {
+                Object value = field.get(attrs);
+                return value instanceof Rect ? (Rect) value : null;
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+    }
+
     static final class Endpoint {
         final int surfaceWidth;
         final int surfaceHeight;
@@ -72,16 +123,20 @@ final class RootPassBlurEndpointBridge {
         try {
             Object viewRoot = getViewRootImpl(root);
             if (viewRoot == null) return null;
-            Field sizeField = findField(viewRoot.getClass(), "mSurfaceSize");
-            sizeField.setAccessible(true);
-            Object sizeValue = sizeField.get(viewRoot);
+            ViewRootAccess access = viewRootAccess(viewRoot.getClass());
+            Object sizeValue = access.surfaceSize.get(viewRoot);
             if (!(sizeValue instanceof Point)) return null;
             Point surfaceSize = (Point) sizeValue;
             int surfaceWidth = surfaceSize.x;
             int surfaceHeight = surfaceSize.y;
             if (surfaceWidth <= 0 || surfaceHeight <= 0) return null;
 
-            Rect surfaceInsets = readSurfaceInsets(viewRoot);
+            Object attrs = access.windowAttributes.get(viewRoot);
+            Rect surfaceInsets = access.surfaceInsets(attrs);
+            int insetLeft = surfaceInsets != null ? surfaceInsets.left : 0;
+            int insetTop = surfaceInsets != null ? surfaceInsets.top : 0;
+            int insetRight = surfaceInsets != null ? surfaceInsets.right : 0;
+            int insetBottom = surfaceInsets != null ? surfaceInsets.bottom : 0;
             int rotation = readConfigRotation(root);
             int bufferWidth = surfaceWidth;
             int bufferHeight = surfaceHeight;
@@ -90,9 +145,7 @@ final class RootPassBlurEndpointBridge {
                 bufferHeight = surfaceWidth;
             }
 
-            Method getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-            getSurfaceControl.setAccessible(true);
-            Object value = getSurfaceControl.invoke(viewRoot);
+            Object value = access.getSurfaceControl.invoke(viewRoot);
             SurfaceControl rootSurface = value instanceof SurfaceControl
                     ? (SurfaceControl) value : null;
             return new Endpoint(
@@ -105,10 +158,10 @@ final class RootPassBlurEndpointBridge {
                     System.identityHashCode(viewRoot),
                     Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot),
                     Miuix307PassBlurBridge.surfaceLayerId(rootSurface),
-                    surfaceInsets.left,
-                    surfaceInsets.top,
-                    surfaceInsets.right,
-                    surfaceInsets.bottom);
+                    insetLeft,
+                    insetTop,
+                    insetRight,
+                    insetBottom);
         } catch (Throwable ignored) {
             return null;
         }
@@ -139,39 +192,37 @@ final class RootPassBlurEndpointBridge {
         return isSameSurface(binding.rootSurface, endpoint.rootSurface);
     }
 
-    private static Rect readSurfaceInsets(Object viewRoot) {
-        Rect result = new Rect();
-        if (viewRoot == null) return result;
-        try {
-            Field attrsField = findField(viewRoot.getClass(), "mWindowAttributes");
-            attrsField.setAccessible(true);
-            Object attrs = attrsField.get(viewRoot);
-            if (attrs == null) return result;
-            Field insetsField = findField(attrs.getClass(), "surfaceInsets");
-            insetsField.setAccessible(true);
-            Object value = insetsField.get(attrs);
-            if (value instanceof Rect) result.set((Rect) value);
-        } catch (Throwable ignored) {}
-        return result;
-    }
-
-    private static int readConfigRotation(View view) {
+    static int readConfigRotation(View view) {
         Display display = view != null ? view.getDisplay() : null;
         if (display == null) return 0;
         int installOrientation = 0;
-        try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
-            if (value instanceof Number) installOrientation = ((Number) value).intValue();
-        } catch (Throwable ignored) {}
+        Method method = DISPLAY_GET_INSTALL_ORIENTATION;
+        if (method != null) {
+            try {
+                Object value = method.invoke(display);
+                if (value instanceof Number) installOrientation = ((Number) value).intValue();
+            } catch (Throwable ignored) {}
+        }
         int result = (installOrientation + display.getRotation()) % 4;
         return result < 0 ? result + 4 : result;
     }
 
     private static Object getViewRootImpl(View view) throws Exception {
-        Method method = View.class.getDeclaredMethod("getViewRootImpl");
-        method.setAccessible(true);
-        return method.invoke(view);
+        Method method = VIEW_GET_VIEW_ROOT_IMPL;
+        return method != null ? method.invoke(view) : null;
+    }
+
+    private static ViewRootAccess viewRootAccess(Class<?> type) throws ReflectiveOperationException {
+        ViewRootAccess current = cachedViewRootAccess;
+        if (current != null && current.type == type) return current;
+        synchronized (ACCESS_LOCK) {
+            current = cachedViewRootAccess;
+            if (current == null || current.type != type) {
+                current = new ViewRootAccess(type);
+                cachedViewRootAccess = current;
+            }
+            return current;
+        }
     }
 
     private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
@@ -186,15 +237,52 @@ final class RootPassBlurEndpointBridge {
         throw new NoSuchFieldException(name);
     }
 
+    private static Method findMethod(Class<?> type, String name, Class<?>... parameterTypes)
+            throws NoSuchMethodException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredMethod(name, parameterTypes);
+            } catch (NoSuchMethodException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchMethodException(name);
+    }
+
+    private static <T extends java.lang.reflect.AccessibleObject> T accessible(T value) {
+        value.setAccessible(true);
+        return value;
+    }
+
+    private static Method optionalDeclaredMethod(
+            Class<?> type, String name, Class<?>... parameterTypes) {
+        try {
+            return accessible(type.getDeclaredMethod(name, parameterTypes));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Method optionalPublicMethod(
+            Class<?> type, String name, Class<?>... parameterTypes) {
+        try {
+            return accessible(type.getMethod(name, parameterTypes));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     private static boolean isSameSurface(SurfaceControl first, SurfaceControl second) {
         if (first == second) return true;
         if (first == null || second == null) return false;
-        try {
-            Method method = SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class);
-            Object value = method.invoke(first, second);
-            return value instanceof Boolean && (Boolean) value;
-        } catch (Throwable ignored) {
-            return first.equals(second);
+        Method method = SURFACE_IS_SAME;
+        if (method != null) {
+            try {
+                Object value = method.invoke(first, second);
+                return value instanceof Boolean && (Boolean) value;
+            } catch (Throwable ignored) {}
         }
+        return first.equals(second);
     }
 }
