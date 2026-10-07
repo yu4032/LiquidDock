@@ -306,10 +306,15 @@ final class RootPassBlurBackend {
      * endpoint generation changes; caller-owned logical layout changes remain a domain concern.
      */
     boolean reconcileRoot() {
+        return reconcileRoot(-1);
+    }
+
+    boolean reconcileRoot(int knownRotation) {
         if (shuttingDown) return false;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return false;
-        RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
+        RootPassBlurEndpointBridge.Endpoint endpoint =
+                RootPassBlurEndpointBridge.inspect(root, knownRotation);
         if (endpoint == null || !endpoint.isValid()) return false;
 
         int nextLogicalWidth = root.getWidth();
