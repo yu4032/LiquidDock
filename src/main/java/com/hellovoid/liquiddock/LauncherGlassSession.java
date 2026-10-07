@@ -706,7 +706,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             return;
         }
 
-        boolean sourceGeometryChanged = sourceBackend.reconcileRoot();
+        boolean sourceGeometryChanged = sourceBackend.reconcileRoot(nextRotation);
         if (sourceGeometryChanged) {
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
             if (nextGeneration > 0L) sceneGeneration = nextGeneration;
