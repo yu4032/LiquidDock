@@ -133,7 +133,7 @@ final class Miuix307ZeroCopyRenderer {
      */
     static void onHomeOpeningStarted() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null) return;
+        if (gpuBackdrop == null || homeProducerOverride) return;
 
         final long serial = ++homeFreshnessSerial;
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
@@ -146,12 +146,18 @@ final class Miuix307ZeroCopyRenderer {
                 + " authority=producer-present");
     }
 
-    /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
+    /** HOME FINISH releases the producer override only after a real fresh frame has presented. */
     static void onHomeOpeningFinished() {
         if (homeFreshnessSerial <= 0L) return;
-        HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
+        DockHomeBackdropFreshnessState.Decision decision =
+                HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
+        if (decision.releaseProducerOverride) {
+            homeProducerOverride = false;
+            applyProducerUpdatesPolicy("home-refresh-finished");
+        }
         MainHook.log(TAG + " HOME finish observed without presentation barrier serial="
-                + homeFreshnessSerial);
+                + homeFreshnessSerial
+                + " releaseOverride=" + decision.releaseProducerOverride);
     }
 
     /**
@@ -161,13 +167,15 @@ final class Miuix307ZeroCopyRenderer {
     private static void onFreshProducerFramePresented() {
         DockHomeBackdropFreshnessState.Decision decision =
                 HOME_FRESHNESS.onProducerFrameAvailable();
-        if (!decision.releaseProducerOverride) return;
+        if (!homeProducerOverride) return;
 
         long serial = homeFreshnessSerial;
-        homeProducerOverride = false;
-        applyProducerUpdatesPolicy("home-refresh-producer-presented");
-        MainHook.log(TAG + " HOME backdrop refreshed serial=" + serial
-                + " authority=producer-present");
+        if (decision.releaseProducerOverride) {
+            homeProducerOverride = false;
+            applyProducerUpdatesPolicy("home-refresh-producer-presented-after-finish");
+            MainHook.log(TAG + " HOME backdrop refreshed serial=" + serial
+                    + " authority=producer-present releaseOverride=true");
+        }
     }
 
     /** Vsync polling is timeout-only; it never decides freshness. */
