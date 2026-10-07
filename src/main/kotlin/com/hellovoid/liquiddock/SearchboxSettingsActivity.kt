@@ -22,7 +22,6 @@ class SearchboxSettingsActivity : SettingsActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
             val masterEnabled by remember {
                 mutableStateOf(
@@ -32,25 +31,18 @@ class SearchboxSettingsActivity : SettingsActivity() {
                     ),
                 )
             }
-            MiuixTheme(controller = controller) {
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = getString(R.string.page_searchbox),
-                            largeTitle = getString(R.string.page_searchbox),
-                            navigationIcon = {
-                                SettingsBackButton { finish() }
-                            },
-                            titlePadding = 20.dp,
-                            actions = {
-                                TextButton(
-                                    text = getString(R.string.action_restart_searchbox),
-                                    onClick = {
-                                        restartPackageProcess(
-                                            "com.android.quicksearchbox",
-                                            "系统搜索",
-                                        )
-                                    },
+            LiquidDockTheme {
+                ModernSettingsScaffold(
+                    title = getString(R.string.page_searchbox),
+                    showBack = true,
+                    onBack = { finish() },
+                    actions = {
+                        TextButton(
+                            text = getString(R.string.action_restart_searchbox),
+                            onClick = {
+                                restartPackageProcess(
+                                    "com.android.quicksearchbox",
+                                    "系统搜索",
                                 )
                             },
                         )
