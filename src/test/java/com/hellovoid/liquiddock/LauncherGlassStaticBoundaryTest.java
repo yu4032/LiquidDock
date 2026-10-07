@@ -37,6 +37,19 @@ public class LauncherGlassStaticBoundaryTest {
     }
 
     @Test
+    public void launcherCompositeLocationsAreResolvedFromLinkedProgram() throws Exception {
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        assertTrue(session.contains(
+                "compositeTextureLocation = requireUniform(compositeProgram, \"uTexture\")"));
+        assertTrue(session.contains(
+                "compositeCropRectLocation = requireUniform(compositeProgram, \"uCropRect\")"));
+        assertFalse(session.contains(
+                "compositeTextureLocation = compositeTextureLocation"));
+        assertFalse(session.contains(
+                "compositeCropRectLocation = compositeCropRectLocation"));
+    }
+
+    @Test
     public void workspaceScrollLateLatchKeepsBackdropRootAnchored() throws Exception {
         String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
         String layer = Files.readString(MAIN.resolve("LauncherGlassStaticLayer.java"));
