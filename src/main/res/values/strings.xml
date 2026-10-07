@@ -6,6 +6,16 @@
     <string name="action_restart_gboard">Restart Gboard</string>
     <string name="action_restart_security_center_and_launcher">Restart Security Center &amp; desktop</string>
     <string name="action_restart_system_ui">Restart System UI</string>
+    <string name="action_restart_scopes">Restart scopes</string>
+    <string name="restart_scopes_title">Restart scopes</string>
+    <string name="restart_scopes_summary">Select the processes to restart. System Framework requires a device reboot and is not listed here.</string>
+    <string name="restart_scope_launcher">Desktop</string>
+    <string name="restart_scope_system_ui">System UI</string>
+    <string name="restart_scope_security_center">Security Center</string>
+    <string name="restart_scope_gboard">Gboard</string>
+    <string name="restart_scope_searchbox">System Search</string>
+    <string name="restart_scopes_confirm">Confirm</string>
+    <string name="restart_scopes_cancel">Cancel</string>
     <string name="page_grid">Home screen layout</string>
     <string name="page_dock">Dock size and blur</string>
     <string name="page_dock_recent_blacklist">Recent apps blacklist</string>
