@@ -6,6 +6,9 @@ import android.os.Looper;
 import android.os.SystemClock;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,6 +46,8 @@ final class LauncherGlassHomePresentationHook {
             ConcurrentHashMap.newKeySet();
     private static final WeakHashMap<Object, Object> WINDOW_ELEMENT_BY_SPRING =
             new WeakHashMap<>();
+    private static final Set<Object> ACTIVE_FRAME_SYNC_SPRINGS =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     private static final LauncherHomeTransitionState HOME_STATE =
             new LauncherHomeTransitionState();
@@ -179,6 +184,7 @@ final class LauncherGlassHomePresentationHook {
     }
 
     private static void onLauncherSpringStarted(Object owner, Object animation) {
+        onLauncherNativeTransitionStarted(owner, animation, "spring-start");
         String animType = readAnimationType(animation);
         if (!isHomeCloseType(animType)) return;
 
@@ -196,6 +202,7 @@ final class LauncherGlassHomePresentationHook {
 
     private static void onLauncherRunningAnimationAccepted(
             Object owner, Object animation, String animType) {
+        onLauncherNativeTransitionStarted(owner, animation, "spring-retarget");
         if (isHomeCloseType(animType)) {
             onLauncherSpringStarted(owner, animation);
             return;
@@ -204,11 +211,52 @@ final class LauncherGlassHomePresentationHook {
     }
 
     private static void onLauncherSpringPhysicalTerminal(Object animation) {
+        onLauncherNativeTransitionFinished(animation, "spring-terminal");
         HOME_STATE.onSpringPhysicalTerminal(animation);
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner) {
+        releaseNativeTransitionsForOwner(owner, "owner-finish-completed");
         releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner));
+    }
+
+    private static synchronized void onLauncherNativeTransitionStarted(
+            Object owner, Object animation, String reason) {
+        if (animation == null) return;
+        rememberSpringOwner(owner, animation);
+        boolean wasEmpty = ACTIVE_FRAME_SYNC_SPRINGS.isEmpty();
+        ACTIVE_FRAME_SYNC_SPRINGS.add(animation);
+        if (wasEmpty && !ACTIVE_FRAME_SYNC_SPRINGS.isEmpty()) {
+            postHomeLifecycleOnMain(() ->
+                    LauncherGlassSessionRegistry.setNativeTransitionFrameSyncForAll(true, reason));
+        }
+    }
+
+    private static synchronized void onLauncherNativeTransitionFinished(
+            Object animation, String reason) {
+        if (animation == null || !ACTIVE_FRAME_SYNC_SPRINGS.remove(animation)) return;
+        if (ACTIVE_FRAME_SYNC_SPRINGS.isEmpty()) {
+            postHomeLifecycleOnMain(() ->
+                    LauncherGlassSessionRegistry.setNativeTransitionFrameSyncForAll(false, reason));
+        }
+    }
+
+    private static synchronized void releaseNativeTransitionsForOwner(
+            Object owner, String reason) {
+        if (owner == null || ACTIVE_FRAME_SYNC_SPRINGS.isEmpty()) return;
+        boolean removed = false;
+        Iterator<Map.Entry<Object, Object>> iterator =
+                WINDOW_ELEMENT_BY_SPRING.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Object, Object> entry = iterator.next();
+            if (entry.getValue() != owner) continue;
+            removed |= ACTIVE_FRAME_SYNC_SPRINGS.remove(entry.getKey());
+            iterator.remove();
+        }
+        if (removed && ACTIVE_FRAME_SYNC_SPRINGS.isEmpty()) {
+            postHomeLifecycleOnMain(() ->
+                    LauncherGlassSessionRegistry.setNativeTransitionFrameSyncForAll(false, reason));
+        }
     }
 
     private static void releaseHomeBarrierOnMain(

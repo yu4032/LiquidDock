@@ -698,18 +698,33 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (staticChanged || dragChanged) scheduleOutputRender(staticChanged, dragChanged);
     }
 
+    void setNativeTransitionFrameSyncEnabled(boolean enabled, String reason) {
+        if (shuttingDown) return;
+        View root = rootRef.get();
+        applyTransitionFrameSync(
+                transitionFrameSync.onNativeTransition(enabled),
+                root,
+                reason != null ? reason : "workspace-native-transition");
+    }
+
     private void applyTransitionFrameSync(
             WorkspaceTransitionFrameSyncState.Decision decision, View root) {
+        applyTransitionFrameSync(decision, root, "workspace-geometry-motion");
+    }
+
+    private void applyTransitionFrameSync(
+            WorkspaceTransitionFrameSyncState.Decision decision, View root, String reason) {
         if (decision == null) return;
         if (decision.enable) {
-            sourceBackend.setTransitionFrameSyncEnabled(true, "workspace-geometry-motion");
+            sourceBackend.setTransitionFrameSyncEnabled(true, reason);
         } else if (decision.disable) {
-            sourceBackend.setTransitionFrameSyncEnabled(false, "workspace-geometry-settled");
+            sourceBackend.setTransitionFrameSyncEnabled(false, reason);
         }
 
-        // While the lease is active, guarantee enough frame-lifecycle observations to see the
-        // terminal stable frames even if the native animation stops invalidating immediately.
-        if (transitionFrameSync.isActive() && root != null && root.isAttachedToWindow()) {
+        // Geometry-owned motion uses real pre-draw stability as its terminal boundary. Request
+        // only the two settle observations it needs; a native spring lease has its own callbacks.
+        if (transitionFrameSync.needsGeometrySettleFrame()
+                && root != null && root.isAttachedToWindow()) {
             root.postInvalidateOnAnimation();
         }
     }

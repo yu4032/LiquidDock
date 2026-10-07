@@ -7,7 +7,7 @@ import org.junit.Test;
 
 public class WorkspaceTransitionFrameSyncStateTest {
     @Test
-    public void firstMotionEnablesAndContinuousMotionKeepsLease() {
+    public void firstGeometryMotionEnablesAndContinuousMotionKeepsLease() {
         WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
 
         WorkspaceTransitionFrameSyncState.Decision first = state.onPreDraw(true);
@@ -22,7 +22,7 @@ public class WorkspaceTransitionFrameSyncStateTest {
     }
 
     @Test
-    public void twoStablePredrawsReleaseButOneDoesNot() {
+    public void twoStablePredrawsReleaseGeometryLease() {
         WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
         state.onPreDraw(true);
 
@@ -36,7 +36,7 @@ public class WorkspaceTransitionFrameSyncStateTest {
     }
 
     @Test
-    public void renewedMotionCancelsPendingRelease() {
+    public void renewedGeometryMotionCancelsPendingRelease() {
         WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
         state.onPreDraw(true);
         state.onPreDraw(false);
@@ -45,6 +45,39 @@ public class WorkspaceTransitionFrameSyncStateTest {
         WorkspaceTransitionFrameSyncState.Decision stableAgain = state.onPreDraw(false);
         assertFalse(stableAgain.disable);
         assertTrue(state.isActive());
+    }
+
+    @Test
+    public void nativeSpringKeepsAggregateActiveAfterGeometrySettles() {
+        WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
+        assertTrue(state.onNativeTransition(true).enable);
+        state.onPreDraw(true);
+        state.onPreDraw(false);
+
+        WorkspaceTransitionFrameSyncState.Decision geometrySettled = state.onPreDraw(false);
+        assertFalse(geometrySettled.disable);
+        assertTrue(state.isActive());
+
+        WorkspaceTransitionFrameSyncState.Decision nativeEnded =
+                state.onNativeTransition(false);
+        assertTrue(nativeEnded.disable);
+        assertFalse(state.isActive());
+    }
+
+    @Test
+    public void geometryKeepsAggregateActiveAfterNativeSpringEnds() {
+        WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
+        state.onNativeTransition(true);
+        state.onPreDraw(true);
+
+        WorkspaceTransitionFrameSyncState.Decision nativeEnded =
+                state.onNativeTransition(false);
+        assertFalse(nativeEnded.disable);
+        assertTrue(state.isActive());
+
+        state.onPreDraw(false);
+        assertTrue(state.onPreDraw(false).disable);
+        assertFalse(state.isActive());
     }
 
     @Test
@@ -61,11 +94,11 @@ public class WorkspaceTransitionFrameSyncStateTest {
     }
 
     @Test
-    public void resetReleasesOnlyAnActiveLease() {
+    public void resetReleasesAnyActiveAuthority() {
         WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
         assertFalse(state.reset().disable);
 
-        state.onPreDraw(true);
+        state.onNativeTransition(true);
         assertTrue(state.reset().disable);
         assertFalse(state.isActive());
     }
