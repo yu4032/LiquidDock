@@ -520,7 +520,6 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var selectedRootIndex by rememberSaveable { mutableStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { ROOT_PAGES.size })
-    val scope = rememberCoroutineScope()
     val root = isRootPage(page)
 
     BackHandler(enabled = !root) { page = parentPage(page) }
@@ -529,6 +528,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         if (root) {
             selectedRootIndex = pagerState.settledPage
             page = ROOT_PAGES[pagerState.settledPage]
+        }
+    }
+    LaunchedEffect(selectedRootIndex, root) {
+        if (root && pagerState.currentPage != selectedRootIndex) {
+            pagerState.animateScrollToPage(selectedRootIndex)
         }
     }
     LaunchedEffect(page) {
@@ -596,9 +600,6 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                         onSelected = { index ->
                             if (selectedRootIndex != index) {
                                 selectedRootIndex = index
-                            }
-                            if (pagerState.currentPage != index) {
-                                scope.launch { pagerState.animateScrollToPage(index) }
                             }
                         },
                         labels = ROOT_DESTINATIONS.map { stringResource(it.labelRes) },
