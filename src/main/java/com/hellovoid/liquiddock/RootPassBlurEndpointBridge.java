@@ -119,6 +119,10 @@ final class RootPassBlurEndpointBridge {
     private RootPassBlurEndpointBridge() {}
 
     static Endpoint inspect(View root) {
+        return inspect(root, -1);
+    }
+
+    static Endpoint inspect(View root, int knownRotation) {
         if (root == null) return null;
         try {
             Object viewRoot = getViewRootImpl(root);
@@ -137,7 +141,7 @@ final class RootPassBlurEndpointBridge {
             int insetTop = surfaceInsets != null ? surfaceInsets.top : 0;
             int insetRight = surfaceInsets != null ? surfaceInsets.right : 0;
             int insetBottom = surfaceInsets != null ? surfaceInsets.bottom : 0;
-            int rotation = readConfigRotation(root);
+            int rotation = knownRotation >= 0 ? knownRotation : readConfigRotation(root);
             int bufferWidth = surfaceWidth;
             int bufferHeight = surfaceHeight;
             if (rotation == 1 || rotation == 3) {
