@@ -86,6 +86,7 @@ final class Miuix307PassBlurBridge {
         }
         SurfaceControl rootSurface = null;
         boolean securityCenterClaimed = false;
+        boolean dockClaimed = false;
         boolean gboardClaimed = false;
         boolean searchboxClaimed = false;
         try {
@@ -142,6 +143,10 @@ final class Miuix307PassBlurBridge {
                 SecurityCenterPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 securityCenterClaimed = true;
             }
+            if (domain == PassBlurDomain.DOCK) {
+                DockPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
+                dockClaimed = true;
+            }
             if (domain == PassBlurDomain.GBOARD_FLOATING) {
                 GboardPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 gboardClaimed = true;
@@ -187,6 +192,9 @@ final class Miuix307PassBlurBridge {
         } catch (Throwable error) {
             if (securityCenterClaimed && rootSurface != null) {
                 SecurityCenterPassBlurContinuousAuthority.release(rootSurface, producerSurface);
+            }
+            if (dockClaimed && rootSurface != null) {
+                DockPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
             if (gboardClaimed && rootSurface != null) {
                 GboardPassBlurContinuousAuthority.release(rootSurface, producerSurface);
@@ -259,6 +267,10 @@ final class Miuix307PassBlurBridge {
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
         if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
         if (!force && binding.updatesEnabled == enabled) return;
+        if (binding.domain == PassBlurDomain.DOCK) {
+            DockPassBlurContinuousAuthority.setUpdatesEnabled(
+                    binding.rootSurface, enabled);
+        }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.setUpdatesEnabled(
                     binding.rootSurface, enabled);
@@ -329,6 +341,10 @@ final class Miuix307PassBlurBridge {
         if (binding == null || !binding.bound) return;
         if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
             SecurityCenterPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        if (binding.domain == PassBlurDomain.DOCK) {
+            DockPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
