@@ -24,6 +24,34 @@ final class LauncherGlassVisibility {
         return effectiveAlpha(host, sceneRoot) > EPSILON;
     }
 
+    static float effectiveWorkspaceAlpha(View host, View sceneRoot) {
+        if (host == null || sceneRoot == null || !host.isAttachedToWindow()) return 0f;
+        float result = 1f;
+        boolean workspaceOwned = false;
+        View cursor = host;
+        while (cursor != null) {
+            if (cursor.getVisibility() != View.VISIBLE) return 0f;
+            float alpha = cursor.getAlpha();
+            if (!Float.isFinite(alpha) || alpha <= 0.001f) return 0f;
+            result *= alpha;
+            if (result <= 0.001f) return 0f;
+
+            if (!workspaceOwned) {
+                LauncherGlassHierarchy.Domain domain =
+                        LauncherGlassHierarchy.classifySelf(cursor);
+                if (domain == LauncherGlassHierarchy.Domain.DOCK) return 0f;
+                if (domain == LauncherGlassHierarchy.Domain.WORKSPACE) {
+                    workspaceOwned = true;
+                }
+            }
+
+            if (cursor == sceneRoot) return workspaceOwned ? clamp01(result) : 0f;
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return 0f;
+    }
+
     static float effectiveAlpha(View host, View sceneRoot) {
         if (host == null || sceneRoot == null || !host.isAttachedToWindow()) return 0f;
         float result = 1f;
