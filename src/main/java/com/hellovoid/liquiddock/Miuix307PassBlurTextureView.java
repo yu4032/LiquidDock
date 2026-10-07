@@ -178,6 +178,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
+    private final int[] screenLocationScratch = new int[2];
 
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
@@ -1198,7 +1199,7 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
-        int[] viewScreen = new int[2];
+        int[] viewScreen = screenLocationScratch;
         getLocationOnScreen(viewScreen);
 
         PrismalParams frameParams = portablePrismalParams;
