@@ -105,4 +105,22 @@
     <string name="highlight_plain">基础高光</string><string name="highlight_plain_summary">由基础高光强度参数控制的边缘高光</string>
     <string name="highlight_caustics">焦散</string><string name="highlight_caustics_summary">曲面玻璃聚焦形成的光纹</string>
     <string name="highlight_press_glow">按压辉光</string><string name="highlight_press_glow_summary">交互按压效果使用的局部辉光</string>
+
+    <string name="tab_overview">概览</string>
+    <string name="tab_layout">布局</string>
+    <string name="tab_glass">玻璃</string>
+    <string name="tab_more">更多</string>
+    <string name="tab_overview_summary">状态、常用控制与快捷入口</string>
+    <string name="tab_layout_summary">主屏幕、Dock、工作台与多任务布局</string>
+    <string name="tab_glass_summary">液态玻璃、描边、阴影、高光与应用适配</string>
+    <string name="tab_more_summary">系统联动、动画、备份与项目信息</string>
+    <string name="category_quick_access">快捷入口</string>
+    <string name="category_layout">布局</string>
+    <string name="category_glass_appearance">玻璃与外观</string>
+    <string name="category_system_tools">系统与工具</string>
+    <string name="home_status_enabled">LiquidDock 已启用</string>
+    <string name="home_status_disabled">LiquidDock 已暂停</string>
+    <string name="home_status_enabled_summary">桌面自定义功能已启用；结构性修改仍可能需要重启桌面。</string>
+    <string name="home_status_disabled_summary">可热切换的视觉层已释放；启用 LiquidDock 后使用桌面自定义功能。</string>
+
 </resources>
