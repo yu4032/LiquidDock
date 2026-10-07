@@ -1,6 +1,13 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +19,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,12 +36,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
@@ -55,13 +60,13 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
-import com.styropyr0.prismal.drawPlainPrismalGlass
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
+import com.styropyr0.prismal.components.PrismalGlassButton
+import com.styropyr0.prismal.components.PrismalGlassStepper
+import com.styropyr0.prismal.components.PrismalGradientGlassPanel
 import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.components.PrismalGlassSlider
-import com.styropyr0.prismal.effects.colorControls
-import com.styropyr0.prismal.effects.prismalBlur
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -74,6 +79,7 @@ internal val LiquidDockPreferenceMargin = PaddingValues(horizontal = 18.dp, vert
 
 private val LocalSettingsScrollBehavior = staticCompositionLocalOf<ScrollBehavior?> { null }
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 
 @Composable
 internal fun LiquidDockTheme(content: @Composable () -> Unit) {
@@ -116,90 +122,89 @@ internal fun LiquidDockSettingsScaffold(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                val density = LocalDensity.current
                 val topBarSurfaceColor = MiuixTheme.colorScheme.surface
                 val collapsed by remember(scrollBehavior) {
                     derivedStateOf { scrollBehavior.state.collapsedFraction >= (1f / 3f) }
                 }
-                val inlineExpandedActions = !showBack
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    // The blur itself is rendered separately from TopAppBar content, then alpha-masked
-                    // from opaque at the status-bar edge to transparent at the lower edge.
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer {
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
-                            .drawWithContent {
-                                drawContent()
-                                drawRect(
-                                    brush = Brush.verticalGradient(
-                                        colorStops = arrayOf(
-                                            0f to Color.Black,
-                                            0.58f to Color.Black,
-                                            0.82f to Color.Black.copy(alpha = 0.42f),
-                                            1f to Color.Transparent,
-                                        ),
-                                    ),
-                                    blendMode = BlendMode.DstIn,
-                                )
-                            }
-                            .drawPlainPrismalGlass(
-                                backdrop = overlayBackdrop,
-                                shape = { PrismalRoundedRectangle(0.dp) },
-                                effects = {
-                                    prismalBlur(with(density) { 14.dp.toPx() })
-                                    colorControls(saturation = 1.18f)
-                                },
-                                onDrawSurface = {
-                                    drawRect(topBarSurfaceColor.copy(alpha = 0.30f))
-                                },
-                            ),
-                    )
+                val customRootHeader = !showBack
+                CompositionLocalProvider(LocalPrismalOverlayBackdrop provides overlayBackdrop) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        // Use Prismal's native progressive glass: the lower edge is already blurred,
+                        // then blur/refraction grow stronger upward into the top bar instead of ending
+                        // in a clear strip at the bottom.
+                        PrismalGradientGlassPanel(
+                            backdrop = overlayBackdrop,
+                            modifier = Modifier.matchParentSize(),
+                            height = 220.dp,
+                            blurRadiusDp = 18.dp,
+                            refractionHeightDp = 12.dp,
+                            refractionAmountDp = 16.dp,
+                            refractionTopWeight = 0.15f,
+                            refractionMiddleWeight = 0.45f,
+                            refractionBottomWeight = 1f,
+                            blurFadeStart = 0.18f,
+                            blurFadeEnd = 0.92f,
+                            chromaticAberration = 0.15f,
+                            tint = topBarSurfaceColor.copy(alpha = 0.26f),
+                        )
 
-                    TopAppBar(
-                        title = title,
-                        largeTitle = if (inlineExpandedActions) " " else title,
-                        color = Color.Transparent,
-                        scrollBehavior = scrollBehavior,
-                        titlePadding = 20.dp,
-                        navigationIcon = {
-                            if (showBack) {
-                                IconButton(onClick = onBack) {
-                                    Icon(
-                                        imageVector = MiuixIcons.Back,
-                                        contentDescription = null,
+                        TopAppBar(
+                            title = if (customRootHeader) " " else title,
+                            largeTitle = if (customRootHeader) " " else title,
+                            color = Color.Transparent,
+                            scrollBehavior = scrollBehavior,
+                            titlePadding = 20.dp,
+                            navigationIcon = {
+                                if (showBack) {
+                                    IconButton(onClick = onBack) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Back,
+                                            contentDescription = null,
+                                        )
+                                    }
+                                }
+                            },
+                            actions = {
+                                if (!customRootHeader) {
+                                    actions()
+                                }
+                            },
+                        )
+
+                        if (customRootHeader) {
+                            if (collapsed) {
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .fillMaxWidth()
+                                        .statusBarsPadding()
+                                        .height(52.dp)
+                                        .padding(start = 20.dp, end = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    AnimatedLiquidDockTitle(title = title, compact = true)
+                                    Spacer(Modifier.weight(1f))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        content = actions,
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .padding(start = 20.dp, end = 16.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    AnimatedLiquidDockTitle(title = title, compact = false)
+                                    Spacer(Modifier.weight(1f))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        content = actions,
                                     )
                                 }
                             }
-                        },
-                        actions = {
-                            if (!inlineExpandedActions || collapsed) {
-                                actions()
-                            }
-                        },
-                    )
-
-                    if (inlineExpandedActions && !collapsed) {
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .padding(start = 20.dp, end = 16.dp, bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = title,
-                                color = MiuixTheme.colorScheme.onSurface,
-                                style = MiuixTheme.textStyles.title1,
-                                maxLines = 1,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                content = actions,
-                            )
                         }
                     }
                 }
@@ -220,6 +225,87 @@ internal fun LiquidDockSettingsScaffold(
             }
         }
     }
+}
+
+@Composable
+private fun AnimatedLiquidDockTitle(
+    title: String,
+    compact: Boolean,
+) {
+    AnimatedContent(
+        targetState = title,
+        transitionSpec = {
+            (fadeIn(tween(180)) + slideInVertically(tween(180)) { it / 3 }) togetherWith
+                (fadeOut(tween(120)) + slideOutVertically(tween(120)) { -it / 4 })
+        },
+        label = "settings-title",
+    ) { animatedTitle ->
+        Text(
+            text = animatedTitle,
+            color = MiuixTheme.colorScheme.onSurface,
+            style = if (compact) MiuixTheme.textStyles.title3 else MiuixTheme.textStyles.title1,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+internal fun LiquidDockGlassIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    val backdrop = LocalPrismalOverlayBackdrop.current
+    if (backdrop == null) {
+        IconButton(onClick = onClick) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+            )
+        }
+        return
+    }
+
+    PrismalGlassButton(
+        onClick = onClick,
+        backdrop = backdrop,
+        modifier = Modifier.size(40.dp),
+        height = 40.dp,
+        blurRadius = 7.dp,
+        refractionHeight = 9.dp,
+        refractionAmount = 12.dp,
+        pressLift = 2.dp,
+        contentPadding = PaddingValues(9.dp),
+        tint = MiuixTheme.colorScheme.surface,
+        tintAlpha = 0.20f,
+        depthEffect = false,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+internal fun LiquidDockGlassStepper(
+    value: Int,
+    valueRange: IntRange,
+    enabled: Boolean,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val backdrop = LocalPrismalSurfaceBackdrop.current ?: return
+    PrismalGlassStepper(
+        value = value,
+        onValueChange = { if (enabled) onValueChange(it) },
+        backdrop = backdrop,
+        valueRange = valueRange,
+        repeatOnHold = true,
+        modifier = modifier.alpha(if (enabled) 1f else 0.42f),
+    )
 }
 
 @Composable
