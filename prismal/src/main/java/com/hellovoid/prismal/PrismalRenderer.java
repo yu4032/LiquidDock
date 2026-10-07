@@ -104,6 +104,7 @@ public final class PrismalRenderer implements AutoCloseable {
     private int cachedBlurHeight = -1;
     private float cachedBlurSigma = Float.NaN;
     private boolean glassTexturesBound;
+    private final PrismalFrameTarget frameTarget = new PrismalFrameTarget();
 
     private int sourceTexture;
     private int sourceFramebuffer;
@@ -220,6 +221,29 @@ public final class PrismalRenderer implements AutoCloseable {
     }
 
     /**
+     * Draw into framebuffer zero of the caller's current RGBA EGL window surface.
+     * The window is fully cleared on every frame because its back buffer may rotate.
+     * Logical coordinates and all optics are unchanged. This does not update outputTexture();
+     * subsequent texture frames must call beginGlassFrame/Region as usual.
+     */
+    public void beginGlassFrameOnSurface(int surfaceWidth, int surfaceHeight) {
+        if (!backdropPrepared) {
+            throw new IllegalStateException("prepareBackdrop must be called before beginGlassFrame");
+        }
+        frameTarget.selectSurface(surfaceWidth, surfaceHeight);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
+        GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        // Keep outputNeedsFullClear intact: the internal texture has not been touched.
+        glassFrameBegun = true;
+        glassDrawCount = 0;
+        glassTexturesBound = false;
+    }
+
+    /**
      * Clear only one dirty logical region of the transparent scene output.
      *
      * <p>The output FBO remains full-root so screen-space Prismal coordinates and backdrop
@@ -250,6 +274,7 @@ public final class PrismalRenderer implements AutoCloseable {
             bottom = Math.max(top, Math.min(height, logicalBottom));
         }
 
+        frameTarget.selectTexture(outputFramebuffer, outputWidth, outputHeight);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
         GLES20.glViewport(0, 0, outputWidth, outputHeight);
         GLES20.glDisable(GLES20.GL_BLEND);
@@ -480,8 +505,8 @@ public final class PrismalRenderer implements AutoCloseable {
                                  PrismalInteractionState interactionState,
                                  boolean composite, float opacity) {
         highlights = highlights.withOs4EdgeReplacingLegacyEdge();
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
-        GLES20.glViewport(0, 0, outputWidth, outputHeight);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
+        GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         if (composite) {
             GLES20.glEnable(GLES20.GL_BLEND);

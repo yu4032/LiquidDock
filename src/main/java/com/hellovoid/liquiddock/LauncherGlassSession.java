@@ -1075,9 +1075,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void renderStaticScene(PrismalParams params) {
         OutputState output = staticOutput;
-        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
-        sourceBackend.makePbufferCurrent();
-        prismalRenderer.beginGlassFrame();
+        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
+                || output.width <= 0 || output.height <= 0) return;
+        // The shared Workspace scene needs no crop or post-processing. Draw its existing
+        // premultiplied-alpha node batch straight into the RGBA window back buffer, avoiding
+        // the full-root intermediate write + texture read/copy on every animation frame.
+        sourceBackend.makeCurrent(output.eglSurface);
+        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
@@ -1093,7 +1097,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
-        presentFull(prismalRenderer.outputTexture(), output);
+        sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
@@ -1141,27 +1145,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, node.interaction);
             present(prismalRenderer.outputTexture(), geometry, entry.getValue());
         }
-    }
-
-    private void presentFull(int sceneTexture, OutputState output) {
-        if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
-                || output.width <= 0 || output.height <= 0) return;
-        sourceBackend.makeCurrent(output.eglSurface);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        GLES20.glViewport(0, 0, output.width, output.height);
-        GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositePositionLocation, compositeUvLocation);
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-                GLES20.glUniform4f(compositeCropRectLocation,
-                0f, 0f, 1f, 1f);
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositePositionLocation, compositeUvLocation);
-        sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private void present(
