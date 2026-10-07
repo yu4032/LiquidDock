@@ -322,6 +322,10 @@ final class LauncherGlassStaticNode {
     }
 
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
+        return captureGeometry(root, null);
+    }
+
+    LauncherGlassGeometry.Snapshot captureGeometry(View root, Matrix cachedGlobalToRoot) {
         View material = materialRef.get();
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || style == null || !style.enabled
@@ -409,11 +413,15 @@ final class LauncherGlassStaticNode {
         materialToGlobal.reset();
         material.transformMatrixToGlobal(materialToGlobal);
         materialToGlobal.mapPoints(geometryPoints);
-        rootToGlobal.reset();
-        root.transformMatrixToGlobal(rootToGlobal);
-        globalToRoot.reset();
-        if (!rootToGlobal.invert(globalToRoot)) return null;
-        globalToRoot.mapPoints(geometryPoints);
+        Matrix rootInverse = cachedGlobalToRoot;
+        if (rootInverse == null) {
+            rootToGlobal.reset();
+            root.transformMatrixToGlobal(rootToGlobal);
+            globalToRoot.reset();
+            if (!rootToGlobal.invert(globalToRoot)) return null;
+            rootInverse = globalToRoot;
+        }
+        rootInverse.mapPoints(geometryPoints);
 
         float left = Math.min(Math.min(geometryPoints[0], geometryPoints[2]),
                 Math.min(geometryPoints[4], geometryPoints[6]));
