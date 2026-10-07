@@ -120,6 +120,8 @@
     <string name="category_layout">Layout</string>
     <string name="category_glass_appearance">Glass &amp; appearance</string>
     <string name="category_system_tools">System &amp; tools</string>
+    <string name="home_dialog_summary">Dialog and popup glass appearance</string>
+    <string name="home_third_party_summary">Per-app glass integration and appearance controls</string>
     <string name="home_status_enabled">LiquidDock is active</string>
     <string name="home_status_disabled">LiquidDock is paused</string>
     <string name="home_status_enabled_summary">Launcher customizations are enabled. Structural changes may still require a launcher restart.</string>
