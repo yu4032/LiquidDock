@@ -319,11 +319,19 @@ final class RootPassBlurBackend {
         Miuix307PassBlurBridge.Binding current = binding;
         boolean endpointChanged = current != null
                 && !RootPassBlurEndpointBridge.sameGeneration(current, endpoint);
-        RootPassBlurContentRect nextContentRect = contentRect(endpoint);
+        RootPassBlurContentRect previousContentRect = contentRect;
+        RootPassBlurContentRect nextContentRect = RootPassBlurContentRect.resolve(
+                previousContentRect,
+                endpoint.surfaceWidth,
+                endpoint.surfaceHeight,
+                endpoint.insetLeft,
+                endpoint.insetTop,
+                endpoint.insetRight,
+                endpoint.insetBottom);
         boolean sourceGeometryChanged = endpoint.bufferWidth != bufferWidth
                 || endpoint.bufferHeight != bufferHeight
                 || endpoint.rotation != rotation
-                || !nextContentRect.sameAs(contentRect);
+                || nextContentRect != previousContentRect;
 
         if (nextLogicalWidth > 0) logicalWidth = nextLogicalWidth;
         if (nextLogicalHeight > 0) logicalHeight = nextLogicalHeight;
@@ -686,16 +694,6 @@ final class RootPassBlurBackend {
                 if (!shuttingDown && binding == null) bindProducerWhenReady(attempt + 1);
             });
         }
-    }
-
-    private RootPassBlurContentRect contentRect(RootPassBlurEndpointBridge.Endpoint endpoint) {
-        return RootPassBlurContentRect.resolve(
-                endpoint.surfaceWidth,
-                endpoint.surfaceHeight,
-                endpoint.insetLeft,
-                endpoint.insetTop,
-                endpoint.insetRight,
-                endpoint.insetBottom);
     }
 
     private void ensureNormalizedTarget(int width, int height) {
