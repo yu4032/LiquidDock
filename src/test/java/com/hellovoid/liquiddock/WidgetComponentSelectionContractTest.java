@@ -164,7 +164,10 @@ public class WidgetComponentSelectionContractTest {
         assertTrue(detail.contains("其他"));
         assertTrue(detail.contains("高级整节点隐藏"));
         assertTrue(detail.contains("ArrowPreference("));
-        assertTrue(detail.contains("SwitchPreference("));
+        assertTrue(detail.contains("LiquidDockGlassToggleRow("));
+        String uiFoundation = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/MiuixSettingsUi.kt"));
+        assertTrue(uiFoundation.contains("PrismalGlassToggle("));
         assertTrue(detail.contains("groupBy { it.componentType }"));
         assertTrue(manifest.contains("android:name=\".WidgetComponentDetailActivity\""));
     }
