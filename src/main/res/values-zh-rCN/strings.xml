@@ -118,6 +118,8 @@
     <string name="category_layout">布局</string>
     <string name="category_glass_appearance">玻璃与外观</string>
     <string name="category_system_tools">系统与工具</string>
+    <string name="home_dialog_summary">对话框与弹出界面的玻璃外观</string>
+    <string name="home_third_party_summary">第三方应用玻璃适配与独立外观控制</string>
     <string name="home_status_enabled">LiquidDock 已启用</string>
     <string name="home_status_disabled">LiquidDock 已暂停</string>
     <string name="home_status_enabled_summary">桌面自定义功能已启用；结构性修改仍可能需要重启桌面。</string>
