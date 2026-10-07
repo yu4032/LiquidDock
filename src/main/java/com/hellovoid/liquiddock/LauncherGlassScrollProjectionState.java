@@ -39,8 +39,9 @@ final class LauncherGlassScrollProjectionState {
 
     synchronized float projectCenterX(
             float capturedCenterX, int capturedScrollX, boolean capturedScrollValid) {
-        return new Frame(initialized, initialAnchorScrollX, currentScrollX)
-                .projectCenterX(capturedCenterX, capturedScrollX, capturedScrollValid);
+        if (!initialized || !Float.isFinite(capturedCenterX)) return capturedCenterX;
+        int anchorScrollX = capturedScrollValid ? capturedScrollX : initialAnchorScrollX;
+        return capturedCenterX + (anchorScrollX - currentScrollX);
     }
 
     synchronized Frame snapshot() {
