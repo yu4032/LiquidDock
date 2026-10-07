@@ -11,6 +11,10 @@ import java.lang.ref.WeakReference;
 final class DockGlassItemNode {
     private final WeakReference<View> viewRef;
     private final GlassComponentStyle style;
+    private final float[] points = new float[8];
+    private final float[] styledBounds = new float[4];
+    private final Matrix transformScratch = new Matrix();
+
     DockGlassItemNode(View view, GlassComponentStyle style) {
         viewRef = new WeakReference<>(view);
         this.style = style;
@@ -70,13 +74,18 @@ final class DockGlassItemNode {
 
         // FloatingIconView2/FloatingIconLayer2 publish their icon rectangle in Launcher-root space.
         // Convert that exact vendor rectangle into this TextureView's output-local coordinates.
-        float[] points = new float[]{
-                proxyRect[0], proxyRect[1], proxyRect[2], proxyRect[1],
-                proxyRect[0], proxyRect[3], proxyRect[2], proxyRect[3]};
-        Matrix rootToGlobal = new Matrix();
-        view.getRootView().transformMatrixToGlobal(rootToGlobal);
-        rootToGlobal.mapPoints(points);
-        outputInverse.mapPoints(points);
+        points[0] = proxyRect[0];
+        points[1] = proxyRect[1];
+        points[2] = proxyRect[2];
+        points[3] = proxyRect[1];
+        points[4] = proxyRect[0];
+        points[5] = proxyRect[3];
+        points[6] = proxyRect[2];
+        points[7] = proxyRect[3];
+        transformScratch.reset();
+        view.getRootView().transformMatrixToGlobal(transformScratch);
+        transformScratch.mapPoints(points, 0, points, 0, 4);
+        outputInverse.mapPoints(points, 0, points, 0, 4);
 
         float left = min4(points[0], points[2], points[4], points[6]);
         float top = min4(points[1], points[3], points[5], points[7]);
@@ -121,13 +130,16 @@ final class DockGlassItemNode {
         float right = icon != null ? icon.right : view.getWidth();
         float bottom = icon != null ? icon.bottom : view.getHeight();
         float density = view.getResources().getDisplayMetrics().density;
-        float[] b = LauncherGlassBoundsPolicy.apply(left, top, right, bottom,
-                style.sizeOffsetDp * density);
-        float[] points = new float[]{b[0], b[1], b[2], b[3]};
-        Matrix global = new Matrix();
-        view.transformMatrixToGlobal(global);
-        global.mapPoints(points);
-        outputInverse.mapPoints(points);
+        LauncherGlassBoundsPolicy.applyInto(
+                styledBounds, left, top, right, bottom, style.sizeOffsetDp * density);
+        points[0] = styledBounds[0];
+        points[1] = styledBounds[1];
+        points[2] = styledBounds[2];
+        points[3] = styledBounds[3];
+        transformScratch.reset();
+        view.transformMatrixToGlobal(transformScratch);
+        transformScratch.mapPoints(points, 0, points, 0, 2);
+        outputInverse.mapPoints(points, 0, points, 0, 2);
         float width = Math.max(1f, (points[2] - points[0]) * scaleX);
         float height = Math.max(1f, (points[3] - points[1]) * scaleY);
         float x = sampleInsetLeft + points[0] * scaleX;
