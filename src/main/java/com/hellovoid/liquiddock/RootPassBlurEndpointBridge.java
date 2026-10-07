@@ -28,6 +28,7 @@ final class RootPassBlurEndpointBridge {
         final Field surfaceSize;
         final Field windowAttributes;
         final Method getSurfaceControl;
+        final Field winFrameInScreen;
         private Class<?> attrsType;
         private Field surfaceInsets;
 
@@ -36,6 +37,7 @@ final class RootPassBlurEndpointBridge {
             surfaceSize = accessible(findField(type, "mSurfaceSize"));
             windowAttributes = accessible(findField(type, "mWindowAttributes"));
             getSurfaceControl = accessible(findMethod(type, "getSurfaceControl"));
+            winFrameInScreen = optionalField(type, "mWinFrameInScreen");
         }
 
         Rect surfaceInsets(Object attrs) {
@@ -206,6 +208,24 @@ final class RootPassBlurEndpointBridge {
         return isSameSurface(binding.rootSurface, endpoint.rootSurface);
     }
 
+    static Rect readWinFrameInScreen(View view) {
+        if (view == null) return null;
+        try {
+            Object viewRoot = getViewRootImpl(view);
+            if (viewRoot == null) return null;
+            Field field = viewRootAccess(viewRoot.getClass()).winFrameInScreen;
+            if (field == null) return null;
+            Object value = field.get(viewRoot);
+            return value instanceof Rect ? (Rect) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    static boolean sameSurface(SurfaceControl first, SurfaceControl second) {
+        return isSameSurface(first, second);
+    }
+
     static int readConfigRotation(View view) {
         Display display = view != null ? view.getDisplay() : null;
         if (display == null) return 0;
@@ -249,6 +269,14 @@ final class RootPassBlurEndpointBridge {
             }
         }
         throw new NoSuchFieldException(name);
+    }
+
+    private static Field optionalField(Class<?> type, String name) {
+        try {
+            return accessible(findField(type, name));
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private static Method findMethod(Class<?> type, String name, Class<?>... parameterTypes)
