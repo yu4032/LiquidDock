@@ -332,6 +332,85 @@ public class SettingsActivity extends AppCompatActivity {
         }).start();
     }
 
+    void restartSelectedScopes(
+            boolean launcher,
+            boolean systemUi,
+            boolean securityCenter,
+            boolean gboard,
+            boolean searchbox) {
+        if (!launcher && !systemUi && !securityCenter && !gboard && !searchbox) return;
+
+        // One root session serializes all selected restart scopes. This avoids overlapping
+        // su processes and keeps the existing Launcher -> Security Center ordering when both
+        // are selected.
+        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
+        new Thread(() -> {
+            try {
+                Process p = new ProcessBuilder("su")
+                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .start();
+                try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
+                    StringBuilder command = new StringBuilder();
+
+                    if (launcher) {
+                        command.append(
+                                "am force-stop com.miui.home; "
+                                + "sleep 1; "
+                                + "am start -a android.intent.action.MAIN -c android.intent.category.HOME; "
+                                + "i=0; while [ $i -lt 30 ] && [ -z \"$(pidof com.miui.home 2>/dev/null)\" ]; do "
+                                + "sleep 0.1; i=$((i+1)); "
+                                + "done; "
+                                + "sleep 0.8; ");
+                    }
+                    if (securityCenter) {
+                        command.append(
+                                "SC_PIDS=$(pidof com.miui.securitycenter:ui 2>/dev/null || true); "
+                                + "if [ -n \"$SC_PIDS\" ]; then kill -TERM $SC_PIDS; fi; "
+                                + "sleep 0.3; ");
+                    }
+                    if (systemUi) {
+                        command.append(
+                                "SYSUI_PIDS=$(pidof com.android.systemui 2>/dev/null || true); "
+                                + "if [ -n \"$SYSUI_PIDS\" ]; then kill -TERM $SYSUI_PIDS; fi; "
+                                + "sleep 0.3; ");
+                    }
+                    if (gboard) {
+                        command.append(
+                                "GBOARD_PIDS=$(pidof com.google.android.inputmethod.latin 2>/dev/null || true); "
+                                + "if [ -n \"$GBOARD_PIDS\" ]; then kill -TERM $GBOARD_PIDS; fi; "
+                                + "sleep 0.2; ");
+                    }
+                    if (searchbox) {
+                        command.append(
+                                "SEARCH_PIDS=$(pidof com.android.quicksearchbox 2>/dev/null || true); "
+                                + "if [ -n \"$SEARCH_PIDS\" ]; then kill -TERM $SEARCH_PIDS; fi; ");
+                    }
+
+                    command.append("\nexit\n");
+                    os.writeBytes(command.toString());
+                    os.flush();
+                }
+                if (!p.waitFor(18, TimeUnit.SECONDS)) {
+                    p.destroy();
+                    if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
+                    throw new IOException("su timed out while restarting selected scopes");
+                }
+                int exitCode = p.exitValue();
+                if (exitCode != 0) {
+                    throw new IOException("scope restart failed with exit code " + exitCode);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                runOnUiThread(() -> Toast.makeText(this,
+                        "Scope restart interrupted", Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
     void restartSecurityCenterAndLauncher() {
         // Serialize restart-bound processes in Launcher-first order. Starting Launcher first lets
         // Workspace establish a stable PassBlur producer before Security Center recreates its own
