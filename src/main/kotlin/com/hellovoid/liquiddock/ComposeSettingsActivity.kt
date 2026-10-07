@@ -482,6 +482,19 @@ private val ROOT_DESTINATIONS = listOf(
     RootDestination(Page.MoreHub, R.string.tab_more, MiuixIcons.Settings),
 )
 
+private enum class RestartScope(
+    val titleRes: Int,
+    val processName: String,
+) {
+    Launcher(R.string.restart_scope_launcher, "com.miui.home"),
+    SystemUi(R.string.restart_scope_system_ui, "com.android.systemui"),
+    SecurityCenter(R.string.restart_scope_security_center, "com.miui.securitycenter:ui"),
+    Gboard(R.string.restart_scope_gboard, "com.google.android.inputmethod.latin"),
+    Searchbox(R.string.restart_scope_searchbox, "com.android.quicksearchbox"),
+}
+
+private val RESTART_SCOPES = RestartScope.entries.toList()
+
 private data class RootFeature(
     val page: Page,
     val titleRes: Int,
@@ -529,11 +542,28 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var selectedRootIndex by rememberSaveable { mutableStateOf(0) }
+    var showRestartScopesDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedRestartScopes by remember { mutableStateOf(emptySet<RestartScope>()) }
     val pagerState = rememberPagerState(pageCount = { ROOT_PAGES.size })
     val root = isRootPage(page)
 
     BackHandler(enabled = !root) { page = parentPage(page) }
 
+    LaunchedEffect(pagerState, root) {
+        snapshotFlow {
+            if (!root) {
+                -1
+            } else if (pagerState.isScrollInProgress) {
+                pagerState.targetPage
+            } else {
+                pagerState.currentPage
+            }
+        }.collectLatest { liveIndex ->
+            if (root && liveIndex in ROOT_PAGES.indices) {
+                selectedRootIndex = liveIndex
+            }
+        }
+    }
     LaunchedEffect(pagerState.settledPage, root) {
         if (root) {
             selectedRootIndex = pagerState.settledPage
@@ -541,7 +571,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         }
     }
     LaunchedEffect(selectedRootIndex, root) {
-        if (root && pagerState.currentPage != selectedRootIndex) {
+        if (root && !pagerState.isScrollInProgress && pagerState.currentPage != selectedRootIndex) {
             pagerState.animateScrollToPage(selectedRootIndex)
         }
     }
@@ -562,38 +592,42 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         showBack = !root,
         onBack = { page = parentPage(page) },
         actions = {
-            val descriptor = THIRD_PARTY_APP_PAGES[page]
-            if (page == Page.SecurityCenterSidebar) {
+            if (page == Page.Home) {
                 TextButton(
-                    text = stringResource(R.string.action_restart_security_center_and_launcher),
-                    onClick = { activity.restartSecurityCenterAndLauncher() },
-                )
-            } else if (page == Page.Animation) {
-                TextButton(
-                    text = stringResource(R.string.action_restart_security_center_and_launcher),
-                    onClick = { activity.restartSecurityCenterAndLauncher() },
-                )
-            } else if (descriptor != null) {
-                TextButton(
-                    text = stringResource(descriptor.restartLabelRes),
+                    text = stringResource(R.string.action_restart_scopes),
                     onClick = {
-                        activity.restartPackageProcess(
-                            descriptor.packageName,
-                            descriptor.displayName,
-                        )
+                        selectedRestartScopes = emptySet()
+                        showRestartScopesDialog = true
                     },
                 )
             } else {
-                TextButton(
-                    text = stringResource(R.string.action_restart_launcher),
-                    onClick = { activity.restartLauncher() },
-                )
-            }
-            if (page == Page.Home) {
-                TextButton(
-                    text = stringResource(R.string.action_restart_system_ui),
-                    onClick = { activity.restartSystemUi() },
-                )
+                val descriptor = THIRD_PARTY_APP_PAGES[page]
+                if (page == Page.SecurityCenterSidebar) {
+                    TextButton(
+                        text = stringResource(R.string.action_restart_security_center_and_launcher),
+                        onClick = { activity.restartSecurityCenterAndLauncher() },
+                    )
+                } else if (page == Page.Animation) {
+                    TextButton(
+                        text = stringResource(R.string.action_restart_security_center_and_launcher),
+                        onClick = { activity.restartSecurityCenterAndLauncher() },
+                    )
+                } else if (descriptor != null) {
+                    TextButton(
+                        text = stringResource(descriptor.restartLabelRes),
+                        onClick = {
+                            activity.restartPackageProcess(
+                                descriptor.packageName,
+                                descriptor.displayName,
+                            )
+                        },
+                    )
+                } else {
+                    TextButton(
+                        text = stringResource(R.string.action_restart_launcher),
+                        onClick = { activity.restartLauncher() },
+                    )
+                }
             }
         },
         bottomBar = { backdrop ->
@@ -718,6 +752,31 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
             }
         }
     }
+
+    RestartScopesDialog(
+        show = showRestartScopesDialog,
+        selected = selectedRestartScopes,
+        onToggle = { scope ->
+            selectedRestartScopes = if (scope in selectedRestartScopes) {
+                selectedRestartScopes - scope
+            } else {
+                selectedRestartScopes + scope
+            }
+        },
+        onConfirm = {
+            activity.restartSelectedScopes(
+                RestartScope.Launcher in selectedRestartScopes,
+                RestartScope.SystemUi in selectedRestartScopes,
+                RestartScope.SecurityCenter in selectedRestartScopes,
+                RestartScope.Gboard in selectedRestartScopes,
+                RestartScope.Searchbox in selectedRestartScopes,
+            )
+            showRestartScopesDialog = false
+        },
+        onDismiss = {
+            showRestartScopesDialog = false
+        },
+    )
 }
 
 @Composable
