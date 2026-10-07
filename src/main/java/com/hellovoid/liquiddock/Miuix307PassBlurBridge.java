@@ -220,7 +220,8 @@ final class Miuix307PassBlurBridge {
             MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
             return;
         }
-        boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
+        boolean force = binding.domain == PassBlurDomain.DOCK
+                || binding.domain == PassBlurDomain.SECURITY_CENTER
                 || binding.domain == PassBlurDomain.GBOARD_FLOATING
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
                 || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
