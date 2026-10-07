@@ -7,6 +7,7 @@ import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -19,6 +20,8 @@ import java.util.WeakHashMap;
 /** One transparent static Launcher glass output for an entire stable Launcher root. */
 final class LauncherGlassStaticLayer extends TextureView implements TextureView.SurfaceTextureListener {
     private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
+
+    private static final WeakHashMap<View, Long> UNLOCK_END_BY_ROOT = new WeakHashMap<>();
 
     private final WeakReference<View> rootRef;
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -70,7 +73,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         rootGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         BY_ROOT.put(root, layer);
-        if (session.isWorkspaceUnlockMotionActive()) layer.startMotionReveal();
+        Long endAt = UNLOCK_END_BY_ROOT.get(root);
+        if (endAt != null) layer.startMotionReveal(endAt);
         MainHook.log("[DC][LauncherGlass] shared static root layer attached root="
                 + root.getClass().getSimpleName());
         return layer;
@@ -105,23 +109,45 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
-    static void onWorkspaceUnlockMotionStarted(View root) {
+    static void onNativeUnlockStarted(View root, long expectedDurationMs) {
+        if (root == null || expectedDurationMs <= 0) return;
+        long endAt = SystemClock.uptimeMillis() + expectedDurationMs;
+        UNLOCK_END_BY_ROOT.put(root, endAt);
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return;
-        if (Looper.myLooper() == Looper.getMainLooper()) layer.startMotionReveal();
-        else layer.mainHandler.post(layer::startMotionReveal);
+        if (Looper.myLooper() == Looper.getMainLooper()) layer.startMotionReveal(endAt);
+        else layer.mainHandler.post(() -> layer.startMotionReveal(endAt));
     }
 
-    private void startMotionReveal() {
+    static void onNativeUnlockEnded(View root) {
+        UNLOCK_END_BY_ROOT.remove(root);
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return;
+        Runnable finish = () -> {
+            if (layer.disposed) return;
+            layer.cancelMotionAnimation();
+            layer.layerAlpha.setMotionAlpha(1f);
+            layer.applyLayerAlpha();
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) finish.run();
+        else layer.mainHandler.post(finish);
+    }
+
+    private void startMotionReveal(long endAt) {
         if (disposed) return;
         cancelMotionAnimation();
-        long duration = AnimationRuntimeState.workspaceVisibilityDurationMs();
+        long remaining = Math.max(0L, endAt - SystemClock.uptimeMillis());
+        long configured = AnimationRuntimeState.workspaceVisibilityDurationMs();
+        long duration = LauncherGlassUnlockFadeTiming.fadeDurationMs(remaining, configured);
+        long delay = duration > 0
+                ? LauncherGlassUnlockFadeTiming.fadeDelayMs(remaining, configured) : 0L;
         boolean animate = layerAlpha.startMotionReveal(duration);
         applyLayerAlpha();
         if (!animate) return;
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         motionAnimator = animator;
         animator.setDuration(duration);
+        animator.setStartDelay(delay);
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(value -> {
             if (disposed || motionAnimator != value) return;
@@ -134,7 +160,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             }
         });
         animator.start();
-        MainHook.log("[DC][WorkspaceFade] unlock reveal durationMs=" + duration);
+        MainHook.log("[DC][WorkspaceFade] native unlock reveal delayMs=" + delay
+                + " durationMs=" + duration);
     }
 
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {

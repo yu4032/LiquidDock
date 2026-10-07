@@ -779,20 +779,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 reason != null ? reason : "workspace-native-transition");
     }
 
-    boolean isWorkspaceUnlockMotionActive() {
-        return workspaceSource && transitionFrameSync.isUnlockTransitionActive();
-    }
-
     void setUnlockTransitionFrameSyncEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         View root = rootRef.get();
-        boolean reveal = workspaceSource && enabled
-                && !transitionFrameSync.isUnlockTransitionActive();
         applyTransitionFrameSync(
                 transitionFrameSync.onUnlockTransition(enabled),
                 root,
                 reason != null ? reason : "workspace-unlock-transition");
-        if (reveal) LauncherGlassStaticLayer.onWorkspaceUnlockMotionStarted(root);
     }
 
     private void applyTransitionFrameSync(
