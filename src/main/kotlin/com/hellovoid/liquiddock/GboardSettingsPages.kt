@@ -519,5 +519,5 @@ private fun GboardPageHeader(title: String, summary: String) {
 
 @Composable
 private fun GboardSettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    LiquidDockSectionCard(content)
+    LiquidDockSectionCard(content = content)
 }
