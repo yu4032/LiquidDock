@@ -717,6 +717,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (decision == null) return;
         if (decision.enable) {
             sourceBackend.setTransitionFrameSyncEnabled(true, reason);
+            if (LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+                sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
+                MainHook.log("[DC][WorkspaceFrameSync] unlock producer resumed for live motion");
+            }
         } else if (decision.disable) {
             sourceBackend.setTransitionFrameSyncEnabled(false, reason);
         }

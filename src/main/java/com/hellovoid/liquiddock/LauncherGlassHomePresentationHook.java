@@ -370,9 +370,7 @@ final class LauncherGlassHomePresentationHook {
     /** Normal unlock capture boundary: SystemUI LOCKSCREEN -> GONE FINISHED. */
     static void onSystemUiLockscreenGoneFinished() {
         UnlockCaptureRecoveryState.Decision decision = UNLOCK_RECOVERY.onSystemUiGoneFinished();
-        applyUnlockDecision(decision, decision.suspendProducers
-                ? "SystemUI/FINISHED-failsafe-arm"
-                : "SystemUI LOCKSCREEN->GONE FINISHED");
+        applyUnlockDecision(decision, "SystemUI LOCKSCREEN->GONE FINISHED");
     }
 
     static boolean isUnlockCaptureBlocked() {
@@ -393,27 +391,12 @@ final class LauncherGlassHomePresentationHook {
             LauncherGlassSceneController.setUnlockTransitionPendingForAll(true);
             LauncherGlassSessionRegistry.suspendForUnlockCapture();
             armUnlockFailOpen(decision.serial);
-            MainHook.log(TAG + " unlock wallpaper capture frozen reason=" + reason
+            MainHook.log(TAG + " unlock wallpaper freshness gated reason=" + reason
                     + " serial=" + decision.serial);
         }
-        if (!decision.requestRollover) return;
-
-        final long serial = decision.serial;
-        MainHook.log(TAG + " SystemUI LOCKSCREEN->GONE FINISHED; rebuilding wallpaper endpoint"
-                + " serial=" + serial);
-        LauncherGlassSessionRegistry.prepareUnlockCaptureReturn(success -> {
-            UnlockCaptureRecoveryState.Decision finished =
-                    UNLOCK_RECOVERY.onRolloverFinished(serial, success);
-            if (!finished.releaseBarrier) {
-                if (!success) {
-                    MainHook.log(TAG + " unlock endpoint rollover failed; capture remains blocked"
-                            + " serial=" + serial);
-                }
-                return;
-            }
-            finishUnlockBarrierNow(
-                    "SystemUI LOCKSCREEN->GONE FINISHED/endpoint-rolled", finished.serial);
-        });
+        if (decision.releaseBarrier) {
+            finishUnlockBarrierNow(reason + "/fresh-reconcile", decision.serial);
+        }
     }
 
     private static void armUnlockFailOpen(long serial) {
@@ -447,7 +430,7 @@ final class LauncherGlassHomePresentationHook {
             unlockBarrierSerial = -1L;
             unlockBarrierStartedAtMs = -1L;
         }
-        MainHook.log(TAG + " unlock wallpaper capture released: " + reason
+        MainHook.log(TAG + " unlock wallpaper freshness released: " + reason
                 + " serial=" + serial);
         // SceneController requests a fresh generation before exposing Workspace glass again.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
