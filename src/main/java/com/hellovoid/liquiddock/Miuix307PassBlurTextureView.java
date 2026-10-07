@@ -1050,6 +1050,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver.OnPreDrawListener listener = () -> {
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
+            // During APP -> HOME the Dock root can keep drawing at panel rate even while the
+            // PassBlur producer temporarily stops delivering frames. Keep the existing
+            // force-refresh lease alive from this real animation authority as a fallback;
+            // renewForceRefresh() itself is gated by the Dock switch and a 50 ms minimum interval.
+            Miuix307PassBlurBridge.Binding current = binding;
+            if (current != null && producerUpdatesEnabled) {
+                Miuix307PassBlurBridge.renewForceRefresh(current);
+            }
             return true;
         };
         observer.addOnPreDrawListener(listener);
