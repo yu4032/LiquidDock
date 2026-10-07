@@ -136,7 +136,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final LauncherGlassOutputRenderState outputRenderState =
             new LauncherGlassOutputRenderState();
     private final boolean workspaceSource;
-    private volatile boolean workspaceAnimationRenderActive;
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -296,6 +295,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         passBlurCaptureScalePercent = glassConfig != null
                 ? glassConfig.passBlurCaptureScalePercent
                 : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
+        if (MainHook.debugLogging && workspaceSource) {
+            MainHook.log("[DC][WorkspaceQuality] opticsScale="
+                    + PassBlurQualityPolicy.workspaceOpticsScalePercent(
+                            true, passBlurCaptureScalePercent) + " reason=resolution-setting");
+        }
         passBlurRenderFps = glassConfig != null
                 ? glassConfig.passBlurRenderFps
                 : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
@@ -796,18 +800,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             WorkspaceTransitionFrameSyncState.Decision decision, View root, String reason) {
         if (decision == null) return;
         if (decision.enable) {
-            if (workspaceSource) workspaceAnimationRenderActive = true;
             sourceBackend.setTransitionFrameSyncEnabled(true, reason);
         } else if (decision.disable) {
-            if (workspaceSource) workspaceAnimationRenderActive = false;
             sourceBackend.setTransitionFrameSyncEnabled(false, reason);
-        }
-        // Native whole-surface motion may not change child geometry. Its start/end still needs
-        // an output redraw, especially to restore full-resolution optics after the lease ends.
-        if (workspaceSource && (decision.enable || decision.disable)) {
-            scheduleOutputRender(true, false);
-            if (MainHook.debugLogging) MainHook.log("[DC][WorkspaceQuality] opticsScale="
-                    + (workspaceAnimationRenderActive ? 50 : 100) + " reason=" + reason);
         }
 
         // Geometry-owned motion uses real pre-draw stability as its terminal boundary. Request
@@ -1087,13 +1082,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
-        // The shared Workspace scene needs no crop or post-processing. Draw its existing
-        // premultiplied-alpha node batch straight into the RGBA window back buffer, avoiding
-        // the full-root intermediate write + texture read/copy on every animation frame.
-        boolean reduced = workspaceSource && workspaceAnimationRenderActive;
+        // The resolution slider controls both backdrop density and Workspace optics, including
+        // stationary frames. At 100% the shared batch can draw straight into its RGBA window.
+        int opticsScale = PassBlurQualityPolicy.workspaceOpticsScalePercent(
+                workspaceSource, passBlurCaptureScalePercent);
+        boolean reduced = opticsScale < 100;
         if (reduced) {
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrameAtScale(50);
+            prismalRenderer.beginGlassFrameAtScale(opticsScale);
         } else {
             sourceBackend.makeCurrent(output.eglSurface);
             prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
@@ -1149,7 +1145,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (node == null || geometry == null) continue;
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrame();
+            prismalRenderer.beginGlassFrameAtScale(
+                    PassBlurQualityPolicy.workspaceOpticsScalePercent(
+                            workspaceSource, passBlurCaptureScalePercent));
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);

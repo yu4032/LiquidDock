@@ -340,7 +340,7 @@ private val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
     "工作区渲染分辨率",
     "%",
-    summary = "原生 PassBlur 始终保持 1.0 与完整空间映射；这里只降低 normalized/Prismal FBO 像素密度，100% 为原始质量；重启桌面生效",
+    summary = "同时调整背景采样与工作区玻璃绘制分辨率，静止和动画都生效；100% 最清晰，较低比例更省 GPU。Dock 不受影响；重启桌面生效",
 )
 private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
