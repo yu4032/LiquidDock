@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import java.util.HashSet
 import java.util.UUID
 
@@ -151,7 +150,7 @@ internal fun DockRecentBlacklistPage(
             items(availableCandidates, key = { "candidate:$it" }) { packageName ->
                 val label = remember(packageName) { appLabel(context.packageManager, packageName) }
                 SettingsCard {
-                    SwitchPreference(
+                    LiquidDockGlassToggleRow(
                         checked = false,
                         onCheckedChange = { checked -> setBlocked(packageName, checked) },
                         title = label,
@@ -176,7 +175,7 @@ internal fun DockRecentBlacklistPage(
             items(blockedPackages, key = { "blocked:$it" }) { packageName ->
                 val label = remember(packageName) { appLabel(context.packageManager, packageName) }
                 SettingsCard {
-                    SwitchPreference(
+                    LiquidDockGlassToggleRow(
                         checked = true,
                         onCheckedChange = { checked -> setBlocked(packageName, checked) },
                         title = label,
