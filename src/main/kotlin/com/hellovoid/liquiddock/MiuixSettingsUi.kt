@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
@@ -102,7 +101,7 @@ internal fun LiquidDockSettingsScaffold(
                 PrismalGlassSurface(
                     backdrop = overlayBackdrop,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = { RectangleShape },
+                    shape = { PrismalRoundedRectangle(0.dp) },
                     blurRadius = 14.dp,
                     tint = MiuixTheme.colorScheme.surface,
                     tintAlpha = 0.34f,
