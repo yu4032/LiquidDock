@@ -1597,64 +1597,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
     }
 
-    private static int readConfigRotation(View materialHost) {
-        Display display = materialHost != null ? materialHost.getDisplay() : null;
-        if (display == null) return 0;
-        int installOrientation = 0;
-        try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
-            if (value instanceof Number) installOrientation = ((Number) value).intValue();
-        } catch (Throwable ignored) {}
-        int rotation = display.getRotation();
-        int result = (installOrientation + rotation) % 4;
-        return result < 0 ? result + 4 : result;
-    }
-
-    private static Rect readViewRootRectField(View view, String fieldName) {
-        if (view == null) return null;
-        try {
-            Object viewRoot = getViewRootImpl(view);
-            if (viewRoot == null) return null;
-            Field field = findField(viewRoot.getClass(), fieldName);
-            field.setAccessible(true);
-            Object value = field.get(viewRoot);
-            return value instanceof Rect ? new Rect((Rect) value) : null;
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static Object getViewRootImpl(View view) throws Exception {
-        Method method = View.class.getDeclaredMethod("getViewRootImpl");
-        method.setAccessible(true);
-        return method.invoke(view);
-    }
-
-    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
-        Class<?> current = type;
-        while (current != null) {
-            try {
-                return current.getDeclaredField(name);
-            } catch (NoSuchFieldException ignored) {
-                current = current.getSuperclass();
-            }
-        }
-        throw new NoSuchFieldException(name);
-    }
-
-    private static boolean isSameSurface(SurfaceControl first, SurfaceControl second) {
-        if (first == second) return true;
-        if (first == null || second == null) return false;
-        try {
-            Method method = SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class);
-            Object value = method.invoke(first, second);
-            return value instanceof Boolean && (Boolean) value;
-        } catch (Throwable ignored) {
-            return first.equals(second);
-        }
-    }
-
     private static int requireUniform(int program, String name) {
         int location = GLES20.glGetUniformLocation(program, name);
         if (location < 0) throw new IllegalStateException("missing uniform " + name);
