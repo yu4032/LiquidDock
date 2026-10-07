@@ -695,7 +695,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
-        int nextRotation = readLauncherConfigRotation(root);
+        int nextRotation = RootPassBlurEndpointBridge.readConfigRotation(root);
         if (nextRotation != configRotation) {
             configRotation = nextRotation;
             beginRotationSettle(nextRotation);
@@ -729,7 +729,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             return;
         }
         installRootObserver();
-        if (readLauncherConfigRotation(root) != configRotation || rotationSettlePending) {
+        if (RootPassBlurEndpointBridge.readConfigRotation(root) != configRotation || rotationSettlePending) {
             retryFreshBackdropRecovery(generation, attempt);
             return;
         }
@@ -884,8 +884,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PrismalCompositeShaders.FRAGMENT);
             compositePositionLocation = requireAttrib(compositeProgram, "aPosition");
             compositeUvLocation = requireAttrib(compositeProgram, "aUv");
-            compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
-            compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+            compositeTextureLocation = compositeTextureLocation;
+            compositeCropRectLocation = compositeCropRectLocation;
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
@@ -955,14 +955,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad();
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+        GLES20.glUniform1i(compositeTextureLocation, 0);
+        GLES20.glUniform4f(compositeCropRectLocation,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad();
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
@@ -980,14 +980,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad();
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+        GLES20.glUniform1i(compositeTextureLocation, 0);
+        GLES20.glUniform4f(compositeCropRectLocation,
                 geometry.cropLeft, geometry.cropBottom, geometry.cropWidth, geometry.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad();
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
