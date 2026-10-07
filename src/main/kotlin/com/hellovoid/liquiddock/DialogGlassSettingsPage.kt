@@ -1,7 +1,9 @@
 package com.hellovoid.liquiddock
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,10 +15,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
 
 /** Launcher-owned dialog glass controls. Appearance overrides inherit the global material by default. */
 @Composable
@@ -263,30 +265,38 @@ private fun DialogAppearanceValueSlider(
     unit: String = "",
 ) {
     val rounded = value.roundToInt().coerceIn(0, max)
-    SliderPreference(
-        value = rounded.toFloat(),
-        onValueChange = {
-            val next = it.roundToInt().coerceIn(0, max)
-            onValueChange(next.toFloat())
-            prefs.edit().putInt(key, next).apply()
-        },
-        title = title,
-        summary = "未单独设置时继承全局液态玻璃",
-        valueText = "",
-        enabled = enabled,
-        valueRange = 0f..max.toFloat(),
-        steps = (max - 1).coerceAtLeast(0),
-        endActions = {
-            Button(
-                onClick = {},
-                enabled = false,
-                minWidth = 62.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text("$rounded${if (unit.isBlank()) "" else " $unit"}")
-            }
-        },
-        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
-    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BasicComponent(
+            title = title,
+            summary = "未单独设置时继承全局液态玻璃",
+            enabled = enabled,
+            insideMargin = LiquidDockPreferenceMargin,
+            endActions = {
+                Button(
+                    onClick = {},
+                    enabled = false,
+                    minWidth = 62.dp,
+                    minHeight = 32.dp,
+                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text("${rounded}${if (unit.isBlank()) "" else " $unit"}")
+                }
+            },
+        )
+        LiquidDockGlassSlider(
+            value = rounded.toFloat(),
+            onValueChange = {
+                val next = it.roundToInt().coerceIn(0, max)
+                onValueChange(next.toFloat())
+                prefs.edit().putInt(key, next).apply()
+            },
+            valueRange = 0f..max.toFloat(),
+            visibilityThreshold = 1f,
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+        )
+    }
 }
