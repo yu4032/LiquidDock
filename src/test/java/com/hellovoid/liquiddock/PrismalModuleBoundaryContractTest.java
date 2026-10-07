@@ -160,6 +160,35 @@ public class PrismalModuleBoundaryContractTest {
     }
 
     @Test
+    public void dockPreDrawCachesReflectionAccessorsAndScratchStorage() throws Exception {
+        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        assertTrue(view.contains("private Object cachedViewRoot;"));
+        assertTrue(view.contains("private Field cachedWinFrameInScreenField;"));
+        assertTrue(view.contains("private Field cachedSurfaceSizeField;"));
+        assertTrue(view.contains("private Method cachedGetSurfaceControlMethod;"));
+        assertTrue(view.contains("private final Rect winFrameScratch = new Rect();"));
+        assertTrue(view.contains("private final int[] viewScreenScratch = new int[2];"));
+        assertTrue(view.contains("Object viewRoot = getViewRootImplCached(materialHost);"));
+        assertTrue(view.contains("Rect winFrame = readViewRootWinFrame(this);"));
+
+        int mappingStart = view.indexOf("private void updateBackdropMapping()");
+        int mappingEnd = view.indexOf("private ProducerGeometry readSurfaceGeometry(", mappingStart);
+        String mapping = view.substring(mappingStart, mappingEnd);
+        assertFalse("mapping must reuse location scratch instead of allocating every pre-draw",
+                mapping.contains("new int[2]"));
+
+        int geometryStart = view.indexOf("private ProducerGeometry readSurfaceGeometry(");
+        int geometryEnd = view.indexOf("private void logStageBDiagnostics(", geometryStart);
+        String geometry = view.substring(geometryStart, geometryEnd);
+        assertFalse("surface geometry hot path must not resolve methods every pre-draw",
+                geometry.contains("getDeclaredMethod("));
+        assertFalse("surface geometry hot path must not walk fields every pre-draw",
+                geometry.contains("findField("));
+        assertFalse("surface geometry hot path must not call setAccessible every pre-draw",
+                geometry.contains("setAccessible("));
+    }
+
+    @Test
     public void liquidDockAdapterOwnsOesNormalizationMappingLogAndFinalCrop() throws Exception {
         String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
         String composite = Files.readString(APP.resolve("Miuix307PrismalCompositeShaders.java"));
