@@ -1065,7 +1065,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (materialHost == null) return;
 
         ProducerGeometry current = readSurfaceGeometry(materialHost);
-        if (current == null || !isSameSurface(current.rootSurface, geometry.rootSurface)) {
+        if (current == null || !RootPassBlurEndpointBridge.sameSurface(current.rootSurface, geometry.rootSurface)) {
             retryBind(attempt, "root changed before bind");
             return;
         }
@@ -1146,7 +1146,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             return false;
         }
         if (!binding.rootSurface.isValid()
-                || !isSameSurface(binding.rootSurface, geometry.rootSurface)) {
+                || !RootPassBlurEndpointBridge.sameSurface(binding.rootSurface, geometry.rootSurface)) {
             rebindProducer("producer-root-changed");
             return false;
         }
@@ -1280,7 +1280,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         int visibleHeight = outputHeight > 0 ? outputHeight : getHeight();
         if (visibleWidth <= 0 || visibleHeight <= 0) return;
 
-        Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
+        Rect winFrame = RootPassBlurEndpointBridge.readWinFrameInScreen(this);
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
         int[] viewScreen = screenLocationScratch;
         getLocationOnScreen(viewScreen);
@@ -1411,7 +1411,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         getLocationOnScreen(viewScreen);
         materialHost.getLocationOnScreen(hostScreen);
         root.getLocationOnScreen(rootScreen);
-        Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
+        Rect winFrame = RootPassBlurEndpointBridge.readWinFrameInScreen(this);
 
         float[] bl = mapFinalCoordinate(
                 mapping.backdropX, mapping.backdropY, mapping.configRotation, matrixSnapshot);
