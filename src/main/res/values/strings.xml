@@ -107,4 +107,22 @@
     <string name="highlight_plain">Base highlight</string><string name="highlight_plain_summary">Basic edge highlight controlled by the highlight intensity</string>
     <string name="highlight_caustics">Caustics</string><string name="highlight_caustics_summary">Focused light patterns from the curved glass surface</string>
     <string name="highlight_press_glow">Press glow</string><string name="highlight_press_glow_summary">Localized glow used by interactive press effects</string>
+
+    <string name="tab_overview">Overview</string>
+    <string name="tab_layout">Layout</string>
+    <string name="tab_glass">Glass</string>
+    <string name="tab_more">More</string>
+    <string name="tab_overview_summary">Status, common controls, and quick access</string>
+    <string name="tab_layout_summary">Home screen, Dock, workstation, and recents layout</string>
+    <string name="tab_glass_summary">Liquid glass, stroke, shadow, highlights, and app adapters</string>
+    <string name="tab_more_summary">System integration, animations, backup, and project information</string>
+    <string name="category_quick_access">Quick access</string>
+    <string name="category_layout">Layout</string>
+    <string name="category_glass_appearance">Glass &amp; appearance</string>
+    <string name="category_system_tools">System &amp; tools</string>
+    <string name="home_status_enabled">LiquidDock is active</string>
+    <string name="home_status_disabled">LiquidDock is paused</string>
+    <string name="home_status_enabled_summary">Launcher customizations are enabled. Structural changes may still require a launcher restart.</string>
+    <string name="home_status_disabled_summary">Runtime-safe visual layers are released; enable LiquidDock to use launcher customizations.</string>
+
 </resources>
