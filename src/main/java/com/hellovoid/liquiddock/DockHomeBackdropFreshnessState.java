@@ -35,24 +35,17 @@ final class DockHomeBackdropFreshnessState {
     private long activeHomeSerial = -1L;
     private long producerFrameSerial;
     private long requiredFrameSerial = -1L;
-    private boolean freshFrameSeen;
-    private boolean homeFinished;
 
     synchronized Decision onHomeStarted(long serial) {
         if (serial <= 0L) return Decision.none();
         activeHomeSerial = serial;
         requiredFrameSerial = producerFrameSerial + 1L;
-        freshFrameSeen = false;
-        homeFinished = false;
         return Decision.forceFreshFrame();
     }
 
     synchronized Decision onHomeFinished(long serial) {
         if (serial <= 0L || serial != activeHomeSerial) return Decision.none();
-        homeFinished = true;
-        if (!freshFrameSeen) return Decision.none();
-        clearActiveHome();
-        return Decision.releaseOverride();
+        return Decision.none();
     }
 
     synchronized Decision onProducerFrameAvailable() {
@@ -61,27 +54,17 @@ final class DockHomeBackdropFreshnessState {
                 || producerFrameSerial < requiredFrameSerial) {
             return Decision.none();
         }
-        freshFrameSeen = true;
-        if (!homeFinished) return Decision.none();
-        clearActiveHome();
+        activeHomeSerial = -1L;
+        requiredFrameSerial = -1L;
         return Decision.releaseOverride();
     }
 
     synchronized void reset() {
         activeHomeSerial = -1L;
         requiredFrameSerial = -1L;
-        freshFrameSeen = false;
-        homeFinished = false;
     }
 
     synchronized boolean isPresentationBlocked() {
         return false;
-    }
-
-    private void clearActiveHome() {
-        activeHomeSerial = -1L;
-        requiredFrameSerial = -1L;
-        freshFrameSeen = false;
-        homeFinished = false;
     }
 }
