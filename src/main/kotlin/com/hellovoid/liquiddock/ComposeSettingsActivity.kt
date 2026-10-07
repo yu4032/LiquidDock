@@ -518,6 +518,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         mutableStateOf(prefs.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()))
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
+    var selectedRootIndex by rememberSaveable { mutableStateOf(0) }
     val pagerState = rememberPagerState(pageCount = { ROOT_PAGES.size })
     val scope = rememberCoroutineScope()
     val root = isRootPage(page)
@@ -525,13 +526,19 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     BackHandler(enabled = !root) { page = parentPage(page) }
 
     LaunchedEffect(pagerState.settledPage, root) {
-        if (root) page = ROOT_PAGES[pagerState.settledPage]
+        if (root) {
+            selectedRootIndex = pagerState.settledPage
+            page = ROOT_PAGES[pagerState.settledPage]
+        }
     }
     LaunchedEffect(page) {
         if (isRootPage(page)) {
             val rootIndex = ROOT_PAGES.indexOf(page)
-            if (rootIndex >= 0 && pagerState.currentPage != rootIndex) {
-                pagerState.scrollToPage(rootIndex)
+            if (rootIndex >= 0) {
+                selectedRootIndex = rootIndex
+                if (pagerState.currentPage != rootIndex) {
+                    pagerState.scrollToPage(rootIndex)
+                }
             }
         }
     }
@@ -585,8 +592,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     contentAlignment = Alignment.Center,
                 ) {
                     LiquidDockGlassNavigationBar(
-                        selectedIndex = pagerState.currentPage,
+                        selectedIndex = selectedRootIndex,
                         onSelected = { index ->
+                            if (selectedRootIndex != index) {
+                                selectedRootIndex = index
+                            }
                             if (pagerState.currentPage != index) {
                                 scope.launch { pagerState.animateScrollToPage(index) }
                             }
