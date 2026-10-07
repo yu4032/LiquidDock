@@ -399,10 +399,6 @@ public final class PrismalRenderer implements AutoCloseable {
         return reducedOutputFramebuffer != 0 && frameTarget.framebuffer == reducedOutputFramebuffer
                 ? reducedOutputTexture : outputTexture;
     }
-
-    /** Physical dimensions of the texture frame selected by the last beginGlassFrame call. */
-    public int outputTextureWidth() { return frameTarget.width; }
-    public int outputTextureHeight() { return frameTarget.height; }
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }
 

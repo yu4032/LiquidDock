@@ -22,11 +22,6 @@ final class PassBlurQualityPolicy {
                 Math.min(MAX_CAPTURE_SCALE_PERCENT, requestedPercent)) : MAX_CAPTURE_SCALE_PERCENT;
     }
 
-    static float workspaceEdgeFilterStrength(boolean workspace, int requestedPercent) {
-        return (MAX_CAPTURE_SCALE_PERCENT
-                - workspaceOpticsScalePercent(workspace, requestedPercent)) / 100f;
-    }
-
     static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {
         // HyperOS PassBlur scale participates in producer geometry/SurfaceTexture semantics;
         // it is not a safe pure-resolution control for strict behind-content correspondence.

@@ -8,19 +8,6 @@ import static org.junit.Assert.assertTrue;
 
 public class PassBlurQualityPolicyTest {
     @Test
-    public void edgeSmoothingFadesWithResolutionAndIsOffAtFullQuality() {
-        assertEquals(0.50f, PassBlurQualityPolicy.workspaceEdgeFilterStrength(true, 50), 0.0001f);
-        assertEquals(0.16f, PassBlurQualityPolicy.workspaceEdgeFilterStrength(true, 84), 0.0001f);
-        assertEquals(0f, PassBlurQualityPolicy.workspaceEdgeFilterStrength(true, 100), 0f);
-    }
-
-    @Test
-    public void edgeSmoothingDoesNotAffectOtherDomainsOrExceedItsBound() {
-        assertEquals(0f, PassBlurQualityPolicy.workspaceEdgeFilterStrength(false, 50), 0f);
-        assertEquals(0.50f, PassBlurQualityPolicy.workspaceEdgeFilterStrength(true, -1), 0f);
-        assertEquals(0f, PassBlurQualityPolicy.workspaceEdgeFilterStrength(true, 999), 0f);
-    }
-    @Test
     public void workspaceOpticsFollowResolutionSliderAcrossItsRange() {
         assertEquals(50, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 50));
         assertEquals(75, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 75));
