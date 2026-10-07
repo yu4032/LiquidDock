@@ -61,7 +61,7 @@ internal fun WidgetComponentsPage(
         .entries
         .sortedBy { it.value.firstOrNull()?.displayOwner().orEmpty() }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text("小组件组件隐藏", fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
@@ -73,7 +73,7 @@ internal fun WidgetComponentsPage(
             }
         }
         item {
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            LiquidDockSectionCard {
                 ArrowPreference(
                     title = "载入当前小组件",
                     summary = "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描",
@@ -108,9 +108,9 @@ internal fun WidgetComponentsPage(
             }
         }
 
-        item { SmallTitle("隐藏规则备份") }
+        item { LiquidDockSectionTitle("隐藏规则备份") }
         item {
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            LiquidDockSectionCard {
                 Column {
                     ArrowPreference(
                         title = "导出隐藏规则",
@@ -128,7 +128,7 @@ internal fun WidgetComponentsPage(
 
         if (groups.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("尚未载入小组件")
                         Text(
@@ -140,9 +140,9 @@ internal fun WidgetComponentsPage(
                 }
             }
         } else {
-            item { SmallTitle("已载入小组件") }
+            item { LiquidDockSectionTitle("已载入小组件") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     Column {
                         groups.forEach { (key, components) ->
                             val first = components.first()
