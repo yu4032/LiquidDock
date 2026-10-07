@@ -249,6 +249,17 @@ final class Miuix307PassBlurTextureView extends TextureView
     private int fboWidth;
     private int fboHeight;
 
+    /**
+     * Prismal's prepared backdrop contains the expensive source-adapter + two-pass blur result.
+     * Dock icon/proxy animation must reuse it until either a real OES producer frame arrives or
+     * the sampling/optical inputs that define the backdrop change.
+     */
+    private BackdropSnapshot preparedBackdropSnapshot;
+    private int preparedBackdropPhysicalWidth;
+    private int preparedBackdropPhysicalHeight;
+    private int preparedBackdropLogicalWidth;
+    private int preparedBackdropLogicalHeight;
+
     private int boundSurfaceWidth;
     private int boundSurfaceHeight;
     private int boundBufferWidth;
@@ -384,6 +395,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         SurfaceTexture staleInput = inputSurfaceTexture;
         try {
             makeCurrent();
+            invalidatePreparedBackdrop();
             inputProducerSurface = null;
             inputSurfaceTexture = null;
 
@@ -746,7 +758,8 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         try {
             makeCurrent();
-            if (frameAvailable.getAndSet(false)) {
+            boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false);
+            if (consumedFreshProducerFrame) {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
@@ -773,13 +786,20 @@ final class Miuix307PassBlurTextureView extends TextureView
             DockPassBlurRenderPlan renderPlan = DockPassBlurRenderPlan.resolve(
                     mapping.sampleWidth, mapping.sampleHeight, passBlurCaptureScalePercent);
             ensureFboSizeExact(renderPlan.physicalWidth, renderPlan.physicalHeight);
-            renderNormalizationPass(mapping);
+
+            boolean rebuildBackdrop = consumedFreshProducerFrame
+                    || !canReusePreparedBackdrop(mapping, renderPlan);
+            if (rebuildBackdrop) {
+                renderNormalizationPass(mapping);
+                prismalRenderer.prepareBackdrop(
+                        rawTexture,
+                        renderPlan.physicalWidth, renderPlan.physicalHeight,
+                        renderPlan.logicalWidth, renderPlan.logicalHeight,
+                        mapping.prismalParams);
+                rememberPreparedBackdrop(mapping, renderPlan);
+            }
+
             PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);
-            prismalRenderer.prepareBackdrop(
-                    rawTexture,
-                    renderPlan.physicalWidth, renderPlan.physicalHeight,
-                    renderPlan.logicalWidth, renderPlan.logicalHeight,
-                    mapping.prismalParams);
             DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
             dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
                     dockBodyHighlightProfile, dockScene,
@@ -841,6 +861,45 @@ final class Miuix307PassBlurTextureView extends TextureView
         } catch (Throwable error) {
             fail("draw", error);
         }
+    }
+
+    private boolean canReusePreparedBackdrop(
+            BackdropSnapshot mapping, DockPassBlurRenderPlan renderPlan) {
+        BackdropSnapshot prepared = preparedBackdropSnapshot;
+        if (prepared == null || mapping == null || renderPlan == null) return false;
+        if (prepared.prismalParams != mapping.prismalParams) return false;
+        return prepared.sampleWidth == mapping.sampleWidth
+                && prepared.sampleHeight == mapping.sampleHeight
+                && prepared.configRotation == mapping.configRotation
+                && preparedBackdropPhysicalWidth == renderPlan.physicalWidth
+                && preparedBackdropPhysicalHeight == renderPlan.physicalHeight
+                && preparedBackdropLogicalWidth == renderPlan.logicalWidth
+                && preparedBackdropLogicalHeight == renderPlan.logicalHeight
+                && Float.compare(prepared.backdropX, mapping.backdropX) == 0
+                && Float.compare(prepared.backdropY, mapping.backdropY) == 0
+                && Float.compare(prepared.backdropW, mapping.backdropW) == 0
+                && Float.compare(prepared.backdropH, mapping.backdropH) == 0
+                && Float.compare(prepared.validSampleLeft, mapping.validSampleLeft) == 0
+                && Float.compare(prepared.validSampleBottom, mapping.validSampleBottom) == 0
+                && Float.compare(prepared.validSampleRight, mapping.validSampleRight) == 0
+                && Float.compare(prepared.validSampleTop, mapping.validSampleTop) == 0;
+    }
+
+    private void rememberPreparedBackdrop(
+            BackdropSnapshot mapping, DockPassBlurRenderPlan renderPlan) {
+        preparedBackdropSnapshot = mapping;
+        preparedBackdropPhysicalWidth = renderPlan.physicalWidth;
+        preparedBackdropPhysicalHeight = renderPlan.physicalHeight;
+        preparedBackdropLogicalWidth = renderPlan.logicalWidth;
+        preparedBackdropLogicalHeight = renderPlan.logicalHeight;
+    }
+
+    private void invalidatePreparedBackdrop() {
+        preparedBackdropSnapshot = null;
+        preparedBackdropPhysicalWidth = 0;
+        preparedBackdropPhysicalHeight = 0;
+        preparedBackdropLogicalWidth = 0;
+        preparedBackdropLogicalHeight = 0;
     }
 
     private void maybeLogPowerStats() {
@@ -1157,6 +1216,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         boundConfigRotation = geometry.configRotation;
         ZeroCopyProducerRecoveryState.Decision invalidated =
                 producerRecovery.onGeometryInvalidated();
+        invalidatePreparedBackdrop();
         if (invalidated.clearFrameAvailable) frameAvailable.set(false);
         firstFrameLogged = false;
         firstDrawLogged = false;
@@ -1522,6 +1582,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void releaseFbos() {
+        invalidatePreparedBackdrop();
         if (rawFramebuffer != 0) {
             GLES20.glDeleteFramebuffers(1, new int[]{rawFramebuffer}, 0);
             rawFramebuffer = 0;
