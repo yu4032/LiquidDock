@@ -1311,7 +1311,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             // for a vendor drop callback or unrelated source update.
             if (DockGlassSceneRenderPolicy.shouldRenderSceneOnlyChange(
                     dockSceneChanged, producerRecovery.hasFreshFrame())) {
-                renderHandler.post(() -> drawLatestFrame(false));
+                scheduleSceneRender();
             }
             return;
         }
