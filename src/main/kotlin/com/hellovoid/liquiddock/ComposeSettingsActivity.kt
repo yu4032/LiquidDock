@@ -74,6 +74,7 @@ import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Theme
@@ -605,8 +606,9 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         onBack = { page = parentPage(page) },
         actions = {
             if (page == Page.Home) {
-                TextButton(
-                    text = stringResource(R.string.action_restart_scopes),
+                LiquidDockGlassIconButton(
+                    icon = MiuixIcons.Refresh,
+                    contentDescription = stringResource(R.string.action_restart_scopes),
                     onClick = {
                         selectedRestartScopes = emptySet()
                         showRestartScopesDialog = true
@@ -614,31 +616,33 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 )
             } else {
                 val descriptor = THIRD_PARTY_APP_PAGES[page]
-                if (page == Page.SecurityCenterSidebar) {
-                    TextButton(
-                        text = stringResource(R.string.action_restart_security_center_and_launcher),
-                        onClick = { activity.restartSecurityCenterAndLauncher() },
-                    )
-                } else if (page == Page.Animation) {
-                    TextButton(
-                        text = stringResource(R.string.action_restart_security_center_and_launcher),
-                        onClick = { activity.restartSecurityCenterAndLauncher() },
-                    )
-                } else if (descriptor != null) {
-                    TextButton(
-                        text = stringResource(descriptor.restartLabelRes),
-                        onClick = {
-                            activity.restartPackageProcess(
-                                descriptor.packageName,
-                                descriptor.displayName,
-                            )
-                        },
-                    )
-                } else {
-                    TextButton(
-                        text = stringResource(R.string.action_restart_launcher),
-                        onClick = { activity.restartLauncher() },
-                    )
+                when {
+                    page == Page.SecurityCenterSidebar || page == Page.Animation -> {
+                        LiquidDockGlassIconButton(
+                            icon = MiuixIcons.Refresh,
+                            contentDescription = stringResource(R.string.action_restart_security_center_and_launcher),
+                            onClick = { activity.restartSecurityCenterAndLauncher() },
+                        )
+                    }
+                    descriptor != null -> {
+                        LiquidDockGlassIconButton(
+                            icon = MiuixIcons.Refresh,
+                            contentDescription = stringResource(descriptor.restartLabelRes),
+                            onClick = {
+                                activity.restartPackageProcess(
+                                    descriptor.packageName,
+                                    descriptor.displayName,
+                                )
+                            },
+                        )
+                    }
+                    else -> {
+                        LiquidDockGlassIconButton(
+                            icon = MiuixIcons.Refresh,
+                            contentDescription = stringResource(R.string.action_restart_launcher),
+                            onClick = { activity.restartLauncher() },
+                        )
+                    }
                 }
             }
         },
@@ -1610,16 +1614,33 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
                 }
             },
         )
-        LiquidDockGlassSlider(
-            value = value,
-            onValueChange = ::save,
-            valueRange = spec.min.toFloat()..maxValue.toFloat(),
-            visibilityThreshold = if (decimalDp) 0.1f else 1f,
-            enabled = enabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
-        )
+        val discreteSpan = maxValue - spec.min
+        if (!decimalDp && discreteSpan in 1..16) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                LiquidDockGlassStepper(
+                    value = value.roundToInt(),
+                    valueRange = spec.min..maxValue,
+                    enabled = enabled,
+                    onValueChange = { save(it.toFloat()) },
+                )
+            }
+        } else {
+            LiquidDockGlassSlider(
+                value = value,
+                onValueChange = ::save,
+                valueRange = spec.min.toFloat()..maxValue.toFloat(),
+                visibilityThreshold = if (decimalDp) 0.1f else 1f,
+                enabled = enabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+            )
+        }
     }
 }
 
