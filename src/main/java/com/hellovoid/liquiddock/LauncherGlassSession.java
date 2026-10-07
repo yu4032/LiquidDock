@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
@@ -119,6 +120,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // per-frame UI scan and render thread do not allocate collection copies.
     private volatile NodeState[] nodeSnapshot = new NodeState[0];
     private volatile StaticNodeState[] staticNodeSnapshot = new StaticNodeState[0];
+    // Main-thread scratch shared by all static nodes within one pre-draw.
+    private final Matrix rootToGlobal = new Matrix();
+    private final Matrix globalToRoot = new Matrix();
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final Object outputWorkLock = new Object();
@@ -658,10 +662,20 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
         Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
         StaticNodeState[] staticSnapshot = staticNodeSnapshot;
+        Matrix frameGlobalToRoot = null;
+        if (staticSnapshot.length > 0) {
+            rootToGlobal.reset();
+            root.transformMatrixToGlobal(rootToGlobal);
+            globalToRoot.reset();
+            if (rootToGlobal.invert(globalToRoot)) {
+                frameGlobalToRoot = globalToRoot;
+            }
+        }
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
-            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+            LauncherGlassGeometry.Snapshot observed =
+                    node.captureGeometry(root, frameGlobalToRoot);
             StaticGeometryFrame oldFrame = state.frame;
             LauncherGlassGeometry.Snapshot old = oldFrame != null ? oldFrame.geometry : null;
             if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
