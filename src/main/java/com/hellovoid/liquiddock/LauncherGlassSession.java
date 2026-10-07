@@ -5,6 +5,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.os.Trace;
 import android.view.Display;
 import android.view.Surface;
 import android.view.View;
@@ -132,7 +133,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile StaticNodeState[] staticNodeStateSnapshot = new StaticNodeState[0];
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
-    private final Object outputWorkLock = new Object();
+    private final LauncherGlassOutputRenderState outputRenderState =
+            new LauncherGlassOutputRenderState();
+    private final boolean workspaceSource;
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -170,9 +173,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
     private volatile boolean backdropPrepared;
-    private boolean pendingStaticRender;
-    private boolean pendingDragRender;
-    private boolean outputRenderQueued;
 
     // Debug-only aggregate timings. UI and render counters are single-thread owned.
     private long uiPerfWindowStartNs;
@@ -209,6 +209,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     LauncherGlassSession(
             View root, LiquidDockConfig.Glass glassConfig, PassBlurBindRequest bindRequest) {
         if (bindRequest == null) throw new IllegalArgumentException("bindRequest == null");
+        workspaceSource = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
         rootRef = new WeakReference<>(root);
         rootWidth = Math.max(0, root.getWidth());
         rootHeight = Math.max(0, root.getHeight());
@@ -589,42 +590,31 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void scheduleOutputRender(boolean staticDirty, boolean dragDirty) {
         if (shuttingDown) return;
-        boolean shouldPost = false;
-        synchronized (outputWorkLock) {
-            pendingStaticRender |= staticDirty;
-            pendingDragRender |= dragDirty;
-            if (!outputRenderQueued) {
-                outputRenderQueued = true;
-                shouldPost = true;
-            }
-        }
-        if (shouldPost && !postRender(this::drainOutputRenderWork)) {
-            synchronized (outputWorkLock) { outputRenderQueued = false; }
+        if (outputRenderState.request(staticDirty, dragDirty)
+                && !postRender(this::drainOutputRenderWork)) {
+            outputRenderState.onPostRejected();
         }
     }
 
     private void drainOutputRenderWork() {
-        boolean renderStatic;
-        boolean renderDrag;
-        synchronized (outputWorkLock) {
-            renderStatic = pendingStaticRender;
-            renderDrag = pendingDragRender;
-            pendingStaticRender = false;
-            pendingDragRender = false;
-        }
+        int work = outputRenderState.consumeQueuedRender();
+        boolean trace = MainHook.debugLogging && workspaceSource && work != 0;
+        if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
-            if (backdropPrepared) renderOutputs(renderStatic, renderDrag);
+            if (backdropPrepared && work != 0) {
+                renderOutputs(
+                        (work & LauncherGlassOutputRenderState.STATIC) != 0,
+                        (work & LauncherGlassOutputRenderState.DRAG) != 0);
+            }
         } catch (Throwable error) {
             MainHook.log(TAG + " output redraw failed " + debugLabel() + ": " + error);
+        } finally {
+            if (trace) Trace.endSection();
         }
 
-        boolean repost = false;
-        synchronized (outputWorkLock) {
-            if (pendingStaticRender || pendingDragRender) repost = true;
-            else outputRenderQueued = false;
-        }
-        if (repost && !postRender(this::drainOutputRenderWork)) {
-            synchronized (outputWorkLock) { outputRenderQueued = false; }
+        if (outputRenderState.finishQueuedRender()
+                && !postRender(this::drainOutputRenderWork)) {
+            outputRenderState.onPostRejected();
         }
     }
 
@@ -976,6 +966,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (root == null || !root.isAttachedToWindow()) return;
         PrismalParams params = prismalParams;
         if (params == null) return;
+        boolean trace = MainHook.debugLogging && workspaceSource;
+        if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {
             boolean perf = MainHook.debugLogging;
             long perfStartNs = perf ? System.nanoTime() : 0L;
@@ -984,15 +976,21 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             rootWidth = frame.logicalWidth;
             rootHeight = frame.logicalHeight;
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.prepareBackdrop(
-                    frame.normalizedTextureId,
-                    frame.physicalWidth,
-                    frame.physicalHeight,
-                    frame.logicalWidth,
-                    frame.logicalHeight,
-                    params);
+            if (trace) Trace.beginSection("LD.Workspace.Backdrop");
+            try {
+                prismalRenderer.prepareBackdrop(
+                        frame.normalizedTextureId,
+                        frame.physicalWidth,
+                        frame.physicalHeight,
+                        frame.logicalWidth,
+                        frame.logicalHeight,
+                        params);
+            } finally {
+                if (trace) Trace.endSection();
+            }
             long backdropDoneNs = perf ? System.nanoTime() : 0L;
             backdropPrepared = true;
+            outputRenderState.consumeForSourceRender();
             renderOutputs(true, true);
             if (perf) {
                 long sceneDoneNs = System.nanoTime();
@@ -1029,6 +1027,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         } catch (Throwable error) {
             MainHook.log(TAG + " fresh Prismal render failed " + debugLabel() + ": " + error);
             throw error;
+        } finally {
+            if (trace) Trace.endSection();
         }
     }
 

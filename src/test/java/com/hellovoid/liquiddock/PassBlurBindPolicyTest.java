@@ -9,6 +9,25 @@ import static org.junit.Assert.assertTrue;
 
 public class PassBlurBindPolicyTest {
     @Test
+    public void unavailableUnlockEndpointDoesNotExhaustWorkspaceBindBudget() {
+        assertEquals(0, PassBlurBindPolicy.retryBudgetAttempt(
+                PassBlurDomain.LAUNCHER_WORKSPACE, 24, true, true));
+        assertEquals(24, PassBlurBindPolicy.retryBudgetAttempt(
+                PassBlurDomain.LAUNCHER_WORKSPACE, 24, false, true));
+        assertEquals(24, PassBlurBindPolicy.retryBudgetAttempt(
+                PassBlurDomain.LAUNCHER_WORKSPACE, 24, true, false));
+    }
+
+    @Test
+    public void unlockReadinessDoesNotExtendOtherDomainsBindBudgets() {
+        for (PassBlurDomain domain : PassBlurDomain.values()) {
+            if (domain == PassBlurDomain.LAUNCHER_WORKSPACE) continue;
+            assertEquals(domain.name(), 24,
+                    PassBlurBindPolicy.retryBudgetAttempt(domain, 24, true, true));
+        }
+    }
+
+    @Test
     public void nativeScaleKeepsAuthoritativeRootGeometryAtFullScale() {
         assertEquals(1.0f,
                 PassBlurBindPolicy.nativeScale(PassBlurDomain.SECURITY_CENTER, 0.25f),

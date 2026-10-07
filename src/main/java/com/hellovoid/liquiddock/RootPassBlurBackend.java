@@ -10,6 +10,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Trace;
 import android.view.Surface;
 import android.view.View;
 
@@ -439,9 +440,16 @@ final class RootPassBlurBackend {
 
     void swapBuffers(EGLSurface surface) {
         requireRenderThread();
-        if (!EGL14.eglSwapBuffers(eglDisplay, surface)) {
-            throw new IllegalStateException("eglSwapBuffers error=0x"
-                    + Integer.toHexString(EGL14.eglGetError()));
+        boolean trace = MainHook.debugLogging
+                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+        if (trace) Trace.beginSection("LD.Workspace.Swap");
+        try {
+            if (!EGL14.eglSwapBuffers(eglDisplay, surface)) {
+                throw new IllegalStateException("eglSwapBuffers error=0x"
+                        + Integer.toHexString(EGL14.eglGetError()));
+            }
+        } finally {
+            if (trace) Trace.endSection();
         }
     }
 
@@ -591,8 +599,7 @@ final class RootPassBlurBackend {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
         try {
             makePbufferCurrentUnchecked();
-            input.updateTexImage();
-            input.getTransformMatrix(textureMatrix);
+            latchSourceFrame(input);
         } catch (Throwable error) {
             notifyTerminalFailure(error);
         }
@@ -602,17 +609,36 @@ final class RootPassBlurBackend {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
         try {
             makePbufferCurrentUnchecked();
-            input.updateTexImage();
-            input.getTransformMatrix(textureMatrix);
+            latchSourceFrame(input);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
-            RootPassBlurFrame frame = normalizeFrame(generation);
+            boolean trace = MainHook.debugLogging
+                    && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+            RootPassBlurFrame frame;
+            if (trace) Trace.beginSection("LD.Workspace.Normalize");
+            try {
+                frame = normalizeFrame(generation);
+            } finally {
+                if (trace) Trace.endSection();
+            }
             if (consumer != null) consumer.onFreshFrame(this, frame);
             if (generation == sourceGeneration && state.onFreshFrame(generation)) {
                 renderedGeneration = generation;
             }
         } catch (Throwable error) {
             notifyTerminalFailure(error);
+        }
+    }
+
+    private void latchSourceFrame(SurfaceTexture input) {
+        boolean trace = MainHook.debugLogging
+                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+        if (trace) Trace.beginSection("LD.Workspace.SourceLatch");
+        try {
+            input.updateTexImage();
+            input.getTransformMatrix(textureMatrix);
+        } finally {
+            if (trace) Trace.endSection();
         }
     }
 
@@ -659,12 +685,12 @@ final class RootPassBlurBackend {
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
         if (root == null || !root.isAttachedToWindow() || producer == null || input == null) {
-            retryBind(attempt);
+            retryBind(attempt, true);
             return;
         }
         RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
         if (endpoint == null || !endpoint.isValid()) {
-            retryBind(attempt);
+            retryBind(attempt, true);
             return;
         }
         logicalWidth = Math.max(1, root.getWidth());
@@ -691,7 +717,12 @@ final class RootPassBlurBackend {
                 || epoch != bindEpoch.get() || rootRef.get() != root) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(bindRequest, producer);
         if (next == null) {
-            retryBind(attempt);
+            RootPassBlurEndpointBridge.Endpoint currentEndpoint =
+                    RootPassBlurEndpointBridge.inspect(root);
+            boolean unavailable = currentEndpoint == null || !currentEndpoint.isValid()
+                    || (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                        && LauncherGlassHomePresentationHook.isUnlockProducerBlocked());
+            retryBind(attempt, unavailable);
             return;
         }
         if (!RootPassBlurEndpointBridge.sameGeneration(next, endpoint)) {
@@ -699,7 +730,7 @@ final class RootPassBlurBackend {
             // The producer endpoint is still valid. Only the ViewRoot generation raced while
             // binding, so stay inside the accepted rollover and retry against the next frame's
             // authoritative endpoint instead of issuing a nested rebind that recovery rejects.
-            retryBind(attempt);
+            retryBind(attempt, true);
             return;
         }
         binding = next;
@@ -715,17 +746,24 @@ final class RootPassBlurBackend {
         if (generation >= 0L) ensureBoundAndRefresh(generation);
     }
 
-    private void retryBind(int attempt) {
+    private void retryBind(int attempt, boolean endpointUnavailable) {
         if (shuttingDown || binding != null) return;
-        if (attempt >= MAX_BIND_RETRY_FRAMES) {
+        boolean unlockPending = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked();
+        int budgetAttempt = PassBlurBindPolicy.retryBudgetAttempt(
+                bindRequest.domain(), attempt, unlockPending, endpointUnavailable);
+        if (budgetAttempt >= MAX_BIND_RETRY_FRAMES) {
             state.onBindExhausted();
             notifyTerminalFailure(new IllegalStateException("PassBlur bind exhausted"));
             return;
         }
         View root = rootRef.get();
         if (root != null) {
+            long retryEpoch = bindEpoch.get();
             root.postOnAnimation(() -> {
-                if (!shuttingDown && binding == null) bindProducerWhenReady(attempt + 1);
+                if (!shuttingDown && binding == null && retryEpoch == bindEpoch.get()) {
+                    bindProducerWhenReady(budgetAttempt + 1);
+                }
             });
         }
     }

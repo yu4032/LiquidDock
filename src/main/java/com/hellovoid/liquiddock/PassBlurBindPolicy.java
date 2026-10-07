@@ -22,6 +22,14 @@ final class PassBlurBindPolicy {
         return domain == PassBlurDomain.LAUNCHER_WORKSPACE;
     }
 
+    static int retryBudgetAttempt(
+            PassBlurDomain domain, int attempt, boolean unlockPending, boolean endpointUnavailable) {
+        // Workspace's root can disappear during native unlock. That lifecycle wait is bounded
+        // by the existing unlock timeout; it must not exhaust the ordinary bind-failure budget.
+        return domain == PassBlurDomain.LAUNCHER_WORKSPACE && unlockPending && endpointUnavailable
+                ? 0 : attempt;
+    }
+
     static String[] exclusions(String rootSurfaceName, String[] extras) {
         LinkedHashSet<String> exclusions = new LinkedHashSet<>();
         addIfPresent(exclusions, rootSurfaceName);
