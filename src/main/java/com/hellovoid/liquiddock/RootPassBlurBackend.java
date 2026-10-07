@@ -253,11 +253,6 @@ final class RootPassBlurBackend {
         if (transitionFrameSyncEnabled == enabled) return;
 
         transitionFrameSyncEnabled = enabled;
-        if (!enabled) {
-            // The limiter did not advance while transition sync bypassed it. Reset cadence instead
-            // of allowing a post-transition catch-up burst.
-            sourceFrameGate = new PassBlurSourceFrameGate(renderFps);
-        }
 
         Miuix307PassBlurBridge.Binding current = binding;
         if (current != null) {
