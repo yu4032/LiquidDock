@@ -17,9 +17,10 @@ final class LauncherGlassVisualOwnerState {
     /** The first valid vendor-visible final-consumer geometry frame publishes proxy geometry. */
     boolean updateLaunchProxyRect(float[] rect) {
         if (!valid(rect)) return false;
-        boolean changed = !launchProxyActive || !same(launchProxyRect, rect);
+        boolean geometryChanged = !same(launchProxyRect, rect);
+        boolean changed = !launchProxyActive || geometryChanged;
         launchProxyActive = true;
-        if (!same(launchProxyRect, rect)) launchProxyRect = rect.clone();
+        if (geometryChanged) launchProxyRect = rect.clone();
         return changed;
     }
 

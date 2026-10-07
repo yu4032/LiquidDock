@@ -59,8 +59,10 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(opticalEdge.contains("uniform float u_os4EdgeEnabled;"));
         assertTrue(opticalEdge.contains("vec3 os4EdgeNormal3"));
         assertTrue(opticalEdge.contains("os4EdgeReflection"));
+        assertTrue(renderer.contains("int highlightMask = highlightMask(highlights);"));
+        assertTrue(renderer.contains("uploadHighlightMask(highlightMask);"));
         assertTrue(renderer.contains(
-                "uniform1f(\"u_os4EdgeEnabled\", highlights.os4Edge ? 1f : 0f);"));
+                "uniform1f(\"u_os4EdgeEnabled\", (mask & (1 << 9)) != 0 ? 1f : 0f);"));
     }
 
     @Test
@@ -74,6 +76,41 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(guard.contains("vec2 rasterScale = (safeGlassSize + vec2(4.0)) / safeGlassSize;"));
         assertTrue(guard.contains("vec2 rasterPosition = a_position * rasterScale;"));
         assertTrue(guard.contains("v_shapeCoord = rasterPosition;"));
+    }
+
+    @Test
+    public void dockSceneClearsOnlyPreviousAndCurrentGlassBounds() throws Exception {
+        String compositor = Files.readString(DOCK_COMPOSITOR);
+
+        assertTrue(compositor.contains("private static final float RASTER_GUARD_PX = 2f;"));
+        assertTrue(compositor.contains("renderer.beginGlassFrameRegion("));
+        assertTrue(compositor.contains("Math.min(lastDirtyLeft, currentLeft)"));
+        assertTrue(compositor.contains("Math.max(lastDirtyBottom, currentBottom)"));
+        assertTrue(compositor.contains("lastDirtyFramebufferWidth == framebufferWidth"));
+        assertTrue(compositor.contains("lastDirtyLeft = currentLeft;"));
+        assertTrue(compositor.contains("lastDirtyBottom = currentBottom;"));
+    }
+
+    @Test
+    public void stableDockSceneReusesFingerprintAndSceneScratchStorage() throws Exception {
+        String compositor = Files.readString(DOCK_COMPOSITOR);
+
+        assertTrue(compositor.contains("private long[] uiFingerprintScratch = new long[0];"));
+        assertTrue(compositor.contains("private long[] proxyFingerprintScratch = new long[0];"));
+        assertTrue(compositor.contains("DockIconAnimationState.Sample[] animationSampleScratch"));
+        assertTrue(compositor.contains("ensureScratchCapacity(cached.size());"));
+        assertTrue(compositor.contains("ArrayList<DockGlassSceneSnapshot.Item> out = sceneItemScratch;"));
+        assertFalse(compositor.contains("long[] uiFingerprints = new long[cached.size()]"));
+        assertFalse(compositor.contains("long[] proxyFingerprints = new long[cached.size()]"));
+        assertFalse(compositor.contains("new DockIconAnimationState.Sample[cached.size()]"));
+    }
+
+    @Test
+    public void dockIconFingerprintWalksOwnershipChainOnlyOnce() throws Exception {
+        String node = Files.readString(DOCK_ITEM_NODE);
+
+        assertTrue(node.contains("if (cursor != dockRoot) return Long.MIN_VALUE;"));
+        assertFalse(node.contains("if (cursor == null || !belongsTo(dockRoot))"));
     }
 
     @Test

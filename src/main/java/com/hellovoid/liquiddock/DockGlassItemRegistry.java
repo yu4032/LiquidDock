@@ -67,7 +67,7 @@ final class DockGlassItemRegistry {
         return ANIMATION.isFading(view);
     }
     static synchronized boolean hasActiveAnimation() {
-        for (View view : new ArrayList<>(ICONS.keySet())) {
+        for (View view : ICONS.keySet()) {
             if (view != null && ANIMATION.isFading(view)) return true;
         }
         return false;
@@ -76,7 +76,7 @@ final class DockGlassItemRegistry {
     static synchronized ArrayList<View> snapshotForRoot(View root) {
         ArrayList<View> out = new ArrayList<>();
         if (!GlassRuntimeState.isAnyIconEnabled() || root == null) return out;
-        for (View view : new ArrayList<>(ICONS.keySet())) {
+        for (View view : ICONS.keySet()) {
             if (view != null && view.isAttachedToWindow() && view.getRootView() == root) out.add(view);
         }
         return out;

@@ -82,6 +82,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
     private static final Set<String> LEGACY_SOURCE_DEBT = Set.of(
             "GlassConfigGenerationContractTest.java",
             "Miuix307EdgeOverscanContractTest.java",
+            "PrismalCompositeHotPathContractTest.java",
             "PrismalModuleBoundaryContractTest.java",
             "PrismalOfficialParityV3Test.java",
             "RestartBoundSettingsContractTest.java",

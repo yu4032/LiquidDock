@@ -78,12 +78,23 @@ final class SystemUiHandleMenuPrismalSession {
     private Surface outputSurface;
     private int oesTexture;
     private int normalizeProgram;
+    private int normalizePositionLocation = -1;
+    private int normalizeUvLocation = -1;
+    private int normalizeTextureLocation = -1;
+    private int normalizeTexMatrixLocation = -1;
+    private int normalizeBackdropRectLocation = -1;
+    private int normalizeConfigRotLocation = -1;
+    private int normalizeValidDockRectLocation = -1;
     private int normalizedTexture;
     private int normalizedFramebuffer;
     private int normalizedWidth;
     private int normalizedHeight;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
+    private int compositePositionLocation = -1;
+    private int compositeUvLocation = -1;
+    private int compositeTextureLocation = -1;
+    private int compositeCropRectLocation = -1;
 
     private Miuix307PassBlurBridge.Binding sourceBinding;
 
@@ -311,25 +322,24 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
-        bindQuad(normalizeProgram);
+        bindQuad(normalizePositionLocation, normalizeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);
-        GLES20.glUniformMatrix4fv(
-                requireUniform(normalizeProgram, "uTexMatrix"),
+                GLES20.glUniformMatrix4fv(
+                normalizeTexMatrixLocation,
                 1, false, textureMatrix, 0);
-        GLES20.glUniform4f(requireUniform(normalizeProgram, "uBackdropRect"),
+        GLES20.glUniform4f(normalizeBackdropRectLocation,
                 sourceContentRect.left,
                 sourceContentRect.bottom,
                 sourceContentRect.width,
                 sourceContentRect.height);
         GLES20.glUniform1i(
-                requireUniform(normalizeProgram, "uConfigRot"),
+                normalizeConfigRotLocation,
                 sourceEndpoint.rotation);
-        GLES20.glUniform4f(requireUniform(normalizeProgram, "uValidDockRect"),
+        GLES20.glUniform4f(normalizeValidDockRectLocation,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(normalizeProgram);
+        unbindQuad(normalizePositionLocation, normalizeUvLocation);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
     }
 
@@ -364,14 +374,13 @@ final class SystemUiHandleMenuPrismalSession {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.outputTexture());
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                GLES20.glUniform4f(compositeCropRectLocation,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad(compositePositionLocation, compositeUvLocation);
         checkEgl("eglSwapBuffers", EGL14.eglSwapBuffers(eglDisplay, outputEglSurface));
 
         if (!firstFramePresented) {
@@ -397,11 +406,32 @@ final class SystemUiHandleMenuPrismalSession {
             normalizeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
+            normalizePositionLocation = GLES20.glGetAttribLocation(normalizeProgram, "aPosition");
+            normalizeUvLocation = GLES20.glGetAttribLocation(normalizeProgram, "aUv");
+            if (normalizePositionLocation < 0 || normalizeUvLocation < 0) {
+                throw new IllegalStateException("normalize quad attribute unavailable");
+            }
+            normalizeTextureLocation = requireUniform(normalizeProgram, "uTexture");
+            normalizeTexMatrixLocation = requireUniform(normalizeProgram, "uTexMatrix");
+            normalizeBackdropRectLocation = requireUniform(normalizeProgram, "uBackdropRect");
+            normalizeConfigRotLocation = requireUniform(normalizeProgram, "uConfigRot");
+            normalizeValidDockRectLocation = requireUniform(normalizeProgram, "uValidDockRect");
+            GLES20.glUseProgram(normalizeProgram);
+            GLES20.glUniform1i(normalizeTextureLocation, 0);
         }
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
+            compositePositionLocation = GLES20.glGetAttribLocation(compositeProgram, "aPosition");
+            compositeUvLocation = GLES20.glGetAttribLocation(compositeProgram, "aUv");
+            if (compositePositionLocation < 0 || compositeUvLocation < 0) {
+                throw new IllegalStateException("composite quad attribute unavailable");
+            }
+            compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
+            compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+            GLES20.glUseProgram(compositeProgram);
+            GLES20.glUniform1i(compositeTextureLocation, 0);
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
@@ -521,7 +551,13 @@ final class SystemUiHandleMenuPrismalSession {
         if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
         if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
         normalizeProgram = 0;
+        normalizePositionLocation = normalizeUvLocation = -1;
+        normalizeTextureLocation = normalizeTexMatrixLocation = -1;
+        normalizeBackdropRectLocation = normalizeConfigRotLocation = -1;
+        normalizeValidDockRectLocation = -1;
         compositeProgram = 0;
+        compositePositionLocation = compositeUvLocation = -1;
+        compositeTextureLocation = compositeCropRectLocation = -1;
     }
 
     private void releaseNormalizedTarget() {
@@ -621,25 +657,19 @@ final class SystemUiHandleMenuPrismalSession {
         return framebuffer[0];
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) {
-            throw new IllegalStateException("quad attribute unavailable");
-        }
+    private void bindQuad(int position, int uv) {
+        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
         quadBuffer.position(0);
         GLES20.glEnableVertexAttribArray(position);
-        GLES20.glVertexAttribPointer(
-                position, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
+        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false,
+                4 * Float.BYTES, quadBuffer);
         quadBuffer.position(2);
         GLES20.glEnableVertexAttribArray(uv);
-        GLES20.glVertexAttribPointer(
-                uv, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
+        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false,
+                4 * Float.BYTES, quadBuffer);
     }
 
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
+    private void unbindQuad(int position, int uv) {
         if (position >= 0) GLES20.glDisableVertexAttribArray(position);
         if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
     }
