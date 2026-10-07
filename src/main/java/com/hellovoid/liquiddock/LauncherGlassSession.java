@@ -26,7 +26,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -126,10 +125,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final Object outputWorkLock = new Object();
-    // UI-side static-scene invalidations are coalesced into the root pre-draw. This prevents
-    // animation/property callbacks from racing the same frame's geometry sync and causing two
-    // full-root static composites in one display frame.
-    private final AtomicBoolean staticSceneDirty = new AtomicBoolean();
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -330,8 +325,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 rebuildStaticNodeSnapshotLocked();
             }
         }
-        requestStaticRedraw();
         syncSceneOnUiThread();
+        requestStaticRedraw();
     }
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
@@ -449,10 +444,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestStaticRedraw() {
-        if (shuttingDown) return;
-        staticSceneDirty.set(true);
-        View root = rootRef.get();
-        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+        scheduleOutputRender(true, false);
     }
 
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
@@ -651,7 +643,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         boolean rootGeometryChanged = nextWidth > 0 && nextHeight > 0
                 && (nextWidth != rootWidth || nextHeight != rootHeight);
         boolean dragChanged = rootGeometryChanged;
-        boolean staticChanged = rootGeometryChanged || staticSceneDirty.getAndSet(false);
+        boolean staticChanged = rootGeometryChanged;
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
