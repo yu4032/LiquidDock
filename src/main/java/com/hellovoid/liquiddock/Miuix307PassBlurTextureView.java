@@ -224,6 +224,10 @@ final class Miuix307PassBlurTextureView extends TextureView
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
     private final int[] screenLocationScratch = new int[2];
+    private final Miuix307BackdropMapping.MutableResult sampleMappingScratch =
+            new Miuix307BackdropMapping.MutableResult();
+    private final Miuix307BackdropMapping.MutableResult dockMappingScratch =
+            new Miuix307BackdropMapping.MutableResult();
 
     private volatile SamplingInsetsCache samplingInsetsCache;
     private volatile boolean shuttingDown;
@@ -1284,11 +1288,15 @@ final class Miuix307PassBlurTextureView extends TextureView
         SamplingInsets insets = resolveSamplingInsets(visibleWidth, visibleHeight, frameParams);
         int sampleWidth = visibleWidth + insets.left + insets.right;
         int sampleHeight = visibleHeight + insets.top + insets.bottom;
-        Miuix307BackdropMapping.Result sample = Miuix307BackdropMapping.compute(
+        Miuix307BackdropMapping.MutableResult sample = sampleMappingScratch;
+        Miuix307BackdropMapping.computeInto(
+                sample,
                 viewScreen[0] - insets.left, viewScreen[1] - insets.top,
                 sampleWidth, sampleHeight,
                 winFrame.left, winFrame.top, winFrame.width(), winFrame.height());
-        Miuix307BackdropMapping.Result dock = Miuix307BackdropMapping.compute(
+        Miuix307BackdropMapping.MutableResult dock = dockMappingScratch;
+        Miuix307BackdropMapping.computeInto(
+                dock,
                 viewScreen[0], viewScreen[1], visibleWidth, visibleHeight,
                 winFrame.left, winFrame.top, winFrame.width(), winFrame.height());
 
