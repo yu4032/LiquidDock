@@ -1205,15 +1205,11 @@ final class Miuix307PassBlurTextureView extends TextureView
             int width, int height, PrismalParams prismalParams) {
         if (prismalParams == null) return SamplingInsets.ZERO;
         int horizontalBaseline = horizontalOverscanPx();
-        int textureLimit = maxTextureSize;
-        int topExtra = topSamplingExtraPx;
-        int bottomExtra = bottomSamplingExtraPx;
-        int leftExtra = leftSamplingExtraPx;
-        int rightExtra = rightSamplingExtraPx;
         SamplingInsetsCache cached = samplingInsetsCache;
         if (cached != null && cached.matches(
                 width, height, prismalParams, horizontalBaseline,
-                topExtra, bottomExtra, leftExtra, rightExtra, textureLimit)) {
+                topSamplingExtraPx, bottomSamplingExtraPx,
+                leftSamplingExtraPx, rightSamplingExtraPx, maxTextureSize)) {
             return cached.insets;
         }
 
@@ -1222,20 +1218,20 @@ final class Miuix307PassBlurTextureView extends TextureView
         int opticalY = PrismalSampling.requiredGuardPx(
                 prismalParams, width, height, false);
 
-        int autoHorizontal = Math.max(horizontalBaseline, opticalX);
-        int left = combineAutoGuardAndUserExtra(autoHorizontal, leftExtra);
-        int right = combineAutoGuardAndUserExtra(autoHorizontal, rightExtra);
-        int top = combineAutoGuardAndUserExtra(opticalY, topExtra);
-        int bottom = combineAutoGuardAndUserExtra(opticalY, bottomExtra);
+        int autoHorizontal = Math.max(horizontalOverscanPx(), opticalX);
+        int left = combineAutoGuardAndUserExtra(autoHorizontal, leftSamplingExtraPx);
+        int right = combineAutoGuardAndUserExtra(autoHorizontal, rightSamplingExtraPx);
+        int top = combineAutoGuardAndUserExtra(opticalY, topSamplingExtraPx);
+        int bottom = combineAutoGuardAndUserExtra(opticalY, bottomSamplingExtraPx);
 
-        long horizontal = fitInsetPairToTextureLimit(width, left, right, textureLimit);
-        long vertical = fitInsetPairToTextureLimit(height, top, bottom, textureLimit);
+        int[] horizontal = fitInsetPairToTextureLimit(width, left, right, maxTextureSize);
+        int[] vertical = fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize);
         SamplingInsets resolved = new SamplingInsets(
-                unpackFirst(horizontal), unpackSecond(horizontal),
-                unpackFirst(vertical), unpackSecond(vertical));
+                horizontal[0], horizontal[1], vertical[0], vertical[1]);
         samplingInsetsCache = new SamplingInsetsCache(
                 width, height, prismalParams, horizontalBaseline,
-                topExtra, bottomExtra, leftExtra, rightExtra, textureLimit, resolved);
+                topSamplingExtraPx, bottomSamplingExtraPx,
+                leftSamplingExtraPx, rightSamplingExtraPx, maxTextureSize, resolved);
         return resolved;
     }
 
@@ -1244,34 +1240,22 @@ final class Miuix307PassBlurTextureView extends TextureView
         return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, combined));
     }
 
-    private static long fitInsetPairToTextureLimit(
+    private static int[] fitInsetPairToTextureLimit(
             int visible, int before, int after, int maxTextureSize) {
         int safeVisible = Math.max(1, visible);
         int safeBefore = Math.max(0, before);
         int safeAfter = Math.max(0, after);
-        if (maxTextureSize <= 0) return packPair(safeBefore, safeAfter);
+        if (maxTextureSize <= 0) return new int[]{safeBefore, safeAfter};
 
         int available = Math.max(0, maxTextureSize - safeVisible);
         long desired = (long) safeBefore + safeAfter;
-        if (desired <= available) return packPair(safeBefore, safeAfter);
-        if (available <= 0 || desired <= 0) return packPair(0, 0);
+        if (desired <= available) return new int[]{safeBefore, safeAfter};
+        if (available <= 0 || desired <= 0) return new int[]{0, 0};
 
         int fittedBefore = (int) Math.round(safeBefore * (available / (double) desired));
         fittedBefore = Math.max(0, Math.min(available, fittedBefore));
         int fittedAfter = available - fittedBefore;
-        return packPair(fittedBefore, fittedAfter);
-    }
-
-    private static long packPair(int first, int second) {
-        return ((long) first << 32) | (second & 0xffffffffL);
-    }
-
-    private static int unpackFirst(long packed) {
-        return (int) (packed >> 32);
-    }
-
-    private static int unpackSecond(long packed) {
-        return (int) packed;
+        return new int[]{fittedBefore, fittedAfter};
     }
 
     private void updateBackdropMapping() {
