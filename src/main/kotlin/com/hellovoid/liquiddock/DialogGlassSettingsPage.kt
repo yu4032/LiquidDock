@@ -154,14 +154,14 @@ internal fun DialogGlassSettingsPage(
         appearanceGeneration++
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_dialog_customization),
                 "当前作用于桌面卸载、移除和二次确认弹窗；未单独设置的颜色与模糊度继承全局液态玻璃。",
             )
         }
-        item { SmallTitle("功能") }
+        item { ModernSectionTitle("功能") }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -187,7 +187,7 @@ internal fun DialogGlassSettingsPage(
                 )
             }
         }
-        item { SmallTitle("玻璃颜色") }
+        item { ModernSectionTitle("玻璃颜色") }
         item {
             SettingsCard {
                 DialogAppearanceValueSlider(
@@ -228,7 +228,7 @@ internal fun DialogGlassSettingsPage(
                 )
             }
         }
-        item { SmallTitle("模糊") }
+        item { ModernSectionTitle("模糊") }
         item {
             SettingsCard {
                 DialogAppearanceValueSlider(
