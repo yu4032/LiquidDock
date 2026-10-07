@@ -159,6 +159,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeUvLocation = -1;
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
+    private boolean staticFirstFrameLogged;
     private volatile boolean backdropPrepared;
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
@@ -884,8 +885,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     Miuix307PrismalCompositeShaders.FRAGMENT);
             compositePositionLocation = requireAttrib(compositeProgram, "aPosition");
             compositeUvLocation = requireAttrib(compositeProgram, "aUv");
-            compositeTextureLocation = compositeTextureLocation;
-            compositeCropRectLocation = compositeCropRectLocation;
+            compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
+            compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+            MainHook.log(TAG + " composite GL ready textureLoc="
+                    + compositeTextureLocation + " cropLoc=" + compositeCropRectLocation);
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
@@ -905,6 +908,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         StaticNodeState[] snapshot = staticNodeSnapshot;
         LauncherGlassScrollProjectionState.Frame scrollFrame =
                 workspaceScrollProjection.snapshot();
+        int drawnNodes = 0;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
@@ -919,8 +923,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+            drawnNodes++;
         }
         presentFull(prismalRenderer.outputTexture(), output);
+        if (!staticFirstFrameLogged && drawnNodes > 0) {
+            staticFirstFrameLogged = true;
+            MainHook.log(TAG + " static frame presented nodes=" + drawnNodes
+                    + "/" + snapshot.length
+                    + " root=" + rootWidth + "x" + rootHeight
+                    + " output=" + output.width + "x" + output.height);
+        }
     }
 
     private void renderDragOutputs(PrismalParams params) {
@@ -1095,6 +1107,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         compositeUvLocation = -1;
         compositeTextureLocation = -1;
         compositeCropRectLocation = -1;
+        staticFirstFrameLogged = false;
         backdropPrepared = false;
     }
 
