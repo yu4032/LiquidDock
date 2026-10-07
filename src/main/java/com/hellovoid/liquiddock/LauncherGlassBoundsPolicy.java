@@ -5,6 +5,16 @@ final class LauncherGlassBoundsPolicy {
     private LauncherGlassBoundsPolicy() {}
 
     static float[] apply(float left, float top, float right, float bottom, float offsetPx) {
+        float[] out = new float[4];
+        applyInto(out, left, top, right, bottom, offsetPx);
+        return out;
+    }
+
+    static void applyInto(
+            float[] out, float left, float top, float right, float bottom, float offsetPx) {
+        if (out == null || out.length < 4) {
+            throw new IllegalArgumentException("bounds output must have at least four entries");
+        }
         float safeOffset = Float.isFinite(offsetPx) ? offsetPx : 0f;
         float nextLeft = left - safeOffset;
         float nextTop = top - safeOffset;
@@ -20,7 +30,10 @@ final class LauncherGlassBoundsPolicy {
             nextTop = center - 0.5f;
             nextBottom = center + 0.5f;
         }
-        return new float[]{nextLeft, nextTop, nextRight, nextBottom};
+        out[0] = nextLeft;
+        out[1] = nextTop;
+        out[2] = nextRight;
+        out[3] = nextBottom;
     }
 
     static float capRadius(float radiusPx, float width, float height) {
