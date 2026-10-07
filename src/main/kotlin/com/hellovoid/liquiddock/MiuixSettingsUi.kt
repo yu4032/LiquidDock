@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,29 +18,43 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.styropyr0.prismal.PrismalBackdrop
+import com.styropyr0.prismal.PrismalGlassSurface
+import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
+import com.styropyr0.prismal.components.PrismalGlassBottomTab
+import com.styropyr0.prismal.components.PrismalGlassBottomTabs
+import com.styropyr0.prismal.components.PrismalGlassToggle
+import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
+import com.styropyr0.prismal.sources.prismalGlassLayer
+import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
+import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 
 internal val LiquidDockPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 
 private val LocalSettingsScrollBehavior = staticCompositionLocalOf<ScrollBehavior?> { null }
+private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 
 @Composable
 internal fun LiquidDockTheme(content: @Composable () -> Unit) {
@@ -53,35 +68,82 @@ internal fun LiquidDockSettingsScaffold(
     showBack: Boolean,
     onBack: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {},
-    bottomBar: @Composable () -> Unit = {},
+    bottomBar: @Composable (PrismalBackdrop) -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val backgroundLayer = rememberPrismalGlassLayer()
+    val screenLayer = rememberPrismalGlassLayer()
+    val overlayBackdrop = rememberPrismalMergedSource(backgroundLayer, screenLayer)
+    val background = MiuixTheme.colorScheme.background
+    val primary = MiuixTheme.colorScheme.primary
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = title,
-                largeTitle = title,
-                scrollBehavior = scrollBehavior,
-                titlePadding = 20.dp,
-                navigationIcon = {
-                    if (showBack) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = null,
-                            )
-                        }
-                    }
-                },
-                actions = actions,
-            )
-        },
-        bottomBar = bottomBar,
-    ) { padding ->
-        CompositionLocalProvider(LocalSettingsScrollBehavior provides scrollBehavior) {
-            content(padding)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            background,
+                            primary.copy(alpha = 0.08f),
+                            background,
+                        ),
+                    ),
+                )
+                .prismalGlassLayer(backgroundLayer),
+        )
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                PrismalGlassSurface(
+                    backdrop = overlayBackdrop,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = { RectangleShape },
+                    blurRadius = 14.dp,
+                    tint = MiuixTheme.colorScheme.surface,
+                    tintAlpha = 0.34f,
+                    saturation = 1.35f,
+                    refractionHeightPx = 18f,
+                    refractionAmountPx = 24f,
+                    chromaticAberration = 0.45f,
+                    depthEffect = true,
+                ) {
+                    TopAppBar(
+                        title = title,
+                        largeTitle = title,
+                        color = Color.Transparent,
+                        scrollBehavior = scrollBehavior,
+                        titlePadding = 20.dp,
+                        navigationIcon = {
+                            if (showBack) {
+                                IconButton(onClick = onBack) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Back,
+                                        contentDescription = null,
+                                    )
+                                }
+                            }
+                        },
+                        actions = actions,
+                    )
+                }
+            },
+            bottomBar = { bottomBar(overlayBackdrop) },
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .prismalGlassLayer(screenLayer),
+            ) {
+                CompositionLocalProvider(
+                    LocalSettingsScrollBehavior provides scrollBehavior,
+                    LocalPrismalSurfaceBackdrop provides backgroundLayer,
+                ) {
+                    content(padding)
+                }
+            }
         }
     }
 }
@@ -106,7 +168,7 @@ internal fun LiquidDockSettingsPage(
             top = padding.calculateTopPadding() + 8.dp,
             bottom = padding.calculateBottomPadding() + extraBottomPadding,
         ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content,
     )
 }
@@ -122,12 +184,35 @@ internal fun LiquidDockSectionTitle(title: String) {
 
 @Composable
 internal fun LiquidDockSectionCard(
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
+    val backdrop = LocalPrismalSurfaceBackdrop.current
+    if (backdrop == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            content = content,
+        )
+        return
+    }
+
+    PrismalGlassSurface(
+        backdrop = backdrop,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
+        shape = { PrismalRoundedRectangle(24.dp) },
+        onClick = onClick,
+        blurRadius = 12.dp,
+        tint = MiuixTheme.colorScheme.surface,
+        tintAlpha = 0.26f,
+        saturation = 1.4f,
+        refractionHeightPx = 16f,
+        refractionAmountPx = 22f,
+        chromaticAberration = 0.35f,
+        depthEffect = true,
     ) {
         Column(content = content)
     }
@@ -164,4 +249,81 @@ internal fun LiquidDockActionRow(
         insideMargin = LiquidDockPreferenceMargin,
         onClick = onClick,
     )
+}
+
+@Composable
+internal fun LiquidDockGlassToggleRow(
+    title: String,
+    summary: String?,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val backdrop = LocalPrismalSurfaceBackdrop.current
+    BasicComponent(
+        title = title,
+        summary = summary,
+        enabled = enabled,
+        insideMargin = LiquidDockPreferenceMargin,
+        endActions = {
+            if (backdrop != null) {
+                PrismalGlassToggle(
+                    selected = { checked },
+                    onSelect = { next ->
+                        if (enabled) onCheckedChange(next)
+                    },
+                    backdrop = backdrop,
+                )
+            }
+        },
+        onClick = {
+            if (enabled) onCheckedChange(!checked)
+        },
+    )
+}
+
+@Composable
+internal fun LiquidDockGlassNavigationBar(
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+    labels: List<String>,
+    icons: List<ImageVector>,
+    backdrop: PrismalBackdrop,
+    modifier: Modifier = Modifier,
+) {
+    PrismalGlassBottomTabs(
+        selectedTabIndex = { selectedIndex },
+        onTabSelected = onSelected,
+        backdrop = backdrop,
+        tabsCount = labels.size,
+        modifier = modifier,
+        tintDropletContent = true,
+        dropletContentTint = MiuixTheme.colorScheme.primary,
+    ) {
+        labels.forEachIndexed { index, label ->
+            val highlightedIndex = LocalPrismalBottomTabHighlightedIndex.current()
+            val selected = highlightedIndex == index
+            val contentColor = if (selected) {
+                MiuixTheme.colorScheme.onSurface
+            } else {
+                MiuixTheme.colorScheme.onSurfaceVariantActions
+            }
+            PrismalGlassBottomTab(
+                onClick = { onSelected(index) },
+            ) {
+                Icon(
+                    imageVector = icons[index],
+                    contentDescription = label,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    text = label,
+                    color = contentColor,
+                    style = MiuixTheme.textStyles.body2,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
