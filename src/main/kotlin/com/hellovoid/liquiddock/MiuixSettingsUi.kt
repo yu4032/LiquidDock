@@ -5,25 +5,38 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
@@ -43,15 +56,20 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
-import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
+import com.styropyr0.prismal.drawPlainPrismalGlass
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.components.PrismalGlassSlider
+import com.styropyr0.prismal.effects.colorControls
+import com.styropyr0.prismal.effects.prismalBlur
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal val LiquidDockPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 
@@ -99,22 +117,50 @@ internal fun LiquidDockSettingsScaffold(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                PrismalGlassSurface(
-                    backdrop = overlayBackdrop,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = { PrismalRoundedRectangle(0.dp) },
-                    blurRadius = 14.dp,
-                    tint = MiuixTheme.colorScheme.surface,
-                    tintAlpha = 0.34f,
-                    saturation = 1.35f,
-                    refractionHeightPx = 18f,
-                    refractionAmountPx = 24f,
-                    chromaticAberration = 0.45f,
-                    depthEffect = true,
-                ) {
+                val density = LocalDensity.current
+                val collapsed by remember(scrollBehavior) {
+                    derivedStateOf { scrollBehavior.state.collapsedFraction >= (1f / 3f) }
+                }
+                val inlineExpandedActions = !showBack
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    // The blur itself is rendered separately from TopAppBar content, then alpha-masked
+                    // from opaque at the status-bar edge to transparent at the lower edge.
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                compositingStrategy = CompositingStrategy.Offscreen
+                            }
+                            .drawWithContent {
+                                drawContent()
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        colorStops = arrayOf(
+                                            0f to Color.Black,
+                                            0.58f to Color.Black,
+                                            0.82f to Color.Black.copy(alpha = 0.42f),
+                                            1f to Color.Transparent,
+                                        ),
+                                    ),
+                                    blendMode = BlendMode.DstIn,
+                                )
+                            }
+                            .drawPlainPrismalGlass(
+                                backdrop = overlayBackdrop,
+                                shape = { PrismalRoundedRectangle(0.dp) },
+                                effects = {
+                                    prismalBlur(with(density) { 14.dp.toPx() })
+                                    colorControls(saturation = 1.18f)
+                                },
+                                onDrawSurface = {
+                                    drawRect(MiuixTheme.colorScheme.surface.copy(alpha = 0.30f))
+                                },
+                            ),
+                    )
+
                     TopAppBar(
                         title = title,
-                        largeTitle = title,
+                        largeTitle = if (inlineExpandedActions) " " else title,
                         color = Color.Transparent,
                         scrollBehavior = scrollBehavior,
                         titlePadding = 20.dp,
@@ -128,8 +174,34 @@ internal fun LiquidDockSettingsScaffold(
                                 }
                             }
                         },
-                        actions = actions,
+                        actions = {
+                            if (!inlineExpandedActions || collapsed) {
+                                actions()
+                            }
+                        },
                     )
+
+                    if (inlineExpandedActions && !collapsed) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, end = 16.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = title,
+                                color = MiuixTheme.colorScheme.onSurface,
+                                style = MiuixTheme.textStyles.title1,
+                                maxLines = 1,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                content = actions,
+                            )
+                        }
+                    }
                 }
             },
             bottomBar = { bottomBar(overlayBackdrop) },
@@ -306,6 +378,12 @@ internal fun LiquidDockGlassSlider(
     )
 }
 
+private class BottomTabSelectionGate {
+    var lastUserDispatchAt: Long = 0L
+    var programmaticTarget: Int? = null
+    var clearJob: Job? = null
+}
+
 @Composable
 internal fun LiquidDockGlassNavigationBar(
     selectedIndex: Int,
@@ -315,46 +393,100 @@ internal fun LiquidDockGlassNavigationBar(
     backdrop: PrismalBackdrop,
     modifier: Modifier = Modifier,
 ) {
-    // Prismal uses the selector lambda itself as a remember/LaunchedEffect key.
-    // Keep its identity stable across recompositions so external tab changes
-    // are observed by snapshotFlow and animate the droplet instead of resetting it.
     val selectedIndexState = rememberUpdatedState(selectedIndex)
     val onSelectedState = rememberUpdatedState(onSelected)
     val selectedIndexProvider = remember { { selectedIndexState.value } }
-    val dispatchSelected = remember { { index: Int -> onSelectedState.value(index) } }
+    val gate = remember { BottomTabSelectionGate() }
+    val scope = rememberCoroutineScope()
 
-    PrismalGlassBottomTabs(
-        selectedTabIndex = selectedIndexProvider,
-        onTabSelected = dispatchSelected,
-        backdrop = backdrop,
-        tabsCount = labels.size,
-        modifier = modifier,
-        tintDropletContent = true,
-        dropletContentTint = MiuixTheme.colorScheme.primary,
-    ) {
-        labels.forEachIndexed { index, label ->
-            val highlightedIndex = LocalPrismalBottomTabHighlightedIndex.current()
-            val selected = highlightedIndex == index
-            val contentColor = if (selected) {
-                MiuixTheme.colorScheme.onSurface
-            } else {
-                MiuixTheme.colorScheme.onSurfaceVariantActions
-            }
-            PrismalGlassBottomTab(
-                onClick = { dispatchSelected(index) },
+    val dispatchUserSelection = remember {
+        { index: Int ->
+            val now = android.os.SystemClock.uptimeMillis()
+            if (
+                index != selectedIndexState.value &&
+                now - gate.lastUserDispatchAt >= 140L
             ) {
-                Icon(
-                    imageVector = icons[index],
-                    contentDescription = label,
-                    tint = contentColor,
-                    modifier = Modifier.size(22.dp),
-                )
-                Text(
-                    text = label,
-                    color = contentColor,
-                    style = MiuixTheme.textStyles.body2,
-                    maxLines = 1,
-                )
+                gate.lastUserDispatchAt = now
+                gate.programmaticTarget = index
+                onSelectedState.value(index)
+                gate.clearJob?.cancel()
+                gate.clearJob = scope.launch {
+                    delay(360L)
+                    if (gate.programmaticTarget == index) {
+                        gate.programmaticTarget = null
+                    }
+                }
+            }
+        }
+    }
+    val dispatchPrismalSelection = remember {
+        { index: Int ->
+            // External clicks already moved the authoritative selection. Ignore Prismal's
+            // completion callback for that same animation so it cannot recursively requeue Pager.
+            if (
+                gate.programmaticTarget == null &&
+                index != selectedIndexState.value
+            ) {
+                onSelectedState.value(index)
+            }
+        }
+    }
+
+    Box(modifier = modifier) {
+        PrismalGlassBottomTabs(
+            selectedTabIndex = selectedIndexProvider,
+            onTabSelected = dispatchPrismalSelection,
+            backdrop = backdrop,
+            tabsCount = labels.size,
+            modifier = Modifier.fillMaxWidth(),
+            tintDropletContent = false,
+            dropletContentTint = MiuixTheme.colorScheme.primary,
+        ) {
+            // Keep Prismal's hit targets and drag/spring machinery, but intentionally leave
+            // the sampled tab content empty. Upstream records content a second time into
+            // tabsBackdrop; drawing labels there causes a refracted duplicate during long press.
+            labels.indices.forEach { index ->
+                PrismalGlassBottomTab(
+                    onClick = { dispatchUserSelection(index) },
+                ) {}
+            }
+        }
+
+        // Draw labels/icons exactly once, above Prismal's glass layers. With no pointer modifier
+        // this visual overlay does not steal click/drag events from the empty Prismal tab targets.
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            labels.forEachIndexed { index, label ->
+                val selected = selectedIndex == index
+                val contentColor = if (selected) {
+                    MiuixTheme.colorScheme.primary
+                } else {
+                    MiuixTheme.colorScheme.onSurfaceVariantActions
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        imageVector = icons[index],
+                        contentDescription = label,
+                        tint = contentColor,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Text(
+                        text = label,
+                        color = contentColor,
+                        style = MiuixTheme.textStyles.body2,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
