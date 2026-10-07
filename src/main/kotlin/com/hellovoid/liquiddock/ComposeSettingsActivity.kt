@@ -1372,7 +1372,7 @@ internal fun PageHeader(title: String, summary: String? = null) {
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    LiquidDockSectionCard(content)
+    LiquidDockSectionCard(content = content)
 }
 
 @Composable
