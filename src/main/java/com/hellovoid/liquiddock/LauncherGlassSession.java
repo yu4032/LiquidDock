@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
@@ -119,6 +120,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final RootPassBlurBackend sourceBackend;
     private final LauncherGlassScrollProjectionState workspaceScrollProjection =
             new LauncherGlassScrollProjectionState();
+    // UI-thread scratch. Root-to-global is common to every Workspace node in one pre-draw, so
+    // invert it once instead of repeating the same matrix walk/inversion for every icon/widget.
+    private final Matrix uiRootToGlobal = new Matrix();
+    private final Matrix uiGlobalToRoot = new Matrix();
     private final Map<LauncherGlassSinkView, NodeState> nodes =
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
@@ -697,10 +702,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
         Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
         StaticNodeState[] staticSnapshot = staticNodeStateSnapshot;
+        boolean staticRootTransformValid =
+                staticSnapshot.length == 0 || prepareStaticRootCaptureTransform(root);
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
-            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+            LauncherGlassGeometry.Snapshot observed = staticRootTransformValid
+                    ? node.captureGeometry(root, uiGlobalToRoot, rootWidth, rootHeight)
+                    : null;
             StaticGeometryFrame oldFrame = state.frame;
             LauncherGlassGeometry.Snapshot old = oldFrame != null ? oldFrame.geometry : null;
             if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
@@ -759,6 +768,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             return;
         }
         if (staticChanged || dragChanged) scheduleOutputRender(staticChanged, dragChanged);
+    }
+
+    private boolean prepareStaticRootCaptureTransform(View root) {
+        if (root == null) return false;
+        uiRootToGlobal.reset();
+        root.transformMatrixToGlobal(uiRootToGlobal);
+        uiGlobalToRoot.reset();
+        return uiRootToGlobal.invert(uiGlobalToRoot);
     }
 
     void setNativeTransitionFrameSyncEnabled(boolean enabled, String reason) {

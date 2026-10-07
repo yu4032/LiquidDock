@@ -326,12 +326,20 @@ final class LauncherGlassStaticNode {
     }
 
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
+        if (root == null) return null;
+        rootToGlobal.reset();
+        root.transformMatrixToGlobal(rootToGlobal);
+        globalToRoot.reset();
+        if (!rootToGlobal.invert(globalToRoot)) return null;
+        return captureGeometry(root, globalToRoot, root.getWidth(), root.getHeight());
+    }
+
+    LauncherGlassGeometry.Snapshot captureGeometry(
+            View root, Matrix sharedGlobalToRoot, int rootWidth, int rootHeight) {
         View material = materialRef.get();
         GlassComponentStyle style = componentStyle();
-        if (disposed || material == null || root == null || style == null || !style.enabled
-                || visibilityAlpha <= 0.001f) return null;
-        int rootWidth = root.getWidth();
-        int rootHeight = root.getHeight();
+        if (disposed || material == null || root == null || sharedGlobalToRoot == null
+                || style == null || !style.enabled || visibilityAlpha <= 0.001f) return null;
         if (rootWidth <= 0 || rootHeight <= 0) return null;
 
         int hostWidth = material.getWidth();
@@ -413,11 +421,7 @@ final class LauncherGlassStaticNode {
         materialToGlobal.reset();
         material.transformMatrixToGlobal(materialToGlobal);
         materialToGlobal.mapPoints(geometryPoints);
-        rootToGlobal.reset();
-        root.transformMatrixToGlobal(rootToGlobal);
-        globalToRoot.reset();
-        if (!rootToGlobal.invert(globalToRoot)) return null;
-        globalToRoot.mapPoints(geometryPoints);
+        sharedGlobalToRoot.mapPoints(geometryPoints);
 
         float left = Math.min(Math.min(geometryPoints[0], geometryPoints[2]),
                 Math.min(geometryPoints[4], geometryPoints[6]));
@@ -436,7 +440,7 @@ final class LauncherGlassStaticNode {
                 geometryPoints[4], geometryPoints[5]) / localHeight;
         float radiusScale = Math.max(0.01f, Math.min(scaleX, scaleY));
         return LauncherGlassGeometry.resolveStatic(
-                root.getWidth(), root.getHeight(), left, top, right, bottom,
+                rootWidth, rootHeight, left, top, right, bottom,
                 LauncherGlassBoundsPolicy.capRadius(
                         requestedRadius * radiusScale, right - left, bottom - top));
     }
