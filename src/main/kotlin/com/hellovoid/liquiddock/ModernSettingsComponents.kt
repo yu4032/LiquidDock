@@ -36,6 +36,9 @@ import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import com.styropyr0.prismal.PrismalBackdrop
+import com.styropyr0.prismal.sources.prismalGlassLayer
+import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -57,22 +60,23 @@ internal fun ModernSettingsScaffold(
     showBack: Boolean = false,
     onBack: () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
-    bottomBar: @Composable (LayerBackdrop) -> Unit = {},
+    bottomBar: @Composable (PrismalBackdrop) -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val surfaceColor = MiuixTheme.colorScheme.surface
     val topBarTint = surfaceColor.copy(alpha = 0.88f)
-    val backdrop = rememberLayerBackdrop {
+    val miuixBackdrop = rememberLayerBackdrop {
         drawRect(surfaceColor)
         drawContent()
     }
+    val prismalBackdrop = rememberPrismalGlassLayer()
     val scrollBehavior = MiuixScrollBehavior()
 
     Scaffold(
         topBar = {
             Box(
                 modifier = Modifier.textureBlur(
-                    backdrop = backdrop,
+                    backdrop = miuixBackdrop,
                     shape = RectangleShape,
                     blurRadius = 22f,
                     colors = BlurDefaults.blurColors(
@@ -93,12 +97,13 @@ internal fun ModernSettingsScaffold(
                 )
             }
         },
-        bottomBar = { bottomBar(backdrop) },
+        bottomBar = { bottomBar(prismalBackdrop) },
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .layerBackdrop(backdrop),
+                .layerBackdrop(miuixBackdrop)
+                .prismalGlassLayer(prismalBackdrop),
         ) {
             CompositionLocalProvider(LocalModernScrollBehavior provides scrollBehavior) {
                 content(padding)
