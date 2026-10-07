@@ -12,6 +12,86 @@ import org.junit.Test;
 /** Host-side behavior tests for the unlock freshness/capture barrier. */
 public class UnlockCaptureRecoveryStateTest {
     @Test
+    public void endpointChangeKeepsLiveGenerationUntilFreshnessRelease() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onPrepare();
+        assertEquals(4L, state.generationAfterEndpointChange(4L, 5L, false));
+        state.onWorkspaceMotionStarted();
+
+        assertEquals(4L, state.generationAfterEndpointChange(4L, 6L, false));
+        assertTrue(state.isBlocked());
+        assertFalse(state.isProducerBlocked());
+
+        state.onSystemUiGoneFinished();
+        assertEquals(7L, state.generationAfterEndpointChange(4L, 7L, false));
+    }
+
+    @Test
+    public void rotationNeverPreservesPreviousOrientationGeneration() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onPrepare();
+        state.onWorkspaceMotionStarted();
+
+        assertEquals(5L, state.generationAfterEndpointChange(4L, 5L, true));
+        assertTrue(state.isBlocked());
+    }
+
+    @Test
+    public void workspaceMotionAllowsProducerRebindWithoutReleasingFreshness() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onPrepare();
+        assertTrue(state.isProducerBlocked());
+
+        state.onWorkspaceMotionStarted();
+
+        assertFalse(state.isProducerBlocked());
+        assertTrue(state.isBlocked());
+        // A Surface replacement must still be allowed during the same unlock cycle.
+        state.onPrepare();
+        assertFalse(state.isProducerBlocked());
+        assertTrue(state.isBlocked());
+        assertTrue(state.onSystemUiGoneFinished().releaseBarrier);
+    }
+
+    @Test
+    public void nextPrepareSuspendsProducerAgainAfterLiveMotion() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onPrepare();
+        state.onWorkspaceMotionStarted();
+        state.onSystemUiGoneFinished();
+
+        assertTrue(state.onPrepare().suspendProducers);
+        assertTrue(state.isProducerBlocked());
+        assertTrue(state.isBlocked());
+    }
+
+    @Test
+    public void motionOutsideUnlockCannotOpenNextProducerGate() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onWorkspaceMotionStarted();
+        assertFalse(state.isProducerBlocked());
+
+        state.onPrepare();
+
+        assertTrue(state.isProducerBlocked());
+        assertTrue(state.isBlocked());
+    }
+
+    @Test
+    public void staleTimeoutKeepsNewPrepareProducerSuspended() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        long first = state.onPrepare().serial;
+        state.onWorkspaceMotionStarted();
+        assertTrue(state.onBarrierTimeout(first).releaseBarrier);
+        assertFalse(state.isProducerBlocked());
+        state.onPrepare();
+
+        assertFalse(state.onBarrierTimeout(first).releaseBarrier);
+        assertTrue(state.isProducerBlocked());
+        assertTrue(state.isBlocked());
+    }
+
+    @Test
     public void prepareArmsCaptureAndSuspendsOnce() {
         UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
 

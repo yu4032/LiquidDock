@@ -373,6 +373,7 @@ final class LauncherGlassHomePresentationHook {
         applyUnlockDecision(decision, "SystemUI LOCKSCREEN->GONE FINISHED");
     }
 
+    /** Freshness stays gated until GONE, even when motion permits live capture and rebind. */
     static boolean isUnlockCaptureBlocked() {
         if (!UNLOCK_RECOVERY.isBlocked()) return false;
         long serial = unlockBarrierSerial;
@@ -382,6 +383,23 @@ final class LauncherGlassHomePresentationHook {
             failOpenUnlockBarrierIfCurrent(serial, "gate-age");
         }
         return UNLOCK_RECOVERY.isBlocked();
+    }
+
+    static void onWorkspaceUnlockMotionStarted() {
+        UNLOCK_RECOVERY.onWorkspaceMotionStarted();
+    }
+
+    static boolean isUnlockProducerBlocked() {
+        // Preserve the timeout fail-open behavior for both gates.
+        isUnlockCaptureBlocked();
+        return UNLOCK_RECOVERY.isProducerBlocked();
+    }
+
+    static long generationAfterEndpointChange(
+            long currentGeneration, long invalidatedGeneration, boolean rotationPending) {
+        isUnlockCaptureBlocked();
+        return UNLOCK_RECOVERY.generationAfterEndpointChange(
+                currentGeneration, invalidatedGeneration, rotationPending);
     }
 
     private static void applyUnlockDecision(

@@ -82,8 +82,8 @@ final class Miuix307PassBlurBridge {
         PassBlurDomain domain = request.domain();
         boolean launcherWorkspace = domain == PassBlurDomain.LAUNCHER_WORKSPACE;
         if (PassBlurBindPolicy.requiresUnlockGate(domain)
-                && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock presentation");
+                && LauncherGlassHomePresentationHook.isUnlockProducerBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace bind blocked by unlock producer gate");
             return null;
         }
         SurfaceControl rootSurface = null;
@@ -209,8 +209,8 @@ final class Miuix307PassBlurBridge {
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
         if (PassBlurBindPolicy.requiresUnlockGate(binding.domain)
-                && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock presentation");
+                && LauncherGlassHomePresentationHook.isUnlockProducerBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock producer gate");
             return;
         }
         setUpdatesEnabled(binding, true, false);
@@ -222,8 +222,8 @@ final class Miuix307PassBlurBridge {
     static void resumeUpdates(Binding binding) {
         if (binding == null) return;
         if (PassBlurBindPolicy.requiresUnlockGate(binding.domain)
-                && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-            MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock presentation");
+                && LauncherGlassHomePresentationHook.isUnlockProducerBlocked()) {
+            MainHook.log(TAG + " PassBlur Workspace resume blocked by unlock producer gate");
             return;
         }
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER

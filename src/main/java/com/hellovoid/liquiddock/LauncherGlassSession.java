@@ -716,18 +716,21 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
-        applyTransitionFrameSync(
-                transitionFrameSync.onPreDraw(geometryMotionChanged), root);
         if (geometryMotionChanged
                 && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
                 && !transitionFrameSync.isUnlockTransitionActive()) {
+            // Open the producer gate before any resume or endpoint rebind. The separate scene
+            // freshness barrier remains pending until SystemUI GONE.
+            LauncherGlassHomePresentationHook.onWorkspaceUnlockMotionStarted();
             applyTransitionFrameSync(
                     transitionFrameSync.onUnlockTransition(true),
                     root,
                     "unlock-motion-hold");
             sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
-            MainHook.log("[DC][WorkspaceFrameSync] unlock producer resumed; hold-until-GONE");
+            MainHook.log("[DC][WorkspaceFrameSync] unlock producer gate opened; resume/rebind allowed; hold-until-GONE");
         }
+        applyTransitionFrameSync(
+                transitionFrameSync.onPreDraw(geometryMotionChanged), root);
 
         int nextRotation = readLauncherConfigRotation(root);
         if (nextRotation != configRotation) {
@@ -743,7 +746,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         boolean sourceGeometryChanged = sourceBackend.reconcileRoot();
         if (sourceGeometryChanged) {
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+            if (nextGeneration > 0L) {
+                sceneGeneration = LauncherGlassHomePresentationHook.generationAfterEndpointChange(
+                        sceneGeneration, nextGeneration, rotationSettlePending);
+            }
             return;
         }
         if (rootGeometryChanged) {
@@ -855,7 +861,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         boolean sourceChanged = sourceBackend.reconcileRoot();
         if (sourceChanged) {
             long nextGeneration = LauncherGlassSceneController.invalidateForProducerChange(root);
-            if (nextGeneration > 0L) sceneGeneration = nextGeneration;
+            if (nextGeneration > 0L) {
+                sceneGeneration = LauncherGlassHomePresentationHook.generationAfterEndpointChange(
+                        sceneGeneration, nextGeneration, rotationSettlePending);
+            }
             return;
         }
         if (generation != sceneGeneration) return;
