@@ -143,11 +143,13 @@ private data class IntSpec(
     val dependency: String? = null,
     val section: IntSection = IntSection.General,
     val summary: String = optionSummary(config.name()),
+    val dynamicMax: ((Context) -> Int)? = null,
 ) {
     val key: String get() = config.name()
     val default: Int get() = config.uiDefault()
     val min: Int get() = requireNotNull(config.minInt())
-    val max: Int get() = requireNotNull(config.maxInt())
+    fun max(context: Context): Int =
+        (dynamicMax?.invoke(context) ?: requireNotNull(config.maxInt())).coerceAtLeast(min)
     val isDecimal: Boolean get() = config.storageMode() == ConfigKey.StorageMode.DP_TENTHS
     fun resetValue(): Float {
         if (!key.startsWith("liquid_")) return default.toFloat()
@@ -365,13 +367,14 @@ private val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
     "工作区渲染分辨率",
     "%",
-    summary = "原生 PassBlur 始终保持 1.0 与完整空间映射；这里只降低 normalized/Prismal FBO 像素密度，100% 为原始质量；重启桌面生效",
+    summary = "同时调整背景采样与工作区玻璃绘制分辨率，静止和动画都生效；100% 最清晰，较低比例更省 GPU。Dock 不受影响；重启桌面生效",
 )
 private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
-    "Prismal 实时渲染上限（0 = Auto）",
+    "玻璃实时渲染上限（0 = Auto）",
     "fps",
-    summary = "0 = 跟随真实 PassBlur 源帧；限速只跳过合成并持续释放 OES BufferQueue，不会创建定时器；重启桌面生效",
+    summary = "除 Dock 外的实时玻璃统一使用；最大值自动取当前屏幕支持的最高刷新率。0 = 跟随真实 PassBlur 源帧；限速只跳过昂贵合成并持续释放 OES BufferQueue；重启相关进程生效",
+    dynamicMax = DisplayRefreshRatePolicy::maxSupportedRefreshRateHz,
 )
 private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.BLUR, "玻璃模糊", "px"),
@@ -1196,7 +1199,7 @@ private fun LiquidPage(
             enabled = masterEnabled && liquidGlass,
             onClick = openLauncherHighlights,
         )
-        LiquidDockSectionTitle("工作区实时捕获性能")
+        LiquidDockSectionTitle("玻璃实时渲染性能")
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
         IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
         BooleanSetting(
@@ -1407,13 +1410,15 @@ internal fun BooleanSetting(
 @Composable
 private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride: Boolean? = null) {
     val decimalDp = spec.isDecimal
-    val resetValue = spec.resetValue()
-    val initial = if (decimalDp && prefs.contains("${spec.key}_tenths"))
-        prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
-    else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat()
-    var value by remember(spec.key) { mutableStateOf(initial) }
-    val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
     val context = LocalContext.current
+    val maxValue = remember(spec.key, context) { spec.max(context) }
+    val resetValue = spec.resetValue().coerceIn(spec.min.toFloat(), maxValue.toFloat())
+    val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
+        prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
+    else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
+        .coerceIn(spec.min.toFloat(), maxValue.toFloat())
+    var value by remember(spec.key, maxValue) { mutableStateOf(initial) }
+    val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
 
     fun save(nextValue: Float) {
         val next = if (decimalDp) {
@@ -1421,7 +1426,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         } else {
             nextValue.roundToInt().toFloat()
         }
-        value = next.coerceIn(spec.min.toFloat(), spec.max.toFloat())
+        value = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
         val editor = prefs.edit().putInt(spec.key, value.roundToInt())
         if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
         editor.apply()
@@ -1478,7 +1483,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         LiquidDockGlassSlider(
             value = value,
             onValueChange = ::save,
-            valueRange = spec.min.toFloat()..spec.max.toFloat(),
+            valueRange = spec.min.toFloat()..maxValue.toFloat(),
             visibilityThreshold = if (decimalDp) 0.1f else 1f,
             enabled = enabled,
             modifier = Modifier

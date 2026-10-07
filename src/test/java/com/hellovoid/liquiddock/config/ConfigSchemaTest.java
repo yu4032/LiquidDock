@@ -248,7 +248,7 @@ public class ConfigSchemaTest {
         assertEquals(Integer.valueOf(0), renderFps.uiDefault());
         assertEquals(Integer.valueOf(0), renderFps.runtimeFallback());
         assertEquals(Integer.valueOf(0), renderFps.minInt());
-        assertEquals(Integer.valueOf(60), renderFps.maxInt());
+        assertEquals(Integer.valueOf(Integer.MAX_VALUE), renderFps.maxInt());
         assertEquals(ConfigKey.ExportMode.ALWAYS, renderFps.exportMode());
     }
 

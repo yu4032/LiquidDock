@@ -38,6 +38,23 @@ public class Miuix307MaterialHandoffContractTest {
     }
 
     @Test
+    public void nativeRadiusReflectionStaysOnGeometryBoundaries() throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixGlassHook.java"));
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String textureView = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+
+        assertTrue("geometry sync must forward the already-read native radius",
+                hook.contains("Miuix307ZeroCopyRenderer.setNativeOpticsRadiusPx(nativeRadius)"));
+        assertTrue("vendor-body pre-draw must reuse cached geometry instead of reflecting every frame",
+                hook.contains("suppressVendorMaterialBody(background, cachedRadiusOrRead(background));"));
+        assertTrue(renderer.contains("static void setNativeOpticsRadiusPx(float radiusPx)"));
+        assertTrue(textureView.contains("private volatile float nativeOpticsRadiusPx = Float.NaN;"));
+        assertTrue(textureView.contains("float nativeRadius = nativeOpticsRadiusPx;"));
+        assertFalse("Dock EGL draw must not reflect vendor radius every frame",
+                textureView.contains("MiuixGlassHook.readNativeOpticsRadius(materialHost)"));
+    }
+
+    @Test
     public void transientInvalidMappingPreservesTheLastPresentedGlassFrame() throws Exception {
         String textureView = Files.readString(
                 MAIN.resolve("Miuix307PassBlurTextureView.java"));
@@ -61,7 +78,9 @@ public class Miuix307MaterialHandoffContractTest {
         assertTrue(suppressor.contains("\"setMiViewBlurMode\""));
         assertTrue(suppressor.contains("\"setMiBackgroundBlurMode\""));
         assertTrue(suppressor.contains("\"setMiBackgroundBlurRadius\""));
-        assertTrue("pre-draw may preserve the transparent vendor body",
+        assertTrue("pre-draw may preserve the transparent vendor body from cached geometry",
+                hook.contains("suppressVendorMaterialBody(background, cachedRadiusOrRead(background));"));
+        assertFalse("root pre-draw must not reflect native radius every frame",
                 hook.contains("suppressVendorMaterialBody(background, readRadius(background));"));
         assertFalse("root pre-draw must never fight vendor compositor blur every frame",
                 hook.contains("suppressVendorGpuBlur(background);\n"

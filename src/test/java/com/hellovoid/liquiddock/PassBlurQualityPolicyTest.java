@@ -8,6 +8,19 @@ import static org.junit.Assert.assertTrue;
 
 public class PassBlurQualityPolicyTest {
     @Test
+    public void workspaceOpticsFollowResolutionSliderAcrossItsRange() {
+        assertEquals(50, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 50));
+        assertEquals(75, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 75));
+        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 100));
+    }
+
+    @Test
+    public void importedOpticsScaleIsClampedAndOtherDomainsStayFullResolution() {
+        assertEquals(50, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 1));
+        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 999));
+        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(false, 50));
+    }
+    @Test
     public void captureScaleIsClampedToSafeExperimentalRange() {
         assertEquals(0.50f, PassBlurQualityPolicy.captureScale(10), 0.0001f);
         assertEquals(0.75f, PassBlurQualityPolicy.captureScale(75), 0.0001f);
@@ -25,6 +38,22 @@ public class PassBlurQualityPolicyTest {
         assertTrue(PassBlurQualityPolicy.requiresFreshConsumerFrame(-1L, 2L));
         assertTrue(PassBlurQualityPolicy.requiresFreshConsumerFrame(1L, 2L));
         assertFalse(PassBlurQualityPolicy.requiresFreshConsumerFrame(2L, 2L));
+    }
+
+    @Test
+    public void renderFpsHasNoFixedSixtyHertzCeiling() {
+        assertEquals(60, PassBlurQualityPolicy.renderFps(60));
+        assertEquals(120, PassBlurQualityPolicy.renderFps(120));
+        assertEquals(165, PassBlurQualityPolicy.renderFps(165));
+        assertEquals(240, PassBlurQualityPolicy.renderFps(240));
+    }
+
+    @Test
+    public void globalCapOnlyLowersProfileSpecificLimits() {
+        assertEquals(120, PassBlurQualityPolicy.applyGlobalRenderFpsCap(165, 120));
+        assertEquals(90, PassBlurQualityPolicy.applyGlobalRenderFpsCap(90, 120));
+        assertEquals(120, PassBlurQualityPolicy.applyGlobalRenderFpsCap(0, 120));
+        assertEquals(90, PassBlurQualityPolicy.applyGlobalRenderFpsCap(90, 0));
     }
 
     @Test
