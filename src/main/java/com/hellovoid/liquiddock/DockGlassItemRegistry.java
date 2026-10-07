@@ -28,9 +28,7 @@ final class DockGlassItemRegistry {
     }
     static synchronized void observeLaunchAnimationFrame(View view, float progress) {
         if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
-        DockAnimationTrace.animationRegistry("registry-observe", view, progress);
         if (!ANIMATION.observeProxyFrame(view, progress, SystemClock.uptimeMillis())) return;
-        DockAnimationTrace.animationRegistry("registry-state-change", view, progress);
         Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
     }
     static synchronized void holdProxyHidden(View view) {
@@ -54,9 +52,7 @@ final class DockGlassItemRegistry {
     }
     static synchronized void endLaunchAnimation(View view) {
         if (!GlassRuntimeState.isAnyIconEnabled() || view == null || !ICONS.containsKey(view)) return;
-        DockAnimationTrace.animationRegistry("registry-end-pre", view, Float.NaN);
         ANIMATION.end(view, SystemClock.uptimeMillis());
-        DockAnimationTrace.animationRegistry("registry-end-post", view, Float.NaN);
         if (ANIMATION.isFading(view)) {
             Miuix307ZeroCopyRenderer.requestDockAnimationFrames();
         }
@@ -71,7 +67,7 @@ final class DockGlassItemRegistry {
         return ANIMATION.isFading(view);
     }
     static synchronized boolean hasActiveAnimation() {
-        for (View view : new ArrayList<>(ICONS.keySet())) {
+        for (View view : ICONS.keySet()) {
             if (view != null && ANIMATION.isFading(view)) return true;
         }
         return false;
@@ -80,7 +76,7 @@ final class DockGlassItemRegistry {
     static synchronized ArrayList<View> snapshotForRoot(View root) {
         ArrayList<View> out = new ArrayList<>();
         if (!GlassRuntimeState.isAnyIconEnabled() || root == null) return out;
-        for (View view : new ArrayList<>(ICONS.keySet())) {
+        for (View view : ICONS.keySet()) {
             if (view != null && view.isAttachedToWindow() && view.getRootView() == root) out.add(view);
         }
         return out;

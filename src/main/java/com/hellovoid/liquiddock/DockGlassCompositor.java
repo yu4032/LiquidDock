@@ -14,6 +14,8 @@ import java.util.ArrayList;
 final class DockGlassCompositor {
     private static final long HASH_SEED = 0xcbf29ce484222325L;
     private static final long HASH_PRIME = 0x100000001b3L;
+    // PrismalRasterGuardShader expands every silhouette by two logical pixels per side.
+    private static final float RASTER_GUARD_PX = 2f;
 
     private static final class CachedItem {
         final DockGlassItemNode node;
@@ -29,6 +31,11 @@ final class DockGlassCompositor {
     private final WeakReference<View> ownershipRootRef;
     private final WeakReference<View> outputRootRef;
     private final ArrayList<CachedItem> cached = new ArrayList<>();
+    private long[] uiFingerprintScratch = new long[0];
+    private long[] proxyFingerprintScratch = new long[0];
+    private DockIconAnimationState.Sample[] animationSampleScratch =
+            new DockIconAnimationState.Sample[0];
+    private final ArrayList<DockGlassSceneSnapshot.Item> sceneItemScratch = new ArrayList<>();
     private volatile GlassComponentStyle iconStyle = new GlassComponentStyle(false, 0f, 0f);
     private volatile PrismalHighlightProfile iconHighlightProfile =
             PrismalHighlightProfile.ALL_ENABLED;
@@ -41,6 +48,13 @@ final class DockGlassCompositor {
     private float lastInsetL = Float.NaN, lastInsetT = Float.NaN;
     private float lastScaleX = Float.NaN, lastScaleY = Float.NaN;
     private boolean lastWorkstationMode;
+    private boolean lastDirtyValid;
+    private int lastDirtyFramebufferWidth = -1;
+    private int lastDirtyFramebufferHeight = -1;
+    private float lastDirtyLeft;
+    private float lastDirtyTop;
+    private float lastDirtyRight;
+    private float lastDirtyBottom;
 
     DockGlassCompositor(View ownershipRoot, View outputRoot) {
         ownershipRootRef = new WeakReference<>(ownershipRoot);
@@ -88,11 +102,6 @@ final class DockGlassCompositor {
             lastWorkstationMode = workstationMode;
             seenRevision = -1L;
         }
-        float resolvedRadiusDp = WorkstationDockIconRadiusPolicy.resolve(
-                iconStyle.cornerRadiusDp, workstationIconCornerRadiusDp, 1f,
-                workstationMode);
-        GlassComponentStyle resolvedStyle = new GlassComponentStyle(
-                iconStyle.enabled, iconStyle.sizeOffsetDp, resolvedRadiusDp);
         long revision = DockGlassItemRegistry.revision();
         boolean dead = false;
         for (CachedItem cachedItem : cached) {
@@ -103,6 +112,11 @@ final class DockGlassCompositor {
             }
         }
         if (revision != seenRevision || dead) {
+            float resolvedRadiusDp = WorkstationDockIconRadiusPolicy.resolve(
+                    iconStyle.cornerRadiusDp, workstationIconCornerRadiusDp, 1f,
+                    workstationMode);
+            GlassComponentStyle resolvedStyle = new GlassComponentStyle(
+                    iconStyle.enabled, iconStyle.sizeOffsetDp, resolvedRadiusDp);
             cached.clear();
             for (View candidate : DockGlassItemRegistry.snapshotForRoot(ownershipRoot.getRootView())) {
                 DockGlassItemNode item = new DockGlassItemNode(candidate, resolvedStyle);
@@ -115,10 +129,10 @@ final class DockGlassCompositor {
         long nowMs = SystemClock.uptimeMillis();
         long fingerprint = HASH_SEED;
         long outputFingerprint = mixOutputRoot(HASH_SEED, outputRoot);
-        long[] uiFingerprints = new long[cached.size()];
-        long[] proxyFingerprints = new long[cached.size()];
-        DockIconAnimationState.Sample[] animationSamples =
-                new DockIconAnimationState.Sample[cached.size()];
+        ensureScratchCapacity(cached.size());
+        long[] uiFingerprints = uiFingerprintScratch;
+        long[] proxyFingerprints = proxyFingerprintScratch;
+        DockIconAnimationState.Sample[] animationSamples = animationSampleScratch;
         for (int i = 0; i < cached.size(); i++) {
             CachedItem cachedItem = cached.get(i);
             DockGlassItemNode item = cachedItem.node;
@@ -166,7 +180,8 @@ final class DockGlassCompositor {
             }
         }
 
-        ArrayList<DockGlassSceneSnapshot.Item> out = new ArrayList<>();
+        ArrayList<DockGlassSceneSnapshot.Item> out = sceneItemScratch;
+        out.clear();
         for (int i = 0; i < cached.size(); i++) {
             CachedItem cachedItem = cached.get(i);
             DockGlassItemNode item = cachedItem.node;
@@ -206,6 +221,15 @@ final class DockGlassCompositor {
         return true;
     }
 
+    private void ensureScratchCapacity(int requiredSize) {
+        if (uiFingerprintScratch.length >= requiredSize) return;
+        int current = uiFingerprintScratch.length;
+        int capacity = Math.max(requiredSize, Math.max(4, current * 2));
+        uiFingerprintScratch = new long[capacity];
+        proxyFingerprintScratch = new long[capacity];
+        animationSampleScratch = new DockIconAnimationState.Sample[capacity];
+    }
+
     DockGlassSceneSnapshot latestScene() { return latestScene; }
 
     int drawFrame(PrismalRenderer renderer, PrismalGeometry dockBody, PrismalParams params,
@@ -213,15 +237,54 @@ final class DockGlassCompositor {
             DockGlassSceneSnapshot scene, int framebufferWidth, int framebufferHeight) {
         PrismalHighlightProfile bodyHighlightProfile = dockBodyHighlightProfile != null
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
-        renderer.beginGlassFrame();
-        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
+
+        float currentLeft = dockBody.left() - RASTER_GUARD_PX;
+        float currentTop = dockBody.top() - RASTER_GUARD_PX;
+        float currentRight = dockBody.right() + RASTER_GUARD_PX;
+        float currentBottom = dockBody.bottom() + RASTER_GUARD_PX;
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
+            if (geometry == null) continue;
+            currentLeft = Math.min(
+                    currentLeft, geometry.centerX - geometry.width * 0.5f - RASTER_GUARD_PX);
+            currentTop = Math.min(
+                    currentTop, geometry.centerY - geometry.height * 0.5f - RASTER_GUARD_PX);
+            currentRight = Math.max(
+                    currentRight, geometry.centerX + geometry.width * 0.5f + RASTER_GUARD_PX);
+            currentBottom = Math.max(
+                    currentBottom, geometry.centerY + geometry.height * 0.5f + RASTER_GUARD_PX);
+        }
+
+        boolean sameFramebuffer = lastDirtyValid
+                && lastDirtyFramebufferWidth == framebufferWidth
+                && lastDirtyFramebufferHeight == framebufferHeight;
+        if (sameFramebuffer) {
+            renderer.beginGlassFrameRegion(
+                    Math.min(lastDirtyLeft, currentLeft),
+                    Math.min(lastDirtyTop, currentTop),
+                    Math.max(lastDirtyRight, currentRight),
+                    Math.max(lastDirtyBottom, currentBottom));
+        } else {
+            renderer.beginGlassFrame();
+        }
+
+        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        for (DockGlassSceneSnapshot.Item item : stable.items) {
+            LauncherGlassGeometry.Snapshot geometry = item.geometry;
+            if (geometry == null) continue;
             renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
                     geometry.centerX, geometry.centerY, geometry.width, geometry.height,
                     geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
         }
+
+        lastDirtyValid = true;
+        lastDirtyFramebufferWidth = framebufferWidth;
+        lastDirtyFramebufferHeight = framebufferHeight;
+        lastDirtyLeft = currentLeft;
+        lastDirtyTop = currentTop;
+        lastDirtyRight = currentRight;
+        lastDirtyBottom = currentBottom;
         return stable.size();
     }
 

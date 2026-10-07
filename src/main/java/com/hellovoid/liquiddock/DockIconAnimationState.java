@@ -18,7 +18,9 @@ final class DockIconAnimationState {
             this.opacity = opacity;
             this.fading = fading;
             this.proxyActive = proxyActive;
-            this.proxyRect = proxyRect != null ? proxyRect.clone() : null;
+            // sample() obtains proxyRect from copyLaunchProxyRect(), which already returns an
+            // isolated snapshot. Take ownership here instead of cloning the same 4 floats twice.
+            this.proxyRect = proxyRect;
         }
     }
 

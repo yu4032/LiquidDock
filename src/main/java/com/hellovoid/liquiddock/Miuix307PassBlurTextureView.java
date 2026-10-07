@@ -13,6 +13,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Process;
 import android.os.SystemClock;
 import android.view.Display;
 import android.view.Surface;
@@ -47,6 +48,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         implements TextureView.SurfaceTextureListener {
     private static final String TAG = "[DC][PBTX]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    // EGL_IMG_context_priority. Android's EGL14 wrapper does not expose these vendor enums.
+    private static final int EGL_CONTEXT_PRIORITY_LEVEL_IMG = 0x3100;
+    private static final int EGL_CONTEXT_PRIORITY_HIGH_IMG = 0x3101;
+    private static final int EGL_CONTEXT_PRIORITY_MEDIUM_IMG = 0x3102;
+    private static final String EGL_IMG_CONTEXT_PRIORITY = "EGL_IMG_context_priority";
     // PrismalSampling computes the automatic optical safety ring. Left/right also retain the
     // fixed 32dp compatibility baseline. GUI values are signed extras applied after that automatic
     // guard: positive expands, negative shrinks, and the final inset never goes below zero.
@@ -174,6 +180,16 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final HandlerThread renderThread;
     private final Handler renderHandler;
     private final Handler mainHandler;
+    /**
+     * Producer frames and UI/pre-draw scene changes share one latest-only render queue. Under GPU
+     * pressure, SurfaceTexture may signal new frames faster than Prismal can present them; rendering
+     * every historical callback only increases latency. updateTexImage() latches the newest buffer,
+     * so collapse all pending producer/scene work into the next render.
+     */
+    private final Object renderQueueLock = new Object();
+    private boolean renderQueued;
+    private boolean renderDirty;
+    private boolean producerRenderDirty;
     private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
@@ -231,9 +247,21 @@ final class Miuix307PassBlurTextureView extends TextureView
     private EGLConfig eglConfig;
     private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface eglWindowSurface = EGL14.EGL_NO_SURFACE;
+    private EGLSurface currentEglSurface = EGL14.EGL_NO_SURFACE;
 
     private int normalizeProgram;
     private int compositeProgram;
+    private int normalizePositionLocation = -1;
+    private int normalizeUvLocation = -1;
+    private int normalizeTextureLocation = -1;
+    private int normalizeTexMatrixLocation = -1;
+    private int normalizeBackdropRectLocation = -1;
+    private int normalizeConfigRotLocation = -1;
+    private int normalizeValidDockRectLocation = -1;
+    private int compositePositionLocation = -1;
+    private int compositeUvLocation = -1;
+    private int compositeTextureLocation = -1;
+    private int compositeCropRectLocation = -1;
     private PrismalRenderer prismalRenderer;
     private int oesTexture;
 
@@ -241,6 +269,17 @@ final class Miuix307PassBlurTextureView extends TextureView
     private int rawFramebuffer;
     private int fboWidth;
     private int fboHeight;
+
+    /**
+     * Prismal's prepared backdrop contains the expensive source-adapter + two-pass blur result.
+     * Dock icon/proxy animation must reuse it until either a real OES producer frame arrives or
+     * the sampling/optical inputs that define the backdrop change.
+     */
+    private BackdropSnapshot preparedBackdropSnapshot;
+    private int preparedBackdropPhysicalWidth;
+    private int preparedBackdropPhysicalHeight;
+    private int preparedBackdropLogicalWidth;
+    private int preparedBackdropLogicalHeight;
 
     private int boundSurfaceWidth;
     private int boundSurfaceHeight;
@@ -278,7 +317,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         setFocusable(false);
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
-        renderThread = new HandlerThread("LiquidDock-PassBlur-EGL");
+        renderThread = new HandlerThread(
+                "LiquidDock-PassBlur-EGL", Process.THREAD_PRIORITY_DISPLAY);
         renderThread.start();
         renderHandler = new Handler(renderThread.getLooper());
         mainHandler = new Handler(context.getMainLooper());
@@ -306,7 +346,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         passBlurCaptureScalePercent = glassConfig.passBlurCaptureScalePercent;
         updateBackdropMapping();
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
     private float workstationDockIconCornerRadiusDp;
@@ -314,7 +354,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
         dockCompositor.setWorkstationIconCornerRadiusDp(workstationDockIconCornerRadiusDp);
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
     void requestDockSceneRefresh() {
@@ -323,7 +363,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (shuttingDown) return;
             dockCompositor.invalidateUiScene();
             updateBackdropMapping();
-            if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+            if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
             postInvalidateOnAnimation();
         });
     }
@@ -335,7 +375,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setProducerUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         producerUpdatesEnabled = enabled;
-        renderHandler.post(() -> {
+        renderHandler.postAtFrontOfQueue(() -> {
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
             if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
@@ -377,6 +417,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         SurfaceTexture staleInput = inputSurfaceTexture;
         try {
             makeCurrent();
+            invalidatePreparedBackdrop();
             inputProducerSurface = null;
             inputSurfaceTexture = null;
 
@@ -582,17 +623,77 @@ final class Miuix307PassBlurTextureView extends TextureView
                     + Integer.toHexString(EGL14.eglGetError()));
         }
 
-        int[] contextAttrs = new int[]{
-                EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
-                EGL14.EGL_NONE
-        };
-        EGLContext context = EGL14.eglCreateContext(
-                display, configs[0], EGL14.EGL_NO_CONTEXT, contextAttrs, 0);
-        checkEglHandle("eglCreateContext", context != EGL14.EGL_NO_CONTEXT);
+        String extensions = EGL14.eglQueryString(display, EGL14.EGL_EXTENSIONS);
+        boolean supportsPriority = hasEglExtension(extensions, EGL_IMG_CONTEXT_PRIORITY);
+        EGLContext context = EGL14.EGL_NO_CONTEXT;
+        boolean requestedHighPriority = false;
+        int highPriorityCreateError = EGL14.EGL_SUCCESS;
+
+        if (supportsPriority) {
+            int[] highPriorityAttrs = new int[]{
+                    EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+                    EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_CONTEXT_PRIORITY_HIGH_IMG,
+                    EGL14.EGL_NONE
+            };
+            context = EGL14.eglCreateContext(
+                    display, configs[0], EGL14.EGL_NO_CONTEXT, highPriorityAttrs, 0);
+            if (context != EGL14.EGL_NO_CONTEXT) {
+                requestedHighPriority = true;
+            } else {
+                highPriorityCreateError = EGL14.eglGetError();
+                MainHook.log(TAG + " EGL high-priority context unavailable error=0x"
+                        + Integer.toHexString(highPriorityCreateError)
+                        + "; falling back to default priority");
+            }
+        }
+
+        if (context == EGL14.EGL_NO_CONTEXT) {
+            int[] contextAttrs = new int[]{
+                    EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+                    EGL14.EGL_NONE
+            };
+            context = EGL14.eglCreateContext(
+                    display, configs[0], EGL14.EGL_NO_CONTEXT, contextAttrs, 0);
+            checkEglHandle("eglCreateContext", context != EGL14.EGL_NO_CONTEXT);
+        }
+
+        int actualPriority = queryContextPriority(display, context, supportsPriority);
+        MainHook.log(TAG + " EGL context priority extension=" + supportsPriority
+                + " requested=" + (requestedHighPriority ? "HIGH" : "DEFAULT")
+                + " actual=" + contextPriorityName(actualPriority)
+                + (highPriorityCreateError != EGL14.EGL_SUCCESS
+                        ? " highCreateError=0x" + Integer.toHexString(highPriorityCreateError)
+                        : ""));
 
         eglDisplay = display;
         eglConfig = configs[0];
         eglContext = context;
+    }
+
+    private static boolean hasEglExtension(String extensions, String extension) {
+        if (extensions == null || extension == null || extension.isEmpty()) return false;
+        return (" " + extensions + " ").contains(" " + extension + " ");
+    }
+
+    private static int queryContextPriority(
+            EGLDisplay display, EGLContext context, boolean supported) {
+        if (!supported || display == EGL14.EGL_NO_DISPLAY
+                || context == EGL14.EGL_NO_CONTEXT) {
+            return 0;
+        }
+        int[] value = new int[1];
+        if (!EGL14.eglQueryContext(
+                display, context, EGL_CONTEXT_PRIORITY_LEVEL_IMG, value, 0)) {
+            EGL14.eglGetError();
+            return 0;
+        }
+        return value[0];
+    }
+
+    private static String contextPriorityName(int priority) {
+        if (priority == EGL_CONTEXT_PRIORITY_HIGH_IMG) return "HIGH";
+        if (priority == EGL_CONTEXT_PRIORITY_MEDIUM_IMG) return "MEDIUM";
+        return priority == 0 ? "UNKNOWN" : "0x" + Integer.toHexString(priority);
     }
 
     private void ensureGlResources() {
@@ -610,6 +711,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (normalizeProgram == 0 || compositeProgram == 0) {
             throw new IllegalStateException("Prismal adapter program creation failed");
         }
+        normalizePositionLocation = requireAttrib(normalizeProgram, "aPosition");
+        normalizeUvLocation = requireAttrib(normalizeProgram, "aUv");
+        normalizeTextureLocation = requireUniform(normalizeProgram, "uTexture");
+        normalizeTexMatrixLocation = requireUniform(normalizeProgram, "uTexMatrix");
+        normalizeBackdropRectLocation = requireUniform(normalizeProgram, "uBackdropRect");
+        normalizeConfigRotLocation = requireUniform(normalizeProgram, "uConfigRot");
+        normalizeValidDockRectLocation = requireUniform(normalizeProgram, "uValidDockRect");
+        compositePositionLocation = requireAttrib(compositeProgram, "aPosition");
+        compositeUvLocation = requireAttrib(compositeProgram, "aUv");
+        compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
+        compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
 
         createInputProducer();
@@ -640,7 +752,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             producerFrameCount++;
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
-            drawLatestFrame(true);
+            scheduleRender(true);
         }, renderHandler);
     }
 
@@ -678,6 +790,68 @@ final class Miuix307PassBlurTextureView extends TextureView
         fboHeight = nextHeight;
     }
 
+    private void scheduleSceneRender() {
+        scheduleRender(false);
+    }
+
+    private void scheduleRender(boolean producerFrame) {
+        if (shuttingDown) return;
+        synchronized (renderQueueLock) {
+            renderDirty = true;
+            if (producerFrame) producerRenderDirty = true;
+            if (renderQueued) return;
+            renderQueued = true;
+        }
+        if (!renderHandler.post(this::drainRenderQueue)) {
+            synchronized (renderQueueLock) {
+                renderQueued = false;
+                renderDirty = false;
+                producerRenderDirty = false;
+            }
+        }
+    }
+
+    /**
+     * Render only the newest available producer/scene generation, then yield to the Handler queue.
+     * Any producer callbacks already queued while the GPU was busy execute before a follow-up GL
+     * pass and collapse onto the same latest SurfaceTexture buffer.
+     */
+    private void drainRenderQueue() {
+        boolean fromProducer;
+        synchronized (renderQueueLock) {
+            if (shuttingDown) {
+                renderQueued = false;
+                renderDirty = false;
+                producerRenderDirty = false;
+                return;
+            }
+            renderDirty = false;
+            fromProducer = producerRenderDirty;
+            producerRenderDirty = false;
+        }
+
+        drawLatestFrame(fromProducer);
+
+        boolean renderAgain;
+        synchronized (renderQueueLock) {
+            if (shuttingDown) {
+                renderQueued = false;
+                renderDirty = false;
+                producerRenderDirty = false;
+                return;
+            }
+            renderAgain = renderDirty;
+            if (!renderAgain) renderQueued = false;
+        }
+        if (renderAgain && !renderHandler.post(this::drainRenderQueue)) {
+            synchronized (renderQueueLock) {
+                renderQueued = false;
+                renderDirty = false;
+                producerRenderDirty = false;
+            }
+        }
+    }
+
     private void drawLatestFrame(boolean fromFrameCallback) {
         if (shuttingDown || eglWindowSurface == EGL14.EGL_NO_SURFACE
                 || normalizeProgram == 0 || compositeProgram == 0 || prismalRenderer == null
@@ -689,10 +863,15 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         try {
             makeCurrent();
-            if (frameAvailable.getAndSet(false)) {
+            boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false);
+            if (consumedFreshProducerFrame) {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
+                // The OES source is now newer than the prepared blur even if this draw later exits
+                // on a mapping-generation mismatch. Force the next render to rebuild from the
+                // already-latched latest producer texture rather than reusing stale backdrop data.
+                invalidatePreparedBackdrop();
             }
             if (!producerRecovery.hasFreshFrame()) return;
 
@@ -716,17 +895,25 @@ final class Miuix307PassBlurTextureView extends TextureView
             DockPassBlurRenderPlan renderPlan = DockPassBlurRenderPlan.resolve(
                     mapping.sampleWidth, mapping.sampleHeight, passBlurCaptureScalePercent);
             ensureFboSizeExact(renderPlan.physicalWidth, renderPlan.physicalHeight);
-            renderNormalizationPass(mapping);
+
+            boolean rebuildBackdrop = consumedFreshProducerFrame
+                    || !canReusePreparedBackdrop(mapping, renderPlan);
+            if (rebuildBackdrop) {
+                renderNormalizationPass(mapping);
+                prismalRenderer.prepareBackdrop(
+                        rawTexture,
+                        renderPlan.physicalWidth, renderPlan.physicalHeight,
+                        renderPlan.logicalWidth, renderPlan.logicalHeight,
+                        mapping.prismalParams);
+                rememberPreparedBackdrop(mapping, renderPlan);
+            }
+
             PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);
-            prismalRenderer.prepareBackdrop(
-                    rawTexture,
-                    renderPlan.physicalWidth, renderPlan.physicalHeight,
-                    renderPlan.logicalWidth, renderPlan.logicalHeight,
-                    mapping.prismalParams);
             DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
             dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
                     dockBodyHighlightProfile, dockScene,
                     renderPlan.logicalWidth, renderPlan.logicalHeight);
+
             int prismalTexture = prismalRenderer.outputTexture();
             if (!renderCompositePass(prismalTexture, mapping)) return;
 
@@ -772,18 +959,57 @@ final class Miuix307PassBlurTextureView extends TextureView
                         + " configRot=" + mapping.configRotation
                         + " frameCallback=" + fromFrameCallback);
             }
-            if (gpuBackdropActive && !stageBDiagnosticsLogged) {
+            if (MainHook.debugLogging && gpuBackdropActive && !stageBDiagnosticsLogged) {
                 stageBDiagnosticsLogged = true;
                 float[] matrixSnapshot = textureMatrix.clone();
                 post(() -> logStageBDiagnostics(matrixSnapshot, mapping));
             }
-            if (gpuBackdropActive && !prismalMappingLogged) {
+            if (MainHook.debugLogging && gpuBackdropActive && !prismalMappingLogged) {
                 prismalMappingLogged = true;
                 logPrismalMapping(prismalGeometry, mapping);
             }
         } catch (Throwable error) {
             fail("draw", error);
         }
+    }
+
+    private boolean canReusePreparedBackdrop(
+            BackdropSnapshot mapping, DockPassBlurRenderPlan renderPlan) {
+        BackdropSnapshot prepared = preparedBackdropSnapshot;
+        if (prepared == null || mapping == null || renderPlan == null) return false;
+        if (prepared.prismalParams != mapping.prismalParams) return false;
+        return prepared.sampleWidth == mapping.sampleWidth
+                && prepared.sampleHeight == mapping.sampleHeight
+                && prepared.configRotation == mapping.configRotation
+                && preparedBackdropPhysicalWidth == renderPlan.physicalWidth
+                && preparedBackdropPhysicalHeight == renderPlan.physicalHeight
+                && preparedBackdropLogicalWidth == renderPlan.logicalWidth
+                && preparedBackdropLogicalHeight == renderPlan.logicalHeight
+                && Float.compare(prepared.backdropX, mapping.backdropX) == 0
+                && Float.compare(prepared.backdropY, mapping.backdropY) == 0
+                && Float.compare(prepared.backdropW, mapping.backdropW) == 0
+                && Float.compare(prepared.backdropH, mapping.backdropH) == 0
+                && Float.compare(prepared.validSampleLeft, mapping.validSampleLeft) == 0
+                && Float.compare(prepared.validSampleBottom, mapping.validSampleBottom) == 0
+                && Float.compare(prepared.validSampleRight, mapping.validSampleRight) == 0
+                && Float.compare(prepared.validSampleTop, mapping.validSampleTop) == 0;
+    }
+
+    private void rememberPreparedBackdrop(
+            BackdropSnapshot mapping, DockPassBlurRenderPlan renderPlan) {
+        preparedBackdropSnapshot = mapping;
+        preparedBackdropPhysicalWidth = renderPlan.physicalWidth;
+        preparedBackdropPhysicalHeight = renderPlan.physicalHeight;
+        preparedBackdropLogicalWidth = renderPlan.logicalWidth;
+        preparedBackdropLogicalHeight = renderPlan.logicalHeight;
+    }
+
+    private void invalidatePreparedBackdrop() {
+        preparedBackdropSnapshot = null;
+        preparedBackdropPhysicalWidth = 0;
+        preparedBackdropPhysicalHeight = 0;
+        preparedBackdropLogicalWidth = 0;
+        preparedBackdropLogicalHeight = 0;
     }
 
     private void maybeLogPowerStats() {
@@ -809,27 +1035,26 @@ final class Miuix307PassBlurTextureView extends TextureView
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, rawFramebuffer);
         GLES20.glViewport(0, 0, fboWidth, fboHeight);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        // Full-screen normalization overwrites every pixel in rawFramebuffer.
         GLES20.glUseProgram(normalizeProgram);
-        bindQuad(normalizeProgram);
+        bindQuad(normalizePositionLocation, normalizeUvLocation);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);
+        GLES20.glUniform1i(normalizeTextureLocation, 0);
         GLES20.glUniformMatrix4fv(
-                requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);
+                normalizeTexMatrixLocation, 1, false, textureMatrix, 0);
         GLES20.glUniform4f(
-                requireUniform(normalizeProgram, "uBackdropRect"),
+                normalizeBackdropRectLocation,
                 mapping.backdropX, mapping.backdropY, mapping.backdropW, mapping.backdropH);
         GLES20.glUniform1i(
-                requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);
+                normalizeConfigRotLocation, mapping.configRotation);
         GLES20.glUniform4f(
-                requireUniform(normalizeProgram, "uValidDockRect"),
+                normalizeValidDockRectLocation,
                 mapping.validSampleLeft, mapping.validSampleBottom,
                 mapping.validSampleRight, mapping.validSampleTop);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(normalizeProgram);
+        unbindQuad(normalizePositionLocation, normalizeUvLocation);
     }
 
     private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {
@@ -888,14 +1113,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         // fringe a second time and produces a black ring around rounded corners.
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+        GLES20.glUniform1i(compositeTextureLocation, 0);
+        GLES20.glUniform4f(compositeCropRectLocation,
                 mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         return true;
@@ -936,9 +1161,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + "BR raw=[" + right + "," + bottom + "] official=[" + right + "," + officialBottom + "]");
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
+    private void bindQuad(int position, int uv) {
         if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
         quadBuffer.position(0);
         GLES20.glEnableVertexAttribArray(position);
@@ -950,9 +1173,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 uv, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
     }
 
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
+    private void unbindQuad(int position, int uv) {
         if (position >= 0) GLES20.glDisableVertexAttribArray(position);
         if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
     }
@@ -1100,6 +1321,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         boundConfigRotation = geometry.configRotation;
         ZeroCopyProducerRecoveryState.Decision invalidated =
                 producerRecovery.onGeometryInvalidated();
+        invalidatePreparedBackdrop();
         if (invalidated.clearFrameAvailable) frameAvailable.set(false);
         firstFrameLogged = false;
         firstDrawLogged = false;
@@ -1237,7 +1459,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             // for a vendor drop callback or unrelated source update.
             if (DockGlassSceneRenderPolicy.shouldRenderSceneOnlyChange(
                     dockSceneChanged, producerRecovery.hasFreshFrame())) {
-                renderHandler.post(() -> drawLatestFrame(false));
+                scheduleSceneRender();
             }
             return;
         }
@@ -1273,9 +1495,12 @@ final class Miuix307PassBlurTextureView extends TextureView
                 dock.validLeft, dock.validBottom, dock.validRight, dock.validTop,
                 nextDockUvLeft, nextDockUvBottom, nextDockUvWidth, nextDockUvHeight,
                 dock.coverage);
-        stageBDiagnosticsLogged = false;
-        prismalMappingLogged = false;
-        if (producerRecovery.hasFreshFrame()) renderHandler.post(() -> drawLatestFrame(false));
+        // Mapping changes are a normal per-frame part of Dock motion. Do not re-arm the
+        // heavyweight Stage-B/Prismal diagnostics here: MainHook.log() also appends to disk,
+        // so resetting these flags on every position update turns debug logging into synchronous
+        // per-frame file I/O on the Launcher UI thread. Re-arm only on producer rebind/geometry
+        // generation changes where the diagnostics are actually meaningful.
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
@@ -1465,6 +1690,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void releaseFbos() {
+        invalidatePreparedBackdrop();
         if (rawFramebuffer != 0) {
             GLES20.glDeleteFramebuffers(1, new int[]{rawFramebuffer}, 0);
             rawFramebuffer = 0;
@@ -1483,11 +1709,13 @@ final class Miuix307PassBlurTextureView extends TextureView
                 || eglWindowSurface == EGL14.EGL_NO_SURFACE) {
             throw new IllegalStateException("EGL output unavailable");
         }
+        if (currentEglSurface == eglWindowSurface) return;
         if (!EGL14.eglMakeCurrent(
                 eglDisplay, eglWindowSurface, eglWindowSurface, eglContext)) {
             throw new IllegalStateException("eglMakeCurrent error=0x"
                     + Integer.toHexString(EGL14.eglGetError()));
         }
+        currentEglSurface = eglWindowSurface;
     }
 
     private void destroyEglWindowSurfaceOnly() {
@@ -1496,6 +1724,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             EGL14.eglMakeCurrent(
                     eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT);
         } catch (Throwable ignored) {}
+        currentEglSurface = EGL14.EGL_NO_SURFACE;
         EGL14.eglDestroySurface(eglDisplay, eglWindowSurface);
         eglWindowSurface = EGL14.EGL_NO_SURFACE;
     }
@@ -1526,6 +1755,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
         normalizeProgram = 0;
         compositeProgram = 0;
+        normalizePositionLocation = normalizeUvLocation = normalizeTextureLocation = -1;
+        normalizeTexMatrixLocation = normalizeBackdropRectLocation = -1;
+        normalizeConfigRotLocation = normalizeValidDockRectLocation = -1;
+        compositePositionLocation = compositeUvLocation = -1;
+        compositeTextureLocation = compositeCropRectLocation = -1;
 
         Surface producer = inputProducerSurface;
         inputProducerSurface = null;
@@ -1551,6 +1785,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
             try { EGL14.eglTerminate(eglDisplay); } catch (Throwable ignored) {}
         }
+        currentEglSurface = EGL14.EGL_NO_SURFACE;
         eglContext = EGL14.EGL_NO_CONTEXT;
         eglDisplay = EGL14.EGL_NO_DISPLAY;
         eglConfig = null;
@@ -1659,6 +1894,12 @@ final class Miuix307PassBlurTextureView extends TextureView
     private static int requireUniform(int program, String name) {
         int location = GLES20.glGetUniformLocation(program, name);
         if (location < 0) throw new IllegalStateException("missing uniform " + name);
+        return location;
+    }
+
+    private static int requireAttrib(int program, String name) {
+        int location = GLES20.glGetAttribLocation(program, name);
+        if (location < 0) throw new IllegalStateException("missing attribute " + name);
         return location;
     }
 
