@@ -210,6 +210,13 @@ final class DockIconAnimationGlassHook {
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
                                 View dockTarget = (View) target;
+                                if (closeToHome) {
+                                    // FloatingIconView2's first CLOSE_TO_HOME frame precedes
+                                    // WindowElement's HOME spring callback on Launcher 4.50.
+                                    // Keep only the Dock PassBlur producer live from this earliest
+                                    // visual boundary; Workspace still uses its own spring authority.
+                                    Miuix307ZeroCopyRenderer.onHomeOpeningStarted();
+                                }
                                 DockAnimationTrace.proxyFrame(
                                         "proxy-post", proxy, dockTarget, proxyAlpha, progress);
                                 if (proxy != null) {
