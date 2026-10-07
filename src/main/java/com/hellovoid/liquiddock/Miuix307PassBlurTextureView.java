@@ -350,6 +350,14 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private float workstationDockIconCornerRadiusDp;
+    private volatile float nativeOpticsRadiusPx = Float.NaN;
+
+    void setNativeOpticsRadiusPx(float radiusPx) {
+        float next = Float.isFinite(radiusPx) && radiusPx > 0f ? radiusPx : Float.NaN;
+        if (Float.compare(nativeOpticsRadiusPx, next) == 0) return;
+        nativeOpticsRadiusPx = next;
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
+    }
 
     void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
@@ -1066,12 +1074,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         float centerYTop = mapping.sampleHeight - centerGlY;
 
         float cornerRadiusPx = Math.max(1f, glassHeight * 0.44f);
-        View materialHost = materialHostRef.get();
-        if (materialHost != null) {
-            float nativeRadius = MiuixGlassHook.readNativeOpticsRadius(materialHost);
-            if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
-                cornerRadiusPx = nativeRadius;
-            }
+        float nativeRadius = nativeOpticsRadiusPx;
+        if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
+            cornerRadiusPx = nativeRadius;
         }
         return new PrismalGeometry(
                 mapping.sampleWidth, mapping.sampleHeight,
