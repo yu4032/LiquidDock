@@ -202,19 +202,6 @@ Dialog 生命周期短，因此优先级低于 Workspace/Dock。
 - per-frame trace 只在显式诊断模式启用；
 - 性能测试时不能让同步文件日志成为主要干扰源。
 
-### Remove historical production trace
-
-`DockAnimationTrace` 仍是生产源码中的短期诊断设施，触发时会：
-
-- 安装 pre-draw listener；
-- 调用反射/语义查询；
-- 构造大量状态字符串；
-- 进入 debug logging。
-
-若当前 Dock handoff 问题已经不再需要该 trace，应删除或迁为显式 debug-only instrumentation。
-
----
-
 ## P1 · Workstation composite runtime restore
 
 **状态：未完成。**
