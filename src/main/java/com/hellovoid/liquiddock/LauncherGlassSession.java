@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Matrix;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
@@ -115,6 +116,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
             Collections.synchronizedMap(new WeakHashMap<>());
+    // Main-thread scratch/cached geometry state. Static registry changes are event-driven, so
+    // pre-draw and render paths can iterate a stable state array without allocating every frame.
+    private final ArrayList<NodeState> uiDragSnapshot = new ArrayList<>();
+    private volatile StaticNodeState[] staticNodeSnapshot = new StaticNodeState[0];
+    private final Matrix rootToGlobal = new Matrix();
+    private final Matrix globalToRoot = new Matrix();
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final Object outputWorkLock = new Object();
@@ -304,7 +311,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void registerStaticNode(LauncherGlassStaticNode node) {
         if (node == null || shuttingDown) return;
         synchronized (staticNodes) {
-            if (!staticNodes.containsKey(node)) staticNodes.put(node, new StaticNodeState(node));
+            if (!staticNodes.containsKey(node)) {
+                staticNodes.put(node, new StaticNodeState(node));
+                rebuildStaticNodeSnapshotLocked();
+            }
         }
         syncSceneOnUiThread();
         requestStaticRedraw();
@@ -312,8 +322,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
         if (node == null) return;
-        synchronized (staticNodes) { staticNodes.remove(node); }
+        synchronized (staticNodes) {
+            if (staticNodes.remove(node) != null) rebuildStaticNodeSnapshotLocked();
+        }
         requestStaticRedraw();
+    }
+
+    private void rebuildStaticNodeSnapshotLocked() {
+        staticNodeSnapshot = staticNodes.values().toArray(new StaticNodeState[0]);
     }
 
     void updateStaticInteraction(
@@ -622,9 +638,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        List<NodeState> dragSnapshot;
-        synchronized (nodes) { dragSnapshot = new ArrayList<>(nodes.values()); }
-        for (NodeState node : dragSnapshot) {
+        uiDragSnapshot.clear();
+        synchronized (nodes) { uiDragSnapshot.addAll(nodes.values()); }
+        for (NodeState node : uiDragSnapshot) {
             LauncherGlassSinkView sink = node.sinkRef.get();
             if (sink == null) continue;
             boolean localChanged = sink.syncFromMaterial();
@@ -640,12 +656,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-        List<StaticNodeState> staticSnapshot;
-        synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
+        StaticNodeState[] staticSnapshot = staticNodeSnapshot;
+        Matrix frameGlobalToRoot = null;
+        if (staticSnapshot.length > 0) {
+            rootToGlobal.reset();
+            root.transformMatrixToGlobal(rootToGlobal);
+            globalToRoot.reset();
+            if (rootToGlobal.invert(globalToRoot)) frameGlobalToRoot = globalToRoot;
+        }
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
-            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(root);
+            LauncherGlassGeometry.Snapshot observed = node.captureGeometry(
+                    root, frameGlobalToRoot, nextWidth, nextHeight);
             StaticGeometryFrame oldFrame = state.frame;
             LauncherGlassGeometry.Snapshot old = oldFrame != null ? oldFrame.geometry : null;
             if (observed == null && old != null && node.retainLastGeometryDuringFade()) continue;
@@ -876,8 +899,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
         sourceBackend.makePbufferCurrent();
         prismalRenderer.beginGlassFrame();
-        List<StaticNodeState> snapshot;
-        synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
+        StaticNodeState[] snapshot = staticNodeSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
