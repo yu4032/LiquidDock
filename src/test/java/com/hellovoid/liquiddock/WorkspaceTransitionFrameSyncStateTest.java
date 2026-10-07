@@ -48,6 +48,19 @@ public class WorkspaceTransitionFrameSyncStateTest {
     }
 
     @Test
+    public void motionCanReenableAfterStableRelease() {
+        WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
+        state.onPreDraw(true);
+        state.onPreDraw(false);
+        assertTrue(state.onPreDraw(false).disable);
+        assertFalse(state.isActive());
+
+        WorkspaceTransitionFrameSyncState.Decision nextMotion = state.onPreDraw(true);
+        assertTrue(nextMotion.enable);
+        assertTrue(state.isActive());
+    }
+
+    @Test
     public void resetReleasesOnlyAnActiveLease() {
         WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
         assertFalse(state.reset().disable);
