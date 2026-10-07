@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.os.SystemClock;
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
 import java.util.Locale;
@@ -26,10 +25,6 @@ final class DockAnimationTrace {
         if (target == null) return;
         ensureSession(target);
         activeUntilUptimeMs = SystemClock.uptimeMillis() + TRACE_TAIL_MS;
-        log(phase, target,
-                "p=" + fmt(progress)
-                        + " pa=" + fmt(proxyAlpha)
-                        + " proxy=" + viewState(proxy));
     }
 
     static void sourceEvent(String event, View target, Integer requestedVisibility) {
@@ -41,19 +36,18 @@ final class DockAnimationTrace {
 
     static void animationRegistry(String event, View target, float progress) {
         if (target == null || !isActiveFor(target)) return;
-        log(event, target, " p=" + fmt(progress));
+        if ("registry-state-change".equals(event)) {
+            log(event, target, " p=" + fmt(progress));
+        }
     }
 
     static void eglSwap(long renderedFrame, boolean fromProducerFrame, int sceneSize) {
-        if (!isActive()) return;
-        MainHook.log(prefix("egl-swap")
-                + " frame=" + renderedFrame
-                + " producerCb=" + fromProducerFrame
-                + " scene=" + sceneSize);
+        // Intentionally lifecycle-only. Per-frame EGL logging synchronously writes debug output and
+        // perturbs the render queue being measured. Long producer gaps are traced by PBTX instead.
     }
 
     static void rendererEvent(String event) {
-        if (!isActive()) return;
+        if (!isActive() || "anim-frame-request".equals(event)) return;
         MainHook.log(prefix(event));
     }
 
@@ -70,33 +64,7 @@ final class DockAnimationTrace {
         activeSession = NEXT_SESSION.incrementAndGet();
         activeTarget = new WeakReference<>(target);
         activeUntilUptimeMs = SystemClock.uptimeMillis() + TRACE_TAIL_MS;
-        installPreDrawTrace(target, activeSession);
         log("session-begin", target, "");
-    }
-
-    private static void installPreDrawTrace(View target, int session) {
-        View root = target.getRootView();
-        if (root == null) return;
-        ViewTreeObserver observer = root.getViewTreeObserver();
-        if (!observer.isAlive()) return;
-        ViewTreeObserver.OnPreDrawListener listener = new ViewTreeObserver.OnPreDrawListener() {
-            @Override
-            public boolean onPreDraw() {
-                if (activeSession == session && isActiveFor(target)) {
-                    log("dock-preDraw", target,
-                            " rootDraw=" + root.getDrawingTime()
-                                    + " root=" + viewState(root));
-                }
-                return true;
-            }
-        };
-        observer.addOnPreDrawListener(listener);
-        target.postDelayed(() -> {
-            try {
-                ViewTreeObserver current = root.getViewTreeObserver();
-                if (current.isAlive()) current.removeOnPreDrawListener(listener);
-            } catch (Throwable ignored) {}
-        }, TRACE_TAIL_MS + 400L);
     }
 
     private static void log(String event, View target, String extra) {
