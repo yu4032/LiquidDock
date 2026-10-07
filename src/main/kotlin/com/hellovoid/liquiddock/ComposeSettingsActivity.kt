@@ -1601,8 +1601,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
 
 @Composable
 private fun StringDropdown(
-    prefs: SharedPreferences,
-    config: ConfigKey<String>,
+    prefs: SharedPreferences, config: ConfigKey<String>,
     title: String,
     options: List<Pair<String, String>>,
     enabled: Boolean = true,
