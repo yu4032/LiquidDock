@@ -116,9 +116,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
             Collections.synchronizedMap(new WeakHashMap<>());
-    // Main-thread scratch/cached geometry state. Static registry changes are event-driven, so
-    // pre-draw and render paths can iterate a stable state array without allocating every frame.
-    private final ArrayList<NodeState> uiDragSnapshot = new ArrayList<>();
+    // Registry changes are event-driven, so pre-draw/render paths can iterate stable state arrays
+    // without allocating a collection snapshot every frame.
+    private volatile NodeState[] nodeSnapshot = new NodeState[0];
     private volatile StaticNodeState[] staticNodeSnapshot = new StaticNodeState[0];
     private final Matrix rootToGlobal = new Matrix();
     private final Matrix globalToRoot = new Matrix();
@@ -286,7 +286,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void registerSink(LauncherGlassSinkView sink) {
         if (sink == null || shuttingDown) return;
         synchronized (nodes) {
-            if (!nodes.containsKey(sink)) nodes.put(sink, new NodeState(sink));
+            if (!nodes.containsKey(sink)) {
+                nodes.put(sink, new NodeState(sink));
+                rebuildNodeSnapshotLocked();
+            }
         }
         syncSceneOnUiThread();
         requestDragRedraw();
@@ -294,8 +297,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterSink(LauncherGlassSinkView sink) {
         if (sink == null) return;
-        synchronized (nodes) { nodes.remove(sink); }
+        synchronized (nodes) {
+            if (nodes.remove(sink) != null) rebuildNodeSnapshotLocked();
+        }
         requestDragRedraw();
+    }
+
+    private void rebuildNodeSnapshotLocked() {
+        nodeSnapshot = nodes.values().toArray(new NodeState[0]);
     }
 
     void updateInteraction(LauncherGlassSinkView sink, PrismalInteractionState interaction) {
@@ -638,9 +647,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        uiDragSnapshot.clear();
-        synchronized (nodes) { uiDragSnapshot.addAll(nodes.values()); }
-        for (NodeState node : uiDragSnapshot) {
+        NodeState[] dragSnapshot = nodeSnapshot;
+        for (NodeState node : dragSnapshot) {
             LauncherGlassSinkView sink = node.sinkRef.get();
             if (sink == null) continue;
             boolean localChanged = sink.syncFromMaterial();
