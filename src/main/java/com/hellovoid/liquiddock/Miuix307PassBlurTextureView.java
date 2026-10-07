@@ -262,6 +262,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private boolean prismalMappingLogged;
     private long producerFrameCount;
     private long renderedFrameCount;
+    private long lastProducerCallbackUptimeMs;
     private long powerWindowStartedMs = SystemClock.uptimeMillis();
     private volatile Runnable freshProducerFramePresentedListener;
     private ViewTreeObserver preDrawObserver;
@@ -348,7 +349,13 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setProducerUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         producerUpdatesEnabled = enabled;
+        long requestedAtMs = SystemClock.uptimeMillis();
         renderHandler.postAtFrontOfQueue(() -> {
+            long queueWaitMs = SystemClock.uptimeMillis() - requestedAtMs;
+            if (queueWaitMs > 16L) {
+                MainHook.log(TAG + "[Stutter] producer-control queueWaitMs=" + queueWaitMs
+                        + " enabled=" + enabled + " reason=" + reason);
+            }
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
             if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
@@ -651,6 +658,19 @@ final class Miuix307PassBlurTextureView extends TextureView
         inputProducerSurface = producer;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
+            long nowMs = SystemClock.uptimeMillis();
+            long previousMs = lastProducerCallbackUptimeMs;
+            lastProducerCallbackUptimeMs = nowMs;
+            if (previousMs > 0L && nowMs - previousMs > 50L) {
+                boolean queued;
+                boolean dirty;
+                synchronized (sceneRenderQueueLock) {
+                    queued = sceneRenderQueued;
+                    dirty = sceneRenderDirty;
+                }
+                MainHook.log(TAG + "[Stutter] producer-callback gapMs=" + (nowMs - previousMs)
+                        + " sceneQueued=" + queued + " sceneDirty=" + dirty);
+            }
             producerFrameCount++;
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
