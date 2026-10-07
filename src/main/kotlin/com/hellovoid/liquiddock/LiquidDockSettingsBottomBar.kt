@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,6 +48,7 @@ internal fun LiquidDockSettingsBottomBar(
 
     Box(
         modifier = Modifier
+            .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 18.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
@@ -57,7 +59,8 @@ internal fun LiquidDockSettingsBottomBar(
             backdrop = backdrop,
             tabsCount = settingsBottomItems.size,
             modifier = Modifier
-                .widthIn(max = 520.dp),
+                .widthIn(max = 520.dp)
+                .fillMaxWidth(),
             tintDropletContent = true,
             dropletContentTint = accent,
         ) {
