@@ -100,6 +100,9 @@ public final class PrismalRenderer implements AutoCloseable {
     private int cachedHighlightMask = Integer.MIN_VALUE;
     private int cachedResolutionWidth = -1;
     private int cachedResolutionHeight = -1;
+    private int cachedBlurWidth = -1;
+    private int cachedBlurHeight = -1;
+    private float cachedBlurSigma = Float.NaN;
     private boolean glassTexturesBound;
 
     private int sourceTexture;
@@ -365,7 +368,15 @@ public final class PrismalRenderer implements AutoCloseable {
         blurVSigmaLocation = requireUniform(blurVProgram, "u_sigma");
         glassPositionLocation = requireAttrib(glassProgram, "a_position");
 
-        // Sampler units and the blur-source selector are program constants.
+        // Sampler units are immutable for the lifetime of these linked programs.
+        GLES20.glUseProgram(sourceProgram);
+        GLES20.glUniform1i(sourceTextureLocation, 0);
+        GLES20.glUseProgram(blurHProgram);
+        GLES20.glUniform1i(blurHTextureLocation, 0);
+        GLES20.glUseProgram(blurVProgram);
+        GLES20.glUniform1i(blurVTextureLocation, 0);
+
+        // Glass samplers and the blur-source selector are also program constants.
         GLES20.glUseProgram(glassProgram);
         GLES20.glUniform1i(glassUniformLocation("u_backgroundTexture"), 0);
         GLES20.glUniform1i(glassUniformLocation("u_blurredTexture"), 1);
@@ -374,6 +385,9 @@ public final class PrismalRenderer implements AutoCloseable {
         cachedHighlightMask = Integer.MIN_VALUE;
         cachedResolutionWidth = -1;
         cachedResolutionHeight = -1;
+        cachedBlurWidth = -1;
+        cachedBlurHeight = -1;
+        cachedBlurSigma = Float.NaN;
         glassTexturesBound = false;
     }
 
@@ -417,7 +431,6 @@ public final class PrismalRenderer implements AutoCloseable {
         bindInterleavedQuad(sourcePositionLocation, sourceUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexture);
-        GLES20.glUniform1i(sourceTextureLocation, 0);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindInterleavedQuad(sourcePositionLocation, sourceUvLocation);
     }
@@ -427,17 +440,22 @@ public final class PrismalRenderer implements AutoCloseable {
         float scaleY = renderHeight / (float) Math.max(1, height);
         float physicalScale = Math.max(0.0001f, Math.min(scaleX, scaleY));
         float sigma = Math.max(p.blurRadiusPx * physicalScale * BLUR_FBO_SCALE, 0.5f);
+        boolean updateTexelSize = cachedBlurWidth != blurWidth || cachedBlurHeight != blurHeight;
+        boolean updateSigma = Float.compare(cachedBlurSigma, sigma) != 0;
         renderBlurPass(blurHProgram, sourceTexture, blurFramebufferH, sigma,
-                blurHPositionLocation, blurHTextureLocation,
-                blurHTexelSizeLocation, blurHSigmaLocation);
+                blurHPositionLocation, blurHTexelSizeLocation, blurHSigmaLocation,
+                updateTexelSize, updateSigma);
         renderBlurPass(blurVProgram, blurTextureH, blurFramebufferV, sigma,
-                blurVPositionLocation, blurVTextureLocation,
-                blurVTexelSizeLocation, blurVSigmaLocation);
+                blurVPositionLocation, blurVTexelSizeLocation, blurVSigmaLocation,
+                updateTexelSize, updateSigma);
+        cachedBlurWidth = blurWidth;
+        cachedBlurHeight = blurHeight;
+        cachedBlurSigma = sigma;
     }
 
     private void renderBlurPass(int program, int inputTexture, int framebuffer, float sigma,
-                                int position, int textureLocation,
-                                int texelSizeLocation, int sigmaLocation) {
+                                int position, int texelSizeLocation, int sigmaLocation,
+                                boolean updateTexelSize, boolean updateSigma) {
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
         GLES20.glViewport(0, 0, blurWidth, blurHeight);
@@ -448,10 +466,11 @@ public final class PrismalRenderer implements AutoCloseable {
         GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, blurQuad);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexture);
-        GLES20.glUniform1i(textureLocation, 0);
-        GLES20.glUniform2f(texelSizeLocation,
-                1f / Math.max(1, blurWidth), 1f / Math.max(1, blurHeight));
-        GLES20.glUniform1f(sigmaLocation, sigma);
+        if (updateTexelSize) {
+            GLES20.glUniform2f(texelSizeLocation,
+                    1f / Math.max(1, blurWidth), 1f / Math.max(1, blurHeight));
+        }
+        if (updateSigma) GLES20.glUniform1f(sigmaLocation, sigma);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
         GLES20.glDisableVertexAttribArray(position);
     }
@@ -755,6 +774,8 @@ public final class PrismalRenderer implements AutoCloseable {
         cachedStaticParams = null;
         cachedHighlightMask = Integer.MIN_VALUE;
         cachedResolutionWidth = cachedResolutionHeight = -1;
+        cachedBlurWidth = cachedBlurHeight = -1;
+        cachedBlurSigma = Float.NaN;
         glassTexturesBound = false;
         glassUniformLocations.clear();
     }

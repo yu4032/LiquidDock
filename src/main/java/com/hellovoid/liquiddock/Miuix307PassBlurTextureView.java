@@ -917,10 +917,6 @@ final class Miuix307PassBlurTextureView extends TextureView
             int prismalTexture = prismalRenderer.outputTexture();
             if (!renderCompositePass(prismalTexture, mapping)) return;
 
-            int glError = GLES20.glGetError();
-            if (glError != GLES20.GL_NO_ERROR) {
-                throw new IllegalStateException("GLES error=0x" + Integer.toHexString(glError));
-            }
             // UI geometry may advance while this GL frame is being prepared. Never publish a
             // frame assembled from an obsolete generation; updateBackdropMapping() will queue the
             // matching generation when a consumed producer frame is available.

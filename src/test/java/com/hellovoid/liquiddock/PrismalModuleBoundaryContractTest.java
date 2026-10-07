@@ -143,6 +143,16 @@ public class PrismalModuleBoundaryContractTest {
     }
 
     @Test
+    public void dockRenderLoopDoesNotPollGlErrorEveryFrame() throws Exception {
+        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        int start = view.indexOf("private void drawLatestFrame(boolean fromFrameCallback)");
+        int end = view.indexOf("private boolean canReusePreparedBackdrop(", start);
+        assertTrue(start >= 0 && end > start);
+        String hotLoop = view.substring(start, end);
+        assertFalse(hotLoop.contains("GLES20.glGetError()"));
+    }
+
+    @Test
     public void liquidDockAdapterOwnsOesNormalizationMappingLogAndFinalCrop() throws Exception {
         String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
         String composite = Files.readString(APP.resolve("Miuix307PrismalCompositeShaders.java"));
