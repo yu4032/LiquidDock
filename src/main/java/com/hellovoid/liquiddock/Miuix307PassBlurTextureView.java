@@ -1300,39 +1300,13 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
         if (materialHost == null) return null;
-        try {
-            Object viewRoot = getViewRootImpl(materialHost);
-            if (viewRoot == null) return null;
-            Field sizeField = findField(viewRoot.getClass(), "mSurfaceSize");
-            sizeField.setAccessible(true);
-            Object value = sizeField.get(viewRoot);
-            if (!(value instanceof Point)) return null;
-            Point surfaceSize = (Point) value;
-            int surfaceWidth = surfaceSize.x;
-            int surfaceHeight = surfaceSize.y;
-            if (surfaceWidth <= 0 || surfaceHeight <= 0) return null;
-
-            int nextRotation = readConfigRotation(materialHost);
-            int bufferWidth = surfaceWidth;
-            int bufferHeight = surfaceHeight;
-            if (nextRotation == 1 || nextRotation == 3) {
-                bufferWidth = surfaceHeight;
-                bufferHeight = surfaceWidth;
-            }
-
-            Method getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-            getSurfaceControl.setAccessible(true);
-            Object surface = getSurfaceControl.invoke(viewRoot);
-            SurfaceControl rootSurface = surface instanceof SurfaceControl
-                    ? (SurfaceControl) surface : null;
-            return new ProducerGeometry(
-                    surfaceWidth, surfaceHeight,
-                    bufferWidth, bufferHeight,
-                    nextRotation, rootSurface);
-        } catch (Throwable error) {
-            MainHook.log(TAG + " producer geometry unavailable: " + error);
-            return null;
-        }
+        RootPassBlurEndpointBridge.Endpoint endpoint =
+                RootPassBlurEndpointBridge.inspectGeometry(materialHost);
+        if (endpoint == null || !endpoint.isValid()) return null;
+        return new ProducerGeometry(
+                endpoint.surfaceWidth, endpoint.surfaceHeight,
+                endpoint.bufferWidth, endpoint.bufferHeight,
+                endpoint.rotation, endpoint.rootSurface);
     }
 
     private void logStageBDiagnostics(
