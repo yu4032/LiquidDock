@@ -168,6 +168,9 @@ public class PrismalModuleBoundaryContractTest {
         assertTrue(view.contains("private Method cachedGetSurfaceControlMethod;"));
         assertTrue(view.contains("private final Rect winFrameScratch = new Rect();"));
         assertTrue(view.contains("private final int[] viewScreenScratch = new int[2];"));
+        assertTrue(view.contains("private final SamplingInsets uiSamplingInsetsCache = new SamplingInsets();"));
+        assertTrue(view.contains("private final int[] uiInsetPairScratch = new int[2];"));
+        assertTrue(view.contains("resolveSamplingInsetsCached(visibleWidth, visibleHeight, frameParams)"));
         assertTrue(view.contains("Object viewRoot = getViewRootImplCached(materialHost);"));
         assertTrue(view.contains("Rect winFrame = readViewRootWinFrame(this);"));
 
@@ -176,6 +179,8 @@ public class PrismalModuleBoundaryContractTest {
         String mapping = view.substring(mappingStart, mappingEnd);
         assertFalse("mapping must reuse location scratch instead of allocating every pre-draw",
                 mapping.contains("new int[2]"));
+        assertFalse("mapping must reuse cached sampling insets instead of allocating every pre-draw",
+                mapping.contains("new SamplingInsets"));
 
         int geometryStart = view.indexOf("private ProducerGeometry readSurfaceGeometry(");
         int geometryEnd = view.indexOf("private void logStageBDiagnostics(", geometryStart);

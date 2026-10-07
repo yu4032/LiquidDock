@@ -66,16 +66,17 @@ final class Miuix307PassBlurTextureView extends TextureView
     };
 
     private static final class SamplingInsets {
-        final int left;
-        final int right;
-        final int top;
-        final int bottom;
+        int left;
+        int right;
+        int top;
+        int bottom;
 
-        SamplingInsets(int left, int right, int top, int bottom) {
+        SamplingInsets set(int left, int right, int top, int bottom) {
             this.left = Math.max(0, left);
             this.right = Math.max(0, right);
             this.top = Math.max(0, top);
             this.bottom = Math.max(0, bottom);
+            return this;
         }
     }
 
@@ -196,6 +197,18 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final float[] textureMatrix = new float[16];
     private final Rect winFrameScratch = new Rect();
     private final int[] viewScreenScratch = new int[2];
+    // UI-thread pre-draw sampling cache. The GL lifecycle path uses its own local result.
+    private final SamplingInsets uiSamplingInsetsCache = new SamplingInsets();
+    private final int[] uiInsetPairScratch = new int[2];
+    private PrismalParams uiSamplingParams;
+    private int uiSamplingWidth = -1;
+    private int uiSamplingHeight = -1;
+    private int uiSamplingMaxTextureSize = -1;
+    private int uiSamplingTopExtra;
+    private int uiSamplingBottomExtra;
+    private int uiSamplingLeftExtra;
+    private int uiSamplingRightExtra;
+    private float uiSamplingDensity = Float.NaN;
 
     // Geometry observation runs on every root pre-draw. Reflection members are stable for this
     // TextureView lifetime (detach permanently shuts this renderer down), while their values are
@@ -1367,12 +1380,48 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private SamplingInsets resolveSamplingInsets(int width, int height) {
-        return resolveSamplingInsets(width, height, portablePrismalParams);
+        SamplingInsets out = new SamplingInsets();
+        int[] pairScratch = new int[2];
+        fillSamplingInsets(width, height, portablePrismalParams, out, pairScratch);
+        return out;
     }
 
-    private SamplingInsets resolveSamplingInsets(
+    private SamplingInsets resolveSamplingInsetsCached(
             int width, int height, PrismalParams prismalParams) {
-        if (prismalParams == null) return new SamplingInsets(0, 0, 0, 0);
+        float density = getResources().getDisplayMetrics().density;
+        if (uiSamplingParams == prismalParams
+                && uiSamplingWidth == width
+                && uiSamplingHeight == height
+                && uiSamplingMaxTextureSize == maxTextureSize
+                && uiSamplingTopExtra == topSamplingExtraPx
+                && uiSamplingBottomExtra == bottomSamplingExtraPx
+                && uiSamplingLeftExtra == leftSamplingExtraPx
+                && uiSamplingRightExtra == rightSamplingExtraPx
+                && Float.compare(uiSamplingDensity, density) == 0) {
+            return uiSamplingInsetsCache;
+        }
+
+        fillSamplingInsets(
+                width, height, prismalParams, uiSamplingInsetsCache, uiInsetPairScratch);
+        uiSamplingParams = prismalParams;
+        uiSamplingWidth = width;
+        uiSamplingHeight = height;
+        uiSamplingMaxTextureSize = maxTextureSize;
+        uiSamplingTopExtra = topSamplingExtraPx;
+        uiSamplingBottomExtra = bottomSamplingExtraPx;
+        uiSamplingLeftExtra = leftSamplingExtraPx;
+        uiSamplingRightExtra = rightSamplingExtraPx;
+        uiSamplingDensity = density;
+        return uiSamplingInsetsCache;
+    }
+
+    private void fillSamplingInsets(
+            int width, int height, PrismalParams prismalParams,
+            SamplingInsets out, int[] pairScratch) {
+        if (prismalParams == null) {
+            out.set(0, 0, 0, 0);
+            return;
+        }
         int opticalX = PrismalSampling.requiredGuardPx(
                 prismalParams, width, height, true);
         int opticalY = PrismalSampling.requiredGuardPx(
@@ -1384,9 +1433,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         int top = combineAutoGuardAndUserExtra(opticalY, topSamplingExtraPx);
         int bottom = combineAutoGuardAndUserExtra(opticalY, bottomSamplingExtraPx);
 
-        int[] horizontal = fitInsetPairToTextureLimit(width, left, right, maxTextureSize);
-        int[] vertical = fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize);
-        return new SamplingInsets(horizontal[0], horizontal[1], vertical[0], vertical[1]);
+        fitInsetPairToTextureLimit(width, left, right, maxTextureSize, pairScratch);
+        int fittedLeft = pairScratch[0];
+        int fittedRight = pairScratch[1];
+        fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize, pairScratch);
+        out.set(fittedLeft, fittedRight, pairScratch[0], pairScratch[1]);
     }
 
     private static int combineAutoGuardAndUserExtra(int automaticGuardPx, int userExtraPx) {
@@ -1394,22 +1445,34 @@ final class Miuix307PassBlurTextureView extends TextureView
         return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, combined));
     }
 
-    private static int[] fitInsetPairToTextureLimit(
-            int visible, int before, int after, int maxTextureSize) {
+    private static void fitInsetPairToTextureLimit(
+            int visible, int before, int after, int maxTextureSize, int[] out) {
         int safeVisible = Math.max(1, visible);
         int safeBefore = Math.max(0, before);
         int safeAfter = Math.max(0, after);
-        if (maxTextureSize <= 0) return new int[]{safeBefore, safeAfter};
+        if (maxTextureSize <= 0) {
+            out[0] = safeBefore;
+            out[1] = safeAfter;
+            return;
+        }
 
         int available = Math.max(0, maxTextureSize - safeVisible);
         long desired = (long) safeBefore + safeAfter;
-        if (desired <= available) return new int[]{safeBefore, safeAfter};
-        if (available <= 0 || desired <= 0) return new int[]{0, 0};
+        if (desired <= available) {
+            out[0] = safeBefore;
+            out[1] = safeAfter;
+            return;
+        }
+        if (available <= 0 || desired <= 0) {
+            out[0] = 0;
+            out[1] = 0;
+            return;
+        }
 
         int fittedBefore = (int) Math.round(safeBefore * (available / (double) desired));
         fittedBefore = Math.max(0, Math.min(available, fittedBefore));
-        int fittedAfter = available - fittedBefore;
-        return new int[]{fittedBefore, fittedAfter};
+        out[0] = fittedBefore;
+        out[1] = available - fittedBefore;
     }
 
     private void updateBackdropMapping() {
@@ -1425,7 +1488,8 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         PrismalParams frameParams = portablePrismalParams;
         if (frameParams == null) return;
-        SamplingInsets insets = resolveSamplingInsets(visibleWidth, visibleHeight, frameParams);
+        SamplingInsets insets =
+                resolveSamplingInsetsCached(visibleWidth, visibleHeight, frameParams);
         int sampleWidth = visibleWidth + insets.left + insets.right;
         int sampleHeight = visibleHeight + insets.top + insets.bottom;
         Miuix307BackdropMapping.Result sample = Miuix307BackdropMapping.compute(
