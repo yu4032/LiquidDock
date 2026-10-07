@@ -18,6 +18,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -46,6 +47,7 @@ import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassToggle
+import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -279,6 +281,28 @@ internal fun LiquidDockGlassToggleRow(
         onClick = {
             if (enabled) onCheckedChange(!checked)
         },
+    )
+}
+
+@Composable
+internal fun LiquidDockGlassSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    visibilityThreshold: Float,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    val backdrop = LocalPrismalSurfaceBackdrop.current ?: return
+    PrismalGlassSlider(
+        value = { value },
+        onValueChange = { next ->
+            if (enabled) onValueChange(next)
+        },
+        valueRange = valueRange,
+        visibilityThreshold = visibilityThreshold,
+        backdrop = backdrop,
+        modifier = modifier.alpha(if (enabled) 1f else 0.42f),
     )
 }
 
