@@ -225,6 +225,16 @@ final class Miuix307PassBlurBridge {
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
                 || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
         setUpdatesEnabled(binding, true, force);
+        if (binding.domain == PassBlurDomain.DOCK) {
+            // APP -> HOME can resume after the producer-driven lease has already expired.
+            // Prime the existing lease immediately instead of waiting for the first slow source
+            // frame to arrive; subsequent real OES arrivals keep renewing it.
+            renewForceRefresh(binding);
+            if (VisualRuntimeState.isDockFrameSyncEnabled()) {
+                MainHook.log(FRAME_SYNC_TAG + " force refresh primed on producer resume"
+                        + " root=" + binding.rootName);
+            }
+        }
     }
 
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
