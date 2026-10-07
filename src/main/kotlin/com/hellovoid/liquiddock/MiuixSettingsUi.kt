@@ -12,10 +12,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
@@ -26,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
@@ -118,6 +117,7 @@ internal fun LiquidDockSettingsScaffold(
             containerColor = Color.Transparent,
             topBar = {
                 val density = LocalDensity.current
+                val topBarSurfaceColor = MiuixTheme.colorScheme.surface
                 val collapsed by remember(scrollBehavior) {
                     derivedStateOf { scrollBehavior.state.collapsedFraction >= (1f / 3f) }
                 }
@@ -153,7 +153,7 @@ internal fun LiquidDockSettingsScaffold(
                                     colorControls(saturation = 1.18f)
                                 },
                                 onDrawSurface = {
-                                    drawRect(MiuixTheme.colorScheme.surface.copy(alpha = 0.30f))
+                                    drawRect(topBarSurfaceColor.copy(alpha = 0.30f))
                                 },
                             ),
                     )
