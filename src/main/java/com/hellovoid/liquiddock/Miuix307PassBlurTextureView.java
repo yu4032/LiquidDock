@@ -255,6 +255,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private long producerFrameCount;
     private long renderedFrameCount;
     private long powerWindowStartedMs = SystemClock.uptimeMillis();
+    private volatile Runnable freshProducerFramePresentedListener;
     private ViewTreeObserver preDrawObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
 
@@ -290,6 +291,10 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     boolean isActivationExhausted() {
         return producerRecovery.isActivationExhausted();
+    }
+
+    void setFreshProducerFramePresentedListener(Runnable listener) {
+        freshProducerFramePresentedListener = listener;
     }
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
@@ -410,6 +415,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         producerRecovery.onShutdown();
         gpuBackdropActive = false;
         hasPresentedFrame = false;
+        freshProducerFramePresentedListener = null;
         removeGeometryObserver();
 
         Miuix307PassBlurBridge.Binding currentBinding = binding;
@@ -689,7 +695,8 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         try {
             makeCurrent();
-            if (frameAvailable.getAndSet(false)) {
+            boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false);
+            if (consumedFreshProducerFrame) {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
@@ -753,6 +760,10 @@ final class Miuix307PassBlurTextureView extends TextureView
                     renderedFrameCount, fromFrameCallback,
                     dockScene != null ? dockScene.size() : 0);
             maybeLogPowerStats();
+            if (consumedFreshProducerFrame) {
+                Runnable listener = freshProducerFramePresentedListener;
+                if (listener != null) listener.run();
+            }
 
             Miuix307PassBlurBridge.Binding currentBinding = binding;
             gpuBackdropActive = currentBinding != null && currentBinding.bound;
@@ -1050,14 +1061,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver.OnPreDrawListener listener = () -> {
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
-            // During APP -> HOME the Dock root can keep drawing at panel rate even while the
-            // PassBlur producer temporarily stops delivering frames. Keep the existing
-            // force-refresh lease alive from this real animation authority as a fallback;
-            // renewForceRefresh() itself is gated by the Dock switch and a 50 ms minimum interval.
-            Miuix307PassBlurBridge.Binding current = binding;
-            if (current != null && producerUpdatesEnabled) {
-                Miuix307PassBlurBridge.renewForceRefresh(current);
-            }
             return true;
         };
         observer.addOnPreDrawListener(listener);
