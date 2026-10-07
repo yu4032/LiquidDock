@@ -136,6 +136,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final LauncherGlassOutputRenderState outputRenderState =
             new LauncherGlassOutputRenderState();
     private final boolean workspaceSource;
+    private volatile boolean workspaceAnimationRenderActive;
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -795,9 +796,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             WorkspaceTransitionFrameSyncState.Decision decision, View root, String reason) {
         if (decision == null) return;
         if (decision.enable) {
+            if (workspaceSource) workspaceAnimationRenderActive = true;
             sourceBackend.setTransitionFrameSyncEnabled(true, reason);
         } else if (decision.disable) {
+            if (workspaceSource) workspaceAnimationRenderActive = false;
             sourceBackend.setTransitionFrameSyncEnabled(false, reason);
+        }
+        // Native whole-surface motion may not change child geometry. Its start/end still needs
+        // an output redraw, especially to restore full-resolution optics after the lease ends.
+        if (workspaceSource && (decision.enable || decision.disable)) {
+            scheduleOutputRender(true, false);
+            if (MainHook.debugLogging) MainHook.log("[DC][WorkspaceQuality] opticsScale="
+                    + (workspaceAnimationRenderActive ? 50 : 100) + " reason=" + reason);
         }
 
         // Geometry-owned motion uses real pre-draw stability as its terminal boundary. Request
@@ -1080,8 +1090,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // The shared Workspace scene needs no crop or post-processing. Draw its existing
         // premultiplied-alpha node batch straight into the RGBA window back buffer, avoiding
         // the full-root intermediate write + texture read/copy on every animation frame.
-        sourceBackend.makeCurrent(output.eglSurface);
-        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+        boolean reduced = workspaceSource && workspaceAnimationRenderActive;
+        if (reduced) {
+            sourceBackend.makePbufferCurrent();
+            prismalRenderer.beginGlassFrameAtScale(50);
+        } else {
+            sourceBackend.makeCurrent(output.eglSurface);
+            prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+        }
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
@@ -1097,7 +1113,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
-        sourceBackend.swapBuffers(output.eglSurface);
+        if (reduced) presentFull(prismalRenderer.outputTexture(), output);
+        else sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
@@ -1145,6 +1162,24 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, node.interaction);
             present(prismalRenderer.outputTexture(), geometry, entry.getValue());
         }
+    }
+
+    private void presentFull(int sceneTexture, OutputState output) {
+        sourceBackend.makeCurrent(output.eglSurface);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        GLES20.glViewport(0, 0, output.width, output.height);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClearColor(0f, 0f, 0f, 0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glUseProgram(compositeProgram);
+        bindQuad(compositePositionLocation, compositeUvLocation);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
+        GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindQuad(compositePositionLocation, compositeUvLocation);
+        sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private void present(

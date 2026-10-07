@@ -4,6 +4,19 @@ import static org.junit.Assert.*;
 import org.junit.Test;
 
 public class PrismalFrameTargetTest {
+    @Test public void animationDensityReducesPixelsWithoutChangingLogicalDomain() {
+        assertEquals(1504, PrismalFrameTarget.scaledDimension(3008, 50));
+        assertEquals(941, PrismalFrameTarget.scaledDimension(1881, 50));
+        assertEquals(1881, PrismalFrameTarget.scaledDimension(1881, 100));
+        assertEquals(1, PrismalFrameTarget.scaledDimension(1, 50));
+    }
+
+    @Test public void animationDensityClampsToSupportedRange() {
+        assertEquals(500, PrismalFrameTarget.scaledDimension(1000, 0));
+        assertEquals(1000, PrismalFrameTarget.scaledDimension(1000, 999));
+        assertThrows(IllegalArgumentException.class,
+                () -> PrismalFrameTarget.scaledDimension(0, 50));
+    }
     @Test public void directFrameUsesWindowDimensionsAndDefaultFramebuffer() {
         PrismalFrameTarget target = new PrismalFrameTarget();
         target.selectTexture(17, 1880, 3008);
