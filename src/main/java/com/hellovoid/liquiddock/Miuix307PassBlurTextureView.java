@@ -175,9 +175,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final Handler renderHandler;
     private final Handler mainHandler;
     /**
-     * UI/pre-draw geometry can advance faster than the Prismal GL pass. Never enqueue one stale
-     * redraw per UI frame: keep at most one scene-only render pending so SurfaceTexture producer
-     * callbacks and producer-control transactions cannot be starved behind obsolete work.
+     * UI/pre-draw geometry may advance faster than the full Prismal pass. Keep at most one
+     * scene-only render pending so obsolete animation frames cannot starve real producer callbacks.
      */
     private final Object sceneRenderQueueLock = new Object();
     private boolean sceneRenderQueued;
@@ -262,9 +261,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private boolean prismalMappingLogged;
     private long producerFrameCount;
     private long renderedFrameCount;
-    private long lastProducerCallbackUptimeMs;
     private long powerWindowStartedMs = SystemClock.uptimeMillis();
-    private volatile Runnable freshProducerFramePresentedListener;
     private ViewTreeObserver preDrawObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
 
@@ -300,10 +297,6 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     boolean isActivationExhausted() {
         return producerRecovery.isActivationExhausted();
-    }
-
-    void setFreshProducerFramePresentedListener(Runnable listener) {
-        freshProducerFramePresentedListener = listener;
     }
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
@@ -349,13 +342,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setProducerUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         producerUpdatesEnabled = enabled;
-        long requestedAtMs = SystemClock.uptimeMillis();
         renderHandler.postAtFrontOfQueue(() -> {
-            long queueWaitMs = SystemClock.uptimeMillis() - requestedAtMs;
-            if (queueWaitMs > 16L) {
-                MainHook.log(TAG + "[Stutter] producer-control queueWaitMs=" + queueWaitMs
-                        + " enabled=" + enabled + " reason=" + reason);
-            }
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
             if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
@@ -430,7 +417,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         producerRecovery.onShutdown();
         gpuBackdropActive = false;
         hasPresentedFrame = false;
-        freshProducerFramePresentedListener = null;
         removeGeometryObserver();
 
         Miuix307PassBlurBridge.Binding currentBinding = binding;
@@ -658,19 +644,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         inputProducerSurface = producer;
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
-            long nowMs = SystemClock.uptimeMillis();
-            long previousMs = lastProducerCallbackUptimeMs;
-            lastProducerCallbackUptimeMs = nowMs;
-            if (previousMs > 0L && nowMs - previousMs > 50L) {
-                boolean queued;
-                boolean dirty;
-                synchronized (sceneRenderQueueLock) {
-                    queued = sceneRenderQueued;
-                    dirty = sceneRenderDirty;
-                }
-                MainHook.log(TAG + "[Stutter] producer-callback gapMs=" + (nowMs - previousMs)
-                        + " sceneQueued=" + queued + " sceneDirty=" + dirty);
-            }
             producerFrameCount++;
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
@@ -728,9 +701,9 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     /**
-     * Render one latest UI generation, then yield back to the Handler queue before any follow-up.
-     * A producer callback that arrived while this draw was running therefore runs before another
-     * scene-only redraw instead of sitting behind an animation-length backlog.
+     * Render the newest UI generation, then yield to the Handler queue before any follow-up.
+     * SurfaceTexture producer callbacks that arrived during this draw therefore run before another
+     * scene-only redraw instead of waiting behind an animation-length backlog.
      */
     private void drainSceneRender() {
         synchronized (sceneRenderQueueLock) {
@@ -752,9 +725,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 return;
             }
             renderAgain = sceneRenderDirty;
-            if (!renderAgain) {
-                sceneRenderQueued = false;
-            }
+            if (!renderAgain) sceneRenderQueued = false;
         }
         if (renderAgain && !renderHandler.post(this::drainSceneRender)) {
             synchronized (sceneRenderQueueLock) {
@@ -775,8 +746,7 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         try {
             makeCurrent();
-            boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false);
-            if (consumedFreshProducerFrame) {
+            if (frameAvailable.getAndSet(false)) {
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
@@ -836,14 +806,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             }
             hasPresentedFrame = true;
             renderedFrameCount++;
-            DockAnimationTrace.eglSwap(
-                    renderedFrameCount, fromFrameCallback,
-                    dockScene != null ? dockScene.size() : 0);
             maybeLogPowerStats();
-            if (consumedFreshProducerFrame) {
-                Runnable listener = freshProducerFramePresentedListener;
-                if (listener != null) listener.run();
-            }
 
             Miuix307PassBlurBridge.Binding currentBinding = binding;
             gpuBackdropActive = currentBinding != null && currentBinding.bound;
@@ -1331,7 +1294,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             // for a vendor drop callback or unrelated source update.
             if (DockGlassSceneRenderPolicy.shouldRenderSceneOnlyChange(
                     dockSceneChanged, producerRecovery.hasFreshFrame())) {
-                scheduleSceneRender();
+                renderHandler.post(() -> drawLatestFrame(false));
             }
             return;
         }
