@@ -307,8 +307,10 @@ final class Miuix307PassBlurBridge {
         if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
         if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
         long now = SystemClock.uptimeMillis();
-        if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
-        binding.lastForceRefreshMs = now;
+        synchronized (binding) {
+            if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
+            binding.lastForceRefreshMs = now;
+        }
         try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
             binding.setForceRefresh.invoke(
                     transaction,
