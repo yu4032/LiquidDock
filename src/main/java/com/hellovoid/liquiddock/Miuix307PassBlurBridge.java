@@ -298,7 +298,30 @@ final class Miuix307PassBlurBridge {
         if (binding == null || !binding.bound
                 || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
         binding.workspaceTransitionFrameSync = enabled;
-        if (enabled) renewForceRefresh(binding);
+        if (enabled) {
+            renewForceRefresh(binding);
+            return;
+        }
+        if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) {
+            binding.lastForceRefreshMs = 0L;
+            return;
+        }
+        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+            binding.setForceRefresh.invoke(
+                    transaction,
+                    binding.rootSurface,
+                    Integer.valueOf(0));
+            transaction.apply();
+        } catch (Throwable error) {
+            long now = SystemClock.uptimeMillis();
+            if (now - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
+                lastForceRefreshErrorLogMs = now;
+                MainHook.log(WORKSPACE_FRAME_SYNC_TAG
+                        + " force refresh release failed: " + error);
+            }
+        } finally {
+            binding.lastForceRefreshMs = 0L;
+        }
     }
 
     static void renewForceRefresh(Binding binding) {
