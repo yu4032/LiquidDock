@@ -52,6 +52,10 @@ final class LauncherGlassVisibility {
         return 0f;
     }
 
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(1f, value));
+    }
+
     static float effectiveAlpha(View host, View sceneRoot) {
         if (host == null || sceneRoot == null || !host.isAttachedToWindow()) return 0f;
         float result = 1f;
