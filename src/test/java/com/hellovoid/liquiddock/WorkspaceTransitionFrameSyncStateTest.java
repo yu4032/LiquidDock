@@ -94,6 +94,24 @@ public class WorkspaceTransitionFrameSyncStateTest {
     }
 
     @Test
+    public void unlockMotionHoldPreventsStableGapChurnUntilGone() {
+        WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
+        assertTrue(state.onPreDraw(true).enable);
+        state.onUnlockTransition(true);
+
+        state.onPreDraw(false);
+        WorkspaceTransitionFrameSyncState.Decision stable = state.onPreDraw(false);
+        assertFalse(stable.disable);
+        assertTrue(state.isActive());
+        assertTrue(state.isUnlockTransitionActive());
+
+        WorkspaceTransitionFrameSyncState.Decision gone =
+                state.onUnlockTransition(false);
+        assertTrue(gone.disable);
+        assertFalse(state.isActive());
+    }
+
+    @Test
     public void resetReleasesAnyActiveAuthority() {
         WorkspaceTransitionFrameSyncState state = new WorkspaceTransitionFrameSyncState();
         assertFalse(state.reset().disable);

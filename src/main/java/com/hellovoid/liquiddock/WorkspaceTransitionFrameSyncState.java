@@ -5,8 +5,9 @@ package com.hellovoid.liquiddock;
  *
  * <p>Geometry motion covers per-view Launcher animation such as unlock/user-present. Native
  * WindowElement spring ownership covers whole-surface transitions whose transform can be invisible
- * in root-relative child geometry. The two sources are ORed: the ordinary Workspace FPS policy is
- * restored only after both authorities have settled.</p>
+ * in root-relative child geometry. Unlock adds a third authority: once real Workspace motion starts,
+ * that lease stays active until keyguard GONE so intermittent stable frames cannot churn
+ * force-refresh on/off. The sources are ORed.</p>
  */
 final class WorkspaceTransitionFrameSyncState {
     static final int STABLE_FRAMES_TO_RELEASE = 2;
@@ -28,6 +29,7 @@ final class WorkspaceTransitionFrameSyncState {
 
     private boolean geometryActive;
     private boolean nativeTransitionActive;
+    private boolean unlockTransitionActive;
     private boolean active;
     private int stableFrames;
 
@@ -50,9 +52,19 @@ final class WorkspaceTransitionFrameSyncState {
         return updateAggregate();
     }
 
+    Decision onUnlockTransition(boolean enabled) {
+        unlockTransitionActive = enabled;
+        return updateAggregate();
+    }
+
+    boolean isUnlockTransitionActive() {
+        return unlockTransitionActive;
+    }
+
     Decision reset() {
         geometryActive = false;
         nativeTransitionActive = false;
+        unlockTransitionActive = false;
         stableFrames = 0;
         return updateAggregate();
     }
@@ -66,7 +78,7 @@ final class WorkspaceTransitionFrameSyncState {
     }
 
     private Decision updateAggregate() {
-        boolean next = geometryActive || nativeTransitionActive;
+        boolean next = geometryActive || nativeTransitionActive || unlockTransitionActive;
         if (next == active) return Decision.NONE;
         active = next;
         return next ? Decision.enable() : Decision.disable();

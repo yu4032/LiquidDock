@@ -432,6 +432,8 @@ final class LauncherGlassHomePresentationHook {
         }
         MainHook.log(TAG + " unlock wallpaper freshness released: " + reason
                 + " serial=" + serial);
+        LauncherGlassSessionRegistry.setUnlockTransitionFrameSyncForAll(
+                false, "unlock-barrier-released");
         // SceneController requests a fresh generation before exposing Workspace glass again.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
     }

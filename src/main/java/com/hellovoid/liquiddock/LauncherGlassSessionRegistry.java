@@ -66,6 +66,14 @@ final class LauncherGlassSessionRegistry {
         }
     }
 
+    static synchronized void setUnlockTransitionFrameSyncForAll(
+            boolean enabled, String reason) {
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session == null || session.isShutdown()) continue;
+            session.setUnlockTransitionFrameSyncEnabled(enabled, reason);
+        }
+    }
+
     /** Stop every existing Launcher PassBlur producer as soon as unlock presentation starts. */
     static synchronized void suspendForUnlockCapture() {
         int paused = 0;

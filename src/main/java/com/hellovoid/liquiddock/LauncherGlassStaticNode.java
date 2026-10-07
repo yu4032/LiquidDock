@@ -14,6 +14,10 @@ import java.util.WeakHashMap;
 
 /** Lightweight static Launcher glass binding. Owns no View, Surface, EGL surface or GPU resource. */
 final class LauncherGlassStaticNode {
+    private static final GlassComponentStyle DEFAULT_COMPONENT_STYLE =
+            new GlassComponentStyle(true, 0f, 0f);
+    private static final GlassComponentStyle DISABLED_COMPONENT_STYLE =
+            new GlassComponentStyle(false, 0f, 0f);
     private static final Map<View, WeakReference<LauncherGlassStaticNode>> BY_MATERIAL =
             Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -146,7 +150,7 @@ final class LauncherGlassStaticNode {
     GlassComponentStyle componentStyle() {
         GlassComponentStyle base;
         boolean liveEnabled;
-        if (glassConfig == null) base = new GlassComponentStyle(true, 0f, 0f);
+        if (glassConfig == null) base = DEFAULT_COMPONENT_STYLE;
         else switch (nodeKind) {
             case ICON: base = glassConfig.iconStyle; break;
             case WIDGET: base = glassConfig.widgetStyle; break;
@@ -161,7 +165,7 @@ final class LauncherGlassStaticNode {
             case LARGE_FOLDER:
             default: liveEnabled = GlassRuntimeState.isLargeFolderEnabled(); break;
         }
-        return new GlassComponentStyle(liveEnabled, base.sizeOffsetDp, base.cornerRadiusDp);
+        return liveEnabled ? base : DISABLED_COMPONENT_STYLE;
     }
 
     void requestLifecycleRefresh() {

@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private static final String TAG = "[DC][LauncherGlass]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    private static final long PERF_LOG_WINDOW_NS = 3_000_000_000L;
     private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger(1);
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
@@ -86,6 +87,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         volatile StaticGeometryFrame frame;
         volatile PrismalInteractionState interaction = PrismalInteractionState.IDLE;
 
+        // Render-thread cache. Backdrop frames change far more often than node geometry.
+        StaticGeometryFrame renderedFrame;
+        PrismalGeometry renderedGeometry;
+        int renderedRootWidth = -1;
+        int renderedRootHeight = -1;
+        float renderedProjectedCenterX = Float.NaN;
+
         StaticNodeState(LauncherGlassStaticNode node) {
             nodeRef = new WeakReference<>(node);
         }
@@ -115,6 +123,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<LauncherGlassStaticNode, StaticNodeState> staticNodes =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private volatile NodeState[] nodeStateSnapshot = new NodeState[0];
+    private volatile StaticNodeState[] staticNodeStateSnapshot = new StaticNodeState[0];
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final Object outputWorkLock = new Object();
@@ -158,6 +168,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
     private boolean outputRenderQueued;
+
+    // Debug-only aggregate timings. UI and render counters are single-thread owned.
+    private long uiPerfWindowStartNs;
+    private long uiPerfTotalNs;
+    private long uiPerfMaxNs;
+    private int uiPerfFrames;
+    private long glPerfWindowStartNs;
+    private long glPerfBackdropNs;
+    private long glPerfSceneNs;
+    private long glPerfTotalNs;
+    private long glPerfMaxNs;
+    private int glPerfFrames;
 
     private ViewTreeObserver rootObserver;
     private ViewTreeObserver.OnPreDrawListener preDrawListener;
@@ -285,7 +307,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void registerSink(LauncherGlassSinkView sink) {
         if (sink == null || shuttingDown) return;
         synchronized (nodes) {
-            if (!nodes.containsKey(sink)) nodes.put(sink, new NodeState(sink));
+            if (!nodes.containsKey(sink)) {
+                nodes.put(sink, new NodeState(sink));
+                nodeStateSnapshot = nodes.values().toArray(new NodeState[0]);
+            }
         }
         syncSceneOnUiThread();
         requestDragRedraw();
@@ -293,7 +318,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterSink(LauncherGlassSinkView sink) {
         if (sink == null) return;
-        synchronized (nodes) { nodes.remove(sink); }
+        synchronized (nodes) {
+            nodes.remove(sink);
+            nodeStateSnapshot = nodes.values().toArray(new NodeState[0]);
+        }
         requestDragRedraw();
     }
 
@@ -310,7 +338,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void registerStaticNode(LauncherGlassStaticNode node) {
         if (node == null || shuttingDown) return;
         synchronized (staticNodes) {
-            if (!staticNodes.containsKey(node)) staticNodes.put(node, new StaticNodeState(node));
+            if (!staticNodes.containsKey(node)) {
+                staticNodes.put(node, new StaticNodeState(node));
+                staticNodeStateSnapshot =
+                        staticNodes.values().toArray(new StaticNodeState[0]);
+            }
         }
         syncSceneOnUiThread();
         requestStaticRedraw();
@@ -318,7 +350,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
         if (node == null) return;
-        synchronized (staticNodes) { staticNodes.remove(node); }
+        synchronized (staticNodes) {
+            staticNodes.remove(node);
+            staticNodeStateSnapshot =
+                    staticNodes.values().toArray(new StaticNodeState[0]);
+        }
         requestStaticRedraw();
     }
 
@@ -616,6 +652,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void syncSceneOnUiThread() {
+        if (!MainHook.debugLogging) {
+            syncSceneOnUiThreadInternal();
+            return;
+        }
+        long startedNs = System.nanoTime();
+        try {
+            syncSceneOnUiThreadInternal();
+        } finally {
+            recordUiPerf(System.nanoTime() - startedNs);
+        }
+    }
+
+    private void syncSceneOnUiThreadInternal() {
         if (shuttingDown) return;
         View root = rootRef.get();
         if (root == null) return;
@@ -629,8 +678,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
-        List<NodeState> dragSnapshot;
-        synchronized (nodes) { dragSnapshot = new ArrayList<>(nodes.values()); }
+        NodeState[] dragSnapshot = nodeStateSnapshot;
         for (NodeState node : dragSnapshot) {
             LauncherGlassSinkView sink = node.sinkRef.get();
             if (sink == null) continue;
@@ -648,8 +696,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-        List<StaticNodeState> staticSnapshot;
-        synchronized (staticNodes) { staticSnapshot = new ArrayList<>(staticNodes.values()); }
+        StaticNodeState[] staticSnapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
@@ -671,6 +718,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
         applyTransitionFrameSync(
                 transitionFrameSync.onPreDraw(geometryMotionChanged), root);
+        if (geometryMotionChanged
+                && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
+                && !transitionFrameSync.isUnlockTransitionActive()) {
+            applyTransitionFrameSync(
+                    transitionFrameSync.onUnlockTransition(true),
+                    root,
+                    "unlock-motion-hold");
+            sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
+            MainHook.log("[DC][WorkspaceFrameSync] unlock producer resumed; hold-until-GONE");
+        }
 
         int nextRotation = readLauncherConfigRotation(root);
         if (nextRotation != configRotation) {
@@ -707,6 +764,15 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 reason != null ? reason : "workspace-native-transition");
     }
 
+    void setUnlockTransitionFrameSyncEnabled(boolean enabled, String reason) {
+        if (shuttingDown) return;
+        View root = rootRef.get();
+        applyTransitionFrameSync(
+                transitionFrameSync.onUnlockTransition(enabled),
+                root,
+                reason != null ? reason : "workspace-unlock-transition");
+    }
+
     private void applyTransitionFrameSync(
             WorkspaceTransitionFrameSyncState.Decision decision, View root) {
         applyTransitionFrameSync(decision, root, "workspace-geometry-motion");
@@ -717,10 +783,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (decision == null) return;
         if (decision.enable) {
             sourceBackend.setTransitionFrameSyncEnabled(true, reason);
-            if (LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
-                sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
-                MainHook.log("[DC][WorkspaceFrameSync] unlock producer resumed for live motion");
-            }
         } else if (decision.disable) {
             sourceBackend.setTransitionFrameSyncEnabled(false, reason);
         }
@@ -731,6 +793,51 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 && root != null && root.isAttachedToWindow()) {
             root.postInvalidateOnAnimation();
         }
+    }
+
+    private void recordUiPerf(long elapsedNs) {
+        if (!MainHook.debugLogging) return;
+        long now = System.nanoTime();
+        if (uiPerfWindowStartNs == 0L) uiPerfWindowStartNs = now;
+        uiPerfFrames++;
+        uiPerfTotalNs += elapsedNs;
+        uiPerfMaxNs = Math.max(uiPerfMaxNs, elapsedNs);
+        if (now - uiPerfWindowStartNs < PERF_LOG_WINDOW_NS) return;
+        long avgUs = uiPerfFrames > 0 ? uiPerfTotalNs / uiPerfFrames / 1_000L : 0L;
+        MainHook.log("[DC][WorkspacePerf][UI] frames=" + uiPerfFrames
+                + " avgSyncUs=" + avgUs
+                + " maxSyncUs=" + (uiPerfMaxNs / 1_000L)
+                + " dragNodes=" + nodeStateSnapshot.length
+                + " staticNodes=" + staticNodeStateSnapshot.length);
+        uiPerfWindowStartNs = now;
+        uiPerfFrames = 0;
+        uiPerfTotalNs = 0L;
+        uiPerfMaxNs = 0L;
+    }
+
+    private void recordGlPerf(long backdropNs, long sceneNs, long totalNs) {
+        if (!MainHook.debugLogging) return;
+        long now = System.nanoTime();
+        if (glPerfWindowStartNs == 0L) glPerfWindowStartNs = now;
+        glPerfFrames++;
+        glPerfBackdropNs += backdropNs;
+        glPerfSceneNs += sceneNs;
+        glPerfTotalNs += totalNs;
+        glPerfMaxNs = Math.max(glPerfMaxNs, totalNs);
+        if (now - glPerfWindowStartNs < PERF_LOG_WINDOW_NS) return;
+        long frames = Math.max(1, glPerfFrames);
+        MainHook.log("[DC][WorkspacePerf][GL] frames=" + glPerfFrames
+                + " avgBackdropUs=" + (glPerfBackdropNs / frames / 1_000L)
+                + " avgSceneUs=" + (glPerfSceneNs / frames / 1_000L)
+                + " avgTotalUs=" + (glPerfTotalNs / frames / 1_000L)
+                + " maxTotalUs=" + (glPerfMaxNs / 1_000L)
+                + " staticNodes=" + staticNodeStateSnapshot.length);
+        glPerfWindowStartNs = now;
+        glPerfFrames = 0;
+        glPerfBackdropNs = 0L;
+        glPerfSceneNs = 0L;
+        glPerfTotalNs = 0L;
+        glPerfMaxNs = 0L;
     }
 
     private void recoverFreshBackdropOnUi(long generation, int attempt) {
@@ -844,6 +951,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         PrismalParams params = prismalParams;
         if (params == null) return;
         try {
+            boolean perf = MainHook.debugLogging;
+            long perfStartNs = perf ? System.nanoTime() : 0L;
+            long backdropStartNs = perfStartNs;
             ensureLauncherGl();
             rootWidth = frame.logicalWidth;
             rootHeight = frame.logicalHeight;
@@ -855,8 +965,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalWidth,
                     frame.logicalHeight,
                     params);
+            long backdropDoneNs = perf ? System.nanoTime() : 0L;
             backdropPrepared = true;
             renderOutputs(true, true);
+            if (perf) {
+                long sceneDoneNs = System.nanoTime();
+                recordGlPerf(
+                        backdropDoneNs - backdropStartNs,
+                        sceneDoneNs - backdropDoneNs,
+                        sceneDoneNs - perfStartNs);
+            }
             WallpaperFrameToken wallpaperFrame = takeWallpaperFrameToken(frame.generation);
             boolean renderedStaticOutput = staticOutput != null;
             long renderedGeneration = frame.generation;
@@ -934,8 +1052,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE) return;
         sourceBackend.makePbufferCurrent();
         prismalRenderer.beginGlassFrame();
-        List<StaticNodeState> snapshot;
-        synchronized (staticNodes) { snapshot = new ArrayList<>(staticNodes.values()); }
+        StaticNodeState[] snapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
@@ -943,9 +1060,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (node == null || geometry == null) continue;
             float projectedCenterX = workspaceScrollProjection.projectCenterX(
                     geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
-            PrismalGeometry prismalGeometry = new PrismalGeometry(
-                    rootWidth, rootHeight, projectedCenterX, geometry.centerY,
-                    geometry.width, geometry.height, geometry.cornerRadius);
+            PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
+                    state, frame, geometry, projectedCenterX);
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(
@@ -954,9 +1070,34 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         presentFull(prismalRenderer.outputTexture(), output);
     }
 
+    private PrismalGeometry resolveStaticPrismalGeometry(
+            StaticNodeState state,
+            StaticGeometryFrame frame,
+            LauncherGlassGeometry.Snapshot geometry,
+            float projectedCenterX) {
+        PrismalGeometry cached = state.renderedGeometry;
+        int width = rootWidth;
+        int height = rootHeight;
+        if (cached != null
+                && state.renderedFrame == frame
+                && state.renderedRootWidth == width
+                && state.renderedRootHeight == height
+                && Float.compare(state.renderedProjectedCenterX, projectedCenterX) == 0) {
+            return cached;
+        }
+        PrismalGeometry created = new PrismalGeometry(
+                width, height, projectedCenterX, geometry.centerY,
+                geometry.width, geometry.height, geometry.cornerRadius);
+        state.renderedFrame = frame;
+        state.renderedRootWidth = width;
+        state.renderedRootHeight = height;
+        state.renderedProjectedCenterX = projectedCenterX;
+        state.renderedGeometry = created;
+        return created;
+    }
+
     private void renderDragOutputs(PrismalParams params) {
-        for (Map.Entry<LauncherGlassSinkView, OutputState> entry
-                : new ArrayList<>(outputs.entrySet())) {
+        for (Map.Entry<LauncherGlassSinkView, OutputState> entry : outputs.entrySet()) {
             NodeState node = nodes.get(entry.getKey());
             LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (node == null || geometry == null) continue;
