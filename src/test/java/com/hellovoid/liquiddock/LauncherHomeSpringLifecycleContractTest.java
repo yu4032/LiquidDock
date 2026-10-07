@@ -27,6 +27,12 @@ public class LauncherHomeSpringLifecycleContractTest {
         assertTrue(source.contains("\"getAnimType\""));
         assertTrue(source.contains("CLOSE_TO_HOME"));
         assertTrue(source.contains("CLOSE_TO_HOME_CENTER"));
+        assertTrue(source.contains("ACTIVE_FRAME_SYNC_SPRINGS"));
+        assertTrue(source.contains("onLauncherNativeTransitionStarted"));
+        assertTrue(source.contains("onLauncherNativeTransitionFinished"));
+        assertTrue(source.contains("releaseNativeTransitionsForOwner"));
+        assertTrue(source.contains("setNativeTransitionFrameSyncForAll(true"));
+        assertTrue(source.contains("setNativeTransitionFrameSyncForAll(false"));
 
         assertFalse(source.contains(
                 "hookMethod(classLoader, WINDOW_ELEMENT, \"animTo\""));

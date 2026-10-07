@@ -30,6 +30,8 @@ final class MiuixGlassHook {
 
     private static WeakReference<DockLiquidGlassHostView> hostRef = new WeakReference<>(null);
     private static WeakReference<View> backgroundRef = new WeakReference<>(null);
+    private static WeakReference<View> nativeRadiusOwner = new WeakReference<>(null);
+    private static float cachedNativeRadius = Float.NaN;
     private static WeakReference<ViewTreeObserver> vendorMaterialObserver = new WeakReference<>(null);
     private static ViewTreeObserver.OnPreDrawListener vendorMaterialPreserver;
     private static WeakReference<View> vendorGpuBlurLoggedFor = new WeakReference<>(null);
@@ -52,6 +54,8 @@ final class MiuixGlassHook {
     private static void clearTrackedViews() {
         hostRef = new WeakReference<>(null);
         backgroundRef = new WeakReference<>(null);
+        nativeRadiusOwner = new WeakReference<>(null);
+        cachedNativeRadius = Float.NaN;
         vendorGpuBlurLoggedFor = new WeakReference<>(null);
         compatBackgroundBlurLoggedFor = new WeakReference<>(null);
         transparentMaterialOwner = new WeakReference<>(null);
@@ -170,12 +174,12 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     static boolean hasReadyNativeGeometry(View dockBg) {
         if (!canInstallBeforeGeometry(dockBg)) return false;
         if (dockBg.getWidth() <= 0 || dockBg.getHeight() <= 0) return false;
-        float radius = readRadius(dockBg);
+        float radius = readAndCacheRadius(dockBg);
         return !Float.isNaN(radius) && !Float.isInfinite(radius) && radius > 0.5f;
     }
 
     static float readNativeOpticsRadius(View dockBg) {
-        return readRadius(dockBg);
+        return cachedRadiusOrRead(dockBg);
     }
 
     static int suppressCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
@@ -222,7 +226,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
         if (nativeVisualOwner) suppressVendorGpuBlur(dockBg);
 
-        float nativeRadius = readRadius(dockBg);
+        float nativeRadius = readAndCacheRadius(dockBg);
         suppressVendorMaterialBody(dockBg, nativeRadius);
         int dockW = readDimension(dockBg, "mWidth", true);
         int dockH = readDimension(dockBg, "mHeight", false);
@@ -236,6 +240,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         boolean zeroCopyCandidate = Miuix307ZeroCopyRenderer.install(
                 materialHost, host, config.glass, config.workstation,
                 Math.round(config.glass.blur));
+        if (zeroCopyCandidate) {
+            Miuix307ZeroCopyRenderer.setNativeOpticsRadiusPx(nativeRadius);
+        }
 
         FrameLayout.LayoutParams hostLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -316,7 +323,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         DockLiquidGlassHostView host = currentHost();
         if (host == null || host.getParent() != dockBg) return;
         if (isNativeVisualOwner(dockBg)) {
-            suppressVendorMaterialBody(dockBg, readRadius(dockBg));
+            suppressVendorMaterialBody(dockBg, readAndCacheRadius(dockBg));
         }
         host.bringToFront();
         host.requestLayout();
@@ -328,9 +335,10 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         DockLiquidGlassHostView host = currentHost();
         if (host == null || host.getParent() != dockBg) return;
 
-        float nativeRadius = readRadius(dockBg);
+        float nativeRadius = readAndCacheRadius(dockBg);
         suppressVendorMaterialBody(dockBg, nativeRadius);
         host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
+        Miuix307ZeroCopyRenderer.setNativeOpticsRadiusPx(nativeRadius);
         Miuix307ZeroCopyRenderer.sync(config.glass, Math.round(config.glass.blur));
         DockStrokeRenderer.configureReplacingForeground(
                 host, config.dock, nativeRadius);
@@ -382,7 +390,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         ViewTreeObserver.OnPreDrawListener listener = () -> {
             View background = watchedBackground.get();
             if (background != null && currentBackground() == background) {
-                suppressVendorMaterialBody(background, readRadius(background));
+                suppressVendorMaterialBody(background, cachedRadiusOrRead(background));
             }
             return true;
         };
@@ -394,7 +402,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         dockBg.post(() -> {
             View background = postedBackground.get();
             if (background != null && currentBackground() == background) {
-                suppressVendorMaterialBody(background, readRadius(background));
+                suppressVendorMaterialBody(background, cachedRadiusOrRead(background));
             }
         });
     }
@@ -457,6 +465,22 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
             if (value instanceof Integer && (Integer) value > 0) return (Integer) value;
         } catch (Throwable ignored) {}
         return fallback;
+    }
+
+    private static float readAndCacheRadius(View dockBg) {
+        float radius = readRadius(dockBg);
+        nativeRadiusOwner = new WeakReference<>(dockBg);
+        cachedNativeRadius = radius;
+        return radius;
+    }
+
+    private static float cachedRadiusOrRead(View dockBg) {
+        float radius = cachedNativeRadius;
+        if (dockBg != null && nativeRadiusOwner.get() == dockBg
+                && !Float.isNaN(radius) && !Float.isInfinite(radius)) {
+            return radius;
+        }
+        return readAndCacheRadius(dockBg);
     }
 
     private static float readRadius(View dockBg) {

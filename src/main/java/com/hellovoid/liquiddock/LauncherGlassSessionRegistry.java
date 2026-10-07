@@ -17,6 +17,7 @@ final class LauncherGlassSessionRegistry {
 
     private static final WeakHashMap<View, LauncherGlassSession> SESSIONS = new WeakHashMap<>();
     private static long workstationRolloverGeneration;
+    private static boolean nativeTransitionFrameSyncActive;
 
     private LauncherGlassSessionRegistry() {}
 
@@ -35,6 +36,9 @@ final class LauncherGlassSessionRegistry {
         }
         LauncherGlassSession created = new LauncherGlassSession(root, glassConfig);
         SESSIONS.put(root, created);
+        if (nativeTransitionFrameSyncActive) {
+            created.setNativeTransitionFrameSyncEnabled(true, "native-transition-inherited");
+        }
         LauncherGlassSceneController controller =
                 LauncherGlassSceneController.acquire(root, created, glassConfig);
         if (controller != null) controller.onRootReady();
@@ -50,6 +54,24 @@ final class LauncherGlassSessionRegistry {
             return null;
         }
         return root;
+    }
+
+    static synchronized void setNativeTransitionFrameSyncForAll(
+            boolean enabled, String reason) {
+        if (nativeTransitionFrameSyncActive == enabled) return;
+        nativeTransitionFrameSyncActive = enabled;
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session == null || session.isShutdown()) continue;
+            session.setNativeTransitionFrameSyncEnabled(enabled, reason);
+        }
+    }
+
+    static synchronized void setUnlockTransitionFrameSyncForAll(
+            boolean enabled, String reason) {
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session == null || session.isShutdown()) continue;
+            session.setUnlockTransitionFrameSyncEnabled(enabled, reason);
+        }
     }
 
     /** Stop every existing Launcher PassBlur producer as soon as unlock presentation starts. */

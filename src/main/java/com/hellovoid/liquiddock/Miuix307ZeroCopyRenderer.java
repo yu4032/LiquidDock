@@ -99,6 +99,11 @@ final class Miuix307ZeroCopyRenderer {
         return gpuBackdrop != null ? gpuBackdrop.getHeight() : 0;
     }
 
+    static void setNativeOpticsRadiusPx(float radiusPx) {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop != null) gpuBackdrop.setNativeOpticsRadiusPx(radiusPx);
+    }
+
     static void sync(LiquidDockConfig.Glass glassConfig, int blurRadiusPx) {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null && glassConfig != null) {

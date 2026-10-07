@@ -56,7 +56,7 @@ public class ThirdPartyGlassConfigCodecTest {
 
         assertEquals(255, imported.get("third_party_glass.miui.searchbox.tint_r"));
         assertEquals(50, imported.get("third_party_glass.miui.searchbox.capture_scale_percent"));
-        assertEquals(60, imported.get("third_party_glass.miui.searchbox.render_fps"));
+        assertEquals(999, imported.get("third_party_glass.miui.searchbox.render_fps"));
         assertFalse(imported.containsKey("third_party_glass.bad/profile.enabled"));
         assertTrue(imported.containsKey(ConfigSchema.Grid.MARGINS_DP.name()));
     }

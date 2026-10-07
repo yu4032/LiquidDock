@@ -140,6 +140,57 @@ public class PrismalModuleBoundaryContractTest {
         assertFalse(normalize.contains("glGetAttribLocation"));
         assertFalse("Dock full normalization overwrite must not clear first",
                 normalize.contains("glClear("));
+        assertFalse("Dock normalize sampler unit is fixed after link",
+                normalize.contains("glUniform1i(normalizeTextureLocation, 0)"));
+        int compositeStart = dock.indexOf("private boolean renderCompositePass(");
+        int compositeEnd = dock.indexOf("private void logPrismalMapping(", compositeStart);
+        String composite = dock.substring(compositeStart, compositeEnd);
+        assertFalse("Dock composite sampler unit is fixed after link",
+                composite.contains("glUniform1i(compositeTextureLocation, 0)"));
+    }
+
+    @Test
+    public void dockRenderLoopDoesNotPollGlErrorEveryFrame() throws Exception {
+        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        int start = view.indexOf("private void drawLatestFrame(boolean fromFrameCallback)");
+        int end = view.indexOf("private boolean canReusePreparedBackdrop(", start);
+        assertTrue(start >= 0 && end > start);
+        String hotLoop = view.substring(start, end);
+        assertFalse(hotLoop.contains("GLES20.glGetError()"));
+    }
+
+    @Test
+    public void dockPreDrawCachesReflectionAccessorsAndScratchStorage() throws Exception {
+        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        assertTrue(view.contains("private Object cachedViewRoot;"));
+        assertTrue(view.contains("private Field cachedWinFrameInScreenField;"));
+        assertTrue(view.contains("private Field cachedSurfaceSizeField;"));
+        assertTrue(view.contains("private Method cachedGetSurfaceControlMethod;"));
+        assertTrue(view.contains("private final Rect winFrameScratch = new Rect();"));
+        assertTrue(view.contains("private final int[] viewScreenScratch = new int[2];"));
+        assertTrue(view.contains("private final SamplingInsets uiSamplingInsetsCache = new SamplingInsets();"));
+        assertTrue(view.contains("private final int[] uiInsetPairScratch = new int[2];"));
+        assertTrue(view.contains("resolveSamplingInsetsCached(visibleWidth, visibleHeight, frameParams)"));
+        assertTrue(view.contains("Object viewRoot = getViewRootImplCached(materialHost);"));
+        assertTrue(view.contains("Rect winFrame = readViewRootWinFrame(this);"));
+
+        int mappingStart = view.indexOf("private void updateBackdropMapping()");
+        int mappingEnd = view.indexOf("private ProducerGeometry readSurfaceGeometry(", mappingStart);
+        String mapping = view.substring(mappingStart, mappingEnd);
+        assertFalse("mapping must reuse location scratch instead of allocating every pre-draw",
+                mapping.contains("new int[2]"));
+        assertFalse("mapping must reuse cached sampling insets instead of allocating every pre-draw",
+                mapping.contains("new SamplingInsets"));
+
+        int geometryStart = view.indexOf("private ProducerGeometry readSurfaceGeometry(");
+        int geometryEnd = view.indexOf("private void logStageBDiagnostics(", geometryStart);
+        String geometry = view.substring(geometryStart, geometryEnd);
+        assertFalse("surface geometry hot path must not resolve methods every pre-draw",
+                geometry.contains("getDeclaredMethod("));
+        assertFalse("surface geometry hot path must not walk fields every pre-draw",
+                geometry.contains("findField("));
+        assertFalse("surface geometry hot path must not call setAccessible every pre-draw",
+                geometry.contains("setAccessible("));
     }
 
     @Test

@@ -41,7 +41,7 @@ final class ThirdPartyGlassAppearance {
                 captureScalePercent,
                 PassBlurQualityPolicy.MIN_CAPTURE_SCALE_PERCENT,
                 PassBlurQualityPolicy.MAX_CAPTURE_SCALE_PERCENT);
-        this.renderFps = clamp(renderFps, 0, PassBlurQualityPolicy.MAX_RENDER_FPS);
+        this.renderFps = Math.max(0, renderFps);
         this.cornerRadiusOverrideDp = cornerRadiusOverrideDp;
         this.highlightProfile = highlightProfile != null
                 ? highlightProfile : PrismalHighlightProfile.ALL_ENABLED;

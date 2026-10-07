@@ -374,7 +374,9 @@ final class LauncherGlassSceneController {
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
         if (state.state() == State.COVERED
-                || unlockTransitionPending || recentsWallpaperSettlePending) {
+                || (unlockTransitionPending
+                    && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
+                || recentsWallpaperSettlePending) {
             session.suspendWorkspaceProducer();
         }
         if (bootstrapPosted) return;

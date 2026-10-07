@@ -13,6 +13,17 @@ public class SystemUiHandleMenuGlassContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
     @Test
+    public void sharedRealtimeCapCoversHandleMenuAfterOesDrain() throws Exception {
+        String session = Files.readString(
+                Path.of("src/main/java/com/hellovoid/liquiddock/SystemUiHandleMenuPrismalSession.java"));
+        assertTrue(session.contains("private final PassBlurFrameRateLimiter sourceFrameLimiter;"));
+        assertTrue(session.contains("glassConfig.passBlurRenderFps"));
+        assertTrue(session.contains("DisplayRefreshRatePolicy.clampRequestedFps("));
+        assertTrue(session.contains("texture.updateTexImage();"));
+        assertTrue(session.contains("!sourceFrameLimiter.shouldSchedule(System.nanoTime(), false)"));
+    }
+
+    @Test
     public void hookUsesSemanticCaptionMenuBoundariesAndKeepsFailOpenBlur() throws Exception {
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
 

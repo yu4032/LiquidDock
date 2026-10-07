@@ -66,6 +66,30 @@ public class PrismalBatchRendererContractTest {
     }
 
     @Test
+    public void rendererCachesStableBlurUniformsAndSamplerUnits() throws Exception {
+        String source = source();
+        assertTrue(source.contains("private int cachedBlurWidth = -1;"));
+        assertTrue(source.contains("private float cachedBlurSigma = Float.NaN;"));
+        assertTrue(source.contains("boolean updateTexelSize = cachedBlurWidth != blurWidth"));
+        assertTrue(source.contains("boolean updateSigma = Float.compare(cachedBlurSigma, sigma) != 0"));
+        assertTrue(source.contains("GLES20.glUniform1i(sourceTextureLocation, 0);"));
+        assertTrue(source.contains("GLES20.glUniform1i(blurHTextureLocation, 0);"));
+        assertTrue(source.contains("GLES20.glUniform1i(blurVTextureLocation, 0);"));
+
+        int sourceStart = source.indexOf("private void renderSourceAdapter(");
+        int sourceEnd = source.indexOf("private void renderBlur(", sourceStart);
+        String sourcePass = source.substring(sourceStart, sourceEnd);
+        assertFalse(sourcePass.contains("glUniform1i(sourceTextureLocation"));
+
+        int blurStart = source.indexOf("private void renderBlurPass(");
+        int blurEnd = source.indexOf("private void renderGlassNode(", blurStart);
+        String blurPass = source.substring(blurStart, blurEnd);
+        assertFalse(blurPass.contains("glUniform1i("));
+        assertTrue(blurPass.contains("if (updateTexelSize)"));
+        assertTrue(blurPass.contains("if (updateSigma)"));
+    }
+
+    @Test
     public void rendererCanClearOnlyOneDirtyGlassRegion() throws Exception {
         String source = source();
         assertTrue(source.contains("public void beginGlassFrameRegion("));

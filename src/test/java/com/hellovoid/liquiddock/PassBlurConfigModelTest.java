@@ -33,7 +33,7 @@ public class PassBlurConfigModelTest {
     }
 
     @Test
-    public void typedConfigClampsPersistedPassBlurQualityValues() {
+    public void typedConfigClampsScaleButLeavesFpsForDisplayRuntimePolicy() {
         Map<String, Object> values = new HashMap<>();
         values.put(ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name(), 10);
         values.put(ConfigSchema.Glass.PASSBLUR_RENDER_FPS.name(), 120);
@@ -41,6 +41,6 @@ public class PassBlurConfigModelTest {
         LiquidDockConfig config = LiquidDockConfig.from(new ConfigReader(values));
 
         assertEquals(50, config.glass.passBlurCaptureScalePercent);
-        assertEquals(60, config.glass.passBlurRenderFps);
+        assertEquals(120, config.glass.passBlurRenderFps);
     }
 }

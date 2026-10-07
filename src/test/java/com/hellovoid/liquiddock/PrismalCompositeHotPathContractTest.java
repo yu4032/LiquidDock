@@ -33,6 +33,12 @@ public class PrismalCompositeHotPathContractTest {
     }
 
     @Test
+    public void securityCenterCompositeDoesNotPollGlErrorEveryPresent() throws Exception {
+        String source = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
+        assertFalse(source.contains("GLES20.glGetError()"));
+    }
+
+    @Test
     public void systemUiNormalizeDrawLoopReusesLinkedLocations() throws Exception {
         String source = Files.readString(MAIN.resolve("SystemUiHandleMenuPrismalSession.java"));
         assertTrue(source.contains("normalizeTexMatrixLocation = requireUniform(normalizeProgram, \"uTexMatrix\")"));

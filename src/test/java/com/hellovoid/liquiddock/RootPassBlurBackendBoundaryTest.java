@@ -38,11 +38,38 @@ public class RootPassBlurBackendBoundaryTest {
 
         assertFalse("hot normalize path must use cached uniforms",
                 backend.contains("glUniform1i(requireUniform(normalizeProgram"));
+        assertTrue("normalize sampler unit must be initialized with the linked program",
+                backend.contains("GLES20.glUseProgram(normalizeProgram);\n"
+                        + "            GLES20.glUniform1i(normalizeTextureLocation, 0);"));
         assertFalse("hot normalize path must use cached attributes",
                 backend.contains("bindQuad(normalizeProgram)"));
         assertFalse("full root normalization overwrite must not clear first",
                 backend.contains("glViewport(0, 0, normalizedWidth, normalizedHeight);\n"
                         + "        GLES20.glClearColor(0f, 0f, 0f, 0f);"));
+    }
+
+    @Test
+    public void workspaceMotionKeepsForceRefreshLeaseButRespectsSharedRenderCap() throws Exception {
+        Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
+        String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));
+        String bridge = Files.readString(main.resolve("Miuix307PassBlurBridge.java"));
+        String session = Files.readString(main.resolve("LauncherGlassSession.java"));
+
+        assertTrue(backend.contains("private volatile boolean transitionFrameSyncEnabled;"));
+        assertFalse("native motion must no longer bypass the user-selected shared FPS cap",
+                backend.contains("transitionSync\n                || gate == null"));
+        assertTrue(backend.contains("DisplayRefreshRatePolicy.clampRequestedFps("));
+        assertTrue(backend.contains("sourceFrameGate = new PassBlurSourceFrameGate(this.renderFps);"));
+        assertTrue(backend.contains("setWorkspaceTransitionFrameSync(current, enabled)"));
+
+        assertTrue(bridge.contains("domain == PassBlurDomain.LAUNCHER_WORKSPACE"));
+        assertTrue(bridge.contains("binding.workspaceTransitionFrameSync"));
+        assertTrue(bridge.contains("WORKSPACE_FRAME_SYNC_TAG"));
+
+        assertTrue(session.contains("WorkspaceTransitionFrameSyncState"));
+        assertTrue(session.contains("geometryMotionChanged = true;"));
+        assertTrue(session.contains("root.postInvalidateOnAnimation();"));
+        assertTrue(session.contains("passBlurRenderFps"));
     }
 
     @Test
