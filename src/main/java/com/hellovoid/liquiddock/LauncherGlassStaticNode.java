@@ -16,6 +16,8 @@ import java.util.WeakHashMap;
 final class LauncherGlassStaticNode {
     private static final Map<View, WeakReference<LauncherGlassStaticNode>> BY_MATERIAL =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final GlassComponentStyle DEFAULT_COMPONENT_STYLE =
+            new GlassComponentStyle(true, 0f, 0f);
 
     private final WeakReference<View> materialRef;
     private final LauncherGlassDragState.Kind kind;
@@ -23,6 +25,7 @@ final class LauncherGlassStaticNode {
     private final LauncherGlassVisualOwnerState visualOwnerState =
             new LauncherGlassVisualOwnerState();
     private final float[] geometryPoints = new float[8];
+    private final float[] styledBounds = new float[4];
     private final Matrix materialToGlobal = new Matrix();
     private final Matrix rootToGlobal = new Matrix();
     private final Matrix globalToRoot = new Matrix();
@@ -144,24 +147,30 @@ final class LauncherGlassStaticNode {
     LauncherGlassNodeKind nodeKind() { return nodeKind; }
 
     GlassComponentStyle componentStyle() {
-        GlassComponentStyle base;
-        boolean liveEnabled;
-        if (glassConfig == null) base = new GlassComponentStyle(true, 0f, 0f);
-        else switch (nodeKind) {
-            case ICON: base = glassConfig.iconStyle; break;
-            case WIDGET: base = glassConfig.widgetStyle; break;
-            case SMALL_FOLDER: base = glassConfig.smallFolderStyle; break;
-            case LARGE_FOLDER:
-            default: base = glassConfig.largeFolderStyle; break;
-        }
+        GlassComponentStyle base = baseComponentStyle();
+        return new GlassComponentStyle(
+                isComponentLiveEnabled(), base.sizeOffsetDp, base.cornerRadiusDp);
+    }
+
+    private GlassComponentStyle baseComponentStyle() {
+        if (glassConfig == null) return DEFAULT_COMPONENT_STYLE;
         switch (nodeKind) {
-            case ICON: liveEnabled = GlassRuntimeState.isIconEnabled(); break;
-            case WIDGET: liveEnabled = GlassRuntimeState.isWidgetEnabled(); break;
-            case SMALL_FOLDER: liveEnabled = GlassRuntimeState.isSmallFolderEnabled(); break;
+            case ICON: return glassConfig.iconStyle;
+            case WIDGET: return glassConfig.widgetStyle;
+            case SMALL_FOLDER: return glassConfig.smallFolderStyle;
             case LARGE_FOLDER:
-            default: liveEnabled = GlassRuntimeState.isLargeFolderEnabled(); break;
+            default: return glassConfig.largeFolderStyle;
         }
-        return new GlassComponentStyle(liveEnabled, base.sizeOffsetDp, base.cornerRadiusDp);
+    }
+
+    private boolean isComponentLiveEnabled() {
+        switch (nodeKind) {
+            case ICON: return GlassRuntimeState.isIconEnabled();
+            case WIDGET: return GlassRuntimeState.isWidgetEnabled();
+            case SMALL_FOLDER: return GlassRuntimeState.isSmallFolderEnabled();
+            case LARGE_FOLDER:
+            default: return GlassRuntimeState.isLargeFolderEnabled();
+        }
     }
 
     void requestLifecycleRefresh() {
@@ -330,9 +339,9 @@ final class LauncherGlassStaticNode {
     LauncherGlassGeometry.Snapshot captureGeometry(
             View root, Matrix cachedGlobalToRoot, int rootWidth, int rootHeight) {
         View material = materialRef.get();
-        GlassComponentStyle style = componentStyle();
-        if (disposed || material == null || root == null || style == null || !style.enabled
-                || visibilityAlpha <= 0.001f) return null;
+        GlassComponentStyle style = baseComponentStyle();
+        if (disposed || material == null || root == null || style == null
+                || !isComponentLiveEnabled() || visibilityAlpha <= 0.001f) return null;
         if (rootWidth <= 0 || rootHeight <= 0) return null;
 
         int hostWidth = material.getWidth();
@@ -395,8 +404,9 @@ final class LauncherGlassStaticNode {
                 localRight = center + targetWidth * 0.5f;
             }
         }
-        float[] styledBounds = LauncherGlassBoundsPolicy.apply(
-                localLeft, localTop, localRight, localBottom, style.sizeOffsetDp * density);
+        LauncherGlassBoundsPolicy.applyInto(
+                styledBounds, localLeft, localTop, localRight, localBottom,
+                style.sizeOffsetDp * density);
         localLeft = styledBounds[0];
         localTop = styledBounds[1];
         localRight = styledBounds[2];
