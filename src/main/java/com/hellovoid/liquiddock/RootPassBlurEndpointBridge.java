@@ -119,10 +119,18 @@ final class RootPassBlurEndpointBridge {
     private RootPassBlurEndpointBridge() {}
 
     static Endpoint inspect(View root) {
-        return inspect(root, -1);
+        return inspect(root, -1, true);
     }
 
     static Endpoint inspect(View root, int knownRotation) {
+        return inspect(root, knownRotation, true);
+    }
+
+    static Endpoint inspectGeometry(View root) {
+        return inspect(root, -1, false);
+    }
+
+    private static Endpoint inspect(View root, int knownRotation, boolean includeGeneration) {
         if (root == null) return null;
         try {
             Object viewRoot = getViewRootImpl(root);
@@ -160,8 +168,10 @@ final class RootPassBlurEndpointBridge {
                     rotation,
                     rootSurface,
                     System.identityHashCode(viewRoot),
-                    Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot),
-                    Miuix307PassBlurBridge.surfaceLayerId(rootSurface),
+                    includeGeneration
+                            ? Miuix307PassBlurBridge.readSurfaceSequenceId(viewRoot) : -1,
+                    includeGeneration
+                            ? Miuix307PassBlurBridge.surfaceLayerId(rootSurface) : -1,
                     insetLeft,
                     insetTop,
                     insetRight,
