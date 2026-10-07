@@ -21,8 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -30,6 +30,11 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.GridView
+import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.colorControls
 import top.yukonga.miuix.kmp.blur.drawBackdrop
@@ -41,14 +46,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private data class SettingsBottomItem(
     val labelRes: Int,
-    val iconRes: Int,
+    val icon: ImageVector,
 )
 
 private val settingsBottomItems = listOf(
-    SettingsBottomItem(R.string.tab_overview, R.drawable.ic_settings_overview),
-    SettingsBottomItem(R.string.tab_layout, R.drawable.ic_settings_layout),
-    SettingsBottomItem(R.string.tab_glass, R.drawable.ic_settings_glass),
-    SettingsBottomItem(R.string.tab_more, R.drawable.ic_settings_more),
+    SettingsBottomItem(R.string.tab_overview, MiuixIcons.Tune),
+    SettingsBottomItem(R.string.tab_layout, MiuixIcons.GridView),
+    SettingsBottomItem(R.string.tab_glass, MiuixIcons.Image),
+    SettingsBottomItem(R.string.tab_more, MiuixIcons.Settings),
 )
 
 private val BottomBarHighlight = Highlight(
@@ -217,7 +222,7 @@ private fun RowScope.SettingsBottomBarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            painter = painterResource(item.iconRes),
+            imageVector = item.icon,
             contentDescription = stringResource(item.labelRes),
             tint = contentColor,
             modifier = Modifier.size(if (selected) 23.dp else 21.dp),
