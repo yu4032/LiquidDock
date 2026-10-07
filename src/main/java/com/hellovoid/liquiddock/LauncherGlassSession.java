@@ -726,10 +726,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // Open the producer gate before any resume or endpoint rebind. The separate scene
             // freshness barrier remains pending until SystemUI GONE.
             LauncherGlassHomePresentationHook.onWorkspaceUnlockMotionStarted();
-            applyTransitionFrameSync(
-                    transitionFrameSync.onUnlockTransition(true),
-                    root,
-                    "unlock-motion-hold");
+            setUnlockTransitionFrameSyncEnabled(true, "unlock-motion-hold");
             sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
             MainHook.log("[DC][WorkspaceFrameSync] unlock producer gate opened; resume/rebind allowed; hold-until-GONE");
         }

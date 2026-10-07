@@ -1,8 +1,13 @@
 package com.hellovoid.liquiddock;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -16,12 +21,17 @@ import java.util.WeakHashMap;
 final class LauncherGlassStaticLayer extends TextureView implements TextureView.SurfaceTextureListener {
     private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
 
+    private static final WeakHashMap<View, Long> UNLOCK_END_BY_ROOT = new WeakHashMap<>();
+
     private final WeakReference<View> rootRef;
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
     private final LauncherGlassSession session;
     private final Handler mainHandler;
     private Surface outputSurface;
     private boolean disposed;
+    private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
+    private ValueAnimator sceneAnimator;
+    private ValueAnimator motionAnimator;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -43,6 +53,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 mainHandler.post(() -> {
                     View stableRoot = rootRef.get();
                     if (stableRoot == v && !v.isAttachedToWindow()) {
+                        cancelSceneAnimation();
+                        cancelMotionAnimation();
                         forget(stableRoot, LauncherGlassStaticLayer.this);
                     }
                 });
@@ -61,6 +73,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         rootGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         BY_ROOT.put(root, layer);
+        Long endAt = UNLOCK_END_BY_ROOT.get(root);
+        if (endAt != null) layer.startMotionReveal(endAt);
         MainHook.log("[DC][LauncherGlass] shared static root layer attached root="
                 + root.getClass().getSimpleName());
         return layer;
@@ -95,34 +109,120 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
+    static void onNativeUnlockStarted(View root, long expectedDurationMs) {
+        if (root == null || expectedDurationMs <= 0) return;
+        long endAt = SystemClock.uptimeMillis() + expectedDurationMs;
+        UNLOCK_END_BY_ROOT.put(root, endAt);
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return;
+        if (Looper.myLooper() == Looper.getMainLooper()) layer.startMotionReveal(endAt);
+        else layer.mainHandler.post(() -> layer.startMotionReveal(endAt));
+    }
+
+    static void onNativeUnlockEnded(View root) {
+        UNLOCK_END_BY_ROOT.remove(root);
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return;
+        Runnable finish = () -> {
+            if (layer.disposed) return;
+            layer.cancelMotionAnimation();
+            layer.layerAlpha.setMotionAlpha(1f);
+            layer.applyLayerAlpha();
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) finish.run();
+        else layer.mainHandler.post(finish);
+    }
+
+    private void startMotionReveal(long endAt) {
+        if (disposed) return;
+        cancelMotionAnimation();
+        long remaining = Math.max(0L, endAt - SystemClock.uptimeMillis());
+        long configured = AnimationRuntimeState.workspaceVisibilityDurationMs();
+        long duration = LauncherGlassUnlockFadeTiming.fadeDurationMs(remaining, configured);
+        long delay = duration > 0
+                ? LauncherGlassUnlockFadeTiming.fadeDelayMs(remaining, configured) : 0L;
+        boolean animate = layerAlpha.startMotionReveal(duration);
+        applyLayerAlpha();
+        if (!animate) return;
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        motionAnimator = animator;
+        animator.setDuration(duration);
+        animator.setStartDelay(delay);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> {
+            if (disposed || motionAnimator != value) return;
+            layerAlpha.setMotionAlpha((Float) value.getAnimatedValue());
+            applyLayerAlpha();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (motionAnimator == animation) motionAnimator = null;
+            }
+        });
+        animator.start();
+        MainHook.log("[DC][WorkspaceFade] native unlock reveal delayMs=" + delay
+                + " durationMs=" + duration);
+    }
+
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
         if (disposed) return;
-        animate().cancel();
+        cancelSceneAnimation();
         if (!visible && immediateHide) {
-            setAlpha(0f);
+            layerAlpha.setSceneAlpha(0f);
+            applyLayerAlpha();
             return;
         }
         if (visible && !fadeReveal) {
-            setAlpha(1f);
+            layerAlpha.setSceneAlpha(1f);
+            applyLayerAlpha();
             return;
         }
         LauncherGlassVisibilityTransition.Plan plan =
-                LauncherGlassVisibilityTransition.plan(getAlpha(), visible);
-        setAlpha(plan.startAlpha);
+                LauncherGlassVisibilityTransition.plan(layerAlpha.sceneAlpha(), visible);
+        layerAlpha.setSceneAlpha(plan.startAlpha);
+        applyLayerAlpha();
         if (plan.durationMs == 0L) {
-            setAlpha(plan.targetAlpha);
+            layerAlpha.setSceneAlpha(plan.targetAlpha);
+            applyLayerAlpha();
             return;
         }
-        animate().alpha(plan.targetAlpha)
-                .setDuration(plan.durationMs)
-                .setInterpolator(new DecelerateInterpolator())
-                .start();
+        ValueAnimator animator = ValueAnimator.ofFloat(plan.startAlpha, plan.targetAlpha);
+        sceneAnimator = animator;
+        animator.setDuration(plan.durationMs);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> {
+            if (disposed || sceneAnimator != value) return;
+            layerAlpha.setSceneAlpha((Float) value.getAnimatedValue());
+            applyLayerAlpha();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (sceneAnimator == animation) sceneAnimator = null;
+            }
+        });
+        animator.start();
+    }
+
+    private void applyLayerAlpha() { setAlpha(layerAlpha.alpha()); }
+
+    private void cancelSceneAnimation() {
+        ValueAnimator previous = sceneAnimator;
+        sceneAnimator = null;
+        if (previous != null) previous.cancel();
+    }
+
+    private void cancelMotionAnimation() {
+        ValueAnimator previous = motionAnimator;
+        motionAnimator = null;
+        if (previous != null) previous.cancel();
     }
 
     void dispose() {
         if (disposed) return;
         session.resetWorkspaceScrollProjection();
         disposed = true;
+        cancelSceneAnimation();
+        cancelMotionAnimation();
         View root = rootRef.get();
         if (root != null) {
             root.removeOnAttachStateChangeListener(rootAttachListener);
