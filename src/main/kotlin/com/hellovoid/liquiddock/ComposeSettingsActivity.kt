@@ -616,33 +616,35 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 )
             } else {
                 val descriptor = THIRD_PARTY_APP_PAGES[page]
-                when {
-                    page == Page.SecurityCenterSidebar || page == Page.Animation -> {
-                        LiquidDockGlassIconButton(
-                            icon = MiuixIcons.Refresh,
-                            contentDescription = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
-                        )
-                    }
-                    descriptor != null -> {
-                        LiquidDockGlassIconButton(
-                            icon = MiuixIcons.Refresh,
-                            contentDescription = stringResource(descriptor.restartLabelRes),
-                            onClick = {
-                                activity.restartPackageProcess(
-                                    descriptor.packageName,
-                                    descriptor.displayName,
-                                )
-                            },
-                        )
-                    }
-                    else -> {
-                        LiquidDockGlassIconButton(
-                            icon = MiuixIcons.Refresh,
-                            contentDescription = stringResource(R.string.action_restart_launcher),
-                            onClick = { activity.restartLauncher() },
-                        )
-                    }
+                if (page == Page.SecurityCenterSidebar) {
+                    LiquidDockGlassIconButton(
+                        icon = MiuixIcons.Refresh,
+                        contentDescription = stringResource(R.string.action_restart_security_center_and_launcher),
+                        onClick = { activity.restartSecurityCenterAndLauncher() },
+                    )
+                } else if (page == Page.Animation) {
+                    LiquidDockGlassIconButton(
+                        icon = MiuixIcons.Refresh,
+                        contentDescription = stringResource(R.string.action_restart_security_center_and_launcher),
+                        onClick = { activity.restartSecurityCenterAndLauncher() },
+                    )
+                } else if (descriptor != null) {
+                    LiquidDockGlassIconButton(
+                        icon = MiuixIcons.Refresh,
+                        contentDescription = stringResource(descriptor.restartLabelRes),
+                        onClick = {
+                            activity.restartPackageProcess(
+                                descriptor.packageName,
+                                descriptor.displayName,
+                            )
+                        },
+                    )
+                } else {
+                    LiquidDockGlassIconButton(
+                        icon = MiuixIcons.Refresh,
+                        contentDescription = stringResource(R.string.action_restart_launcher),
+                        onClick = { activity.restartLauncher() },
+                    )
                 }
             }
         },
