@@ -5,7 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** HOME refresh must keep the producer live through the full return animation. */
+/** HOME refresh must start immediately without ever hiding the Dock backdrop. */
 public class DockHomeBackdropFreshnessStateTest {
     @Test public void homeStartImmediatelyForcesFreshProducerWithoutBlockingPresentation() {
         DockHomeBackdropFreshnessState state = new DockHomeBackdropFreshnessState();
@@ -16,27 +16,27 @@ public class DockHomeBackdropFreshnessStateTest {
         assertFalse(start.releaseProducerOverride);
     }
 
-    @Test public void freshFrameBeforeFinishDoesNotReleaseProducerEarly() {
+    @Test public void firstFrameAfterHomeStartReleasesProducerOverrideExactlyOnce() {
         DockHomeBackdropFreshnessState state = new DockHomeBackdropFreshnessState();
         state.onHomeStarted(21L);
 
-        DockHomeBackdropFreshnessState.Decision fresh = state.onProducerFrameAvailable();
-        assertFalse(fresh.releasePresentation);
-        assertFalse(fresh.releaseProducerOverride);
+        DockHomeBackdropFreshnessState.Decision first = state.onProducerFrameAvailable();
+        assertFalse(first.releasePresentation);
+        assertTrue(first.releaseProducerOverride);
 
-        DockHomeBackdropFreshnessState.Decision finish = state.onHomeFinished(21L);
-        assertTrue(finish.releaseProducerOverride);
+        DockHomeBackdropFreshnessState.Decision second = state.onProducerFrameAvailable();
+        assertFalse(second.releasePresentation);
+        assertFalse(second.releaseProducerOverride);
     }
 
-    @Test public void finishBeforeFreshFrameWaitsForRealProducerPresentation() {
+    @Test public void finishNeverArmsAVisibilityBarrier() {
         DockHomeBackdropFreshnessState state = new DockHomeBackdropFreshnessState();
         state.onHomeStarted(31L);
 
         DockHomeBackdropFreshnessState.Decision finish = state.onHomeFinished(31L);
-        assertFalse(finish.releaseProducerOverride);
-
-        DockHomeBackdropFreshnessState.Decision fresh = state.onProducerFrameAvailable();
-        assertTrue(fresh.releaseProducerOverride);
+        assertFalse(finish.blockPresentation);
+        assertFalse(finish.releasePresentation);
+        assertFalse(finish.forceProducerUpdates);
     }
 
     @Test public void newerHomeStartSupersedesOlderTransition() {
@@ -45,8 +45,7 @@ public class DockHomeBackdropFreshnessStateTest {
         DockHomeBackdropFreshnessState.Decision newer = state.onHomeStarted(41L);
 
         assertTrue(newer.forceProducerUpdates);
-        assertFalse(state.onHomeFinished(40L).releaseProducerOverride);
-        assertFalse(state.onProducerFrameAvailable().releaseProducerOverride);
-        assertTrue(state.onHomeFinished(41L).releaseProducerOverride);
+        assertFalse(state.onHomeFinished(40L).forceProducerUpdates);
+        assertTrue(state.onProducerFrameAvailable().releaseProducerOverride);
     }
 }
