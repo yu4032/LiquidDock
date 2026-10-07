@@ -154,6 +154,11 @@ public class DockIconAnimationStateTest {
         assertTrue(sample.proxyActive);
         assertArrayEquals(first, sample.proxyRect, 0f);
 
+        // Sample owns an isolated copy; mutating it must not alter the stored proxy geometry.
+        sample.proxyRect[0] = 999f;
+        DockIconAnimationState.Sample fresh = state.sample(icon, 1_001L);
+        assertArrayEquals(first, fresh.proxyRect, 0f);
+
         assertFalse(state.updateProxyGeometry(icon, first.clone()));
         assertTrue(state.updateProxyGeometry(icon, new float[]{12f, 22f, 60f, 90f}));
         assertTrue(state.endProxyGeometry(icon));
