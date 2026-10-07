@@ -63,6 +63,7 @@ final class RootPassBlurBackend {
     private volatile int physicalScalePercent;
     private volatile int renderFps;
     private volatile PassBlurSourceFrameGate sourceFrameGate;
+    private volatile boolean transitionFrameSyncEnabled;
     private volatile long sourceGeneration = -1L;
     private volatile long renderedGeneration = -1L;
     private volatile boolean requestedSingleFramePulse;
@@ -244,6 +245,25 @@ final class RootPassBlurBackend {
                 }
             }
         });
+    }
+
+    void setTransitionFrameSyncEnabled(boolean enabled, String reason) {
+        if (shuttingDown || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+        if (transitionFrameSyncEnabled == enabled) return;
+
+        transitionFrameSyncEnabled = enabled;
+        if (!enabled) {
+            // The limiter did not advance while transition sync bypassed it. Reset cadence instead
+            // of allowing a post-transition catch-up burst.
+            sourceFrameGate = new PassBlurSourceFrameGate(renderFps);
+        }
+
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (current != null) {
+            Miuix307PassBlurBridge.setWorkspaceTransitionFrameSync(current, enabled);
+        }
+        MainHook.log("[DC][WorkspaceFrameSync] active=" + enabled
+                + " reason=" + reason + " renderFps=" + renderFps);
     }
 
     void setQuality(int physicalScalePercent, int renderFps) {
@@ -558,8 +578,11 @@ final class RootPassBlurBackend {
         Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
-        boolean shouldRender = generation >= 0L && (gate == null || gate.shouldSchedule(
-                System.nanoTime(), renderedGeneration, generation));
+        boolean transitionSync = transitionFrameSyncEnabled
+                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+        boolean shouldRender = generation >= 0L && (transitionSync
+                || gate == null || gate.shouldSchedule(
+                        System.nanoTime(), renderedGeneration, generation));
         if (!shouldRender) {
             drainSourceFrameWithoutRender(input);
             return;
@@ -683,6 +706,8 @@ final class RootPassBlurBackend {
             return;
         }
         binding = next;
+        Miuix307PassBlurBridge.setWorkspaceTransitionFrameSync(
+                next, transitionFrameSyncEnabled);
         state.onBindSucceeded();
         completeRolloverCompletions(true, "bind-succeeded");
         MainHook.log(TAG + " bound root=" + next.rootName

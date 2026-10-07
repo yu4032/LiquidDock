@@ -49,6 +49,30 @@ public class RootPassBlurBackendBoundaryTest {
     }
 
     @Test
+    public void workspaceMotionTemporarilyBypassesConsumerCapAndUsesBridgeLease() throws Exception {
+        Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
+        String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));
+        String bridge = Files.readString(main.resolve("Miuix307PassBlurBridge.java"));
+        String session = Files.readString(main.resolve("LauncherGlassSession.java"));
+
+        assertTrue(backend.contains("private volatile boolean transitionFrameSyncEnabled;"));
+        assertTrue(backend.contains("boolean transitionSync = transitionFrameSyncEnabled"));
+        assertTrue(backend.contains("transitionSync\n                || gate == null"));
+        assertTrue(backend.contains("sourceFrameGate = new PassBlurSourceFrameGate(renderFps);"));
+        assertTrue(backend.contains("setWorkspaceTransitionFrameSync(current, enabled)"));
+
+        assertTrue(bridge.contains("domain == PassBlurDomain.LAUNCHER_WORKSPACE"));
+        assertTrue(bridge.contains("binding.workspaceTransitionFrameSync"));
+        assertTrue(bridge.contains("WORKSPACE_FRAME_SYNC_TAG"));
+
+        assertTrue(session.contains("WorkspaceTransitionFrameSyncState"));
+        assertTrue(session.contains("geometryMotionChanged = true;"));
+        assertTrue(session.contains("root.postInvalidateOnAnimation();"));
+        assertTrue("configured Workspace FPS remains a static/idle policy",
+                session.contains("passBlurRenderFps"));
+    }
+
+    @Test
     public void sourceRecoveryUsesFrameLifecycleInsteadOfFixedDelay() throws Exception {
         Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
         String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));

@@ -21,6 +21,7 @@ final class Miuix307PassBlurBridge {
     private static final String TAG = "[DC][PBGL]";
     private static final String FRAME_SYNC_TAG = "[DC][DockFrameSync]";
     private static final String GBOARD_FRAME_SYNC_TAG = "[DC][GboardFrameSync]";
+    private static final String WORKSPACE_FRAME_SYNC_TAG = "[DC][WorkspaceFrameSync]";
     private static final int INITIAL_UPDATE_FRAMES = 4;
     private static final int FORCE_REFRESH_LEASE_MS = 250;
     private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
@@ -42,7 +43,8 @@ final class Miuix307PassBlurBridge {
         final PassBlurDomain domain;
         boolean bound = true;
         boolean updatesEnabled = true;
-        long lastForceRefreshMs;
+        volatile boolean workspaceTransitionFrameSync;
+        volatile long lastForceRefreshMs;
 
         Binding(
                 SurfaceControl rootSurface,
@@ -119,13 +121,17 @@ final class Miuix307PassBlurBridge {
                     "setMiBlurWinExc", SurfaceControl.class, String[].class);
             Method setForceRefresh = null;
             if (domain == PassBlurDomain.DOCK
-                    || domain == PassBlurDomain.GBOARD_FLOATING) {
+                    || domain == PassBlurDomain.GBOARD_FLOATING
+                    || domain == PassBlurDomain.LAUNCHER_WORKSPACE) {
                 try {
                     setForceRefresh = transactionClass.getMethod(
                             "setForceRefresh", SurfaceControl.class, Integer.TYPE);
                 } catch (Throwable error) {
-                    MainHook.log((domain == PassBlurDomain.GBOARD_FLOATING
-                            ? GBOARD_FRAME_SYNC_TAG : FRAME_SYNC_TAG)
+                    String frameSyncTag = domain == PassBlurDomain.GBOARD_FLOATING
+                            ? GBOARD_FRAME_SYNC_TAG
+                            : domain == PassBlurDomain.LAUNCHER_WORKSPACE
+                            ? WORKSPACE_FRAME_SYNC_TAG : FRAME_SYNC_TAG;
+                    MainHook.log(frameSyncTag
                             + " force refresh lease unavailable: " + error);
                 }
             }
@@ -288,11 +294,20 @@ final class Miuix307PassBlurBridge {
      * Once arrivals stop, no more transactions are sent and vendor pacing resumes when the
      * existing lease expires.
      */
+    static void setWorkspaceTransitionFrameSync(Binding binding, boolean enabled) {
+        if (binding == null || !binding.bound
+                || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+        binding.workspaceTransitionFrameSync = enabled;
+        if (enabled) renewForceRefresh(binding);
+    }
+
     static void renewForceRefresh(Binding binding) {
         if (binding == null || !binding.bound || !binding.updatesEnabled) return;
         boolean dock = binding.domain == PassBlurDomain.DOCK;
         boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
-        if (!dock && !gboard) return;
+        boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
+                && binding.workspaceTransitionFrameSync;
+        if (!dock && !gboard && !workspace) return;
         if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
         if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
         long now = SystemClock.uptimeMillis();
@@ -308,7 +323,9 @@ final class Miuix307PassBlurBridge {
             long errorNow = SystemClock.uptimeMillis();
             if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
                 lastForceRefreshErrorLogMs = errorNow;
-                MainHook.log((gboard ? GBOARD_FRAME_SYNC_TAG : FRAME_SYNC_TAG)
+                String frameSyncTag = gboard ? GBOARD_FRAME_SYNC_TAG
+                        : workspace ? WORKSPACE_FRAME_SYNC_TAG : FRAME_SYNC_TAG;
+                MainHook.log(frameSyncTag
                         + " force refresh renew failed: " + error);
             }
         }

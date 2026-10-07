@@ -133,6 +133,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
     private volatile int passBlurRenderFps = PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+    private final WorkspaceTransitionFrameSyncState transitionFrameSync =
+            new WorkspaceTransitionFrameSyncState();
 
     // Launcher-only wallpaper authority. A source frame consumes the token only after Prismal render.
     private long wallpaperRequestedGeneration = -1L;
@@ -623,6 +625,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 && (nextWidth != rootWidth || nextHeight != rootHeight);
         boolean dragChanged = rootGeometryChanged;
         boolean staticChanged = rootGeometryChanged;
+        boolean geometryMotionChanged = rootGeometryChanged;
         if (nextWidth > 0) rootWidth = nextWidth;
         if (nextHeight > 0) rootHeight = nextHeight;
 
@@ -640,6 +643,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     || (old != null && !old.sameAs(observed))) {
                 node.geometry = observed;
                 dragChanged = true;
+                geometryMotionChanged = true;
             }
         }
 
@@ -661,8 +665,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         || (oldFrame != null && oldFrame.workspaceScrollValid);
                 state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
                 staticChanged = true;
+                geometryMotionChanged = true;
             }
         }
+
+        applyTransitionFrameSync(
+                transitionFrameSync.onPreDraw(geometryMotionChanged), root);
 
         int nextRotation = readLauncherConfigRotation(root);
         if (nextRotation != configRotation) {
@@ -688,6 +696,22 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             return;
         }
         if (staticChanged || dragChanged) scheduleOutputRender(staticChanged, dragChanged);
+    }
+
+    private void applyTransitionFrameSync(
+            WorkspaceTransitionFrameSyncState.Decision decision, View root) {
+        if (decision == null) return;
+        if (decision.enable) {
+            sourceBackend.setTransitionFrameSyncEnabled(true, "workspace-geometry-motion");
+        } else if (decision.disable) {
+            sourceBackend.setTransitionFrameSyncEnabled(false, "workspace-geometry-settled");
+        }
+
+        // While the lease is active, guarantee enough frame-lifecycle observations to see the
+        // terminal stable frames even if the native animation stops invalidating immediately.
+        if (transitionFrameSync.isActive() && root != null && root.isAttachedToWindow()) {
+            root.postInvalidateOnAnimation();
+        }
     }
 
     private void recoverFreshBackdropOnUi(long generation, int attempt) {
@@ -1047,6 +1071,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         MainHook.log(TAG + " shutdown " + debugLabel());
+        WorkspaceTransitionFrameSyncState.Decision frameSyncReset = transitionFrameSync.reset();
+        if (frameSyncReset.disable) {
+            sourceBackend.setTransitionFrameSyncEnabled(false, "launcher-shutdown");
+        }
         terminalFailureListener = null;
         shuttingDown = true;
         rotationSettleSerial++;
