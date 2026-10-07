@@ -93,20 +93,45 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
-    public void systemUiRestartIsOnlyRenderedOnHomePage() throws Exception {
+    public void homePageUsesSingleRestartScopeSelector() throws Exception {
         String source = Files.readString(UI);
         int actionsAt = source.indexOf("actions = {");
-        int launcherRestartAt = source.indexOf("action_restart_launcher", actionsAt);
-        int systemUiRestartAt = source.indexOf("action_restart_system_ui", actionsAt);
-        int homeGuardAt = source.lastIndexOf("if (page == Page.Home)", systemUiRestartAt);
+        int homeGuardAt = source.indexOf("if (page == Page.Home)", actionsAt);
+        int scopeActionAt = source.indexOf("action_restart_scopes", homeGuardAt);
+        int dialogAt = source.indexOf("RestartScopesDialog(", scopeActionAt);
+        int batchRestartAt = source.indexOf("activity.restartSelectedScopes(", dialogAt);
 
         assertTrue("top app bar actions must exist", actionsAt >= 0);
-        assertTrue("launcher restart must remain visible on every page", launcherRestartAt > actionsAt);
-        assertTrue("SystemUI restart must still exist", systemUiRestartAt > launcherRestartAt);
-        assertTrue("SystemUI restart must be guarded by the Home page",
-                homeGuardAt > launcherRestartAt && homeGuardAt < systemUiRestartAt);
-        assertTrue("Home-page guard must directly wrap the SystemUI action",
-                systemUiRestartAt - homeGuardAt < 300);
+        assertTrue("Home page must own the restart scope action", homeGuardAt > actionsAt);
+        assertTrue("Home page must render one restart-scope entry", scopeActionAt > homeGuardAt);
+        assertTrue("restart scope dialog must be wired from Home", dialogAt > scopeActionAt);
+        assertTrue("dialog confirmation must call the serialized batch restart", batchRestartAt > dialogAt);
+
+        int homeElseAt = source.indexOf("} else {", scopeActionAt);
+        String homeBranch = source.substring(homeGuardAt, homeElseAt);
+        assertFalse("Home page must not keep a standalone Launcher restart button",
+                homeBranch.contains("action_restart_launcher"));
+        assertFalse("Home page must not keep a standalone SystemUI restart button",
+                homeBranch.contains("action_restart_system_ui"));
+    }
+
+    @Test
+    public void batchRestartCoversEveryRestartableScopeInOneRootSession() throws Exception {
+        String activity = Files.readString(SETTINGS_BASE);
+        int method = activity.indexOf("void restartSelectedScopes(");
+        int launcher = activity.indexOf("am force-stop com.miui.home", method);
+        int securityCenter = activity.indexOf("pidof com.miui.securitycenter:ui", method);
+        int systemUi = activity.indexOf("pidof com.android.systemui", method);
+        int gboard = activity.indexOf("pidof com.google.android.inputmethod.latin", method);
+        int searchbox = activity.indexOf("pidof com.android.quicksearchbox", method);
+
+        assertTrue("batch restart method must exist", method >= 0);
+        assertTrue("Launcher restart must be supported", launcher > method);
+        assertTrue("Security Center restart must follow Launcher when selected",
+                securityCenter > launcher);
+        assertTrue("SystemUI restart must be supported", systemUi > securityCenter);
+        assertTrue("Gboard restart must be supported", gboard > systemUi);
+        assertTrue("Search restart must be supported", searchbox > gboard);
     }
 
     private static String stringValue(String xml, String name) {
