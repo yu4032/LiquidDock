@@ -172,6 +172,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeUvLocation = -1;
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
+    private int compositeTexelSizeLocation = -1;
+    private int compositeEdgeFilterLocation = -1;
+    private int compositeInteriorAlphaLocation = -1;
     private volatile boolean backdropPrepared;
 
     // Debug-only aggregate timings. UI and render counters are single-thread owned.
@@ -1055,7 +1058,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
-                    Miuix307PrismalCompositeShaders.FRAGMENT);
+                    LauncherGlassCompositeShaders.FRAGMENT);
             compositePositionLocation =
                     GLES20.glGetAttribLocation(compositeProgram, "aPosition");
             compositeUvLocation =
@@ -1065,6 +1068,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
             compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+            compositeTexelSizeLocation = requireUniform(compositeProgram, "uInputTexelSize");
+            compositeEdgeFilterLocation = requireUniform(compositeProgram, "uEdgeFilterStrength");
+            compositeInteriorAlphaLocation = requireUniform(compositeProgram, "uInteriorAlpha");
             GLES20.glUseProgram(compositeProgram);
             GLES20.glUniform1i(compositeTextureLocation, 0);
         }
@@ -1171,6 +1177,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
+        configureCompositeEdgeFilter();
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
@@ -1194,6 +1201,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
+        configureCompositeEdgeFilter();
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
@@ -1202,6 +1210,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(output.eglSurface);
+    }
+
+    private void configureCompositeEdgeFilter() {
+        GLES20.glUniform2f(compositeTexelSizeLocation,
+                1f / Math.max(1, prismalRenderer.outputTextureWidth()),
+                1f / Math.max(1, prismalRenderer.outputTextureHeight()));
+        GLES20.glUniform1f(compositeEdgeFilterLocation,
+                PassBlurQualityPolicy.workspaceEdgeFilterStrength(
+                        workspaceSource, passBlurCaptureScalePercent));
+        PrismalParams params = prismalParams;
+        GLES20.glUniform1f(compositeInteriorAlphaLocation,
+                params != null ? Math.max(0f, Math.min(1f, params.transmittance)) : 1f);
     }
 
     private void releaseOutput(OutputState output) {
@@ -1310,6 +1330,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         compositeProgram = 0;
         compositePositionLocation = compositeUvLocation = -1;
         compositeTextureLocation = compositeCropRectLocation = -1;
+        compositeTexelSizeLocation = compositeEdgeFilterLocation = compositeInteriorAlphaLocation = -1;
         backdropPrepared = false;
     }
 
