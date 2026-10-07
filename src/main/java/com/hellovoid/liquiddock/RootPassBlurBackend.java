@@ -645,7 +645,13 @@ final class RootPassBlurBackend {
         bufferWidth = endpoint.bufferWidth;
         bufferHeight = endpoint.bufferHeight;
         rotation = endpoint.rotation;
-        contentRect = contentRect(endpoint);
+        contentRect = RootPassBlurContentRect.resolve(
+                endpoint.surfaceWidth,
+                endpoint.surfaceHeight,
+                endpoint.insetLeft,
+                endpoint.insetTop,
+                endpoint.insetRight,
+                endpoint.insetBottom);
         long epoch = bindEpoch.get();
         postToRenderThread(() -> {
             if (shuttingDown || input != inputSurfaceTexture || epoch != bindEpoch.get()) return;
