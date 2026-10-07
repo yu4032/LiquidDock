@@ -481,6 +481,8 @@ final class RootPassBlurBackend {
             normalizeConfigRotLocation = requireUniform(normalizeProgram, "uConfigRot");
             normalizeValidDockRectLocation = requireUniform(normalizeProgram, "uValidDockRect");
             normalizeBackdropRectLocation = requireUniform(normalizeProgram, "uBackdropRect");
+            GLES20.glUseProgram(normalizeProgram);
+            GLES20.glUniform1i(normalizeTextureLocation, 0);
         }
         if (oesTexture == 0 || inputSurfaceTexture == null || inputProducerSurface == null) {
             createInputProducer();
@@ -608,7 +610,6 @@ final class RootPassBlurBackend {
         bindQuad(normalizePositionLocation, normalizeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(normalizeTextureLocation, 0);
         GLES20.glUniformMatrix4fv(normalizeTexMatrixLocation,
                 1, false, textureMatrix, 0);
         GLES20.glUniform1i(normalizeConfigRotLocation, rotation);

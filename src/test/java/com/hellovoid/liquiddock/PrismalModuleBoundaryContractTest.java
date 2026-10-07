@@ -140,6 +140,13 @@ public class PrismalModuleBoundaryContractTest {
         assertFalse(normalize.contains("glGetAttribLocation"));
         assertFalse("Dock full normalization overwrite must not clear first",
                 normalize.contains("glClear("));
+        assertFalse("Dock normalize sampler unit is fixed after link",
+                normalize.contains("glUniform1i(normalizeTextureLocation, 0)"));
+        int compositeStart = dock.indexOf("private boolean renderCompositePass(");
+        int compositeEnd = dock.indexOf("private void logPrismalMapping(", compositeStart);
+        String composite = dock.substring(compositeStart, compositeEnd);
+        assertFalse("Dock composite sampler unit is fixed after link",
+                composite.contains("glUniform1i(compositeTextureLocation, 0)"));
     }
 
     @Test

@@ -38,6 +38,11 @@ public class RootPassBlurBackendBoundaryTest {
 
         assertFalse("hot normalize path must use cached uniforms",
                 backend.contains("glUniform1i(requireUniform(normalizeProgram"));
+        int normalizeStart = backend.indexOf("private RootPassBlurFrame normalizeFrame(");
+        int normalizeEnd = backend.indexOf("private void bindProducerWhenReady(", normalizeStart);
+        String normalize = backend.substring(normalizeStart, normalizeEnd);
+        assertFalse("normalize sampler unit is fixed after program link",
+                normalize.contains("glUniform1i(normalizeTextureLocation, 0)"));
         assertFalse("hot normalize path must use cached attributes",
                 backend.contains("bindQuad(normalizeProgram)"));
         assertFalse("full root normalization overwrite must not clear first",

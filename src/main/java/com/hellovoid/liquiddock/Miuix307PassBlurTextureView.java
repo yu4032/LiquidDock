@@ -722,6 +722,10 @@ final class Miuix307PassBlurTextureView extends TextureView
         compositeUvLocation = requireAttrib(compositeProgram, "aUv");
         compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
         compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+        GLES20.glUseProgram(normalizeProgram);
+        GLES20.glUniform1i(normalizeTextureLocation, 0);
+        GLES20.glUseProgram(compositeProgram);
+        GLES20.glUniform1i(compositeTextureLocation, 0);
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
 
         createInputProducer();
@@ -1037,7 +1041,6 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(normalizeTextureLocation, 0);
         GLES20.glUniformMatrix4fv(
                 normalizeTexMatrixLocation, 1, false, textureMatrix, 0);
         GLES20.glUniform4f(
@@ -1112,7 +1115,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
-        GLES20.glUniform1i(compositeTextureLocation, 0);
         GLES20.glUniform4f(compositeCropRectLocation,
                 mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
