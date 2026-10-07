@@ -39,6 +39,33 @@ public class PrismalBatchRendererContractTest {
     }
 
     @Test
+    public void firstRegionClearAfterTargetAllocationFallsBackToFullFrame() throws Exception {
+        String source = source();
+        assertTrue(source.contains("private boolean outputNeedsFullClear = true;"));
+        assertTrue(source.contains("if (outputNeedsFullClear) {"));
+        assertTrue(source.contains("outputNeedsFullClear = false;"));
+        assertTrue(source.contains("outputFramebuffer = createFramebuffer(outputTexture);\n"
+                + "        outputNeedsFullClear = true;"));
+        assertTrue(source.contains("glassPositionLocation = requireAttrib(glassProgram, \"a_position\")"));
+        assertFalse(source.contains("int position = requireAttrib(glassProgram, \"a_position\")"));
+    }
+
+    @Test
+    public void rendererCachesFrameInvariantGlassStateAcrossNodes() throws Exception {
+        String source = source();
+
+        assertTrue(source.contains("private PrismalParams cachedStaticParams;"));
+        assertTrue(source.contains("if (cachedStaticParams != p) {"));
+        assertTrue(source.contains("uploadStaticGlassParams(p);"));
+        assertTrue(source.contains("if (cachedHighlightMask != highlightMask) {"));
+        assertTrue(source.contains("if (!glassTexturesBound) {"));
+        assertTrue(source.contains("glassTexturesBound = false;"));
+        assertTrue(source.contains("GLES20.glUniform1i(glassUniformLocation(\"u_backgroundTexture\"), 0);"));
+        assertTrue(source.contains("GLES20.glUniform1i(glassUniformLocation(\"u_blurredTexture\"), 1);"));
+        assertTrue(source.contains("GLES20.glUniform1i(glassUniformLocation(\"u_useBlurredTexture\"), 1);"));
+    }
+
+    @Test
     public void rendererCanClearOnlyOneDirtyGlassRegion() throws Exception {
         String source = source();
         assertTrue(source.contains("public void beginGlassFrameRegion("));

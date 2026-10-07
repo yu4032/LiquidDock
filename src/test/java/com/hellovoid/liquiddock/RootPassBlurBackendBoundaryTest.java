@@ -27,6 +27,25 @@ public class RootPassBlurBackendBoundaryTest {
     }
 
     @Test
+    public void hotPathCachesEglBindingAndNormalizeProgramLocations() throws Exception {
+        Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
+        String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));
+
+        assertTrue(backend.contains("if (currentEglSurface == surface) return;"));
+        assertTrue(backend.contains("if (currentEglSurface == eglPbufferSurface) return;"));
+        assertTrue(backend.contains("normalizeTextureLocation = requireUniform(normalizeProgram, \"uTexture\")"));
+        assertTrue(backend.contains("normalizePositionLocation = requireAttrib(normalizeProgram, \"aPosition\")"));
+
+        assertFalse("hot normalize path must use cached uniforms",
+                backend.contains("glUniform1i(requireUniform(normalizeProgram"));
+        assertFalse("hot normalize path must use cached attributes",
+                backend.contains("bindQuad(normalizeProgram)"));
+        assertFalse("full root normalization overwrite must not clear first",
+                backend.contains("glViewport(0, 0, normalizedWidth, normalizedHeight);\n"
+                        + "        GLES20.glClearColor(0f, 0f, 0f, 0f);"));
+    }
+
+    @Test
     public void sourceRecoveryUsesFrameLifecycleInsteadOfFixedDelay() throws Exception {
         Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
         String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));

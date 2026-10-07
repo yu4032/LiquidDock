@@ -72,6 +72,74 @@ public class PrismalModuleBoundaryContractTest {
         assertTrue(view.contains("prepared.prismalParams != mapping.prismalParams"));
         assertTrue(view.contains("invalidatePreparedBackdrop();"));
         assertTrue(view.contains("scheduleSceneRender()"));
+        assertTrue(view.contains("DockGlassSceneRenderPolicy.shouldRenderSceneOnlyChange("));
+        assertFalse("Dock pull-out scene changes must never enqueue one stale render per pre-draw",
+                view.contains("renderHandler.post(() -> drawLatestFrame(false));"));
+        assertTrue("producer callbacks must join the same latest-only render queue",
+                view.contains("scheduleRender(true);"));
+        assertFalse("producer callbacks must not render every historical frame directly",
+                view.contains("drawLatestFrame(true);"));
+        assertTrue(view.contains("private void drainRenderQueue()"));
+        assertTrue(view.contains("updateTexImage() latches the newest buffer"));
+        assertTrue("Dock render thread should use display CPU priority",
+                view.contains("Process.THREAD_PRIORITY_DISPLAY"));
+        assertTrue("Dock should request EGL high-priority scheduling when supported",
+                view.contains("EGL_IMG_context_priority")
+                        && view.contains("EGL_CONTEXT_PRIORITY_HIGH_IMG")
+                        && view.contains("eglQueryContext("));
+        assertTrue("priority request must retain a default EGL fallback",
+                view.contains("falling back to default priority")
+                        && view.contains("requestedHighPriority ? \"HIGH\" : \"DEFAULT\""));
+    }
+
+    @Test
+    public void dynamicDockMappingDoesNotRearmHeavyDiagnosticsEveryFrame() throws Exception {
+        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        int start = view.indexOf("private void updateBackdropMapping()");
+        int end = view.indexOf("private ProducerGeometry readSurfaceGeometry", start);
+        assertTrue(start >= 0 && end > start);
+        String method = view.substring(start, end);
+        assertFalse("per-frame Dock geometry must not re-arm Stage-B file logging",
+                method.contains("stageBDiagnosticsLogged = false"));
+        assertFalse("per-frame Dock geometry must not re-arm Prismal mapping file logging",
+                method.contains("prismalMappingLogged = false"));
+        assertTrue("Stage-B diagnostics must be gated before diagnostic computation",
+                view.contains("MainHook.debugLogging && gpuBackdropActive && !stageBDiagnosticsLogged"));
+        assertTrue("Prismal mapping diagnostics must be gated before string construction",
+                view.contains("MainHook.debugLogging && gpuBackdropActive && !prismalMappingLogged"));
+    }
+
+    @Test
+    public void prismalHotPathAvoidsRedundantDriverQueriesAndFullOverwriteClears() throws Exception {
+        String renderer = Files.readString(
+                MODULE.resolve("java/com/hellovoid/prismal/PrismalRenderer.java"));
+        assertTrue(renderer.contains("sourceTextureLocation = requireUniform(sourceProgram, \"uTexture\")"));
+        assertTrue(renderer.contains("blurHPositionLocation = requireAttrib(blurHProgram, \"a_position\")"));
+        assertTrue(renderer.contains("blurVPositionLocation = requireAttrib(blurVProgram, \"a_position\")"));
+
+        int sourceStart = renderer.indexOf("private void renderSourceAdapter(");
+        int sourceEnd = renderer.indexOf("private void renderBlur(", sourceStart);
+        String source = renderer.substring(sourceStart, sourceEnd);
+        assertFalse(source.contains("glGetUniformLocation"));
+        assertFalse(source.contains("glGetAttribLocation"));
+        assertFalse("full source overwrite must not clear first", source.contains("glClear("));
+
+        int blurStart = renderer.indexOf("private void renderBlurPass(");
+        int blurEnd = renderer.indexOf("private void renderGlassNode(", blurStart);
+        String blur = renderer.substring(blurStart, blurEnd);
+        assertFalse(blur.contains("glGetUniformLocation"));
+        assertFalse(blur.contains("glGetAttribLocation"));
+        assertFalse("full blur overwrite must not clear first", blur.contains("glClear("));
+
+        String dock = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        assertTrue(dock.contains("if (currentEglSurface == eglWindowSurface) return;"));
+        int normalizeStart = dock.indexOf("private void renderNormalizationPass(");
+        int normalizeEnd = dock.indexOf("private PrismalGeometry createPrismalGeometry", normalizeStart);
+        String normalize = dock.substring(normalizeStart, normalizeEnd);
+        assertFalse(normalize.contains("glGetUniformLocation"));
+        assertFalse(normalize.contains("glGetAttribLocation"));
+        assertFalse("Dock full normalization overwrite must not clear first",
+                normalize.contains("glClear("));
     }
 
     @Test

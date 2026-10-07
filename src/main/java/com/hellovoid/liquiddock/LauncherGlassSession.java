@@ -148,6 +148,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private OutputState staticOutput;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
+    private int compositePositionLocation = -1;
+    private int compositeUvLocation = -1;
+    private int compositeTextureLocation = -1;
+    private int compositeCropRectLocation = -1;
     private volatile boolean backdropPrepared;
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
@@ -860,6 +864,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
+            compositePositionLocation =
+                    GLES20.glGetAttribLocation(compositeProgram, "aPosition");
+            compositeUvLocation =
+                    GLES20.glGetAttribLocation(compositeProgram, "aUv");
+            if (compositePositionLocation < 0 || compositeUvLocation < 0) {
+                throw new IllegalStateException("composite quad attribute unavailable");
+            }
+            compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
+            compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+            GLES20.glUseProgram(compositeProgram);
+            GLES20.glUniform1i(compositeTextureLocation, 0);
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
@@ -929,14 +944,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                GLES20.glUniform4f(compositeCropRectLocation,
                 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
@@ -954,14 +968,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+                GLES20.glUniform4f(compositeCropRectLocation,
                 geometry.cropLeft, geometry.cropBottom, geometry.cropWidth, geometry.cropHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(output.eglSurface);
     }
 
@@ -1065,12 +1078,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
         compositeProgram = 0;
+        compositePositionLocation = compositeUvLocation = -1;
+        compositeTextureLocation = compositeCropRectLocation = -1;
         backdropPrepared = false;
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
+    private void bindQuad(int position, int uv) {
         if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
         quadBuffer.position(0);
         GLES20.glEnableVertexAttribArray(position);
@@ -1082,9 +1095,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 4 * Float.BYTES, quadBuffer);
     }
 
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
+    private void unbindQuad(int position, int uv) {
         if (position >= 0) GLES20.glDisableVertexAttribArray(position);
         if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
     }
