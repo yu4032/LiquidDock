@@ -880,16 +880,16 @@ private fun AnimationPage(
         summary = "设置页面滑动与淡入淡出；下一次页面切换立即生效，无需重启",
     )
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_animation),
                 "这里只调整 LiquidDock 自己拥有的动画。系统原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
             )
         }
-        item { SmallTitle("工作区玻璃") }
+        item { LiquidDockSectionTitle("工作区玻璃") }
         item { SettingsCard { IntSetting(prefs, workspaceVisibility, masterEnabled) } }
-        item { SmallTitle("Dock") }
+        item { LiquidDockSectionTitle("Dock") }
         item {
             SettingsCard {
                 IntSetting(prefs, dockIconReveal, masterEnabled)
@@ -901,21 +901,21 @@ private fun AnimationPage(
                 )
             }
         }
-        item { SmallTitle("玻璃交互") }
+        item { LiquidDockSectionTitle("玻璃交互") }
         item {
             SettingsCard {
                 IntSetting(prefs, pressIn, masterEnabled)
                 IntSetting(prefs, pressOut, masterEnabled)
             }
         }
-        item { SmallTitle("弹出界面") }
+        item { LiquidDockSectionTitle("弹出界面") }
         item {
             SettingsCard {
                 IntSetting(prefs, shortcutDismiss, masterEnabled)
                 IntSetting(prefs, securityCenterExit, masterEnabled)
             }
         }
-        item { SmallTitle("系统界面") }
+        item { LiquidDockSectionTitle("系统界面") }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -927,7 +927,7 @@ private fun AnimationPage(
                 )
             }
         }
-        item { SmallTitle("GUI") }
+        item { LiquidDockSectionTitle("GUI") }
         item { SettingsCard { IntSetting(prefs, settingsPage, masterEnabled) } }
     }
 }
@@ -941,9 +941,9 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
             ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
         ))
     }
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
-        item { SmallTitle("图标大小 · Launcher 4.50") }
+        item { LiquidDockSectionTitle("图标大小 · Launcher 4.50") }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -960,7 +960,7 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                 )
             }
         }
-        item { SmallTitle(stringResource(R.string.category_grid)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -980,11 +980,11 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                 )
             }
         }
-        item { SmallTitle(stringResource(R.string.category_landscape)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.category_landscape)) }
         item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
-        item { SmallTitle(stringResource(R.string.category_portrait)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.category_portrait)) }
         item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
-        item { SmallTitle(stringResource(R.string.category_split_screen)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.category_split_screen)) }
         item { SettingsCard { splitGridSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
     }
 }
@@ -1063,20 +1063,20 @@ private fun SecurityCenterSidebarPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_security_center_sidebar),
                 stringResource(R.string.security_center_sidebar_header_summary),
             )
         }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
         item {
             SettingsCard {
                 SideSlideHoldSetting(prefs, masterEnabled)
             }
         }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1201,7 +1201,7 @@ private fun LiquidPage(
             enabled = masterEnabled && liquidGlass,
             onClick = openLauncherHighlights,
         )
-        SmallTitle("工作区实时捕获性能")
+        LiquidDockSectionTitle("工作区实时捕获性能")
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
         IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
         BooleanSetting(
@@ -1229,14 +1229,14 @@ private fun LauncherHighlightsPage(
     masterEnabled: Boolean,
 ) {
     val liquidEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_launcher_highlights),
                 stringResource(R.string.launcher_highlights_header_summary),
             )
         }
-        item { SmallTitle("图标、小文件夹与 Dock 图标") }
+        item { LiquidDockSectionTitle("图标、小文件夹与 Dock 图标") }
         item {
             SettingsCard {
                 launcherHighlightSpecs.forEach { spec ->
@@ -1248,7 +1248,7 @@ private fun LauncherHighlightsPage(
                 }
             }
         }
-        item { SmallTitle("小组件与大文件夹") }
+        item { LiquidDockSectionTitle("小组件与大文件夹") }
         item {
             SettingsCard {
                 launcherHighlightSpecs.forEach { spec ->
@@ -1272,9 +1272,9 @@ private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterE
         BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
         BooleanSetting(prefs, ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边", "通过填充与挖空获得清晰抗锯齿", masterEnabled) { fillDiff = it }
-        SmallTitle("描边背景色")
+        LiquidDockSectionTitle("描边背景色")
         strokeSpecs.filter { it.section == IntSection.StrokeBackground }.forEach { IntSetting(prefs, it, masterEnabled && dockStroke) }
-        SmallTitle("方圆形与线宽")
+        LiquidDockSectionTitle("方圆形与线宽")
         strokeSpecs.filter { it.section == IntSection.StrokeGeometry }.forEach {
             val enabled = when (it.dependency) {
                 "dock_stroke" -> dockStroke
@@ -1307,11 +1307,11 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
 
 @Composable
 private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item { PageHeader("预设与数据", "保存、恢复或迁移 LiquidDock 配置") }
-        item { SmallTitle("预设") }
+        item { LiquidDockSectionTitle("预设") }
         item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
-        item { SmallTitle("备份与应用") }
+        item { LiquidDockSectionTitle("备份与应用") }
         item {
             SettingsCard {
                 ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
@@ -1327,14 +1327,14 @@ private fun openUrl(context: Context, url: String) {
 
 @Composable
 private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity, prefs: SharedPreferences) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item { PageHeader("引用与许可", "LiquidDock 使用的框架与实现参考") }
         item {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Debug.LOGGING, "调试日志", "输出诊断日志到 Download/liquiddock.log，重启桌面生效")
             }
         }
-        item { SmallTitle("界面与运行框架") }
+        item { LiquidDockSectionTitle("界面与运行框架") }
         item {
             SettingsCard {
                 ArrowPreference("Compose Miuix", summary = "MIUIX Compose 界面框架 · Apache-2.0", onClick = { openUrl(activity, "https://github.com/compose-miuix-ui/miuix") })
@@ -1342,7 +1342,7 @@ private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity,
                 ArrowPreference("LSPosed API", summary = "模块 Hook API · GPL-3.0", onClick = { openUrl(activity, "https://github.com/LSPosed/LSPosed") })
             }
         }
-        item { SmallTitle("实现参考") }
+        item { LiquidDockSectionTitle("实现参考") }
         item {
             SettingsCard {
                 ArrowPreference("HyperCeiler", summary = "设置分层、交互方式与模块工程实践参考 · GPL-3.0", onClick = { openUrl(activity, "https://github.com/ReChronoRain/HyperCeiler") })
@@ -1350,7 +1350,7 @@ private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity,
                 ArrowPreference("HyperLight", summary = "降采样与屏幕捕获思路启发", onClick = {})
             }
         }
-        item { SmallTitle("许可说明") }
+        item { LiquidDockSectionTitle("许可说明") }
         item {
             SettingsCard {
                 ArrowPreference("第三方开源声明", summary = "完整依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
@@ -1366,7 +1366,7 @@ private fun SettingsList(
     summary: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item { PageHeader(title, summary) }
         item { SettingsCard(content) }
     }
@@ -1374,15 +1374,19 @@ private fun SettingsList(
 
 @Composable
 internal fun PageHeader(title: String, summary: String? = null) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-        if (!summary.isNullOrBlank()) Text(summary, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
+    if (!summary.isNullOrBlank()) {
+        Text(
+            text = summary,
+            fontSize = 13.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
     }
 }
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { Column(content = content) }
+    LiquidDockSectionCard(content)
 }
 
 @Composable
@@ -1398,6 +1402,7 @@ internal fun BooleanSetting(
         title = title,
         summary = summary,
         enabled = enabled,
+        insideMargin = LiquidDockPreferenceMargin,
     )
 }
 
@@ -1457,7 +1462,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
                 insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             ) { Text("重置") }
         },
-        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
+        insideMargin = LiquidDockPreferenceMargin,
     )
 }
 
@@ -1470,13 +1475,15 @@ private fun StringDropdown(
     val default = config.uiDefault()
     var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
     val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
-    ArrowPreference(
+    WindowDropdownPreference(
         title = title,
         summary = options[index].first,
+        items = options.map { it.first },
+        selectedIndex = index,
         enabled = enabled,
-        onClick = {
-            if (!enabled) return@ArrowPreference
-            val next = options[(index + 1) % options.size].second
+        insideMargin = LiquidDockPreferenceMargin,
+        onSelectedIndexChange = { selected ->
+            val next = options[selected].second
             value = next
             prefs.edit().putString(key, next).apply()
         },
