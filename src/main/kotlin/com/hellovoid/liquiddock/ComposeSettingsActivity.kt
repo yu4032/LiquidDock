@@ -54,13 +54,13 @@ import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -1405,54 +1405,78 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     var value by remember(spec.key) { mutableStateOf(initial) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
     val context = LocalContext.current
+
     fun save(nextValue: Float) {
-        val next = if (decimalDp) (nextValue * 10f).roundToInt() / 10f else nextValue.roundToInt().toFloat()
+        val next = if (decimalDp) {
+            (nextValue * 10f).roundToInt() / 10f
+        } else {
+            nextValue.roundToInt().toFloat()
+        }
         value = next.coerceIn(spec.min.toFloat(), spec.max.toFloat())
         val editor = prefs.edit().putInt(spec.key, value.roundToInt())
         if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
         editor.apply()
     }
-    val displayValue = if (decimalDp) String.format(java.util.Locale.ROOT, "%.1f", value) else value.roundToInt().toString()
-    SliderPreference(
-        value = value,
-        onValueChange = { save(it) },
-        title = spec.title,
-        summary = spec.summary,
-        valueText = "",
-        enabled = enabled,
-        valueRange = spec.min.toFloat()..spec.max.toFloat(),
-        steps = if (decimalDp) ((spec.max - spec.min) * 10 - 1).coerceAtLeast(0) else (spec.max - spec.min - 1).coerceAtLeast(0),
-        endActions = {
-            Button(
-                onClick = {
-                    val input = EditText(context).apply {
-                        setText(displayValue)
-                        selectAll()
-                        inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED or
-                                if (decimalDp) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0
-                    }
-                    android.app.AlertDialog.Builder(context)
-                        .setTitle(spec.title)
-                        .setView(input)
-                        .setNegativeButton("取消", null)
-                        .setPositiveButton("确定") { _, _ -> input.text.toString().toFloatOrNull()?.let(::save) }
-                        .show()
-                },
-                enabled = enabled,
-                minWidth = 72.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            ) { Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}") }
-            Button(
-                onClick = { save(resetValue) },
-                enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
-                minWidth = 56.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            ) { Text("重置") }
-        },
-        insideMargin = LiquidDockPreferenceMargin,
-    )
+
+    val displayValue = if (decimalDp) {
+        String.format(java.util.Locale.ROOT, "%.1f", value)
+    } else {
+        value.roundToInt().toString()
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BasicComponent(
+            title = spec.title,
+            summary = spec.summary,
+            enabled = enabled,
+            insideMargin = LiquidDockPreferenceMargin,
+            endActions = {
+                Button(
+                    onClick = {
+                        val input = EditText(context).apply {
+                            setText(displayValue)
+                            selectAll()
+                            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED or
+                                    if (decimalDp) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0
+                        }
+                        android.app.AlertDialog.Builder(context)
+                            .setTitle(spec.title)
+                            .setView(input)
+                            .setNegativeButton("取消", null)
+                            .setPositiveButton("确定") { _, _ ->
+                                input.text.toString().toFloatOrNull()?.let(::save)
+                            }
+                            .show()
+                    },
+                    enabled = enabled,
+                    minWidth = 72.dp,
+                    minHeight = 32.dp,
+                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}")
+                }
+                Button(
+                    onClick = { save(resetValue) },
+                    enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
+                    minWidth = 56.dp,
+                    minHeight = 32.dp,
+                    insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text("重置")
+                }
+            },
+        )
+        LiquidDockGlassSlider(
+            value = value,
+            onValueChange = ::save,
+            valueRange = spec.min.toFloat()..spec.max.toFloat(),
+            visibilityThreshold = if (decimalDp) 0.1f else 1f,
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+        )
+    }
 }
 
 @Composable
