@@ -63,8 +63,6 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Community
 import top.yukonga.miuix.kmp.icon.extended.GridView
@@ -577,7 +575,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 )
             }
         },
-        bottomBar = {
+        bottomBar = { backdrop ->
             if (root) {
                 Box(
                     modifier = Modifier
@@ -586,24 +584,20 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                         .padding(horizontal = 18.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    FloatingNavigationBar(
+                    LiquidDockGlassNavigationBar(
+                        selectedIndex = pagerState.currentPage,
+                        onSelected = { index ->
+                            if (pagerState.currentPage != index) {
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            }
+                        },
+                        labels = ROOT_DESTINATIONS.map { stringResource(it.labelRes) },
+                        icons = ROOT_DESTINATIONS.map { it.icon },
+                        backdrop = backdrop,
                         modifier = Modifier
                             .widthIn(max = 520.dp)
                             .fillMaxWidth(),
-                    ) {
-                        ROOT_DESTINATIONS.forEachIndexed { index, destination ->
-                            FloatingNavigationBarItem(
-                                selected = pagerState.currentPage == index,
-                                onClick = {
-                                    if (pagerState.currentPage != index) {
-                                        scope.launch { pagerState.animateScrollToPage(index) }
-                                    }
-                                },
-                                icon = destination.icon,
-                                label = stringResource(destination.labelRes),
-                            )
-                        }
-                    }
+                    )
                 }
             }
         },
@@ -773,13 +767,9 @@ private fun HomeOverviewCard(
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
     val glassEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-    ) {
+    LiquidDockSectionCard {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            SwitchPreference(
+            LiquidDockGlassToggleRow(
                 checked = masterEnabled,
                 onCheckedChange = {
                     prefs.edit().putBoolean(ConfigSchema.Core.ENABLED.name(), it).apply()
@@ -791,7 +781,6 @@ private fun HomeOverviewCard(
                 summary = stringResource(
                     if (masterEnabled) R.string.home_status_enabled_summary else R.string.home_status_disabled_summary,
                 ),
-                insideMargin = LiquidDockPreferenceMargin,
             )
             Column(
                 modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
@@ -1393,13 +1382,16 @@ internal fun BooleanSetting(
 ) {
     val key = config.name()
     var value by remember(key) { mutableStateOf(prefs.getBoolean(key, default)) }
-    SwitchPreference(
+    LiquidDockGlassToggleRow(
         checked = value,
-        onCheckedChange = { value = it; prefs.edit().putBoolean(key, it).apply(); onChanged(it) },
+        onCheckedChange = {
+            value = it
+            prefs.edit().putBoolean(key, it).apply()
+            onChanged(it)
+        },
         title = title,
         summary = summary,
         enabled = enabled,
-        insideMargin = LiquidDockPreferenceMargin,
     )
 }
 
