@@ -749,6 +749,9 @@ final class Miuix307PassBlurTextureView extends TextureView
             }
             hasPresentedFrame = true;
             renderedFrameCount++;
+            DockAnimationTrace.eglSwap(
+                    renderedFrameCount, fromFrameCallback,
+                    dockScene != null ? dockScene.size() : 0);
             maybeLogPowerStats();
 
             Miuix307PassBlurBridge.Binding currentBinding = binding;
