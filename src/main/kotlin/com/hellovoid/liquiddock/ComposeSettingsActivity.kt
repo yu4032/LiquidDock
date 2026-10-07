@@ -54,6 +54,7 @@ import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -463,6 +464,58 @@ private val shadowSpecs = listOf(
     IntSpec(ConfigSchema.Dock.STROKE_SHADOW_ALPHA, "描边阴影透明度", "", "stroke_shadow"),
 )
 
+private data class RootDestination(
+    val page: Page,
+    val labelRes: Int,
+    val icon: ImageVector,
+)
+
+private val ROOT_DESTINATIONS = listOf(
+    RootDestination(Page.Home, R.string.tab_overview, MiuixIcons.Home),
+    RootDestination(Page.LayoutHub, R.string.tab_layout, MiuixIcons.GridView),
+    RootDestination(Page.GlassHub, R.string.tab_glass, MiuixIcons.Image),
+    RootDestination(Page.MoreHub, R.string.tab_more, MiuixIcons.Settings),
+)
+
+private data class RootFeature(
+    val page: Page,
+    val titleRes: Int,
+    val summaryRes: Int,
+    val icon: ImageVector,
+)
+
+private val overviewFeatures = listOf(
+    RootFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, MiuixIcons.Tune),
+    RootFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, MiuixIcons.Image),
+    RootFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, MiuixIcons.GridView),
+    RootFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, MiuixIcons.Settings),
+)
+
+private val layoutFeatures = listOf(
+    RootFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, MiuixIcons.GridView),
+    RootFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, MiuixIcons.Tune),
+    RootFeature(Page.Divider, R.string.page_divider, R.string.home_divider_summary, MiuixIcons.More),
+    RootFeature(Page.Workstation, R.string.page_workstation, R.string.home_workstation_summary, MiuixIcons.GridView),
+    RootFeature(Page.Recents, R.string.page_recents, R.string.home_recents_summary, MiuixIcons.Settings),
+)
+
+private val glassFeatures = listOf(
+    RootFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, MiuixIcons.Image),
+    RootFeature(Page.Stroke, R.string.page_stroke, R.string.home_stroke_summary, MiuixIcons.Theme),
+    RootFeature(Page.Shadow, R.string.page_shadow, R.string.home_shadow_summary, MiuixIcons.Theme),
+    RootFeature(Page.DialogCustomization, R.string.page_dialog_customization, R.string.home_dialog_summary, MiuixIcons.More),
+    RootFeature(Page.LauncherHighlights, R.string.page_launcher_highlights, R.string.launcher_highlights_entry_summary, MiuixIcons.Image),
+    RootFeature(Page.WidgetComponents, R.string.widget_components_entry, R.string.widget_components_entry_summary, MiuixIcons.GridView),
+    RootFeature(Page.ThirdPartyApps, R.string.page_third_party_apps, R.string.home_third_party_summary, MiuixIcons.Community),
+)
+
+private val moreFeatures = listOf(
+    RootFeature(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, R.string.home_security_center_sidebar_summary, MiuixIcons.Tune),
+    RootFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, MiuixIcons.Settings),
+    RootFeature(Page.Data, R.string.home_data_title, R.string.home_data_summary, MiuixIcons.More),
+    RootFeature(Page.About, R.string.home_about_title, R.string.home_about_summary, MiuixIcons.Info),
+)
+
 @Composable
 private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     val prefs = remember { PreferenceManager.getDefaultSharedPreferences(activity) }
@@ -470,54 +523,103 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         mutableStateOf(prefs.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()))
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
-    BackHandler(enabled = page != Page.Home) { page = parentPage(page) }
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = stringResource(page.titleRes),
-                navigationIcon = {
-                    if (page != Page.Home) TextButton(text = stringResource(R.string.action_back), onClick = { page = parentPage(page) })
-                },
-                actions = {
-                    val descriptor = THIRD_PARTY_APP_PAGES[page]
-                    if (page == Page.SecurityCenterSidebar) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
+    val pagerState = rememberPagerState(pageCount = { ROOT_PAGES.size })
+    val scope = rememberCoroutineScope()
+    val root = isRootPage(page)
+
+    BackHandler(enabled = !root) { page = parentPage(page) }
+
+    LaunchedEffect(pagerState.settledPage, root) {
+        if (root) page = ROOT_PAGES[pagerState.settledPage]
+    }
+    LaunchedEffect(page) {
+        if (isRootPage(page)) {
+            val rootIndex = ROOT_PAGES.indexOf(page)
+            if (rootIndex >= 0 && pagerState.currentPage != rootIndex) {
+                pagerState.scrollToPage(rootIndex)
+            }
+        }
+    }
+
+    LiquidDockSettingsScaffold(
+        title = stringResource(page.titleRes),
+        showBack = !root,
+        onBack = { page = parentPage(page) },
+        actions = {
+            val descriptor = THIRD_PARTY_APP_PAGES[page]
+            if (page == Page.SecurityCenterSidebar) {
+                TextButton(
+                    text = stringResource(R.string.action_restart_security_center_and_launcher),
+                    onClick = { activity.restartSecurityCenterAndLauncher() },
+                )
+            } else if (page == Page.Animation) {
+                TextButton(
+                    text = stringResource(R.string.action_restart_security_center_and_launcher),
+                    onClick = { activity.restartSecurityCenterAndLauncher() },
+                )
+            } else if (descriptor != null) {
+                TextButton(
+                    text = stringResource(descriptor.restartLabelRes),
+                    onClick = {
+                        activity.restartPackageProcess(
+                            descriptor.packageName,
+                            descriptor.displayName,
                         )
-                    } else if (page == Page.Animation) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
-                        )
-                    } else if (descriptor != null) {
-                        TextButton(
-                            text = stringResource(descriptor.restartLabelRes),
-                            onClick = {
-                                activity.restartPackageProcess(
-                                    descriptor.packageName,
-                                    descriptor.displayName,
-                                )
-                            },
-                        )
-                    } else {
-                        TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
+                    },
+                )
+            } else {
+                TextButton(
+                    text = stringResource(R.string.action_restart_launcher),
+                    onClick = { activity.restartLauncher() },
+                )
+            }
+            if (page == Page.Home) {
+                TextButton(
+                    text = stringResource(R.string.action_restart_system_ui),
+                    onClick = { activity.restartSystemUi() },
+                )
+            }
+        },
+        bottomBar = {
+            if (root) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    FloatingNavigationBar(
+                        modifier = Modifier
+                            .widthIn(max = 520.dp)
+                            .fillMaxWidth(),
+                    ) {
+                        ROOT_DESTINATIONS.forEachIndexed { index, destination ->
+                            FloatingNavigationBarItem(
+                                selected = pagerState.currentPage == index,
+                                onClick = {
+                                    if (pagerState.currentPage != index) {
+                                        scope.launch { pagerState.animateScrollToPage(index) }
+                                    }
+                                },
+                                icon = destination.icon,
+                                label = stringResource(destination.labelRes),
+                            )
+                        }
                     }
-                    if (page == Page.Home) {
-                        TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
-                    }
-                },
-            )
+                }
+            }
         },
     ) { padding ->
+        val duration = prefs.getInt(
+            ConfigSchema.Animation.SETTINGS_PAGE.name(),
+            ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
+        ).coerceIn(0, 2000)
+
         AnimatedContent(
-            targetState = page,
+            targetState = page.takeUnless(::isRootPage),
             transitionSpec = {
-                val duration = prefs.getInt(
-                    ConfigSchema.Animation.SETTINGS_PAGE.name(),
-                    ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
-                ).coerceIn(0, 2000)
-                if (targetState.ordinal > initialState.ordinal) {
+                if (targetState != null) {
                     (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
                             (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
                 } else {
@@ -525,47 +627,82 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                             (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
                 }
             },
-            label = "page",
-        ) { target ->
-            when (target) {
-                Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }) { page = it }
-                Page.Grid -> GridPage(padding, prefs, masterEnabled)
-                Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
-                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
-                Page.Divider -> DividerPage(padding, prefs, masterEnabled)
-                Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
-                Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
-                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                )
-                Page.Liquid -> LiquidPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                    openLauncherHighlights = { page = Page.LauncherHighlights },
-                    openWidgetComponents = { page = Page.WidgetComponents },
-                    openThirdPartyApps = { page = Page.ThirdPartyApps },
-                    openDialogCustomization = { page = Page.DialogCustomization },
-                )
-                Page.DialogCustomization -> DialogGlassSettingsPage(
-                    padding, prefs, masterEnabled,
-                )
-                Page.ThirdPartyApps -> ThirdPartyAppsPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                    openGboard = { page = Page.Gboard },
-                )
-                Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
-                Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
-                Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
-                Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
-                Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
-                Page.Data -> DataPage(padding, activity)
-                Page.About -> AboutPage(padding, activity, prefs)
+            label = "detail-page",
+        ) { detail ->
+            if (detail == null) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1,
+                ) { index ->
+                    when (ROOT_PAGES[index]) {
+                        Page.Home -> HomePage(
+                            padding = padding,
+                            prefs = prefs,
+                            masterEnabled = masterEnabled,
+                            onMasterChanged = { masterEnabled = it },
+                            open = { page = it },
+                        )
+                        Page.LayoutHub -> SettingsHubPage(
+                            padding = padding,
+                            summary = stringResource(R.string.tab_layout_summary),
+                            features = layoutFeatures,
+                            open = { page = it },
+                        )
+                        Page.GlassHub -> SettingsHubPage(
+                            padding = padding,
+                            summary = stringResource(R.string.tab_glass_summary),
+                            features = glassFeatures,
+                            open = { page = it },
+                        )
+                        Page.MoreHub -> SettingsHubPage(
+                            padding = padding,
+                            summary = stringResource(R.string.tab_more_summary),
+                            features = moreFeatures,
+                            open = { page = it },
+                        )
+                        else -> Unit
+                    }
+                }
+            } else {
+                when (detail) {
+                    Page.Grid -> GridPage(padding, prefs, masterEnabled)
+                    Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
+                    Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
+                    Page.Divider -> DividerPage(padding, prefs, masterEnabled)
+                    Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
+                    Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
+                    Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                    )
+                    Page.Liquid -> LiquidPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                        openLauncherHighlights = { page = Page.LauncherHighlights },
+                        openWidgetComponents = { page = Page.WidgetComponents },
+                        openThirdPartyApps = { page = Page.ThirdPartyApps },
+                        openDialogCustomization = { page = Page.DialogCustomization },
+                    )
+                    Page.DialogCustomization -> DialogGlassSettingsPage(padding, prefs, masterEnabled)
+                    Page.ThirdPartyApps -> ThirdPartyAppsPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                        openGboard = { page = Page.Gboard },
+                    )
+                    Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                    Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
+                    Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
+                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
+                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
+                    Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
+                    Page.Data -> DataPage(padding, activity)
+                    Page.About -> AboutPage(padding, activity, prefs)
+                    Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub -> Unit
+                }
             }
         }
     }
