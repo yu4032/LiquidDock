@@ -376,8 +376,9 @@ final class LauncherGlassStaticNode {
                             requestedRadius * radiusScale, proxyWidth, proxyHeight));
         }
 
-        if (!LauncherGlassHierarchy.isWorkspace(material)
-                || !LauncherGlassVisibility.isVisible(material, root)) return null;
+        if (LauncherGlassVisibility.effectiveWorkspaceAlpha(material, root) <= 0.001f) {
+            return null;
+        }
         if (hostWidth <= 0 || hostHeight <= 0) return null;
 
         float localLeft = 0f;
