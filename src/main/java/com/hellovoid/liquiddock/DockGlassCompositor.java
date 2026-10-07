@@ -193,8 +193,12 @@ final class DockGlassCompositor {
             out.add(new DockGlassSceneSnapshot.Item(
                     geometry, renderGeometry, animationSample.opacity));
         }
-        latestScene = DockGlassSceneSnapshot.takeOwnership(
-                out.toArray(new DockGlassSceneSnapshot.Item[0]));
+        if (out.isEmpty()) {
+            latestScene = DockGlassSceneSnapshot.EMPTY;
+        } else {
+            latestScene = DockGlassSceneSnapshot.takeOwnership(
+                    out.toArray(new DockGlassSceneSnapshot.Item[out.size()]));
+        }
         lastFingerprint = fingerprint;
         lastOutputFingerprint = outputFingerprint;
         lastW = framebufferWidth;
