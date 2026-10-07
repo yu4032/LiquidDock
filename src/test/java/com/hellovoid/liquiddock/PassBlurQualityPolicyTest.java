@@ -28,6 +28,22 @@ public class PassBlurQualityPolicyTest {
     }
 
     @Test
+    public void renderFpsHasNoFixedSixtyHertzCeiling() {
+        assertEquals(60, PassBlurQualityPolicy.renderFps(60));
+        assertEquals(120, PassBlurQualityPolicy.renderFps(120));
+        assertEquals(165, PassBlurQualityPolicy.renderFps(165));
+        assertEquals(240, PassBlurQualityPolicy.renderFps(240));
+    }
+
+    @Test
+    public void globalCapOnlyLowersProfileSpecificLimits() {
+        assertEquals(120, PassBlurQualityPolicy.applyGlobalRenderFpsCap(165, 120));
+        assertEquals(90, PassBlurQualityPolicy.applyGlobalRenderFpsCap(90, 120));
+        assertEquals(120, PassBlurQualityPolicy.applyGlobalRenderFpsCap(0, 120));
+        assertEquals(90, PassBlurQualityPolicy.applyGlobalRenderFpsCap(90, 0));
+    }
+
+    @Test
     public void renderFpsZeroMeansSourceDrivenAuto() {
         PassBlurFrameRateLimiter limiter = new PassBlurFrameRateLimiter(0);
         assertTrue(limiter.shouldSchedule(0L, false));

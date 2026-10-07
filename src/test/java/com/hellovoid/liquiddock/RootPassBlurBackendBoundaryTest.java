@@ -49,16 +49,17 @@ public class RootPassBlurBackendBoundaryTest {
     }
 
     @Test
-    public void workspaceMotionTemporarilyBypassesConsumerCapAndUsesBridgeLease() throws Exception {
+    public void workspaceMotionKeepsForceRefreshLeaseButRespectsSharedRenderCap() throws Exception {
         Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
         String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));
         String bridge = Files.readString(main.resolve("Miuix307PassBlurBridge.java"));
         String session = Files.readString(main.resolve("LauncherGlassSession.java"));
 
         assertTrue(backend.contains("private volatile boolean transitionFrameSyncEnabled;"));
-        assertTrue(backend.contains("boolean transitionSync = transitionFrameSyncEnabled"));
-        assertTrue(backend.contains("transitionSync\n                || gate == null"));
-        assertTrue(backend.contains("sourceFrameGate = new PassBlurSourceFrameGate(renderFps);"));
+        assertFalse("native motion must no longer bypass the user-selected shared FPS cap",
+                backend.contains("transitionSync\n                || gate == null"));
+        assertTrue(backend.contains("DisplayRefreshRatePolicy.clampRequestedFps("));
+        assertTrue(backend.contains("sourceFrameGate = new PassBlurSourceFrameGate(this.renderFps);"));
         assertTrue(backend.contains("setWorkspaceTransitionFrameSync(current, enabled)"));
 
         assertTrue(bridge.contains("domain == PassBlurDomain.LAUNCHER_WORKSPACE"));
@@ -68,8 +69,7 @@ public class RootPassBlurBackendBoundaryTest {
         assertTrue(session.contains("WorkspaceTransitionFrameSyncState"));
         assertTrue(session.contains("geometryMotionChanged = true;"));
         assertTrue(session.contains("root.postInvalidateOnAnimation();"));
-        assertTrue("configured Workspace FPS remains a static/idle policy",
-                session.contains("passBlurRenderFps"));
+        assertTrue(session.contains("passBlurRenderFps"));
     }
 
     @Test

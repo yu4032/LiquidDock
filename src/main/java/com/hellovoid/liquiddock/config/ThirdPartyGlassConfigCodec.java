@@ -93,9 +93,7 @@ final class ThirdPartyGlassConfigCodec {
                             PassBlurQualityKeys.CAPTURE_SCALE_MIN,
                             PassBlurQualityKeys.CAPTURE_SCALE_MAX);
                 case "render_fps":
-                    return clamp(raw,
-                            PassBlurQualityKeys.RENDER_FPS_MIN,
-                            PassBlurQualityKeys.RENDER_FPS_MAX);
+                    return Math.max(PassBlurQualityKeys.RENDER_FPS_MIN, raw);
                 default:
                     return null;
             }

@@ -2,13 +2,12 @@ package com.hellovoid.liquiddock;
 
 import com.hellovoid.liquiddock.config.PassBlurQualityKeys;
 
-/** Pure policy for Workspace PassBlur quality controls. */
+/** Pure policy for shared PassBlur/Prismal quality controls. */
 final class PassBlurQualityPolicy {
     static final int DEFAULT_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT;
     static final int MIN_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_MIN;
     static final int MAX_CAPTURE_SCALE_PERCENT = PassBlurQualityKeys.CAPTURE_SCALE_MAX;
     static final int DEFAULT_RENDER_FPS = PassBlurQualityKeys.RENDER_FPS_DEFAULT;
-    static final int MAX_RENDER_FPS = PassBlurQualityKeys.RENDER_FPS_MAX;
 
     private PassBlurQualityPolicy() {}
 
@@ -26,8 +25,15 @@ final class PassBlurQualityPolicy {
     }
 
     static int renderFps(int requestedFps) {
-        if (requestedFps <= 0) return DEFAULT_RENDER_FPS;
-        return Math.min(MAX_RENDER_FPS, requestedFps);
+        return requestedFps <= 0 ? DEFAULT_RENDER_FPS : requestedFps;
+    }
+
+    static int applyGlobalRenderFpsCap(int requestedFps, int globalCapFps) {
+        int requested = renderFps(requestedFps);
+        int global = renderFps(globalCapFps);
+        if (global == DEFAULT_RENDER_FPS) return requested;
+        if (requested == DEFAULT_RENDER_FPS) return global;
+        return Math.min(requested, global);
     }
 
     static boolean requiresFreshConsumerFrame(long consumedGeneration, long sceneGeneration) {

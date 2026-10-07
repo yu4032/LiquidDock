@@ -116,8 +116,9 @@ final class RootPassBlurBackend {
         logicalWidth = Math.max(0, authoritativeRoot.getWidth());
         logicalHeight = Math.max(0, authoritativeRoot.getHeight());
         this.physicalScalePercent = physicalScalePercent;
-        this.renderFps = renderFps;
-        sourceFrameGate = new PassBlurSourceFrameGate(renderFps);
+        this.renderFps = DisplayRefreshRatePolicy.clampRequestedFps(
+                authoritativeRoot.getContext(), renderFps);
+        sourceFrameGate = new PassBlurSourceFrameGate(this.renderFps);
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
         quadBuffer.put(QUAD).position(0);
@@ -268,11 +269,15 @@ final class RootPassBlurBackend {
 
     void setQuality(int physicalScalePercent, int renderFps) {
         if (shuttingDown) return;
+        View root = rootRef.get();
+        int effectiveRenderFps = root != null
+                ? DisplayRefreshRatePolicy.clampRequestedFps(root.getContext(), renderFps)
+                : PassBlurQualityPolicy.renderFps(renderFps);
         boolean scaleChanged = this.physicalScalePercent != physicalScalePercent;
-        boolean fpsChanged = this.renderFps != renderFps;
+        boolean fpsChanged = this.renderFps != effectiveRenderFps;
         this.physicalScalePercent = physicalScalePercent;
-        this.renderFps = renderFps;
-        if (fpsChanged) sourceFrameGate = new PassBlurSourceFrameGate(renderFps);
+        this.renderFps = effectiveRenderFps;
+        if (fpsChanged) sourceFrameGate = new PassBlurSourceFrameGate(effectiveRenderFps);
         if (scaleChanged) {
             state.onQualityChanged();
             postToRenderThread(this::releaseNormalizedTarget);
@@ -578,11 +583,8 @@ final class RootPassBlurBackend {
         Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
-        boolean transitionSync = transitionFrameSyncEnabled
-                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
-        boolean shouldRender = generation >= 0L && (transitionSync
-                || gate == null || gate.shouldSchedule(
-                        System.nanoTime(), renderedGeneration, generation));
+        boolean shouldRender = generation >= 0L && (gate == null || gate.shouldSchedule(
+                System.nanoTime(), renderedGeneration, generation));
         if (!shouldRender) {
             drainSourceFrameWithoutRender(input);
             return;

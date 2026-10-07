@@ -68,6 +68,8 @@ final class ThirdPartyGlassProfiles {
                 reader.b(key(profileId, "highlight_caustics"), baseHighlights.caustics),
                 reader.b(key(profileId, "highlight_press_glow"), baseHighlights.pressGlow));
 
+        int profileFps = reader.i(key(profileId, "render_fps"), baseFps);
+        int effectiveFps = PassBlurQualityPolicy.applyGlobalRenderFpsCap(profileFps, baseFps);
         return new ThirdPartyGlassAppearance(
                 reader.b(key(profileId, "enabled"), defaults.enabled),
                 hasAppearanceOverride,
@@ -77,7 +79,7 @@ final class ThirdPartyGlassProfiles {
                 reader.i(tintB, baseB),
                 reader.i(tintAlpha, baseAlpha),
                 reader.i(key(profileId, "capture_scale_percent"), baseScale),
-                reader.i(key(profileId, "render_fps"), baseFps),
+                effectiveFps,
                 reader.f(key(profileId, "corner_radius_dp"), defaults.cornerRadiusOverrideDp),
                 highlights,
                 reader.b(key(profileId, "fresh_on_resume"), defaults.freshOnResume));

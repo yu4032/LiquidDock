@@ -57,6 +57,7 @@ final class SystemUiHandleMenuPrismalSession {
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
     private final PrismalHighlightProfile highlightProfile;
+    private final PassBlurFrameRateLimiter sourceFrameLimiter;
     private final float[] textureMatrix = new float[16];
 
     private volatile boolean shuttingDown;
@@ -135,6 +136,12 @@ final class SystemUiHandleMenuPrismalSession {
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
+        int requestedRenderFps = glassConfig != null
+                ? glassConfig.passBlurRenderFps
+                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        sourceFrameLimiter = new PassBlurFrameRateLimiter(
+                DisplayRefreshRatePolicy.clampRequestedFps(
+                        host.getContext(), requestedRenderFps));
 
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -298,6 +305,7 @@ final class SystemUiHandleMenuPrismalSession {
             makePbufferCurrent();
             texture.updateTexImage();
             texture.getTransformMatrix(textureMatrix);
+            if (!sourceFrameLimiter.shouldSchedule(System.nanoTime(), false)) return;
             ensureRenderResources();
             normalizeBackdrop();
             sourceFrameReady = true;
