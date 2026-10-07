@@ -234,6 +234,17 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     private int normalizeProgram;
     private int compositeProgram;
+    private int normalizePositionLocation = -1;
+    private int normalizeUvLocation = -1;
+    private int normalizeTextureLocation = -1;
+    private int normalizeTexMatrixLocation = -1;
+    private int normalizeBackdropRectLocation = -1;
+    private int normalizeConfigRotLocation = -1;
+    private int normalizeValidDockRectLocation = -1;
+    private int compositePositionLocation = -1;
+    private int compositeUvLocation = -1;
+    private int compositeTextureLocation = -1;
+    private int compositeCropRectLocation = -1;
     private PrismalRenderer prismalRenderer;
     private int oesTexture;
 
@@ -610,6 +621,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (normalizeProgram == 0 || compositeProgram == 0) {
             throw new IllegalStateException("Prismal adapter program creation failed");
         }
+        normalizePositionLocation = requireAttrib(normalizeProgram, "aPosition");
+        normalizeUvLocation = requireAttrib(normalizeProgram, "aUv");
+        normalizeTextureLocation = requireUniform(normalizeProgram, "uTexture");
+        normalizeTexMatrixLocation = requireUniform(normalizeProgram, "uTexMatrix");
+        normalizeBackdropRectLocation = requireUniform(normalizeProgram, "uBackdropRect");
+        normalizeConfigRotLocation = requireUniform(normalizeProgram, "uConfigRot");
+        normalizeValidDockRectLocation = requireUniform(normalizeProgram, "uValidDockRect");
+        compositePositionLocation = requireAttrib(compositeProgram, "aPosition");
+        compositeUvLocation = requireAttrib(compositeProgram, "aUv");
+        compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
+        compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
 
         createInputProducer();
@@ -812,24 +834,24 @@ final class Miuix307PassBlurTextureView extends TextureView
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glUseProgram(normalizeProgram);
-        bindQuad(normalizeProgram);
+        bindQuad(normalizePositionLocation, normalizeUvLocation);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(requireUniform(normalizeProgram, "uTexture"), 0);
+        GLES20.glUniform1i(normalizeTextureLocation, 0);
         GLES20.glUniformMatrix4fv(
-                requireUniform(normalizeProgram, "uTexMatrix"), 1, false, textureMatrix, 0);
+                normalizeTexMatrixLocation, 1, false, textureMatrix, 0);
         GLES20.glUniform4f(
-                requireUniform(normalizeProgram, "uBackdropRect"),
+                normalizeBackdropRectLocation,
                 mapping.backdropX, mapping.backdropY, mapping.backdropW, mapping.backdropH);
         GLES20.glUniform1i(
-                requireUniform(normalizeProgram, "uConfigRot"), mapping.configRotation);
+                normalizeConfigRotLocation, mapping.configRotation);
         GLES20.glUniform4f(
-                requireUniform(normalizeProgram, "uValidDockRect"),
+                normalizeValidDockRectLocation,
                 mapping.validSampleLeft, mapping.validSampleBottom,
                 mapping.validSampleRight, mapping.validSampleTop);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(normalizeProgram);
+        unbindQuad(normalizePositionLocation, normalizeUvLocation);
     }
 
     private PrismalGeometry createPrismalGeometry(BackdropSnapshot mapping) {
@@ -888,14 +910,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         // fringe a second time and produces a black ring around rounded corners.
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositeProgram);
+        bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
-        GLES20.glUniform1i(requireUniform(compositeProgram, "uTexture"), 0);
-        GLES20.glUniform4f(requireUniform(compositeProgram, "uCropRect"),
+        GLES20.glUniform1i(compositeTextureLocation, 0);
+        GLES20.glUniform4f(compositeCropRectLocation,
                 mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositeProgram);
+        unbindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         return true;
@@ -936,25 +958,23 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + "BR raw=[" + right + "," + bottom + "] official=[" + right + "," + officialBottom + "]");
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
+    private void bindQuad(int positionLocation, int uvLocation) {
+        if (positionLocation < 0 || uvLocation < 0) {
+            throw new IllegalStateException("quad attribute unavailable");
+        }
         quadBuffer.position(0);
-        GLES20.glEnableVertexAttribArray(position);
+        GLES20.glEnableVertexAttribArray(positionLocation);
         GLES20.glVertexAttribPointer(
-                position, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
+                positionLocation, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
         quadBuffer.position(2);
-        GLES20.glEnableVertexAttribArray(uv);
+        GLES20.glEnableVertexAttribArray(uvLocation);
         GLES20.glVertexAttribPointer(
-                uv, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
+                uvLocation, 2, GLES20.GL_FLOAT, false, 4 * Float.BYTES, quadBuffer);
     }
 
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
-        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
+    private void unbindQuad(int positionLocation, int uvLocation) {
+        if (positionLocation >= 0) GLES20.glDisableVertexAttribArray(positionLocation);
+        if (uvLocation >= 0) GLES20.glDisableVertexAttribArray(uvLocation);
     }
 
     private void bindProducerWhenReady(int attempt) {
@@ -1526,6 +1546,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
         normalizeProgram = 0;
         compositeProgram = 0;
+        normalizePositionLocation = normalizeUvLocation = normalizeTextureLocation = -1;
+        normalizeTexMatrixLocation = normalizeBackdropRectLocation =
+                normalizeConfigRotLocation = normalizeValidDockRectLocation = -1;
+        compositePositionLocation = compositeUvLocation =
+                compositeTextureLocation = compositeCropRectLocation = -1;
 
         Surface producer = inputProducerSurface;
         inputProducerSurface = null;
@@ -1659,6 +1684,12 @@ final class Miuix307PassBlurTextureView extends TextureView
     private static int requireUniform(int program, String name) {
         int location = GLES20.glGetUniformLocation(program, name);
         if (location < 0) throw new IllegalStateException("missing uniform " + name);
+        return location;
+    }
+
+    private static int requireAttrib(int program, String name) {
+        int location = GLES20.glGetAttribLocation(program, name);
+        if (location < 0) throw new IllegalStateException("missing attribute " + name);
         return location;
     }
 
