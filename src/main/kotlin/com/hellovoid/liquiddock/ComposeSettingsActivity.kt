@@ -1405,9 +1405,9 @@ private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterE
         BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
         BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
         BooleanSetting(prefs, ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边", "通过填充与挖空获得清晰抗锯齿", masterEnabled) { fillDiff = it }
-        SmallTitle("描边背景色")
+        ModernSectionTitle("描边背景色")
         strokeSpecs.filter { it.section == IntSection.StrokeBackground }.forEach { IntSetting(prefs, it, masterEnabled && dockStroke) }
-        SmallTitle("方圆形与线宽")
+        ModernSectionTitle("方圆形与线宽")
         strokeSpecs.filter { it.section == IntSection.StrokeGeometry }.forEach {
             val enabled = when (it.dependency) {
                 "dock_stroke" -> dockStroke
