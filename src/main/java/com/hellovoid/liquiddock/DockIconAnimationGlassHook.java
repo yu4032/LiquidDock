@@ -328,6 +328,7 @@ final class DockIconAnimationGlassHook {
         forgetPending(pending);
         DockGlassItemRegistry.endProxyGeometry(pending.source);
         forgetProxyTarget(pending.proxy);
+        Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
         DockAnimationTrace.sourceEvent("handoff-complete-" + reason, pending.source, View.VISIBLE);
 
         try {
