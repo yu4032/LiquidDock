@@ -1116,8 +1116,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            refreshProducerGeometryInPlace();
-            updateBackdropMapping();
+            if (!refreshProducerGeometryInPlace()) updateBackdropMapping();
             return true;
         };
         observer.addOnPreDrawListener(listener);
@@ -1136,31 +1135,33 @@ final class Miuix307PassBlurTextureView extends TextureView
         } catch (Throwable ignored) {}
     }
 
-    private void refreshProducerGeometryInPlace() {
-        if (shuttingDown || binding == null) return;
+    private boolean refreshProducerGeometryInPlace() {
+        if (shuttingDown || binding == null) return false;
         View materialHost = materialHostRef.get();
         SurfaceTexture input = inputSurfaceTexture;
-        if (materialHost == null || input == null) return;
+        if (materialHost == null || input == null) return false;
 
         ProducerGeometry geometry = readSurfaceGeometry(materialHost);
-        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) return;
+        if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) {
+            return false;
+        }
         if (!binding.rootSurface.isValid()
                 || !isSameSurface(binding.rootSurface, geometry.rootSurface)) {
             rebindProducer("producer-root-changed");
-            return;
+            return false;
         }
         if (geometry.surfaceWidth == boundSurfaceWidth
                 && geometry.surfaceHeight == boundSurfaceHeight
                 && geometry.bufferWidth == boundBufferWidth
                 && geometry.bufferHeight == boundBufferHeight
                 && geometry.configRotation == boundConfigRotation) {
-            return;
+            return false;
         }
 
         if (WorkstationProducerPolicy.shouldRebindForGeometryChange(
                 MainHook.isWorkstationMode(), true)) {
             rebindProducer("workstation-producer-geometry-changed");
-            return;
+            return false;
         }
 
         configRotation = geometry.configRotation;
@@ -1188,6 +1189,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + geometry.surfaceWidth + "x" + geometry.surfaceHeight
                 + " buffer=" + geometry.bufferWidth + "x" + geometry.bufferHeight
                 + " configRot=" + geometry.configRotation);
+        return true;
     }
 
     private int horizontalOverscanPx() {
