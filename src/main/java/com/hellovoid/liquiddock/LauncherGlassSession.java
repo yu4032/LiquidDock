@@ -155,6 +155,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private OutputState staticOutput;
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
+    private int compositePositionLocation = -1;
+    private int compositeUvLocation = -1;
+    private int compositeTextureLocation = -1;
+    private int compositeCropRectLocation = -1;
     private volatile boolean backdropPrepared;
     private boolean pendingStaticRender;
     private boolean pendingDragRender;
@@ -186,7 +190,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         rootRef = new WeakReference<>(root);
         rootWidth = Math.max(0, root.getWidth());
         rootHeight = Math.max(0, root.getHeight());
-        configRotation = readLauncherConfigRotation(root);
+        configRotation = RootPassBlurEndpointBridge.readConfigRotation(root);
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -806,19 +810,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         return 1f;
     }
 
-    private static int readLauncherConfigRotation(View view) {
-        Display display = view != null ? view.getDisplay() : null;
-        if (display == null) return 0;
-        int installOrientation = 0;
-        try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
-            if (value instanceof Number) installOrientation = ((Number) value).intValue();
-        } catch (Throwable ignored) {}
-        int result = (installOrientation + display.getRotation()) % 4;
-        return result < 0 ? result + 4 : result;
-    }
-
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
@@ -891,6 +882,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
                     Miuix307PrismalCompositeShaders.FRAGMENT);
+            compositePositionLocation = requireAttrib(compositeProgram, "aPosition");
+            compositeUvLocation = requireAttrib(compositeProgram, "aUv");
+            compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
+            compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
         }
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
     }
@@ -927,8 +922,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void renderDragOutputs(PrismalParams params) {
-        for (Map.Entry<LauncherGlassSinkView, OutputState> entry
-                : new ArrayList<>(outputs.entrySet())) {
+        for (Map.Entry<LauncherGlassSinkView, OutputState> entry : outputs.entrySet()) {
             NodeState node = nodes.get(entry.getKey());
             LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (node == null || geometry == null) continue;
@@ -1087,7 +1081,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private void releaseLauncherGl() {
         releaseOutput(staticOutput);
         staticOutput = null;
-        for (OutputState output : new ArrayList<>(outputs.values())) releaseOutput(output);
+        for (OutputState output : outputs.values()) releaseOutput(output);
         outputs.clear();
         if (prismalRenderer != null) {
             try { prismalRenderer.close(); } catch (Throwable ignored) {}
@@ -1095,28 +1089,34 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
         compositeProgram = 0;
+        compositePositionLocation = -1;
+        compositeUvLocation = -1;
+        compositeTextureLocation = -1;
+        compositeCropRectLocation = -1;
         backdropPrepared = false;
     }
 
-    private void bindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position < 0 || uv < 0) throw new IllegalStateException("quad attribute unavailable");
+    private void bindQuad() {
+        if (compositePositionLocation < 0 || compositeUvLocation < 0) {
+            throw new IllegalStateException("quad attribute unavailable");
+        }
         quadBuffer.position(0);
-        GLES20.glEnableVertexAttribArray(position);
-        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false,
+        GLES20.glEnableVertexAttribArray(compositePositionLocation);
+        GLES20.glVertexAttribPointer(compositePositionLocation, 2, GLES20.GL_FLOAT, false,
                 4 * Float.BYTES, quadBuffer);
         quadBuffer.position(2);
-        GLES20.glEnableVertexAttribArray(uv);
-        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false,
+        GLES20.glEnableVertexAttribArray(compositeUvLocation);
+        GLES20.glVertexAttribPointer(compositeUvLocation, 2, GLES20.GL_FLOAT, false,
                 4 * Float.BYTES, quadBuffer);
     }
 
-    private void unbindQuad(int program) {
-        int position = GLES20.glGetAttribLocation(program, "aPosition");
-        int uv = GLES20.glGetAttribLocation(program, "aUv");
-        if (position >= 0) GLES20.glDisableVertexAttribArray(position);
-        if (uv >= 0) GLES20.glDisableVertexAttribArray(uv);
+    private void unbindQuad() {
+        if (compositePositionLocation >= 0) {
+            GLES20.glDisableVertexAttribArray(compositePositionLocation);
+        }
+        if (compositeUvLocation >= 0) {
+            GLES20.glDisableVertexAttribArray(compositeUvLocation);
+        }
     }
 
     private static int createProgram(String vertexSource, String fragmentSource) {
@@ -1155,6 +1155,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private static int requireUniform(int program, String name) {
         int location = GLES20.glGetUniformLocation(program, name);
         if (location < 0) throw new IllegalStateException("missing uniform " + name);
+        return location;
+    }
+
+    private static int requireAttrib(int program, String name) {
+        int location = GLES20.glGetAttribLocation(program, name);
+        if (location < 0) throw new IllegalStateException("missing attribute " + name);
         return location;
     }
 }
