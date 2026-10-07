@@ -81,6 +81,23 @@ public class ThirdPartyGlassProfilesTest {
     }
 
     @Test
+    public void profileRenderFpsCannotExceedSharedGlobalCap() {
+        Map<String, Object> values = new HashMap<>();
+        values.put("liquid_passblur_render_fps", 120);
+        values.put("third_party_glass.example.adapter.render_fps", 165);
+        ConfigReader reader = new ConfigReader(values);
+        LiquidDockConfig.Glass base = LiquidDockConfig.from(reader).glass;
+
+        ThirdPartyGlassAppearance appearance = ThirdPartyGlassProfiles.resolve(
+                reader,
+                "example.adapter",
+                base,
+                new ThirdPartyGlassProfiles.Defaults(false, true, -1f));
+
+        assertEquals(120, appearance.renderFps);
+    }
+
+    @Test
     public void invalidProfileIdsAreRejectedBeforeKeyConstruction() {
         LiquidDockConfig.Glass base = LiquidDockConfig.from(new ConfigReader(new HashMap<>())).glass;
         assertThrows(IllegalArgumentException.class, () -> ThirdPartyGlassProfiles.resolve(

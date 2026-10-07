@@ -15,6 +15,7 @@ public final class PrismalHighlightProfile {
     public final boolean caustics;
     public final boolean pressGlow;
     public final boolean os4Edge;
+    private volatile PrismalHighlightProfile os4Replacement;
 
     public PrismalHighlightProfile(
             boolean skyHaze,
@@ -55,7 +56,13 @@ public final class PrismalHighlightProfile {
 
     /** Replace both parameter-driven legacy edge families with one OS4 optical edge. */
     public PrismalHighlightProfile withOs4EdgeReplacingLegacyEdge() {
-        return new PrismalHighlightProfile(
+        if (os4Edge && !specular && !litRim && !oppositeRim
+                && !cornerRim && !faceSheen && !plainHighlight) {
+            return this;
+        }
+        PrismalHighlightProfile cached = os4Replacement;
+        if (cached != null) return cached;
+        PrismalHighlightProfile created = new PrismalHighlightProfile(
                 skyHaze,
                 false,
                 false,
@@ -66,5 +73,7 @@ public final class PrismalHighlightProfile {
                 caustics,
                 pressGlow,
                 true);
+        os4Replacement = created;
+        return created;
     }
 }

@@ -10,6 +10,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Trace;
 import android.view.Surface;
 import android.view.View;
 
@@ -63,6 +64,7 @@ final class RootPassBlurBackend {
     private volatile int physicalScalePercent;
     private volatile int renderFps;
     private volatile PassBlurSourceFrameGate sourceFrameGate;
+    private volatile boolean transitionFrameSyncEnabled;
     private volatile long sourceGeneration = -1L;
     private volatile long renderedGeneration = -1L;
     private volatile boolean requestedSingleFramePulse;
@@ -115,8 +117,9 @@ final class RootPassBlurBackend {
         logicalWidth = Math.max(0, authoritativeRoot.getWidth());
         logicalHeight = Math.max(0, authoritativeRoot.getHeight());
         this.physicalScalePercent = physicalScalePercent;
-        this.renderFps = renderFps;
-        sourceFrameGate = new PassBlurSourceFrameGate(renderFps);
+        this.renderFps = DisplayRefreshRatePolicy.clampRequestedFps(
+                authoritativeRoot.getContext(), renderFps);
+        sourceFrameGate = new PassBlurSourceFrameGate(this.renderFps);
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
         quadBuffer.put(QUAD).position(0);
@@ -246,13 +249,31 @@ final class RootPassBlurBackend {
         });
     }
 
+    void setTransitionFrameSyncEnabled(boolean enabled, String reason) {
+        if (shuttingDown || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+        if (transitionFrameSyncEnabled == enabled) return;
+
+        transitionFrameSyncEnabled = enabled;
+
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (current != null) {
+            Miuix307PassBlurBridge.setWorkspaceTransitionFrameSync(current, enabled);
+        }
+        MainHook.log("[DC][WorkspaceFrameSync] active=" + enabled
+                + " reason=" + reason + " renderFps=" + renderFps);
+    }
+
     void setQuality(int physicalScalePercent, int renderFps) {
         if (shuttingDown) return;
+        View root = rootRef.get();
+        int effectiveRenderFps = root != null
+                ? DisplayRefreshRatePolicy.clampRequestedFps(root.getContext(), renderFps)
+                : PassBlurQualityPolicy.renderFps(renderFps);
         boolean scaleChanged = this.physicalScalePercent != physicalScalePercent;
-        boolean fpsChanged = this.renderFps != renderFps;
+        boolean fpsChanged = this.renderFps != effectiveRenderFps;
         this.physicalScalePercent = physicalScalePercent;
-        this.renderFps = renderFps;
-        if (fpsChanged) sourceFrameGate = new PassBlurSourceFrameGate(renderFps);
+        this.renderFps = effectiveRenderFps;
+        if (fpsChanged) sourceFrameGate = new PassBlurSourceFrameGate(effectiveRenderFps);
         if (scaleChanged) {
             state.onQualityChanged();
             postToRenderThread(this::releaseNormalizedTarget);
@@ -419,9 +440,16 @@ final class RootPassBlurBackend {
 
     void swapBuffers(EGLSurface surface) {
         requireRenderThread();
-        if (!EGL14.eglSwapBuffers(eglDisplay, surface)) {
-            throw new IllegalStateException("eglSwapBuffers error=0x"
-                    + Integer.toHexString(EGL14.eglGetError()));
+        boolean trace = MainHook.debugLogging
+                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+        if (trace) Trace.beginSection("LD.Workspace.Swap");
+        try {
+            if (!EGL14.eglSwapBuffers(eglDisplay, surface)) {
+                throw new IllegalStateException("eglSwapBuffers error=0x"
+                        + Integer.toHexString(EGL14.eglGetError()));
+            }
+        } finally {
+            if (trace) Trace.endSection();
         }
     }
 
@@ -481,6 +509,8 @@ final class RootPassBlurBackend {
             normalizeConfigRotLocation = requireUniform(normalizeProgram, "uConfigRot");
             normalizeValidDockRectLocation = requireUniform(normalizeProgram, "uValidDockRect");
             normalizeBackdropRectLocation = requireUniform(normalizeProgram, "uBackdropRect");
+            GLES20.glUseProgram(normalizeProgram);
+            GLES20.glUniform1i(normalizeTextureLocation, 0);
         }
         if (oesTexture == 0 || inputSurfaceTexture == null || inputProducerSurface == null) {
             createInputProducer();
@@ -569,8 +599,7 @@ final class RootPassBlurBackend {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
         try {
             makePbufferCurrentUnchecked();
-            input.updateTexImage();
-            input.getTransformMatrix(textureMatrix);
+            latchSourceFrame(input);
         } catch (Throwable error) {
             notifyTerminalFailure(error);
         }
@@ -580,17 +609,36 @@ final class RootPassBlurBackend {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
         try {
             makePbufferCurrentUnchecked();
-            input.updateTexImage();
-            input.getTransformMatrix(textureMatrix);
+            latchSourceFrame(input);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
-            RootPassBlurFrame frame = normalizeFrame(generation);
+            boolean trace = MainHook.debugLogging
+                    && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+            RootPassBlurFrame frame;
+            if (trace) Trace.beginSection("LD.Workspace.Normalize");
+            try {
+                frame = normalizeFrame(generation);
+            } finally {
+                if (trace) Trace.endSection();
+            }
             if (consumer != null) consumer.onFreshFrame(this, frame);
             if (generation == sourceGeneration && state.onFreshFrame(generation)) {
                 renderedGeneration = generation;
             }
         } catch (Throwable error) {
             notifyTerminalFailure(error);
+        }
+    }
+
+    private void latchSourceFrame(SurfaceTexture input) {
+        boolean trace = MainHook.debugLogging
+                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+        if (trace) Trace.beginSection("LD.Workspace.SourceLatch");
+        try {
+            input.updateTexImage();
+            input.getTransformMatrix(textureMatrix);
+        } finally {
+            if (trace) Trace.endSection();
         }
     }
 
@@ -608,7 +656,6 @@ final class RootPassBlurBackend {
         bindQuad(normalizePositionLocation, normalizeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(normalizeTextureLocation, 0);
         GLES20.glUniformMatrix4fv(normalizeTexMatrixLocation,
                 1, false, textureMatrix, 0);
         GLES20.glUniform1i(normalizeConfigRotLocation, rotation);
@@ -638,12 +685,12 @@ final class RootPassBlurBackend {
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
         if (root == null || !root.isAttachedToWindow() || producer == null || input == null) {
-            retryBind(attempt);
+            retryBind(attempt, true);
             return;
         }
         RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
         if (endpoint == null || !endpoint.isValid()) {
-            retryBind(attempt);
+            retryBind(attempt, true);
             return;
         }
         logicalWidth = Math.max(1, root.getWidth());
@@ -670,7 +717,12 @@ final class RootPassBlurBackend {
                 || epoch != bindEpoch.get() || rootRef.get() != root) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(bindRequest, producer);
         if (next == null) {
-            retryBind(attempt);
+            RootPassBlurEndpointBridge.Endpoint currentEndpoint =
+                    RootPassBlurEndpointBridge.inspect(root);
+            boolean unavailable = currentEndpoint == null || !currentEndpoint.isValid()
+                    || (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                        && LauncherGlassHomePresentationHook.isUnlockProducerBlocked());
+            retryBind(attempt, unavailable);
             return;
         }
         if (!RootPassBlurEndpointBridge.sameGeneration(next, endpoint)) {
@@ -678,10 +730,12 @@ final class RootPassBlurBackend {
             // The producer endpoint is still valid. Only the ViewRoot generation raced while
             // binding, so stay inside the accepted rollover and retry against the next frame's
             // authoritative endpoint instead of issuing a nested rebind that recovery rejects.
-            retryBind(attempt);
+            retryBind(attempt, true);
             return;
         }
         binding = next;
+        Miuix307PassBlurBridge.setWorkspaceTransitionFrameSync(
+                next, transitionFrameSyncEnabled);
         state.onBindSucceeded();
         completeRolloverCompletions(true, "bind-succeeded");
         MainHook.log(TAG + " bound root=" + next.rootName
@@ -692,17 +746,24 @@ final class RootPassBlurBackend {
         if (generation >= 0L) ensureBoundAndRefresh(generation);
     }
 
-    private void retryBind(int attempt) {
+    private void retryBind(int attempt, boolean endpointUnavailable) {
         if (shuttingDown || binding != null) return;
-        if (attempt >= MAX_BIND_RETRY_FRAMES) {
+        boolean unlockPending = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked();
+        int budgetAttempt = PassBlurBindPolicy.retryBudgetAttempt(
+                bindRequest.domain(), attempt, unlockPending, endpointUnavailable);
+        if (budgetAttempt >= MAX_BIND_RETRY_FRAMES) {
             state.onBindExhausted();
             notifyTerminalFailure(new IllegalStateException("PassBlur bind exhausted"));
             return;
         }
         View root = rootRef.get();
         if (root != null) {
+            long retryEpoch = bindEpoch.get();
             root.postOnAnimation(() -> {
-                if (!shuttingDown && binding == null) bindProducerWhenReady(attempt + 1);
+                if (!shuttingDown && binding == null && retryEpoch == bindEpoch.get()) {
+                    bindProducerWhenReady(budgetAttempt + 1);
+                }
             });
         }
     }

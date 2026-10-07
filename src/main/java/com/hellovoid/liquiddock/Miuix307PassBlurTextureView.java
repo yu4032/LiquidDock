@@ -66,16 +66,17 @@ final class Miuix307PassBlurTextureView extends TextureView
     };
 
     private static final class SamplingInsets {
-        final int left;
-        final int right;
-        final int top;
-        final int bottom;
+        int left;
+        int right;
+        int top;
+        int bottom;
 
-        SamplingInsets(int left, int right, int top, int bottom) {
+        SamplingInsets set(int left, int right, int top, int bottom) {
             this.left = Math.max(0, left);
             this.right = Math.max(0, right);
             this.top = Math.max(0, top);
             this.bottom = Math.max(0, bottom);
+            return this;
         }
     }
 
@@ -194,6 +195,35 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final ZeroCopyProducerRecoveryState producerRecovery =
             new ZeroCopyProducerRecoveryState();
     private final float[] textureMatrix = new float[16];
+    private final Rect winFrameScratch = new Rect();
+    private final int[] viewScreenScratch = new int[2];
+    // UI-thread pre-draw sampling cache. The GL lifecycle path uses its own local result.
+    private final SamplingInsets uiSamplingInsetsCache = new SamplingInsets();
+    private final int[] uiInsetPairScratch = new int[2];
+    private PrismalParams uiSamplingParams;
+    private int uiSamplingWidth = -1;
+    private int uiSamplingHeight = -1;
+    private int uiSamplingMaxTextureSize = -1;
+    private int uiSamplingTopExtra;
+    private int uiSamplingBottomExtra;
+    private int uiSamplingLeftExtra;
+    private int uiSamplingRightExtra;
+    private float uiSamplingDensity = Float.NaN;
+
+    // Geometry observation runs on every root pre-draw. Reflection members are stable for this
+    // TextureView lifetime (detach permanently shuts this renderer down), while their values are
+    // still read fresh every frame.
+    private Method getViewRootImplMethod;
+    private Object cachedViewRoot;
+    private Field cachedWinFrameInScreenField;
+    private Field cachedSurfaceSizeField;
+    private Method cachedGetSurfaceControlMethod;
+    private boolean installOrientationMethodResolved;
+    private Method cachedInstallOrientationMethod;
+    private Display cachedInstallOrientationDisplay;
+    private int cachedInstallOrientation;
+    private boolean sameSurfaceMethodResolved;
+    private Method cachedIsSameSurfaceMethod;
 
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
@@ -350,6 +380,14 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private float workstationDockIconCornerRadiusDp;
+    private volatile float nativeOpticsRadiusPx = Float.NaN;
+
+    void setNativeOpticsRadiusPx(float radiusPx) {
+        float next = Float.isFinite(radiusPx) && radiusPx > 0f ? radiusPx : Float.NaN;
+        if (Float.compare(nativeOpticsRadiusPx, next) == 0) return;
+        nativeOpticsRadiusPx = next;
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
+    }
 
     void setWorkstationDockIconCornerRadiusDp(float radiusDp) {
         workstationDockIconCornerRadiusDp = Math.max(0f, radiusDp);
@@ -722,6 +760,10 @@ final class Miuix307PassBlurTextureView extends TextureView
         compositeUvLocation = requireAttrib(compositeProgram, "aUv");
         compositeTextureLocation = requireUniform(compositeProgram, "uTexture");
         compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
+        GLES20.glUseProgram(normalizeProgram);
+        GLES20.glUniform1i(normalizeTextureLocation, 0);
+        GLES20.glUseProgram(compositeProgram);
+        GLES20.glUniform1i(compositeTextureLocation, 0);
         if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
 
         createInputProducer();
@@ -917,10 +959,6 @@ final class Miuix307PassBlurTextureView extends TextureView
             int prismalTexture = prismalRenderer.outputTexture();
             if (!renderCompositePass(prismalTexture, mapping)) return;
 
-            int glError = GLES20.glGetError();
-            if (glError != GLES20.GL_NO_ERROR) {
-                throw new IllegalStateException("GLES error=0x" + Integer.toHexString(glError));
-            }
             // UI geometry may advance while this GL frame is being prepared. Never publish a
             // frame assembled from an obsolete generation; updateBackdropMapping() will queue the
             // matching generation when a consumed producer frame is available.
@@ -1041,7 +1079,6 @@ final class Miuix307PassBlurTextureView extends TextureView
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture);
-        GLES20.glUniform1i(normalizeTextureLocation, 0);
         GLES20.glUniformMatrix4fv(
                 normalizeTexMatrixLocation, 1, false, textureMatrix, 0);
         GLES20.glUniform4f(
@@ -1067,12 +1104,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         float centerYTop = mapping.sampleHeight - centerGlY;
 
         float cornerRadiusPx = Math.max(1f, glassHeight * 0.44f);
-        View materialHost = materialHostRef.get();
-        if (materialHost != null) {
-            float nativeRadius = MiuixGlassHook.readNativeOpticsRadius(materialHost);
-            if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
-                cornerRadiusPx = nativeRadius;
-            }
+        float nativeRadius = nativeOpticsRadiusPx;
+        if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
+            cornerRadiusPx = nativeRadius;
         }
         return new PrismalGeometry(
                 mapping.sampleWidth, mapping.sampleHeight,
@@ -1116,7 +1150,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
-        GLES20.glUniform1i(compositeTextureLocation, 0);
         GLES20.glUniform4f(compositeCropRectLocation,
                 mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
@@ -1347,12 +1380,48 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private SamplingInsets resolveSamplingInsets(int width, int height) {
-        return resolveSamplingInsets(width, height, portablePrismalParams);
+        SamplingInsets out = new SamplingInsets();
+        int[] pairScratch = new int[2];
+        fillSamplingInsets(width, height, portablePrismalParams, out, pairScratch);
+        return out;
     }
 
-    private SamplingInsets resolveSamplingInsets(
+    private SamplingInsets resolveSamplingInsetsCached(
             int width, int height, PrismalParams prismalParams) {
-        if (prismalParams == null) return new SamplingInsets(0, 0, 0, 0);
+        float density = getResources().getDisplayMetrics().density;
+        if (uiSamplingParams == prismalParams
+                && uiSamplingWidth == width
+                && uiSamplingHeight == height
+                && uiSamplingMaxTextureSize == maxTextureSize
+                && uiSamplingTopExtra == topSamplingExtraPx
+                && uiSamplingBottomExtra == bottomSamplingExtraPx
+                && uiSamplingLeftExtra == leftSamplingExtraPx
+                && uiSamplingRightExtra == rightSamplingExtraPx
+                && Float.compare(uiSamplingDensity, density) == 0) {
+            return uiSamplingInsetsCache;
+        }
+
+        fillSamplingInsets(
+                width, height, prismalParams, uiSamplingInsetsCache, uiInsetPairScratch);
+        uiSamplingParams = prismalParams;
+        uiSamplingWidth = width;
+        uiSamplingHeight = height;
+        uiSamplingMaxTextureSize = maxTextureSize;
+        uiSamplingTopExtra = topSamplingExtraPx;
+        uiSamplingBottomExtra = bottomSamplingExtraPx;
+        uiSamplingLeftExtra = leftSamplingExtraPx;
+        uiSamplingRightExtra = rightSamplingExtraPx;
+        uiSamplingDensity = density;
+        return uiSamplingInsetsCache;
+    }
+
+    private void fillSamplingInsets(
+            int width, int height, PrismalParams prismalParams,
+            SamplingInsets out, int[] pairScratch) {
+        if (prismalParams == null) {
+            out.set(0, 0, 0, 0);
+            return;
+        }
         int opticalX = PrismalSampling.requiredGuardPx(
                 prismalParams, width, height, true);
         int opticalY = PrismalSampling.requiredGuardPx(
@@ -1364,9 +1433,11 @@ final class Miuix307PassBlurTextureView extends TextureView
         int top = combineAutoGuardAndUserExtra(opticalY, topSamplingExtraPx);
         int bottom = combineAutoGuardAndUserExtra(opticalY, bottomSamplingExtraPx);
 
-        int[] horizontal = fitInsetPairToTextureLimit(width, left, right, maxTextureSize);
-        int[] vertical = fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize);
-        return new SamplingInsets(horizontal[0], horizontal[1], vertical[0], vertical[1]);
+        fitInsetPairToTextureLimit(width, left, right, maxTextureSize, pairScratch);
+        int fittedLeft = pairScratch[0];
+        int fittedRight = pairScratch[1];
+        fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize, pairScratch);
+        out.set(fittedLeft, fittedRight, pairScratch[0], pairScratch[1]);
     }
 
     private static int combineAutoGuardAndUserExtra(int automaticGuardPx, int userExtraPx) {
@@ -1374,22 +1445,34 @@ final class Miuix307PassBlurTextureView extends TextureView
         return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, combined));
     }
 
-    private static int[] fitInsetPairToTextureLimit(
-            int visible, int before, int after, int maxTextureSize) {
+    private static void fitInsetPairToTextureLimit(
+            int visible, int before, int after, int maxTextureSize, int[] out) {
         int safeVisible = Math.max(1, visible);
         int safeBefore = Math.max(0, before);
         int safeAfter = Math.max(0, after);
-        if (maxTextureSize <= 0) return new int[]{safeBefore, safeAfter};
+        if (maxTextureSize <= 0) {
+            out[0] = safeBefore;
+            out[1] = safeAfter;
+            return;
+        }
 
         int available = Math.max(0, maxTextureSize - safeVisible);
         long desired = (long) safeBefore + safeAfter;
-        if (desired <= available) return new int[]{safeBefore, safeAfter};
-        if (available <= 0 || desired <= 0) return new int[]{0, 0};
+        if (desired <= available) {
+            out[0] = safeBefore;
+            out[1] = safeAfter;
+            return;
+        }
+        if (available <= 0 || desired <= 0) {
+            out[0] = 0;
+            out[1] = 0;
+            return;
+        }
 
         int fittedBefore = (int) Math.round(safeBefore * (available / (double) desired));
         fittedBefore = Math.max(0, Math.min(available, fittedBefore));
-        int fittedAfter = available - fittedBefore;
-        return new int[]{fittedBefore, fittedAfter};
+        out[0] = fittedBefore;
+        out[1] = available - fittedBefore;
     }
 
     private void updateBackdropMapping() {
@@ -1398,14 +1481,15 @@ final class Miuix307PassBlurTextureView extends TextureView
         int visibleHeight = outputHeight > 0 ? outputHeight : getHeight();
         if (visibleWidth <= 0 || visibleHeight <= 0) return;
 
-        Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
+        Rect winFrame = readViewRootWinFrame(this);
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
-        int[] viewScreen = new int[2];
+        int[] viewScreen = viewScreenScratch;
         getLocationOnScreen(viewScreen);
 
         PrismalParams frameParams = portablePrismalParams;
         if (frameParams == null) return;
-        SamplingInsets insets = resolveSamplingInsets(visibleWidth, visibleHeight, frameParams);
+        SamplingInsets insets =
+                resolveSamplingInsetsCached(visibleWidth, visibleHeight, frameParams);
         int sampleWidth = visibleWidth + insets.left + insets.right;
         int sampleHeight = visibleHeight + insets.top + insets.bottom;
         Miuix307BackdropMapping.Result sample = Miuix307BackdropMapping.compute(
@@ -1503,13 +1587,31 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
+    private Field surfaceSizeField(Object viewRoot) throws Exception {
+        Field field = cachedSurfaceSizeField;
+        if (field != null) return field;
+        field = findField(viewRoot.getClass(), "mSurfaceSize");
+        field.setAccessible(true);
+        cachedSurfaceSizeField = field;
+        return field;
+    }
+
+    private Method surfaceControlMethod(Object viewRoot) throws Exception {
+        Method method = cachedGetSurfaceControlMethod;
+        if (method != null) return method;
+        method = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
+        method.setAccessible(true);
+        cachedGetSurfaceControlMethod = method;
+        return method;
+    }
+
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
         if (materialHost == null) return null;
         try {
-            Object viewRoot = getViewRootImpl(materialHost);
+            Object viewRoot = getViewRootImplCached(materialHost);
             if (viewRoot == null) return null;
-            Field sizeField = findField(viewRoot.getClass(), "mSurfaceSize");
-            sizeField.setAccessible(true);
+
+            Field sizeField = surfaceSizeField(viewRoot);
             Object value = sizeField.get(viewRoot);
             if (!(value instanceof Point)) return null;
             Point surfaceSize = (Point) value;
@@ -1525,8 +1627,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 bufferHeight = surfaceWidth;
             }
 
-            Method getSurfaceControl = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-            getSurfaceControl.setAccessible(true);
+            Method getSurfaceControl = surfaceControlMethod(viewRoot);
             Object surface = getSurfaceControl.invoke(viewRoot);
             SurfaceControl rootSurface = surface instanceof SurfaceControl
                     ? (SurfaceControl) surface : null;
@@ -1554,7 +1655,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         getLocationOnScreen(viewScreen);
         materialHost.getLocationOnScreen(hostScreen);
         root.getLocationOnScreen(rootScreen);
-        Rect winFrame = readViewRootRectField(this, "mWinFrameInScreen");
+        Rect winFrame = readViewRootWinFrame(this);
 
         float[] bl = mapFinalCoordinate(
                 mapping.backdropX, mapping.backdropY, mapping.configRotation, matrixSnapshot);
@@ -1833,38 +1934,72 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
     }
 
-    private static int readConfigRotation(View materialHost) {
+    private int readConfigRotation(View materialHost) {
         Display display = materialHost != null ? materialHost.getDisplay() : null;
         if (display == null) return 0;
-        int installOrientation = 0;
-        try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
-            if (value instanceof Number) installOrientation = ((Number) value).intValue();
-        } catch (Throwable ignored) {}
+
+        if (cachedInstallOrientationDisplay != display) {
+            if (!installOrientationMethodResolved) {
+                installOrientationMethodResolved = true;
+                try {
+                    cachedInstallOrientationMethod =
+                            Display.class.getMethod("getInstallOrientation");
+                } catch (Throwable ignored) {
+                    cachedInstallOrientationMethod = null;
+                }
+            }
+            int installOrientation = 0;
+            Method method = cachedInstallOrientationMethod;
+            if (method != null) {
+                try {
+                    Object value = method.invoke(display);
+                    if (value instanceof Number) {
+                        installOrientation = ((Number) value).intValue();
+                    }
+                } catch (Throwable ignored) {}
+            }
+            cachedInstallOrientation = installOrientation;
+            cachedInstallOrientationDisplay = display;
+        }
+
         int rotation = display.getRotation();
-        int result = (installOrientation + rotation) % 4;
+        int result = (cachedInstallOrientation + rotation) % 4;
         return result < 0 ? result + 4 : result;
     }
 
-    private static Rect readViewRootRectField(View view, String fieldName) {
+    private Rect readViewRootWinFrame(View view) {
         if (view == null) return null;
         try {
-            Object viewRoot = getViewRootImpl(view);
+            Object viewRoot = getViewRootImplCached(view);
             if (viewRoot == null) return null;
-            Field field = findField(viewRoot.getClass(), fieldName);
-            field.setAccessible(true);
+            Field field = cachedWinFrameInScreenField;
+            if (field == null) {
+                field = findField(viewRoot.getClass(), "mWinFrameInScreen");
+                field.setAccessible(true);
+                cachedWinFrameInScreenField = field;
+            }
             Object value = field.get(viewRoot);
-            return value instanceof Rect ? new Rect((Rect) value) : null;
+            if (!(value instanceof Rect)) return null;
+            winFrameScratch.set((Rect) value);
+            return winFrameScratch;
         } catch (Throwable ignored) {
             return null;
         }
     }
 
-    private static Object getViewRootImpl(View view) throws Exception {
-        Method method = View.class.getDeclaredMethod("getViewRootImpl");
-        method.setAccessible(true);
-        return method.invoke(view);
+    private Object getViewRootImplCached(View view) throws Exception {
+        Object cached = cachedViewRoot;
+        if (cached != null) return cached;
+
+        Method method = getViewRootImplMethod;
+        if (method == null) {
+            method = View.class.getDeclaredMethod("getViewRootImpl");
+            method.setAccessible(true);
+            getViewRootImplMethod = method;
+        }
+        Object viewRoot = method.invoke(view);
+        if (viewRoot != null) cachedViewRoot = viewRoot;
+        return viewRoot;
     }
 
     private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
@@ -1879,16 +2014,27 @@ final class Miuix307PassBlurTextureView extends TextureView
         throw new NoSuchFieldException(name);
     }
 
-    private static boolean isSameSurface(SurfaceControl first, SurfaceControl second) {
+    private boolean isSameSurface(SurfaceControl first, SurfaceControl second) {
         if (first == second) return true;
         if (first == null || second == null) return false;
-        try {
-            Method method = SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class);
-            Object value = method.invoke(first, second);
-            return value instanceof Boolean && (Boolean) value;
-        } catch (Throwable ignored) {
-            return first.equals(second);
+
+        if (!sameSurfaceMethodResolved) {
+            sameSurfaceMethodResolved = true;
+            try {
+                cachedIsSameSurfaceMethod =
+                        SurfaceControl.class.getMethod("isSameSurface", SurfaceControl.class);
+            } catch (Throwable ignored) {
+                cachedIsSameSurfaceMethod = null;
+            }
         }
+        Method method = cachedIsSameSurfaceMethod;
+        if (method != null) {
+            try {
+                Object value = method.invoke(first, second);
+                if (value instanceof Boolean) return (Boolean) value;
+            } catch (Throwable ignored) {}
+        }
+        return first.equals(second);
     }
 
     private static int requireUniform(int program, String name) {
