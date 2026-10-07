@@ -24,7 +24,9 @@ public class ThirdPartyAppRestartDescriptorTest {
         assertTrue(compose.contains("ThirdPartyAppPageDescriptor"));
         assertTrue(compose.contains("THIRD_PARTY_APP_PAGES"));
         assertTrue(compose.contains("Page.Gboard to ThirdPartyAppPageDescriptor"));
+        assertTrue(compose.contains("Page.BaiduInputMethod to ThirdPartyAppPageDescriptor"));
         assertTrue(compose.contains("com.google.android.inputmethod.latin"));
+        assertTrue(compose.contains("com.baidu.input_mi"));
         assertTrue(compose.contains("descriptor.restartLabelRes"));
         assertTrue(compose.contains("activity.restartPackageProcess("));
         assertFalse(compose.contains("if (page == Page.Gboard)"));

@@ -32,6 +32,7 @@ internal fun ThirdPartyAppsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     openGboard: () -> Unit,
+    openBaiduInputMethod: () -> Unit,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -66,6 +67,12 @@ internal fun ThirdPartyAppsPage(
                     summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = openGboard,
+                )
+                ArrowPreference(
+                    title = "百度输入法小米版",
+                    summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = openBaiduInputMethod,
                 )
             }
         }
@@ -240,6 +247,213 @@ internal fun SearchboxSettingsPage(
                 ArrowPreference(
                     title = "恢复继承全局外观",
                     summary = "删除系统搜索的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
+                    enabled = controlsEnabled && hasAppearanceOverride,
+                    onClick = { clearAppearanceOverrides() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun BaiduInputMethodSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var enabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                BaiduInputMethodGlassPreferences.ENABLED_KEY,
+                BaiduInputMethodGlassPreferences.ENABLED_DEFAULT,
+            ),
+        )
+    }
+
+    fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
+        prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
+    } else {
+        prefs.getInt(
+            ConfigSchema.Glass.BLUR.name(),
+            ConfigSchema.Glass.BLUR.uiDefault(),
+        ).toFloat()
+    }
+    fun globalChannel(key: String, fallback: Int): Float =
+        prefs.getInt(key, fallback).toFloat()
+
+    var blur by remember {
+        mutableStateOf(
+            if (prefs.contains(BaiduInputMethodGlassPreferences.BLUR_KEY))
+                prefs.getInt(
+                    BaiduInputMethodGlassPreferences.BLUR_KEY,
+                    globalBlur().roundToInt(),
+                ).toFloat()
+            else globalBlur(),
+        )
+    }
+    var tintR by remember {
+        mutableStateOf(
+            if (prefs.contains(BaiduInputMethodGlassPreferences.TINT_RED_KEY))
+                prefs.getInt(BaiduInputMethodGlassPreferences.TINT_RED_KEY, 0).toFloat()
+            else globalChannel(
+                ConfigSchema.Glass.TINT_RED.name(),
+                ConfigSchema.Glass.TINT_RED.uiDefault(),
+            ),
+        )
+    }
+    var tintG by remember {
+        mutableStateOf(
+            if (prefs.contains(BaiduInputMethodGlassPreferences.TINT_GREEN_KEY))
+                prefs.getInt(BaiduInputMethodGlassPreferences.TINT_GREEN_KEY, 0).toFloat()
+            else globalChannel(
+                ConfigSchema.Glass.TINT_GREEN.name(),
+                ConfigSchema.Glass.TINT_GREEN.uiDefault(),
+            ),
+        )
+    }
+    var tintB by remember {
+        mutableStateOf(
+            if (prefs.contains(BaiduInputMethodGlassPreferences.TINT_BLUE_KEY))
+                prefs.getInt(BaiduInputMethodGlassPreferences.TINT_BLUE_KEY, 255).toFloat()
+            else globalChannel(
+                ConfigSchema.Glass.TINT_BLUE.name(),
+                ConfigSchema.Glass.TINT_BLUE.uiDefault(),
+            ),
+        )
+    }
+    var tintAlpha by remember {
+        mutableStateOf(
+            if (prefs.contains(BaiduInputMethodGlassPreferences.TINT_ALPHA_KEY))
+                prefs.getInt(BaiduInputMethodGlassPreferences.TINT_ALPHA_KEY, 35).toFloat()
+            else globalChannel(
+                ConfigSchema.Glass.TINT_ALPHA.name(),
+                ConfigSchema.Glass.TINT_ALPHA.uiDefault(),
+            ),
+        )
+    }
+    var appearanceGeneration by remember { mutableStateOf(0) }
+    val controlsEnabled = masterEnabled && liquidEnabled && enabled
+    val hasAppearanceOverride = appearanceGeneration.let {
+        prefs.contains(BaiduInputMethodGlassPreferences.BLUR_KEY) ||
+            prefs.contains(BaiduInputMethodGlassPreferences.TINT_RED_KEY) ||
+            prefs.contains(BaiduInputMethodGlassPreferences.TINT_GREEN_KEY) ||
+            prefs.contains(BaiduInputMethodGlassPreferences.TINT_BLUE_KEY) ||
+            prefs.contains(BaiduInputMethodGlassPreferences.TINT_ALPHA_KEY)
+    }
+
+    fun clearAppearanceOverrides() {
+        prefs.edit()
+            .remove(BaiduInputMethodGlassPreferences.BLUR_KEY)
+            .remove(BaiduInputMethodGlassPreferences.TINT_RED_KEY)
+            .remove(BaiduInputMethodGlassPreferences.TINT_GREEN_KEY)
+            .remove(BaiduInputMethodGlassPreferences.TINT_BLUE_KEY)
+            .remove(BaiduInputMethodGlassPreferences.TINT_ALPHA_KEY)
+            .apply()
+        blur = globalBlur()
+        tintR = globalChannel(
+            ConfigSchema.Glass.TINT_RED.name(),
+            ConfigSchema.Glass.TINT_RED.uiDefault(),
+        )
+        tintG = globalChannel(
+            ConfigSchema.Glass.TINT_GREEN.name(),
+            ConfigSchema.Glass.TINT_GREEN.uiDefault(),
+        )
+        tintB = globalChannel(
+            ConfigSchema.Glass.TINT_BLUE.name(),
+            ConfigSchema.Glass.TINT_BLUE.uiDefault(),
+        )
+        tintAlpha = globalChannel(
+            ConfigSchema.Glass.TINT_ALPHA.name(),
+            ConfigSchema.Glass.TINT_ALPHA.uiDefault(),
+        )
+        appearanceGeneration++
+    }
+
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+        item {
+            GboardPageHeader(
+                "百度输入法小米版",
+                "仅作用于百度输入法小米版悬浮键盘；运行时以 showFloatKeyboardView(View) 为浮动键盘语义入口。颜色与模糊度未单独设置时继承全局液态玻璃。",
+            )
+        }
+        item { SmallTitle("功能") }
+        item {
+            GboardSettingsCard {
+                SwitchPreference(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        prefs.edit()
+                            .putBoolean(BaiduInputMethodGlassPreferences.ENABLED_KEY, it)
+                            .apply()
+                    },
+                    title = "启用悬浮键盘液态玻璃",
+                    summary = "关闭后保留百度输入法原生悬浮键盘背景；重新进入悬浮模式或重启输入法后生效",
+                    enabled = masterEnabled && liquidEnabled,
+                )
+            }
+        }
+        item { SmallTitle("玻璃颜色") }
+        item {
+            GboardSettingsCard {
+                GboardValueSlider(
+                    key = BaiduInputMethodGlassPreferences.TINT_RED_KEY,
+                    title = "红",
+                    value = tintR,
+                    onValueChange = { tintR = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                GboardValueSlider(
+                    key = BaiduInputMethodGlassPreferences.TINT_GREEN_KEY,
+                    title = "绿",
+                    value = tintG,
+                    onValueChange = { tintG = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                GboardValueSlider(
+                    key = BaiduInputMethodGlassPreferences.TINT_BLUE_KEY,
+                    title = "蓝",
+                    value = tintB,
+                    onValueChange = { tintB = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+                GboardValueSlider(
+                    key = BaiduInputMethodGlassPreferences.TINT_ALPHA_KEY,
+                    title = "不透明度",
+                    value = tintAlpha,
+                    onValueChange = { tintAlpha = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 255,
+                )
+            }
+        }
+        item { SmallTitle("模糊") }
+        item {
+            GboardSettingsCard {
+                GboardValueSlider(
+                    key = BaiduInputMethodGlassPreferences.BLUR_KEY,
+                    title = "玻璃模糊",
+                    value = blur,
+                    onValueChange = { blur = it },
+                    prefs = prefs,
+                    enabled = controlsEnabled,
+                    max = 60,
+                    unit = "px",
+                )
+                ArrowPreference(
+                    title = "恢复继承全局外观",
+                    summary = "删除百度输入法小米版的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
                     enabled = controlsEnabled && hasAppearanceOverride,
                     onClick = { clearAppearanceOverrides() },
                 )

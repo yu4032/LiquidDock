@@ -2,21 +2,18 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.graphics.SurfaceTexture;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
-import android.view.ViewGroup;
 
-/** Stable full-screen Prismal output; only glass geometry moves over the frozen backdrop. */
-final class MiuiSearchboxGlassView extends TextureView
+/** TextureView output placed below supported Baidu keyboard content. */
+final class BaiduInputMethodGlassView extends TextureView
         implements TextureView.SurfaceTextureListener {
-    private final MiuiSearchboxGlassSession session;
+    private final BaiduInputMethodGlassSession session;
     private Surface outputSurface;
     private boolean disposed;
 
-    MiuiSearchboxGlassView(Context context, MiuiSearchboxGlassSession session) {
+    BaiduInputMethodGlassView(Context context, BaiduInputMethodGlassSession session) {
         super(context);
         if (session == null) throw new IllegalArgumentException("session == null");
         this.session = session;
@@ -30,22 +27,11 @@ final class MiuiSearchboxGlassView extends TextureView
     void dispose() {
         if (disposed) return;
         disposed = true;
-        setVisibility(View.INVISIBLE);
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachOutput(current);
-        if (getParent() instanceof ViewGroup) {
-            ViewGroup host = (ViewGroup) getParent();
-            try {
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    try {
-                        if (getParent() == host) host.removeView(this);
-                    } catch (Throwable ignored) {}
-                });
-            } catch (Throwable ignored) {
-                // Never fall back to synchronous removal while detach dispatch may be active.
-            }
-        }
+        // Parent removal is owned by BaiduInputMethodGlassCoordinator and is deliberately
+        // deferred outside ViewGroup's detach traversal.
     }
 
     @Override

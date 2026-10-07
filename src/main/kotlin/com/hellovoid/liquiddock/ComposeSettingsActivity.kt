@@ -75,6 +75,7 @@ private enum class Page(val titleRes: Int) {
     SecurityCenterSidebar(R.string.page_security_center_sidebar),
     Liquid(R.string.page_liquid), DialogCustomization(R.string.page_dialog_customization),
     ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
+    BaiduInputMethod(R.string.page_baidu_input_method),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
     Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
@@ -84,7 +85,7 @@ private enum class Page(val titleRes: Int) {
 
 private fun parentPage(page: Page): Page = when (page) {
     Page.DockRecentBlacklist -> Page.Dock
-    Page.Gboard -> Page.ThirdPartyApps
+    Page.Gboard, Page.BaiduInputMethod -> Page.ThirdPartyApps
     Page.DialogCustomization, Page.ThirdPartyApps,
     Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
     else -> Page.Home
@@ -101,6 +102,11 @@ private val THIRD_PARTY_APP_PAGES = mapOf(
         packageName = "com.google.android.inputmethod.latin",
         displayName = "Gboard",
         restartLabelRes = R.string.action_restart_gboard,
+    ),
+    Page.BaiduInputMethod to ThirdPartyAppPageDescriptor(
+        packageName = "com.baidu.input_mi",
+        displayName = "百度输入法小米版",
+        restartLabelRes = R.string.action_restart_baidu_input_method,
     ),
 )
 
@@ -527,8 +533,14 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     prefs = prefs,
                     masterEnabled = masterEnabled,
                     openGboard = { page = Page.Gboard },
+                    openBaiduInputMethod = { page = Page.BaiduInputMethod },
                 )
                 Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                Page.BaiduInputMethod -> BaiduInputMethodSettingsPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                )
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
