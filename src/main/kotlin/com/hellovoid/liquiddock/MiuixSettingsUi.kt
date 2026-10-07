@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -314,9 +315,17 @@ internal fun LiquidDockGlassNavigationBar(
     backdrop: PrismalBackdrop,
     modifier: Modifier = Modifier,
 ) {
+    // Prismal uses the selector lambda itself as a remember/LaunchedEffect key.
+    // Keep its identity stable across recompositions so external tab changes
+    // are observed by snapshotFlow and animate the droplet instead of resetting it.
+    val selectedIndexState = rememberUpdatedState(selectedIndex)
+    val onSelectedState = rememberUpdatedState(onSelected)
+    val selectedIndexProvider = remember { { selectedIndexState.value } }
+    val dispatchSelected = remember { { index: Int -> onSelectedState.value(index) } }
+
     PrismalGlassBottomTabs(
-        selectedTabIndex = { selectedIndex },
-        onTabSelected = onSelected,
+        selectedTabIndex = selectedIndexProvider,
+        onTabSelected = dispatchSelected,
         backdrop = backdrop,
         tabsCount = labels.size,
         modifier = modifier,
@@ -332,7 +341,7 @@ internal fun LiquidDockGlassNavigationBar(
                 MiuixTheme.colorScheme.onSurfaceVariantActions
             }
             PrismalGlassBottomTab(
-                onClick = { onSelected(index) },
+                onClick = { dispatchSelected(index) },
             ) {
                 Icon(
                     imageVector = icons[index],
