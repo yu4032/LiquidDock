@@ -61,7 +61,7 @@ internal fun WidgetComponentsPage(
         .entries
         .sortedBy { it.value.firstOrNull()?.displayOwner().orEmpty() }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
@@ -72,7 +72,7 @@ internal fun WidgetComponentsPage(
             }
         }
         item {
-            Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            ModernSectionCard {
                 ArrowPreference(
                     title = "载入当前小组件",
                     summary = "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描",
@@ -107,9 +107,9 @@ internal fun WidgetComponentsPage(
             }
         }
 
-        item { SmallTitle("隐藏规则备份") }
+        item { ModernSectionTitle("隐藏规则备份") }
         item {
-            Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+            ModernSectionCard {
                 Column {
                     ArrowPreference(
                         title = "导出隐藏规则",
@@ -127,7 +127,7 @@ internal fun WidgetComponentsPage(
 
         if (groups.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                ModernSectionCard {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("尚未载入小组件")
                         Text(
@@ -139,9 +139,9 @@ internal fun WidgetComponentsPage(
                 }
             }
         } else {
-            item { SmallTitle("已载入小组件") }
+            item { ModernSectionTitle("已载入小组件") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                ModernSectionCard {
                     Column {
                         groups.forEach { (key, components) ->
                             val first = components.first()
