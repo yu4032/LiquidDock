@@ -5,6 +5,25 @@ package com.hellovoid.liquiddock;
  * The PassBlur backdrop remains root-anchored; only glass geometry is shifted.
  */
 final class LauncherGlassScrollProjectionState {
+    static final class Frame {
+        final boolean initialized;
+        final int initialAnchorScrollX;
+        final int currentScrollX;
+
+        Frame(boolean initialized, int initialAnchorScrollX, int currentScrollX) {
+            this.initialized = initialized;
+            this.initialAnchorScrollX = initialAnchorScrollX;
+            this.currentScrollX = currentScrollX;
+        }
+
+        float projectCenterX(
+                float capturedCenterX, int capturedScrollX, boolean capturedScrollValid) {
+            if (!initialized || !Float.isFinite(capturedCenterX)) return capturedCenterX;
+            int anchorScrollX = capturedScrollValid ? capturedScrollX : initialAnchorScrollX;
+            return capturedCenterX + (anchorScrollX - currentScrollX);
+        }
+    }
+
     private boolean initialized;
     private int initialAnchorScrollX;
     private int currentScrollX;
@@ -20,9 +39,12 @@ final class LauncherGlassScrollProjectionState {
 
     synchronized float projectCenterX(
             float capturedCenterX, int capturedScrollX, boolean capturedScrollValid) {
-        if (!initialized || !Float.isFinite(capturedCenterX)) return capturedCenterX;
-        int anchorScrollX = capturedScrollValid ? capturedScrollX : initialAnchorScrollX;
-        return capturedCenterX + (anchorScrollX - currentScrollX);
+        return new Frame(initialized, initialAnchorScrollX, currentScrollX)
+                .projectCenterX(capturedCenterX, capturedScrollX, capturedScrollValid);
+    }
+
+    synchronized Frame snapshot() {
+        return new Frame(initialized, initialAnchorScrollX, currentScrollX);
     }
 
     synchronized void reset() {
