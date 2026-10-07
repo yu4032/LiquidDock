@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
@@ -30,10 +32,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
@@ -45,6 +49,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
@@ -68,6 +73,9 @@ import com.styropyr0.prismal.drawPlainPrismalGlass
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
+import com.styropyr0.prismal.components.PrismalGlassMenu
+import com.styropyr0.prismal.components.PrismalGlassMenuItem
+import com.styropyr0.prismal.components.prismalMenuAnchor
 import com.styropyr0.prismal.components.PrismalGlassStepper
 import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.components.PrismalGlassSlider
@@ -98,7 +106,7 @@ internal fun LiquidDockSettingsScaffold(
     title: String,
     showBack: Boolean,
     onBack: () -> Unit,
-    actions: @Composable RowScope.() -> Unit = {},
+    actions: @Composable RowScope.(PrismalBackdrop) -> Unit = { _ -> },
     bottomBar: @Composable (PrismalBackdrop) -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -178,17 +186,16 @@ internal fun LiquidDockSettingsScaffold(
                             titlePadding = 20.dp,
                             navigationIcon = {
                                 if (showBack) {
-                                    IconButton(onClick = onBack) {
-                                        Icon(
-                                            imageVector = MiuixIcons.Back,
-                                            contentDescription = null,
-                                        )
-                                    }
+                                    LiquidDockGlassIconButton(
+                                        icon = MiuixIcons.Back,
+                                        contentDescription = null,
+                                        onClick = onBack,
+                                    )
                                 }
                             },
                             actions = {
                                 if (!customRootHeader) {
-                                    actions()
+                                    actions(overlayBackdrop)
                                 }
                             },
                         )
@@ -208,8 +215,9 @@ internal fun LiquidDockSettingsScaffold(
                                     Spacer(Modifier.weight(1f))
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        content = actions,
-                                    )
+                                    ) {
+                                        actions(overlayBackdrop)
+                                    }
                                 }
                             } else {
                                 Row(
@@ -223,8 +231,9 @@ internal fun LiquidDockSettingsScaffold(
                                     Spacer(Modifier.weight(1f))
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        content = actions,
-                                    )
+                                    ) {
+                                        actions(overlayBackdrop)
+                                    }
                                 }
                             }
                         }
@@ -241,6 +250,7 @@ internal fun LiquidDockSettingsScaffold(
                 CompositionLocalProvider(
                     LocalSettingsScrollBehavior provides scrollBehavior,
                     LocalPrismalSurfaceBackdrop provides backgroundLayer,
+                    LocalPrismalOverlayBackdrop provides overlayBackdrop,
                 ) {
                     content(padding)
                 }
@@ -274,12 +284,16 @@ private fun AnimatedLiquidDockTitle(
 @Composable
 internal fun LiquidDockGlassIconButton(
     icon: ImageVector,
-    contentDescription: String,
+    contentDescription: String?,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalPrismalOverlayBackdrop.current
     if (backdrop == null) {
-        IconButton(onClick = onClick) {
+        IconButton(
+            onClick = onClick,
+            modifier = modifier,
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
@@ -291,7 +305,7 @@ internal fun LiquidDockGlassIconButton(
     PrismalGlassButton(
         onClick = onClick,
         backdrop = backdrop,
-        modifier = Modifier.size(40.dp),
+        modifier = modifier.size(40.dp),
         height = 40.dp,
         blurRadius = 7.dp,
         refractionHeight = 9.dp,
@@ -308,6 +322,123 @@ internal fun LiquidDockGlassIconButton(
             tint = MiuixTheme.colorScheme.onSurface,
             modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+@Composable
+internal fun LiquidDockGlassButton(
+    text: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    minWidth: Dp = 0.dp,
+    height: Dp = 36.dp,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+    dimWhenDisabled: Boolean = true,
+) {
+    val backdrop = LocalPrismalSurfaceBackdrop.current ?: LocalPrismalOverlayBackdrop.current
+    val resolvedModifier = modifier
+        .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
+        .alpha(if (!enabled && dimWhenDisabled) 0.42f else 1f)
+
+    if (backdrop == null) {
+        Box(
+            modifier = resolvedModifier
+                .height(height)
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(contentPadding),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                color = MiuixTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+        return
+    }
+
+    PrismalGlassButton(
+        onClick = { if (enabled) onClick() },
+        backdrop = backdrop,
+        modifier = resolvedModifier,
+        isInteractive = enabled,
+        height = height,
+        blurRadius = 7.dp,
+        refractionHeight = 9.dp,
+        refractionAmount = 12.dp,
+        pressLift = 2.dp,
+        contentPadding = contentPadding,
+        tint = MiuixTheme.colorScheme.surface,
+        tintAlpha = 0.20f,
+        depthEffect = false,
+    ) {
+        Text(
+            text = text,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+internal fun LiquidDockGlassMenuRow(
+    title: String,
+    summary: String,
+    items: List<String>,
+    selectedIndex: Int,
+    enabled: Boolean = true,
+    onSelectedIndexChange: (Int) -> Unit,
+) {
+    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
+    val expanded = remember { mutableStateOf(false) }
+    val anchorBounds = remember { mutableStateOf(Rect.Zero) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .prismalMenuAnchor { anchorBounds.value = it },
+    ) {
+        BasicComponent(
+            title = title,
+            summary = summary,
+            enabled = enabled,
+            insideMargin = LiquidDockPreferenceMargin,
+            endActions = {
+                Icon(
+                    imageVector = MiuixIcons.Basic.ArrowRight,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                    modifier = Modifier.size(width = 10.dp, height = 16.dp),
+                )
+            },
+            onClick = {
+                if (enabled && backdrop != null) expanded.value = true
+            },
+        )
+    }
+
+    if (backdrop != null) {
+        PrismalGlassMenu(
+            expanded = expanded.value,
+            onDismissRequest = { expanded.value = false },
+            anchorBounds = anchorBounds.value,
+            backdrop = backdrop,
+            width = 300.dp,
+            surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.78f),
+        ) {
+            items.forEachIndexed { index, label ->
+                PrismalGlassMenuItem(
+                    text = label,
+                    selected = index == selectedIndex,
+                    enabled = enabled,
+                    onClick = {
+                        onSelectedIndexChange(index)
+                        expanded.value = false
+                    },
+                )
+            }
+        }
     }
 }
 

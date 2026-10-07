@@ -28,7 +28,6 @@ import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -110,8 +109,11 @@ private fun WidgetComponentDetailScreen(
         onBack = {
             if (selectedType != null) selectedType = null else activity.finish()
         },
-        actions = {
-            TextButton(text = "重启桌面", onClick = { activity.restartLauncher() })
+        actions = { _ ->
+            LiquidDockGlassButton(
+                text = "重启桌面",
+                onClick = { activity.restartLauncher() },
+            )
         },
     ) { padding ->
         if (selectedType == null) {

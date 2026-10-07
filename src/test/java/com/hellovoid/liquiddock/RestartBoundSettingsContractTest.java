@@ -95,17 +95,21 @@ public class RestartBoundSettingsContractTest {
     @Test
     public void homePageUsesSingleRestartScopeSelector() throws Exception {
         String source = Files.readString(UI);
-        int actionsAt = source.indexOf("actions = {");
+        int actionsAt = source.indexOf("actions = { backdrop ->");
         int homeGuardAt = source.indexOf("if (page == Page.Home)", actionsAt);
         int scopeActionAt = source.indexOf("action_restart_scopes", homeGuardAt);
-        int dialogAt = source.indexOf("RestartScopesDialog(", scopeActionAt);
-        int batchRestartAt = source.indexOf("activity.restartSelectedScopes(", dialogAt);
+        int menuAt = source.indexOf("RestartScopesMenu(", scopeActionAt);
+        int batchRestartAt = source.indexOf("activity.restartSelectedScopes(", menuAt);
 
         assertTrue("top app bar actions must exist", actionsAt >= 0);
         assertTrue("Home page must own the restart scope action", homeGuardAt > actionsAt);
         assertTrue("Home page must render one restart-scope entry", scopeActionAt > homeGuardAt);
-        assertTrue("restart scope dialog must be wired from Home", dialogAt > scopeActionAt);
-        assertTrue("dialog confirmation must call the serialized batch restart", batchRestartAt > dialogAt);
+        assertTrue("Prismal restart scope menu must be wired from Home", menuAt > scopeActionAt);
+        assertTrue("menu confirmation must call the serialized batch restart", batchRestartAt > menuAt);
+        assertTrue("restart selector must use the native Prismal glass popup",
+                source.contains("PrismalGlassMenu("));
+        assertTrue("restart selector must preserve a bounded scrollable scope list",
+                source.contains(".heightIn(max = 300.dp)") && source.contains(".verticalScroll(scopeListScroll)"));
 
         int homeElseAt = source.indexOf("} else {", scopeActionAt);
         String homeBranch = source.substring(homeGuardAt, homeElseAt);

@@ -9,7 +9,6 @@ import androidx.compose.runtime.remember
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class SearchboxSettingsActivity : SettingsActivity() {
@@ -32,8 +31,8 @@ class SearchboxSettingsActivity : SettingsActivity() {
                     title = getString(R.string.page_searchbox),
                     showBack = true,
                     onBack = { finish() },
-                    actions = {
-                        TextButton(
+                    actions = { _ ->
+                        LiquidDockGlassButton(
                             text = getString(R.string.action_restart_searchbox),
                             onClick = {
                                 restartPackageProcess(

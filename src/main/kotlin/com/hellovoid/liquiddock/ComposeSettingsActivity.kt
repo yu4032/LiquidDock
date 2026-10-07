@@ -46,6 +46,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -60,18 +61,15 @@ import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.CheckboxLocation
-import top.yukonga.miuix.kmp.preference.CheckboxPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import com.styropyr0.prismal.PrismalBackdrop
+import com.styropyr0.prismal.components.PrismalGlassMenu
+import com.styropyr0.prismal.components.PrismalGlassMenuDivider
+import com.styropyr0.prismal.components.PrismalGlassMenuItem
+import com.styropyr0.prismal.components.prismalMenuAnchor
 import top.yukonga.miuix.kmp.icon.extended.Community
 import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Home
@@ -83,7 +81,6 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Theme
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
 import kotlinx.coroutines.flow.collectLatest
 
 class ComposeSettingsActivity : SettingsActivity() {
@@ -549,6 +546,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     var requestedRootIndex by remember { mutableStateOf<Int?>(null) }
     var showRestartScopesDialog by rememberSaveable { mutableStateOf(false) }
     var selectedRestartScopes by remember { mutableStateOf(emptySet<RestartScope>()) }
+    var restartMenuAnchor by remember { mutableStateOf(Rect.Zero) }
     val pagerState = rememberPagerState(pageCount = { ROOT_PAGES.size })
     val root = isRootPage(page)
 
@@ -607,7 +605,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         title = stringResource(page.titleRes),
         showBack = !root,
         onBack = { page = parentPage(page) },
-        actions = {
+        actions = { backdrop ->
             if (page == Page.Home) {
                 LiquidDockGlassIconButton(
                     icon = MiuixIcons.Refresh,
@@ -616,6 +614,31 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                         selectedRestartScopes = emptySet()
                         showRestartScopesDialog = true
                     },
+                    modifier = Modifier.prismalMenuAnchor { restartMenuAnchor = it },
+                )
+                RestartScopesMenu(
+                    show = showRestartScopesDialog,
+                    selected = selectedRestartScopes,
+                    anchorBounds = restartMenuAnchor,
+                    backdrop = backdrop,
+                    onToggle = { scope ->
+                        selectedRestartScopes = if (scope in selectedRestartScopes) {
+                            selectedRestartScopes - scope
+                        } else {
+                            selectedRestartScopes + scope
+                        }
+                    },
+                    onConfirm = {
+                        activity.restartSelectedScopes(
+                            RestartScope.Launcher in selectedRestartScopes,
+                            RestartScope.SystemUi in selectedRestartScopes,
+                            RestartScope.SecurityCenter in selectedRestartScopes,
+                            RestartScope.Gboard in selectedRestartScopes,
+                            RestartScope.Searchbox in selectedRestartScopes,
+                        )
+                        showRestartScopesDialog = false
+                    },
+                    onDismiss = { showRestartScopesDialog = false },
                 )
             } else {
                 val descriptor = THIRD_PARTY_APP_PAGES[page]
@@ -775,86 +798,83 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         }
     }
 
-    RestartScopesDialog(
-        show = showRestartScopesDialog,
-        selected = selectedRestartScopes,
-        onToggle = { scope ->
-            selectedRestartScopes = if (scope in selectedRestartScopes) {
-                selectedRestartScopes - scope
-            } else {
-                selectedRestartScopes + scope
-            }
-        },
-        onConfirm = {
-            activity.restartSelectedScopes(
-                RestartScope.Launcher in selectedRestartScopes,
-                RestartScope.SystemUi in selectedRestartScopes,
-                RestartScope.SecurityCenter in selectedRestartScopes,
-                RestartScope.Gboard in selectedRestartScopes,
-                RestartScope.Searchbox in selectedRestartScopes,
-            )
-            showRestartScopesDialog = false
-        },
-        onDismiss = {
-            showRestartScopesDialog = false
-        },
-    )
 }
 
 @Composable
-private fun RestartScopesDialog(
+private fun RestartScopesMenu(
     show: Boolean,
     selected: Set<RestartScope>,
+    anchorBounds: Rect,
+    backdrop: PrismalBackdrop,
     onToggle: (RestartScope) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    WindowDialog(
-        show = show,
-        title = stringResource(R.string.restart_scopes_title),
-        summary = stringResource(R.string.restart_scopes_summary),
+    PrismalGlassMenu(
+        expanded = show,
         onDismissRequest = onDismiss,
+        anchorBounds = anchorBounds,
+        backdrop = backdrop,
+        width = 340.dp,
+        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.82f),
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            val scopeListScroll = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 300.dp)
-                    .verticalScroll(scopeListScroll),
-            ) {
-                RESTART_SCOPES.forEach { scope ->
-                    CheckboxPreference(
-                        title = stringResource(scope.titleRes),
-                        summary = scope.processName,
-                        checked = scope in selected,
-                        onCheckedChange = { onToggle(scope) },
-                        checkboxLocation = CheckboxLocation.End,
-                        insideMargin = LiquidDockPreferenceMargin,
-                    )
-                }
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.restart_scopes_title),
+                style = MiuixTheme.textStyles.title3,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.restart_scopes_summary),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                TextButton(
-                    text = stringResource(R.string.restart_scopes_confirm),
-                    onClick = onConfirm,
-                    enabled = selected.isNotEmpty(),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                )
-                Spacer(Modifier.width(20.dp))
-                TextButton(
-                    text = stringResource(R.string.restart_scopes_cancel),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
+        PrismalGlassMenuDivider()
+
+        val scopeListScroll = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 300.dp)
+                .verticalScroll(scopeListScroll),
+        ) {
+            RESTART_SCOPES.forEach { scope ->
+                PrismalGlassMenuItem(
+                    text = "${stringResource(scope.titleRes)} · ${scope.processName}",
+                    selected = scope in selected,
+                    onClick = { onToggle(scope) },
                 )
             }
+        }
+
+        PrismalGlassMenuDivider()
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            LiquidDockGlassButton(
+                text = stringResource(R.string.restart_scopes_confirm),
+                onClick = onConfirm,
+                enabled = selected.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+                height = 38.dp,
+            )
+            Spacer(Modifier.width(12.dp))
+            LiquidDockGlassButton(
+                text = stringResource(R.string.restart_scopes_cancel),
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+                height = 38.dp,
+            )
         }
     }
 }
@@ -1593,7 +1613,8 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
             enabled = enabled,
             insideMargin = LiquidDockPreferenceMargin,
             endActions = {
-                Button(
+                LiquidDockGlassButton(
+                    text = "$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}",
                     onClick = {
                         val input = EditText(context).apply {
                             setText(displayValue)
@@ -1612,20 +1633,17 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
                     },
                     enabled = enabled,
                     minWidth = 72.dp,
-                    minHeight = 32.dp,
-                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                ) {
-                    Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}")
-                }
-                Button(
+                    height = 32.dp,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                )
+                LiquidDockGlassButton(
+                    text = "重置",
                     onClick = { save(resetValue) },
                     enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
                     minWidth = 56.dp,
-                    minHeight = 32.dp,
-                    insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Text("重置")
-                }
+                    height = 32.dp,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                )
             },
         )
         val discreteSpan = maxValue - spec.min
@@ -1667,13 +1685,12 @@ private fun StringDropdown(
     val default = config.uiDefault()
     var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
     val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
-    WindowDropdownPreference(
+    LiquidDockGlassMenuRow(
         title = title,
         summary = options[index].first,
         items = options.map { it.first },
         selectedIndex = index,
         enabled = enabled,
-        insideMargin = LiquidDockPreferenceMargin,
         onSelectedIndexChange = { selected ->
             val next = options[selected].second
             value = next

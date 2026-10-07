@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 
@@ -274,15 +273,15 @@ private fun DialogAppearanceValueSlider(
             enabled = enabled,
             insideMargin = LiquidDockPreferenceMargin,
             endActions = {
-                Button(
+                LiquidDockGlassButton(
+                    text = "${rounded}${if (unit.isBlank()) "" else " $unit"}",
                     onClick = {},
                     enabled = false,
+                    dimWhenDisabled = false,
                     minWidth = 62.dp,
-                    minHeight = 32.dp,
-                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                ) {
-                    Text("${rounded}${if (unit.isBlank()) "" else " $unit"}")
-                }
+                    height = 32.dp,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                )
             },
         )
         LiquidDockGlassSlider(
