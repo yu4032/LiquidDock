@@ -903,12 +903,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.makePbufferCurrent();
         prismalRenderer.beginGlassFrame();
         StaticNodeState[] snapshot = staticNodeSnapshot;
+        LauncherGlassScrollProjectionState.Frame scrollFrame =
+                workspaceScrollProjection.snapshot();
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
             LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
             if (node == null || geometry == null) continue;
-            float projectedCenterX = workspaceScrollProjection.projectCenterX(
+            float projectedCenterX = scrollFrame.projectCenterX(
                     geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, projectedCenterX, geometry.centerY,
