@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,20 +19,30 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -53,23 +64,38 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Community
+import top.yukonga.miuix.kmp.icon.extended.GridView
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Theme
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 class ComposeSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
-            MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+            LiquidDockTheme { LiquidDockSettings(this) }
         }
     }
 }
 
 private enum class Page(val titleRes: Int) {
-    Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
+    Home(R.string.app_name),
+    LayoutHub(R.string.tab_layout),
+    GlassHub(R.string.tab_glass),
+    MoreHub(R.string.tab_more),
+    Grid(R.string.page_grid), Dock(R.string.page_dock),
     DockRecentBlacklist(R.string.page_dock_recent_blacklist),
     Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
     SecurityCenterSidebar(R.string.page_security_center_sidebar),
@@ -82,12 +108,19 @@ private enum class Page(val titleRes: Int) {
     About(R.string.page_about)
 }
 
+private val ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub)
+
+private fun isRootPage(page: Page): Boolean = page in ROOT_PAGES
+
 private fun parentPage(page: Page): Page = when (page) {
     Page.DockRecentBlacklist -> Page.Dock
     Page.Gboard -> Page.ThirdPartyApps
+    Page.Grid, Page.Dock, Page.Divider, Page.Workstation, Page.Recents -> Page.LayoutHub
     Page.DialogCustomization, Page.ThirdPartyApps,
     Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
-    else -> Page.Home
+    Page.Liquid, Page.Stroke, Page.Shadow -> Page.GlassHub
+    Page.SecurityCenterSidebar, Page.Animation, Page.Data, Page.About -> Page.MoreHub
+    Page.LayoutHub, Page.GlassHub, Page.MoreHub, Page.Home -> Page.Home
 }
 
 private data class ThirdPartyAppPageDescriptor(
