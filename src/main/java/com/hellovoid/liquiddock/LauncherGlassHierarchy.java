@@ -12,18 +12,25 @@ final class LauncherGlassHierarchy {
     static Domain classify(View view) {
         View cursor = view;
         while (cursor != null) {
-            String name = cursor.getClass().getName();
-            String simple = cursor.getClass().getSimpleName();
-            if ("com.miui.home.launcher.Workspace".equals(name) || "Workspace".equals(simple)) {
-                return Domain.WORKSPACE;
-            }
-            if ("com.miui.home.launcher.hotseats.HotSeats".equals(name)
-                    || "HotSeats".equals(simple)
-                    || name.startsWith("com.miui.home.launcher.hotseats.")) {
-                return Domain.DOCK;
-            }
+            Domain domain = classifySelf(cursor);
+            if (domain != Domain.OTHER) return domain;
             ViewParent parent = cursor.getParent();
             cursor = parent instanceof View ? (View) parent : null;
+        }
+        return Domain.OTHER;
+    }
+
+    static Domain classifySelf(View view) {
+        if (view == null) return Domain.OTHER;
+        String name = view.getClass().getName();
+        String simple = view.getClass().getSimpleName();
+        if ("com.miui.home.launcher.Workspace".equals(name) || "Workspace".equals(simple)) {
+            return Domain.WORKSPACE;
+        }
+        if ("com.miui.home.launcher.hotseats.HotSeats".equals(name)
+                || "HotSeats".equals(simple)
+                || name.startsWith("com.miui.home.launcher.hotseats.")) {
+            return Domain.DOCK;
         }
         return Domain.OTHER;
     }
