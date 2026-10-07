@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -44,14 +45,14 @@ class WidgetComponentDetailActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val widgetKey = intent.getStringExtra(EXTRA_WIDGET_KEY)
         if (widgetKey.isNullOrEmpty()) {
             finish()
             return
         }
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
-            MiuixTheme(controller = controller) {
+            LiquidDockTheme {
                 WidgetComponentDetailScreen(this, widgetKey)
             }
         }
@@ -109,22 +110,14 @@ private fun WidgetComponentDetailScreen(
 
     BackHandler(enabled = selectedType != null) { selectedType = null }
 
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
-                navigationIcon = {
-                    TextButton(
-                        text = "返回",
-                        onClick = {
-                            if (selectedType != null) selectedType = null else activity.finish()
-                        },
-                    )
-                },
-                actions = {
-                    TextButton(text = "重启桌面", onClick = { activity.restartLauncher() })
-                },
-            )
+    LiquidDockSettingsScaffold(
+        title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
+        showBack = true,
+        onBack = {
+            if (selectedType != null) selectedType = null else activity.finish()
+        },
+        actions = {
+            TextButton(text = "重启桌面", onClick = { activity.restartLauncher() })
         },
     ) { padding ->
         if (selectedType == null) {
@@ -177,7 +170,7 @@ private fun WidgetComponentTypePage(
     onShowAdvancedRemote: (Boolean) -> Unit,
     onOpenType: (String) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text(owner, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
@@ -191,7 +184,7 @@ private fun WidgetComponentTypePage(
 
         if (isMaml) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     SwitchPreference(
                         checked = showAllMaml,
                         onCheckedChange = onShowAllMaml,
@@ -202,7 +195,7 @@ private fun WidgetComponentTypePage(
             }
         } else {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     SwitchPreference(
                         checked = showAdvancedRemote,
                         onCheckedChange = onShowAdvancedRemote,
@@ -214,9 +207,9 @@ private fun WidgetComponentTypePage(
         }
 
         if (likelyBackgrounds.isNotEmpty()) {
-            item { SmallTitle("疑似底层背景") }
+            item { LiquidDockSectionTitle("疑似底层背景") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     Column {
                         likelyBackgrounds.forEach { descriptor ->
                             ArrowPreference(
@@ -235,7 +228,7 @@ private fun WidgetComponentTypePage(
 
         if (components.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("该小组件已不在当前载入目录中")
                         Text("返回上一页并重新载入当前小组件。", fontSize = 13.sp)
@@ -244,7 +237,7 @@ private fun WidgetComponentTypePage(
             }
         } else if (typeGroups.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("当前没有可安全直接操作的背景或图像层")
                         if (!isMaml) {
@@ -254,9 +247,9 @@ private fun WidgetComponentTypePage(
                 }
             }
         } else {
-            item { SmallTitle("组件类型") }
+            item { LiquidDockSectionTitle("组件类型") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LiquidDockSectionCard {
                     Column {
                         componentTypeOrder.forEach { type ->
                             val group = WidgetComponentRanking.sorted(typeGroups[type].orEmpty())
@@ -289,7 +282,7 @@ private fun WidgetExactNodePage(
 ) {
     val isMaml = components.firstOrNull()?.isMaml() == true
     val rankedComponents = WidgetComponentRanking.sorted(components)
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LiquidDockSettingsPage(padding) {
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text(componentTypeTitle(type), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
@@ -310,7 +303,7 @@ private fun WidgetExactNodePage(
         }
         items(rankedComponents, key = { it.selectorKey() }) { descriptor ->
             val key = descriptor.selectorKey()
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            LiquidDockSectionCard {
                 SwitchPreference(
                     checked = key in selected,
                     onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
