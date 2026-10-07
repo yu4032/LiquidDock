@@ -27,6 +27,14 @@ final class Miuix307PassBlurBridge {
     private static final long FORCE_REFRESH_ERROR_LOG_MIN_MS = 5000L;
     private static long lastForceRefreshErrorLogMs;
 
+    private static final Object REFLECTION_CACHE_LOCK = new Object();
+    private static volatile boolean layerIdMethodResolved;
+    private static volatile Method layerIdMethod;
+    private static volatile Class<?> surfaceSequenceType;
+    private static volatile boolean surfaceSequenceResolved;
+    private static volatile Method surfaceSequenceMethod;
+    private static volatile java.lang.reflect.Field surfaceSequenceField;
+
     static final class Binding {
         final SurfaceControl rootSurface;
         final Surface producerSurface;
@@ -357,9 +365,25 @@ final class Miuix307PassBlurBridge {
 
     static int surfaceLayerId(SurfaceControl surface) {
         if (surface == null) return -1;
+        Method method = layerIdMethod;
+        if (!layerIdMethodResolved) {
+            synchronized (REFLECTION_CACHE_LOCK) {
+                if (!layerIdMethodResolved) {
+                    try {
+                        method = SurfaceControl.class.getDeclaredMethod("getLayerId");
+                        method.setAccessible(true);
+                        layerIdMethod = method;
+                    } catch (Throwable ignored) {
+                        layerIdMethod = null;
+                    }
+                    layerIdMethodResolved = true;
+                } else {
+                    method = layerIdMethod;
+                }
+            }
+        }
+        if (method == null) return -1;
         try {
-            Method method = SurfaceControl.class.getDeclaredMethod("getLayerId");
-            method.setAccessible(true);
             Object value = method.invoke(surface);
             return value instanceof Number ? ((Number) value).intValue() : -1;
         } catch (Throwable ignored) {
@@ -369,34 +393,60 @@ final class Miuix307PassBlurBridge {
 
     static int readSurfaceSequenceId(Object viewRoot) {
         if (viewRoot == null) return -1;
-        Class<?> type = viewRoot.getClass();
-        while (type != null) {
+        Class<?> requestedType = viewRoot.getClass();
+        ensureSurfaceSequenceAccessor(requestedType);
+        Method method = surfaceSequenceMethod;
+        if (method != null) {
             try {
-                Method method = type.getDeclaredMethod("getSurfaceSequenceId");
-                method.setAccessible(true);
                 Object value = method.invoke(viewRoot);
                 if (value instanceof Number) return ((Number) value).intValue();
-            } catch (NoSuchMethodException ignored) {
-                type = type.getSuperclass();
-                continue;
-            } catch (Throwable ignored) {
-                break;
-            }
+            } catch (Throwable ignored) {}
         }
-        type = viewRoot.getClass();
-        while (type != null) {
+        java.lang.reflect.Field field = surfaceSequenceField;
+        if (field != null) {
             try {
-                java.lang.reflect.Field field = type.getDeclaredField("mSurfaceSequenceId");
-                field.setAccessible(true);
                 Object value = field.get(viewRoot);
                 return value instanceof Number ? ((Number) value).intValue() : -1;
-            } catch (NoSuchFieldException ignored) {
-                type = type.getSuperclass();
-            } catch (Throwable ignored) {
-                return -1;
-            }
+            } catch (Throwable ignored) {}
         }
         return -1;
+    }
+
+    private static void ensureSurfaceSequenceAccessor(Class<?> requestedType) {
+        if (surfaceSequenceResolved && surfaceSequenceType == requestedType) return;
+        synchronized (REFLECTION_CACHE_LOCK) {
+            if (surfaceSequenceResolved && surfaceSequenceType == requestedType) return;
+            Method nextMethod = null;
+            java.lang.reflect.Field nextField = null;
+            Class<?> type = requestedType;
+            while (type != null && nextMethod == null) {
+                try {
+                    nextMethod = type.getDeclaredMethod("getSurfaceSequenceId");
+                    nextMethod.setAccessible(true);
+                } catch (NoSuchMethodException ignored) {
+                    type = type.getSuperclass();
+                } catch (Throwable ignored) {
+                    break;
+                }
+            }
+            if (nextMethod == null) {
+                type = requestedType;
+                while (type != null && nextField == null) {
+                    try {
+                        nextField = type.getDeclaredField("mSurfaceSequenceId");
+                        nextField.setAccessible(true);
+                    } catch (NoSuchFieldException ignored) {
+                        type = type.getSuperclass();
+                    } catch (Throwable ignored) {
+                        break;
+                    }
+                }
+            }
+            surfaceSequenceType = requestedType;
+            surfaceSequenceMethod = nextMethod;
+            surfaceSequenceField = nextField;
+            surfaceSequenceResolved = true;
+        }
     }
 
     private static String surfaceName(SurfaceControl surface) {
