@@ -60,6 +60,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     };
 
     private static final class SamplingInsets {
+        static final SamplingInsets ZERO = new SamplingInsets(0, 0, 0, 0);
         final int left;
         final int right;
         final int top;
@@ -70,6 +71,50 @@ final class Miuix307PassBlurTextureView extends TextureView
             this.right = Math.max(0, right);
             this.top = Math.max(0, top);
             this.bottom = Math.max(0, bottom);
+        }
+    }
+
+    private static final class SamplingInsetsCache {
+        final int width;
+        final int height;
+        final PrismalParams params;
+        final int horizontalBaseline;
+        final int topExtra;
+        final int bottomExtra;
+        final int leftExtra;
+        final int rightExtra;
+        final int textureLimit;
+        final SamplingInsets insets;
+
+        SamplingInsetsCache(
+                int width, int height, PrismalParams params, int horizontalBaseline,
+                int topExtra, int bottomExtra, int leftExtra, int rightExtra,
+                int textureLimit, SamplingInsets insets) {
+            this.width = width;
+            this.height = height;
+            this.params = params;
+            this.horizontalBaseline = horizontalBaseline;
+            this.topExtra = topExtra;
+            this.bottomExtra = bottomExtra;
+            this.leftExtra = leftExtra;
+            this.rightExtra = rightExtra;
+            this.textureLimit = textureLimit;
+            this.insets = insets;
+        }
+
+        boolean matches(
+                int width, int height, PrismalParams params, int horizontalBaseline,
+                int topExtra, int bottomExtra, int leftExtra, int rightExtra,
+                int textureLimit) {
+            return this.width == width
+                    && this.height == height
+                    && this.params == params
+                    && this.horizontalBaseline == horizontalBaseline
+                    && this.topExtra == topExtra
+                    && this.bottomExtra == bottomExtra
+                    && this.leftExtra == leftExtra
+                    && this.rightExtra == rightExtra
+                    && this.textureLimit == textureLimit;
         }
     }
 
@@ -180,6 +225,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final float[] textureMatrix = new float[16];
     private final int[] screenLocationScratch = new int[2];
 
+    private volatile SamplingInsetsCache samplingInsetsCache;
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
     private volatile boolean hasPresentedFrame;
@@ -1151,21 +1197,40 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     private SamplingInsets resolveSamplingInsets(
             int width, int height, PrismalParams prismalParams) {
-        if (prismalParams == null) return new SamplingInsets(0, 0, 0, 0);
+        if (prismalParams == null) return SamplingInsets.ZERO;
+        int horizontalBaseline = horizontalOverscanPx();
+        int textureLimit = maxTextureSize;
+        int topExtra = topSamplingExtraPx;
+        int bottomExtra = bottomSamplingExtraPx;
+        int leftExtra = leftSamplingExtraPx;
+        int rightExtra = rightSamplingExtraPx;
+        SamplingInsetsCache cached = samplingInsetsCache;
+        if (cached != null && cached.matches(
+                width, height, prismalParams, horizontalBaseline,
+                topExtra, bottomExtra, leftExtra, rightExtra, textureLimit)) {
+            return cached.insets;
+        }
+
         int opticalX = PrismalSampling.requiredGuardPx(
                 prismalParams, width, height, true);
         int opticalY = PrismalSampling.requiredGuardPx(
                 prismalParams, width, height, false);
 
-        int autoHorizontal = Math.max(horizontalOverscanPx(), opticalX);
-        int left = combineAutoGuardAndUserExtra(autoHorizontal, leftSamplingExtraPx);
-        int right = combineAutoGuardAndUserExtra(autoHorizontal, rightSamplingExtraPx);
-        int top = combineAutoGuardAndUserExtra(opticalY, topSamplingExtraPx);
-        int bottom = combineAutoGuardAndUserExtra(opticalY, bottomSamplingExtraPx);
+        int autoHorizontal = Math.max(horizontalBaseline, opticalX);
+        int left = combineAutoGuardAndUserExtra(autoHorizontal, leftExtra);
+        int right = combineAutoGuardAndUserExtra(autoHorizontal, rightExtra);
+        int top = combineAutoGuardAndUserExtra(opticalY, topExtra);
+        int bottom = combineAutoGuardAndUserExtra(opticalY, bottomExtra);
 
-        int[] horizontal = fitInsetPairToTextureLimit(width, left, right, maxTextureSize);
-        int[] vertical = fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize);
-        return new SamplingInsets(horizontal[0], horizontal[1], vertical[0], vertical[1]);
+        long horizontal = fitInsetPairToTextureLimit(width, left, right, textureLimit);
+        long vertical = fitInsetPairToTextureLimit(height, top, bottom, textureLimit);
+        SamplingInsets resolved = new SamplingInsets(
+                unpackFirst(horizontal), unpackSecond(horizontal),
+                unpackFirst(vertical), unpackSecond(vertical));
+        samplingInsetsCache = new SamplingInsetsCache(
+                width, height, prismalParams, horizontalBaseline,
+                topExtra, bottomExtra, leftExtra, rightExtra, textureLimit, resolved);
+        return resolved;
     }
 
     private static int combineAutoGuardAndUserExtra(int automaticGuardPx, int userExtraPx) {
@@ -1173,22 +1238,34 @@ final class Miuix307PassBlurTextureView extends TextureView
         return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, combined));
     }
 
-    private static int[] fitInsetPairToTextureLimit(
+    private static long fitInsetPairToTextureLimit(
             int visible, int before, int after, int maxTextureSize) {
         int safeVisible = Math.max(1, visible);
         int safeBefore = Math.max(0, before);
         int safeAfter = Math.max(0, after);
-        if (maxTextureSize <= 0) return new int[]{safeBefore, safeAfter};
+        if (maxTextureSize <= 0) return packPair(safeBefore, safeAfter);
 
         int available = Math.max(0, maxTextureSize - safeVisible);
         long desired = (long) safeBefore + safeAfter;
-        if (desired <= available) return new int[]{safeBefore, safeAfter};
-        if (available <= 0 || desired <= 0) return new int[]{0, 0};
+        if (desired <= available) return packPair(safeBefore, safeAfter);
+        if (available <= 0 || desired <= 0) return packPair(0, 0);
 
         int fittedBefore = (int) Math.round(safeBefore * (available / (double) desired));
         fittedBefore = Math.max(0, Math.min(available, fittedBefore));
         int fittedAfter = available - fittedBefore;
-        return new int[]{fittedBefore, fittedAfter};
+        return packPair(fittedBefore, fittedAfter);
+    }
+
+    private static long packPair(int first, int second) {
+        return ((long) first << 32) | (second & 0xffffffffL);
+    }
+
+    private static int unpackFirst(long packed) {
+        return (int) (packed >> 32);
+    }
+
+    private static int unpackSecond(long packed) {
+        return (int) packed;
     }
 
     private void updateBackdropMapping() {
