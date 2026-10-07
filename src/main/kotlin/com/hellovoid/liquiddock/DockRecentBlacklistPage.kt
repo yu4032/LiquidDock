@@ -94,7 +94,7 @@ internal fun DockRecentBlacklistPage(
         }
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_dock_recent_blacklist),
@@ -142,7 +142,7 @@ internal fun DockRecentBlacklistPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.dock_recent_blacklist_current_candidates)) }
+        item { ModernSectionTitle(stringResource(R.string.dock_recent_blacklist_current_candidates)) }
         if (availableCandidates.isEmpty()) {
             item {
                 SettingsCard {
@@ -167,7 +167,7 @@ internal fun DockRecentBlacklistPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.dock_recent_blacklist_blocked_apps)) }
+        item { ModernSectionTitle(stringResource(R.string.dock_recent_blacklist_blocked_apps)) }
         if (blockedPackages.isEmpty()) {
             item {
                 SettingsCard {
