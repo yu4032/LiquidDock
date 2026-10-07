@@ -8,6 +8,33 @@ final class Miuix307BackdropMapping {
         OUTSIDE
     }
 
+    static final class MutableResult {
+        float backdropX;
+        float backdropY;
+        float backdropW;
+        float backdropH;
+        float validLeft;
+        float validBottom;
+        float validRight;
+        float validTop;
+        Coverage coverage = Coverage.OUTSIDE;
+
+        void set(
+                float backdropX, float backdropY, float backdropW, float backdropH,
+                float validLeft, float validBottom, float validRight, float validTop,
+                Coverage coverage) {
+            this.backdropX = backdropX;
+            this.backdropY = backdropY;
+            this.backdropW = backdropW;
+            this.backdropH = backdropH;
+            this.validLeft = validLeft;
+            this.validBottom = validBottom;
+            this.validRight = validRight;
+            this.validTop = validTop;
+            this.coverage = coverage;
+        }
+    }
+
     static final class Result {
         final float backdropX;
         final float backdropY;
@@ -39,8 +66,22 @@ final class Miuix307BackdropMapping {
     static Result compute(
             int hostLeft, int hostTop, int hostWidth, int hostHeight,
             int frameLeft, int frameTop, int frameWidth, int frameHeight) {
+        MutableResult out = new MutableResult();
+        computeInto(out, hostLeft, hostTop, hostWidth, hostHeight,
+                frameLeft, frameTop, frameWidth, frameHeight);
+        return new Result(
+                out.backdropX, out.backdropY, out.backdropW, out.backdropH,
+                out.validLeft, out.validBottom, out.validRight, out.validTop, out.coverage);
+    }
+
+    static void computeInto(
+            MutableResult out,
+            int hostLeft, int hostTop, int hostWidth, int hostHeight,
+            int frameLeft, int frameTop, int frameWidth, int frameHeight) {
+        if (out == null) throw new IllegalArgumentException("out == null");
         if (hostWidth <= 0 || hostHeight <= 0 || frameWidth <= 0 || frameHeight <= 0) {
-            return outside();
+            out.set(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, Coverage.OUTSIDE);
+            return;
         }
 
         float backdropX = (hostLeft - frameLeft) / (float) frameWidth;
@@ -60,9 +101,9 @@ final class Miuix307BackdropMapping {
         int intersectionBottom = Math.min(hostBottom, frameBottom);
 
         if (intersectionLeft >= intersectionRight || intersectionTop >= intersectionBottom) {
-            return new Result(
-                    backdropX, backdropY, backdropW, backdropH,
+            out.set(backdropX, backdropY, backdropW, backdropH,
                     0f, 0f, 0f, 0f, Coverage.OUTSIDE);
+            return;
         }
 
         float validLeft = clamp01((intersectionLeft - hostLeft) / (float) hostWidth);
@@ -77,14 +118,10 @@ final class Miuix307BackdropMapping {
                 && intersectionTop == hostTop
                 && intersectionRight == hostRight
                 && intersectionBottom == hostBottom;
-        return new Result(
+        out.set(
                 backdropX, backdropY, backdropW, backdropH,
                 validLeft, validBottom, validRight, validTop,
                 full ? Coverage.FULL : Coverage.PARTIAL);
-    }
-
-    private static Result outside() {
-        return new Result(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, Coverage.OUTSIDE);
     }
 
     private static float clamp01(float value) {
