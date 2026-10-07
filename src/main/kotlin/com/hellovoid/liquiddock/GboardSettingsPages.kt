@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -17,11 +18,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
 
 @Composable
 internal fun ThirdPartyAppsPage(
@@ -475,32 +476,40 @@ private fun GboardValueSlider(
     unit: String = "",
 ) {
     val rounded = value.roundToInt().coerceIn(0, max)
-    SliderPreference(
-        value = rounded.toFloat(),
-        onValueChange = {
-            val next = it.roundToInt().coerceIn(0, max)
-            onValueChange(next.toFloat())
-            prefs.edit().putInt(key, next).apply()
-        },
-        title = title,
-        summary = "未单独设置时继承全局液态玻璃",
-        valueText = "",
-        enabled = enabled,
-        valueRange = 0f..max.toFloat(),
-        steps = (max - 1).coerceAtLeast(0),
-        endActions = {
-            Button(
-                onClick = {},
-                enabled = false,
-                minWidth = 62.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text("$rounded${if (unit.isBlank()) "" else " $unit"}")
-            }
-        },
-        insideMargin = LiquidDockPreferenceMargin,
-    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BasicComponent(
+            title = title,
+            summary = "未单独设置时继承全局液态玻璃",
+            enabled = enabled,
+            insideMargin = LiquidDockPreferenceMargin,
+            endActions = {
+                Button(
+                    onClick = {},
+                    enabled = false,
+                    minWidth = 62.dp,
+                    minHeight = 32.dp,
+                    insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text("${rounded}${if (unit.isBlank()) "" else " $unit"}")
+                }
+            },
+        )
+        LiquidDockGlassSlider(
+            value = rounded.toFloat(),
+            onValueChange = {
+                val next = it.roundToInt().coerceIn(0, max)
+                onValueChange(next.toFloat())
+                prefs.edit().putInt(key, next).apply()
+            },
+            valueRange = 0f..max.toFloat(),
+            visibilityThreshold = 1f,
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+        )
+    }
 }
 
 @Composable
