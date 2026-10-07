@@ -86,7 +86,6 @@ final class Miuix307PassBlurBridge {
         }
         SurfaceControl rootSurface = null;
         boolean securityCenterClaimed = false;
-        boolean dockClaimed = false;
         boolean gboardClaimed = false;
         boolean searchboxClaimed = false;
         try {
@@ -143,10 +142,6 @@ final class Miuix307PassBlurBridge {
                 SecurityCenterPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 securityCenterClaimed = true;
             }
-            if (domain == PassBlurDomain.DOCK) {
-                DockPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
-                dockClaimed = true;
-            }
             if (domain == PassBlurDomain.GBOARD_FLOATING) {
                 GboardPassBlurContinuousAuthority.claim(rootSurface, producerSurface, scale);
                 gboardClaimed = true;
@@ -193,9 +188,6 @@ final class Miuix307PassBlurBridge {
             if (securityCenterClaimed && rootSurface != null) {
                 SecurityCenterPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
-            if (dockClaimed && rootSurface != null) {
-                DockPassBlurContinuousAuthority.release(rootSurface, producerSurface);
-            }
             if (gboardClaimed && rootSurface != null) {
                 GboardPassBlurContinuousAuthority.release(rootSurface, producerSurface);
             }
@@ -229,21 +221,10 @@ final class Miuix307PassBlurBridge {
             return;
         }
         boolean force = binding.domain == PassBlurDomain.SECURITY_CENTER
-                || binding.domain == PassBlurDomain.DOCK
                 || binding.domain == PassBlurDomain.GBOARD_FLOATING
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
                 || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
         setUpdatesEnabled(binding, true, force);
-        if (binding.domain == PassBlurDomain.DOCK) {
-            // APP -> HOME can resume after the producer-driven lease has already expired.
-            // Prime the existing lease immediately instead of waiting for the first slow source
-            // frame to arrive; subsequent real OES arrivals keep renewing it.
-            renewForceRefresh(binding);
-            if (VisualRuntimeState.isDockFrameSyncEnabled()) {
-                MainHook.log(FRAME_SYNC_TAG + " force refresh primed on producer resume"
-                        + " root=" + binding.rootName);
-            }
-        }
     }
 
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
@@ -267,10 +248,6 @@ final class Miuix307PassBlurBridge {
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
         if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
         if (!force && binding.updatesEnabled == enabled) return;
-        if (binding.domain == PassBlurDomain.DOCK) {
-            DockPassBlurContinuousAuthority.setUpdatesEnabled(
-                    binding.rootSurface, enabled);
-        }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.setUpdatesEnabled(
                     binding.rootSurface, enabled);
@@ -341,10 +318,6 @@ final class Miuix307PassBlurBridge {
         if (binding == null || !binding.bound) return;
         if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
             SecurityCenterPassBlurContinuousAuthority.release(
-                    binding.rootSurface, binding.producerSurface);
-        }
-        if (binding.domain == PassBlurDomain.DOCK) {
-            DockPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
