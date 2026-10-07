@@ -35,6 +35,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
     private static final Set<String> STATIC_SOURCE_ALLOWLIST = Set.of(
             "ConfigKeyOwnershipContractTest.java",
             "DockGlassShapeOwnershipContractTest.java",
+            "DockPassBlurOwnershipContractTest.java",
             "DockFinalCompositeAlphaContractTest.java",
             "DockMirrorShortcutReflectionContractTest.java",
             "DockShadowArchitectureTest.java",
