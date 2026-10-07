@@ -30,7 +30,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class WidgetComponentDetailActivity : SettingsActivity() {
@@ -180,7 +179,7 @@ private fun WidgetComponentTypePage(
         if (isMaml) {
             item {
                 LiquidDockSectionCard {
-                    SwitchPreference(
+                    LiquidDockGlassToggleRow(
                         checked = showAllMaml,
                         onCheckedChange = onShowAllMaml,
                         title = "显示全部内部元素",
@@ -191,7 +190,7 @@ private fun WidgetComponentTypePage(
         } else {
             item {
                 LiquidDockSectionCard {
-                    SwitchPreference(
+                    LiquidDockGlassToggleRow(
                         checked = showAdvancedRemote,
                         onCheckedChange = onShowAdvancedRemote,
                         title = "高级整节点隐藏",
@@ -299,7 +298,7 @@ private fun WidgetExactNodePage(
         items(rankedComponents, key = { it.selectorKey() }) { descriptor ->
             val key = descriptor.selectorKey()
             LiquidDockSectionCard {
-                SwitchPreference(
+                LiquidDockGlassToggleRow(
                     checked = key in selected,
                     onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
                     title = exactNodeTitle(descriptor),
