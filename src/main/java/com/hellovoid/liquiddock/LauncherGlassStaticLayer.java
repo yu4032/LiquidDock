@@ -70,7 +70,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         rootGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         BY_ROOT.put(root, layer);
-        if (session.isWorkspaceMotionActive()) layer.startMotionReveal();
+        if (session.isWorkspaceUnlockMotionActive()) layer.startMotionReveal();
         MainHook.log("[DC][LauncherGlass] shared static root layer attached root="
                 + root.getClass().getSimpleName());
         return layer;
@@ -105,7 +105,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
-    static void onWorkspaceMotionStarted(View root) {
+    static void onWorkspaceUnlockMotionStarted(View root) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return;
         if (Looper.myLooper() == Looper.getMainLooper()) layer.startMotionReveal();
@@ -134,7 +134,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             }
         });
         animator.start();
-        MainHook.log("[DC][WorkspaceFade] motion reveal durationMs=" + duration);
+        MainHook.log("[DC][WorkspaceFade] unlock reveal durationMs=" + duration);
     }
 
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {

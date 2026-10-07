@@ -726,10 +726,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // Open the producer gate before any resume or endpoint rebind. The separate scene
             // freshness barrier remains pending until SystemUI GONE.
             LauncherGlassHomePresentationHook.onWorkspaceUnlockMotionStarted();
-            applyTransitionFrameSync(
-                    transitionFrameSync.onUnlockTransition(true),
-                    root,
-                    "unlock-motion-hold");
+            setUnlockTransitionFrameSyncEnabled(true, "unlock-motion-hold");
             sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
             MainHook.log("[DC][WorkspaceFrameSync] unlock producer gate opened; resume/rebind allowed; hold-until-GONE");
         }
@@ -782,17 +779,20 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 reason != null ? reason : "workspace-native-transition");
     }
 
-    boolean isWorkspaceMotionActive() {
-        return workspaceSource && transitionFrameSync.isActive();
+    boolean isWorkspaceUnlockMotionActive() {
+        return workspaceSource && transitionFrameSync.isUnlockTransitionActive();
     }
 
     void setUnlockTransitionFrameSyncEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         View root = rootRef.get();
+        boolean reveal = workspaceSource && enabled
+                && !transitionFrameSync.isUnlockTransitionActive();
         applyTransitionFrameSync(
                 transitionFrameSync.onUnlockTransition(enabled),
                 root,
                 reason != null ? reason : "workspace-unlock-transition");
+        if (reveal) LauncherGlassStaticLayer.onWorkspaceUnlockMotionStarted(root);
     }
 
     private void applyTransitionFrameSync(
@@ -804,7 +804,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             WorkspaceTransitionFrameSyncState.Decision decision, View root, String reason) {
         if (decision == null) return;
         if (decision.enable) {
-            if (workspaceSource) LauncherGlassStaticLayer.onWorkspaceMotionStarted(root);
             sourceBackend.setTransitionFrameSyncEnabled(true, reason);
         } else if (decision.disable) {
             sourceBackend.setTransitionFrameSyncEnabled(false, reason);
