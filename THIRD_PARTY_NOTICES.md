@@ -6,7 +6,7 @@
 
 LiquidDock 当前使用或编译依赖：
 
-- **Compose Miuix 0.9.3** — `miuix-ui-android`, `miuix-preference-android` — Apache License 2.0 — <https://github.com/compose-miuix-ui/miuix>
+- **Compose Miuix 0.9.4** — `miuix-ui-android`, `miuix-preference-android`, `miuix-icons-android` — Apache License 2.0 — <https://github.com/compose-miuix-ui/miuix>\n- **PrismalAGSL v1.0.4** — Compose liquid-glass surfaces, navigation, toggles and sliders used by the settings UI — MIT License — <https://github.com/styropyr0/PrismalAGSL>
 - **AndroidX Activity Compose 1.13.0** — Apache License 2.0 — <https://source.android.com/docs/setup/about/licenses>
 - **AndroidX Preference 1.2.1** — Apache License 2.0 — <https://source.android.com/docs/setup/about/licenses>
 - **AndroidX AppCompat 1.7.0** — Apache License 2.0 — <https://source.android.com/docs/setup/about/licenses>
@@ -17,7 +17,7 @@ LiquidDock 当前使用或编译依赖：
 
 - **Prismal** — MIT License — <https://github.com/styropyr0/Prismal>
 
-LiquidDock 仓库包含独立 `prismal` 模块，并基于 Prismal 的光学/Shader/参数设计进行适配。具体许可证与上游归属以仓库内对应声明为准。
+LiquidDock 仓库保留独立 `prismal` 模块，用于 Launcher/Hook 侧的 OpenGL ES 渲染适配；设置应用自身的 Compose UI 则直接依赖上游 PrismalAGSL。两者不共享 PassBlur 或屏幕捕获链。具体许可证与上游归属以仓库内对应声明为准。
 
 ## Engineering references
 
