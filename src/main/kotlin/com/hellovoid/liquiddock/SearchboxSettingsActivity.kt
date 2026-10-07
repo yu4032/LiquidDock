@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock
 
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,8 +19,8 @@ class SearchboxSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
             val masterEnabled by remember {
                 mutableStateOf(
@@ -29,26 +30,18 @@ class SearchboxSettingsActivity : SettingsActivity() {
                     ),
                 )
             }
-            MiuixTheme(controller = controller) {
-                Scaffold(
-                    topBar = {
-                        SmallTopAppBar(
-                            title = getString(R.string.page_searchbox),
-                            navigationIcon = {
-                                TextButton(
-                                    text = getString(R.string.action_back),
-                                    onClick = { finish() },
-                                )
-                            },
-                            actions = {
-                                TextButton(
-                                    text = getString(R.string.action_restart_searchbox),
-                                    onClick = {
-                                        restartPackageProcess(
-                                            "com.android.quicksearchbox",
-                                            "系统搜索",
-                                        )
-                                    },
+            LiquidDockTheme {
+                LiquidDockSettingsScaffold(
+                    title = getString(R.string.page_searchbox),
+                    showBack = true,
+                    onBack = { finish() },
+                    actions = {
+                        TextButton(
+                            text = getString(R.string.action_restart_searchbox),
+                            onClick = {
+                                restartPackageProcess(
+                                    "com.android.quicksearchbox",
+                                    "系统搜索",
                                 )
                             },
                         )
