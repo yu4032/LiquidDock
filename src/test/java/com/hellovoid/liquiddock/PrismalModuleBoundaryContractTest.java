@@ -61,6 +61,20 @@ public class PrismalModuleBoundaryContractTest {
     }
 
     @Test
+    public void dockSceneOnlyFramesReusePreparedBackdrop() throws Exception {
+        String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
+        assertTrue(view.contains("boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false)"));
+        assertTrue(view.contains("boolean rebuildBackdrop = consumedFreshProducerFrame"));
+        assertTrue(view.contains("|| !canReusePreparedBackdrop(mapping, renderPlan)"));
+        assertTrue(view.contains("if (rebuildBackdrop) {"));
+        assertTrue(view.contains("rememberPreparedBackdrop(mapping, renderPlan)"));
+        assertTrue(view.contains("private boolean canReusePreparedBackdrop("));
+        assertTrue(view.contains("prepared.prismalParams != mapping.prismalParams"));
+        assertTrue(view.contains("invalidatePreparedBackdrop();"));
+        assertTrue(view.contains("scheduleSceneRender()"));
+    }
+
+    @Test
     public void liquidDockAdapterOwnsOesNormalizationMappingLogAndFinalCrop() throws Exception {
         String view = Files.readString(APP.resolve("Miuix307PassBlurTextureView.java"));
         String composite = Files.readString(APP.resolve("Miuix307PrismalCompositeShaders.java"));
