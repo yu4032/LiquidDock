@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
@@ -64,6 +65,15 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Community
+import top.yukonga.miuix.kmp.icon.extended.GridView
+import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Theme
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -76,8 +86,7 @@ class ComposeSettingsActivity : SettingsActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
-            MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+            LiquidDockTheme { LiquidDockSettings(this) }
         }
     }
 }
@@ -469,63 +478,49 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         mutableStateOf(prefs.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()))
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
-    val surfaceColor = MiuixTheme.colorScheme.surface
-    val backdrop = rememberLayerBackdrop {
-        drawRect(surfaceColor)
-        drawContent()
-    }
 
     BackHandler(enabled = page != Page.Home) { page = parentPage(page) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = stringResource(page.titleRes),
-                largeTitle = stringResource(page.titleRes),
-                navigationIcon = {
-                    if (!isRootPage(page)) {
-                        SettingsBackButton { page = parentPage(page) }
-                    }
-                },
-                titlePadding = 20.dp,
-                actions = {
-                    val descriptor = THIRD_PARTY_APP_PAGES[page]
-                    if (page == Page.SecurityCenterSidebar) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
+    ModernSettingsScaffold(
+        title = stringResource(page.titleRes),
+        showBack = !isRootPage(page),
+        onBack = { page = parentPage(page) },
+        actions = {
+            val descriptor = THIRD_PARTY_APP_PAGES[page]
+            if (page == Page.SecurityCenterSidebar) {
+                TextButton(
+                    text = stringResource(R.string.action_restart_security_center_and_launcher),
+                    onClick = { activity.restartSecurityCenterAndLauncher() },
+                )
+            } else if (page == Page.Animation) {
+                TextButton(
+                    text = stringResource(R.string.action_restart_security_center_and_launcher),
+                    onClick = { activity.restartSecurityCenterAndLauncher() },
+                )
+            } else if (descriptor != null) {
+                TextButton(
+                    text = stringResource(descriptor.restartLabelRes),
+                    onClick = {
+                        activity.restartPackageProcess(
+                            descriptor.packageName,
+                            descriptor.displayName,
                         )
-                    } else if (page == Page.Animation) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
-                        )
-                    } else if (descriptor != null) {
-                        TextButton(
-                            text = stringResource(descriptor.restartLabelRes),
-                            onClick = {
-                                activity.restartPackageProcess(
-                                    descriptor.packageName,
-                                    descriptor.displayName,
-                                )
-                            },
-                        )
-                    } else {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_launcher),
-                            onClick = { activity.restartLauncher() },
-                        )
-                    }
-                    if (page == Page.Home) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_system_ui),
-                            onClick = { activity.restartSystemUi() },
-                        )
-                    }
-                },
-            )
+                    },
+                )
+            } else {
+                TextButton(
+                    text = stringResource(R.string.action_restart_launcher),
+                    onClick = { activity.restartLauncher() },
+                )
+            }
+            if (page == Page.Home) {
+                TextButton(
+                    text = stringResource(R.string.action_restart_system_ui),
+                    onClick = { activity.restartSystemUi() },
+                )
+            }
         },
-        bottomBar = {
+        bottomBar = { backdrop ->
             if (isRootPage(page)) {
                 LiquidDockSettingsBottomBar(
                     selectedIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0),
@@ -535,92 +530,84 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
             }
         },
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .layerBackdrop(backdrop),
-        ) {
-            AnimatedContent(
-                targetState = page,
-                transitionSpec = {
-                    val duration = prefs.getInt(
-                        ConfigSchema.Animation.SETTINGS_PAGE.name(),
-                        ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
-                    ).coerceIn(0, 2000)
-                    if (targetState.ordinal > initialState.ordinal) {
-                        (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
-                                (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
-                    } else {
-                        (slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration))) togetherWith
-                                (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
-                    }
-                },
-                label = "page",
-            ) { target ->
-                when (target) {
-                    Page.Home -> HomePage(
-                        padding = padding,
-                        prefs = prefs,
-                        masterEnabled = masterEnabled,
-                        onMasterChanged = { masterEnabled = it },
-                        open = { page = it },
-                    )
-                    Page.LayoutHub -> SettingsHubPage(
-                        padding = padding,
-                        summary = stringResource(R.string.tab_layout_summary),
-                        features = layoutHomeFeatures,
-                        open = { page = it },
-                    )
-                    Page.GlassHub -> SettingsHubPage(
-                        padding = padding,
-                        summary = stringResource(R.string.tab_glass_summary),
-                        features = glassHomeFeatures,
-                        open = { page = it },
-                    )
-                    Page.MoreHub -> SettingsHubPage(
-                        padding = padding,
-                        summary = stringResource(R.string.tab_more_summary),
-                        features = moreHomeFeatures,
-                        open = { page = it },
-                    )
-                    Page.Grid -> GridPage(padding, prefs, masterEnabled)
-                    Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
-                    Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
-                    Page.Divider -> DividerPage(padding, prefs, masterEnabled)
-                    Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
-                    Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
-                    Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
-                        padding = padding,
-                        prefs = prefs,
-                        masterEnabled = masterEnabled,
-                    )
-                    Page.Liquid -> LiquidPage(
-                        padding = padding,
-                        prefs = prefs,
-                        masterEnabled = masterEnabled,
-                        openLauncherHighlights = { page = Page.LauncherHighlights },
-                        openWidgetComponents = { page = Page.WidgetComponents },
-                        openThirdPartyApps = { page = Page.ThirdPartyApps },
-                        openDialogCustomization = { page = Page.DialogCustomization },
-                    )
-                    Page.DialogCustomization -> DialogGlassSettingsPage(
-                        padding, prefs, masterEnabled,
-                    )
-                    Page.ThirdPartyApps -> ThirdPartyAppsPage(
-                        padding = padding,
-                        prefs = prefs,
-                        masterEnabled = masterEnabled,
-                        openGboard = { page = Page.Gboard },
-                    )
-                    Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
-                    Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
-                    Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
-                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
-                    Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
-                    Page.Data -> DataPage(padding, activity)
-                    Page.About -> AboutPage(padding, activity, prefs)
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val duration = prefs.getInt(
+                    ConfigSchema.Animation.SETTINGS_PAGE.name(),
+                    ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
+                ).coerceIn(0, 2000)
+                if (targetState.ordinal > initialState.ordinal) {
+                    (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
+                            (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
+                } else {
+                    (slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration))) togetherWith
+                            (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
                 }
+            },
+            label = "page",
+        ) { target ->
+            when (target) {
+                Page.Home -> HomePage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                    onMasterChanged = { masterEnabled = it },
+                    open = { page = it },
+                )
+                Page.LayoutHub -> SettingsHubPage(
+                    padding = padding,
+                    summary = stringResource(R.string.tab_layout_summary),
+                    features = layoutHomeFeatures,
+                    open = { page = it },
+                )
+                Page.GlassHub -> SettingsHubPage(
+                    padding = padding,
+                    summary = stringResource(R.string.tab_glass_summary),
+                    features = glassHomeFeatures,
+                    open = { page = it },
+                )
+                Page.MoreHub -> SettingsHubPage(
+                    padding = padding,
+                    summary = stringResource(R.string.tab_more_summary),
+                    features = moreHomeFeatures,
+                    open = { page = it },
+                )
+                Page.Grid -> GridPage(padding, prefs, masterEnabled)
+                Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
+                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
+                Page.Divider -> DividerPage(padding, prefs, masterEnabled)
+                Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
+                Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
+                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                )
+                Page.Liquid -> LiquidPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                    openLauncherHighlights = { page = Page.LauncherHighlights },
+                    openWidgetComponents = { page = Page.WidgetComponents },
+                    openThirdPartyApps = { page = Page.ThirdPartyApps },
+                    openDialogCustomization = { page = Page.DialogCustomization },
+                )
+                Page.DialogCustomization -> DialogGlassSettingsPage(padding, prefs, masterEnabled)
+                Page.ThirdPartyApps -> ThirdPartyAppsPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                    openGboard = { page = Page.Gboard },
+                )
+                Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
+                Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
+                Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
+                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
+                Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
+                Page.Data -> DataPage(padding, activity)
+                Page.About -> AboutPage(padding, activity, prefs)
             }
         }
     }
@@ -630,32 +617,32 @@ private data class HomeFeature(
     val page: Page,
     val titleRes: Int,
     val summaryRes: Int,
-    val index: String,
+    val icon: ImageVector,
 )
 
 private val overviewQuickFeatures = listOf(
-    HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, "01"),
-    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, "02"),
-    HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, "03"),
-    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, "04"),
+    HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, MiuixIcons.Tune),
+    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, MiuixIcons.Image),
+    HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, MiuixIcons.GridView),
+    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, MiuixIcons.Settings),
 )
 
 private val layoutHomeFeatures = listOf(
-    HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, "01"),
-    HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, "02"),
-    HomeFeature(Page.Divider, R.string.page_divider, R.string.home_divider_summary, "03"),
-    HomeFeature(Page.Workstation, R.string.page_workstation, R.string.home_workstation_summary, "04"),
-    HomeFeature(Page.Recents, R.string.page_recents, R.string.home_recents_summary, "05"),
+    HomeFeature(Page.Grid, R.string.page_grid, R.string.home_grid_summary, MiuixIcons.GridView),
+    HomeFeature(Page.Dock, R.string.page_dock, R.string.home_dock_summary, MiuixIcons.Tune),
+    HomeFeature(Page.Divider, R.string.page_divider, R.string.home_divider_summary, MiuixIcons.More),
+    HomeFeature(Page.Workstation, R.string.page_workstation, R.string.home_workstation_summary, MiuixIcons.GridView),
+    HomeFeature(Page.Recents, R.string.page_recents, R.string.home_recents_summary, MiuixIcons.Settings),
 )
 
 private val glassHomeFeatures = listOf(
-    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, "01"),
-    HomeFeature(Page.Stroke, R.string.page_stroke, R.string.home_stroke_summary, "02"),
-    HomeFeature(Page.Shadow, R.string.page_shadow, R.string.home_shadow_summary, "03"),
-    HomeFeature(Page.DialogCustomization, R.string.page_dialog_customization, R.string.home_dialog_summary, "04"),
-    HomeFeature(Page.LauncherHighlights, R.string.page_launcher_highlights, R.string.launcher_highlights_entry_summary, "05"),
-    HomeFeature(Page.WidgetComponents, R.string.widget_components_entry, R.string.widget_components_entry_summary, "06"),
-    HomeFeature(Page.ThirdPartyApps, R.string.page_third_party_apps, R.string.home_third_party_summary, "07"),
+    HomeFeature(Page.Liquid, R.string.page_liquid, R.string.home_liquid_summary, MiuixIcons.Image),
+    HomeFeature(Page.Stroke, R.string.page_stroke, R.string.home_stroke_summary, MiuixIcons.Theme),
+    HomeFeature(Page.Shadow, R.string.page_shadow, R.string.home_shadow_summary, MiuixIcons.Theme),
+    HomeFeature(Page.DialogCustomization, R.string.page_dialog_customization, R.string.home_dialog_summary, MiuixIcons.More),
+    HomeFeature(Page.LauncherHighlights, R.string.page_launcher_highlights, R.string.launcher_highlights_entry_summary, MiuixIcons.Image),
+    HomeFeature(Page.WidgetComponents, R.string.widget_components_entry, R.string.widget_components_entry_summary, MiuixIcons.GridView),
+    HomeFeature(Page.ThirdPartyApps, R.string.page_third_party_apps, R.string.home_third_party_summary, MiuixIcons.Community),
 )
 
 private val moreHomeFeatures = listOf(
@@ -663,11 +650,11 @@ private val moreHomeFeatures = listOf(
         Page.SecurityCenterSidebar,
         R.string.page_security_center_sidebar,
         R.string.home_security_center_sidebar_summary,
-        "01",
+        MiuixIcons.Tune,
     ),
-    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, "02"),
-    HomeFeature(Page.Data, R.string.home_data_title, R.string.home_data_summary, "03"),
-    HomeFeature(Page.About, R.string.home_about_title, R.string.home_about_summary, "04"),
+    HomeFeature(Page.Animation, R.string.page_animation, R.string.home_animation_summary, MiuixIcons.Settings),
+    HomeFeature(Page.Data, R.string.home_data_title, R.string.home_data_summary, MiuixIcons.More),
+    HomeFeature(Page.About, R.string.home_about_title, R.string.home_about_summary, MiuixIcons.Settings),
 )
 
 @Composable
@@ -678,10 +665,10 @@ private fun HomePage(
     onMasterChanged: (Boolean) -> Unit,
     open: (Page) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = padding.calculateTopPadding()),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ModernSettingsPage(
+        padding = padding,
+        overlayBottomBar = true,
+        bottomExtra = 104.dp,
     ) {
         item {
             HomeOverviewCard(
@@ -690,15 +677,9 @@ private fun HomePage(
                 onMasterChanged = onMasterChanged,
             )
         }
-        item {
-            PageHeader(
-                stringResource(R.string.app_name),
-                stringResource(R.string.tab_overview_summary),
-            )
-        }
-        item { SmallTitle(stringResource(R.string.category_quick_access)) }
+        item { ModernPageIntro(stringResource(R.string.tab_overview_summary)) }
+        item { ModernSectionTitle(stringResource(R.string.category_quick_access)) }
         item { HomeFeatureGrid(overviewQuickFeatures, open) }
-        item { Spacer(modifier = Modifier.padding(bottom = 104.dp)) }
     }
 }
 
@@ -709,14 +690,13 @@ private fun SettingsHubPage(
     features: List<HomeFeature>,
     open: (Page) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = padding.calculateTopPadding()),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ModernSettingsPage(
+        padding = padding,
+        overlayBottomBar = true,
+        bottomExtra = 104.dp,
     ) {
-        item { PageHeader("", summary) }
+        item { ModernPageIntro(summary) }
         item { HomeFeatureGrid(features, open) }
-        item { Spacer(modifier = Modifier.padding(bottom = 104.dp)) }
     }
 }
 
@@ -820,36 +800,14 @@ private fun HomeFeatureCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.heightIn(min = if (compact) 92.dp else 126.dp),
+    ModernFeatureTile(
+        title = stringResource(feature.titleRes),
+        summary = stringResource(feature.summaryRes),
+        icon = feature.icon,
+        compact = compact,
         onClick = onClick,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 17.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                text = feature.index,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MiuixTheme.colorScheme.primary,
-            )
-            Text(
-                text = stringResource(feature.titleRes),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = stringResource(feature.summaryRes),
-                fontSize = 13.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                maxLines = if (compact) 2 else 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -917,16 +875,16 @@ private fun AnimationPage(
         summary = "设置页面滑动与淡入淡出；下一次页面切换立即生效，无需重启",
     )
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_animation),
                 "这里只调整 LiquidDock 自己拥有的动画。系统原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
             )
         }
-        item { SmallTitle("工作区玻璃") }
+        item { ModernSectionTitle("工作区玻璃") }
         item { SettingsCard { IntSetting(prefs, workspaceVisibility, masterEnabled) } }
-        item { SmallTitle("Dock") }
+        item { ModernSectionTitle("Dock") }
         item {
             SettingsCard {
                 IntSetting(prefs, dockIconReveal, masterEnabled)
@@ -938,21 +896,21 @@ private fun AnimationPage(
                 )
             }
         }
-        item { SmallTitle("玻璃交互") }
+        item { ModernSectionTitle("玻璃交互") }
         item {
             SettingsCard {
                 IntSetting(prefs, pressIn, masterEnabled)
                 IntSetting(prefs, pressOut, masterEnabled)
             }
         }
-        item { SmallTitle("弹出界面") }
+        item { ModernSectionTitle("弹出界面") }
         item {
             SettingsCard {
                 IntSetting(prefs, shortcutDismiss, masterEnabled)
                 IntSetting(prefs, securityCenterExit, masterEnabled)
             }
         }
-        item { SmallTitle("系统界面") }
+        item { ModernSectionTitle("系统界面") }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -964,7 +922,7 @@ private fun AnimationPage(
                 )
             }
         }
-        item { SmallTitle("GUI") }
+        item { ModernSectionTitle("GUI") }
         item { SettingsCard { IntSetting(prefs, settingsPage, masterEnabled) } }
     }
 }
@@ -978,9 +936,9 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
             ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
         ))
     }
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
-        item { SmallTitle("图标大小 · Launcher 4.50") }
+        item { ModernSectionTitle("图标大小 · Launcher 4.50") }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -997,7 +955,7 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                 )
             }
         }
-        item { SmallTitle(stringResource(R.string.category_grid)) }
+        item { ModernSectionTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1017,11 +975,11 @@ private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEna
                 )
             }
         }
-        item { SmallTitle(stringResource(R.string.category_landscape)) }
+        item { ModernSectionTitle(stringResource(R.string.category_landscape)) }
         item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
-        item { SmallTitle(stringResource(R.string.category_portrait)) }
+        item { ModernSectionTitle(stringResource(R.string.category_portrait)) }
         item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
-        item { SmallTitle(stringResource(R.string.category_split_screen)) }
+        item { ModernSectionTitle(stringResource(R.string.category_split_screen)) }
         item { SettingsCard { splitGridSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
     }
 }
@@ -1043,10 +1001,10 @@ private fun DockPage(
         mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault()))
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item { PageHeader(stringResource(R.string.page_dock), stringResource(R.string.home_dock_summary)) }
 
-        item { SmallTitle(stringResource(R.string.dock_section_behavior)) }
+        item { ModernSectionTitle(stringResource(R.string.dock_section_behavior)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1071,7 +1029,7 @@ private fun DockPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.dock_section_motion)) }
+        item { ModernSectionTitle(stringResource(R.string.dock_section_motion)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1091,7 +1049,7 @@ private fun DockPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.dock_section_geometry)) }
+        item { ModernSectionTitle(stringResource(R.string.dock_section_geometry)) }
         item {
             SettingsCard {
                 dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
@@ -1150,20 +1108,20 @@ private fun SecurityCenterSidebarPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_security_center_sidebar),
                 stringResource(R.string.security_center_sidebar_header_summary),
             )
         }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
+        item { ModernSectionTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
         item {
             SettingsCard {
                 SideSlideHoldSetting(prefs, masterEnabled)
             }
         }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
+        item { ModernSectionTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1212,7 +1170,7 @@ private fun LiquidPage(
         mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault()))
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_liquid),
@@ -1220,7 +1178,7 @@ private fun LiquidPage(
             )
         }
 
-        item { SmallTitle(stringResource(R.string.liquid_section_core)) }
+        item { ModernSectionTitle(stringResource(R.string.liquid_section_core)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1240,7 +1198,7 @@ private fun LiquidPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.liquid_section_surfaces)) }
+        item { ModernSectionTitle(stringResource(R.string.liquid_section_surfaces)) }
         item {
             SettingsCard {
                 ArrowPreference(
@@ -1279,7 +1237,7 @@ private fun LiquidPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.liquid_section_components)) }
+        item { ModernSectionTitle(stringResource(R.string.liquid_section_components)) }
         item {
             SettingsCard {
                 BooleanSetting(
@@ -1366,7 +1324,7 @@ private fun LiquidPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.liquid_section_performance)) }
+        item { ModernSectionTitle(stringResource(R.string.liquid_section_performance)) }
         item {
             SettingsCard {
                 IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
@@ -1388,7 +1346,7 @@ private fun LiquidPage(
             }
         }
 
-        item { SmallTitle(stringResource(R.string.liquid_section_optics)) }
+        item { ModernSectionTitle(stringResource(R.string.liquid_section_optics)) }
         item {
             SettingsCard {
                 liquidSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidGlass) }
@@ -1404,14 +1362,14 @@ private fun LauncherHighlightsPage(
     masterEnabled: Boolean,
 ) {
     val liquidEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item {
             PageHeader(
                 stringResource(R.string.page_launcher_highlights),
                 stringResource(R.string.launcher_highlights_header_summary),
             )
         }
-        item { SmallTitle("图标、小文件夹与 Dock 图标") }
+        item { ModernSectionTitle("图标、小文件夹与 Dock 图标") }
         item {
             SettingsCard {
                 launcherHighlightSpecs.forEach { spec ->
@@ -1423,7 +1381,7 @@ private fun LauncherHighlightsPage(
                 }
             }
         }
-        item { SmallTitle("小组件与大文件夹") }
+        item { ModernSectionTitle("小组件与大文件夹") }
         item {
             SettingsCard {
                 launcherHighlightSpecs.forEach { spec ->
@@ -1482,11 +1440,11 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
 
 @Composable
 private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item { PageHeader("预设与数据", "保存、恢复或迁移 LiquidDock 配置") }
-        item { SmallTitle("预设") }
+        item { ModernSectionTitle("预设") }
         item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
-        item { SmallTitle("备份与应用") }
+        item { ModernSectionTitle("备份与应用") }
         item {
             SettingsCard {
                 ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
@@ -1502,14 +1460,14 @@ private fun openUrl(context: Context, url: String) {
 
 @Composable
 private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity, prefs: SharedPreferences) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item { PageHeader("引用与许可", "LiquidDock 使用的框架与实现参考") }
         item {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Debug.LOGGING, "调试日志", "输出诊断日志到 Download/liquiddock.log，重启桌面生效")
             }
         }
-        item { SmallTitle("界面与运行框架") }
+        item { ModernSectionTitle("界面与运行框架") }
         item {
             SettingsCard {
                 ArrowPreference("Compose Miuix", summary = "MIUIX Compose 界面框架 · Apache-2.0", onClick = { openUrl(activity, "https://github.com/compose-miuix-ui/miuix") })
@@ -1517,15 +1475,17 @@ private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity,
                 ArrowPreference("LSPosed API", summary = "模块 Hook API · GPL-3.0", onClick = { openUrl(activity, "https://github.com/LSPosed/LSPosed") })
             }
         }
-        item { SmallTitle("实现参考") }
+        item { ModernSectionTitle("实现参考") }
         item {
             SettingsCard {
+                ArrowPreference("HyperIsland", summary = "Compose Miuix 信息架构与现代设置页设计参考", onClick = { openUrl(activity, "https://github.com/yu4032/HyperIsland") })
+                ArrowPreference("KernelSU", summary = "Miuix 浮动导航与玻璃材质交互参考 · GPL-3.0", onClick = { openUrl(activity, "https://github.com/tiann/KernelSU") })
                 ArrowPreference("HyperCeiler", summary = "设置分层、交互方式与模块工程实践参考 · GPL-3.0", onClick = { openUrl(activity, "https://github.com/ReChronoRain/HyperCeiler") })
                 ArrowPreference("Prismal", summary = "液态玻璃光学模型与 Shader 参数设计参考 · MIT", onClick = { openUrl(activity, "https://github.com/styropyr0/Prismal") })
                 ArrowPreference("HyperLight", summary = "降采样与屏幕捕获思路启发", onClick = {})
             }
         }
-        item { SmallTitle("许可说明") }
+        item { ModernSectionTitle("许可说明") }
         item {
             SettingsCard {
                 ArrowPreference("第三方开源声明", summary = "完整依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
@@ -1541,7 +1501,7 @@ private fun SettingsList(
     summary: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    ModernSettingsPage(padding = padding) {
         item { PageHeader(title, summary) }
         item { SettingsCard(content) }
     }
@@ -1549,36 +1509,17 @@ private fun SettingsList(
 
 @Composable
 internal fun SettingsBackButton(onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
-        Icon(
-            painter = painterResource(R.drawable.ic_liquiddock_back),
-            contentDescription = stringResource(R.string.action_back),
-        )
-    }
+    ModernBackButton(onClick)
 }
 
 @Composable
 internal fun PageHeader(title: String, summary: String? = null) {
-    if (!summary.isNullOrBlank()) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-            Text(
-                text = summary,
-                fontSize = 13.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-        }
-    }
+    ModernPageIntro(summary)
 }
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-    ) {
-        Column(content = content)
-    }
+    ModernSectionCard(content)
 }
 
 @Composable
@@ -1594,6 +1535,7 @@ internal fun BooleanSetting(
         title = title,
         summary = summary,
         enabled = enabled,
+        insideMargin = ModernPreferenceMargin,
     )
 }
 
@@ -1653,26 +1595,31 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
                 insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             ) { Text("重置") }
         },
-        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
+        insideMargin = ModernPreferenceMargin,
     )
 }
 
 @Composable
 private fun StringDropdown(
-    prefs: SharedPreferences, config: ConfigKey<String>, title: String,
-    options: List<Pair<String, String>>, enabled: Boolean = true,
+    prefs: SharedPreferences,
+    config: ConfigKey<String>,
+    title: String,
+    options: List<Pair<String, String>>,
+    enabled: Boolean = true,
 ) {
     val key = config.name()
     val default = config.uiDefault()
     var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
     val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
-    ArrowPreference(
+    WindowDropdownPreference(
         title = title,
         summary = options[index].first,
+        items = options.map { it.first },
+        selectedIndex = index,
         enabled = enabled,
-        onClick = {
-            if (!enabled) return@ArrowPreference
-            val next = options[(index + 1) % options.size].second
+        insideMargin = ModernPreferenceMargin,
+        onSelectedIndexChange = { nextIndex ->
+            val next = options[nextIndex].second
             value = next
             prefs.edit().putString(key, next).apply()
         },
