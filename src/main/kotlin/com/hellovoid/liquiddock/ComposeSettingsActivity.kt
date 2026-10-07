@@ -710,45 +710,108 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
 
 @Composable
 private fun HomePage(
-    padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
-    onMasterChanged: (Boolean) -> Unit, open: (Page) -> Unit,
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onMasterChanged: (Boolean) -> Unit,
+    open: (Page) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader(stringResource(R.string.app_name)) }
-        item { SmallTitle(stringResource(R.string.category_master)) }
+    LiquidDockSettingsPage(padding) {
         item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Core.ENABLED,
-                    stringResource(R.string.enable_liquiddock),
-                    stringResource(R.string.enable_liquiddock_summary),
-                ) { onMasterChanged(it) }
+            HomeOverviewCard(
+                prefs = prefs,
+                masterEnabled = masterEnabled,
+                onMasterChanged = onMasterChanged,
+            )
+        }
+        item { PageHeader("", stringResource(R.string.tab_overview_summary)) }
+        item { LiquidDockSectionTitle(stringResource(R.string.category_quick_access)) }
+        item {
+            LiquidDockSectionCard {
+                overviewFeatures.forEach { feature ->
+                    LiquidDockActionRow(
+                        title = stringResource(feature.titleRes),
+                        summary = stringResource(feature.summaryRes),
+                        icon = feature.icon,
+                        onClick = { open(feature.page) },
+                    )
+                }
             }
         }
-        item { SmallTitle(stringResource(R.string.category_customization)) }
+    }
+}
+
+@Composable
+private fun SettingsHubPage(
+    padding: PaddingValues,
+    summary: String,
+    features: List<RootFeature>,
+    open: (Page) -> Unit,
+) {
+    LiquidDockSettingsPage(padding) {
+        item { PageHeader("", summary) }
         item {
-            SettingsCard {
-                ArrowPreference(stringResource(R.string.page_grid), summary = stringResource(R.string.home_grid_summary), onClick = { open(Page.Grid) })
-                ArrowPreference(stringResource(R.string.page_dock), summary = stringResource(R.string.home_dock_summary), onClick = { open(Page.Dock) })
-                ArrowPreference(stringResource(R.string.page_divider), summary = stringResource(R.string.home_divider_summary), onClick = { open(Page.Divider) })
-                ArrowPreference(stringResource(R.string.page_workstation), summary = stringResource(R.string.home_workstation_summary), onClick = { open(Page.Workstation) })
-                ArrowPreference(stringResource(R.string.page_recents), summary = stringResource(R.string.home_recents_summary), onClick = { open(Page.Recents) })
-                ArrowPreference(
-                    stringResource(R.string.page_security_center_sidebar),
-                    summary = stringResource(R.string.home_security_center_sidebar_summary),
-                    onClick = { open(Page.SecurityCenterSidebar) },
+            LiquidDockSectionCard {
+                features.forEach { feature ->
+                    LiquidDockActionRow(
+                        title = stringResource(feature.titleRes),
+                        summary = stringResource(feature.summaryRes),
+                        icon = feature.icon,
+                        onClick = { open(feature.page) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeOverviewCard(
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onMasterChanged: (Boolean) -> Unit,
+) {
+    val columns = prefs.getInt(ConfigSchema.Grid.COLUMNS.name(), ConfigSchema.Grid.COLUMNS.uiDefault())
+    val rows = prefs.getInt(ConfigSchema.Grid.ROWS.name(), ConfigSchema.Grid.ROWS.uiDefault())
+    val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
+    val glassEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            SwitchPreference(
+                checked = masterEnabled,
+                onCheckedChange = {
+                    prefs.edit().putBoolean(ConfigSchema.Core.ENABLED.name(), it).apply()
+                    onMasterChanged(it)
+                },
+                title = stringResource(
+                    if (masterEnabled) R.string.home_status_enabled else R.string.home_status_disabled,
+                ),
+                summary = stringResource(
+                    if (masterEnabled) R.string.home_status_enabled_summary else R.string.home_status_disabled_summary,
+                ),
+                insideMargin = LiquidDockPreferenceMargin,
+            )
+            Column(
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "${columns} × ${rows}",
+                    style = MiuixTheme.textStyles.headline1,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
-                ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
-                ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
-                ArrowPreference(stringResource(R.string.page_animation), summary = stringResource(R.string.home_animation_summary), onClick = { open(Page.Animation) })
+                Text(
+                    text = "主屏幕网格 · Dock ${if (dockEnabled) "ON" else "OFF"} · 玻璃 ${if (glassEnabled) "ON" else "OFF"}",
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
             }
         }
-        item { SmallTitle(stringResource(R.string.category_configuration)) }
-        item { SettingsCard { ArrowPreference(stringResource(R.string.home_data_title), summary = stringResource(R.string.home_data_summary), onClick = { open(Page.Data) }) } }
-        item { SmallTitle(stringResource(R.string.category_about)) }
-        item { SettingsCard { ArrowPreference(stringResource(R.string.home_about_title), summary = stringResource(R.string.home_about_summary), onClick = { open(Page.About) }) } }
     }
 }
 
