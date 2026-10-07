@@ -780,6 +780,55 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
 }
 
 @Composable
+private fun RestartScopesDialog(
+    show: Boolean,
+    selected: Set<RestartScope>,
+    onToggle: (RestartScope) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    WindowDialog(
+        show = show,
+        title = stringResource(R.string.restart_scopes_title),
+        summary = stringResource(R.string.restart_scopes_summary),
+        onDismissRequest = onDismiss,
+    ) {
+        Column {
+            RESTART_SCOPES.forEach { scope ->
+                CheckboxPreference(
+                    title = stringResource(scope.titleRes),
+                    summary = scope.processName,
+                    checked = scope in selected,
+                    onCheckedChange = { onToggle(scope) },
+                    checkboxLocation = CheckboxLocation.End,
+                    insideMargin = LiquidDockPreferenceMargin,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                TextButton(
+                    text = stringResource(R.string.restart_scopes_confirm),
+                    onClick = onConfirm,
+                    enabled = selected.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                )
+                Spacer(Modifier.width(20.dp))
+                TextButton(
+                    text = stringResource(R.string.restart_scopes_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun HomePage(
     padding: PaddingValues,
     prefs: SharedPreferences,
