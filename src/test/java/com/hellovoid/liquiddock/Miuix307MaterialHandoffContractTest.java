@@ -78,7 +78,9 @@ public class Miuix307MaterialHandoffContractTest {
         assertTrue(suppressor.contains("\"setMiViewBlurMode\""));
         assertTrue(suppressor.contains("\"setMiBackgroundBlurMode\""));
         assertTrue(suppressor.contains("\"setMiBackgroundBlurRadius\""));
-        assertTrue("pre-draw may preserve the transparent vendor body",
+        assertTrue("pre-draw may preserve the transparent vendor body from cached geometry",
+                hook.contains("suppressVendorMaterialBody(background, cachedRadiusOrRead(background));"));
+        assertFalse("root pre-draw must not reflect native radius every frame",
                 hook.contains("suppressVendorMaterialBody(background, readRadius(background));"));
         assertFalse("root pre-draw must never fight vendor compositor blur every frame",
                 hook.contains("suppressVendorGpuBlur(background);\n"
