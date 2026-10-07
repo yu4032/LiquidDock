@@ -134,23 +134,26 @@ public class Miuix307EdgeOverscanContractTest {
         try {
             method = Miuix307PassBlurTextureView.class.getDeclaredMethod(
                     "fitInsetPairToTextureLimit",
-                    int.class, int.class, int.class, int.class);
+                    int.class, int.class, int.class, int.class, int[].class);
         } catch (NoSuchMethodException missing) {
             fail("fitInsetPairToTextureLimit must constrain overscan before FBO allocation");
             return;
         }
         method.setAccessible(true);
 
-        int[] symmetric = (int[]) method.invoke(null, 2302, 3500, 3500, 8192);
+        int[] symmetric = new int[2];
+        method.invoke(null, 2302, 3500, 3500, 8192, symmetric);
         assertEquals(5890, symmetric[0] + symmetric[1]);
         assertTrue(Math.abs(symmetric[0] - symmetric[1]) <= 1);
 
-        int[] asymmetric = (int[]) method.invoke(null, 2302, 4000, 2000, 8192);
+        int[] asymmetric = new int[2];
+        method.invoke(null, 2302, 4000, 2000, 8192, asymmetric);
         assertEquals(5890, asymmetric[0] + asymmetric[1]);
         assertTrue("hardware limiting should preserve the requested left/right proportion",
                 Math.abs(asymmetric[0] - asymmetric[1] * 2) <= 2);
 
-        int[] alreadyFits = (int[]) method.invoke(null, 2302, 300, 150, 8192);
+        int[] alreadyFits = new int[2];
+        method.invoke(null, 2302, 300, 150, 8192, alreadyFits);
         assertEquals(300, alreadyFits[0]);
         assertEquals(150, alreadyFits[1]);
     }
@@ -161,8 +164,10 @@ public class Miuix307EdgeOverscanContractTest {
         assertTrue(view.contains("private volatile int maxTextureSize;"));
         assertTrue(view.contains("GLES20.GL_MAX_TEXTURE_SIZE"));
         assertTrue(view.contains("private void queryMaxTextureSize()"));
-        assertTrue(view.contains("fitInsetPairToTextureLimit(width, left, right, maxTextureSize)"));
-        assertTrue(view.contains("fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize)"));
+        assertTrue(view.contains(
+                "fitInsetPairToTextureLimit(width, left, right, maxTextureSize, pairScratch)"));
+        assertTrue(view.contains(
+                "fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize, pairScratch)"));
         assertTrue("first FBO allocation must wait until the queried limit is reflected in mapping",
                 view.contains("queryMaxTextureSize();")
                         && view.contains("updateBackdropMapping();")
