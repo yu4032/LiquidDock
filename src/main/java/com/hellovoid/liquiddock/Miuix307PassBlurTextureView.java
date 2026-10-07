@@ -1523,6 +1523,24 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
+    private Field surfaceSizeField(Object viewRoot) throws Exception {
+        Field field = cachedSurfaceSizeField;
+        if (field != null) return field;
+        field = findField(viewRoot.getClass(), "mSurfaceSize");
+        field.setAccessible(true);
+        cachedSurfaceSizeField = field;
+        return field;
+    }
+
+    private Method surfaceControlMethod(Object viewRoot) throws Exception {
+        Method method = cachedGetSurfaceControlMethod;
+        if (method != null) return method;
+        method = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
+        method.setAccessible(true);
+        cachedGetSurfaceControlMethod = method;
+        return method;
+    }
+
     private ProducerGeometry readSurfaceGeometry(View materialHost) {
         if (materialHost == null) return null;
         try {
@@ -1557,24 +1575,6 @@ final class Miuix307PassBlurTextureView extends TextureView
             MainHook.log(TAG + " producer geometry unavailable: " + error);
             return null;
         }
-    }
-
-    private Field surfaceSizeField(Object viewRoot) throws Exception {
-        Field field = cachedSurfaceSizeField;
-        if (field != null) return field;
-        field = findField(viewRoot.getClass(), "mSurfaceSize");
-        field.setAccessible(true);
-        cachedSurfaceSizeField = field;
-        return field;
-    }
-
-    private Method surfaceControlMethod(Object viewRoot) throws Exception {
-        Method method = cachedGetSurfaceControlMethod;
-        if (method != null) return method;
-        method = viewRoot.getClass().getDeclaredMethod("getSurfaceControl");
-        method.setAccessible(true);
-        cachedGetSurfaceControlMethod = method;
-        return method;
     }
 
     private void logStageBDiagnostics(
