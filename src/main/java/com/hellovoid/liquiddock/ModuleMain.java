@@ -154,6 +154,11 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.dock.shadowEnabled,
                     runtimeConfig.dock.strokeShadow,
                     runtimeConfig.divider.enabled);
+            if (runtimeConfig.enabled && runtimeConfig.glass.enabled
+                    && !DockPassBlurContinuousAuthority.install()) {
+                Api101Bridge.log(
+                        "[DC][DockPassBlurAuthority] continuous PassBlur authority unavailable");
+            }
             DockMirrorShortcutHook.install(classLoader);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
             Launcher450IconSizeHook.install(classLoader,
