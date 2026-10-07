@@ -22,7 +22,6 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 internal fun ThirdPartyAppsPage(
@@ -167,7 +166,7 @@ internal fun SearchboxSettingsPage(
         item { LiquidDockSectionTitle("功能") }
         item {
             GboardSettingsCard {
-                SwitchPreference(
+                LiquidDockGlassToggleRow(
                     checked = searchboxEnabled,
                     onCheckedChange = {
                         searchboxEnabled = it
@@ -360,7 +359,7 @@ internal fun GboardSettingsPage(
         item { LiquidDockSectionTitle("功能") }
         item {
             GboardSettingsCard {
-                SwitchPreference(
+                LiquidDockGlassToggleRow(
                     checked = gboardEnabled,
                     onCheckedChange = {
                         gboardEnabled = it
@@ -370,7 +369,7 @@ internal fun GboardSettingsPage(
                     summary = "关闭后保留 Gboard 原生悬浮键盘材质；已保存的独立外观参数不会丢失",
                     enabled = masterEnabled && liquidEnabled,
                 )
-                SwitchPreference(
+                LiquidDockGlassToggleRow(
                     checked = autoResizeAfterHandleDrag,
                     onCheckedChange = {
                         autoResizeAfterHandleDrag = it
@@ -382,7 +381,7 @@ internal fun GboardSettingsPage(
                     summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
                     enabled = masterEnabled,
                 )
-                SwitchPreference(
+                LiquidDockGlassToggleRow(
                     checked = realtimeBackgroundSampling,
                     onCheckedChange = {
                         realtimeBackgroundSampling = it
