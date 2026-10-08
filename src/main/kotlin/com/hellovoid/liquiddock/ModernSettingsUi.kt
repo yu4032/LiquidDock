@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,6 +49,7 @@ import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
+import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
 import com.styropyr0.prismal.components.PrismalGlassButton
 import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
@@ -98,6 +100,9 @@ internal fun ModernSettingsScaffold(
     val background = MiuixTheme.colorScheme.background
     val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
+    // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
+    // A neutral surface fill avoids recoloring green/other content behind the bar.
+    val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     Box(modifier = Modifier.fillMaxSize()) {
@@ -135,8 +140,8 @@ internal fun ModernSettingsScaffold(
                                 modifier = Modifier.matchParentSize(),
                                 shape = { PrismalRoundedRectangle(0.dp) },
                                 blurRadius = TOP_BAR_GLASS_BLUR,
-                                tint = surface,
-                                tintAlpha = TOP_BAR_GLASS_TINT_ALPHA,
+                                tint = Color.Unspecified,
+                                surfaceColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
                                 saturation = 1.35f,
                                 refractionHeightPx = 0f,
                                 refractionAmountPx = 0f,
@@ -396,19 +401,26 @@ internal fun ModernBottomNavigation(
                     tintDropletContent = false,
                     dropletContentTint = MiuixTheme.colorScheme.primary,
                 ) {
-                    labels.indices.forEach { index ->
+                    // Use Prismal's actual capsule-clipped tab rather than an
+                    // overlapping clickable Row (whose ripple was rectangular).
+                    labels.forEachIndexed { index, label ->
                         PrismalGlassBottomTab(
                             onClick = {
                                 if (index != selected) onSelect(index)
                             },
-                        ) {}
+                        ) {
+                            val highlightedIndex = LocalPrismalBottomTabHighlightedIndex.current
+                            val active = highlightedIndex() == index
+                            ModernTabContents(label, icons[index], active)
+                        }
                     }
                 }
             } else {
                 val fallbackShape = RoundedCornerShape(30.dp)
-                Box(
+                Row(
                     modifier = Modifier
-                        .matchParentSize()
+                        .fillMaxSize()
+                        .clip(fallbackShape)
                         .background(
                             color = MiuixTheme.colorScheme.surface.copy(alpha = 0.96f),
                             shape = fallbackShape,
@@ -417,52 +429,62 @@ internal fun ModernBottomNavigation(
                             width = 1.dp,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.14f),
                             shape = fallbackShape,
-                        ),
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                labels.forEachIndexed { index, label ->
-                    val active = index == selected
-                    val contentColor = if (active) {
-                        MiuixTheme.colorScheme.primary
-                    } else {
-                        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable {
-                                if (index != selected) onSelect(index)
-                            },
-                        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            imageVector = icons[index],
-                            contentDescription = label,
-                            tint = contentColor,
-                            modifier = Modifier.size(21.dp),
                         )
-                        Text(
-                            text = label,
-                            color = contentColor,
-                            fontSize = 11.sp,
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    labels.forEachIndexed { index, label ->
+                        val active = index == selected
+                        val shape = RoundedCornerShape(28.dp)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(shape)
+                                .background(
+                                    if (active) MiuixTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    else Color.Transparent,
+                                    shape = shape,
+                                )
+                                .clickable(
+                                    interactionSource = null,
+                                    indication = null,
+                                ) {
+                                    if (index != selected) onSelect(index)
+                                },
+                            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            ModernTabContents(label, icons[index], active)
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ModernTabContents(label: String, icon: ImageVector, active: Boolean) {
+    val contentColor = if (active) {
+        MiuixTheme.colorScheme.primary
+    } else {
+        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = label,
+        tint = contentColor,
+        modifier = Modifier.size(21.dp),
+    )
+    Text(
+        text = label,
+        color = contentColor,
+        fontSize = 11.sp,
+        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
