@@ -16,30 +16,32 @@ public class AnimationSettingsContractTest {
     private static final Path JAVA = MAIN.resolve("java/com/hellovoid/liquiddock");
 
     @Test
-    public void animationPageOnlyExposesLiquidDockOwnedTimings() throws Exception {
+    public void animationSettingsAreSplitByOwningDomain() throws Exception {
         String ui = Files.readString(UI);
-        int start = ui.indexOf("private fun AnimationPage(");
-        int end = ui.indexOf("private fun GridPage(", start);
-        assertTrue(start >= 0 && end > start);
-        String animationPage = ui.substring(start, end);
 
-        assertTrue(animationPage.contains("ConfigSchema.Animation.WORKSPACE_VISIBILITY"));
-        assertTrue(animationPage.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
-        assertTrue(animationPage.contains("ConfigSchema.Animation.PRESS_IN"));
-        assertTrue(animationPage.contains("ConfigSchema.Animation.PRESS_OUT"));
-        assertTrue(animationPage.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
-        assertTrue(animationPage.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
-        assertTrue(animationPage.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
-        assertTrue("Dock resize timing remains visible on the animation page",
-                animationPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
-        assertTrue(animationPage.contains("系统原生动画继续跟随原实现"));
+        assertTrue(ui.contains("private fun AnimationPage("));
+        assertTrue(ui.contains("private fun AnimationWorkspacePage("));
+        assertTrue(ui.contains("private fun AnimationInteractionPage("));
+        assertTrue(ui.contains("private fun AnimationPopupsPage("));
+        assertTrue(ui.contains("private fun AnimationSystemPage("));
+        assertTrue(ui.contains("private fun AnimationGuiPage("));
+
+        assertTrue(ui.contains("ConfigSchema.Animation.WORKSPACE_VISIBILITY"));
+        assertTrue(ui.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
+        assertTrue(ui.contains("ConfigSchema.Animation.PRESS_IN"));
+        assertTrue(ui.contains("ConfigSchema.Animation.PRESS_OUT"));
+        assertTrue(ui.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
+        assertTrue(ui.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
+        assertTrue(ui.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
+        assertTrue(ui.contains("ConfigSchema.Animation.DOCK_RESIZE"));
+        assertTrue(ui.contains("系统原生弹出动画保持原样"));
     }
 
     @Test
     public void dockResizeTimingStaysOnAnimationPageAndUsesDockFeatureGate() throws Exception {
         String ui = Files.readString(UI);
-        int animationStart = ui.indexOf("private fun AnimationPage(");
-        int animationEnd = ui.indexOf("private fun GridPage(", animationStart);
+        int animationStart = ui.indexOf("private fun AnimationWorkspacePage(");
+        int animationEnd = ui.indexOf("private fun AnimationInteractionPage(", animationStart);
         assertTrue(animationStart >= 0 && animationEnd > animationStart);
         String animationPage = ui.substring(animationStart, animationEnd);
         assertTrue(animationPage.contains(
@@ -47,13 +49,13 @@ public class AnimationSettingsContractTest {
         assertTrue(animationPage.contains(
                 "&& !systemResizeEnabled && smoothResizeEnabled"));
 
-        int dockStart = ui.indexOf("private fun DockPage(");
-        int dockEnd = ui.indexOf("private fun DividerPage(", dockStart);
+        int dockStart = ui.indexOf("private fun DockBehaviorPage(");
+        int dockEnd = ui.indexOf("private fun DockGeometryPage(", dockStart);
         assertTrue(dockStart >= 0 && dockEnd > dockStart);
         String dockPage = ui.substring(dockStart, dockEnd);
         assertTrue(dockPage.contains("ConfigSchema.Dock.RESIZE_ANIMATION"));
         assertTrue(dockPage.contains("ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION"));
-        assertFalse("Dock page keeps switches but must not duplicate the duration slider",
+        assertFalse("Dock behavior page keeps switches but must not duplicate the duration slider",
                 dockPage.contains("ConfigSchema.Animation.DOCK_RESIZE"));
     }
 
