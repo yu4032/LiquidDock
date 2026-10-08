@@ -294,7 +294,7 @@ private val launcher450IconSizeSpec = IntSpec(
     ConfigSchema.Grid.ICON_SIZE_PERCENT,
     "图标大小",
     "%",
-    summary = "Launcher 4.50：工作区、Dock、小文件夹共用；100% 为系统默认",
+    summary = "调整工作区、Dock 和小文件夹中的图标大小；100% 为系统默认",
 )
 
 private val gridDimensionSpecs = listOf(
@@ -407,15 +407,15 @@ private val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_
 private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
 private val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
-    "工作区渲染分辨率",
+    "工作区玻璃清晰度",
     "%",
-    summary = "同时调整背景采样与工作区玻璃绘制分辨率，静止和动画都生效；100% 最清晰，较低比例更省 GPU。Dock 不受影响；重启桌面生效",
+    summary = "100% 最清晰；降低数值可减少工作区玻璃的性能占用。Dock 不受影响；重启桌面后生效",
 )
 private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
-    "玻璃实时渲染上限（0 = Auto）",
+    "玻璃刷新率上限（0 = 自动）",
     "fps",
-    summary = "除 Dock 外的实时玻璃统一使用；最大值自动取当前屏幕支持的最高刷新率。0 = 跟随真实 PassBlur 源帧；限速只跳过昂贵合成并持续释放 OES BufferQueue；重启相关进程生效",
+    summary = "限制工作区等实时玻璃的最高刷新率；0 表示自动跟随屏幕刷新率。较低数值可降低性能占用；重启相关应用后生效",
     dynamicMax = DisplayRefreshRatePolicy::maxSupportedRefreshRateHz,
 )
 private val liquidSpecs = listOf(
@@ -580,7 +580,7 @@ private data class HubEntry(
 
 private val overviewEntries = listOf(
     HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
-    HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与采样"),
+    HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与性能"),
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏与分屏布局"),
     HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock、玻璃交互与系统界面"),
 )
@@ -1748,7 +1748,7 @@ private fun LiquidSamplingPage(
     SettingsList(
         padding,
         stringResource(R.string.page_liquid_sampling),
-        "调整玻璃采样边界、渲染分辨率与实时刷新。",
+        "调整玻璃清晰度、刷新率与边缘显示范围。",
     ) {
         liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
@@ -1876,14 +1876,14 @@ private fun GlassWidgetsPage(
             prefs,
             ConfigSchema.Glass.WIDGET_GLASS,
             "小部件玻璃",
-            "只替换材质背景，保留 RemoteViews / MAML 内容",
+            "只替换小组件背景，保留原有文字、图标与交互内容",
             masterEnabled && liquidEnabled,
         ) { widgetGlass = it }
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.WIDGET_DARK_CONTENT,
             "小组件深色内容适配",
-            "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
+            "在深色背景上提高文字可读性，不修改图片与彩色内容",
             masterEnabled && liquidEnabled && widgetGlass,
         )
         IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
