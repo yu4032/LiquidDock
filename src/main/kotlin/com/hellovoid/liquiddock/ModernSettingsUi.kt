@@ -39,9 +39,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +60,12 @@ import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -75,8 +80,9 @@ internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-// Uniform background blur, with no progressive gradient or refractive edge rim.
-private val TOP_BAR_GLASS_BLUR = 14.dp
+// Uniform header blur using a single capture of the actual scrolled page content.
+// Keep Prismal for its controls and backdrop lenses, not the header's screen sampling.
+private const val TOP_BAR_BLUR_RADIUS = 14f
 private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
@@ -107,6 +113,17 @@ internal fun ModernSettingsScaffold(
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
+    // HyperIsland-style independent content source: one opaque page capture for
+    // the header, including standalone labels and nested Prismal card output.
+    // Do not merge the wallpaper/source layers for this uniform blur.
+    val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
+        rememberLayerBackdrop {
+            drawRect(surface)
+            drawContent()
+        }
+    } else {
+        null
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -133,34 +150,33 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // Miuix Scaffold paints its body first. Keep the title bar above
-                    // the complete screenLayer so scrolled text/cards are sampled
-                    // and blurred under the glass instead of drawn sharply over it.
-                    Box(modifier = Modifier.fillMaxWidth().zIndex(1f)) {
-                        // Blur the real scene behind the header uniformly, not through
-                        // a gradient or a perimeter lens. The bar stays rectangular.
-                        if (glassEnabled) {
-                            PrismalGlassSurface(
-                                backdrop = overlayBackdrop,
-                                modifier = Modifier.matchParentSize(),
-                                shape = { PrismalRoundedRectangle(0.dp) },
-                                blurRadius = TOP_BAR_GLASS_BLUR,
-                                tint = Color.Unspecified,
-                                surfaceColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
-                                saturation = 1.35f,
-                                refractionHeightPx = 0f,
-                                refractionAmountPx = 0f,
-                                chromaticAberration = 0f,
-                                depthEffect = false,
+                    // Miuix Scaffold paints body before topBar. The header samples
+                    // one fully recorded page source, not a merged Prismal lens source.
+                    // Keep this a solid rectangle with uniform blur and neutral tint.
+                    val headerModifier = if (barBackdrop != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .zIndex(1f)
+                            .textureBlur(
+                                backdrop = barBackdrop,
+                                shape = RectangleShape,
+                                blurRadius = TOP_BAR_BLUR_RADIUS,
+                                noiseCoefficient = 0f,
+                                colors = BlurDefaults.blurColors(
+                                    blendColors = listOf(
+                                        BlendColorEntry(
+                                            color = headerNeutralColor.copy(
+                                                alpha = TOP_BAR_GLASS_TINT_ALPHA,
+                                            ),
+                                        ),
+                                    ),
+                                    saturation = 1.35f,
+                                ),
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .background(surface),
-                            )
-                        }
-
+                    } else {
+                        Modifier.fillMaxWidth().zIndex(1f).background(surface)
+                    }
+                    Box(modifier = headerModifier) {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
@@ -238,16 +254,12 @@ internal fun ModernSettingsScaffold(
                         .fillMaxSize()
                         .zIndex(0f)
                         .then(
-                            if (glassEnabled) {
-                                // Nested Prismal cards have their own offscreen render layers.
-                                // Flatten those child layers with the text before recording
-                                // the entire page for the top-bar backdrop.
-                                Modifier
-                                    .prismalGlassLayer(screenLayer)
-                                    .graphicsLayer {
-                                        compositingStrategy = CompositingStrategy.Offscreen
-                                    }
-                            } else Modifier,
+                            if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
+                            else Modifier,
+                        )
+                        .then(
+                            if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
+                            else Modifier,
                         ),
                 ) {
                     content(padding)
