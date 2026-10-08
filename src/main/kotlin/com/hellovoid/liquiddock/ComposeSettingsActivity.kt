@@ -252,10 +252,6 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_backdrop_scale_x" -> "背景取样水平缩放"
     "liquid_prismal_backdrop_scale_y" -> "背景取样垂直缩放"
     "liquid_prismal_parallax_scale" -> "表面视差倍率"
-    "liquid_sampling_extra_top" -> "PassBlur 上采样边界补偿；0 使用自动边界，负数缩小保护区"
-    "liquid_sampling_extra_bottom" -> "PassBlur 下采样边界补偿；0 使用自动边界，负数缩小保护区"
-    "liquid_sampling_extra_left" -> "PassBlur 左采样边界补偿；0 使用自动边界，负数缩小保护区"
-    "liquid_sampling_extra_right" -> "PassBlur 右采样边界补偿；0 使用自动边界，负数缩小保护区"
     "stroke_base_r" -> "描边基础颜色的红色通道"
     "stroke_base_g" -> "描边基础颜色的绿色通道"
     "stroke_base_b" -> "描边基础颜色的蓝色通道"
@@ -411,10 +407,6 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.LENS_REFRACTION, "透镜折射倍率", "×"),
     IntSpec(ConfigSchema.Glass.DEPTH_EFFECT, "透镜中心偏转", "%"),
     IntSpec(ConfigSchema.Glass.CHROMATIC, "色散强度", ""),
-    IntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_TOP, "上安全区额外值", "px"),
-    IntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM, "下安全区额外值", "px"),
-    IntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_LEFT, "左安全区额外值", "px"),
-    IntSpec(ConfigSchema.Glass.SAMPLING_EXTRA_RIGHT, "右安全区额外值", "px"),
     IntSpec(ConfigSchema.Glass.TINT_ALPHA, "玻璃底色透明度", ""),
     IntSpec(ConfigSchema.Glass.TINT_RED, "底色 · 红", ""),
     IntSpec(ConfigSchema.Glass.TINT_GREEN, "底色 · 绿", ""),
@@ -517,10 +509,6 @@ private val liquidShadowSpecs = liquidSpecsFor(
     ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS,
 )
 private val liquidSamplingSpecs = liquidSpecsFor(
-    ConfigSchema.Glass.SAMPLING_EXTRA_TOP,
-    ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM,
-    ConfigSchema.Glass.SAMPLING_EXTRA_LEFT,
-    ConfigSchema.Glass.SAMPLING_EXTRA_RIGHT,
     ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X,
     ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y,
     ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE,
@@ -618,7 +606,7 @@ private val liquidEntries = listOf(
     HubEntry(Page.LiquidColor, R.string.page_liquid_color, "底色、色散与鲜艳度"),
     HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、边缘光、焦散与光源方向"),
     HubEntry(Page.LiquidShadow, R.string.page_liquid_shadow, "玻璃内部阴影颜色与柔和度"),
-    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "采样边界、背景缩放、帧率与帧同步"),
+    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "背景缩放、帧率与帧同步"),
     HubEntry(Page.LiquidOs4, R.string.page_liquid_os4, "OS4 边缘反射与方向光"),
 )
 
@@ -1805,7 +1793,7 @@ private fun LiquidSamplingPage(
     SettingsList(
         padding,
         stringResource(R.string.page_liquid_sampling),
-        "调整 PassBlur 四边采样边界补偿、渲染分辨率与实时刷新上限。四边补偿仅作用于 PassBlur 采样，不是桌面布局边距。",
+        "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
     ) {
         liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
