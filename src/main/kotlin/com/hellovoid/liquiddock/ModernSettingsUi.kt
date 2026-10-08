@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -48,9 +47,6 @@ import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
 import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.components.prismalMenuAnchor
-import com.styropyr0.prismal.drawPlainPrismalGlass
-import com.styropyr0.prismal.effects.colorControls
-import com.styropyr0.prismal.effects.prismalBlur
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -86,7 +82,6 @@ internal fun ModernSettingsScaffold(
     val background = MiuixTheme.colorScheme.background
     val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
-    val density = LocalDensity.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -111,25 +106,22 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .drawPlainPrismalGlass(
-                                    backdrop = overlayBackdrop,
-                                    shape = { PrismalRoundedRectangle(0.dp) },
-                                    effects = {
-                                        prismalBlur(with(density) { 14.dp.toPx() })
-                                        colorControls(saturation = 1.16f)
-                                    },
-                                    onDrawSurface = {
-                                        drawRect(surface.copy(alpha = 0.24f))
-                                    },
-                                ),
-                        )
+                    PrismalGlassSurface(
+                        backdrop = overlayBackdrop,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = { PrismalRoundedRectangle(0.dp) },
+                        blurRadius = 14.dp,
+                        tint = surface,
+                        tintAlpha = 0.34f,
+                        saturation = 1.35f,
+                        refractionHeightPx = 18f,
+                        refractionAmountPx = 24f,
+                        chromaticAberration = 0.45f,
+                        depthEffect = true,
+                    ) {
                         TopAppBar(
-                            title = title,
-                            largeTitle = title,
+                            title = " ",
+                            largeTitle = " ",
                             color = Color.Transparent,
                             navigationIcon = {
                                 if (showBack) {
