@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.net.Uri
+import android.text.InputType
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -34,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -45,8 +48,14 @@ import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.GridView
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -123,6 +132,12 @@ private enum class Page(val titleRes: Int) {
 }
 
 private val ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub)
+private val ROOT_ICONS: List<ImageVector> = listOf(
+    MiuixIcons.Home,
+    MiuixIcons.GridView,
+    MiuixIcons.Image,
+    MiuixIcons.Settings,
+)
 
 private fun isRootPage(page: Page): Boolean = page in ROOT_PAGES
 
@@ -793,6 +808,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                         stringResource(R.string.tab_glass),
                         stringResource(R.string.tab_more),
                     ),
+                    icons = ROOT_ICONS,
                     selectedIndex = selectedRootIndex,
                     onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
                 )
@@ -2237,43 +2253,89 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         editor.apply()
     }
 
-    val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
-    val scaledMin = if (decimalDp) spec.min * 10 else spec.min
-    val scaledMax = if (decimalDp) maxValue * 10 else maxValue
+    val displayValue = if (decimalDp) {
+        String.format(java.util.Locale.ROOT, "%.1f", value)
+    } else {
+        value.roundToInt().toString()
+    }
 
-    SliderPreference(
-        value = value,
-        onValueChange = ::save,
-        title = spec.title,
-        summary = spec.summary,
-        enabled = enabled,
-        valueRange = spec.min.toFloat()..maxValue.toFloat(),
-        steps = if (decimalDp) ((maxValue - spec.min) * 10 - 1).coerceAtLeast(0)
-        else (maxValue - spec.min - 1).coerceAtLeast(0),
-        endActions = {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BasicComponent(
+            title = spec.title,
+            summary = spec.summary,
+            enabled = enabled,
+            insideMargin = ModernPreferenceMargin,
+            endActions = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            val input = EditText(context).apply {
+                                setText(displayValue)
+                                selectAll()
+                                inputType = InputType.TYPE_CLASS_NUMBER or
+                                        InputType.TYPE_NUMBER_FLAG_SIGNED or
+                                        if (decimalDp) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0
+                            }
+                            android.app.AlertDialog.Builder(context)
+                                .setTitle(spec.title)
+                                .setView(input)
+                                .setNegativeButton("取消", null)
+                                .setPositiveButton("确定") { _, _ ->
+                                    input.text.toString().toFloatOrNull()?.let(::save)
+                                }
+                                .show()
+                        },
+                        enabled = enabled,
+                        minWidth = 72.dp,
+                        minHeight = 32.dp,
+                        insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}")
+                    }
+                    Button(
+                        onClick = { save(resetValue) },
+                        enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
+                        minWidth = 56.dp,
+                        minHeight = 32.dp,
+                        insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text("重置")
+                    }
+                }
+            },
+        )
+
+        val discreteSpan = maxValue - spec.min
+        if (!decimalDp && discreteSpan in 1..16) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+                horizontalArrangement = Arrangement.End,
             ) {
                 ModernGlassStepper(
-                    value = scaledValue,
-                    valueRange = scaledMin..scaledMax,
+                    value = value.roundToInt(),
+                    valueRange = spec.min..maxValue,
                     enabled = enabled,
-                    onValueChange = { next ->
-                        save(if (decimalDp) next / 10f else next.toFloat())
-                    },
+                    onValueChange = { save(it.toFloat()) },
                 )
-                Button(
-                    onClick = { save(resetValue) },
-                    enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
-                    minWidth = 52.dp,
-                    minHeight = 32.dp,
-                    insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                ) { Text("重置") }
             }
-        },
-        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
-    )
+        } else {
+            ModernGlassSlider(
+                value = value,
+                onValueChange = ::save,
+                valueRange = spec.min.toFloat()..maxValue.toFloat(),
+                visibilityThreshold = if (decimalDp) 0.1f else 1f,
+                enabled = enabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+            )
+        }
+    }
 }
 
 @Composable
