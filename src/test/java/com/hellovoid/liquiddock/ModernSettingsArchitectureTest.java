@@ -63,7 +63,8 @@ public class ModernSettingsArchitectureTest {
                 "LiquidShadow", "LiquidSampling", "LiquidOs4",
                 "GlassIcons", "GlassWidgets", "GlassFolders", "GlassMenus",
                 "WorkstationDock", "WorkstationDesktop",
-                "WorkstationAppsLandscape", "WorkstationAppsPortrait"
+                "WorkstationAppsLandscape", "WorkstationAppsPortrait",
+                "LauncherHighlightsCompact", "LauncherHighlightsLarge"
         };
         for (String page : pages) {
             assertTrue(page + " must remain a dedicated page",
