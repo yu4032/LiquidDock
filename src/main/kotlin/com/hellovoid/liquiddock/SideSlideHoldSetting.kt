@@ -8,8 +8,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.preference.SliderPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 internal fun SideSlideHoldSetting(
