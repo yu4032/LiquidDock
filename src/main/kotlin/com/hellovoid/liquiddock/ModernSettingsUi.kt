@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -413,7 +412,7 @@ internal fun Button(
     minWidth: Dp = 0.dp,
     minHeight: Dp = 36.dp,
     insideMargin: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-    content: @Composable () -> Unit,
+    content: @Composable RowScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current ?: LocalPrismalOverlayBackdrop.current
     val resolved = modifier
@@ -421,12 +420,13 @@ internal fun Button(
         .alpha(if (enabled) 1f else 0.42f)
 
     if (backdrop == null) {
-        Box(
+        Row(
             modifier = resolved
                 .height(minHeight)
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(insideMargin),
-            contentAlignment = Alignment.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
             content()
         }
@@ -447,8 +447,9 @@ internal fun Button(
         tint = MiuixTheme.colorScheme.surface,
         tintAlpha = 0.20f,
         depthEffect = false,
-        content = content,
-    )
+    ) {
+        content()
+    }
 }
 
 @Composable
