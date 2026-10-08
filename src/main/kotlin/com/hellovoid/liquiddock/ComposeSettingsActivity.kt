@@ -5,8 +5,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.net.Uri
-import android.text.InputType
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -2258,6 +2256,10 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     } else {
         value.roundToInt().toString()
     }
+    val displayText = "$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}"
+    val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
+    val scaledMin = if (decimalDp) spec.min * 10 else spec.min
+    val scaledMax = if (decimalDp) maxValue * 10 else maxValue
 
     Column(modifier = Modifier.fillMaxWidth()) {
         BasicComponent(
@@ -2266,73 +2268,49 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
             enabled = enabled,
             insideMargin = ModernPreferenceMargin,
             endActions = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = {
-                            val input = EditText(context).apply {
-                                setText(displayValue)
-                                selectAll()
-                                inputType = InputType.TYPE_CLASS_NUMBER or
-                                        InputType.TYPE_NUMBER_FLAG_SIGNED or
-                                        if (decimalDp) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0
-                            }
-                            android.app.AlertDialog.Builder(context)
-                                .setTitle(spec.title)
-                                .setView(input)
-                                .setNegativeButton("取消", null)
-                                .setPositiveButton("确定") { _, _ ->
-                                    input.text.toString().toFloatOrNull()?.let(::save)
-                                }
-                                .show()
-                        },
-                        enabled = enabled,
-                        minWidth = 72.dp,
-                        minHeight = 32.dp,
-                        insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}")
-                    }
-                    Button(
-                        onClick = { save(resetValue) },
-                        enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
-                        minWidth = 56.dp,
-                        minHeight = 32.dp,
-                        insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    ) {
-                        Text("重置")
-                    }
-                }
+                Text(
+                    text = displayText,
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                )
             },
         )
 
-        val discreteSpan = maxValue - spec.min
-        if (!decimalDp && discreteSpan in 1..16) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
-                horizontalArrangement = Arrangement.End,
+        ModernGlassSlider(
+            value = value,
+            onValueChange = ::save,
+            valueRange = spec.min.toFloat()..maxValue.toFloat(),
+            visibilityThreshold = if (decimalDp) 0.1f else 1f,
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, bottom = 8.dp),
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = { save(resetValue) },
+                enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
+                minWidth = 56.dp,
+                minHeight = 36.dp,
+                insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             ) {
-                ModernGlassStepper(
-                    value = value.roundToInt(),
-                    valueRange = spec.min..maxValue,
-                    enabled = enabled,
-                    onValueChange = { save(it.toFloat()) },
-                )
+                Text("重置")
             }
-        } else {
-            ModernGlassSlider(
-                value = value,
-                onValueChange = ::save,
-                valueRange = spec.min.toFloat()..maxValue.toFloat(),
-                visibilityThreshold = if (decimalDp) 0.1f else 1f,
+            androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 4.dp))
+            ModernGlassStepper(
+                value = scaledValue,
+                valueRange = scaledMin..scaledMax,
                 enabled = enabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+                onValueChange = { next ->
+                    save(if (decimalDp) next / 10f else next.toFloat())
+                },
             )
         }
     }
