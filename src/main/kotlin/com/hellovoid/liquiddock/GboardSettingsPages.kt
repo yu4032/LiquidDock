@@ -495,3 +495,8 @@ private fun GboardPageHeader(title: String, summary: String) {
     PageHeader(title, summary)
 }
 
+
+@Composable
+private fun GboardSettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    SettingsCard(content)
+}
