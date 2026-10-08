@@ -218,14 +218,12 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_tint_g" -> "玻璃颜色 · 绿"
     "liquid_tint_b" -> "玻璃颜色 · 蓝"
     "liquid_highlight_width" -> "控制边缘反射与高光带宽度"
-    "liquid_highlight_alpha" -> "控制整体高光强度"
     "liquid_depth_effect" -> "控制折射方向向玻璃中心偏转的程度"
     "liquid_brightness" -> "整体输出亮度"
     "liquid_specular_sharp" -> "镜面高光锐度"
     "liquid_specular_strength" -> "双镜面高光强度"
     "liquid_rim_light" -> "边缘光强度"
     "liquid_caustics" -> "焦散强度"
-    "liquid_edge_band" -> "控制边缘高光带宽度"
     "liquid_prismal_refraction_inset" -> "控制玻璃可见遮罩的内缩尺度；不直接增加折射位移"
     "liquid_prismal_displacement_scale" -> "折射与视差位移总倍率"
     "liquid_prismal_height_transition_width" -> "控制玻璃表面从边缘到中心的高度过渡范围"
@@ -254,11 +252,10 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_backdrop_scale_x" -> "背景取样水平缩放"
     "liquid_prismal_backdrop_scale_y" -> "背景取样垂直缩放"
     "liquid_prismal_parallax_scale" -> "表面视差倍率"
-    "liquid_recents_prearm_distance" -> "从底部上滑达到此距离时，提前启动多任务实时捕获"
-    "liquid_sampling_extra_top" -> "最终上安全区 = 自动安全区 + 此值；可正可负，0 表示纯自动"
-    "liquid_sampling_extra_bottom" -> "最终下安全区 = 自动安全区 + 此值；可正可负，0 表示纯自动"
-    "liquid_sampling_extra_left" -> "最终左安全区 = 自动安全区 + 此值；可正可负，0 表示纯自动"
-    "liquid_sampling_extra_right" -> "最终右安全区 = 自动安全区 + 此值；可正可负，0 表示纯自动"
+    "liquid_sampling_extra_top" -> "PassBlur 上采样边界补偿；0 使用自动边界，负数缩小保护区"
+    "liquid_sampling_extra_bottom" -> "PassBlur 下采样边界补偿；0 使用自动边界，负数缩小保护区"
+    "liquid_sampling_extra_left" -> "PassBlur 左采样边界补偿；0 使用自动边界，负数缩小保护区"
+    "liquid_sampling_extra_right" -> "PassBlur 右采样边界补偿；0 使用自动边界，负数缩小保护区"
     "stroke_base_r" -> "描边基础颜色的红色通道"
     "stroke_base_g" -> "描边基础颜色的绿色通道"
     "stroke_base_b" -> "描边基础颜色的蓝色通道"
@@ -621,7 +618,7 @@ private val liquidEntries = listOf(
     HubEntry(Page.LiquidColor, R.string.page_liquid_color, "底色、色散与鲜艳度"),
     HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、边缘光、焦散与光源方向"),
     HubEntry(Page.LiquidShadow, R.string.page_liquid_shadow, "玻璃内部阴影颜色与柔和度"),
-    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "安全区、背景缩放、帧率与帧同步"),
+    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "采样边界、背景缩放、帧率与帧同步"),
     HubEntry(Page.LiquidOs4, R.string.page_liquid_os4, "OS4 边缘反射与方向光"),
 )
 
@@ -1808,7 +1805,7 @@ private fun LiquidSamplingPage(
     SettingsList(
         padding,
         stringResource(R.string.page_liquid_sampling),
-        "调整背景采样安全区、渲染分辨率与实时刷新上限。",
+        "调整 PassBlur 四边采样边界补偿、渲染分辨率与实时刷新上限。四边补偿仅作用于 PassBlur 采样，不是桌面布局边距。",
     ) {
         liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
