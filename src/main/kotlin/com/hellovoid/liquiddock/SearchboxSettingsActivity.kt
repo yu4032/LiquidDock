@@ -18,6 +18,10 @@ class SearchboxSettingsActivity : SettingsActivity() {
         setContent {
             val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
+            val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, MODE_PRIVATE) }
+            val glassEnabled by remember {
+                mutableStateOf(uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true))
+            }
             val masterEnabled by remember {
                 mutableStateOf(
                     prefs.getBoolean(
@@ -29,6 +33,7 @@ class SearchboxSettingsActivity : SettingsActivity() {
             MiuixTheme(controller = controller) {
                 ModernSettingsScaffold(
                     title = getString(R.string.page_searchbox),
+                    glassEnabled = glassEnabled,
                     showBack = true,
                     backLabel = getString(R.string.action_back),
                     onBack = { finish() },
