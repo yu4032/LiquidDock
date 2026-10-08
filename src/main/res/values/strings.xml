@@ -28,7 +28,7 @@
     <string name="page_liquid">Liquid glass</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
     <string name="home_security_center_sidebar_summary">Side-slide launch, second-stage trigger distance, and sidebar liquid glass</string>
-    <string name="security_center_sidebar_header_summary">Manage Launcher side-slide launch and Security Center sidebar material in one place; restart Launcher and Security Center after related changes.</string>
+    <string name="security_center_sidebar_header_summary">Manage Launcher side-slide behavior and Security Center sidebar material; when a reload is required, use Restart scopes and select Desktop and Security Center.</string>
     <string name="security_center_sidebar_category_gesture">Side-slide launch</string>
     <string name="security_center_sidebar_category_appearance">Appearance</string>
     <string name="page_dialog_customization">Dialog popup customization</string>
@@ -50,14 +50,14 @@
     <string name="home_grid_summary">Custom HOME grid, landscape/portrait spacing, split-screen alignment, and page indicator</string>
     <string name="home_dock_summary">Size, corners, icon spacing, position, and blur</string>
     <string name="home_divider_summary">Independent divider width, height, position, color, and opacity</string>
-    <string name="home_workstation_summary">Independent length and spacing; does not inherit normal Dock parameters</string>
+    <string name="home_workstation_summary">Independent Dock geometry, desktop horizontal offset, and All Apps spacing in both orientations</string>
     <string name="home_recents_summary">Customize the full-screen wallpaper background blur</string>
     <string name="home_liquid_summary">Blur, refraction, dispersion, color, lighting, and highlights</string>
     <string name="home_stroke_summary">Base color, squircle shape, and stroke width</string>
     <string name="home_shadow_summary">Whole-Dock and stroke shadows</string>
-    <string name="home_animation_summary">LiquidDock-owned visibility, press, Dock and exit fades; native system timing stays unchanged</string>
+    <string name="home_animation_summary">Workspace, Dock, glass interaction, popup, system-integration, and settings-page animations</string>
     <string name="home_data_title">Presets, import, and export</string>
-    <string name="home_data_summary">Default preset, JSON backup, and launcher restart</string>
+    <string name="home_data_summary">Default preset, JSON backup, and parameter restore</string>
     <string name="home_about_title">Credits, references, and open-source licenses</string>
     <string name="home_about_summary">Project acknowledgements, dependencies, and licenses</string>
     <string name="grid_header_summary">The layout avoids the system Dock before applying distance offsets</string>
@@ -77,7 +77,7 @@
     <string name="dock_frame_sync_summary">Keep the Dock glass background synchronized with the display refresh rate for smoother high-refresh-rate background updates; changes apply immediately</string>
     <string name="option_off">Off</string>
     <string name="workstation_customization">Custom workstation</string>
-    <string name="workstation_customization_summary">Uses independent Dock length and 8-column horizontal spacing; requires a launcher restart</string>
+    <string name="workstation_customization_summary">Uses independent Dock geometry, desktop horizontal offset, and All Apps spacing in both orientations; adapts to the current grid column count and requires a launcher restart</string>
     <string name="recents_header_summary">Adjust the system wallpaper blur shown behind task cards; restart the launcher to apply.</string>
     <string name="liquid_enable">Enable liquid glass</string>
     <string name="liquid_enable_summary">Turning off removes the current glass effect immediately; after enabling, some scenes require a launcher restart to take effect</string>
@@ -91,8 +91,6 @@
     <string name="liquid_material_blur">HyperOS advanced material</string>
     <string name="liquid_dynamic_capture">Continuous capture for dynamic apps</string>
     <string name="liquid_dynamic_capture_summary">Refreshes while the Dock is open over games or video, and stops immediately after it closes</string>
-    <string name="pref_debug_log">Debug Logging</string>
-    <string name="pref_debug_log_summary">Write [DC] diagnostics to logcat (about page), restart desktop to apply</string>
     <string name="liquid_header_summary">Component switches can be adjusted immediately; some optical and performance settings require a launcher restart as noted.</string>
     <string name="page_launcher_highlights">Icon, folder &amp; widget highlights</string>
     <string name="launcher_highlights_entry">Icon, folder &amp; widget highlight layers</string>
