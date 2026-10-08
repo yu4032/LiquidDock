@@ -73,8 +73,8 @@ public class UserFacingPreferenceSchemaTest {
                 source.contains("val config: ConfigKey<Int>"));
         assertTrue("boolean settings must accept ConfigKey<Boolean>",
                 source.contains("prefs: SharedPreferences, config: ConfigKey<Boolean>"));
-        assertTrue("string settings must accept ConfigKey<String>",
-                source.contains("config: ConfigKey<String>"));
+        assertFalse("no unused generic string-setting helper should remain",
+                source.contains("private fun StringDropdown("));
         assertFalse("raw boolean setting APIs are forbidden",
                 source.contains("RawBooleanSetting("));
         assertFalse("string settings must not accept an untyped persisted key",
