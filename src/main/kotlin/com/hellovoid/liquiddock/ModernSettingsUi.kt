@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -78,6 +79,11 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+
+// Ordinary translucent fill: unlike Prismal tint, it never applies BlendMode.Hue.
+@Composable
+private fun neutralGlassOverlay(alpha: Float): Color =
+    (if (isSystemInDarkTheme()) Color.Black else Color.White).copy(alpha = alpha)
 
 @Composable
 internal fun ModernSettingsScaffold(
@@ -172,8 +178,8 @@ internal fun ModernSettingsScaffold(
                                                 refractionAmount = 12.dp,
                                                 pressLift = 2.dp,
                                                 contentPadding = PaddingValues(9.dp),
-                                                tint = surface,
-                                                tintAlpha = 0.20f,
+                                                tint = Color.Unspecified,
+                                                surfaceColor = neutralGlassOverlay(0.16f),
                                                 depthEffect = false,
                                             ) {
                                                 Icon(
@@ -328,8 +334,8 @@ internal fun RestartScopesDialog(
                         refractionAmount = 12.dp,
                         pressLift = 0.dp,
                         contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                        tint = Color(0xFFD73333),
-                        tintAlpha = 0.92f,
+                        tint = Color.Unspecified,
+                        surfaceColor = Color(0xFFD73333).copy(alpha = 0.92f),
                         depthEffect = false,
                         depthShadow = null,
                     ) {
@@ -497,8 +503,8 @@ internal fun ModernTopActionButton(
         refractionAmount = 12.dp,
         pressLift = 2.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.20f,
+        tint = Color.Unspecified,
+        surfaceColor = neutralGlassOverlay(0.16f),
         depthEffect = false,
     ) {
         Text(
@@ -537,8 +543,8 @@ internal fun ModernSurface(
         shape = { PrismalRoundedRectangle(24.dp) },
         onClick = onClick,
         blurRadius = 12.dp,
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.24f,
+        tint = Color.Unspecified,
+        surfaceColor = neutralGlassOverlay(0.18f),
         saturation = 1.32f,
         refractionHeightPx = 16f,
         refractionAmountPx = 21f,
@@ -677,8 +683,8 @@ internal fun Button(
         refractionAmount = 12.dp,
         pressLift = 0.dp,
         contentPadding = insideMargin,
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.20f,
+        tint = Color.Unspecified,
+        surfaceColor = neutralGlassOverlay(0.16f),
         depthEffect = false,
         depthShadow = null,
     ) {
