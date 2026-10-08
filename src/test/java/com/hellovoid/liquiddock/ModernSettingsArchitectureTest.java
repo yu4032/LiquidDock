@@ -327,21 +327,21 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void disabledGlassCardsHaveOpaqueThemeAwareSeparation() throws Exception {
+    public void disabledGlassCellsKeepOriginalStylingWithSmallColorAdjustment() throws Exception {
         String surfaces = Files.readString(SURFACES);
-
         assertTrue(surfaces.contains("if (backdrop == null)"));
-        assertTrue(surfaces.contains("val darkTheme = palette.background.luminance() < 0.5f"));
-        assertTrue(surfaces.contains("lerp(palette.surface, palette.onSurface, 0.09f)"));
-        assertTrue(surfaces.contains("val cardStroke = palette.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.12f)"));
-        assertTrue(surfaces.contains("elevation = if (darkTheme) 0.dp else 3.dp"));
-        assertTrue(surfaces.contains(".background(cardFill)"));
-        assertTrue(surfaces.contains(".border(width = 1.dp, color = cardStroke, shape = cardShape)"));
-        assertFalse(surfaces.contains(".background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))"));
+        assertTrue(surfaces.contains("lerp("));
+        assertTrue(surfaces.contains("MiuixTheme.colorScheme.surface,"));
+        assertTrue(surfaces.contains("MiuixTheme.colorScheme.onSurface,"));
+        assertTrue(surfaces.contains("0.04f,"));
+        assertTrue(surfaces.contains(").copy(alpha = 0.94f)"));
+        assertTrue(surfaces.contains(".clip(RoundedCornerShape(24.dp))"));
+        assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
+        assertFalse(surfaces.contains("val cardStroke ="));
+        assertFalse(surfaces.contains("val cardShape ="));
 
-        // The glass-enabled branch must continue to use native Prismal surfaces.
+        // The active glass pipeline and bottom tab interactions stay untouched.
         assertTrue(surfaces.contains("PrismalGlassSurface("));
-        assertTrue(surfaces.contains("refractionAmountPx = 21f"));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
     }
 
