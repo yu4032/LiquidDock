@@ -5,11 +5,10 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.net.Uri
-import android.text.InputType
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,7 +20,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
@@ -43,16 +45,8 @@ import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -61,6 +55,7 @@ class ComposeSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
             MiuixTheme(controller = controller) { LiquidDockSettings(this) }
@@ -591,25 +586,25 @@ private val overviewEntries = listOf(
 )
 
 private val layoutEntries = listOf(
-    HubEntry(Page.Grid, R.string.page_grid, "网格基础、横屏、竖屏与分屏分别设置"),
-    HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、几何与最近程序"),
-    HubEntry(Page.Workstation, R.string.page_workstation, "工作台独立布局与 Dock 参数"),
+    HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏间距与分屏布局"),
+    HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
+    HubEntry(Page.Workstation, R.string.page_workstation, "工作台桌面、Dock 与所有应用布局"),
     HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
+    HubEntry(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, "侧滑呼出、工具箱与侧边栏设置"),
 )
 
 private val glassEntries = listOf(
-    HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质按光学主题拆分设置"),
-    HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹、菜单分别管理"),
+    HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质与光学参数"),
+    HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹与菜单外观"),
     HubEntry(Page.Stroke, R.string.page_stroke, "Dock 描边、方圆曲线与颜色"),
     HubEntry(Page.Shadow, R.string.page_shadow, "Dock 与描边阴影"),
-    HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用独立适配"),
+    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
+    HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )
 
 private val moreEntries = listOf(
-    HubEntry(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, "侧滑呼出与安全中心侧边栏"),
-    HubEntry(Page.Animation, R.string.page_animation, "LiquidDock 自有动画与过渡"),
-    HubEntry(Page.Data, R.string.page_data, "预设、导入与导出"),
-    HubEntry(Page.About, R.string.page_about, "项目、日志、引用与许可证"),
+    HubEntry(Page.Data, R.string.page_data, "默认配置、导入与导出"),
+    HubEntry(Page.About, R.string.page_about, "第三方开源项目与许可"),
 )
 
 private val gridEntries = listOf(
@@ -831,19 +826,19 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 )
                 Page.LayoutHub -> HubPage(
                     padding,
-                    "把大功能拆成独立子页，减少单页控件与重组压力",
+                    "主屏幕、Dock、工作台与多任务布局",
                     layoutEntries,
                     ::navigateTo,
                 )
                 Page.GlassHub -> HubPage(
                     padding,
-                    "材质参数与组件适配分离，按主题进入需要的页面",
+                    "玻璃材质、组件样式、动画与第三方应用外观",
                     glassEntries,
                     ::navigateTo,
                 )
                 Page.MoreHub -> HubPage(
                     padding,
-                    "系统联动、动画、数据与项目信息",
+                    "预设与开源许可",
                     moreEntries,
                     ::navigateTo,
                 )
@@ -959,7 +954,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
                 Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
                 Page.Data -> DataPage(padding, activity)
-                Page.About -> AboutPage(padding, activity, prefs)
+                Page.About -> AboutPage(padding, activity)
             }
         }
     }
@@ -984,7 +979,7 @@ private fun HomePage(
         item {
             PageHeader(
                 stringResource(R.string.app_name),
-                "现代化设置界面 · 功能按领域分层，重页面拆成独立子页",
+                "桌面布局与液态玻璃个性化设置",
             )
         }
         item {
@@ -1068,7 +1063,7 @@ private fun AnimationPage(
 ) {
     HubPage(
         padding = padding,
-        summary = "动画按运行域拆分，进入子页时才组合对应控件",
+        summary = "调整工作区、Dock、弹出界面与系统界面动画",
         entries = animationEntries,
         open = open,
     )
@@ -1201,7 +1196,7 @@ private fun GridPage(
         item {
             PageHeader(
                 stringResource(R.string.page_grid),
-                "总开关留在入口页，具体方向布局进入独立子页。",
+                "设置桌面网格与不同屏幕方向下的布局。",
             )
         }
         item {
@@ -1229,7 +1224,7 @@ private fun GridPage(
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
                     Text(
-                        "自定义网格关闭时，各方向参数会保留但不参与运行时布局。",
+                        "开启自由主界面网格后应用下方布局参数。",
                         fontSize = 12.sp,
                     )
                 }
@@ -1263,7 +1258,7 @@ private fun GridBasicsPage(
     SettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
-        "这里只放网格尺寸和图标尺寸，方向位置参数不在此页组合。",
+        "调整网格行列数、图标大小与小组件宽度。",
     ) {
         BooleanSetting(
             prefs,
@@ -1308,7 +1303,7 @@ private fun GridLandscapePage(
     SettingsList(
         padding,
         stringResource(R.string.page_grid_landscape),
-        "仅组合横屏布局参数。",
+        "调整横屏桌面的间距与页面指示器位置。",
     ) {
         gridSpecs
             .filter { it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y" }
@@ -1329,7 +1324,7 @@ private fun GridPortraitPage(
     SettingsList(
         padding,
         stringResource(R.string.page_grid_portrait),
-        "仅组合竖屏布局参数。",
+        "调整竖屏桌面的间距与页面指示器位置。",
     ) {
         gridSpecs
             .filter { it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y" }
@@ -1382,7 +1377,7 @@ private fun DockPage(
         item {
             PageHeader(
                 stringResource(R.string.page_dock),
-                "Dock 入口页只保留总开关，其余功能进入独立子页。",
+                "调整 Dock 行为、尺寸、位置与外观。",
             )
         }
         item {
@@ -1425,7 +1420,7 @@ private fun DockPage(
         if (!dockEnabled) {
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
-                    Text("Dock 自定义关闭时，子页参数会保留但不会参与运行时绘制。", fontSize = 12.sp)
+                    Text("开启 Dock 自定义后应用下方设置。", fontSize = 12.sp)
                 }
             }
         }
@@ -1453,7 +1448,7 @@ private fun DockBehaviorPage(
     SettingsList(
         padding,
         stringResource(R.string.page_dock_behavior),
-        "功能入口与尺寸动画单独管理，不与几何滑条同时组合。",
+        "管理 Dock 功能入口与尺寸变化动画。",
     ) {
         BooleanSetting(
             prefs,
@@ -1492,7 +1487,7 @@ private fun DockGeometryPage(
     SettingsList(
         padding,
         stringResource(R.string.page_dock_geometry),
-        "只组合 Dock 的尺寸、位置和模糊几何参数。",
+        "调整 Dock 的尺寸、位置、圆角与图标间距。",
     ) {
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
@@ -1537,7 +1532,7 @@ private fun WorkstationPage(
         item {
             PageHeader(
                 stringResource(R.string.page_workstation),
-                "工作台总开关留在入口页，Dock、桌面与所有应用分开设置。",
+                "调整工作台桌面、Dock 与所有应用布局。",
             )
         }
         item {
@@ -1564,7 +1559,7 @@ private fun WorkstationPage(
         if (!enabled) {
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
-                    Text("工作台自定义关闭时，子页参数保持保存但不参与运行时布局。", fontSize = 12.sp)
+                    Text("开启工作台自定义后应用下方设置。", fontSize = 12.sp)
                 }
             }
         }
@@ -1701,7 +1696,7 @@ private fun LiquidPage(
         item {
             ModernFeatureCard(
                 title = stringResource(R.string.page_glass_components),
-                summary = "组件开关与材质光学分离，避免同页组合全部控件",
+                summary = "管理图标、小组件、文件夹与菜单玻璃",
                 onClick = { open(Page.GlassComponents) },
                 modifier = Modifier.padding(horizontal = 14.dp),
             )
@@ -1753,7 +1748,7 @@ private fun LiquidSamplingPage(
     SettingsList(
         padding,
         stringResource(R.string.page_liquid_sampling),
-        "采样边界与实时更新性能集中在此页，避免与光学参数同时重组。",
+        "调整玻璃采样边界、渲染分辨率与实时刷新。",
     ) {
         liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
@@ -1782,7 +1777,7 @@ private fun GlassComponentsPage(
 ) {
     HubPage(
         padding = padding,
-        summary = "不同类型的玻璃目标独立进入子页，只组合当前需要的控件。",
+        summary = "选择需要调整的玻璃组件。",
         entries = componentEntries,
         open = open,
     )
@@ -1818,7 +1813,7 @@ private fun GlassIconsPage(
     SettingsList(
         padding,
         stringResource(R.string.page_glass_icons),
-        "桌面图标与 Dock 功能图标放在同一轻量页。",
+        "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
     ) {
         BooleanSetting(
             prefs,
@@ -2122,34 +2117,29 @@ private fun openUrl(context: Context, url: String) {
 }
 
 @Composable
-private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity, prefs: SharedPreferences) {
+private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("引用与许可", "LiquidDock 使用的框架与实现参考") }
-        item {
-            SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Debug.LOGGING, "调试日志", "输出诊断日志到 Download/liquiddock.log，重启桌面生效")
-            }
-        }
+        item { PageHeader("引用与许可", "LiquidDock 使用的第三方开源项目与许可证") }
         item { SmallTitle("界面与运行框架") }
         item {
             SettingsCard {
                 ArrowPreference("Compose Miuix", summary = "MIUIX Compose 界面框架 · Apache-2.0", onClick = { openUrl(activity, "https://github.com/compose-miuix-ui/miuix") })
+                ArrowPreference("PrismalAGSL", summary = "设置界面液态玻璃组件 · MIT", onClick = { openUrl(activity, "https://github.com/styropyr0/PrismalAGSL") })
                 ArrowPreference("AndroidX / Jetpack", summary = "Activity、Preference、AppCompat · Apache-2.0", onClick = { openUrl(activity, "https://source.android.com/docs/setup/about/licenses") })
                 ArrowPreference("LSPosed API", summary = "模块 Hook API · GPL-3.0", onClick = { openUrl(activity, "https://github.com/LSPosed/LSPosed") })
             }
         }
-        item { SmallTitle("实现参考") }
+        item { SmallTitle("开源项目") }
         item {
             SettingsCard {
-                ArrowPreference("HyperCeiler", summary = "设置分层、交互方式与模块工程实践参考 · GPL-3.0", onClick = { openUrl(activity, "https://github.com/ReChronoRain/HyperCeiler") })
-                ArrowPreference("Prismal", summary = "液态玻璃光学模型与 Shader 参数设计参考 · MIT", onClick = { openUrl(activity, "https://github.com/styropyr0/Prismal") })
-                ArrowPreference("HyperLight", summary = "降采样与屏幕捕获思路启发", onClick = {})
+                ArrowPreference("HyperCeiler", summary = "开源模块项目 · GPL-3.0", onClick = { openUrl(activity, "https://github.com/ReChronoRain/HyperCeiler") })
+                ArrowPreference("Prismal", summary = "液态玻璃光学模型 · MIT", onClick = { openUrl(activity, "https://github.com/styropyr0/Prismal") })
             }
         }
         item { SmallTitle("许可说明") }
         item {
             SettingsCard {
-                ArrowPreference("第三方开源声明", summary = "完整依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
+                ArrowPreference("第三方开源声明", summary = "依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
             }
         }
     }
@@ -2241,51 +2231,53 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         .coerceIn(spec.min.toFloat(), maxValue.toFloat())
     var value by remember(spec.key, maxValue) { mutableStateOf(initial) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
+
     fun save(nextValue: Float) {
-        val next = if (decimalDp) (nextValue * 10f).roundToInt() / 10f else nextValue.roundToInt().toFloat()
+        val next = if (decimalDp) {
+            (nextValue * 10f).roundToInt() / 10f
+        } else {
+            nextValue.roundToInt().toFloat()
+        }
         value = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
         val editor = prefs.edit().putInt(spec.key, value.roundToInt())
         if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
         editor.apply()
     }
-    val displayValue = if (decimalDp) String.format(java.util.Locale.ROOT, "%.1f", value) else value.roundToInt().toString()
+
+    val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
+    val scaledMin = if (decimalDp) spec.min * 10 else spec.min
+    val scaledMax = if (decimalDp) maxValue * 10 else maxValue
+
     SliderPreference(
         value = value,
-        onValueChange = { save(it) },
+        onValueChange = ::save,
         title = spec.title,
         summary = spec.summary,
-        valueText = "",
         enabled = enabled,
         valueRange = spec.min.toFloat()..maxValue.toFloat(),
-        steps = if (decimalDp) ((maxValue - spec.min) * 10 - 1).coerceAtLeast(0) else (maxValue - spec.min - 1).coerceAtLeast(0),
+        steps = if (decimalDp) ((maxValue - spec.min) * 10 - 1).coerceAtLeast(0)
+        else (maxValue - spec.min - 1).coerceAtLeast(0),
         endActions = {
-            Button(
-                onClick = {
-                    val input = EditText(context).apply {
-                        setText(displayValue)
-                        selectAll()
-                        inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED or
-                                if (decimalDp) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0
-                    }
-                    android.app.AlertDialog.Builder(context)
-                        .setTitle(spec.title)
-                        .setView(input)
-                        .setNegativeButton("取消", null)
-                        .setPositiveButton("确定") { _, _ -> input.text.toString().toFloatOrNull()?.let(::save) }
-                        .show()
-                },
-                enabled = enabled,
-                minWidth = 72.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            ) { Text("$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}") }
-            Button(
-                onClick = { save(resetValue) },
-                enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
-                minWidth = 56.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            ) { Text("重置") }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ModernGlassStepper(
+                    value = scaledValue,
+                    valueRange = scaledMin..scaledMax,
+                    enabled = enabled,
+                    onValueChange = { next ->
+                        save(if (decimalDp) next / 10f else next.toFloat())
+                    },
+                )
+                Button(
+                    onClick = { save(resetValue) },
+                    enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f,
+                    minWidth = 52.dp,
+                    minHeight = 32.dp,
+                    insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                ) { Text("重置") }
+            }
         },
         insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
     )
@@ -2293,20 +2285,24 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
 
 @Composable
 private fun StringDropdown(
-    prefs: SharedPreferences, config: ConfigKey<String>, title: String,
-    options: List<Pair<String, String>>, enabled: Boolean = true,
+    prefs: SharedPreferences,
+    config: ConfigKey<String>,
+    title: String,
+    options: List<Pair<String, String>>,
+    enabled: Boolean = true,
 ) {
     val key = config.name()
     val default = config.uiDefault()
     var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
     val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
-    ArrowPreference(
+    ModernChoicePreference(
         title = title,
         summary = options[index].first,
+        items = options.map { it.first },
+        selectedIndex = index,
         enabled = enabled,
-        onClick = {
-            if (!enabled) return@ArrowPreference
-            val next = options[(index + 1) % options.size].second
+        onSelectedIndexChange = { nextIndex ->
+            val next = options[nextIndex].second
             value = next
             prefs.edit().putString(key, next).apply()
         },
