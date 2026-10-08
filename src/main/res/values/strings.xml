@@ -39,8 +39,8 @@
     <string name="page_stroke">Stroke</string>
     <string name="page_shadow">Shadow</string>
     <string name="page_animation">Animations &amp; transitions</string>
-    <string name="page_data">Presets and data</string>
-    <string name="page_about">Credits and licenses</string>
+    <string name="page_data">Presets</string>
+    <string name="page_about">Licenses</string>
     <string name="category_master">Master switch</string>
     <string name="category_customization">Customization</string>
     <string name="category_configuration">Configuration</string>
@@ -109,10 +109,10 @@
     <string name="highlight_press_glow">Press glow</string><string name="highlight_press_glow_summary">Localized glow used by interactive press effects</string>
     <string name="tab_overview">Overview</string>
     <string name="tab_layout">Layout</string>
-    <string name="tab_glass">Glass</string>
+    <string name="tab_glass">Appearance</string>
     <string name="tab_more">More</string>
     <string name="page_layout_hub">Layout</string>
-    <string name="page_glass_hub">Glass</string>
+    <string name="page_glass_hub">Appearance</string>
     <string name="page_more_hub">More</string>
     <string name="page_grid_basics">Grid basics</string>
     <string name="page_grid_landscape">Landscape layout</string>
