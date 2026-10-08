@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -56,9 +57,10 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
@@ -119,32 +121,36 @@ internal fun ModernSettingsScaffold(
                         chromaticAberration = 0.45f,
                         depthEffect = true,
                     ) {
-                        TopAppBar(
+                        SmallTopAppBar(
                             title = " ",
-                            largeTitle = " ",
                             color = Color.Transparent,
                             navigationIcon = {
                                 if (showBack) {
-                                    PrismalGlassButton(
-                                        onClick = onBack,
-                                        backdrop = overlayBackdrop,
-                                        modifier = Modifier.size(40.dp),
-                                        height = 40.dp,
-                                        blurRadius = 7.dp,
-                                        refractionHeight = 9.dp,
-                                        refractionAmount = 12.dp,
-                                        pressLift = 2.dp,
-                                        contentPadding = PaddingValues(8.dp),
-                                        tint = surface,
-                                        tintAlpha = 0.20f,
-                                        depthEffect = false,
+                                    Box(
+                                        modifier = Modifier.size(52.dp),
+                                        contentAlignment = Alignment.Center,
                                     ) {
-                                        Text(
-                                            text = "‹",
-                                            fontSize = 28.sp,
-                                            color = MiuixTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                        )
+                                        PrismalGlassButton(
+                                            onClick = onBack,
+                                            backdrop = overlayBackdrop,
+                                            modifier = Modifier.size(40.dp),
+                                            height = 40.dp,
+                                            blurRadius = 7.dp,
+                                            refractionHeight = 9.dp,
+                                            refractionAmount = 12.dp,
+                                            pressLift = 2.dp,
+                                            contentPadding = PaddingValues(9.dp),
+                                            tint = surface,
+                                            tintAlpha = 0.20f,
+                                            depthEffect = false,
+                                        ) {
+                                            Icon(
+                                                imageVector = MiuixIcons.Back,
+                                                contentDescription = backLabel,
+                                                tint = MiuixTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
                                     }
                                 }
                             },
@@ -169,6 +175,7 @@ internal fun ModernSettingsScaffold(
 @Composable
 internal fun ModernBottomNavigation(
     labels: List<String>,
+    icons: List<ImageVector>,
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
 ) {
@@ -218,20 +225,28 @@ internal fun ModernBottomNavigation(
             ) {
                 labels.forEachIndexed { index, label ->
                     val active = index == selected
-                    Box(
+                    val contentColor = if (active) {
+                        MiuixTheme.colorScheme.primary
+                    } else {
+                        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
+                    }
+                    Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentAlignment = Alignment.Center,
+                        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        Icon(
+                            imageVector = icons[index],
+                            contentDescription = label,
+                            tint = contentColor,
+                            modifier = Modifier.size(21.dp),
+                        )
                         Text(
                             text = label,
-                            color = if (active) {
-                                MiuixTheme.colorScheme.primary
-                            } else {
-                                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
-                            },
-                            fontSize = 12.sp,
+                            color = contentColor,
+                            fontSize = 11.sp,
                             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -528,13 +543,18 @@ internal fun SliderPreference(
             enabled = enabled,
             insideMargin = insideMargin,
             endActions = {
-                when {
-                    endActions != null -> endActions()
-                    valueText.isNotBlank() -> Text(
-                        text = valueText,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.66f),
-                        fontSize = 13.sp,
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (valueText.isNotBlank()) {
+                        Text(
+                            text = valueText,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                            fontSize = 13.sp,
+                        )
+                    }
+                    endActions?.invoke()
                 }
             },
         )
