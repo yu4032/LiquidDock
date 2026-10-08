@@ -93,20 +93,15 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
-    public void systemUiRestartIsOnlyRenderedOnHomePage() throws Exception {
+    public void topBarUsesOneGlobalRestartScopeAction() throws Exception {
         String source = Files.readString(UI);
-        int actionsAt = source.indexOf("actions = {");
-        int launcherRestartAt = source.indexOf("action_restart_launcher", actionsAt);
-        int systemUiRestartAt = source.indexOf("action_restart_system_ui", actionsAt);
-        int homeGuardAt = source.lastIndexOf("if (page == Page.Home)", systemUiRestartAt);
 
-        assertTrue("top app bar actions must exist", actionsAt >= 0);
-        assertTrue("launcher restart must remain visible on every page", launcherRestartAt > actionsAt);
-        assertTrue("SystemUI restart must still exist", systemUiRestartAt > launcherRestartAt);
-        assertTrue("SystemUI restart must be guarded by the Home page",
-                homeGuardAt > launcherRestartAt && homeGuardAt < systemUiRestartAt);
-        assertTrue("Home-page guard must directly wrap the SystemUI action",
-                systemUiRestartAt - homeGuardAt < 300);
+        assertTrue(source.contains("R.string.action_restart_scopes"));
+        assertTrue(source.contains("showRestartScopes = true"));
+        assertTrue(source.contains("RestartScopesDialog("));
+        assertFalse(source.contains("R.string.action_restart_launcher"));
+        assertFalse(source.contains("R.string.action_restart_system_ui"));
+        assertFalse(source.contains("R.string.action_restart_security_center_and_launcher"));
     }
 
     private static String stringValue(String xml, String name) {
