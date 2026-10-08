@@ -84,7 +84,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void modernShellUsesPrismalComponentsAndHyperIslandStyleProgressiveTopBarBlur() throws Exception {
+    public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
 
@@ -98,31 +98,107 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
 
-        assertTrue(source.contains("ProgressiveBlur.Top.copy("));
-        assertTrue(source.contains("startFraction = 0.68f"));
-        assertTrue(source.contains("endFraction = 1f"));
-        assertTrue(source.contains("curve = 1f"));
-        assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 16f"));
-        assertTrue(source.contains(".progressiveTextureBlur("));
+        assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
+        assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
+        assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
+        assertTrue(source.contains("rememberLayerBackdrop {"));
+        assertTrue(source.contains(".textureBlur("));
         assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
-        assertFalse(source.contains("drawLine("));
+        assertFalse(source.contains(".progressiveTextureBlur("));
+        assertFalse(source.contains("ProgressiveBlur.Top.copy("));
         assertFalse(source.contains("drawPlainPrismalGlass("));
 
         assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
-        assertTrue(source.contains("rememberPrismalMergedSource"));
+        assertTrue(source.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
+    }
+    @Test
+    public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("val headerModifier = if (barBackdrop != null)"));
+        assertTrue(surfaces.contains(".textureBlur("));
+        assertTrue(surfaces.contains("shape = RectangleShape"));
+        assertTrue(surfaces.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
+        assertTrue(surfaces.contains("noiseCoefficient = 0f"));
+        assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
+        assertFalse(surfaces.contains(".progressiveTextureBlur("));
+        assertFalse(surfaces.contains("TOP_BAR_PROGRESSIVE_BLUR"));
     }
 
     @Test
-    public void topBarBlurIsLinearFromClearBottomToStrongTitleRegion() throws Exception {
+    public void headerGlassPreservesBackdropHueWithoutPrismalHueTint() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        assertTrue(surfaces.contains("ProgressiveBlur.Top.copy("));
-        assertTrue(surfaces.contains("startFraction = 0.68f"));
-        assertTrue(surfaces.contains("endFraction = 1f"));
-        assertTrue(surfaces.contains("curve = 1f"));
-        assertTrue(surfaces.contains("TOP_BAR_BLUR_RADIUS = 16f"));
+        assertTrue(surfaces.contains("val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White"));
+        assertTrue(surfaces.contains("BlendColorEntry("));
+        assertTrue(surfaces.contains("color = headerNeutralColor.copy("));
+        assertTrue(surfaces.contains("alpha = TOP_BAR_GLASS_TINT_ALPHA"));
+        assertTrue(surfaces.contains("saturation = 1.35f"));
+        assertTrue(surfaces.contains("tint = Color.Unspecified"));
+        assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = 0.20f)"));
+    }
+
+    @Test
+    public void bottomTabSelectionUsesNativeCapsuleClippedHitTargets() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
+        assertTrue(surfaces.contains("labels.indices.forEach { index ->"));
+        assertTrue(surfaces.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
+        assertFalse(surfaces.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(surfaces.contains("indication = null"));
+        assertFalse(surfaces.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
+    }
+
+    @Test
+    public void appBarActionsDoNotApplyHueTintToBackdrop() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = 0.20f)"));
+        assertTrue(surfaces.contains("surfaceColor = neutralActionTint.copy(alpha = 0.20f)"));
+        assertTrue(surfaces.contains("tint = Color.Unspecified"));
+        assertTrue(surfaces.contains("useVibrancy = false"));
+        assertTrue(surfaces.contains("saturation = 1f"));
+        // Other Prismal settings widgets may still use their own material tint.
+        // Only the app-bar buttons are required to be hue-neutral.
+    }
+
+    @Test
+    public void headerSamplesEntireScrolledContentLayerBehindGlass() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String pages = Files.readString(UI);
+
+        // API-level architecture guard only: actual render completeness is a
+        // device-level visual contract, not something source inspection proves.
+        assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
+        assertTrue(surfaces.contains("val barBackdrop = if (glassEnabled && isRuntimeShaderSupported())"));
+        assertTrue(surfaces.contains("rememberLayerBackdrop {\n            drawRect(surface)\n            drawContent()"));
+        assertTrue(surfaces.contains("backdrop = barBackdrop"));
+        assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("Box(modifier = headerModifier)"));
+        assertTrue(surfaces.contains(".zIndex(0f)"));
+        assertFalse(surfaces.contains("CompositingStrategy.Offscreen"));
+        assertFalse(surfaces.contains(".graphicsLayer {"));
+
+        assertTrue(pages.contains("LazyColumn("));
+        assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
+        assertTrue(pages.contains("桌面布局与液态玻璃个性化设置"));
+    }
+
+    @Test
+    public void bottomLabelsAreSinglePassAbovePrismalDragDroplet() throws Exception {
+        String source = Files.readString(SURFACES);
+        assertTrue(source.contains("labels.indices.forEach { index ->"));
+        assertTrue(source.contains("PrismalGlassBottomTab("));
+        assertTrue(source.contains(") {}"));
+        assertTrue(source.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertFalse(source.contains("LocalPrismalBottomTabHighlightedIndex"));
+        assertTrue(source.contains("tintDropletContent = false"));
     }
 
     @Test
@@ -248,6 +324,52 @@ public class ModernSettingsArchitectureTest {
         assertTrue(widget.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(widget.contains("glassEnabled = glassEnabled"));
         assertTrue(zh.contains("<string name=\"settings_glass_effect\">设置界面玻璃效果</string>"));
+    }
+
+    @Test
+    public void disabledGlassUsesSolidDarkerCanvasWithoutRecoloringCells() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        // Glass-on keeps its Prismal wallpaper gradient. Glass-off instead paints
+        // a uniform opaque canvas, slightly darker than the Miuix background.
+        assertTrue(surfaces.contains("if (glassEnabled) {"));
+        assertTrue(surfaces.contains("Brush.verticalGradient("));
+        assertTrue(surfaces.contains("Modifier.background(lerp(background, Color.Black, 0.06f))"));
+        assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)"));
+        assertTrue(surfaces.contains("if (backdrop == null)"));
+
+        // The non-glass Cell stays exactly the pre-adjustment surface, not an
+        // outlined, shadowed, or tinted substitute.
+        assertTrue(surfaces.contains(".background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))"));
+        assertTrue(surfaces.contains(".clip(RoundedCornerShape(24.dp))"));
+        assertFalse(surfaces.contains("val cardStroke ="));
+        assertFalse(surfaces.contains("val cardFill ="));
+        assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
+        assertTrue(surfaces.contains("PrismalGlassSurface("));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+    }
+
+    @Test
+    public void numericLabelsUseMiuixInputDialogWithoutChangingSliders() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String settings = Files.readString(UI);
+        String gboard = Files.readString(GBOARD);
+        String dialog = Files.readString(DIALOG_GLASS);
+        String sideSlide = Files.readString(SIDE_SLIDE);
+
+        assertTrue(surfaces.contains("internal fun NumericSettingInputDialog("));
+        assertTrue(surfaces.contains("WindowDialog("));
+        assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.TextField("));
+        assertTrue(surfaces.contains("keyboardActions = KeyboardActions("));
+        assertTrue(surfaces.contains(".clickable(enabled = enabled) { editingValue = true }"));
+        assertTrue(surfaces.contains("onConfirm = { next ->"));
+        assertTrue(settings.contains("NumericSettingInputDialog("));
+        assertTrue(settings.contains("save(next)"));
+        assertTrue(settings.contains("ModernGlassSlider("));
+        assertTrue(settings.contains("ModernGlassStepper("));
+        assertTrue(gboard.contains("valueText = \"$rounded"));
+        assertTrue(dialog.contains("valueText = \"$rounded"));
+        assertTrue(sideSlide.contains("valueText = \"$secondStageDistancePx px\""));
     }
 
     @Test
