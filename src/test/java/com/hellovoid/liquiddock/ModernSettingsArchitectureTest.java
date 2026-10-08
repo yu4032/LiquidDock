@@ -128,6 +128,30 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void headerGlassPreservesBackdropHueWithoutPrismalHueTint() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White"));
+        assertTrue(surfaces.contains("tint = Color.Unspecified"));
+        assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA)"));
+        assertTrue(surfaces.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
+        assertTrue(surfaces.contains("refractionHeightPx = 0f"));
+        assertTrue(surfaces.contains("refractionAmountPx = 0f"));
+    }
+
+    @Test
+    public void bottomTabSelectionUsesNativeCapsuleClippedHitTargets() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
+        assertTrue(surfaces.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(surfaces.contains("ModernTabContents(label, icons[index], active)"));
+        assertTrue(surfaces.contains("indication = null"));
+        assertFalse(surfaces.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
+    }
+
+    @Test
     public void pageNameLivesInTopBarInsteadOfContentHeader() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
