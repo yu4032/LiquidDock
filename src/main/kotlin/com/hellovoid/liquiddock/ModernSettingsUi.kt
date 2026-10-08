@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -131,7 +132,10 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                    // Miuix Scaffold paints its body first. Keep the title bar above
+                    // the complete screenLayer so scrolled text/cards are sampled
+                    // and blurred under the glass instead of drawn sharply over it.
+                    Box(modifier = Modifier.fillMaxWidth().zIndex(1f)) {
                         // Blur the real scene behind the header uniformly, not through
                         // a gradient or a perimeter lens. The bar stays rectangular.
                         if (glassEnabled) {
@@ -176,8 +180,10 @@ internal fun ModernSettingsScaffold(
                                                 refractionAmount = 12.dp,
                                                 pressLift = 2.dp,
                                                 contentPadding = PaddingValues(9.dp),
-                                                tint = surface,
-                                                tintAlpha = 0.20f,
+                                                tint = Color.Unspecified,
+                                                surfaceColor = headerNeutralColor.copy(alpha = 0.20f),
+                                                useVibrancy = false,
+                                                saturation = 1f,
                                                 depthEffect = false,
                                             ) {
                                                 Icon(
@@ -229,7 +235,10 @@ internal fun ModernSettingsScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .zIndex(0f)
                         .then(
+                            // Capture the entire scrollable page, not only its background,
+                            // so the top bar also blurs headers and list item text.
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
                             else Modifier,
                         ),
@@ -495,6 +504,8 @@ internal fun ModernTopActionButton(
     modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
+    val actionSurface = MiuixTheme.colorScheme.surface
+    val neutralActionTint = if (actionSurface.luminance() < 0.5f) Color.Black else Color.White
     if (backdrop == null) {
         top.yukonga.miuix.kmp.basic.Button(
             onClick = onClick,
@@ -518,8 +529,12 @@ internal fun ModernTopActionButton(
         refractionAmount = 12.dp,
         pressLift = 2.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.20f,
+        // Prismal tint uses BlendMode.Hue; never let app-bar actions recolor
+        // underlying green content into the theme's purple.
+        tint = Color.Unspecified,
+        surfaceColor = neutralActionTint.copy(alpha = 0.20f),
+        useVibrancy = false,
+        saturation = 1f,
         depthEffect = false,
     ) {
         Text(
