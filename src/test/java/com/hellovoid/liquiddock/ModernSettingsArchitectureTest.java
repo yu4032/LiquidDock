@@ -99,9 +99,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassStepper"));
 
         assertTrue(source.contains("ProgressiveBlur.Top.copy("));
-        assertTrue(source.contains("startFraction = 0.12f"));
+        assertTrue(source.contains("startFraction = 0.68f"));
         assertTrue(source.contains("endFraction = 1f"));
-        assertTrue(source.contains("curve = 1.25f"));
+        assertTrue(source.contains("curve = 1f"));
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 16f"));
         assertTrue(source.contains(".progressiveTextureBlur("));
         assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
@@ -112,6 +112,17 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
         assertTrue(source.contains("rememberPrismalMergedSource"));
+    }
+
+    @Test
+    public void topBarBlurIsLinearFromClearBottomToStrongTitleRegion() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("ProgressiveBlur.Top.copy("));
+        assertTrue(surfaces.contains("startFraction = 0.68f"));
+        assertTrue(surfaces.contains("endFraction = 1f"));
+        assertTrue(surfaces.contains("curve = 1f"));
+        assertTrue(surfaces.contains("TOP_BAR_BLUR_RADIUS = 16f"));
     }
 
     @Test
@@ -240,14 +251,19 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void nonGlassBottomBarUsesOutlineWhileProgressiveTopBarHasNoOutline() throws Exception {
+    public void topBarUsesOnlyBottomStrokeAndKeepsActionShadowRoom() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
         assertTrue(surfaces.contains("val fallbackShape = RoundedCornerShape(30.dp)"));
         assertTrue(surfaces.contains(".border("));
         assertTrue(surfaces.contains("width = 1.dp"));
         assertTrue(surfaces.contains("alpha = 0.14f"));
-        assertFalse(surfaces.contains("headerDividerColor"));
+
+        assertTrue(surfaces.contains("TOP_BAR_ACTION_SHADOW_ROOM = 10.dp"));
+        assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
+        assertTrue(surfaces.contains("bottomContent = {"));
+        assertTrue(surfaces.contains("Spacer(Modifier.height(TOP_BAR_ACTION_SHADOW_ROOM))"));
+        assertTrue(surfaces.contains(".align(Alignment.BottomCenter)"));
         assertFalse(surfaces.contains("drawLine("));
     }
 
