@@ -141,4 +141,6 @@
     <string name="page_workstation_desktop">Workstation desktop</string>
     <string name="page_workstation_apps_landscape">All apps · landscape</string>
     <string name="page_workstation_apps_portrait">All apps · portrait</string>
+    <string name="page_launcher_highlights_compact">Icon &amp; small-folder highlights</string>
+    <string name="page_launcher_highlights_large">Widget &amp; large-folder highlights</string>
 </resources>
