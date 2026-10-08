@@ -891,6 +891,7 @@ internal fun NumericSettingInputDialog(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
             val minText = if (integerOnly) valueRange.start.roundToInt().toString() else valueRange.start.toString()
             val maxText = if (integerOnly) valueRange.endInclusive.roundToInt().toString() else valueRange.endInclusive.toString()
             Text(
@@ -906,7 +907,11 @@ internal fun NumericSettingInputDialog(
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
                 keyboardOptions = KeyboardOptions(
-                    keyboardType = if (integerOnly) KeyboardType.Number else KeyboardType.Decimal,
+                    keyboardType = when {
+                        valueRange.start < 0f -> KeyboardType.Text
+                        integerOnly -> KeyboardType.Number
+                        else -> KeyboardType.Decimal
+                    },
                     imeAction = ImeAction.Done,
                 ),
                 keyboardActions = KeyboardActions(
@@ -918,11 +923,15 @@ internal fun NumericSettingInputDialog(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = onDismiss, minWidth = 72.dp, minHeight = 40.dp) {
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onDismiss,
+                    minWidth = 72.dp,
+                    minHeight = 40.dp,
+                ) {
                     Text("取消")
                 }
                 Spacer(Modifier.padding(horizontal = 5.dp))
-                Button(
+                top.yukonga.miuix.kmp.basic.Button(
                     onClick = { parsed?.let(onConfirm) },
                     enabled = parsed != null,
                     minWidth = 72.dp,
@@ -1026,7 +1035,7 @@ internal fun SliderPreference(
         integerOnly = integerOnly,
         onDismiss = { editingValue = false },
         onConfirm = { next ->
-            onValueChange(quantize(next))
+            onValueChange(next)
             editingValue = false
         },
     )
