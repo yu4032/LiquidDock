@@ -1015,7 +1015,7 @@ private fun HomePage(
                 )
                 Text(
                     text = if (masterEnabled) {
-                        "可热切换的视觉功能立即响应；结构性 Hook 修改仍按各项说明重启对应作用域。"
+                        "可即时生效的外观设置会立即更新；需要重启的项目会在说明中明确标注。"
                     } else {
                         "LiquidDock 已暂停，已保存的设置不会丢失。"
                     },
@@ -1758,13 +1758,6 @@ private fun LiquidSamplingPage(
             ConfigSchema.Dock.FRAME_SYNC,
             stringResource(R.string.dock_frame_sync),
             stringResource(R.string.dock_frame_sync_summary),
-            masterEnabled && liquidEnabled,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-            "显示表面法线（调试）",
-            "用颜色显示表面法线方向，便于调试折射与光照",
             masterEnabled && liquidEnabled,
         )
     }
