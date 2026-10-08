@@ -84,12 +84,11 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void modernShellUsesPrismalComponentsAndHyperIslandStyleProgressiveTopBarBlur() throws Exception {
+    public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
 
         assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
-        assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"));
         assertTrue(source.contains("PrismalGlassSurface"));
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
@@ -98,14 +97,14 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
 
-        assertTrue(source.contains("ProgressiveBlur.Top.copy("));
-        assertTrue(source.contains("startFraction = 0.68f"));
-        assertTrue(source.contains("endFraction = 1f"));
-        assertTrue(source.contains("curve = 1f"));
-        assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 16f"));
-        assertTrue(source.contains(".progressiveTextureBlur("));
-        assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
-        assertFalse(source.contains("drawLine("));
+        assertTrue(source.contains("TOP_BAR_GLASS_BLUR = 14.dp"));
+        assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
+        assertTrue(source.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
+        assertTrue(source.contains("backdrop = overlayBackdrop"));
+        assertFalse(source.contains(".progressiveTextureBlur("));
+        assertFalse(source.contains("ProgressiveBlur.Top.copy("));
+        assertFalse(source.contains("rememberLayerBackdrop("));
+        assertFalse(source.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertFalse(source.contains("drawPlainPrismalGlass("));
 
         assertTrue(source.contains("SmallTopAppBar("));
@@ -115,14 +114,17 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void topBarBlurIsLinearFromClearBottomToStrongTitleRegion() throws Exception {
+    public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        assertTrue(surfaces.contains("ProgressiveBlur.Top.copy("));
-        assertTrue(surfaces.contains("startFraction = 0.68f"));
-        assertTrue(surfaces.contains("endFraction = 1f"));
-        assertTrue(surfaces.contains("curve = 1f"));
-        assertTrue(surfaces.contains("TOP_BAR_BLUR_RADIUS = 16f"));
+        assertTrue(surfaces.contains("modifier = Modifier.matchParentSize()"));
+        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
+        assertTrue(surfaces.contains("refractionHeightPx = 0f"));
+        assertTrue(surfaces.contains("refractionAmountPx = 0f"));
+        assertTrue(surfaces.contains("chromaticAberration = 0f"));
+        assertTrue(surfaces.contains("depthEffect = false"));
+        assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
+        assertFalse(surfaces.contains("TOP_BAR_PROGRESSIVE_BLUR"));
     }
 
     @Test
