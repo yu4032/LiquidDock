@@ -1,3 +1,5 @@
-minApiVersion=101
-targetApiVersion=101
+minApiVersion=102
+targetApiVersion=102
 staticScope=true
+# Full hot reload is not enabled until all process-owned hooks and GL resources have a teardown contract.
+autoHotReload=false
