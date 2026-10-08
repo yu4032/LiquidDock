@@ -84,11 +84,12 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void modernShellUsesPrismalComponentsNeededBySettingsUi() throws Exception {
+    public void modernShellUsesPrismalComponentsAndHyperIslandStyleProgressiveTopBarBlur() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
 
         assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
+        assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"));
         assertTrue(source.contains("PrismalGlassSurface"));
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
@@ -96,13 +97,17 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassToggle"));
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
-        assertTrue(source.contains("drawPlainPrismalGlass("));
-        assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
-        assertTrue(source.contains("drawRect(surface.copy(alpha = 0.34f))"));
-        assertTrue(source.contains("drawLine("));
-        assertTrue(source.contains("start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f)"));
-        assertTrue(source.contains("end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f)"));
-        assertTrue(source.contains("baseHeaderModifier.drawPlainPrismalGlass"));
+
+        assertTrue(source.contains("ProgressiveBlur.Top.copy("));
+        assertTrue(source.contains("startFraction = 0.12f"));
+        assertTrue(source.contains("endFraction = 1f"));
+        assertTrue(source.contains("curve = 1.25f"));
+        assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 16f"));
+        assertTrue(source.contains(".progressiveTextureBlur("));
+        assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertFalse(source.contains("drawLine("));
+        assertFalse(source.contains("drawPlainPrismalGlass("));
+
         assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
@@ -232,6 +237,18 @@ public class ModernSettingsArchitectureTest {
         assertTrue(widget.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(widget.contains("glassEnabled = glassEnabled"));
         assertTrue(zh.contains("<string name=\"settings_glass_effect\">设置界面玻璃效果</string>"));
+    }
+
+    @Test
+    public void nonGlassBottomBarUsesOutlineWhileProgressiveTopBarHasNoOutline() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("val fallbackShape = RoundedCornerShape(30.dp)"));
+        assertTrue(surfaces.contains(".border("));
+        assertTrue(surfaces.contains("width = 1.dp"));
+        assertTrue(surfaces.contains("alpha = 0.14f"));
+        assertFalse(surfaces.contains("headerDividerColor"));
+        assertFalse(surfaces.contains("drawLine("));
     }
 
     @Test
