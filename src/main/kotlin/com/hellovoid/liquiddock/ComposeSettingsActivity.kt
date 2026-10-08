@@ -339,25 +339,33 @@ private fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> {
     return workstationSpecs.filter { it.key in keys }
 }
 
-private val workstationDockSpecs = workstationSpecsFor(
-    ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,
-    ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
-    ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
-    ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,
-)
-private val workstationDesktopSpecs = workstationSpecsFor(
-    ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET,
-)
-private val workstationAppsLandscapeSpecs = workstationSpecsFor(
-    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
-    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
-    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
-)
-private val workstationAppsPortraitSpecs = workstationSpecsFor(
-    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
-    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
-    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
-)
+private val workstationDockSpecs by lazy {
+    workstationSpecsFor(
+        ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,
+        ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
+        ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
+        ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,
+    )
+}
+private val workstationDesktopSpecs by lazy {
+    workstationSpecsFor(
+        ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET,
+    )
+}
+private val workstationAppsLandscapeSpecs by lazy {
+    workstationSpecsFor(
+        ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
+        ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
+        ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
+    )
+}
+private val workstationAppsPortraitSpecs by lazy {
+    workstationSpecsFor(
+        ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
+        ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
+        ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+    )
+}
 
 private val dividerSpecs = listOf(
     IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp×10"),
