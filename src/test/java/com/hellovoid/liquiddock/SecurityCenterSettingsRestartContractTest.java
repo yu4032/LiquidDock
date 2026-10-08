@@ -8,86 +8,61 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Regression contract for the serialized Security Center + Launcher restart action. */
+/** Regression contract for the global multi-scope restart action. */
 public class SecurityCenterSettingsRestartContractTest {
     private static final Path MAIN = Path.of("src/main");
 
     @Test
-    public void sidebarPageUsesOneCombinedRestartAction() throws Exception {
+    public void settingsUseOneGlobalRestartScopeAction() throws Exception {
         String compose = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
-        String marker = "page == Page.SecurityCenterSidebar ||";
-        int sidebarGuard = compose.indexOf(marker);
-        assertTrue("Security Center sidebar page must own the combined restart action",
-                sidebarGuard >= 0);
 
-        int combined = compose.indexOf(
-                "R.string.action_restart_security_center_and_launcher", sidebarGuard);
-        assertTrue("combined restart button must be rendered on the Security Center page",
-                combined > sidebarGuard);
-        assertTrue("combined button must call the serialized activity action",
-                compose.indexOf("activity.restartSecurityCenterAndLauncher()", combined) > combined);
-
-        int descriptorBranch = compose.indexOf("descriptor != null ->", combined);
-        String sidebarBranch = compose.substring(sidebarGuard, descriptorBranch);
-        assertFalse("Security Center page must not expose a second standalone Launcher restart",
-                sidebarBranch.contains("activity.restartLauncher()"));
-        assertFalse("old standalone Security Center action must be removed",
-                compose.contains("activity.restartSecurityCenter()"));
+        assertTrue(compose.contains("R.string.action_restart_scopes"));
+        assertTrue(compose.contains("RestartScopesDialog("));
+        assertTrue(compose.contains("activity.restartHookScopes(selected)"));
+        assertFalse(compose.contains("activity.restartSecurityCenterAndLauncher()"));
+        assertFalse(compose.contains("activity.restartSystemUi()"));
+        assertFalse(compose.contains("activity.restartPackageProcess("));
     }
 
     @Test
-    public void animationHubAndPopupPageUseCombinedRestartAction() throws Exception {
+    public void restartDialogIncludesEveryRestartableXposedScopeExceptSystem() throws Exception {
         String compose = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
-        int animationGuard = compose.indexOf("page == Page.Animation ||");
-        assertTrue("Animation hub must expose the combined restart for Security Center-owned fades",
-                animationGuard >= 0);
-        assertTrue("popup animation page must share the combined restart",
-                compose.indexOf("page == Page.AnimationPopups ->", animationGuard) > animationGuard);
-        int combined = compose.indexOf(
-                "R.string.action_restart_security_center_and_launcher", animationGuard);
-        assertTrue("Animation pages must render the combined restart action",
-                combined > animationGuard);
-        assertTrue("Animation combined button must call the serialized action",
-                compose.indexOf("activity.restartSecurityCenterAndLauncher()", combined) > combined);
+        String scope = Files.readString(
+                MAIN.resolve("resources/META-INF/xposed/scope.list"));
+
+        assertTrue(scope.contains("system"));
+        assertTrue(compose.contains("RestartScopeItem(\"com.miui.home\""));
+        assertTrue(compose.contains("RestartScopeItem(\"com.android.systemui\""));
+        assertTrue(compose.contains("RestartScopeItem(\"com.miui.securitycenter\""));
+        assertTrue(compose.contains("RestartScopeItem(\"com.google.android.inputmethod.latin\""));
+        assertTrue(compose.contains("RestartScopeItem(\"com.android.quicksearchbox\""));
+        assertFalse(compose.contains("RestartScopeItem(\"system\""));
     }
 
     @Test
-    public void combinedRestartSerializesLauncherBeforeSecurityCenter() throws Exception {
+    public void batchRestartKeepsLauncherBeforeSecurityCenterAndNeverForceStopsSecurityCenter() throws Exception {
         String activity = Files.readString(
                 MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
 
-        int method = activity.indexOf("void restartSecurityCenterAndLauncher()");
-        int launcherKill = activity.indexOf("am force-stop com.miui.home", method);
-        int startHome = activity.indexOf(
-                "am start -a android.intent.action.MAIN -c android.intent.category.HOME",
-                launcherKill);
-        int waitForLauncher = activity.indexOf("while [ $i -lt 30 ]", startHome);
-        int settle = activity.indexOf("sleep 0.8", waitForLauncher);
-        int securityPid = activity.indexOf("pidof com.miui.securitycenter:ui", settle);
-        int securityKill = activity.indexOf("kill -TERM $SC_PIDS", securityPid);
-
-        assertTrue("Launcher must restart before Security Center", launcherKill > method);
-        assertTrue("HOME must start after Launcher restart", startHome > launcherKill);
-        assertTrue("must wait for the new Launcher process", waitForLauncher > startHome);
-        assertTrue("must leave a settle window before Security Center restart", settle > waitForLauncher);
-        assertTrue("Security Center must restart last", securityPid > settle && securityKill > securityPid);
-        assertFalse("must not force-stop the whole Security Center package",
-                activity.contains("am force-stop com.miui.securitycenter"));
+        assertTrue(activity.contains("void restartHookScopes(Set<String> scopes)"));
+        assertTrue(activity.contains("RESTARTABLE_HOOK_SCOPES"));
+        assertTrue(activity.contains("am force-stop com.miui.home"));
+        assertTrue(activity.contains("pidof com.miui.securitycenter:ui"));
+        assertTrue(activity.contains("kill -TERM $SC_PIDS"));
+        assertFalse(activity.contains("am force-stop com.miui.securitycenter"));
     }
 
     @Test
-    public void combinedRestartHasEnglishAndChineseLabels() throws Exception {
-        String english = Files.readString(MAIN.resolve("res/values/strings.xml"));
-        String chinese = Files.readString(MAIN.resolve("res/values-zh-rCN/strings.xml"));
-        assertTrue(english.contains(
-                "<string name=\"action_restart_security_center_and_launcher\">"
-                        + "Restart Security Center &amp; desktop</string>"));
-        assertTrue(chinese.contains(
-                "<string name=\"action_restart_security_center_and_launcher\">"
-                        + "重启安全中心与桌面</string>"));
-        assertFalse("obsolete standalone Security Center label should be removed",
-                english.contains("name=\"action_restart_security_center\""));
+    public void restartDialogIsScrollableAndUsesCenteredRedConfirmButton() throws Exception {
+        String ui = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt"));
+
+        assertTrue(ui.contains("verticalScroll(rememberScrollState())"));
+        assertTrue(ui.contains("System Framework（system）需要重启设备"));
+        assertTrue(ui.contains("tint = Color(0xFFD73333)"));
+        assertTrue(ui.contains("contentAlignment = Alignment.Center"));
+        assertTrue(ui.contains("text = \"重启\""));
     }
 }
