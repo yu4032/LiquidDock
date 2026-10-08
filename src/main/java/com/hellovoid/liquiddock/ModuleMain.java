@@ -8,21 +8,24 @@ import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
 import io.github.libxposed.api.XposedModule;
 
-/** libxposed API 101 entry point with process-specific timing and opt-in glass integrations. */
+/** libxposed API 102 experiment; do not hot-reload active process hooks before owner teardown exists. */
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
     private String loadedProcessName;
+    // True once target-process initialization can own hooks, listeners or EGL resources.
+    private boolean activeProcessLifecycle;
 
     @Override
     public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
         Api101Bridge.init(this);
         refreshDebugLogging();
         loadedProcessName = param.getProcessName();
-        Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
+        Api101Bridge.log("[DC] API102 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
         if ("system".equals(loadedProcessName)) {
+            activeProcessLifecycle = true;
             try {
                 ConfigReader config = ConfigReader.load();
                 boolean enabled = config.b(
@@ -47,6 +50,14 @@ public final class ModuleMain extends XposedModule {
     public void onPackageReady(@NonNull PackageReadyParam param) {
         refreshDebugLogging();
         String packageName = param.getPackageName();
+        // Lifecycle callbacks are not replayed automatically after API 102 hot reload.
+        // These owners currently have no complete stop/unregister/restore transaction.
+        if (SYSTEM_UI_PACKAGE.equals(packageName)
+                || LAUNCHER_PACKAGE.equals(packageName)
+                || SecurityCenterProcessPolicy.PACKAGE.equals(packageName)
+                || ThirdPartyGlassAdapterRegistry.handles(packageName)) {
+            activeProcessLifecycle = true;
+        }
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             ClassLoader classLoader = param.getClassLoader();
             if (classLoader == null) return;
@@ -179,8 +190,36 @@ public final class ModuleMain extends XposedModule {
             RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
             DockBottomGeometryHook.install(classLoader);
         } catch (Throwable error) {
-            Api101Bridge.errorAlways("[DC] API101 package init failed", error);
+            Api101Bridge.errorAlways("[DC] API102 package init failed", error);
         }
+    }
+
+    /**
+     * API 102 lifecycle probe. An active LiquidDock process may hold native PassBlur producers,
+     * ViewTreeObserver callbacks, BroadcastReceivers and hook closures that refer to this
+     * module generation. Returning true before those resources are detached would be unsafe.
+     *
+     * The only eligible window is before target-package initialization; automatic hot reload
+     * remains disabled in module.prop until the complete ownership transaction is implemented.
+     */
+    @Override
+    public boolean onHotReloading(@NonNull HotReloadingParam param) {
+        if (activeProcessLifecycle) {
+            Api101Bridge.log("[DC][HotReload] rejected: process owners have no teardown transaction");
+            return false;
+        }
+        param.setSavedInstanceState(loadedProcessName);
+        return true;
+    }
+
+    @Override
+    public void onHotReloaded(@NonNull HotReloadedParam param) {
+        // Only used for the safe pre-install path admitted above.
+        Api101Bridge.init(this);
+        Object previous = param.getSavedInstanceState();
+        loadedProcessName = previous instanceof String ? (String) previous : null;
+        refreshDebugLogging();
+        Api101Bridge.log("[DC][HotReload] restored pre-install module state");
     }
 
     private static void refreshDebugLogging() {
