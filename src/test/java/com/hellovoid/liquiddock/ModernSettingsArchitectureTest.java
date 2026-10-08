@@ -30,6 +30,10 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
     private static final Path GBOARD = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt");
+    private static final Path DIALOG_GLASS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt");
+    private static final Path SIDE_SLIDE = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SideSlideHoldSetting.kt");
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
@@ -237,11 +241,15 @@ public class ModernSettingsArchitectureTest {
         String search = Files.readString(SEARCHBOX);
         String widgetCatalog = Files.readString(WIDGET_COMPONENTS);
         String widgetDetail = Files.readString(WIDGET_DETAIL);
+        String dialog = Files.readString(DIALOG_GLASS);
+        String sideSlide = Files.readString(SIDE_SLIDE);
+        String recent = Files.readString(RECENT_BLACKLIST);
 
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
                 .matcher(compose + "\n" + gboard + "\n" + search + "\n"
-                        + widgetCatalog + "\n" + widgetDetail);
+                        + widgetCatalog + "\n" + widgetDetail + "\n"
+                        + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
         assertTrue("original GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
                 configRefs.size() >= 233);
