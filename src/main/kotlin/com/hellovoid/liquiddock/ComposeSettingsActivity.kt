@@ -34,7 +34,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -130,12 +129,6 @@ private enum class Page(val titleRes: Int) {
 }
 
 private val ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub)
-private val ROOT_ICONS: List<ImageVector> = listOf(
-    MiuixIcons.Home,
-    MiuixIcons.GridView,
-    MiuixIcons.Image,
-    MiuixIcons.Settings,
-)
 
 private fun isRootPage(page: Page): Boolean = page in ROOT_PAGES
 
@@ -735,6 +728,12 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     val root = isRootPage(page)
     val selectedRootIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0)
+    val rootIcons = listOf(
+        MiuixIcons.Home,
+        MiuixIcons.GridView,
+        MiuixIcons.Image,
+        MiuixIcons.Settings,
+    )
 
     fun navigateTo(target: Page) {
         if (target == page) return
@@ -806,7 +805,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                         stringResource(R.string.tab_glass),
                         stringResource(R.string.tab_more),
                     ),
-                    icons = ROOT_ICONS,
+                    icons = rootIcons,
                     selectedIndex = selectedRootIndex,
                     onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
                 )
