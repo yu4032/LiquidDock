@@ -425,11 +425,11 @@ public class ModernSettingsArchitectureTest {
                 "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
         for (String edge : new String[] {"TOP", "BOTTOM", "LEFT", "RIGHT"}) {
             assertFalse(ui.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
-            assertTrue(runtimeConfig.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
+            assertFalse(runtimeConfig.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
         }
-        assertTrue(passBlurView.contains("combineAutoGuardAndUserExtra("));
-        assertTrue(passBlurView.contains("topSamplingExtraPx"));
-        assertTrue(passBlurView.contains("rightSamplingExtraPx"));
+        assertFalse(passBlurView.contains("combineAutoGuardAndUserExtra("));
+        assertFalse(passBlurView.contains("topSamplingExtraPx"));
+        assertTrue(passBlurView.contains("PrismalSampling.requiredGuardPx("));
         assertTrue(ui.contains("采样保护区由渲染器自动计算"));
         assertFalse(ui.contains("\"liquid_edge_band\" ->"));
         assertFalse(ui.contains("\"liquid_highlight_alpha\" ->"));
