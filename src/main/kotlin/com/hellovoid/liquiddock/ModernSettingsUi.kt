@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +58,13 @@ import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -71,8 +79,13 @@ internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-// Uniform background blur, with no progressive gradient or refractive edge rim.
-private val TOP_BAR_GLASS_BLUR = 14.dp
+private val TOP_BAR_PROGRESSIVE_BLUR = ProgressiveBlur.Top.copy(
+    startFraction = 0.68f,
+    endFraction = 1f,
+    curve = 1f,
+)
+private const val TOP_BAR_BLUR_RADIUS = 16f
+private const val TOP_BAR_SURFACE_ALPHA = 0.66f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
@@ -99,6 +112,15 @@ internal fun ModernSettingsScaffold(
     val surface = MiuixTheme.colorScheme.surface
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
+    val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
+        rememberLayerBackdrop {
+            drawRect(surface)
+            drawContent()
+        }
+    } else {
+        null
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -125,33 +147,29 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        // Blur the real scene behind the header uniformly, not through
-                        // a gradient or a perimeter lens. The bar stays rectangular.
-                        if (glassEnabled) {
-                            PrismalGlassSurface(
-                                backdrop = overlayBackdrop,
-                                modifier = Modifier.matchParentSize(),
-                                shape = { PrismalRoundedRectangle(0.dp) },
-                                blurRadius = TOP_BAR_GLASS_BLUR,
-                                // Prismal's tint applies BlendMode.Hue even for low alpha,
-                                // turning green backdrops purple under some Monet palettes.
-                                // Use neutral glass instead so sampled background hues survive.
-                                tint = Color.Unspecified,
-                                surfaceColor = Color.Gray.copy(alpha = 0.06f),
-                                refractionHeightPx = 0f,
-                                refractionAmountPx = 0f,
-                                chromaticAberration = 0f,
-                                depthEffect = false,
+                    val headerModifier = if (barBackdrop != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .progressiveTextureBlur(
+                                backdrop = barBackdrop,
+                                shape = RectangleShape,
+                                blurRadius = TOP_BAR_BLUR_RADIUS,
+                                gradient = TOP_BAR_PROGRESSIVE_BLUR,
+                                colors = BlurDefaults.blurColors(
+                                    blendColors = listOf(
+                                        BlendColorEntry(
+                                            color = surface.copy(alpha = TOP_BAR_SURFACE_ALPHA),
+                                        ),
+                                    ),
+                                ),
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .background(surface),
-                            )
-                        }
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(surface.copy(alpha = 0.94f))
+                    }
 
+                    Box(modifier = headerModifier) {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
@@ -172,8 +190,8 @@ internal fun ModernSettingsScaffold(
                                                 refractionAmount = 12.dp,
                                                 pressLift = 2.dp,
                                                 contentPadding = PaddingValues(9.dp),
-                                                tint = Color.Unspecified,
-                                                surfaceColor = surface.copy(alpha = 0.20f),
+                                                tint = surface,
+                                                tintAlpha = 0.20f,
                                                 depthEffect = false,
                                             ) {
                                                 Icon(
@@ -227,6 +245,10 @@ internal fun ModernSettingsScaffold(
                         .fillMaxSize()
                         .then(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
+                            else Modifier,
+                        )
+                        .then(
+                            if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
                             else Modifier,
                         ),
                 ) {
@@ -328,8 +350,8 @@ internal fun RestartScopesDialog(
                         refractionAmount = 12.dp,
                         pressLift = 0.dp,
                         contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                        tint = Color.Unspecified,
-                        surfaceColor = Color(0xFFD73333).copy(alpha = 0.40f),
+                        tint = Color(0xFFD73333),
+                        tintAlpha = 0.92f,
                         depthEffect = false,
                         depthShadow = null,
                     ) {
@@ -497,8 +519,8 @@ internal fun ModernTopActionButton(
         refractionAmount = 12.dp,
         pressLift = 2.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        tint = Color.Unspecified,
-        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.20f),
+        tint = MiuixTheme.colorScheme.surface,
+        tintAlpha = 0.20f,
         depthEffect = false,
     ) {
         Text(
@@ -537,12 +559,12 @@ internal fun ModernSurface(
         shape = { PrismalRoundedRectangle(24.dp) },
         onClick = onClick,
         blurRadius = 12.dp,
-        tint = Color.Unspecified,
-        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.26f),
-        saturation = 1.4f,
+        tint = MiuixTheme.colorScheme.surface,
+        tintAlpha = 0.24f,
+        saturation = 1.32f,
         refractionHeightPx = 16f,
-        refractionAmountPx = 22f,
-        chromaticAberration = 0.35f,
+        refractionAmountPx = 21f,
+        chromaticAberration = 0.28f,
         depthEffect = true,
     ) {
         Column(
@@ -677,8 +699,8 @@ internal fun Button(
         refractionAmount = 12.dp,
         pressLift = 0.dp,
         contentPadding = insideMargin,
-        tint = Color.Unspecified,
-        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.20f),
+        tint = MiuixTheme.colorScheme.surface,
+        tintAlpha = 0.20f,
         depthEffect = false,
         depthShadow = null,
     ) {
