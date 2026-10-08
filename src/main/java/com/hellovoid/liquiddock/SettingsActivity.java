@@ -30,6 +30,12 @@ import com.hellovoid.liquiddock.config.ConfigMigration;
 
 public class SettingsActivity extends AppCompatActivity {
     private static final int WIDGET_HIDDEN_BACKUP_MAX_BYTES = 1024 * 1024;
+    private static final Set<String> RESTARTABLE_HOOK_SCOPES = Set.of(
+            "com.miui.home",
+            "com.android.systemui",
+            "com.miui.securitycenter",
+            "com.google.android.inputmethod.latin",
+            "com.android.quicksearchbox");
 
     private final ActivityResultLauncher<String> exportConfigLauncher =
         registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
@@ -257,6 +263,93 @@ public class SettingsActivity extends AppCompatActivity {
         } else {
             throw new IllegalArgumentException("Unsupported preference value for " + key);
         }
+    }
+
+    void restartHookScopes(Set<String> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            Toast.makeText(this, "未选择重启作用域", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        for (String scope : scopes) {
+            if (!RESTARTABLE_HOOK_SCOPES.contains(scope)) {
+                Toast.makeText(this, "不支持的重启作用域: " + scope, Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+
+        Set<String> selected = Set.copyOf(scopes);
+        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
+        new Thread(() -> {
+            try {
+                StringBuilder command = new StringBuilder();
+
+                if (selected.contains("com.miui.home")) {
+                    command.append("am force-stop com.miui.home; ")
+                            .append("sleep 1; ")
+                            .append("am start -a android.intent.action.MAIN -c android.intent.category.HOME; ")
+                            .append("i=0; while [ $i -lt 30 ] && [ -z \"$(pidof com.miui.home 2>/dev/null)\" ]; do ")
+                            .append("sleep 0.1; i=$((i+1)); done; ");
+                }
+
+                if (selected.contains("com.android.systemui")) {
+                    command.append("PIDS=$(pidof com.android.systemui 2>/dev/null || true); ")
+                            .append("if [ -n \"$PIDS\" ]; then kill -TERM $PIDS; fi; ");
+                }
+
+                if (selected.contains("com.miui.securitycenter")) {
+                    if (selected.contains("com.miui.home")) {
+                        command.append("sleep 0.8; ");
+                    }
+                    command.append("SC_PIDS=$(pidof com.miui.securitycenter:ui 2>/dev/null || true); ")
+                            .append("if [ -n \"$SC_PIDS\" ]; then kill -TERM $SC_PIDS; fi; ");
+                }
+
+                if (selected.contains("com.google.android.inputmethod.latin")) {
+                    command.append("PIDS=$(pidof com.google.android.inputmethod.latin 2>/dev/null || true); ")
+                            .append("if [ -n \"$PIDS\" ]; then kill -TERM $PIDS; fi; ");
+                }
+
+                if (selected.contains("com.android.quicksearchbox")) {
+                    command.append("PIDS=$(pidof com.android.quicksearchbox 2>/dev/null || true); ")
+                            .append("if [ -n \"$PIDS\" ]; then kill -TERM $PIDS; fi; ");
+                }
+
+                command.append("\nexit\n");
+
+                Process p = new ProcessBuilder("su")
+                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .start();
+                try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
+                    os.writeBytes(command.toString());
+                    os.flush();
+                }
+                if (!p.waitFor(15, TimeUnit.SECONDS)) {
+                    p.destroy();
+                    if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
+                    throw new IOException("su timed out while restarting selected hook scopes");
+                }
+                int exitCode = p.exitValue();
+                if (exitCode != 0) {
+                    throw new IOException("scope restart failed with exit code " + exitCode);
+                }
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        "已重启 " + selected.size() + " 个作用域",
+                        Toast.LENGTH_SHORT).show());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        "作用域重启已中断",
+                        Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        "Error: " + e.getMessage(),
+                        Toast.LENGTH_SHORT).show());
+            }
+        }).start();
     }
 
     void restartLauncher() {
