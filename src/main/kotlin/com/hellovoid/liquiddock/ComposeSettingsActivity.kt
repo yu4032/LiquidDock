@@ -111,6 +111,8 @@ private enum class Page(val titleRes: Int) {
     Gboard(R.string.page_gboard),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
+    LauncherHighlightsCompact(R.string.page_launcher_highlights_compact),
+    LauncherHighlightsLarge(R.string.page_launcher_highlights_large),
     Stroke(R.string.page_stroke),
     Shadow(R.string.page_shadow),
 
@@ -640,6 +642,11 @@ private val componentEntries = listOf(
     HubEntry(Page.GlassMenus, R.string.page_glass_menus, "快捷菜单、系统顶部菜单与对话弹窗"),
 )
 
+private val highlightEntries = listOf(
+    HubEntry(Page.LauncherHighlightsCompact, R.string.page_launcher_highlights_compact, "天空雾光、镜面高光、边缘光、焦散与按压辉光"),
+    HubEntry(Page.LauncherHighlightsLarge, R.string.page_launcher_highlights_large, "小组件与大文件夹使用独立高光开关"),
+)
+
 private val animationEntries = listOf(
     HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "工作区显隐、Dock 恢复与尺寸变化"),
     HubEntry(Page.AnimationInteraction, R.string.page_animation_interaction, "玻璃按压进入与释放"),
@@ -922,7 +929,13 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 )
                 Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
-                Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
+                Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
+                Page.LauncherHighlightsCompact -> LauncherHighlightTogglePage(
+                    padding, prefs, masterEnabled, compact = true,
+                )
+                Page.LauncherHighlightsLarge -> LauncherHighlightTogglePage(
+                    padding, prefs, masterEnabled, compact = false,
+                )
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
                 Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
 
@@ -1996,40 +2009,44 @@ private fun GlassMenusPage(
 @Composable
 private fun LauncherHighlightsPage(
     padding: PaddingValues,
+    open: (Page) -> Unit,
+) {
+    HubPage(
+        padding = padding,
+        summary = stringResource(R.string.launcher_highlights_header_summary),
+        entries = highlightEntries,
+        open = open,
+    )
+}
+
+@Composable
+private fun LauncherHighlightTogglePage(
+    padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    compact: Boolean,
 ) {
-    val liquidEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item {
-            PageHeader(
-                stringResource(R.string.page_launcher_highlights),
-                stringResource(R.string.launcher_highlights_header_summary),
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding = padding,
+        title = "",
+        summary = if (compact) {
+            "图标、小文件夹与 Dock 图标使用这一组高光层。"
+        } else {
+            "小组件与大文件夹使用这一组独立高光层。"
+        },
+    ) {
+        launcherHighlightSpecs.forEach { spec ->
+            BooleanSetting(
+                prefs,
+                if (compact) spec.compactConfig else spec.largeConfig,
+                stringResource(spec.titleRes),
+                stringResource(spec.summaryRes),
+                masterEnabled && liquidEnabled,
             )
-        }
-        item { SmallTitle("图标、小文件夹与 Dock 图标") }
-        item {
-            SettingsCard {
-                launcherHighlightSpecs.forEach { spec ->
-                    BooleanSetting(
-                        prefs, spec.compactConfig,
-                        stringResource(spec.titleRes), stringResource(spec.summaryRes),
-                        masterEnabled && liquidEnabled,
-                    )
-                }
-            }
-        }
-        item { SmallTitle("小组件与大文件夹") }
-        item {
-            SettingsCard {
-                launcherHighlightSpecs.forEach { spec ->
-                    BooleanSetting(
-                        prefs, spec.largeConfig,
-                        stringResource(spec.titleRes), stringResource(spec.summaryRes),
-                        masterEnabled && liquidEnabled,
-                    )
-                }
-            }
         }
     }
 }
