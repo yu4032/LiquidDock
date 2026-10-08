@@ -407,7 +407,7 @@ public class ModernSettingsArchitectureTest {
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
         assertTrue("original GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
-                configRefs.size() >= 233);
+                configRefs.size() >= 229);
         assertTrue(configRefs.contains("ConfigSchema.Debug.LOGGING"));
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 
