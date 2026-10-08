@@ -407,13 +407,35 @@ public class ModernSettingsArchitectureTest {
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
         assertTrue("original GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
-                configRefs.size() >= 233);
+                configRefs.size() >= 229);
         assertTrue(configRefs.contains("ConfigSchema.Debug.LOGGING"));
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 
         assertTrue(countDistinctRefs(gboard, "GboardGlassPreferences") >= 11);
         assertTrue(countDistinctRefs(gboard, "MiuiSearchboxGlassPreferences") >= 7);
         assertTrue(countDistinctRefs(widgetCatalog + "\n" + widgetDetail, "WidgetComponentStore") >= 15);
+    }
+
+    @Test
+    public void manualPassBlurSafetyControlsHiddenWhileAutoGuardRemainsActive() throws Exception {
+        String ui = Files.readString(UI);
+        String runtimeConfig = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java"));
+        String passBlurView = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
+        for (String edge : new String[] {"TOP", "BOTTOM", "LEFT", "RIGHT"}) {
+            assertFalse(ui.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
+            assertFalse(runtimeConfig.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
+        }
+        assertFalse(passBlurView.contains("combineAutoGuardAndUserExtra("));
+        assertFalse(passBlurView.contains("topSamplingExtraPx"));
+        assertTrue(passBlurView.contains("PrismalSampling.requiredGuardPx("));
+        assertTrue(ui.contains("采样保护区由渲染器自动计算"));
+        assertFalse(ui.contains("\"liquid_edge_band\" ->"));
+        assertFalse(ui.contains("\"liquid_highlight_alpha\" ->"));
+        assertFalse(ui.contains("\"liquid_recents_prearm_distance\" ->"));
+        assertTrue(ui.contains("ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE"));
+        assertTrue(ui.contains("ConfigSchema.Glass.PASSBLUR_RENDER_FPS"));
     }
 
     @Test

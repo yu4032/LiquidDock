@@ -254,10 +254,6 @@ public final class PresetManager {
         source.put("liquid_tint_alpha", 0);
         source.put("liquid_capture_power_limit_fps", 30);
         source.put("liquid_capture_stop_delay", 150);
-        source.put("liquid_sampling_extra_top", -256);
-        source.put("liquid_sampling_extra_bottom", -256);
-        source.put("liquid_sampling_extra_left", -256);
-        source.put("liquid_sampling_extra_right", -256);
         source.put("liquid_thickness", 18);
         source.put("liquid_ior", 155);
         source.put("liquid_normal_strength", 115);

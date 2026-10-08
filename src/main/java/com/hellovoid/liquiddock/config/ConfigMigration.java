@@ -78,7 +78,11 @@ public final class ConfigMigration {
                 || sp.contains("liquid_capture_bleed_top")
                 || sp.contains("liquid_capture_bleed_bottom")
                 || sp.contains("liquid_capture_bleed_left")
-                || sp.contains("liquid_capture_bleed_right");
+                || sp.contains("liquid_capture_bleed_right")
+                || sp.contains("liquid_sampling_extra_top")
+                || sp.contains("liquid_sampling_extra_bottom")
+                || sp.contains("liquid_sampling_extra_left")
+                || sp.contains("liquid_sampling_extra_right");
         if (!hasRetired) return;
         SharedPreferences.Editor e = sp.edit();
         e.remove("liquid_legacy_s_curve");
@@ -86,6 +90,10 @@ public final class ConfigMigration {
         e.remove("liquid_capture_bleed_bottom");
         e.remove("liquid_capture_bleed_left");
         e.remove("liquid_capture_bleed_right");
+        e.remove("liquid_sampling_extra_top");
+        e.remove("liquid_sampling_extra_bottom");
+        e.remove("liquid_sampling_extra_left");
+        e.remove("liquid_sampling_extra_right");
         e.commit();
     }
 

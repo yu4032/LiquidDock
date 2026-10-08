@@ -204,10 +204,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private int uiSamplingWidth = -1;
     private int uiSamplingHeight = -1;
     private int uiSamplingMaxTextureSize = -1;
-    private int uiSamplingTopExtra;
-    private int uiSamplingBottomExtra;
-    private int uiSamplingLeftExtra;
-    private int uiSamplingRightExtra;
     private float uiSamplingDensity = Float.NaN;
 
     // Geometry observation runs on every root pre-draw. Reflection members are stable for this
@@ -243,10 +239,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile int outputWidth;
     private volatile int outputHeight;
     private volatile int maxTextureSize;
-    private volatile int topSamplingExtraPx;
-    private volatile int bottomSamplingExtraPx;
-    private volatile int leftSamplingExtraPx;
-    private volatile int rightSamplingExtraPx;
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
 
@@ -370,10 +362,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         dockBodyHighlightProfile = glassConfig.largeSurfaceHighlightProfile;
         dockCompositor.setIconStyle(
                 glassConfig.iconStyle, glassConfig.launcherHighlightProfile);
-        topSamplingExtraPx = glassConfig.samplingExtraTopPx;
-        bottomSamplingExtraPx = glassConfig.samplingExtraBottomPx;
-        leftSamplingExtraPx = glassConfig.samplingExtraLeftPx;
-        rightSamplingExtraPx = glassConfig.samplingExtraRightPx;
         passBlurCaptureScalePercent = glassConfig.passBlurCaptureScalePercent;
         updateBackdropMapping();
         if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
@@ -1393,10 +1381,6 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && uiSamplingWidth == width
                 && uiSamplingHeight == height
                 && uiSamplingMaxTextureSize == maxTextureSize
-                && uiSamplingTopExtra == topSamplingExtraPx
-                && uiSamplingBottomExtra == bottomSamplingExtraPx
-                && uiSamplingLeftExtra == leftSamplingExtraPx
-                && uiSamplingRightExtra == rightSamplingExtraPx
                 && Float.compare(uiSamplingDensity, density) == 0) {
             return uiSamplingInsetsCache;
         }
@@ -1407,10 +1391,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         uiSamplingWidth = width;
         uiSamplingHeight = height;
         uiSamplingMaxTextureSize = maxTextureSize;
-        uiSamplingTopExtra = topSamplingExtraPx;
-        uiSamplingBottomExtra = bottomSamplingExtraPx;
-        uiSamplingLeftExtra = leftSamplingExtraPx;
-        uiSamplingRightExtra = rightSamplingExtraPx;
         uiSamplingDensity = density;
         return uiSamplingInsetsCache;
     }
@@ -1428,21 +1408,16 @@ final class Miuix307PassBlurTextureView extends TextureView
                 prismalParams, width, height, false);
 
         int autoHorizontal = Math.max(horizontalOverscanPx(), opticalX);
-        int left = combineAutoGuardAndUserExtra(autoHorizontal, leftSamplingExtraPx);
-        int right = combineAutoGuardAndUserExtra(autoHorizontal, rightSamplingExtraPx);
-        int top = combineAutoGuardAndUserExtra(opticalY, topSamplingExtraPx);
-        int bottom = combineAutoGuardAndUserExtra(opticalY, bottomSamplingExtraPx);
+        int left = autoHorizontal;
+        int right = autoHorizontal;
+        int top = opticalY;
+        int bottom = opticalY;
 
         fitInsetPairToTextureLimit(width, left, right, maxTextureSize, pairScratch);
         int fittedLeft = pairScratch[0];
         int fittedRight = pairScratch[1];
         fitInsetPairToTextureLimit(height, top, bottom, maxTextureSize, pairScratch);
         out.set(fittedLeft, fittedRight, pairScratch[0], pairScratch[1]);
-    }
-
-    private static int combineAutoGuardAndUserExtra(int automaticGuardPx, int userExtraPx) {
-        long combined = (long) Math.max(0, automaticGuardPx) + userExtraPx;
-        return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, combined));
     }
 
     private static void fitInsetPairToTextureLimit(
